@@ -124,6 +124,69 @@ namespace VPB
             return true;
         }
 
+        /// <summary>NameStartsWith scope: every term must be a case-insensitive prefix of <paramref name="name"/>. Different shape from substring matcher above; can't be expressed via IndexOf alone.</summary>
+        internal static bool MatchesAllTermsStartsWith(string name, string[] termsLower)
+        {
+            if (termsLower == null || termsLower.Length == 0) return true;
+            if (string.IsNullOrEmpty(name)) return false;
+            for (int i = 0; i < termsLower.Length; i++)
+            {
+                string t = termsLower[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                if (!name.StartsWith(t, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Single entry point for FileEntry-based search matching. Reads <see cref="VPBConfig.GallerySearchScope"/> and picks a strategy.
+        /// Name field is always the pretty form so search couples to what the user sees on the tile.
+        /// Path field engaged only in PathAndName mode.
+        /// </summary>
+        internal static bool MatchesFileEntryByScope(FileEntry file, string[] termsLower)
+        {
+            if (termsLower == null || termsLower.Length == 0) return true;
+            string scope = VPBConfig.Instance != null
+                ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                : "PathAndName";
+            string name = GetPrettyEntryDisplayName(file);
+            switch (scope)
+            {
+                case "NameOnly":
+                    return MatchesAllTermsInEither(name, "", termsLower);
+                case "NameStartsWith":
+                    return MatchesAllTermsStartsWith(name, termsLower);
+                default:
+                    string path = null;
+                    try { path = file != null ? file.Path : null; } catch { path = null; }
+                    return MatchesAllTermsInEither(path, name, termsLower);
+            }
+        }
+
+        /// <summary>
+        /// Package-level overload for sites that pass raw strings (no FileEntry available). Package uid is the name field; internalPath optionally folded into the path field for PathAndName mode.
+        /// </summary>
+        internal static bool MatchesPackageByScope(string packageUid, string packagePath, string internalPath, string[] termsLower)
+        {
+            if (termsLower == null || termsLower.Length == 0) return true;
+            string scope = VPBConfig.Instance != null
+                ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                : "PathAndName";
+            string name = packageUid ?? "";
+            switch (scope)
+            {
+                case "NameOnly":
+                    return MatchesAllTermsInEither(name, "", termsLower);
+                case "NameStartsWith":
+                    return MatchesAllTermsStartsWith(name, termsLower);
+                default:
+                    string pathField = packagePath ?? "";
+                    if (!string.IsNullOrEmpty(internalPath))
+                        pathField = pathField.Length == 0 ? internalPath : (pathField + " " + internalPath);
+                    return MatchesAllTermsInEither(pathField, name, termsLower);
+            }
+        }
+
         /// <summary>VAR zip paths often use '\'; category roots use '/'.</summary>
         private static string GalleryNormalizePathSlashes(string p)
         {

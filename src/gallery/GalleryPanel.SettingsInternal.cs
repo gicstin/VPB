@@ -487,6 +487,33 @@ namespace VPB
                     VPBConfig.Instance.TriggerChange();
                 }
             });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.prettyPresetNames", GroupKey = "grid", Label = VPBTranslation.T("settings.gallery_pretty_preset_names", "Pretty preset names"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_pretty_preset_names", "Strip Preset_/Plugins_ prefix and file extension from preset labels. Path moves to hover tooltip."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryPrettyPresetNames,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryPrettyPresetNames = v;
+                    LogUtil.LogWarning("[VPB] PRETTY toggle GalleryPrettyPresetNames=" + v);
+                    ResetPrettyNameDiagnosticsSample();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    else RefreshFiles(true);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "search.scope", GroupKey = "search", Label = VPBTranslation.T("settings.gallery_search_scope", "Search Scope"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_search_scope", "What the gallery search box matches against. Path + Name = current; Name only = less verbose; Name starts with = prefix only."),
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "Path + Name", "Name only", "Name starts with" },
+                GetString = () => GallerySearchScopeToLabel(VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)),
+                SetString = v => {
+                    VPBConfig.Instance.GallerySearchScope = GallerySearchScopeFromLabel(v);
+                    LogUtil.LogWarning("[VPB] PRETTY toggle GallerySearchScope=" + VPBConfig.Instance.GallerySearchScope + " (raw='" + v + "')");
+                    ResetPrettyNameDiagnosticsSample();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    else RefreshFiles(true);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),
@@ -1633,6 +1660,21 @@ namespace VPB
             if (!Gallery.TryConsumeBaMigrationPromptPending()) return;
             if (!BaImporter.TryDetectBaDataDir(out _)) return;
             ShowBaMigrationPrompt();
+        }
+
+        // Canonical token <-> UI cycle label for the GallerySearchScope setting; keeps storage stable while letting localization tweak the label.
+        private static string GallerySearchScopeToLabel(string canonical)
+        {
+            if (canonical == "NameOnly") return "Name only";
+            if (canonical == "NameStartsWith") return "Name starts with";
+            return "Path + Name";
+        }
+
+        private static string GallerySearchScopeFromLabel(string label)
+        {
+            if (string.Equals(label, "Name only", StringComparison.OrdinalIgnoreCase)) return "NameOnly";
+            if (string.Equals(label, "Name starts with", StringComparison.OrdinalIgnoreCase)) return "NameStartsWith";
+            return "PathAndName";
         }
     }
 }

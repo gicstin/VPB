@@ -176,7 +176,7 @@ namespace VPB
         }
 
         /// <summary>Triple-check logging for the new family-aware sorts. Flip to false to silence.</summary>
-        private static bool LogFamilySortDiagnostics = true;
+        private static bool LogFamilySortDiagnostics = false;
 
         private static void LogFamilyScanTimesSummary(string label, SortDirection dir, List<FileEntry> files, Dictionary<string, FamilyScanTimes> fam)
         {

@@ -1055,11 +1055,7 @@ namespace VPB
                         {
                             var e = topSearchBaseFiles[i];
                             if (e == null) continue;
-                            string p = null;
-                            string n = null;
-                            try { p = e.Path; } catch { p = null; }
-                            try { n = e.Name; } catch { n = null; }
-                            if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                            if (MatchesFileEntryByScope(e, nameFilterTerms))
                                 filtered.Add(e);
                         }
                         currentFilteredFiles.Clear();
@@ -1074,11 +1070,7 @@ namespace VPB
                     {
                         var e = topSearchBaseFiles[i];
                         if (e == null) continue;
-                        string p = null;
-                        string n = null;
-                        try { p = e.Path; } catch { p = null; }
-                        try { n = e.Name; } catch { n = null; }
-                        if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                        if (MatchesFileEntryByScope(e, nameFilterTerms))
                             filtered.Add(e);
                     }
                     currentFilteredFiles.Clear();

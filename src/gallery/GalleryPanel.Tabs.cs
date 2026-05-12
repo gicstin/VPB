@@ -244,6 +244,7 @@ namespace VPB
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (creatorFilter ?? "")
                 + "|" + (nameFilterLower ?? "")
+                + "|" + (VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName")
                 + "|" + (currentExtension ?? "")
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
@@ -1509,11 +1510,38 @@ namespace VPB
         private static string GetGridItemLabelText(FileEntry file)
         {
             if (file == null) return "";
+
+            // Pretty mode strips creator/version/prefix for every entry kind, matching BA across all tabs.
+            bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+            if (pretty)
+            {
+                string r = GetPrettyEntryDisplayName(file);
+                LogPrettyNameSample(file, r, "GridLabel");
+                return r;
+            }
+
             VarPackage pkg = null;
             if (file is VarFileEntry vfe)         pkg = vfe.Package;
             else if (file is PackageListEntry ple) pkg = ple.Package;
             if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) return pkg.Uid;
             return System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+        }
+
+        /// <summary>True when filename matches BA's preset prefix rule (Preset_*.vap or Plugins_*.json). Drives the override-uid-with-pretty-name decision in <see cref="GetGridItemLabelText"/>.</summary>
+        internal static bool IsPresetLikeFileName(FileEntry file)
+        {
+            if (file == null) return false;
+            string raw = file.Name;
+            if (string.IsNullOrEmpty(raw)) return false;
+            int dot = raw.LastIndexOf('.');
+            if (dot <= 0) return false;
+            string stem = raw.Substring(0, dot);
+            string ext = raw.Substring(dot + 1);
+            if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase) && stem.StartsWith("Preset_", StringComparison.Ordinal))
+                return true;
+            if (string.Equals(ext, "json", StringComparison.OrdinalIgnoreCase) && stem.StartsWith("Plugins_", StringComparison.Ordinal))
+                return true;
+            return false;
         }
 
         private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
@@ -2632,18 +2660,20 @@ namespace VPB
                 Text labelText = labelTr.GetComponent<Text>();
                 if (labelText != null)
                 {
-                    string displayName = string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+                    bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+                    string displayName = pretty
+                        ? GetPrettyEntryDisplayName(file)
+                        : (string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name);
                     labelText.text = displayName;
-                    // Add tooltip showing full package path if available
+                    // Tooltip now surfaces internal path so users can see where the preset lives; falls back to package uid if path missing.
                     try
                     {
                         if (file is VarFileEntry vfe && vfe.Package != null)
                         {
-                            AddTooltipPlain(
-                                labelTr.gameObject,
-                                string.Format(
-                                    VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"),
-                                    vfe.Package.Uid));
+                            string hint = string.IsNullOrEmpty(vfe.InternalPath)
+                                ? string.Format(VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"), vfe.Package.Uid)
+                                : vfe.InternalPath.Replace('\\', '/');
+                            AddTooltipPlain(labelTr.gameObject, hint);
                         }
                     }
                     catch { }

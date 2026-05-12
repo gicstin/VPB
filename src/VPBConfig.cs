@@ -245,6 +245,10 @@ namespace VPB
         public bool PluginGalleryGridThumbnails = true;
         /// <summary>When true, gallery list layout uses each item's file name (legacy). When false (default), .var rows show Creator.Package.Version (package uid, no .var suffix).</summary>
         public bool GalleryListNamesLegacyFileName = false;
+        /// <summary>When true (default), gallery labels strip "Preset_"/"Plugins_" prefixes and the file extension so presets appear by their human name; the original path moves into the hover tooltip. Mirrors BA's resourceDisplayName behavior.</summary>
+        public bool GalleryPrettyPresetNames = true;
+        /// <summary>What the gallery search box matches against. See <see cref="NormalizeGallerySearchScope"/> for canonical values; default "PathAndName" preserves prior behavior.</summary>
+        public string GallerySearchScope = "PathAndName";
         /// <summary>Which layout(s) show the hover preview. Off, List, Grid, or Both. Default: List.</summary>
         public string GalleryHoverPreviewMode = "List";
         /// <summary>Square preview size (pixels) for List layout hover preview.</summary>
@@ -329,6 +333,24 @@ namespace VPB
                     return s_HoverPreviewModeCanonical[i];
             }
             return "List";
+        }
+
+        private static readonly string[] s_GallerySearchScopeCanonical = { "PathAndName", "NameOnly", "NameStartsWith" };
+        /// <summary>
+        /// Canonical: "PathAndName" (default; multi-term AND against either e.Path or pretty name),
+        /// "NameOnly" (terms must all appear in pretty name), "NameStartsWith" (each term must be a prefix of the pretty name).
+        /// Pretty name = <see cref="GalleryPanel.GetPrettyEntryDisplayName"/>; couples display and search so users can type what they see.
+        /// </summary>
+        public static string NormalizeGallerySearchScope(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "PathAndName";
+            string v = value.Trim();
+            for (int i = 0; i < s_GallerySearchScopeCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_GallerySearchScopeCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_GallerySearchScopeCanonical[i];
+            }
+            return "PathAndName";
         }
 
         /// <summary>Maps user/config values to a canonical option; unknown values become "Scenes".</summary>
@@ -587,6 +609,8 @@ namespace VPB
             GalleryLayoutMode = 0;
             GalleryShowHiddenPackages = false;
             GalleryListNamesLegacyFileName = false;
+            GalleryPrettyPresetNames = true;
+            GallerySearchScope = "PathAndName";
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
             GalleryHideCreatorSideButtons = false;
@@ -714,6 +738,8 @@ namespace VPB
                         if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
                         if (node["PluginGalleryGridThumbnails"] != null) PluginGalleryGridThumbnails = node["PluginGalleryGridThumbnails"].AsBool;
                         if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
+                        if (node["GalleryPrettyPresetNames"] != null) GalleryPrettyPresetNames = node["GalleryPrettyPresetNames"].AsBool;
+                        if (node["GallerySearchScope"] != null) GallerySearchScope = NormalizeGallerySearchScope(node["GallerySearchScope"].Value);
                         if (node["GalleryHoverPreviewMode"] != null)
                             GalleryHoverPreviewMode = NormalizeHoverPreviewMode(node["GalleryHoverPreviewMode"].Value);
                         else if (node["GalleryListHoverPreviewEnabled"] != null)
@@ -978,6 +1004,8 @@ namespace VPB
                 node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
                 node["PluginGalleryGridThumbnails"].AsBool = PluginGalleryGridThumbnails;
                 node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
+                node["GalleryPrettyPresetNames"].AsBool = GalleryPrettyPresetNames;
+                node["GallerySearchScope"] = NormalizeGallerySearchScope(GallerySearchScope);
                 node["GalleryHoverPreviewMode"] = NormalizeHoverPreviewMode(GalleryHoverPreviewMode);
                 node["GalleryListHoverPreviewSize"].AsFloat = GalleryListHoverPreviewSize;
                 node["GalleryListHoverPreviewOffsetX"].AsFloat = GalleryListHoverPreviewOffsetX;

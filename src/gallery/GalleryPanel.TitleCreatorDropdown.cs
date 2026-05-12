@@ -338,6 +338,7 @@ namespace VPB
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (titleCreatorDropdownFilter ?? "")
                 + "|" + (nameFilterLower ?? "")
+                + "|" + (VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName")
                 + "|" + (currentExtension ?? "")
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)

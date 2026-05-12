@@ -8,6 +8,31 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        // Pretty-name + search-scope diagnostics. Flip to true when investigating label/search behavior.
+        internal static bool LogPrettyNameDiagnostics = false;
+        private static int s_PrettyNameSampleCount;
+        private const int PrettyNameSampleMax = 12;
+
+        private static void LogPrettyNameSample(FileEntry file, string returned, string caller)
+        {
+            if (!LogPrettyNameDiagnostics) return;
+            if (s_PrettyNameSampleCount >= PrettyNameSampleMax) return;
+            try
+            {
+                s_PrettyNameSampleCount++;
+                string kind = file == null ? "null" : file.GetType().Name;
+                string nameRaw = file != null ? (file.Name ?? "<null>") : "<null>";
+                bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+                LogUtil.LogWarning("[VPB] PRETTY " + caller + " pretty=" + pretty + " kind=" + kind + " raw='" + nameRaw + "' -> '" + (returned ?? "<null>") + "'");
+            }
+            catch { }
+        }
+
+        internal static void ResetPrettyNameDiagnosticsSample()
+        {
+            s_PrettyNameSampleCount = 0;
+        }
+
         private static readonly Color ColorInactiveRow = new Color(0.25f, 0.25f, 0.25f, 1f);
         private static readonly Color ColorCancelRow = new Color(0.35f, 0.35f, 0.35f, 1f);
         private static readonly Color ColorGroupRow = new Color(0.2f, 0.2f, 0.2f, 1f);
@@ -16,13 +41,23 @@ namespace VPB
         private static readonly Color ColorNewItemRow = new Color(0.2f, 0.5f, 0.4f, 1f);
         private static readonly Color ColorFacetActiveRow = new Color(0.35f, 0.35f, 0.6f, 1f);
 
-        /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on.</summary>
+        /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on, or pretty mode is on (then the BA-style stripped name wins for every entry kind).</summary>
         private static string GetGalleryListRowDisplayName(FileEntry file)
         {
             if (file == null) return "[UNNAMED]";
             bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
+            bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+
+            if (pretty)
+            {
+                string r = GetPrettyEntryDisplayName(file);
+                LogPrettyNameSample(file, r, "ListRow");
+                return r;
+            }
+
             if (legacy)
                 return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+
             try
             {
                 if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
@@ -69,6 +104,58 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Mirrors BA's resourceDisplayName for every entry kind so pretty mode = stripped label everywhere it renders.
+        /// Order of precedence:
+        ///   1. .vap presets strip 7-char "Preset_" (BA ResourceManifest.cs:4029).
+        ///   2. .json session plugin presets strip 8-char "Plugins_" (BA ResourceManifest.cs:4030).
+        ///   3. VAR package rows (PackageListEntry / non-preset VarFileEntry) render <see cref="VarPackage.Name"/> only (BA PackagedRVGE.resourceDisplayName).
+        ///   4. Missing-package rows keep their RequestedUid (no Package to read Name from).
+        ///   5. Loose system files fall back to filename without extension.
+        /// Couples display with search so what users see equals what they can type.
+        /// </summary>
+        internal static string GetPrettyEntryDisplayName(FileEntry file)
+        {
+            if (file == null) return "[UNNAMED]";
+
+            string raw = file.Name;
+            if (!string.IsNullOrEmpty(raw))
+            {
+                int dot = raw.LastIndexOf('.');
+                string stem = dot > 0 ? raw.Substring(0, dot) : raw;
+                string ext = dot > 0 ? raw.Substring(dot + 1) : "";
+
+                if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase)
+                    && stem.StartsWith("Preset_", StringComparison.Ordinal)
+                    && stem.Length > 7)
+                    return stem.Substring(7);
+
+                if (string.Equals(ext, "json", StringComparison.OrdinalIgnoreCase)
+                    && stem.StartsWith("Plugins_", StringComparison.Ordinal)
+                    && stem.Length > 8)
+                    return stem.Substring(8);
+            }
+
+            // Package-level rows (and non-preset VarFileEntry items that share a package) reduce to the package's Name.
+            try
+            {
+                if (file is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Name))
+                    return ple.Package.Name;
+                if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                    return mple.RequestedUid;
+                if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Name))
+                    return vfe.Package.Name;
+            }
+            catch { }
+
+            if (!string.IsNullOrEmpty(raw))
+            {
+                int dot2 = raw.LastIndexOf('.');
+                return dot2 > 0 ? raw.Substring(0, dot2) : raw;
+            }
+            return file.Path ?? "[UNNAMED]";
         }
 
         private static string FormatBytesForList(long bytes)

@@ -608,11 +608,7 @@ namespace VPB
                     continue;
                 }
 
-                string p = null;
-                string n = null;
-                try { p = e.Path; } catch { }
-                try { n = e.Name; } catch { }
-                if (MatchesAllTermsInEither(p, n, terms))
+                if (MatchesFileEntryByScope(e, terms))
                     result.Add(e);
             }
             return result;
@@ -791,7 +787,7 @@ namespace VPB
                     if (!pathOk) continue;
 
                     // Name filter
-                    if (hasNameFilt && !MatchesAllTermsInEither(pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                    if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
 
                     var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -1410,7 +1406,7 @@ namespace VPB
                         return false;
                 }
                 if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                    if (!MatchesAllTermsInEither(entry.Path, "", nameFilterTerms))
+                    if (!MatchesFileEntryByScope(entry, nameFilterTerms))
                         return false;
                 if (activeTags != null && activeTags.Count > 0)
                 {
@@ -1619,7 +1615,7 @@ namespace VPB
 
             // Name Filter
             if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                if (!MatchesAllTermsInEither(entry.Path, "", nameFilterTerms))
+                if (!MatchesFileEntryByScope(entry, nameFilterTerms))
                     return false;
 
             // Tag Filter
@@ -1950,7 +1946,7 @@ namespace VPB
                         if (!pathOk) continue;
 
                         // Name filter
-                        if (hasNameFilt && !MatchesAllTermsInEither(pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                        if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
 
                         var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -2041,6 +2037,7 @@ namespace VPB
                 sb.Append(currentCreator ?? "").Append('\u001E');
                 sb.Append(currentPackagePathFilter ?? "").Append('\u001E');
                 sb.Append(nameFilterLower ?? "").Append('\u001E');
+                sb.Append(VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName").Append('\u001E');
                 sb.Append(title).Append('\u001E');
                 sb.Append((int)posePeopleFilter).Append('\u001E');
                 sb.Append((int)clothingSubfilter).Append('\u001E');
@@ -3223,7 +3220,7 @@ namespace VPB
                                                 continue;
                                             if (hasNameFilter)
                                             {
-                                                if (!MatchesAllTermsInEither(pkg.Path ?? "", pkg.Uid ?? "", nameTerms)) continue;
+                                                if (!MatchesPackageByScope(pkg.Uid ?? "", pkg.Path ?? "", null, nameTerms)) continue;
                                             }
                                             if (utCatMemKeyHits != null)
                                             {
@@ -3309,7 +3306,7 @@ namespace VPB
 
                                     if (hasNameFilter)
                                     {
-                                        if (!MatchesAllTermsInEither(pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
+                                        if (!MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
                                     }
 
                                     if (utCatMemKeyHits != null)
