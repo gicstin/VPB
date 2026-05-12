@@ -543,6 +543,19 @@ namespace VPB
                 var f = files[i];
                 string famKey = ComputeFamilyKey(f);
                 if (string.IsNullOrEmpty(famKey)) continue;
+
+                // Loose files are singleton families: ctime = DateAdded, mtime = DateUpdated.
+                // Without this split, re-saved scenes/presets wouldn't float to the top under DateUpdated.
+                if (f is SystemFileEntry sfe)
+                {
+                    DateTime added = DateTime.MinValue;
+                    try { added = FileStat.GetCreationTimeOrMin(sfe.Path); } catch { }
+                    DateTime updated = sfe.LastWriteTime;
+                    if (added == DateTime.MinValue) added = updated;
+                    map[famKey] = new FamilyScanTimes { MinScanned = added, HighestVersion = 0, HighestVersionScanned = updated };
+                    continue;
+                }
+
                 DateTime scanned = GetIndexedFirstScannedForFile(f);
                 int version = GetUidVersionNumber(f);
 
@@ -585,17 +598,8 @@ namespace VPB
             DateTime dt;
             if (file is VarFileEntry vfe && vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
             if (file is PackageListEntry ple && ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
-            // Loose files: match the DateAdded/DateUpdated sort key (ctime preferred over mtime)
-            // so the displayed subtitle agrees with the visible sort order.
-            if (file is SystemFileEntry sfe)
-            {
-                try
-                {
-                    DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
-                    if (ct != DateTime.MinValue) return ct;
-                }
-                catch { }
-            }
+            // Loose files: show mtime (DateUpdated key). Reflects the user's most recent edit/resave,
+            // which is the date that's actually informative for a file the user iterates on.
             return file.LastWriteTime;
         }
 
