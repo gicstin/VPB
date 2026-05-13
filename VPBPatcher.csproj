@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <Import Project="VPB.local.props" Condition="Exists('VPB.local.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B2A1C3D4-5E6F-7A8B-9C0D-1E2F3A4B5C6D}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>VPB.Patcher</RootNamespace>
+    <AssemblyName>VPB.Patcher</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>embedded</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>embedded</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(VaMPath)\BepInEx\core\BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="Mono.Cecil">
+      <HintPath>$(VaMPath)\BepInEx\core\Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="src\patcher\VPBPatcher.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>if not exist "$(VaMPath)\BepInEx\patchers" mkdir "$(VaMPath)\BepInEx\patchers"
+copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\patchers\VPB.Patcher.dll"
+if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers"
+copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\patchers\VPB.Patcher.dll"</PostBuildEvent>
+  </PropertyGroup>
+</Project>

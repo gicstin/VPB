@@ -475,6 +475,9 @@
     <Compile Include="src\hook\VarUtil.cs" />
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
+    <Compile Include="src\updater\VpbUpdaterService.cs" />
+    <Compile Include="src\updater\VpbUpdateConfig.cs" />
+    <Compile Include="src\updater\VamHookPlugin.Updater.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />

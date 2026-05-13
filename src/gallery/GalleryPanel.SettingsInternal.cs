@@ -729,7 +729,79 @@ namespace VPB
                 }
             }
 
+            // ── Auto-Updater ──
+            var updater = VamHookPlugin.singleton != null ? VamHookPlugin.singleton.Updater : null;
+            if (updater != null)
+            {
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "updater.check",
+                    GroupKey = "updater",
+                    Label = GetUpdaterCheckLabel(updater),
+                    Tooltip = VPBTranslation.T("settings.tip.updater.check", "Check for VPB updates from GitHub and stage files for next restart."),
+                    ControlType = InternalSettingControlType.Button,
+                    OnAction = (updater.HasPendingUpdate || updater.IsBusy) ? (Action)null : () =>
+                    {
+                        updater.CheckForUpdateAsync();
+                        RefreshInternalSettingsListRows(true);
+                    }
+                });
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "updater.auto",
+                    GroupKey = "updater",
+                    Label = VPBTranslation.T("settings.updater.auto_check", "Auto-check on startup"),
+                    Tooltip = VPBTranslation.T("settings.tip.updater.auto", "Automatically check for updates each time VaM starts."),
+                    ControlType = InternalSettingControlType.Toggle,
+                    GetBool = () => updater.Config.AutoCheck,
+                    SetBool = v => { updater.Config.AutoCheck = v; updater.Config.Save(); }
+                });
+                defs.Add(new InternalSettingDefinition
+                {
+                    Key = "updater.branch",
+                    GroupKey = "updater",
+                    Label = VPBTranslation.T("settings.updater.branch", "Update branch"),
+                    Tooltip = VPBTranslation.T("settings.tip.updater.branch", "GitHub branch to pull updates from (e.g. main, dev)."),
+                    ControlType = InternalSettingControlType.Cycle,
+                    Options = updater.GetAvailableBranches(),
+                    GetString = () => updater.Config.Branch ?? "main",
+                    SetString = v => updater.SetBranch(v)
+                });
+                if (updater.HasPendingUpdate)
+                {
+                    defs.Add(new InternalSettingDefinition
+                    {
+                        Key = "updater.clear",
+                        GroupKey = "updater",
+                        Label = VPBTranslation.T("settings.updater.clear_staged", "Clear staged update"),
+                        Tooltip = VPBTranslation.T("settings.tip.updater.clear", "Remove the pending update so it will not be applied on restart."),
+                        ControlType = InternalSettingControlType.Button,
+                        OnAction = () =>
+                        {
+                            updater.ClearStagedUpdate();
+                            RefreshInternalSettingsListRows(true);
+                        }
+                    });
+                }
+            }
+
             return defs;
+        }
+
+        private static string GetUpdaterCheckLabel(VpbUpdaterService updater)
+        {
+            if (updater.IsBusy)
+                return updater.StatusMessage ?? VPBTranslation.T("settings.updater.checking", "Checking...");
+            if (updater.HasPendingUpdate)
+            {
+                string av = updater.AvailableVersion ?? "?";
+                return "Updating " + PluginVersionInfo.Version + " → " + av + "  (restart VaM)";
+            }
+            if (updater.Status == VpbUpdateStatus.UpToDate)
+                return updater.StatusMessage ?? VPBTranslation.T("settings.updater.up_to_date", "Up to date");
+            if (updater.Status == VpbUpdateStatus.Error)
+                return updater.StatusMessage ?? VPBTranslation.T("settings.updater.error", "Update error");
+            return VPBTranslation.T("settings.updater.check", "Check for Updates (VPB " + PluginVersionInfo.Version + ")");
         }
 
         private InternalSettingDefinition GetInternalSettingDefinition(string rowKey)
@@ -815,6 +887,12 @@ namespace VPB
             internalSettingsHadPreSessionViewState = true;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             internalSettingsSessionActive = true;
+        }
+
+        public void NotifyUpdaterStatusChanged()
+        {
+            if (IsSettingsPanelOpen())
+                RefreshInternalSettingsListRows(true);
         }
 
         private bool IsSettingsPanelOpen()

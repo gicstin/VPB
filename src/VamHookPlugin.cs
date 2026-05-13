@@ -846,6 +846,8 @@ namespace VPB
             ThirdPartyFixHook.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
+
+            InitUpdater();
         }
 
         private void SetMiniMode(bool enabled)
@@ -1087,6 +1089,7 @@ namespace VPB
             VamOnDemandLoader.DrainMainThreadQueue();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
+            UpdateUpdater();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle

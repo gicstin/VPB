@@ -71,6 +71,7 @@ namespace VPB
             AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
             if (BaImporter.TryDetectBaDataDir(out _))
                 AddGroupRow("ba_migration", VPBTranslation.T("settings.group.ba_migration", "BrowserAssist Migration"));
+            AddGroupRow("updater", VPBTranslation.T("settings.group.updater", "Auto-Updater"));
         }
 
         private void BuildRatingsTabs(GameObject container, List<GameObject> trackedButtons)

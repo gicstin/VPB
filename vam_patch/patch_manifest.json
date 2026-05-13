@@ -674,5 +674,13 @@
     {
         "RelativePath":  "VaM (Log Mode).bat",
         "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/patchers",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/patchers/VPB.Patcher.dll",
+        "IsDirectory":  false
     }
 ]
