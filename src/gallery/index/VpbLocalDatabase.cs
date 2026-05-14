@@ -336,6 +336,7 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS cat_mem (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path));" +
                 "CREATE TABLE IF NOT EXISTS pkg_dep (src_uid TEXT NOT NULL, dep_uid TEXT NOT NULL, PRIMARY KEY(src_uid, dep_uid));" +
                 "CREATE TABLE IF NOT EXISTS sys_file (cache_key TEXT NOT NULL, path TEXT NOT NULL, wtime INTEGER, size INTEGER, PRIMARY KEY(cache_key, path));" +
+                "CREATE TABLE IF NOT EXISTS loose_deps (path TEXT PRIMARY KEY, wtime INTEGER, size INTEGER, deps TEXT);" +
                 "CREATE TABLE IF NOT EXISTS cleanup_exclude (uid TEXT PRIMARY KEY, added_utc_binary INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cat_filter_state (panel_id TEXT NOT NULL, cat_key TEXT NOT NULL, state_json TEXT NOT NULL, PRIMARY KEY(panel_id, cat_key));" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_cat ON cat_mem(category);" +
@@ -1300,6 +1301,90 @@ namespace VPB
                     {
                         try { conn.ExecUtf8("ROLLBACK;"); } catch { }
                         throw;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Persistent cache for dependencies extracted from loose .json scene/preset files. Survives VaM restarts so the
+        /// 1500ms per-file stream scan only runs once per (path, mtime, size). Returns true when a fresh row matches.
+        /// </summary>
+        internal static bool TryReadLooseSceneDeps(string filePath, long expectedWtimeBinary, long expectedSize, HashSet<string> outDeps)
+        {
+            if (outDeps == null) return false;
+            outDeps.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (string.IsNullOrEmpty(filePath)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT wtime, size, deps FROM loose_deps WHERE path = ?"))
+                    {
+                        st.BindText(1, filePath);
+                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
+
+                        long wt = long.MinValue, sz = long.MinValue;
+                        string wtxt = st.ColumnText(0);
+                        string sztxt = st.ColumnText(1);
+                        if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
+                        if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
+                        if (wt != expectedWtimeBinary || sz != expectedSize) return false;
+
+                        string deps = st.ColumnText(2) ?? "";
+                        if (deps.Length == 0) return true;
+                        string[] parts = deps.Split('|');
+                        for (int i = 0; i < parts.Length; i++)
+                        {
+                            string p = parts[i];
+                            if (!string.IsNullOrEmpty(p)) outDeps.Add(p);
+                        }
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                outDeps.Clear();
+                return false;
+            }
+        }
+
+        internal static void WriteLooseSceneDeps(string filePath, long wtimeBinary, long size, HashSet<string> deps)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(filePath)) return;
+            try
+            {
+                string depsCsv = "";
+                if (deps != null && deps.Count > 0)
+                {
+                    var sb = new StringBuilder(deps.Count * 24);
+                    bool first = true;
+                    foreach (var d in deps)
+                    {
+                        if (string.IsNullOrEmpty(d)) continue;
+                        // Defensive: drop anything containing the delimiter so round-trip can't corrupt the set.
+                        if (d.IndexOf('|') >= 0) continue;
+                        if (!first) sb.Append('|');
+                        sb.Append(d);
+                        first = false;
+                    }
+                    depsCsv = sb.ToString();
+                }
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var ins = conn.Prepare("INSERT OR REPLACE INTO loose_deps(path,wtime,size,deps) VALUES(?,?,?,?)"))
+                    {
+                        ins.BindText(1, filePath);
+                        ins.BindText(2, wtimeBinary.ToString());
+                        ins.BindText(3, size.ToString());
+                        ins.BindText(4, depsCsv);
+                        ins.Step();
                     }
                 }
             }

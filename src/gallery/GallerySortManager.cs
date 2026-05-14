@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 using SimpleJSON;
 
@@ -82,6 +83,70 @@ namespace VPB
 
         // Cache for scene dependencies to avoid re-parsing on every access
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
+
+        // Background warmer: at-most-one running task that pre-populates the SQLite loose-deps cache.
+        // Writes DB only — never touches _sceneDependencyCache — so it cannot race with main-thread binds.
+        private static int _looseDepsWarmRunning;
+        private static readonly string[] LooseDepsWarmRoots = { "Saves", "Custom" };
+
+        /// <summary>
+        /// Kick off (or skip-if-running) a background pass that fills <c>loose_deps</c> for every loose <c>.json</c>
+        /// under <c>Saves/</c> and <c>Custom/</c>. Bind reads stay O(1) after this finishes, even for Timeline-heavy
+        /// scene files. Safe to call from any thread; no-op when an extraction pass is already in flight.
+        /// </summary>
+        public static void StartBackgroundWarmLooseDepsCache()
+        {
+            if (Interlocked.CompareExchange(ref _looseDepsWarmRunning, 1, 0) != 0) return;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { WarmLooseDepsCacheCore(); }
+                catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
+                finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
+            });
+        }
+
+        private static void WarmLooseDepsCacheCore()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int seen = 0, hit = 0, written = 0;
+            var probe = new HashSet<string>();
+            for (int r = 0; r < LooseDepsWarmRoots.Length; r++)
+            {
+                string root = LooseDepsWarmRoots[r];
+                if (!Directory.Exists(root)) continue;
+                var files = new List<string>();
+                try { FileManager.SafeGetFiles(root, "*.json", files); } catch { continue; }
+                for (int i = 0; i < files.Count; i++)
+                {
+                    string path = files[i];
+                    if (string.IsNullOrEmpty(path)) continue;
+                    seen++;
+                    try
+                    {
+                        var fi = new FileInfo(path);
+                        if (!fi.Exists) continue;
+                        long wt = fi.LastWriteTimeUtc.ToBinary();
+                        long sz = fi.Length;
+
+                        probe.Clear();
+                        if (VpbLocalDatabase.TryReadLooseSceneDeps(path, wt, sz, probe))
+                        {
+                            hit++;
+                            continue;
+                        }
+
+                        var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
+                        VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
+                        written++;
+
+                        // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
+                        if ((written & 7) == 0) Thread.Sleep(10);
+                    }
+                    catch { }
+                }
+            }
+            LogUtil.Log("[VPB] Loose-deps warm DONE | seen=" + seen + " | hit=" + hit + " | written=" + written + " | ms=" + sw.ElapsedMilliseconds);
+        }
 
         public GallerySortManager()
         {
@@ -837,18 +902,47 @@ namespace VPB
                     return null;
                 }
 
-                // Check cache first
+                // L1: process-memory cache
                 if (_sceneDependencyCache.TryGetValue(filePath, out var cached))
                 {
                     return cached;
                 }
 
-                // Use streaming/line-by-line extraction to avoid loading entire large files into memory
+                // L2: SQLite cache (survives VaM restart; keyed by mtime+size so Timeline writeback invalidates).
+                long wtBin = 0, sz = 0;
+                bool haveStat = false;
+                try
+                {
+                    var fi = new FileInfo(filePath);
+                    if (fi.Exists)
+                    {
+                        wtBin = fi.LastWriteTimeUtc.ToBinary();
+                        sz = fi.Length;
+                        haveStat = true;
+                    }
+                }
+                catch { haveStat = false; }
+
+                if (haveStat)
+                {
+                    var dbDeps = new HashSet<string>();
+                    if (VpbLocalDatabase.TryReadLooseSceneDeps(filePath, wtBin, sz, dbDeps))
+                    {
+                        _sceneDependencyCache[filePath] = dbDeps;
+                        return dbDeps;
+                    }
+                }
+
+                // Miss: pay the stream scan once, then persist for future binds.
                 var deps = ExtractDependenciesStreaming(file);
 
-                // Cache the result
                 if (deps != null && deps.Count > 0)
                     _sceneDependencyCache[filePath] = deps;
+
+                if (haveStat && deps != null)
+                {
+                    try { VpbLocalDatabase.WriteLooseSceneDeps(filePath, wtBin, sz, deps); } catch { }
+                }
 
                 return deps;
             }

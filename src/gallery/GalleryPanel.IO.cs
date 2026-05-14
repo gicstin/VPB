@@ -2542,6 +2542,13 @@ namespace VPB
             long deepAfterSysFilesMs = -1;
             long deepAfterSortMs = -1;
             long deepAfterGridBindMs = -1;
+            long deepGbListCopyMs = -1;
+            long deepGbConfigMs = -1;
+            long deepGbSetItemMs = -1;
+            long deepGbCreateTotalMs = 0;
+            int deepGbCreateCount = 0;
+            long deepGbBindTotalMs = 0;
+            int deepGbBindCount = 0;
             long deepAfterEarlyMetaWaitMs = -1;
             long deepUpdateLayoutMs = -1;
             int deepFilesCountAfterDrain = 0;
@@ -3756,6 +3763,8 @@ namespace VPB
             if (nameFilterTerms == null || nameFilterTerms.Length == 0)
                 _topSearchBaseIsClean = true;
 
+            if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds;
+
             // Setup Recycling Grid
             if (contentGO != null)
             {
@@ -3768,7 +3777,14 @@ namespace VPB
                 recyclingGrid.content = contentGO.GetComponent<RectTransform>();
 
                 // Setup Callbacks
-                recyclingGrid.onCreateItem = () => CreateNewFileButtonGO();
+                recyclingGrid.onCreateItem = () => {
+                    var swC = System.Diagnostics.Stopwatch.StartNew();
+                    var go0 = CreateNewFileButtonGO();
+                    swC.Stop();
+                    deepGbCreateTotalMs += swC.ElapsedMilliseconds;
+                    deepGbCreateCount++;
+                    return go0;
+                };
                 recyclingGrid.onBindItem = (go, index) => {
                     if (index >= 0 && index < currentFilteredFiles.Count)
                     {
@@ -3777,7 +3793,11 @@ namespace VPB
                         int centerIdx = recyclingGrid != null ? recyclingGrid.CachedCenterItemIndex : 0;
                         int dist = Mathf.Abs(index - centerIdx);
                         _nextThumbPriority = Mathf.Min(90, dist * 3); // center=0 (first), edges=higher (later)
+                        var swB = System.Diagnostics.Stopwatch.StartNew();
                         BindFileButton(go, currentFilteredFiles[index]);
+                        swB.Stop();
+                        deepGbBindTotalMs += swB.ElapsedMilliseconds;
+                        deepGbBindCount++;
                     }
                 };
                 
@@ -3798,6 +3818,8 @@ namespace VPB
                     recyclingGrid.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferRefresh: true);
                     recyclingGrid.SetAdaptiveConfig(true, minSize, cols, false, deferRefresh: true);
                 }
+                if (swDeep != null) deepGbConfigMs = swDeep.ElapsedMilliseconds;
+
                 // Set item count and pre-position scroll so the first UpdateVisibleItems
                 // binds the correct viewport items, not items at the top.
                 if (scrollToBottom)
@@ -3812,6 +3834,7 @@ namespace VPB
                 {
                     recyclingGrid.SetItemCountAtScroll(currentFilteredFiles.Count, savedScrollNormalizedPos);
                 }
+                if (swDeep != null) deepGbSetItemMs = swDeep.ElapsedMilliseconds;
             }
             if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
 
@@ -3871,6 +3894,11 @@ namespace VPB
                         + " | sysAdded=" + deepSysFilesAdded
                         + " | afterSort=" + deepAfterSortMs + "ms"
                         + " | afterGridBind=" + deepAfterGridBindMs + "ms"
+                        + " | gbListCopy=" + deepGbListCopyMs + "ms"
+                        + " | gbConfig=" + deepGbConfigMs + "ms"
+                        + " | gbSetItem=" + deepGbSetItemMs + "ms"
+                        + " | gbCreate=" + deepGbCreateTotalMs + "ms/" + deepGbCreateCount
+                        + " | gbBind=" + deepGbBindTotalMs + "ms/" + deepGbBindCount
                         + " | afterEarlyMetaWait=" + deepAfterEarlyMetaWaitMs + "ms"
                         + " | filesAfterDrain=" + deepFilesCountAfterDrain
                         + " | filesFinal=" + (files != null ? files.Count : 0)

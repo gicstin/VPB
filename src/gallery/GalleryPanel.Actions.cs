@@ -300,6 +300,7 @@ namespace VPB
                 RefreshFiles(true);
                 refreshOnNextShow = false;
                 try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+                try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
             }
             catch (Exception ex)
             {
