@@ -961,7 +961,7 @@ namespace VPB
             }
             else if (contentType == ContentType.UserTagsApplied)
             {
-                BuildUserTagsTabs(container, trackedButtons, isLeft);
+                BuildUserTagsAppliedTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.History)
             {

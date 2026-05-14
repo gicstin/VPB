@@ -52,11 +52,6 @@ namespace VPB
 
             GameObject utVirtHolder = EnsureUserTagPickVirtualHolder(container.transform);
             EnsureUserTagVirtScrollHook(isLeft, utVirtHolder);
-            if (dataSigChanged)
-            {
-                ScrollRect srReset = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
-                if (srReset != null) srReset.verticalNormalizedPosition = 1f;
-            }
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);

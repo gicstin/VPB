@@ -870,7 +870,7 @@ namespace VPB
                 if (countsOk) dict.TryGetValue(name, out c);
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
-            userTagsCached = true;
+            userTagsCached = countsOk;
             unchecked { userTagSideTabDataRevision++; }
         }
 
