@@ -3521,13 +3521,14 @@ namespace VPB
                         }
                         sysCacheKey = sbKey.ToString();
 
-                        // Signature: directory last write times.
+                        // Signature: deep max(mtime) per scan root. Top-level mtime alone misses additions in
+                        // subfolders, which kept the cache stale across sessions. DeepMaxDirMtimeBinary walks the dir tree and takes max mtime so
+                        // any subfolder change invalidates.
                         var sbSig = new System.Text.StringBuilder(256);
                         for (int i = 0; i < p2.Count; i++)
                         {
                             string sp = p2[i];
-                            long t = 0;
-                            try { if (Directory.Exists(sp)) t = Directory.GetLastWriteTimeUtc(sp).ToBinary(); } catch { t = 0; }
+                            long t = VpbLocalDatabase.DeepMaxDirMtimeBinary(sp);
                             if (i != 0) sbSig.Append('|');
                             sbSig.Append(t.ToString());
                         }

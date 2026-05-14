@@ -529,7 +529,8 @@ namespace VPB
             // Prefer SQLite-cached enumeration to avoid recursive disk walks on every side-tab rebuild.
             var exts = new[] { "cs", "cslist", "dll" };
             string sig = "0";
-            try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+            // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
+            try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
             string cacheKey = "plugins:custom_scripts|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=cs,cslist,dll";
 
             int n = 0;
@@ -587,7 +588,8 @@ namespace VPB
                 catch { continue; }
 
                 string sig = "0";
-                try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+                // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
+                try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
                 string cacheKey = "appearance:custom_presets|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=vap";
 
                 int n = 0;
@@ -1547,8 +1549,9 @@ namespace VPB
                         var sbSig = new StringBuilder(128);
                         for (int i = 0; i < p2.Count; i++)
                         {
+                            // Deep dir-mtime so additions in subfolders invalidate this cache.
                             long t = 0;
-                            try { if (Directory.Exists(p2[i])) t = Directory.GetLastWriteTimeUtc(p2[i]).ToBinary(); } catch { t = 0; }
+                            try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                             if (i != 0) sbSig.Append('|');
                             sbSig.Append(t.ToString());
                         }
@@ -1757,8 +1760,9 @@ namespace VPB
                         var sbSig = new StringBuilder(128);
                         for (int i = 0; i < p2.Count; i++)
                         {
+                            // Deep dir-mtime so additions in subfolders invalidate this cache.
                             long t = 0;
-                            try { if (Directory.Exists(p2[i])) t = Directory.GetLastWriteTimeUtc(p2[i]).ToBinary(); } catch { t = 0; }
+                            try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                             if (i != 0) sbSig.Append('|');
                             sbSig.Append(t.ToString());
                         }
@@ -1914,8 +1918,9 @@ namespace VPB
                     var sbSig = new StringBuilder(128);
                     for (int i = 0; i < p2.Count; i++)
                     {
+                        // Deep dir-mtime so additions in subfolders invalidate this cache.
                         long t = 0;
-                        try { if (Directory.Exists(p2[i])) t = Directory.GetLastWriteTimeUtc(p2[i]).ToBinary(); } catch { t = 0; }
+                        try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
                         if (i != 0) sbSig.Append('|');
                         sbSig.Append(t.ToString());
                     }

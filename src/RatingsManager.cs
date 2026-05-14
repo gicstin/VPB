@@ -180,7 +180,9 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return new string[0];
             string sig = "0";
-            try { sig = Directory.GetLastWriteTimeUtc(root).ToBinary().ToString(); } catch { sig = "0"; }
+            // Deep dir-mtime so additions in subfolders invalidate this cache (FileManager.SafeGetFiles
+            // walks AllDirectories).
+            try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
             string cacheKey = "markers:fav|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|pat=" + (pattern ?? "");
 
             var cached = new List<VpbLocalDatabase.SystemFileRow>();

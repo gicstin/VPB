@@ -556,9 +556,10 @@ namespace VPB
                     var sbSig = new StringBuilder(128);
                     for (int i = 0; i < p2.Count; i++)
                     {
+                        // Deep dir-mtime so additions in subfolders invalidate this cache.
                         string sp = p2[i];
                         long tt = 0;
-                        try { if (Directory.Exists(sp)) tt = Directory.GetLastWriteTimeUtc(sp).ToBinary(); } catch { tt = 0; }
+                        try { tt = VpbLocalDatabase.DeepMaxDirMtimeBinary(sp); } catch { tt = 0; }
                         if (i != 0) sbSig.Append('|');
                         sbSig.Append(tt.ToString());
                     }
@@ -777,9 +778,10 @@ namespace VPB
                     var sbSig = new StringBuilder(128);
                     for (int i = 0; i < p2.Count; i++)
                     {
+                        // Deep dir-mtime so additions in subfolders invalidate this cache.
                         string sp = p2[i];
                         long tt = 0;
-                        try { if (Directory.Exists(sp)) tt = Directory.GetLastWriteTimeUtc(sp).ToBinary(); } catch { tt = 0; }
+                        try { tt = VpbLocalDatabase.DeepMaxDirMtimeBinary(sp); } catch { tt = 0; }
                         if (i != 0) sbSig.Append('|');
                         sbSig.Append(tt.ToString());
                     }

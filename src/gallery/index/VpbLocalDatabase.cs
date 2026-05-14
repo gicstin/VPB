@@ -351,6 +351,25 @@ namespace VPB
                 "CREATE INDEX IF NOT EXISTS idx_iu_count ON item_usage(use_count);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
                 "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
+            // Once-per-build wipe of pre-deep-sig sys_sig:* rows, gated by sentinel so it survives
+            // EnsureSchema's per-connection invocation. Old shallow-mtime sigs could otherwise
+            // coincidentally match a new deep-mtime sig and return stale cache rows.
+            const string sysSigDeepMigKey = "schema_migration:sys_sig_deep_v1";
+            if (string.IsNullOrEmpty(MetaGet(conn, sysSigDeepMigKey)))
+            {
+                try { conn.ExecUtf8("DELETE FROM meta WHERE k LIKE 'sys_sig:%';"); } catch { }
+                try
+                {
+                    using (var mset = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                    {
+                        mset.BindText(1, sysSigDeepMigKey);
+                        mset.BindText(2, "1");
+                        mset.Step();
+                    }
+                }
+                catch { }
+            }
+
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN var_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN list_path TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
@@ -1141,13 +1160,54 @@ namespace VPB
                 {
                     for (int i = 0; i < s.Length; i++)
                     {
-                        // UTF-16 code units; stable within this codebase.
                         h ^= (ushort)s[i];
                         h *= Prime;
                     }
                 }
                 return h.ToString("x16");
             }
+        }
+
+        /// <summary>
+        /// Recursive max(mtime) across <paramref name="root"/> and all subdirectories. Used by sys_file cache
+        /// signature builders: callers walk file trees with SearchOption.AllDirectories, but the top-level
+        /// dir's mtime does not update when files are added to deep subfolders, so a shallow sig would let
+        /// the cache return stale rows. Walking GetDirectories(AllDirectories) costs one directory enumeration
+        /// per scan but is far cheaper than the file enumeration the cache is protecting against.
+        /// </summary>
+        internal static long DeepMaxDirMtimeBinary(string root)
+        {
+            long max = 0;
+            if (string.IsNullOrEmpty(root)) return max;
+            try
+            {
+                if (!Directory.Exists(root)) return max;
+                try
+                {
+                    long rootM = Directory.GetLastWriteTimeUtc(root).ToBinary();
+                    if (rootM > max) max = rootM;
+                }
+                catch { }
+
+                string[] dirs;
+                try { dirs = Directory.GetDirectories(root, "*", SearchOption.AllDirectories); }
+                catch { dirs = null; }
+
+                if (dirs != null)
+                {
+                    for (int i = 0; i < dirs.Length; i++)
+                    {
+                        try
+                        {
+                            long m = Directory.GetLastWriteTimeUtc(dirs[i]).ToBinary();
+                            if (m > max) max = m;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+            return max;
         }
 
         internal static bool TryReadSystemFilesForCacheKey(string cacheKey, string expectedSig, List<SystemFileRow> outRows)
