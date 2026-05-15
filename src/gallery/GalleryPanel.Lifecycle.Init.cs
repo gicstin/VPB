@@ -2171,6 +2171,11 @@ namespace VPB
 
             // Main Content Area
             GameObject scrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
+            // Tab scroll panels must render above the image grid so their VR scroll buttons aren't covered.
+            if (leftTabScrollGO != null) leftTabScrollGO.transform.SetAsLastSibling();
+            if (leftSubTabScrollGO != null) leftSubTabScrollGO.transform.SetAsLastSibling();
+            if (rightTabScrollGO != null) rightTabScrollGO.transform.SetAsLastSibling();
+            if (rightSubTabScrollGO != null) rightSubTabScrollGO.transform.SetAsLastSibling();
             scrollRect = scrollGO.GetComponent<ScrollRect>();
             try { GalleryViewportCtrlScrollColumns.TryAttach(this, scrollRect); } catch { }
             contentScrollRT = scrollGO.GetComponent<RectTransform>();

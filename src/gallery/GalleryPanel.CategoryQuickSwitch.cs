@@ -46,6 +46,9 @@ namespace VPB
             headerBtn.targetGraphic = hitImg;
             headerBtn.onClick.AddListener(() => ToggleCategoryQuickMenuVisible());
 
+            var headerBehaviour = cqRoot.AddComponent<CategoryQuickSwitchHeaderBehaviour>();
+            headerBehaviour.Panel = this;
+
             var hlg = cqRoot.AddComponent<HorizontalLayoutGroup>();
             // Small left inset so arrow never touches edge.
             hlg.padding = new RectOffset(6, 0, 0, 0);

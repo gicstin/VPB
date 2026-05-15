@@ -538,6 +538,7 @@ namespace VPB
         private enum UserTagSelectionState { Off, On, Mixed }
         private readonly Dictionary<string, UserTagSelectionState> _userTagSelectionStates = new Dictionary<string, UserTagSelectionState>(StringComparer.OrdinalIgnoreCase);
         private int _userTagSelectionRowCount = 0;
+        private readonly Dictionary<string, float> _userTagButtonLastClickTime = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         private string _userTagPulseTag = null;
         private float _userTagPulseUntil = 0f;
         private FileEntry _userTagDragHoverFile = null;

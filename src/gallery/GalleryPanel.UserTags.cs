@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -3282,11 +3283,19 @@ namespace VPB
         private RectTransform _ghostRT;
         private Canvas _rootCanvas;
         private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(16);
+        public bool ConsumedByDrag { get; private set; }
+        private bool _releaseProcessed;
 
         private void Awake()
         {
             _cg = GetComponent<CanvasGroup>();
             if (_cg == null) _cg = gameObject.AddComponent<CanvasGroup>();
+        }
+
+        private void OnDisable()
+        {
+            if (_pressed || _dragging)
+                CleanupDragVisuals();
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -3296,15 +3305,24 @@ namespace VPB
             if (eventData.button != PointerEventData.InputButton.Left) return;
             _pressed = true;
             _dragging = false;
+            ConsumedByDrag = false;
+            _releaseProcessed = false;
             _pressPos = eventData.position;
             _pressTime = Time.unscaledTime;
         }
 
         public void OnPointerUp(PointerEventData eventData)
         {
+            if (!_pressed) return;
+            if (!isActiveAndEnabled) return;
+
             _pressed = false;
+            _releaseProcessed = true;
             if (_dragging)
+            {
                 EndManualDrag(eventData);
+                ConsumedByDrag = true;
+            }
         }
 
         private void Update()
@@ -3316,25 +3334,43 @@ namespace VPB
                 UpdateGhostPosition();
                 if (!IsAppliedRowDrag)
                     RefreshUserTagApplyDragHoverStatus();
-                // Mouse-up may not route to source once we disable raycasts.
-                if (Input.GetMouseButtonUp(0))
+                if (!_releaseProcessed && Input.GetMouseButtonUp(0))
                     EndManualDrag(null);
                 return;
             }
 
             if (!_pressed) return;
 
-            // Start manual drag once pointer moved enough. Works even when ScrollRect eats drag events.
+            bool isVR = XrUtils.IsVrActive();
+            float distThreshold = isVR ? 50f : 10f;
+            float holdThreshold = isVR ? 0.25f : 0f;
+
             Vector2 cur = Input.mousePosition;
             float dist = (cur - _pressPos).magnitude;
-            if (dist < 10f) return;
+            if (dist < distThreshold) return;
+
+            float held = Time.unscaledTime - _pressTime;
+            if (held < holdThreshold) return;
+
             BeginManualDrag();
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            // Keep Unity path (desktop). Manual path handles ScrollRect conflicts.
             if (Panel == null) return;
+
+            if (XrUtils.IsVrActive())
+            {
+                float held = Time.unscaledTime - _pressTime;
+                if (held < 0.25f) return;
+
+                if (eventData != null)
+                {
+                    float dist = (eventData.position - _pressPos).magnitude;
+                    if (dist < 50f) return;
+                }
+            }
+
             BeginManualDrag();
         }
 
@@ -3490,6 +3526,8 @@ namespace VPB
         {
             _pressed = false;
             _dragging = false;
+            ConsumedByDrag = false;
+            _releaseProcessed = false;
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
             if (_cg != null)
             {
