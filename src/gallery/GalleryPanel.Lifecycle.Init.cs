@@ -327,6 +327,7 @@ namespace VPB
 
             // Creator filter dropdown button (between Filter Presets and Search)
             SetupTitleCreatorFilterDropdown(titleBarGO, backgroundBoxGO);
+            SetupGlobalSourceFilterDropdown(titleBarGO, backgroundBoxGO);
 
             fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", UI.BarIconGlyphTint);
             fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", UI.BarIconGlyphTint);

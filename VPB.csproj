@@ -374,6 +374,7 @@
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.GlobalSourceFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
     <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />

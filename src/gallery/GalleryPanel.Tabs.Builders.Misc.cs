@@ -100,30 +100,18 @@ namespace VPB
 
             if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
 
-            int allCount = appearanceSourceCountAll;
-            int presetsCount = appearanceSourceCountPresets;
-            int customCount = appearanceSourceCountCustom;
+            bool localOnly = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
 
-            string[] appearanceKeys = new string[] { "", "presets", "custom" };
-            string[] appearanceLabels = new string[]
+            // Single toggle: "Local only" overrides the global source filter on Appearance when ON.
+            // When OFF, the title-bar global filter applies normally.
+            string label = "Local only (" + appearanceSourceCountCustom + ")";
+            Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
+
+            CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                "All (" + allCount + ")",
-                "Presets (" + presetsCount + ")",
-                "Custom (" + customCount + ")",
-            };
-
-            for (int i = 0; i < appearanceKeys.Length; i++)
-            {
-                string key = appearanceKeys[i];
-                string label = appearanceLabels[i];
-                bool isActive = string.Equals(currentAppearanceSourceFilter, key, StringComparison.OrdinalIgnoreCase);
-                Color btnColor = isActive ? appearanceColor : ColorInactiveRow;
-
-                CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                    currentAppearanceSourceFilter = key;
-                    RefreshFilesAndTabs();
-                }, trackedButtons);
-            }
+                currentAppearanceSourceFilter = localOnly ? "" : "local";
+                RefreshFilesAndTabs();
+            }, trackedButtons);
 
             {
                 Color inactive = ColorInactiveRow;
@@ -273,21 +261,19 @@ namespace VPB
 
         private void BuildSceneSourceTabs(GameObject container, List<GameObject> trackedButtons)
         {
-            var sceneFilters = GetOrderedSceneSourceFilterLabels();
             Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f);
 
-            foreach (var filter in sceneFilters)
+            bool localOnly = string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+
+            // Single toggle: "Local only" overrides the global source filter on Scenes when ON.
+            string label = "Local only";
+            Color btnColor = localOnly ? sceneColor : ColorInactiveRow;
+
+            CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                bool isActive = (currentSceneSourceFilter == filter) || (string.IsNullOrEmpty(currentSceneSourceFilter) && filter == "All Scenes");
-                Color btnColor = isActive ? sceneColor : ColorInactiveRow;
-
-                CreateTabButton(container.transform, filter, btnColor, isActive, () => {
-                    if (filter == "All Scenes") currentSceneSourceFilter = "";
-                    else currentSceneSourceFilter = filter;
-
-                    RefreshFilesAndTabs();
-                }, trackedButtons);
-            }
+                currentSceneSourceFilter = localOnly ? "" : "local";
+                RefreshFilesAndTabs();
+            }, trackedButtons);
         }
     }
 }

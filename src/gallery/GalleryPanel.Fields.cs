@@ -136,6 +136,48 @@ namespace VPB
         public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
         public bool HasLoadedContent => hasLoadedContent;
 
+        // Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.
+        public void GetPerfTelemetry(out int pendingThumbCacheJobs, out int thumbCacheTotalEnqueued, out int thumbCacheSaved)
+        {
+            pendingThumbCacheJobs = pendingThumbnailCacheJobs != null ? pendingThumbnailCacheJobs.Count : 0;
+            thumbCacheTotalEnqueued = _thumbCacheTotalEnqueued;
+            thumbCacheSaved = _thumbCacheSaved;
+        }
+
+        // Returns count of runtime + persistent listeners on scrollRect.onValueChanged, or -1 on failure.
+        // Used to detect leaked AddListener subscriptions across panel rebuilds.
+        public int GetScrollListenerCountForTelemetry()
+        {
+            if (scrollRect == null) return -1;
+            return VpbPerfTelemetry.CountListeners(scrollRect.onValueChanged);
+        }
+
+        // Button-pool / button-list counters for VpbPerfTelemetry retention diagnosis.
+        // Pools only grow (Stack pattern, no Shrink). Active lists rebuild on category switch.
+        // Tab buttons sum dual-buffer side-tabs (category + creator, left + right) plus active sub-tabs.
+        public void GetButtonPoolTelemetry(
+            out int fileButtonPoolCount,
+            out int navButtonPoolCount,
+            out int fileButtonImagesCount,
+            out int activeButtonsTotal,
+            out int tabButtonsTotal)
+        {
+            fileButtonPoolCount = fileButtonPool != null ? fileButtonPool.Count : 0;
+            navButtonPoolCount = navButtonPool != null ? navButtonPool.Count : 0;
+            fileButtonImagesCount = fileButtonImages != null ? fileButtonImages.Count : 0;
+            activeButtonsTotal =
+                (activeButtons != null ? activeButtons.Count : 0) +
+                (leftActiveTabButtons != null ? leftActiveTabButtons.Count : 0) +
+                (leftSubActiveTabButtons != null ? leftSubActiveTabButtons.Count : 0) +
+                (rightActiveTabButtons != null ? rightActiveTabButtons.Count : 0) +
+                (rightSubActiveTabButtons != null ? rightSubActiveTabButtons.Count : 0);
+            tabButtonsTotal =
+                (leftCategoryTabButtons != null ? leftCategoryTabButtons.Count : 0) +
+                (leftCreatorTabButtons != null ? leftCreatorTabButtons.Count : 0) +
+                (rightCategoryTabButtons != null ? rightCategoryTabButtons.Count : 0) +
+                (rightCreatorTabButtons != null ? rightCreatorTabButtons.Count : 0);
+        }
+
         private bool refreshOnNextShow;
         private bool hasLoadedContent = false;
         // When gallery is unhidden via menu gate (no Show() call), refresh raycaster once.
@@ -476,6 +518,19 @@ namespace VPB
         private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
         private string currentSceneSourceFilter = ""; // NEW
         private string currentAppearanceSourceFilter = "";
+
+        // Mirror of VPBConfig.GlobalSourceFilter. Read in init, written by dropdown click handlers,
+        // applied as the early gate in PassesFilters.
+        private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+
+        private GameObject globalSourceFilterBtn;
+        private Text globalSourceFilterBtnText;
+        private GameObject globalSourceFilterDropdown;
+        private GameObject globalSourceFilterDropdownBlocker;
+        private Text globalSourceFilterRowAllCountText;
+        private Text globalSourceFilterRowLocalCountText;
+        private Text globalSourceFilterRowVarCountText;
+
         private string currentPackagePathFilter = "";
         private PosePeopleFilter posePeopleFilter = PosePeopleFilter.All;
         private readonly Dictionary<string, int> posePeopleCountCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);

@@ -911,7 +911,7 @@ namespace VPB
         }
 
 
-        /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle).</summary>
+        /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle). Unreferenced: Task 8 replaced BuildSceneSourceTabs with a single toggle.</summary>
         private List<string> GetOrderedSceneSourceFilterLabels()
         {
             SortState st = GetSortState("SceneSource");

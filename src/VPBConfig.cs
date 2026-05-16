@@ -10,6 +10,13 @@ namespace VPB
 {
     public class VPBConfig
     {
+        public enum GlobalSourceFilterValue
+        {
+            All,
+            Local,
+            Var
+        }
+
         public const float MinUiScale = 0.72f;
         public const float MaxUiScale = 1.5f;
 
@@ -205,6 +212,8 @@ namespace VPB
             get { return string.Equals(AppearanceClothingApplyMode, "keep", StringComparison.OrdinalIgnoreCase); }
             set { AppearanceClothingApplyMode = value ? "keep" : "replace"; }
         }
+        /// <summary>True keeps target atom's current scale when an Appearance preset is applied (both toolbox and drag-drop). Default false.</summary>
+        public bool SuppressAppearanceScaleChange { get; set; } = false;
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
         /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
@@ -238,6 +247,8 @@ namespace VPB
         public string LastGalleryCategory = "";
         /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed".</summary>
         public string InitialGalleryCategory = "Scenes";
+        /// <summary>Global source filter for gallery: All (default), Local (loose files only), or Var (.var packages only).</summary>
+        public GlobalSourceFilterValue GlobalSourceFilter = GlobalSourceFilterValue.All;
 
         private static readonly string[] s_InitialGalleryCategoryCanonical = { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" };
 
@@ -586,6 +597,7 @@ namespace VPB
             GalleryOpacity = 1.0f;
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
+            SuppressAppearanceScaleChange = false;
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
             RequireDragHoldBeforeMove = false;
@@ -643,6 +655,7 @@ namespace VPB
             BaMigrationPromptDismissed = false;
             GalleryScrollButtonStepViewportFraction = 0.65f;
             GalleryScrollButtonsEnabled = true;
+            GlobalSourceFilter = GlobalSourceFilterValue.All;
 
             try
             {
@@ -701,6 +714,7 @@ namespace VPB
                             AppearanceClothingApplyMode = node["AppearanceClothingApplyMode"].Value;
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
+                        if (node["SuppressAppearanceScaleChange"] != null) SuppressAppearanceScaleChange = node["SuppressAppearanceScaleChange"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["DragHoldThreshold"] != null)
@@ -711,6 +725,25 @@ namespace VPB
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         if (node["InitialGalleryCategory"] != null)
                             InitialGalleryCategory = NormalizeInitialGalleryCategory(node["InitialGalleryCategory"].Value);
+                        if (node["global_source_filter"] != null)
+                        {
+                            // .NET Framework 3.5 has no generic Enum.TryParse, so Parse with ignoreCase + try/catch and
+                            // bound-check via Enum.IsDefined. Treat any unknown/legacy value as All so users do not get
+                            // stranded on a filter we no longer recognize.
+                            string gsfRaw = node["global_source_filter"].Value;
+                            GlobalSourceFilterValue parsed = GlobalSourceFilterValue.All;
+                            if (!string.IsNullOrEmpty(gsfRaw))
+                            {
+                                try
+                                {
+                                    object boxed = Enum.Parse(typeof(GlobalSourceFilterValue), gsfRaw, true);
+                                    if (boxed is GlobalSourceFilterValue && Enum.IsDefined(typeof(GlobalSourceFilterValue), boxed))
+                                        parsed = (GlobalSourceFilterValue)boxed;
+                                }
+                                catch { }
+                            }
+                            GlobalSourceFilter = parsed;
+                        }
                         if (node["GalleryDefaultLeftSidePanel"] != null)
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
@@ -973,6 +1006,7 @@ namespace VPB
                 node["GalleryOpacity"].AsFloat = GalleryOpacity;
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
+                node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
@@ -982,6 +1016,7 @@ namespace VPB
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
+                node["global_source_filter"] = GlobalSourceFilter.ToString();
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
                 node["GalleryScrollButtonStepViewportFraction"].AsFloat = Mathf.Clamp(GalleryScrollButtonStepViewportFraction, 0.10f, 2.00f);
@@ -1071,7 +1106,7 @@ namespace VPB
                 }
                 catch { }
                 long msBuild = sw.ElapsedMilliseconds;
-                string jsonOutput = node.ToString();
+                string jsonOutput = JsonSerializationUtil.Serialize(node, 32_768);
                 long msAfterToString = sw.ElapsedMilliseconds;
                 File.WriteAllText(path, jsonOutput);
                 long msAfterDisk = sw.ElapsedMilliseconds;

@@ -59,7 +59,24 @@ namespace VPB
             if (string.IsNullOrEmpty(creator)) return;
             EnsureCurrentCreatorSet();
             if (_currentCreatorSet.Contains(creator)) _currentCreatorSet.Remove(creator);
-            else _currentCreatorSet.Add(creator);
+            else
+            {
+                _currentCreatorSet.Add(creator);
+                // A picked creator implies .var content; force global filter to All so the user does not see a contradictory "Local + Creator: X" state.
+                if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
+                {
+                    currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+                    if (VPBConfig.Instance != null)
+                    {
+                        VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+                        try { VPBConfig.Instance.Save(); }
+                        catch (System.Exception ex) { LogUtil.LogWarning("[VPB] VPBConfig.Save failed on creator/global-filter reset: " + ex.Message); }
+                    }
+                    try { UpdateGlobalSourceFilterButtonLabel(); }
+                    catch (System.Exception ex) { LogUtil.LogWarning("[VPB] UpdateGlobalSourceFilterButtonLabel failed on creator/global-filter reset: " + ex.Message); }
+                    LogUtil.Log("[VPB] Creator filter picked; global source filter reset to All.");
+                }
+            }
             SetCreatorFilterFromSetAndSync();
         }
 

@@ -52,13 +52,20 @@ namespace VPB
             float chip = 40f * s;
             float halfChip = 20f * s;
 
+            // Global source filter button is wider than the standard chip, so it's tracked separately in the
+            // left-pack math instead of being lumped into the uniform chip-count formula.
+            bool hasSourceFilter = globalSourceFilterBtn != null;
+            float sourceW = GlobalSourceFilterButtonWidth * s;
+            float halfSourceW = sourceW * 0.5f;
+
             float fpsWRead = (_titleBarFpsRT != null) ? Mathf.Max(_titleBarFpsRT.rect.width, 72f * s) : 100f * s;
 
             // Right pack widths: close … min … FPS (+ end inset)
             float rp = endM + chip + g + chip + g + fpsWRead;
 
-            // Left pack after section: settings, lang, presets, creator (four 40-squares, three gaps inside)
-            float lpSpan = chip * 4f + g * 3f;
+            // Left pack after section: settings, lang, presets, creator (four 40-squares, three gaps inside),
+            // plus the wider global source filter button + its trailing gap when present.
+            float lpSpan = chip * 4f + g * 3f + (hasSourceFilter ? sourceW + g : 0f);
 
             // Compact search worst-case: chip + gaps into sort type + sort dir + ★ + ⟳
             float midMin = chip * 5f + g * 4f;
@@ -136,6 +143,7 @@ namespace VPB
             float R = searchAvailRightBoundary;
 
             int nLeftPack = 0;
+            if (hasSourceFilter) nLeftPack++;
             if (_titleBarSettingsBtnRT != null) nLeftPack++;
             if (langRT != null) nLeftPack++;
             if (_titleBarQfToggleBtnRT != null) nLeftPack++;
@@ -145,7 +153,8 @@ namespace VPB
                 if (crt0 != null) nLeftPack++;
             }
 
-            float leftPackSpan = nLeftPack * (chip + g);
+            // Uniform chip-and-gap baseline, plus the extra width the source filter contributes over a standard chip.
+            float leftPackSpan = nLeftPack * (chip + g) + (hasSourceFilter ? (sourceW - chip) : 0f);
             float availForSearchFloor = Mathf.Max(0f, R - LminAfterCat - leftPackSpan);
             float iconW = chip;
             bool useCompact =
@@ -228,6 +237,15 @@ namespace VPB
                 _titleBarFileSortDirBtnRT.anchoredPosition = new Vector2(xfSortDir, 0f);
 
             float xl = xlPackStart;
+            if (hasSourceFilter)
+            {
+                RectTransform sourceRT = globalSourceFilterBtn.GetComponent<RectTransform>();
+                if (sourceRT != null)
+                {
+                    sourceRT.anchoredPosition = new Vector2(xl + halfSourceW, 0f);
+                    xl += sourceW + g;
+                }
+            }
             if (_titleBarSettingsBtnRT != null)
             {
                 _titleBarSettingsBtnRT.anchoredPosition = new Vector2(xl + halfChip, 0f);

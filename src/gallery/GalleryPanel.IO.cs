@@ -1485,6 +1485,27 @@ namespace VPB
             // Appearance subfilter (Gallery left Tags panel)
             // Applies only when browsing Appearance category.
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // Global source filter (early gate). Cheap type check, runs first. Bypassed when the
+            // per-category Local toggle is ON for this category (toggle has override semantics).
+            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
+            {
+                bool toggleOverridesGlobal = false;
+                if (isAppearance && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
+                    toggleOverridesGlobal = true;
+                bool isScene = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
+                               || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
+                    toggleOverridesGlobal = true;
+
+                if (!toggleOverridesGlobal)
+                {
+                    bool isVarBackedForGate = IsVarBacked(entry);
+                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local && isVarBackedForGate) return false;
+                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var   && !isVarBackedForGate) return false;
+                }
+            }
+
             if (isAppearance)
             {
                 string p = entry.Path ?? "";
@@ -1512,18 +1533,12 @@ namespace VPB
                         norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase)
                     );
 
-                if (!string.IsNullOrEmpty(currentAppearanceSourceFilter))
+                // Per-category Local toggle override. When ON, ignore global filter and show local-only.
+                // When OFF (empty string), the global filter applies at the earlier gate.
+                bool appearanceLocalToggleOn = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+                if (appearanceLocalToggleOn)
                 {
-                    if (currentAppearanceSourceFilter == "presets")
-                    {
-                        // Presets = appearance .vap in a .var package
-                        if (!isVarAppearanceVap) return false;
-                    }
-                    else if (currentAppearanceSourceFilter == "custom")
-                    {
-                        // Custom = appearance presets outside .var (Saves/Custom folders)
-                        if (!isLocalAppearanceVap) return false;
-                    }
+                    if (IsVarBacked(entry)) return false;
                 }
 
                 if (appearanceSubfilter != 0)
@@ -1595,22 +1610,19 @@ namespace VPB
                 else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
             }
 
-            // Scene Source Filter
-            if (!string.IsNullOrEmpty(currentSceneSourceFilter))
+            // Scene Source Filter.
+            // Per-category Local toggle override. When ON, ignore global filter and show local-only.
+            // When OFF, the global filter applies at the earlier gate.
+            // Gated to scene categories so leftover toggle state cannot hide var rows in unrelated categories.
+            bool isSceneCategoryForLocal =
+                title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0
+                || cp.IndexOf("Saves\\scene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool sceneLocalToggleOn = isSceneCategoryForLocal
+                && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+            if (sceneLocalToggleOn)
             {
-                if (currentSceneSourceFilter == "Addon Scenes")
-                {
-                    if (!(entry is VarFileEntry)) return false;
-                }
-                else if (currentSceneSourceFilter == "Custom Scenes")
-                {
-                    if (entry is VarFileEntry) return false;
-                    // Custom scenes are from Saves folder or Custom/SubScene folder
-                    string ep = entry.Path.Replace('\\', '/');
-                    bool isCustomSave = ep.StartsWith("Saves", StringComparison.OrdinalIgnoreCase);
-                    bool isLocalSubScene = ep.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
-                    if (!isCustomSave && !isLocalSubScene) return false;
-                }
+                if (IsVarBacked(entry)) return false;
             }
 
             // Name Filter

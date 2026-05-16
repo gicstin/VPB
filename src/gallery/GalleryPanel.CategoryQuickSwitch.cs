@@ -141,39 +141,11 @@ namespace VPB
             outerImg.color = UI.PopupBackdrop;
             outerImg.raycastTarget = true;
 
-            // Force consistent render order + visibility across Unity/VaM builds.
-            try
-            {
-                var menuCanvas = _categoryQuickMenuOuterGO.AddComponent<Canvas>();
-                menuCanvas.overrideSorting = true;
-                // Match parent Canvas render mode/camera so WorldSpace (VR floating) behaves.
-                // Hardcoding ScreenSpaceOverlay can make menu render/raycast wrong in VR.
-                try
-                {
-                    if (canvas != null)
-                    {
-                        menuCanvas.renderMode = canvas.renderMode;
-                        menuCanvas.worldCamera = canvas.worldCamera;
-                        menuCanvas.sortingLayerID = canvas.sortingLayerID;
-                        // Always above main panel, even if parent sortingOrder changes later.
-                        menuCanvas.sortingOrder = canvas.sortingOrder + 10;
-                    }
-                    else
-                    {
-                        menuCanvas.sortingOrder = 1000;
-                    }
-                }
-                catch
-                {
-                    menuCanvas.sortingOrder = 1000;
-                }
-
-                // Child Canvas with overrideSorting needs its own raycaster for reliable clicks.
-                // Without this, rows can render but never receive pointer events on some Unity/VaM builds.
-                var gr = _categoryQuickMenuOuterGO.AddComponent<GraphicRaycaster>();
-                gr.ignoreReversedGraphics = true;
-            }
-            catch { }
+            // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
+            // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
+            // canvases) or broke raycast (z-position offset). Matching TitleCreatorDropdown's pattern: stay in
+            // the parent gallery canvas, rely on hierarchy sibling order (SetAsLastSibling on show) to render
+            // above rows. Within a single canvas, sibling order is the render order.
             try
             {
                 var cg = _categoryQuickMenuOuterGO.AddComponent<CanvasGroup>();
@@ -256,6 +228,7 @@ namespace VPB
                 _categoryQuickChromeRootGO.SetActive(show);
             if (!show && _categoryQuickMenuOpen)
                 SetCategoryQuickMenuVisible(false);
+            if (!show) HideGlobalSourceFilterDropdownIfOpen();
             ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
         }
 
@@ -347,6 +320,7 @@ namespace VPB
 
         private IEnumerator CoDeferredCategoryQuickPick(string name, string extension, string path)
         {
+            HideGlobalSourceFilterDropdownIfOpen();
             SetCategoryQuickMenuVisible(false);
             yield return null;
             _categoryQuickApplyCoroutine = null;

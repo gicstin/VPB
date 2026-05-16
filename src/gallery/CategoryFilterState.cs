@@ -23,6 +23,18 @@ namespace VPB
         public int PosePeopleFilter = 0;
         public SortState FileSortState = null;
 
+        // Maps legacy source-filter string values to the binary toggle the global-filter
+        // design now uses: "" means toggle OFF (global filter applies), "local" means toggle ON
+        // (override to local-only on this category).
+        private static string MigrateLegacySourceFilter(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            if (string.Equals(raw, "local", StringComparison.OrdinalIgnoreCase)) return "local";
+            if (string.Equals(raw, "Custom Scenes", StringComparison.OrdinalIgnoreCase)) return "local";
+            if (string.Equals(raw, "custom", StringComparison.OrdinalIgnoreCase)) return "local";
+            return "";
+        }
+
         public string ToJson()
         {
             var node = new JSONClass();
@@ -56,7 +68,7 @@ namespace VPB
                 node["sort"] = sortNode;
             }
 
-            return node.ToString();
+            return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
 
         public static CategoryFilterState FromJson(string json)
@@ -70,8 +82,8 @@ namespace VPB
                 var s = new CategoryFilterState();
                 s.NameFilter = node["n"] ?? "";
                 s.Creator = node["c"] ?? "";
-                s.SceneSourceFilter = node["ss"] ?? "";
-                s.AppearanceSourceFilter = node["as"] ?? "";
+                s.SceneSourceFilter = MigrateLegacySourceFilter(node["ss"] ?? "");
+                s.AppearanceSourceFilter = MigrateLegacySourceFilter(node["as"] ?? "");
                 s.PackagePathFilter = node["pp"] ?? "";
                 s.ClothingSubfilter = node["csf"].AsInt;
                 s.HairSubfilter = node["hsf"] != null ? node["hsf"].AsInt : 0;
