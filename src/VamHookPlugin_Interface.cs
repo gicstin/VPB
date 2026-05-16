@@ -217,6 +217,14 @@ namespace VPB
                     if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
                     if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
 
+                    // Short-name aliases for remaining Person preset subfolders (matches BA's naming).
+                    if (name.Equals("Person AnimationPresets", StringComparison.OrdinalIgnoreCase)) name = "Animation";
+                    if (name.Equals("Person General", StringComparison.OrdinalIgnoreCase)) name = "General";
+                    if (name.Equals("Person Morphs", StringComparison.OrdinalIgnoreCase)) name = "Morphs";
+                    if (name.Equals("Person Skin", StringComparison.OrdinalIgnoreCase)) name = "Skin";
+                    // Distinguish from main "Plugins" (Custom/Scripts), which is for .cs/.cslist/.dll script files.
+                    if (name.Equals("Person Plugins", StringComparison.OrdinalIgnoreCase)) name = "Plugin Presets";
+
                     // Consolidate physics categories
                     if (name.Equals("Person GlutePhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
                     if (name.Equals("Person BreastPhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
@@ -257,7 +265,9 @@ namespace VPB
                 addCat("Hair", "vap", "Custom/Atom/Person/Hair");
                 addCat("Hair", "vam|vap", "Saves/Person/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
+                addCat("Pose", "vap", "Custom/Atom/Person/Pose");
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
+                addCat("Appearance", "vap", "Custom/Atom/Person/Appearance");
                 // Clothing/Hair presets are included in the unified Clothing/Hair categories.
                 addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 
@@ -335,6 +345,12 @@ namespace VPB
                             foreach (string resourcePath in resEnum)
                             {
                                 string resourceName = Path.GetFileName(resourcePath);
+
+                                // Textures holds .png/.jpg image assets, not presets. Skip from preset discovery.
+                                if (atomType.Equals("Person", StringComparison.OrdinalIgnoreCase)
+                                    && resourceName.Equals("Textures", StringComparison.OrdinalIgnoreCase))
+                                    continue;
+
                                 string finalName = resourceName;
 
                                 // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
