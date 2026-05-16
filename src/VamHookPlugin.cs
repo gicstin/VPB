@@ -1090,6 +1090,7 @@ namespace VPB
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
             UpdateUpdater();
+            VpbPerfTelemetry.EmitSnapshotIfDue();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle

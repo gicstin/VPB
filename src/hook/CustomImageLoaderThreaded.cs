@@ -455,8 +455,7 @@ namespace VPB
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
-						// Must assign QueuedImage.loadedFromGalleryCache (field); a local bool used to shadow this
-						// and left res.loadedFromGalleryCache false — breaks skip logic + duplicate disk cache jobs.
+						// Assign the queued image's field, not a local — downstream skip logic reads it to avoid duplicate disk-cache jobs.
 						loadedFromGalleryCache = false;
 						if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
 						{
@@ -571,9 +570,8 @@ namespace VPB
 
                                     if (isThumbnail && isVarPath)
                                     {
-                                        // Offload VAR OpenStream + read-bytes to a single dedicated IO thread.
-                                        // Concurrent FileManager.OpenStream across multiple worker threads appears to deadlock (stg=1 stuck).
-                                        // Enqueue happens in <see cref="StartWorker"/>; Process() should not be entered for VAR thumbs until IO completes.
+                                        // VAR thumbnails read on the dedicated IO thread; concurrent FileManager.OpenStream
+                                        // from worker threads deadlocks inside FileManager. Return now; IO thread re-enqueues for decode.
                                         return;
                                     }
                                     else
@@ -740,22 +738,7 @@ namespace VPB
                         raw = ByteArrayPool.Rent(num8);
                         textureFormat = TextureFormat.RGBA32;
 
-                        // Copy Color32 to raw bytes (Unity's Color32 is RGBA)
-                        // We need to match the original loader's expected format if it was doing something special.
-                        // The original loader was doing some swaps:
-                        /*
-                        for (int i = 0; i < num8; i += num3)
-                        {
-                            byte b = raw[i];
-                            raw[i] = raw[i + 2];
-                            raw[i + 2] = b;
-                            ...
-                        }
-                        */
-                        // Unity Color32 is: r, g, b, a.
-                        // The original loader was copying from System.Drawing (BGRA usually) and swapping R and B.
-                        // So it ended up as RGBA.
-                        
+                        // Color32 is RGBA; copy channels directly into the raw byte buffer.
                         for (int i = 0; i < pix.Length; i++)
                         {
                             int idx = i * 4;
@@ -834,8 +817,7 @@ namespace VPB
 
                 if (createNormalFromBump)
                 {
-                    // This is the most complex one. 
-                    // I'll copy the logic from the original loader but adapted to RGBA
+                    // Sobel convolution on a grayscale heightmap; output is a tangent-space normal in RGBA layout.
                     byte[] array = new byte[num8]; // Not pooled because it's temporary here
                     float[][] hMap = new float[height][];
                     for (int l = 0; l < height; l++)
@@ -1040,7 +1022,7 @@ namespace VPB
 								jSONClass["width"] = tex.width.ToString();
 								jSONClass["height"] = tex.height.ToString();
 								jSONClass["format"] = tex.format.ToString();
-								string contents = jSONClass.ToString(string.Empty);
+								string contents = VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024);
 								byte[] rawTextureData2 = tex.GetRawTextureData();
 								File.WriteAllText(text + "meta", contents);
 								File.WriteAllBytes(text, rawTextureData2);
@@ -2349,6 +2331,26 @@ namespace VPB
 		{
             try { _varThumbIoStop = true; } catch { }
             // StopThreads removed
+		}
+
+		// Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.
+		public void GetTelemetryCounts(
+			out int textureCacheCount,
+			out int immediateTextureCacheCount,
+			out int thumbnailCacheCount,
+			out int queuedImagesCount,
+			out int dispatchedImagesCount,
+			out int pendingThumbnailCallbacksCount)
+		{
+			textureCacheCount = textureCache != null ? textureCache.Count : 0;
+			immediateTextureCacheCount = immediateTextureCache != null ? immediateTextureCache.Count : 0;
+			thumbnailCacheCount = thumbnailCache != null ? thumbnailCache.Count : 0;
+			queuedImagesCount = queuedImages != null ? queuedImages.Count : 0;
+			dispatchedImagesCount = dispatchedImages != null ? dispatchedImages.Count : 0;
+			lock (pendingThumbnailLock)
+			{
+				pendingThumbnailCallbacksCount = pendingThumbnailCallbacks != null ? pendingThumbnailCallbacks.Count : 0;
+			}
 		}
 
 		protected virtual void Awake()

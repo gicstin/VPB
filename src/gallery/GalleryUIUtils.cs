@@ -923,6 +923,9 @@ namespace VPB
 
         private static readonly Dictionary<string, Sprite> _iconSpriteCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
 
+        // Read-only counter for VpbPerfTelemetry.
+        public static int IconSpriteCacheCount { get { return _iconSpriteCache != null ? _iconSpriteCache.Count : 0; } }
+
         /// <summary>
         /// Pre-loads all PNGs from the vpb_icons/ directory into the sprite cache.
         /// Call this at plugin startup (e.g. from a coroutine in Start) so the cache is warm
