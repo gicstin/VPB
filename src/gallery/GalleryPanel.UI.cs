@@ -498,43 +498,67 @@ namespace VPB
 
         private bool TryInvokeSceneSave(string path, bool overwriteConfirmed)
         {
-            Exception signedSaveError;
-            if (PluginSignatureSaveBridge.TrySaveScene(path, out signedSaveError))
+            bool logPerf = Settings.Instance != null && Settings.Instance.LogSavePerf != null && Settings.Instance.LogSavePerf.Value;
+            System.Diagnostics.Stopwatch swTotal = logPerf ? System.Diagnostics.Stopwatch.StartNew() : null;
+            System.Diagnostics.Stopwatch swInner = logPerf ? new System.Diagnostics.Stopwatch() : null;
+            string takenPath = null;
+            bool savedOk = false;
+            try
             {
-                return true;
+                Exception signedSaveError;
+                if (logPerf) { swInner.Reset(); swInner.Start(); }
+                bool bridgeOk = PluginSignatureSaveBridge.TrySaveScene(path, out signedSaveError);
+                if (logPerf) swInner.Stop();
+                if (bridgeOk)
+                {
+                    takenPath = "Bridge";
+                    savedOk = true;
+                    return true;
+                }
+                if (signedSaveError != null)
+                {
+                    LogUtil.LogWarning("[VPB] Signed scene save bridge failed, using fallback save invocation: " + signedSaveError.Message);
+                }
+
+                object result;
+
+                // Mirror BA behavior first: direct Save(path) tends to preserve native scene screenshot flow.
+                if (TryReflectionSave("Save", new object[] { path }, logPerf, swInner, out result)) { takenPath = "Save(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveScene", new object[] { path }, logPerf, swInner, out result)) { takenPath = "SaveScene(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
+
+                // Then try richer signatures in case this VaM build exposes them.
+                if (TryReflectionSave("SaveSceneWithScreenshot", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "SaveSceneWithScreenshot(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveWithScreenshot", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "SaveWithScreenshot(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveSceneWithScreenshot", new object[] { path }, logPerf, swInner, out result)) { takenPath = "SaveSceneWithScreenshot(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveWithScreenshot", new object[] { path }, logPerf, swInner, out result)) { takenPath = "SaveWithScreenshot(path)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("Save", new object[] { path, overwriteConfirmed, true }, logPerf, swInner, out result)) { takenPath = "Save(path,ow,true)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveScene", new object[] { path, overwriteConfirmed, true }, logPerf, swInner, out result)) { takenPath = "SaveScene(path,ow,true)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("Save", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "Save(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
+                if (TryReflectionSave("SaveScene", new object[] { path, overwriteConfirmed }, logPerf, swInner, out result)) { takenPath = "SaveScene(path,ow)"; savedOk = InterpretSaveResult(result); return savedOk; }
+
+                takenPath = "none";
+                return false;
             }
-            if (signedSaveError != null)
+            finally
             {
-                LogUtil.LogWarning("[VPB] Signed scene save bridge failed, using fallback save invocation: " + signedSaveError.Message);
+                if (logPerf && swTotal != null)
+                {
+                    swTotal.Stop();
+                    long totalMs = swTotal.ElapsedMilliseconds;
+                    long innerMs = swInner != null ? swInner.ElapsedMilliseconds : -1;
+                    long preambleMs = totalMs - (innerMs >= 0 ? innerMs : 0);
+                    LogUtil.LogWarning("[VPB][SavePerf] path=" + (takenPath ?? "none") + " ok=" + savedOk + " totalMs=" + totalMs + " innerInvokeMs=" + innerMs + " preambleMs=" + preambleMs);
+                }
             }
+        }
 
-            object result;
-
-            // Mirror BA behavior first: direct Save(path) tends to preserve native scene screenshot flow.
-            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path }, out result))
-                return InterpretSaveResult(result);
-
-            // Then try richer signatures in case this VaM build exposes them.
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveSceneWithScreenshot", new object[] { path, overwriteConfirmed }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveWithScreenshot", new object[] { path, overwriteConfirmed }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveSceneWithScreenshot", new object[] { path }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveWithScreenshot", new object[] { path }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path, overwriteConfirmed, true }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path, overwriteConfirmed, true }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "Save", new object[] { path, overwriteConfirmed }, out result))
-                return InterpretSaveResult(result);
-            if (TryInvokeSaveMethod(SuperController.singleton, "SaveScene", new object[] { path, overwriteConfirmed }, out result))
-                return InterpretSaveResult(result);
-
-            return false;
+        // Wrapper to time only the reflected native-save invocation (not the parameter-shape probing).
+        private bool TryReflectionSave(string methodName, object[] args, bool logPerf, System.Diagnostics.Stopwatch swInner, out object result)
+        {
+            if (logPerf && swInner != null) { swInner.Reset(); swInner.Start(); }
+            bool ok = TryInvokeSaveMethod(SuperController.singleton, methodName, args, out result);
+            if (logPerf && swInner != null) swInner.Stop();
+            return ok;
         }
 
         private static bool TryInvokeSaveMethod(object target, string methodName, object[] args, out object result)
@@ -3157,6 +3181,7 @@ namespace VPB
 
         private void ToggleRight(ContentType type)
         {
+            if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
@@ -3238,6 +3263,7 @@ namespace VPB
 
         private void ToggleLeft(ContentType type)
         {
+            if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
