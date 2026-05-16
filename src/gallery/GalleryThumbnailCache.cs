@@ -527,6 +527,8 @@ namespace VPB
                     return false;
                 if (entry.Width <= 0 || entry.Height <= 0)
                     return false;
+                if (entry.Width != entry.Height)
+                    return false;
 
                 try
                 {
@@ -684,50 +686,70 @@ namespace VPB
             }
         }
 
+        private const int ThumbOutputSize = 256;
+        private const float ThumbCropRatioMin = 0.75f;
+        private const float ThumbCropRatioMax = 1.33f;
+
         public System.Collections.IEnumerator GenerateAndSaveThumbnailRoutine(string path, Texture2D sourceTex, long lastWriteTime, int turboJpegScaleDenom = 1)
         {
             yield return null;
 
             if (sourceTex == null) yield break;
 
-            int maxDim = 256;
-            byte[] bytes = null;
-            int w = sourceTex.width;
-            int h = sourceTex.height;
+            int size = ThumbOutputSize;
+            float ratio = (float)sourceTex.width / Mathf.Max(1, sourceTex.height);
+            bool nearSquare = ratio >= ThumbCropRatioMin && ratio <= ThumbCropRatioMax;
 
-            // Always use Blit+ReadPixels — GetRawTextureData requires the texture to be marked
-            // Read/Write in the import settings, which loaded thumbnails are not.
-            if (w > maxDim || h > maxDim)
+            RenderTexture squareRT = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.Default);
+            RenderTexture prev = RenderTexture.active;
+            RenderTexture.active = squareRT;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = prev;
+            yield return null;
+
+            if (nearSquare)
             {
-                float aspect = (float)w / h;
-                if (w > h) { w = maxDim; h = Mathf.RoundToInt(maxDim / aspect); }
-                else { h = maxDim; w = Mathf.RoundToInt(maxDim * aspect); }
+                // Center-crop: blit source into square; RawImage uvRect handles sub-pixel precision at display time.
+                Graphics.Blit(sourceTex, squareRT);
+            }
+            else
+            {
+                // Fit entire image inside square, centered, black bars fill the rest.
+                int fitW, fitH;
+                if (ratio > 1f) { fitW = size; fitH = Mathf.Max(1, Mathf.RoundToInt(size / ratio)); }
+                else            { fitH = size; fitW = Mathf.Max(1, Mathf.RoundToInt(size * ratio)); }
+
+                float offsetX = (size - fitW) * 0.5f / size;
+                float offsetY = (size - fitH) * 0.5f / size;
+                float scaleX  = (float)fitW / size;
+                float scaleY  = (float)fitH / size;
+
+                RenderTexture fitRT = RenderTexture.GetTemporary(fitW, fitH, 0, RenderTextureFormat.Default);
+                Graphics.Blit(sourceTex, fitRT);
+                yield return null;
+
+                Graphics.Blit(fitRT, squareRT, new Vector2(scaleX, scaleY), new Vector2(offsetX, offsetY));
+                RenderTexture.ReleaseTemporary(fitRT);
             }
             yield return null;
 
-            RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.Default);
-            Graphics.Blit(sourceTex, rt);
-            yield return null;
-
-            RenderTexture prev = RenderTexture.active;
-            RenderTexture.active = rt;
-
+            RenderTexture.active = squareRT;
             TextureFormat format = TextureFormat.RGB24;
-            Texture2D newTex = new Texture2D(w, h, format, false);
-            newTex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            Texture2D newTex = new Texture2D(size, size, format, false);
+            newTex.ReadPixels(new Rect(0, 0, size, size), 0, 0);
             newTex.Apply();
             yield return null;
 
             RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
+            RenderTexture.ReleaseTemporary(squareRT);
 
-            bytes = newTex.GetRawTextureData();
+            byte[] bytes = newTex.GetRawTextureData();
             UnityEngine.Object.Destroy(newTex);
 
             if (bytes != null)
             {
                 int td = turboJpegScaleDenom <= 1 ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
-                SaveThumbnail(path, bytes, bytes.Length, w, h, format, lastWriteTime, td);
+                SaveThumbnail(path, bytes, bytes.Length, size, size, format, lastWriteTime, td);
             }
         }
 

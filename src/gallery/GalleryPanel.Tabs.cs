@@ -1495,17 +1495,10 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsStripVisible()) return 0f;
             float L = GetGridLabelUnits();
-            return L / (100f + L);
+            return L / 100f;
         }
 
-        internal float GetGridCellConfigHeight()
-        {
-            if (layoutMode == GalleryLayoutMode.Grid
-                && VPBConfig.Instance != null
-                && VPBConfig.Instance.GalleryGridLabelsStripVisible())
-                return 100f + GetGridLabelUnits();
-            return 100f;
-        }
+        internal float GetGridCellConfigHeight() => 100f;
 
         private static string GetGridItemLabelText(FileEntry file)
         {
@@ -2553,7 +2546,7 @@ namespace VPB
                     bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
                     float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
 
-                    thumbRT.anchorMin = new Vector2(0f, labelFrac);
+                    thumbRT.anchorMin = Vector2.zero;
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
                     thumbRT.anchoredPosition = Vector2.zero;

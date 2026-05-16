@@ -1041,14 +1041,27 @@ namespace VPB
             catch { }
         }
 
+        private const float ThumbCropRatioMin = 0.75f;
+        private const float ThumbCropRatioMax = 1.33f;
+
         private void UpdateAspectRatio(RawImage target, Texture tex)
         {
             if (target == null || tex == null) return;
+            float ratio = (float)tex.width / Mathf.Max(1, tex.height);
             AspectRatioFitter arf = target.GetComponent<AspectRatioFitter>();
+
             if (arf != null)
             {
-                arf.aspectRatio = (float)tex.width / tex.height;
+                // List rows: cell resizes to natural image ratio via ARF.
+                target.uvRect = new Rect(0f, 0f, 1f, 1f);
+                arf.aspectRatio = ratio;
+                return;
             }
+
+            // Grid cells: always center-crop to square via uvRect — no stretching for any ratio.
+            float uSize = ratio >= 1f ? 1f / ratio : 1f;
+            float vSize = ratio >= 1f ? 1f : ratio;
+            target.uvRect = new Rect((1f - uSize) * 0.5f, (1f - vSize) * 0.5f, uSize, vSize);
         }
 
         /// <summary>
