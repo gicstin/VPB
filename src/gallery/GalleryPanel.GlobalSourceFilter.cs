@@ -51,6 +51,8 @@ namespace VPB
             globalSourceFilterBtnText = globalSourceFilterBtn != null
                 ? globalSourceFilterBtn.GetComponentInChildren<Text>(true)
                 : null;
+            if (globalSourceFilterBtnText != null)
+                globalSourceFilterBtnText.horizontalOverflow = HorizontalWrapMode.Overflow;
 
             RectTransform btnRT = globalSourceFilterBtn != null ? globalSourceFilterBtn.GetComponent<RectTransform>() : null;
             if (btnRT != null)
@@ -188,7 +190,7 @@ namespace VPB
             labelText.raycastTarget = false;
             RectTransform labelRT = labelGO.GetComponent<RectTransform>();
             labelRT.anchorMin = new Vector2(0f, 0f);
-            labelRT.anchorMax = new Vector2(0.6f, 1f);
+            labelRT.anchorMax = new Vector2(0.5f, 1f);
             labelRT.offsetMin = new Vector2(8f, 0f);
             labelRT.offsetMax = new Vector2(0f, 0f);
 
@@ -201,9 +203,10 @@ namespace VPB
             countText.fontSize = 14;
             countText.color = new Color(1f, 1f, 1f, 0.75f);
             countText.alignment = TextAnchor.MiddleRight;
+            countText.horizontalOverflow = HorizontalWrapMode.Overflow;
             countText.raycastTarget = false;
             RectTransform countRT = countGO.GetComponent<RectTransform>();
-            countRT.anchorMin = new Vector2(0.6f, 0f);
+            countRT.anchorMin = new Vector2(0.5f, 0f);
             countRT.anchorMax = new Vector2(1f, 1f);
             countRT.offsetMin = new Vector2(0f, 0f);
             countRT.offsetMax = new Vector2(-8f, 0f);
