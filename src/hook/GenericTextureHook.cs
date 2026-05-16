@@ -589,6 +589,7 @@ namespace VPB
             if (Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return false;
 
             if (SuperControllerHook.IsSimulationTexturePath(path)) return false;
+            if (SuperControllerHook.IsLutTexturePath(path)) return false;
 
             try
             {

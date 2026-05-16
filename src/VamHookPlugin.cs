@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -2962,6 +2963,64 @@ namespace VPB
                                 int w = meta["width"].AsInt;
                                 int h = meta["height"].AsInt;
                                 if (meta["isThumbnail"].AsBool || (w > 0 && w <= threshold && h > 0 && h <= threshold)) continue;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    // Check if sim or LUT texture using original path (before parsing)
+                    string fName = Path.GetFileName(file);
+                    if (SuperControllerHook.IsLutTexturePath(fName)) continue;
+
+                    // Parse original filename from cache name for sim check
+                    string recon = Path.GetFileNameWithoutExtension(fName);
+                    if (recon.EndsWith("_1")) recon = recon.Substring(0, recon.Length - 2);
+                    // Strip ALL VPB flags if present (loop for multiple flags)
+                    bool stripped;
+                    do
+                    {
+                        stripped = false;
+                        var fm = Regex.Match(recon, @"_(_?[CLNAIR]|BN\d+)$");
+                        if (fm.Success) { recon = recon.Substring(0, fm.Index); stripped = true; }
+                    } while (stripped);
+                    var m = Regex.Match(recon, @"_\d{17,18}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_\d{1,12}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_([a-zA-Z]{2,5})$");
+                    if (m.Success)
+                    {
+                        string ext = m.Groups[1].Value.ToLowerInvariant();
+                        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "dds"
+                            || ext == "tga" || ext == "bmp" || ext == "exr" || ext == "tiff" || ext == "tif")
+                            recon = recon.Substring(0, m.Index) + "." + ext;
+                    }
+                    if (SuperControllerHook.IsSimulationTexturePath(recon)) continue;
+                    if (SuperControllerHook.IsLutTexturePath(recon)) continue;
+
+                    // Additional LUT detection: check metadata dimensions
+                    // LUT textures have characteristic dimensions: 32x1024, 1024x32, 2x2, etc.
+                    // Key signature: extreme aspect ratio (>32 or <1/32) or exact LUT dimensions
+                    if (File.Exists(metaPath))
+                    {
+                        try
+                        {
+                            var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                            if (meta != null)
+                            {
+                                int w = meta["width"].AsInt;
+                                int h = meta["height"].AsInt;
+                                if (w > 0 && h > 0)
+                                {
+                                    float ratio = (float)w / h;
+                                    bool isLutDimensions = (w == 2 && h == 2) ||
+                                                           (w == 32 && h == 1024) ||
+                                                           (w == 1024 && h == 32) ||
+                                                           (ratio >= 32f) ||
+                                                           (ratio <= 0.03125f); // 1/32
+                                    if (isLutDimensions)
+                                        continue;
+                                }
                             }
                         }
                         catch { }

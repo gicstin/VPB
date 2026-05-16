@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using SimpleJSON;
 using UnityEngine;
@@ -761,6 +762,69 @@ namespace VPB
 
         private void BulkZstdWorker(string nativeCacheDir, string vpbCacheDir)
         {
+            // Cleanup: purge legacy sim .zvamcache files from previous VPB versions
+            // VPB cannot serve sim textures (returns null), so these files waste space
+            try
+            {
+                var legacyZstdFiles = Directory.GetFiles(vpbCacheDir, "*.zvamcache", SearchOption.TopDirectoryOnly);
+                foreach (var zf in legacyZstdFiles)
+                {
+                    try
+                    {
+                        string zBase = Path.GetFileNameWithoutExtension(zf);
+                        string recon = zBase;
+                        // Strip VPB suffixes like _C, _L, _N, etc.
+                        int firstUnderscore = recon.IndexOf('_');
+                        if (firstUnderscore > 0)
+                        {
+                            string suffixPart = recon.Substring(firstUnderscore);
+                            // Check for pattern _flags.zvamcache
+                            if (suffixPart.Contains("_"))
+                            {
+                                // Try to extract original filename portion before VPB flags
+                                var parts = recon.Split('_');
+                                if (parts.Length >= 2)
+                                {
+                                    // Reconstruct by finding where original filename ends
+                                    // Look for size_time pattern or VPB flags
+                                    for (int i = 1; i < parts.Length; i++)
+                                    {
+                                        if (parts[i] == "C" || parts[i] == "L" || parts[i] == "N" ||
+                                            parts[i] == "A" || parts[i] == "BN" || parts[i] == "I" ||
+                                            parts[i] == "R" || Regex.IsMatch(parts[i], @"^\d+$") ||
+                                            parts[i].Contains("x"))
+                                        {
+                                            // Found a flag or size indicator
+                                            recon = string.Join("_", parts, 0, i);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Restore extension if present
+                        var extMatch = Regex.Match(recon, @"_([a-zA-Z0-9]+)$");
+                        if (extMatch.Success)
+                        {
+                            string possibleExt = extMatch.Groups[1].Value.ToLowerInvariant();
+                            if (possibleExt == "png" || possibleExt == "jpg" || possibleExt == "jpeg" ||
+                                possibleExt == "dds" || possibleExt == "tga" || possibleExt == "bmp" ||
+                                possibleExt == "exr" || possibleExt == "tiff" || possibleExt == "tif")
+                            {
+                                recon = recon.Substring(0, extMatch.Index) + "." + possibleExt;
+                            }
+                        }
+                        if (SuperControllerHook.IsSimulationTexturePath(recon))
+                        {
+                            File.Delete(zf);
+                            if (File.Exists(zf + "meta")) File.Delete(zf + "meta");
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
             string[] files;
             try
             {
@@ -798,11 +862,76 @@ namespace VPB
             {
                 files = Directory.GetFiles(nativeCacheDir, "*.vamcache", SearchOption.TopDirectoryOnly);
             }
-            CurrentZstdStats.TotalFiles = files.Length;
-
             int compressionLevel = Settings.Instance.ZstdCompressionLevel.Value;
             bool deleteOriginal = Settings.Instance.DeleteOriginalCacheAfterCompression.Value;
             int threshold = Settings.Instance.ThumbnailThreshold.Value;
+
+            // Pre-filter: count only files that will actually be compressed (exclude sim, thumbnails, small)
+            int eligibleCount = 0;
+            foreach (var f in files)
+            {
+                try
+                {
+                    string fName = Path.GetFileName(f);
+                    string fMeta = f + "meta";
+                    if (!File.Exists(fMeta)) continue;
+
+                    var mj = JSON.Parse(File.ReadAllText(fMeta));
+                    if (mj == null) continue;
+
+                    bool isThumb = mj["isThumbnail"].AsBool;
+                    int w = mj["width"].AsInt;
+                    int h = mj["height"].AsInt;
+                    if (isThumb || (w > 0 && w <= threshold && h > 0 && h <= threshold)) continue;
+
+                    // Check sim - parse original filename from cache name
+                    string cacheBase = Path.GetFileNameWithoutExtension(fName);
+                    string recon = cacheBase;
+                    if (recon.EndsWith("_1")) recon = recon.Substring(0, recon.Length - 2);
+                    // Strip ALL VPB flags if present (loop for multiple flags)
+                    bool stripped;
+                    do
+                    {
+                        stripped = false;
+                        var fm = Regex.Match(recon, @"_(_?[CLNAIR]|BN\d+)$");
+                        if (fm.Success) { recon = recon.Substring(0, fm.Index); stripped = true; }
+                    } while (stripped);
+                    var m = Regex.Match(recon, @"_\d{17,18}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_\d{1,12}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_([a-zA-Z]{2,5})$");
+                    if (m.Success)
+                    {
+                        string ext = m.Groups[1].Value.ToLowerInvariant();
+                        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "dds"
+                            || ext == "tga" || ext == "bmp" || ext == "exr" || ext == "tiff" || ext == "tif")
+                            recon = recon.Substring(0, m.Index) + "." + ext;
+                    }
+                    if (SuperControllerHook.IsSimulationTexturePath(recon))
+                        continue;
+                    if (SuperControllerHook.IsLutTexturePath(recon))
+                        continue;
+
+                    // Additional LUT detection: check metadata dimensions
+                    // Use already-loaded w/h from earlier in this scope
+                    if (w > 0 && h > 0)
+                    {
+                        float ratio = (float)w / h;
+                        bool isLutDimensions = (w == 2 && h == 2) ||
+                                                 (w == 32 && h == 1024) ||
+                                                 (w == 1024 && h == 32) ||
+                                                 (ratio >= 32f) ||
+                                                 (ratio <= 0.03125f);
+                        if (isLutDimensions)
+                            continue;
+                    }
+
+                    eligibleCount++;
+                }
+                catch { }
+            }
+            CurrentZstdStats.TotalFiles = eligibleCount;
 
             foreach (var file in files)
             {
@@ -817,49 +946,125 @@ namespace VPB
                     CurrentZstdStats.CurrentFile = fileName;
 
                     string metaPath = file + "meta";
-                    if (!File.Exists(metaPath))
-                    {
-                        CurrentZstdStats.SkippedCount++;
-                        continue;
-                    }
+                    if (!File.Exists(metaPath)) continue;
 
                     // Check metadata for resolution and isThumbnail flag
                     JSONNode metaJson = null;
-                    bool isReadable = false;
                     try
                     {
                         metaJson = JSON.Parse(File.ReadAllText(metaPath));
                         if (metaJson != null)
                         {
-                            // Skip if marked as thumbnail or if resolution is <= threshold
                             bool isThumb = metaJson["isThumbnail"].AsBool;
                             int width = metaJson["width"].AsInt;
                             int height = metaJson["height"].AsInt;
 
                             if (isThumb || (width > 0 && width <= threshold && height > 0 && height <= threshold))
-                            {
-                                CurrentZstdStats.SkippedCount++;
                                 continue;
-                            }
-
-                            try { if (metaJson["isReadable"] != null) isReadable = metaJson["isReadable"].AsBool; } catch { isReadable = false; }
                         }
+                    }
+                    catch { continue; }
+
+                    // Parse original filename and extract size/time from VaM cache name
+                    // Format: {originalName_dots_to_underscores}_{fileSize}_{fileTime}_1.vamcache
+                    // OR: {name}_{size}_{time}_{vpbFlags}.vamcache (if on-demand created it)
+                    string cacheFileBase = Path.GetFileNameWithoutExtension(fileName);
+                    string reconstructed = cacheFileBase;
+                    string bulkSizeStr = "";
+                    string bulkTimeStr = "";
+                    bool isSimTexture = false;
+                    try
+                    {
+                        // Strip VaM's _1 suffix first
+                        if (reconstructed.EndsWith("_1"))
+                            reconstructed = reconstructed.Substring(0, reconstructed.Length - 2);
+
+                        // Strip ALL VPB flags suffixes if present (from on-demand or previous bulk)
+                        // Pattern: _C, _L, _N, _A, _R, _BN, _I, or __C, etc.
+                        // Loop because on-demand files can have multiple flags like __C_A
+                        bool strippedAny;
+                        do
+                        {
+                            strippedAny = false;
+                            var flagMatch = Regex.Match(reconstructed, @"_(_?[CLNAIR]|BN\d+)$");
+                            if (flagMatch.Success)
+                            {
+                                reconstructed = reconstructed.Substring(0, flagMatch.Index);
+                                strippedAny = true;
+                            }
+                        } while (strippedAny);
+
+                        // Extract time (17-18 digits)
+                        var m = Regex.Match(reconstructed, @"_(\d{17,18})$");
+                        if (m.Success)
+                        {
+                            bulkTimeStr = m.Groups[1].Value;
+                            reconstructed = reconstructed.Substring(0, m.Index);
+                        }
+                        // Extract size (1-12 digits)
+                        m = Regex.Match(reconstructed, @"_(\d{1,12})$");
+                        if (m.Success)
+                        {
+                            bulkSizeStr = m.Groups[1].Value;
+                            reconstructed = reconstructed.Substring(0, m.Index);
+                        }
+                        // Restore extension
+                        m = Regex.Match(reconstructed, @"_([a-zA-Z]{2,5})$");
+                        if (m.Success)
+                        {
+                            string ext = m.Groups[1].Value.ToLowerInvariant();
+                            if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "dds"
+                                || ext == "tga" || ext == "bmp" || ext == "exr"
+                                || ext == "tiff" || ext == "tif")
+                            {
+                                reconstructed = reconstructed.Substring(0, m.Index) + "." + ext;
+                            }
+                        }
+                        if (SuperControllerHook.IsSimulationTexturePath(reconstructed))
+                            isSimTexture = true;
+                        if (SuperControllerHook.IsLutTexturePath(reconstructed))
+                            isSimTexture = true; // Reuse flag to skip LUTs same way
                     }
                     catch { }
 
-                    string targetName = Path.GetFileNameWithoutExtension(fileName);
-                    targetName += ".zvamcache";
-                    string targetPath = Path.Combine(vpbCacheDir, targetName);
-
-                    // SIM textures (marked readable in meta) must never be compressed to VPB .zvamcache.
-                    // If a SIM .zvamcache exists already (possibly corrupted), remove it and skip.
-                    if (isReadable)
+                    // Additional LUT detection: check metadata dimensions
+                    if (!isSimTexture && File.Exists(metaPath))
                     {
-                        try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
-                        try { if (File.Exists(targetPath + "meta")) File.Delete(targetPath + "meta"); } catch { }
-                        CurrentZstdStats.SkippedCount++;
-                        continue;
+                        try
+                        {
+                            var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                            if (meta != null)
+                            {
+                                int lw = meta["width"].AsInt;
+                                int lh = meta["height"].AsInt;
+                                if (lw > 0 && lh > 0)
+                                {
+                                    float ratio = (float)lw / lh;
+                                    bool isLutDimensions = (lw == 2 && lh == 2) ||
+                                                           (lw == 32 && lh == 1024) ||
+                                                           (lw == 1024 && lh == 32) ||
+                                                           (ratio >= 32f) ||
+                                                           (ratio <= 0.03125f);
+                                    if (isLutDimensions)
+                                        isSimTexture = true; // Reuse flag to skip
+                                }
+                            }
+                        }
+                        catch { }
                     }
+
+                    // Skip sim textures and LUT textures entirely - leave them as native .vamcache
+                    if (isSimTexture) continue;
+
+                    // Build targetName matching GetZstdCachePath format for serving compatibility
+                    // GetZstdCachePath: {sanitizedFileName}_{size}_{time}_{sig}.zvamcache
+                    // For bulk: default flags (compress=true) → sig = "_C"
+                    string sourceFileName = Path.GetFileName(reconstructed);
+                    string vpbFileName = TextureUtil.SanitizeFileName(sourceFileName).Replace('.', '_');
+                    if (vpbFileName.Length > 100) vpbFileName = vpbFileName.Substring(0, 100);
+                    // Use extracted size/time from cache filename
+                    string targetName = $"{vpbFileName}_{bulkSizeStr}_{bulkTimeStr}__C.zvamcache";
+                    string targetPath = Path.Combine(vpbCacheDir, targetName);
 
                     long originalSize = new FileInfo(file).Length;
                     CurrentZstdStats.TotalOriginalSize += originalSize;

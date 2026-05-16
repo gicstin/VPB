@@ -417,6 +417,17 @@ namespace VPB
             return false;
         }
 
+        internal static bool IsLutTexturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string lower = path.ToLowerInvariant();
+            // LUT (Look-Up Table) textures for color grading
+            if (lower.Contains("lut")) return true;
+            if (lower.Contains("lensdirt")) return true;
+            if (lower.IndexOf("lens dirt", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
         static int CalculateImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
@@ -1340,11 +1351,6 @@ namespace VPB
                     {
                         LogUtil.LogError($"[VPB SIM] PostFinish: Failed to fix up sim texture {__instance.imgPath}: {ex.Message}");
                     }
-                }
-
-                if (__instance.createAlphaFromGrayscale)
-                {
-                    ImageLoadingMgr.WriteAlphaTextureToZstdCache(__instance);
                 }
 
                 if (ImageLoadingMgr.singleton != null)

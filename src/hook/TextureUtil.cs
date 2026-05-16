@@ -157,6 +157,11 @@ namespace VPB
                 {
                     string p = matches[i];
                     if (string.IsNullOrEmpty(p)) continue;
+                    // Only purge .zvamcache files that VPB itself wrote as a sim/readable variant.
+                    // Bulk-compressed files originating from VaM's native cache have no isReadable
+                    // field in their meta → IsZstdMetaReadable returns false → leave them alone.
+                    // Purging those would cause VaM to regenerate .vamcache unnecessarily.
+                    if (!IsZstdMetaReadable(p)) continue;
                     try
                     {
                         if (File.Exists(p))
@@ -258,6 +263,9 @@ namespace VPB
                 {
                     string p = matches[i];
                     if (string.IsNullOrEmpty(p)) continue;
+                    // Only purge .zvamcache files that VPB itself wrote (isReadable=true in meta).
+                    // Bulk-compressed files from VaM's native cache have no isReadable field → spare them.
+                    if (!IsZstdMetaReadable(p)) continue;
                     try { if (File.Exists(p)) File.Delete(p); } catch { }
                     try { string meta = p + "meta"; if (File.Exists(meta)) File.Delete(meta); } catch { }
                 }
@@ -283,24 +291,6 @@ namespace VPB
             
             string cacheDir = VamHookPlugin.GetCacheDir();
             bool isSimReq = (isReadable || SuperControllerHook.IsSimulationTexturePath(imgPath));
-            if (isSimReq)
-            {
-                // Must never serve SIM from .zvamcache. Purge aggressively, but avoid repeated directory scans.
-                bool shouldPurge = false;
-                lock (s_SimPurgeLock)
-                {
-                    if (!s_SimPurgedThisSession.Contains(imgPath))
-                    {
-                        s_SimPurgedThisSession.Add(imgPath);
-                        shouldPurge = true;
-                    }
-                }
-                if (shouldPurge)
-                {
-                    // Even if FileEntry isn't available yet (early scene-load), remove likely corrupted variants.
-                    TryPurgeSimZstdByFilenameFallback(imgPath, cacheDir);
-                }
-            }
 
             var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
             if (fileEntry == null)
@@ -309,19 +299,6 @@ namespace VPB
                 {
                     LogUtil.LogTextureTrace("GetZstdCachePath_NoFileEntry:" + imgPath, "[VPB] GetZstdCachePath: No FileEntry for " + imgPath);
                 }
-                // If SIM request, we already purged by filename fallback above; always return null.
-                if (isSimReq) return null;
-                return null;
-            }
-
-            // SIM (simulation/physics) textures must never be served from VPB's .zvamcache.
-            // If an old/corrupted .zvamcache exists for a SIM request, delete it now so VaM can rebuild/cache normally.
-            if (isSimReq)
-            {
-                // FileEntry is now available; do the precise purge once.
-                // (This is still guarded by the session set above; if we already purged by filename fallback,
-                // it's still safe to call again, but we avoid extra IO.)
-                TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
                 return null;
             }
 
@@ -331,6 +308,20 @@ namespace VPB
 
             string sizeStr = fileEntry.Size.ToString();
             string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
+
+            if (isSimReq)
+            {
+                // Sim textures are handled by VaM's native cache only.
+                // VPB never compresses them (BulkZstdWorker skips them) and never serves them.
+                return null;
+            }
+
+            if (SuperControllerHook.IsLutTexturePath(imgPath))
+            {
+                // LUT textures are handled by VaM's native cache only.
+                // VPB never compresses them (BulkZstdWorker skips them) and never serves them.
+                return null;
+            }
 
             string sig = "";
             if (targetWidth > 0 && targetHeight > 0) sig += $"{targetWidth}_{targetHeight}";
@@ -344,24 +335,34 @@ namespace VPB
             
             string finalPath = System.IO.Path.Combine(cacheDir, $"{fileName}_{sizeStr}_{timeStr}_{sig}.zvamcache");
 
-            // Safety net: some SIM textures have neutral filenames and may not be detected by heuristics at request time.
-            // If an existing cache entry indicates a readable (SIM) texture via meta, purge it and fall back to VaM.
+            // Fallback: if specific variant (_C_A, _C_L, etc.) doesn't exist, try the base _C variant
+            // Bulk compression only creates _C files, but on-demand may request variants with additional flags
+            if (!sig.Equals("_C", StringComparison.Ordinal) && !File.Exists(finalPath))
+            {
+                // Try with double underscore pattern (the actual bulk compression naming)
+                string fallbackPath = System.IO.Path.Combine(cacheDir, $"{fileName}_{sizeStr}_{timeStr}__C.zvamcache");
+                if (File.Exists(fallbackPath))
+                {
+                    finalPath = fallbackPath;
+                }
+            }
+
+            // Safety net: neutral-named SIM textures that were cached before sim detection
+            // was added. If the existing .zvamcache meta has isReadable=true it was written by
+            // VPB's old on-demand path (not by bulk compression) and must not be served.
+            // We still return null (never serve) but no longer delete the file, because:
+            // (a) VaM's native loader never reads VPB's cache dir, so the file is harmless.
+            // (b) Deleting it was causing the infinite vamcache-regen cycle.
             try
             {
                 if (File.Exists(finalPath) && IsZstdMetaReadable(finalPath))
-                {
-                    TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
                     return null;
-                }
             }
             catch { }
             try
             {
                 if (AnyMatchingZstdVariantHasReadableMeta(imgPath, fileEntry, cacheDir))
-                {
-                    TryPurgeSimZstdCacheVariants(imgPath, fileEntry, cacheDir);
                     return null;
-                }
             }
             catch { }
             

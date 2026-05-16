@@ -2446,6 +2446,15 @@ namespace VPB
                         continue;
                     }
 
+                    // LUT textures should never be cached - they are handled by VaM natively
+                    if (SuperControllerHook.IsLutTexturePath(internalPath))
+                    {
+                        if (wantNative) s_CacheSkips++;
+                        if (wantZstd) s_ZstdSkips++;
+                        Trace("CacheSkipLut: internal='" + internalPath + "' target=" + targetWidth + "x" + targetHeight + " sig=" + GetFlagsSignature(flags));
+                        continue;
+                    }
+
                     string zstdPath = null;
                     if (wantZstd)
                     {
