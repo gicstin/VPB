@@ -63,6 +63,12 @@ namespace VPB
 
         private void Update()
         {
+            if (canvas != null && !canvas.enabled)
+            {
+                try { ApplyVamMenuGateVisibility(); } catch { }
+                return;
+            }
+
             if (canvas != null && VPBConfig.Instance != null)
             {
                 HandleKeyboardInput();
