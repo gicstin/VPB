@@ -859,12 +859,6 @@ namespace VPB
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
 
-            if (FileButton.EnsureInstalledByText(presetJSON.ToString()))
-            {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
-            }
-
             // Duo pose: has PeopleCount >= 2 with Person1/Person2/atoms fields
             if (presetJSON["PeopleCount"] != null && presetJSON["PeopleCount"].AsInt >= 2)
             {
@@ -902,36 +896,10 @@ namespace VPB
                 }
             }
 
-            if (suppressRoot)
-            {
-                if (storablesArr != null)
-                {
-                    for (int i = 0; i < storablesArr.Count; i++)
-                    {
-                        JSONClass s = storablesArr[i] as JSONClass;
-                        if (s == null) continue;
-
-                        if (s["id"].Value == "control")
-                        {
-                            if (s.HasKey("position")) s.Remove("position");
-                            if (s.HasKey("rotation")) s.Remove("rotation");
-                        }
-
-                        if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
-                        {
-                            if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
-                        }
-                    }
-                }
-                else if (presetJSON["presets"] != null)
-                {
-                    CleanPresets(presetJSON["presets"] as JSONArray);
-                }
-            }
 
             if (!hasPosePresetsStorable && storablesArr != null)
             {
-                // Raw bone storables format — apply via the native atom restore pipeline
+                // VPB-refactor: native atom restore, deferred from import-unification
                 LogUtil.Log($"[VPB] LoadPose: No PosePresets storable found; using atom.Restore() for raw storables.");
                 target.PreRestore(true, false);
                 if (!suppressRoot) target.RestoreTransform(presetJSON);
@@ -941,23 +909,14 @@ namespace VPB
                 return;
             }
 
-            JSONStorable presetStorable = target.GetStorableByID("PosePresets");
-            if (presetStorable != null)
+            FileEntry entry = FileEntry ?? VPB.FileManager.GetFileEntry(normalizedPath);
+            if (entry == null)
             {
-                 var pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                 if (pm != null)
-                 {
-                    try
-                    {
-                        MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
-                        pm.LoadPresetFromJSON(presetJSON, false);
-                    }
-                    finally
-                    {
-                        MVR.FileManagement.FileManager.PopLoadDir();
-                    }
-                 }
+                LogUtil.LogWarning($"[VPB] LoadPose: could not resolve FileEntry for {normalizedPath}");
+                return;
             }
+            VpbImport.LoadPreset(entry, target, VpbResourceType.Pose, ClothingApplyMode.Replace,
+                                 presetJC: presetJSON, suppressRoot: suppressRoot);
         }
         
         private void CleanPresets(JSONArray presets)

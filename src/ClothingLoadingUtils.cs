@@ -484,7 +484,7 @@ namespace VPB
                 string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedPresetPath);
                 folderFullPath = FileManagerSecure.NormalizeLoadPath(folderFullPath);
 
-                string presetJSONString = presetJSON.ToString();
+                string presetJSONString = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 16_384);
                 bool modified = false;
 
                 if (presetJSONString.Contains("SELF:"))
@@ -706,24 +706,8 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    try
-                    {
-                        FileManager.PushLoadDirFromFilePath(normalizedPath);
-                    }
-                    catch { }
-
-                    try
-                    {
-                        pm.LoadPresetFromJSON(presetJSON, false);
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            FileManager.PopLoadDir();
-                        }
-                        catch { }
-                    }
+                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
+                        ClothingApplyMode.Replace, presetJC: presetJSON);
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                     SchedulePostApplyFixup(atom, inferredBaseId);
@@ -740,17 +724,6 @@ namespace VPB
         {
             if (atom == null || entry == null) return;
             string path = entry.Path;
-
-            try
-            {
-                SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, path);
-                // Ensure geometry bool catalogs are populated before immediate toggle/apply.
-                VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("clothing_item_prewarm_flush");
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning("[VPB OnDemand] Item preset prewarm failed: " + ex.Message);
-            }
 
             if (isClothing && VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode)
             {
@@ -904,7 +877,7 @@ namespace VPB
                                     if (UI.IsLikelyVarPackageReference(normalizedVam))
                                     {
                                         string pkg = normalizedVam.Substring(0, normalizedVam.IndexOf(':'));
-                                        string jsonStr = vamJSON.ToString();
+                                        string jsonStr = VPB.src.util.JsonSerializationUtil.Serialize(vamJSON, 16_384);
                                         if (jsonStr.Contains("SELF:"))
                                         {
                                             JSONNode parsed = SimpleJSON.JSON.Parse(jsonStr.Replace("SELF:", pkg + ":"));
@@ -925,24 +898,8 @@ namespace VPB
                                         }
                                     }
 
-                                    try
-                                    {
-                                        FileManager.PushLoadDirFromFilePath(normalizedVam);
-                                    }
-                                    catch { }
-
-                                    try
-                                    {
-                                        pm.LoadPresetFromJSON(vamJSON, false);
-                                    }
-                                    finally
-                                    {
-                                        try
-                                        {
-                                            FileManager.PopLoadDir();
-                                        }
-                                        catch { }
-                                    }
+                                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
+                                        ClothingApplyMode.Replace, presetJC: vamJSON);
 
                                     itemUid = UI.NormalizePath(vamPath);
                                 }

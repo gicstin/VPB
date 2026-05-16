@@ -15,7 +15,7 @@ namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
-        private HashSet<string> GetRegionsImpl(FileEntry entry, string cachePrefix, List<string> regionTagSet, Func<VarFileEntry, List<string>> getVarTags, Func<string, HashSet<string>> heuristicFn)
+        private static HashSet<string> GetRegionsImpl(FileEntry entry, string cachePrefix, List<string> regionTagSet, Func<VarFileEntry, List<string>> getVarTags, Func<string, HashSet<string>> heuristicFn)
         {
             if (entry == null) return new HashSet<string>();
             string cacheKey = cachePrefix + entry.Uid;
@@ -74,10 +74,10 @@ namespace VPB
             return regions;
         }
 
-        private HashSet<string> GetHairRegions(FileEntry entry) =>
+        private static HashSet<string> GetHairRegions(FileEntry entry) =>
             GetRegionsImpl(entry, "hair:", TagFilter.HairRegionTags, vfe => vfe.HairTags, GetRegionsFromHeuristics);
 
-        private HashSet<string> GetClothingRegions(FileEntry entry) =>
+        private static HashSet<string> GetClothingRegions(FileEntry entry) =>
             GetRegionsImpl(entry, "clothing:", TagFilter.ClothingRegionTags, vfe => vfe.ClothingTags, GetClothingRegionsFromHeuristics);
 
         private static HashSet<string> GetRegionsFromHeuristics(string name)
@@ -284,6 +284,7 @@ namespace VPB
              return false;
         }
 
+        // VPB-refactor: native atom restore, deferred from import-unification
         private void ApplyPoseToAtom(Atom atom, JSONClass data)
         {
              bool suppressRoot = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
@@ -578,78 +579,13 @@ namespace VPB
 
         private void ApplyPoseFromPresetPath(Atom target, string path, bool suppressRoot)
         {
-            if (target == null) return;
-            if (string.IsNullOrEmpty(path)) return;
+            if (target == null || string.IsNullOrEmpty(path)) return;
 
-            string normalizedPath = UI.NormalizePath(path);
-            JSONNode node = UI.LoadJSONWithFallback(normalizedPath, null);
-            if (node == null) return;
+            FileEntry entry = FileManager.GetFileEntry(path);
+            if (entry == null) return;
 
-            JSONClass presetJSON = null;
-            try { presetJSON = node.AsObject; } catch { presetJSON = null; }
-            if (presetJSON == null) return;
-
-            try
-            {
-                if (presetJSON["atoms"] != null)
-                {
-                    JSONClass extracted = ExtractAtomFromScene(presetJSON, "Person");
-                    if (extracted != null) presetJSON = extracted;
-                }
-            }
-            catch { }
-
-            if (suppressRoot)
-            {
-                try
-                {
-                    if (presetJSON["storables"] != null)
-                    {
-                        JSONArray storables = presetJSON["storables"] as JSONArray;
-                        if (storables != null)
-                        {
-                            for (int i = 0; i < storables.Count; i++)
-                            {
-                                JSONClass s = storables[i] as JSONClass;
-                                if (s == null) continue;
-                                if (s["id"].Value == "control")
-                                {
-                                    if (s.HasKey("position")) s.Remove("position");
-                                    if (s.HasKey("rotation")) s.Remove("rotation");
-                                }
-
-                                if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
-                                {
-                                    if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
-                                }
-                            }
-                        }
-                    }
-                    else if (presetJSON["presets"] != null)
-                    {
-                        CleanPresets(presetJSON["presets"] as JSONArray);
-                    }
-                }
-                catch { }
-            }
-
-            JSONStorable presetStorable = null;
-            try { presetStorable = target.GetStorableByID("PosePresets"); } catch { presetStorable = null; }
-            if (presetStorable == null) return;
-
-            MeshVR.PresetManager pm = null;
-            try { pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>(); } catch { pm = null; }
-            if (pm == null) return;
-
-            try
-            {
-                MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
-                pm.LoadPresetFromJSON(presetJSON, false);
-            }
-            finally
-            {
-                try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { }
-            }
+            VpbImport.LoadPreset(entry, target, VpbResourceType.Pose, ClothingApplyMode.Replace,
+                                 presetJC: null, suppressRoot: suppressRoot);
         }
 
 
