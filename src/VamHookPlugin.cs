@@ -906,6 +906,11 @@ namespace VPB
             VamScanFilter.DiscoverVamInternals();
             var _ = ScanWhitelistManager.Instance; // eager init
 
+            // Migrate legacy VPB hide markers to native VaM-compatible format
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try { PackageHidePrefs.MigrateAllLegacyHideMarkers(); } catch { }
+            });
+
             AutoLoadALPackages();
 
             // Auto-create gallery pane on startup if enabled
