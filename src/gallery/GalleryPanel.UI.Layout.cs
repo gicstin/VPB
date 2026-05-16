@@ -1374,7 +1374,7 @@ namespace VPB
                 mini["atoms"] = one;
 
                 string undoTempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_undo_atom_" + Guid.NewGuid().ToString() + ".json");
-                File.WriteAllText(undoTempPath, mini.ToString());
+                File.WriteAllText(undoTempPath, VPB.src.util.JsonSerializationUtil.Serialize(mini, 100_000));
 
                 PushUndo(() => {
                     try

@@ -280,6 +280,7 @@
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
+    <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
@@ -406,6 +407,7 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
     <Compile Include="src\util\JSONExtensions.cs" />
+    <Compile Include="src\util\JsonSerializationUtil.cs" />
     <Compile Include="src\util\CUAConverter.cs" />
     <Compile Include="src\util\CUAClothing.cs" />
     <Compile Include="src\util\CUAClothing.Data.cs" />

@@ -342,7 +342,7 @@ namespace VPB
                         miniScene["atoms"] = newAtoms;
 
                         string undoTempPathFallback = Path.Combine(sc.savesDir, "vpb_temp_undo_atom_" + Guid.NewGuid().ToString() + ".json");
-                        try { File.WriteAllText(undoTempPathFallback, miniScene.ToString()); }
+                        try { File.WriteAllText(undoTempPathFallback, JsonSerializationUtil.Serialize(miniScene, 100_000)); }
                         catch
                         {
                             LogUtil.LogWarning("[VPB] PushUndoSnapshotForFullAtomState: failed to write temp scene for " + atomUid);
@@ -400,7 +400,7 @@ namespace VPB
                 mini["atoms"] = one;
 
                 string undoTempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_undo_atom_" + Guid.NewGuid().ToString() + ".json");
-                File.WriteAllText(undoTempPath, mini.ToString());
+                File.WriteAllText(undoTempPath, JsonSerializationUtil.Serialize(mini, 100_000));
 
                 Panel.PushUndo(() => {
                     try

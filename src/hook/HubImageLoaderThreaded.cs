@@ -671,7 +671,7 @@ namespace VPB
                                     byte[] rawTextureData2 = tex.GetRawTextureData();
                                     if (rawTextureData2 != null && rawTextureData2.Length > 0)
                                     {
-                                        File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
+                                        File.WriteAllText(text + "meta", VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024));
                                         File.WriteAllBytes(text, rawTextureData2);
                                     }
                                 }

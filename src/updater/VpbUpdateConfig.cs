@@ -54,7 +54,7 @@ namespace VPB
                 node["autoCheck"].AsBool = AutoCheck;
                 node["lastCheckUtc"] = LastCheckUtc ?? "";
                 node["lastStagedVersion"] = LastStagedVersion ?? "";
-                File.WriteAllText(_filePath, node.ToString());
+                File.WriteAllText(_filePath, VPB.src.util.JsonSerializationUtil.Serialize(node, 1024));
             }
             catch { }
         }

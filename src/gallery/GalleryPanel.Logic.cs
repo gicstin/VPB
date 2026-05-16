@@ -2645,7 +2645,7 @@ namespace VPB
 
                 try
                 {
-                    File.WriteAllText(tempPath, sceneRoot.ToString());
+                    File.WriteAllText(tempPath, JsonSerializationUtil.Serialize(sceneRoot, 100_000));
                 }
                 catch
                 {

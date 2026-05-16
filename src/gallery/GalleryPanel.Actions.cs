@@ -847,7 +847,7 @@ namespace VPB
                 JSONClass root = new JSONClass();
                 foreach (var kvp in categoryScrollPositions)
                     root[kvp.Key].AsFloat = kvp.Value;
-                File.WriteAllText(p, root.ToString());
+                File.WriteAllText(p, JsonSerializationUtil.Serialize(root, 4096));
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache save: " + ex.Message); }
         }

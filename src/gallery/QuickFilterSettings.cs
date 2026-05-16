@@ -180,7 +180,7 @@ namespace VPB
             {
                 var arr = new JSONArray();
                 foreach (var f in Filters) arr.Add(f.ToJSON());
-                File.WriteAllText(filePath, arr.ToString());
+                File.WriteAllText(filePath, VPB.src.util.JsonSerializationUtil.Serialize(arr, 4096));
             }
             catch (Exception ex)
             {

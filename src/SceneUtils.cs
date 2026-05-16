@@ -132,7 +132,7 @@ namespace VPB
 
                 string name = (string.IsNullOrEmpty(filePrefix) ? "vpb_scene" : filePrefix) + "_" + Guid.NewGuid().ToString() + ".json";
                 string tempPath = Path.Combine(dir, name);
-                File.WriteAllText(tempPath, root.ToString());
+                File.WriteAllText(tempPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 100_000));
                 LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(tempPath);
 
                 ScheduleTempFileDelete(tempPath, 20);
@@ -475,15 +475,21 @@ namespace VPB
                                         }
 
                                         int missing = 0;
+                                        List<string> missingKeys = null;
                                         foreach (string key in deps)
                                         {
                                             VarPackage pkg = FileManager.GetPackageForDependency(key, false);
                                             if (pkg != null) continue;
                                             missing++;
+                                            if (missingKeys == null) missingKeys = new List<string>(8);
+                                            missingKeys.Add(key);
                                         }
                                         if (missing > 0)
                                         {
-                                            LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}");
+                                            // Listing only the missing keys (not all parsed deps) so the warning
+                                            // line is actionable: each entry is one package the user needs.
+                                            string list = missingKeys != null ? string.Join("; ", missingKeys.ToArray()) : "";
+                                            LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
                                         }
                                         result.MissingCount = missing;
                                     }

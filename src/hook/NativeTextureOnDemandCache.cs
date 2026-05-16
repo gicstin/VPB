@@ -2706,7 +2706,7 @@ namespace VPB
                             meta["format"] = tf.ToString();
                             if (flags.isReadable) meta["isReadable"] = "true";
 
-                            AtomicWriteAllText(cachePath + "meta", meta.ToString(string.Empty));
+                            AtomicWriteAllText(cachePath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(meta, 1024));
                             AtomicWriteAllBytes(cachePath, payload);
                             s_CacheWrites++;
                             try
@@ -2790,7 +2790,7 @@ namespace VPB
                                 zmeta["sourceHeight"] = zstdSourceH.ToString();
                             }
                             zmeta["zstdLevel"].AsInt = level;
-                            AtomicWriteAllText(zstdPath + "meta", zmeta.ToString(string.Empty));
+                            AtomicWriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
 
                             s_ZstdWrites++;
                             if (rewriteZstd) s_ZstdRewrites++;

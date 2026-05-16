@@ -893,7 +893,7 @@ namespace VPB
                                 metaJson["width"] = metaJson["width"].Value; // Ensure it's a string
                                 metaJson["height"] = metaJson["height"].Value; // Ensure it's a string
                                 metaJson["zstdLevel"].AsInt = compressionLevel;
-                                File.WriteAllText(targetPath + "meta", metaJson.ToString());
+                                File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                             }
                             catch (Exception ex)
                             {
@@ -1046,7 +1046,7 @@ namespace VPB
                             metaJson["width"] = metaJson["width"].Value; // Ensure it's a string
                             metaJson["height"] = metaJson["height"].Value; // Ensure it's a string
                             metaJson.Remove("zstdLevel");
-                            File.WriteAllText(targetPath + "meta", metaJson.ToString());
+                            File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                         }
                         catch (Exception ex)
                         {
@@ -1136,7 +1136,7 @@ namespace VPB
                 zmeta["height"] = src.height.ToString();
                 zmeta["format"] = TextureFormat.RGBA32.ToString();
                 zmeta["vpbVer"].AsInt = AlphaCacheVersion;
-                File.WriteAllText(zstdPath + "meta", zmeta.ToString(string.Empty));
+                File.WriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
             }
             catch (Exception ex)
             {

@@ -393,7 +393,7 @@ namespace VPB
             root["files"] = arr;
 
             string path = Path.Combine(stagingDir, PendingFileName);
-            File.WriteAllText(path, root.ToString());
+            File.WriteAllText(path, VPB.src.util.JsonSerializationUtil.Serialize(root, 1024));
         }
 
         private static List<ManifestItem> ParseManifest(string json)
