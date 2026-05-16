@@ -183,6 +183,7 @@
   "gallery.tooltip.path_list": "開啟套件與檔案路徑列表。",
   "gallery.tooltip.history_list": "開啟歷史與使用量篩選。",
   "gallery.tooltip.creator_filter": "作者篩選（多選）。左鍵開啟，右鍵清除。",
+  "gallery.tooltip.global_source_filter": "來源篩選（全部 / 本地 / .var）。套用至所有分類。右鍵重設為全部。",
   "gallery.tooltip.apply_mode": "切換單擊/雙擊套用",
   "gallery.tooltip.replace_mode": "切換拖放時新增/取代（同一按鈕）",
   "gallery.tooltip.save_pane": "儲存預設及相關操作",

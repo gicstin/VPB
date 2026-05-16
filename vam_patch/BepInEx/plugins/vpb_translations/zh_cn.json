@@ -183,6 +183,7 @@
   "gallery.tooltip.path_list": "打开资源包和文件路径列表。",
   "gallery.tooltip.history_list": "打开历史记录与使用过滤器。",
   "gallery.tooltip.creator_filter": "作者筛选（多选）。左键打开。右键清除。",
+  "gallery.tooltip.global_source_filter": "来源筛选（全部 / 本地 / .var）。应用于所有分类。右键重置为全部。",
   "gallery.tooltip.apply_mode": "切换单击/双击应用",
   "gallery.tooltip.replace_mode": "切换拖放时添加/替换（同一按钮）",
   "gallery.tooltip.save_pane": "保存预设及相关操作",

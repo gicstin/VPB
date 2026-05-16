@@ -182,6 +182,7 @@
   "gallery.tooltip.path_list": "パッケージとファイルパス一覧を開く。",
   "gallery.tooltip.history_list": "履歴と使用フィルターを開く。",
   "gallery.tooltip.creator_filter": "作者フィルター（複数選択）。左クリックで開く、右クリックでクリア。",
+  "gallery.tooltip.global_source_filter": "ソースフィルター（全て / ローカル / .var）。全カテゴリに適用。右クリックで全てにリセット。",
   "gallery.tooltip.apply_mode": "適用モード（1クリック/2クリック）を切替",
   "gallery.tooltip.apply_mode_disabled_hold_to_launch": "ホールド起動が ON です。切り替えるにはホールド起動を OFF にしてください。",
   "gallery.tooltip.replace_mode": "ドラッグ適用の追加/置換を切替",

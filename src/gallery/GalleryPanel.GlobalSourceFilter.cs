@@ -71,8 +71,18 @@ namespace VPB
                 btn.onClick.AddListener(() => ToggleGlobalSourceFilterDropdown());
             }
 
+            if (globalSourceFilterBtn != null)
+            {
+                var rc = globalSourceFilterBtn.AddComponent<UIRightClickDelegate>();
+                rc.OnRightClick = () =>
+                {
+                    if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
+                        OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue.All);
+                };
+            }
+
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.global_source_filter",
-                "Source filter (All / Local / .var). Applies to every category.");
+                "Source filter (All / Local / .var). Applies to every category. (Right-click to reset to All)");
 
             // Matches the pattern used by settings/lang/qf/creator chips: scale action handles sizeDelta + fontSize only.
             // Anchored position is set every frame by ApplyTitleBarResponsiveLayout as part of the left-pack sweep.

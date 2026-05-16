@@ -183,6 +183,7 @@
   "gallery.tooltip.path_list": "패키지/파일 경로 목록 열기.",
   "gallery.tooltip.history_list": "기록 및 사용 필터 열기.",
   "gallery.tooltip.creator_filter": "제작자 필터(다중 선택). 좌클릭 열기, 우클릭 지우기.",
+  "gallery.tooltip.global_source_filter": "소스 필터(전체 / 로컬 / .var). 모든 카테고리에 적용. 우클릭으로 전체로 초기화.",
   "gallery.tooltip.apply_mode": "1클릭/2클릭 적용 전환",
   "gallery.tooltip.replace_mode": "드롭 시 추가/바꾸기 전환",
   "gallery.tooltip.save_pane": "프리셋 저장 및 관련 작업",
