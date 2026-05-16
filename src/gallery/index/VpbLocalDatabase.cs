@@ -3710,6 +3710,9 @@ namespace VPB
             sb.Append("LEFT JOIN cat_mem mx ON mx.pkg_uid = p.uid AND (");
             sb.Append("lower(TRIM(ifnull(mx.list_path,''))) = lower(TRIM(i.item_key)) OR ");
             sb.Append("lower(TRIM(ifnull(mx.internal_path,''))) = lower(TRIM(").Append(GalleryHistoryUsageInternalKeySql).Append("))) ");
+            sb.Append("AND mx.rowid = (SELECT MIN(cm.rowid) FROM cat_mem cm WHERE cm.pkg_uid = p.uid AND (");
+            sb.Append("lower(TRIM(ifnull(cm.list_path,''))) = lower(TRIM(i.item_key)) OR ");
+            sb.Append("lower(TRIM(ifnull(cm.internal_path,''))) = lower(TRIM(").Append(GalleryHistoryUsageInternalKeySql).Append(")))) ");
             sb.Append("LEFT JOIN cat_mem mr ON mr.pkg_uid = p.uid AND mr.rowid = (");
             sb.Append("SELECT MIN(cm.rowid) FROM cat_mem cm WHERE cm.pkg_uid = p.uid) ");
             sb.Append("WHERE 1=1");

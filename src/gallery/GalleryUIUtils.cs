@@ -735,6 +735,7 @@ namespace VPB
             ScrollRect scrollRect = scrollableContentGO.AddComponent<ScrollRect>();
             scrollRect.content = contentRT;
             scrollRect.viewport = viewportRT;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             // IMPORTANT: Do NOT assign scrollRect.verticalScrollbar directly, as it triggers Unity's 
