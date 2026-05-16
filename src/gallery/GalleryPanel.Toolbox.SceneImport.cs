@@ -142,7 +142,6 @@ namespace VPB
                     SuperController.singleton.SaveJSON(sceneJson, convertedPath);
                     LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(convertedPath);
 
-                    // TODO: this is not always necessary
                     var itemControl = SelectedTargetAtom.GetComponentInChildren<DAZClothingItemControl>();
                     if (itemControl)
                     {
@@ -191,21 +190,6 @@ namespace VPB
                     }
                 }
 
-                // In scan-whitelist mode, EnsureInstalled can make packages physically available
-                // without VaM having them registered yet. Prewarm on-demand registration before
-                // Restore() so clothing/hair/morph lookups don't fail on first access.
-                if (ScanWhitelistManager.Instance.IsEnabled)
-                {
-                    try
-                    {
-                        SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(presetFile, normalizedPath);
-                    }
-                    catch (Exception prewarmEx)
-                    {
-                        LogUtil.LogWarning("[VPB OnDemand] Scene import prewarm failed: " + prewarmEx.Message);
-                    }
-                }
-
                 sceneJson = sceneJson.RemoveNonPersonAtomsMutable();
                 if (sceneJson["atoms"] == null || sceneJson["atoms"].AsArray.Count == 0)
                 {
@@ -215,9 +199,33 @@ namespace VPB
 
                 JSONClass personPreset = sceneJson["atoms"][0].AsObject;
 
-                SelectedTargetAtom.PreRestore(restorePhysical: false, restoreAppearance: true);
-                SelectedTargetAtom.Restore(personPreset, restorePhysical: false, restoreAppearance: true, restoreCore: false);
-                SelectedTargetAtom.PostRestore(restorePhysical: false, restoreAppearance: true);
+                string clothingMode = VPBConfig.Instance?.AppearanceClothingApplyMode ?? "replace";
+                JSONClass importPreset = VpbImport.WrapAtomNodeAsPreset(personPreset);
+
+                // Translate clothingMode string to ClothingApplyMode
+                ClothingApplyMode applyMode;
+                if (clothingMode == "keep")
+                {
+                    applyMode = ClothingApplyMode.Keep;
+                }
+                else if (clothingMode == "replace")
+                {
+                    applyMode = ClothingApplyMode.Replace;
+                }
+                else if (clothingMode == "merge")
+                {
+                    applyMode = ClothingApplyMode.Merge;
+                }
+                else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
+                {
+                    applyMode = ClothingApplyMode.ClothingOnly;
+                }
+                else
+                {
+                    applyMode = ClothingApplyMode.Replace;
+                }
+
+                VpbImport.LoadPreset(presetFile, SelectedTargetAtom, VpbResourceType.Appearance, applyMode, presetJC: importPreset);
                 if (SuperController.singleton != null && personPreset["id"] != null)
                 {
                     SuperController.singleton.RenameAtom(SelectedTargetAtom, personPreset["id"]);
@@ -231,6 +239,31 @@ namespace VPB
                 LogUtil.LogError("[VPB] TboxSceneImportSelectedPackage error: " + ex);
                 ShowTemporaryStatus("Import failed. See log.", 2f);
             }
+        }
+
+        private void ToggleSuppressAppearanceScale()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.SuppressAppearanceScaleChange =
+                !VPBConfig.Instance.SuppressAppearanceScaleChange;
+            try { VPBConfig.Instance.Save(true, true); } catch { }
+            RefreshSuppressScaleBtnVisual();
+            ShowTemporaryStatus(
+                VPBConfig.Instance.SuppressAppearanceScaleChange
+                    ? "Scale change on Appearance Import: SUPPRESSED"
+                    : "Scale change on Appearance Import: ALLOWED",
+                1.5f);
+        }
+
+        private void RefreshSuppressScaleBtnVisual()
+        {
+            if (tboxSuppressScaleBtn == null) return;
+            var img = tboxSuppressScaleBtn.GetComponent<UnityEngine.UI.Image>();
+            if (img == null) return;
+            bool on = VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange;
+            img.color = on
+                ? new Color(0.2f, 0.45f, 0.75f, 0.9f)
+                : UI.IconButtonBackdrop;
         }
 
     }

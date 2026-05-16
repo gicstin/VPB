@@ -280,6 +280,7 @@
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
+    <Compile Include="src\util\AppearancePresetSuppress.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />

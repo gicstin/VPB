@@ -42,6 +42,7 @@ namespace VPB
         private GameObject tboxCacheTexturesBtn;
         private GameObject tboxOpenHubBtn;
         private GameObject tboxSceneImportBtn;
+        private GameObject tboxSuppressScaleBtn;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
         private GameObject tboxGridRateBtn;
@@ -171,6 +172,7 @@ namespace VPB
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
+            one(tboxSuppressScaleBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
             one(tboxGridRateBtn);
@@ -213,6 +215,7 @@ namespace VPB
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
+            d(tboxSuppressScaleBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
             d(tboxGridRateBtn);
@@ -333,6 +336,7 @@ namespace VPB
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
                 if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
+                if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
             }
@@ -814,6 +818,24 @@ namespace VPB
                 if (s != null) UI.AddIconToButton(tboxSceneImportBtn, s, padding: 6f);
             }
             catch { }
+
+            tboxSuppressScaleBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                ToggleSuppressAppearanceScale
+            );
+            tboxSuppressScaleBtn.name = "Tbox_SuppressScale";
+            TboxConfigureActionButtonFlex(tboxSuppressScaleBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxSuppressScaleBtn, "gallery.tooltip.suppress_scale",
+                "Keep target's current scale when importing Appearance");
+            try
+            {
+                var s = UI.LoadIconSprite("vpb_icons/arrows_vertical.png", Color.white);
+                if (s != null) UI.AddIconToButton(tboxSuppressScaleBtn, s, padding: 6f);
+            }
+            catch { }
+            RefreshSuppressScaleBtnVisual();
 
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -2082,6 +2104,7 @@ namespace VPB
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxSceneImportBtn, false);
+                show(tboxSuppressScaleBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
                 show(tboxSelectAllBtn, false);
@@ -2132,6 +2155,7 @@ namespace VPB
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
             show(tboxSceneImportBtn, !isCleanup);
+            show(tboxSuppressScaleBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
             show(tboxClearSelectionBtn, !isCleanup);
 
