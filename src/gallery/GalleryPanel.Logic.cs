@@ -1082,6 +1082,9 @@ namespace VPB
                 || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isAppearanceTitle = (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0);
+            int sourceFilterMode = ResolveEffectiveSourceFilterMode(isAppearanceTitle, cp);
+            bool countVarRows = (sourceFilterMode != 1);
+            bool countLooseFiles = (sourceFilterMode != 2);
             if (isClothingTitle)
             {
                 tagsToCount.UnionWith(TagFilter.AllClothingTags);
@@ -1126,7 +1129,9 @@ namespace VPB
                 yield return null;
                 if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
             }
-            if (tagParForScan != null && VpbSqlite3.IsAvailable)
+            // Skip the SQL fast path under Source: Local. cat_mem holds var-backed rows only, and the var counters
+            // must be zero in Local mode; the live-loop walk below will produce loose-only counts correctly.
+            if (tagParForScan != null && VpbSqlite3.IsAvailable && countVarRows)
             {
                 VpbLocalDatabase.TagScanTotals sqlFacets;
                 string extJ = GalleryTagCountBackgroundScan.JoinExtensionsForTagScan(tagParForScan.ExtensionsSplit);
@@ -1368,6 +1373,10 @@ namespace VPB
 
                     if (isAppearanceTitle)
                     {
+                        // Source-filter gate: var rows are var-backed by definition, so a Local-only filter must
+                        // exclude them from every appearance counter (matches the grid's PassesFilters behavior).
+                        if (!countVarRows) continue;
+
                         string p = internalPath.Replace('\\', '/');
                         bool isAppearance = p.IndexOf("/appearance", StringComparison.OrdinalIgnoreCase) >= 0;
                         if (!isAppearance)
@@ -1446,7 +1455,7 @@ namespace VPB
                     }
 
                     // Appearance split-pane counts (All/Presets/Custom)
-                    if (isAppearanceTitle)
+                    if (isAppearanceTitle && countVarRows)
                     {
                         if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase))
                         {
@@ -1892,7 +1901,8 @@ namespace VPB
 
             // Count Custom (local filesystem) appearances for split-pane counts.
             // This is intentionally separate from the package loop above.
-            if (isAppearanceTitle)
+            // Source-filter gate: skip the loose-file scan entirely when the user is on Source: Var.
+            if (isAppearanceTitle && countLooseFiles)
             {
                 List<string> pathsToSearch = new List<string>();
                 if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
@@ -1973,6 +1983,67 @@ namespace VPB
 
                         appearanceSourceCountCustom++;
                         appearanceSourceCountAll++;
+
+                        // Gender + subfilter counting for loose .vap. Matches the merge contract used by the var path
+                        // so totals add up when SourceFilterMode == All.
+                        bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
+                        bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+                        AppearanceGender lg = AppearanceGender.Unknown;
+                        try
+                        {
+                            var pg = VPB.src.util.LooseVapGenderProbe.Classify(sysPath);
+                            if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Female) lg = AppearanceGender.Female;
+                            else if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Male) lg = AppearanceGender.Male;
+                            else if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Futa) lg = AppearanceGender.Futa;
+                        }
+                        catch { lg = AppearanceGender.Unknown; }
+
+                        appearanceSubfilterCountAll++;
+                        if (isPresetLoose) appearanceSubfilterCountPresets++;
+                        if (isCustomLoose) appearanceSubfilterCountCustom++;
+                        if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
+                        if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
+                        if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
+
+                        bool LoosePasses(AppearanceSubfilter f)
+                        {
+                            if (f == 0) return true;
+                            bool wPresets = (f & AppearanceSubfilter.Presets) != 0;
+                            bool wCustom  = (f & AppearanceSubfilter.Custom) != 0;
+                            bool wMale    = (f & AppearanceSubfilter.Male) != 0;
+                            bool wFemale  = (f & AppearanceSubfilter.Female) != 0;
+                            bool wFuta    = (f & AppearanceSubfilter.Futa) != 0;
+                            bool typeOk = true;
+                            if (wPresets || wCustom)
+                            {
+                                if (wPresets && wCustom) typeOk = true;
+                                else if (wPresets) typeOk = isPresetLoose;
+                                else if (wCustom) typeOk = isCustomLoose;
+                            }
+                            if (!typeOk) return false;
+                            if (wMale || wFemale || wFuta)
+                            {
+                                bool gOk = (wMale && lg == AppearanceGender.Male)
+                                        || (wFemale && lg == AppearanceGender.Female)
+                                        || (wFuta && lg == AppearanceGender.Futa);
+                                if (!gOk) return false;
+                            }
+                            return true;
+                        }
+
+                        AppearanceSubfilter aSub = appearanceSubfilter;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Custom))  appearanceSubfilterFacetCountCustom++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Male))    appearanceSubfilterFacetCountMale++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Female))  appearanceSubfilterFacetCountFemale++;
+                        if (LoosePasses(aSub ^ AppearanceSubfilter.Futa))    appearanceSubfilterFacetCountFuta++;
+                        if (LoosePasses(aSub))
+                        {
+                            appearanceSubfilterCurrentCountAll++;
+                            if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
+                            if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
+                            if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
+                        }
                     }
                 }
 
@@ -2013,6 +2084,29 @@ namespace VPB
         }
 
         /// <summary>Stable key for <see cref="GalleryTagCountSnapshotCache"/> when tag/facet counts depend only on category + filters + package scan.</summary>
+        /// <summary>
+        /// Resolves the effective source filter for the tag scan / cache key. The per-category Local toggle on
+        /// Appearance / Scenes overrides the global filter; otherwise the global filter wins. Returned values:
+        /// 0=All, 1=Local, 2=Var.
+        /// </summary>
+        private int ResolveEffectiveSourceFilterMode(bool isAppearanceTitle, string cp)
+        {
+            bool localOverride = false;
+            try
+            {
+                if (isAppearanceTitle && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
+                    localOverride = true;
+                bool isScene = (!string.IsNullOrEmpty(cp)) && cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
+                    localOverride = true;
+            }
+            catch { }
+            if (localOverride) return 1;
+            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local) return 1;
+            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var)   return 2;
+            return 0;
+        }
+
         private bool TryBuildTagCountCacheKey(out string key)
         {
             key = null;
@@ -2037,6 +2131,11 @@ namespace VPB
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
                 sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
                 long pr = 0;
+                string ckTitle = !string.IsNullOrEmpty(currentCategoryTitle)
+                    ? currentCategoryTitle
+                    : (titleText != null ? titleText.text : "");
+                bool ckIsAppearance = (ckTitle != null) && ckTitle.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+                sb.Append(ResolveEffectiveSourceFilterMode(ckIsAppearance, currentPath ?? "")).Append((char)0x1E);
                 try { pr = FileManager.lastPackageRefreshTime.ToBinary(); } catch { pr = 0; }
                 sb.Append(pr).Append('\u001E');
                 int utc = 0;
@@ -2076,6 +2175,7 @@ namespace VPB
                 || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
             inputs.IsAppearanceTitle = (inputs.Title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0);
+            inputs.SourceFilterMode = ResolveEffectiveSourceFilterMode(inputs.IsAppearanceTitle, cp);
 
             HashSet<string> tagsToCount = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (inputs.IsClothingTitle)

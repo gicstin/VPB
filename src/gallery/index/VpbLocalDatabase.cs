@@ -337,6 +337,7 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS pkg_dep (src_uid TEXT NOT NULL, dep_uid TEXT NOT NULL, PRIMARY KEY(src_uid, dep_uid));" +
                 "CREATE TABLE IF NOT EXISTS sys_file (cache_key TEXT NOT NULL, path TEXT NOT NULL, wtime INTEGER, size INTEGER, PRIMARY KEY(cache_key, path));" +
                 "CREATE TABLE IF NOT EXISTS loose_deps (path TEXT PRIMARY KEY, wtime INTEGER, size INTEGER, deps TEXT);" +
+                "CREATE TABLE IF NOT EXISTS loose_vap_gender (path TEXT PRIMARY KEY, wtime INTEGER, size INTEGER, gender INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cleanup_exclude (uid TEXT PRIMARY KEY, added_utc_binary INTEGER NOT NULL);" +
                 "CREATE TABLE IF NOT EXISTS cat_filter_state (panel_id TEXT NOT NULL, cat_key TEXT NOT NULL, state_json TEXT NOT NULL, PRIMARY KEY(panel_id, cat_key));" +
                 "CREATE INDEX IF NOT EXISTS idx_cm_cat ON cat_mem(category);" +
@@ -1384,6 +1385,122 @@ namespace VPB
                         ins.BindText(2, wtimeBinary.ToString());
                         ins.BindText(3, size.ToString());
                         ins.BindText(4, depsCsv);
+                        ins.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Per-file gender classification cache for loose .vap appearance presets. Avoids re-streaming the same JSON every refresh.</summary>
+        internal static bool TryReadLooseVapGender(string filePath, long expectedWtimeBinary, long expectedSize, out int gender)
+        {
+            gender = 0;
+            if (!VpbSqlite3.IsAvailable) return false;
+            if (string.IsNullOrEmpty(filePath)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT wtime, size, gender FROM loose_vap_gender WHERE path = ?"))
+                    {
+                        st.BindText(1, filePath);
+                        if (st.Step() != VpbSqlite3.SqliteRow) return false;
+                        long wt, sz; int g;
+                        string wtxt = st.ColumnText(0);
+                        string sztxt = st.ColumnText(1);
+                        string gtxt = st.ColumnText(2);
+                        if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) return false;
+                        if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) return false;
+                        if (string.IsNullOrEmpty(gtxt) || !int.TryParse(gtxt, out g)) return false;
+                        if (wt != expectedWtimeBinary || sz != expectedSize) return false;
+                        gender = g;
+                        return true;
+                    }
+                }
+            }
+            catch { gender = 0; return false; }
+        }
+
+        internal static void WriteLooseVapGender(string filePath, long wtimeBinary, long size, int gender)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(filePath)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var ins = conn.Prepare("INSERT OR REPLACE INTO loose_vap_gender(path,wtime,size,gender) VALUES(?,?,?,?)"))
+                    {
+                        ins.BindText(1, filePath);
+                        ins.BindText(2, wtimeBinary.ToString());
+                        ins.BindText(3, size.ToString());
+                        ins.BindText(4, gender.ToString());
+                        ins.Step();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>DAZCharacter displayName -> isMale map, built from the live DAZCharacterSelector and persisted in meta. Used by the on-disk vap classifier so non-conforming displayName strings still resolve correctly when the user has the pack installed.</summary>
+        internal static bool TryReadCharacterGenderDict(out Dictionary<string, bool> outMap)
+        {
+            outMap = null;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    string raw = MetaGet(conn, "daz_char_dict_v1");
+                    if (string.IsNullOrEmpty(raw)) return false;
+                    char rs = '\x1E';
+                    char us = '\x1F';
+                    var map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                    string[] entries = raw.Split(rs);
+                    for (int i = 0; i < entries.Length; i++)
+                    {
+                        string e = entries[i];
+                        if (string.IsNullOrEmpty(e)) continue;
+                        int sep = e.IndexOf(us);
+                        if (sep <= 0 || sep >= e.Length - 1) continue;
+                        map[e.Substring(0, sep)] = (e.Substring(sep + 1) == "1");
+                    }
+                    outMap = map;
+                    return map.Count > 0;
+                }
+            }
+            catch { outMap = null; return false; }
+        }
+
+        internal static void WriteCharacterGenderDict(Dictionary<string, bool> map)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (map == null) return;
+            try
+            {
+                char rs = '\x1E';
+                char us = '\x1F';
+                var sb = new StringBuilder(map.Count * 24);
+                bool first = true;
+                foreach (var kv in map)
+                {
+                    if (string.IsNullOrEmpty(kv.Key)) continue;
+                    if (kv.Key.IndexOf(rs) >= 0 || kv.Key.IndexOf(us) >= 0) continue;
+                    if (!first) sb.Append(rs);
+                    sb.Append(kv.Key).Append(us).Append(kv.Value ? '1' : '0');
+                    first = false;
+                }
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var ins = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                    {
+                        ins.BindText(1, "daz_char_dict_v1");
+                        ins.BindText(2, sb.ToString());
                         ins.Step();
                     }
                 }
@@ -3301,12 +3418,13 @@ namespace VPB
                                     bool isCustomAppearance = p.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                                     bool isPresetAppearance = p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                                     
-                                    // Heuristic gender (simplified version of the one in GalleryTagCountBackgroundScan)
+                                    // Heuristic gender (simplified version of the one in GalleryTagCountBackgroundScan).
+                                    // Futa fold: surfaces as Male (2) per current UI scope.
                                     int g = 0; // Unknown
                                     string combined = (p + " " + (pkgUid ?? "")).ToLowerInvariant();
                                     if (combined.Contains("female") || combined.Contains("woman") || combined.Contains("girl")) g = 1;
+                                    else if (combined.Contains("futa") || combined.Contains("herm")) g = 2;
                                     else if (combined.Contains("male") || combined.Contains("man") || combined.Contains("boy")) g = 2;
-                                    else if (combined.Contains("futa") || combined.Contains("herm")) g = 3;
 
                                     outFacets.AppearanceSubfilterCountAll++;
                                     if (isPresetAppearance) outFacets.AppearanceSubfilterCountPresets++;

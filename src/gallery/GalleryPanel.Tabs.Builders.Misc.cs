@@ -117,14 +117,19 @@ namespace VPB
                 Color inactive = ColorInactiveRow;
                 Color active = ColorFacetActiveRow;
 
-                string[] options = new string[] { "Female", "Male", "Futa" };
+                // Futa fold: button removed for now; classifiers map Futa→Male so those items still surface
+                // under the Male badge. Clear a stale Futa bit from prior configs so the grid doesn't filter
+                // to an empty set with no UI to recover from.
+                if ((appearanceSubfilter & AppearanceSubfilter.Futa) != 0)
+                    appearanceSubfilter &= ~AppearanceSubfilter.Futa;
+
+                string[] options = new string[] { "Female", "Male" };
                 for (int gi = 0; gi < options.Length; gi++)
                 {
                     string opt = options[gi];
                     AppearanceSubfilter flag = 0;
                     if (opt == "Male") flag = AppearanceSubfilter.Male;
                     else if (opt == "Female") flag = AppearanceSubfilter.Female;
-                    else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
 
                     bool isGenderActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
                     Color btnColor2 = isGenderActive ? active : inactive;
@@ -132,7 +137,6 @@ namespace VPB
                     int cnt = 0;
                     if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
                     else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                    else if (opt == "Futa") cnt = isGenderActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
 
                     string label2 = opt + " (" + cnt + ")";
 

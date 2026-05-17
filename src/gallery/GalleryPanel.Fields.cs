@@ -783,11 +783,12 @@ namespace VPB
             try { userTags = TagsManager.Instance.GetTags(entry.Uid); } catch { userTags = null; }
             if (userTags != null && userTags.Count > 0)
             {
+                // Futa fold: surfaces as Male per current UI scope.
                 foreach (var t in userTags)
                 {
                     if (string.IsNullOrEmpty(t)) continue;
                     string tl = t.Trim().ToLowerInvariant();
-                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Futa;
+                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Male;
                 }
                 foreach (var t in userTags)
                 {
@@ -796,6 +797,22 @@ namespace VPB
                     if (tl == "female" || tl == "woman" || tl == "girl") return AppearanceGender.Female;
                     if (tl == "male" || tl == "man" || tl == "boy") return AppearanceGender.Male;
                 }
+            }
+
+            // Loose .vap presets carry the authoritative gender inside the geometry storable's "character" field.
+            // Probe and cache per (path, mtime, size) so adjacent presets pay the parse once.
+            if (entry is SystemFileEntry sfeProbe
+                && !sfeProbe.isVar
+                && !string.IsNullOrEmpty(p)
+                && p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+            {
+                VPB.src.util.LooseVapGenderProbe.Gender g;
+                try { g = VPB.src.util.LooseVapGenderProbe.Classify(p); }
+                catch { g = VPB.src.util.LooseVapGenderProbe.Gender.Unknown; }
+                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Female) return AppearanceGender.Female;
+                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Male)   return AppearanceGender.Male;
+                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Futa)   return AppearanceGender.Male;
+                // Unknown: drop through to the filename-token heuristic.
             }
 
             string name = entry.Name ?? "";
@@ -821,7 +838,8 @@ namespace VPB
                 return false;
             }
 
-            if (HasToken("futa") || HasToken("herm") || HasToken("shemale") || HasToken("dickgirl")) return AppearanceGender.Futa;
+            // Futa fold: surfaces as Male per current UI scope.
+            if (HasToken("futa") || HasToken("herm") || HasToken("shemale") || HasToken("dickgirl")) return AppearanceGender.Male;
             if (HasToken("female") || HasToken("woman") || HasToken("girl")) return AppearanceGender.Female;
             if (HasToken("male") || HasToken("man") || HasToken("boy")) return AppearanceGender.Male;
 

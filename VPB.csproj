@@ -283,6 +283,7 @@
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
+    <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />

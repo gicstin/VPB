@@ -27,6 +27,11 @@ namespace VPB
         public bool IsHairTitle;
         public bool IsAppearanceTitle;
         public bool HasAnyTagsToCount;
+
+        /// <summary>0=All, 1=Local (skip var-row appearance counters), 2=Var (skip loose-file appearance counters). Reflects the global source filter with the per-category Local toggle as an override.</summary>
+        public int SourceFilterMode;
+        public bool CountVarRows { get { return SourceFilterMode != 1; } }
+        public bool CountLooseFiles { get { return SourceFilterMode != 2; } }
     }
 
     /// <summary>Worker signals completion; main thread waits on <see cref="Finished"/>.</summary>
@@ -259,6 +264,11 @@ namespace VPB
 
             if (input.IsAppearanceTitle)
             {
+                // Source-filter gating: var rows are var-backed by definition, so a Local-only filter must exclude
+                // them from every appearance counter, otherwise the badge reports "Female 36" while the grid (which
+                // applies the same filter) returns 0.
+                if (!input.CountVarRows) return;
+
                 string p = internalPath.Replace('\\', '/');
                 bool isAppearance = p.IndexOf("/appearance", StringComparison.OrdinalIgnoreCase) >= 0;
                 if (!isAppearance) return;
@@ -300,7 +310,7 @@ namespace VPB
                 }
             }
 
-            if (input.IsAppearanceTitle)
+            if (input.IsAppearanceTitle && input.CountVarRows)
             {
                 if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase))
                 {
@@ -347,13 +357,14 @@ namespace VPB
         /// <summary>Matches <see cref="GalleryPanel.Fields"/> AppearanceGender order: Unknown=0, Female=1, Male=2, Futa=3.</summary>
         private static int HeuristicAppearanceGender(string internalPath, string fileName, string pkgUid, HashSet<string> userTags)
         {
+            // Futa fold: surfaces as Male (2) per current UI scope.
             if (userTags != null && userTags.Count > 0)
             {
                 foreach (string t in userTags)
                 {
                     if (string.IsNullOrEmpty(t)) continue;
                     string tl = t.Trim().ToLowerInvariant();
-                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return 3;
+                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return 2;
                 }
                 foreach (string t in userTags)
                 {
@@ -370,7 +381,7 @@ namespace VPB
             for (int i = 0; i < tokens.Length; i++)
             {
                 string tok = tokens[i];
-                if (tok == "futa" || tok == "herm" || tok == "shemale" || tok == "dickgirl") return 3;
+                if (tok == "futa" || tok == "herm" || tok == "shemale" || tok == "dickgirl") return 2;
             }
             for (int i = 0; i < tokens.Length; i++)
             {
@@ -432,7 +443,8 @@ namespace VPB
             bool isAppearanceTitle = input.IsAppearanceTitle;
 
             bool varScanFromSql = false;
-            if (VpbSqlite3.IsAvailable)
+            // Skip the SQL fast path under Source: Local — see GalleryPanel.Logic.cs for rationale.
+            if (VpbSqlite3.IsAvailable && input.CountVarRows)
             {
                 string extKey = JoinExtensionsForTagScan(input.ExtensionsSplit);
                 VpbLocalDatabase.TagScanTotals sqlFacets;
@@ -749,7 +761,8 @@ namespace VPB
                 }
             }
 
-            if (isAppearanceTitle)
+            // Source-filter gate: skip loose-file appearance counting entirely under Source: Var.
+            if (isAppearanceTitle && input.CountLooseFiles)
             {
                 List<string> pathsToSearch = new List<string>();
                 if (input.CurrentPathsCopy != null && input.CurrentPathsCopy.Count > 0) pathsToSearch.AddRange(input.CurrentPathsCopy);
@@ -828,6 +841,34 @@ namespace VPB
                             continue;
                         t.AppearanceSourceCountCustom++;
                         t.AppearanceSourceCountAll++;
+
+                        // Gender + subfilter counting for loose .vap. Uses the same numeric scheme as the var path
+                        // (1=Female, 2=Male, 3=Futa, 0=Unknown) so the totals merge cleanly when SourceFilterMode==All.
+                        bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
+                        bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+                        int lg = (int)VPB.src.util.LooseVapGenderProbe.Classify(sysPath);
+                        GalleryPanel.AppearanceSubfilter aSub = input.AppearanceSubfilterVal;
+
+                        t.AppearanceSubfilterCountAll++;
+                        if (isPresetLoose) t.AppearanceSubfilterCountPresets++;
+                        if (isCustomLoose) t.AppearanceSubfilterCountCustom++;
+                        if (lg == 2) t.AppearanceSubfilterCountMale++;
+                        if (lg == 1) t.AppearanceSubfilterCountFemale++;
+                        if (lg == 3) t.AppearanceSubfilterCountFuta++;
+
+                        if (PassesAppearanceSubfilters(aSub ^ GalleryPanel.AppearanceSubfilter.Presets, aSub, isPresetLoose, isCustomLoose, lg)) t.AppearanceSubfilterFacetCountPresets++;
+                        if (PassesAppearanceSubfilters(aSub ^ GalleryPanel.AppearanceSubfilter.Custom,  aSub, isPresetLoose, isCustomLoose, lg)) t.AppearanceSubfilterFacetCountCustom++;
+                        if (PassesAppearanceSubfilters(aSub ^ GalleryPanel.AppearanceSubfilter.Male,    aSub, isPresetLoose, isCustomLoose, lg)) t.AppearanceSubfilterFacetCountMale++;
+                        if (PassesAppearanceSubfilters(aSub ^ GalleryPanel.AppearanceSubfilter.Female,  aSub, isPresetLoose, isCustomLoose, lg)) t.AppearanceSubfilterFacetCountFemale++;
+                        if (PassesAppearanceSubfilters(aSub ^ GalleryPanel.AppearanceSubfilter.Futa,    aSub, isPresetLoose, isCustomLoose, lg)) t.AppearanceSubfilterFacetCountFuta++;
+
+                        if (PassesAppearanceSubfilters(aSub, aSub, isPresetLoose, isCustomLoose, lg))
+                        {
+                            t.AppearanceSubfilterCurrentCountAll++;
+                            if (lg == 2) t.AppearanceSubfilterCurrentCountMale++;
+                            if (lg == 1) t.AppearanceSubfilterCurrentCountFemale++;
+                            if (lg == 3) t.AppearanceSubfilterCurrentCountFuta++;
+                        }
                     }
                 }
 
