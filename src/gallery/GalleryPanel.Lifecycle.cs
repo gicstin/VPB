@@ -122,6 +122,7 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
             VPBConfig.Instance.ConfigChanged += RefreshCategoryQuickSwitchOnConfigChanged;
+            VPBConfig.Instance.ConfigChanged += OnGalleryTransparencyConfigChanged;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -136,6 +137,12 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
             VPBConfig.Instance.ConfigChanged -= RefreshCategoryQuickSwitchOnConfigChanged;
+            VPBConfig.Instance.ConfigChanged -= OnGalleryTransparencyConfigChanged;
+        }
+
+        private void OnGalleryTransparencyConfigChanged()
+        {
+            try { ApplyGalleryTransparencyVisuals(); } catch { }
         }
 
         void OnDestroy()

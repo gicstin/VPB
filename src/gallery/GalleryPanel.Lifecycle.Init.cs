@@ -108,9 +108,10 @@ namespace VPB
             
             // Add UIHoverColor (This handles hover/drag color changes AND sets raycast target properly)
             UIHoverColor bgHover = backgroundBoxGO.AddComponent<UIHoverColor>();
+            backgroundHoverColor = bgHover;
             bgHover.targetImage = backgroundBoxGO.GetComponent<Image>();
-            bgHover.normalColor = new Color(0.1f, 0.1f, 0.1f, 0.9f);
-            bgHover.hoverColor = new Color(0.1f, 0.1f, 0.1f, 0.9f); // Same color for now, but ensures interaction
+            bgHover.normalColor = GalleryBackgroundTinted;
+            bgHover.hoverColor = GalleryBackgroundTinted;
             
             // AddHoverDelegate
             AddHoverDelegate(backgroundBoxGO);
@@ -170,7 +171,7 @@ namespace VPB
                 Text t = tgo.AddComponent<Text>();
                 VPBUiFont.ApplyTo(t);
                 t.text = arrowText;
-                t.fontSize = 30;
+                t.fontSize = FixedCollapseTriggerArrowFontSize;
                 t.color = new Color(1, 1, 1, 0.5f);
                 t.alignment = TextAnchor.MiddleCenter;
                 RectTransform trt = tgo.GetComponent<RectTransform>();
@@ -187,7 +188,7 @@ namespace VPB
             }
 
             // Collapse Trigger Areas (Right/Left/Top) — separate GOs so chamfer always correct
-            collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, 60, 0, Vector2.zero, 100f);
+            collapseTriggerGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchRight, FixedCollapseTriggerThickness, 0, Vector2.zero, FixedCollapseTriggerChamferSize);
             InitCollapseTrigger(
                 collapseTriggerGO,
                 out collapseHandleText,
@@ -195,12 +196,12 @@ namespace VPB
                 new Vector2(1f, 0.2f),
                 new Vector2(1f, 0.8f),
                 new Vector2(1f, 0.5f),
-                new Vector2(60f, 0f),
+                new Vector2(FixedCollapseTriggerThickness, 0f),
                 "<",
                 ChamferedRect.ChamferSide.Left
             );
 
-            collapseTriggerLeftGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchLeft, 60, 0, Vector2.zero, 100f);
+            collapseTriggerLeftGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.vStretchLeft, FixedCollapseTriggerThickness, 0, Vector2.zero, FixedCollapseTriggerChamferSize);
             InitCollapseTrigger(
                 collapseTriggerLeftGO,
                 out collapseHandleLeftText,
@@ -208,12 +209,12 @@ namespace VPB
                 new Vector2(0f, 0.2f),
                 new Vector2(0f, 0.8f),
                 new Vector2(0f, 0.5f),
-                new Vector2(60f, 0f),
+                new Vector2(FixedCollapseTriggerThickness, 0f),
                 ">",
                 ChamferedRect.ChamferSide.Right
             );
 
-            collapseTriggerTopGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.hStretchTop, 0, 60, Vector2.zero, 100f);
+            collapseTriggerTopGO = UI.AddChildGOChamferedImage(canvasGO, new Color(0.15f, 0.15f, 0.15f, 0.4f), AnchorPresets.hStretchTop, 0, FixedCollapseTriggerThickness, Vector2.zero, FixedCollapseTriggerChamferSize);
             InitCollapseTrigger(
                 collapseTriggerTopGO,
                 out collapseHandleTopText,
@@ -221,7 +222,7 @@ namespace VPB
                 new Vector2(0.2f, 1f),
                 new Vector2(0.8f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, 60f),
+                new Vector2(0f, FixedCollapseTriggerThickness),
                 "˅",
                 ChamferedRect.ChamferSide.Bottom
             );
@@ -1163,13 +1164,13 @@ namespace VPB
                 { var rt = lSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
 
                 // Right Button Container
-                rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
+                rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
                 sideButtonGroups.Add(rightSideContainer.AddComponent<CanvasGroup>());
                 AddHoverDelegate(rightSideContainer);
                 AddSubmenuSideHoverTrigger(rightSideContainer, false);
 
                 // Full-height hover strip to cover top/bottom gaps outside the 700px side container
-                rightSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.vStretchRight, 130, 0, new Vector2(140, 0));
+                rightSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.vStretchRight, GallerySideHoverStripWidth, 0, new Vector2(GallerySideHoverStripOffset, 0));
                 AddHoverDelegate(rightSideHoverStrip);
                 AddSubmenuSideHoverTrigger(rightSideHoverStrip, false);
                 try
@@ -1694,13 +1695,13 @@ namespace VPB
 
 
                 // Left Button Container
-                leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.middleLeft, 130, 700, new Vector2(-140, 0));
+                leftSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.middleLeft, 130, 700, new Vector2(-140, 0));
                 sideButtonGroups.Add(leftSideContainer.AddComponent<CanvasGroup>());
                 AddHoverDelegate(leftSideContainer);
                 AddSubmenuSideHoverTrigger(leftSideContainer, true);
 
                 // Full-height hover strip to cover top/bottom gaps outside the 700px side container
-                leftSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0.01f), AnchorPresets.vStretchLeft, 130, 0, new Vector2(-140, 0));
+                leftSideHoverStrip = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.vStretchLeft, GallerySideHoverStripWidth, 0, new Vector2(-GallerySideHoverStripOffset, 0));
                 AddHoverDelegate(leftSideHoverStrip);
                 AddSubmenuSideHoverTrigger(leftSideHoverStrip, true);
                 try
@@ -2374,6 +2375,8 @@ namespace VPB
             UI.ApplyGalleryPaneHoverPolicy(backgroundBoxGO);
             if (backgroundBoxGO.GetComponent<GalleryPaneChromeEnforcer>() == null)
                 backgroundBoxGO.AddComponent<GalleryPaneChromeEnforcer>();
+
+            try { ApplyGalleryTransparencyVisuals(); } catch { }
 
             // Default lastAppliedPackageRefreshTime was DateTime.MinValue, so the first Show() always saw
             // pkgRefreshTime > lastApplied, set packagesChanged, cleared creator/category caches, and

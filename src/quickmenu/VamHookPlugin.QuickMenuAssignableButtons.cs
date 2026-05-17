@@ -18,6 +18,21 @@ namespace VPB
         private static readonly Vector2 QuickMenuAnchorBaseline = new Vector2(-515f, -12f); // shown as (0,0) in the position UI
         private static readonly Vector2 QuickMenuPopupOffset = new Vector2(260f, -20f);
 
+        private static readonly Color QmBackdropAssignedTransparent = new Color(0f, 0f, 0f, 0.35f);
+        private static readonly Color QmBackdropAssignedHoverTransparent = new Color(0f, 0f, 0f, 0.55f);
+        private static readonly Color QmBackdropEmptyTransparent = new Color(0f, 0f, 0f, 0f);
+        private static readonly Color QmBackdropEmptyHoverTransparent = new Color(0f, 0f, 0f, 0.20f);
+        private static readonly Color QmBackdropAssignedOpaque = new Color(0.12f, 0.12f, 0.12f, 1f);
+        private static readonly Color QmBackdropAssignedHoverOpaque = new Color(0.18f, 0.18f, 0.18f, 1f);
+        private static readonly Color QmBackdropEmptyOpaque = new Color(0.10f, 0.10f, 0.10f, 1f);
+        private static readonly Color QmBackdropEmptyHoverOpaque = new Color(0.14f, 0.14f, 0.14f, 1f);
+        private static readonly Color QmBackdropEditOnOpaque = new Color(0.10f, 0.55f, 0.18f, 1f);
+        private static readonly Color QmBackdropEditOnHoverOpaque = new Color(0.12f, 0.70f, 0.22f, 1f);
+        private static readonly Color QmBackdropEditOffOpaque = new Color(0.12f, 0.12f, 0.12f, 1f);
+        private static readonly Color QmBackdropEditOffHoverOpaque = new Color(0.18f, 0.18f, 0.18f, 1f);
+        private static readonly Color QmTooltipBackdropTransparent = new Color(0f, 0f, 0f, 0.35f);
+        private static readonly Color QmTooltipBackdropOpaque = new Color(0.12f, 0.12f, 0.12f, 1f);
+
         private enum QuickMenuAssignableAction
         {
             None = 0,
@@ -272,7 +287,7 @@ namespace VPB
             m_QmTooltipRT = rt;
 
             var img = go.AddComponent<Image>();
-            img.color = new Color(0f, 0f, 0f, 0.35f);
+            img.color = QuickMenuAssignablesForceOpaque() ? QmTooltipBackdropOpaque : QmTooltipBackdropTransparent;
             img.raycastTarget = false;
             m_QmTooltipBackdrop = img;
 
@@ -315,7 +330,11 @@ namespace VPB
                 return;
             }
 
-            if (m_QmTooltipBackdrop != null) m_QmTooltipBackdrop.enabled = true;
+            if (m_QmTooltipBackdrop != null)
+            {
+                m_QmTooltipBackdrop.enabled = true;
+                m_QmTooltipBackdrop.color = QuickMenuAssignablesForceOpaque() ? QmTooltipBackdropOpaque : QmTooltipBackdropTransparent;
+            }
             m_QmTooltipText.enabled = true;
 
             // Auto-size height to fit wrapped text.
@@ -983,6 +1002,30 @@ namespace VPB
             t.fontSize = 18;
         }
 
+        internal void RefreshQuickMenuAssignableTransparency()
+        {
+            if (m_QuickMenuGridButtons == null) return;
+            for (int i = 0; i < QuickMenuGridSlotCount; i++)
+            {
+                try { QuickMenuRefreshSlotVisual(i); } catch { }
+            }
+            try { QuickMenuUpdateTooltipVisual(); } catch { }
+        }
+
+        private static bool QuickMenuAssignablesForceOpaque()
+        {
+            try { return VPBConfig.Instance != null && VPBConfig.Instance.ShouldDisableGalleryAssignableButtonsTransparency(); }
+            catch { return true; }
+        }
+
+        private static void QuickMenuApplyBackdropColors(Image bg, Color normal, Color hover)
+        {
+            if (bg == null) return;
+            bg.color = normal;
+            var hh = bg.GetComponent<QuickMenuSquareHover>();
+            if (hh != null) { hh.normal = normal; hh.hover = hover; }
+        }
+
         private void QuickMenuRefreshSlotVisual(int idx)
         {
             if (idx < 0 || idx >= QuickMenuGridSlotCount) return;
@@ -1010,12 +1053,18 @@ namespace VPB
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
                 if (bg != null)
                 {
-                    // Edit-mode exit affordance: green slot background so user finds toggle fast.
-                    Color normal = m_QuickMenuEditMode ? new Color(0.10f, 0.55f, 0.18f, 0.75f) : new Color(0f, 0f, 0f, 0.35f);
-                    Color hover  = m_QuickMenuEditMode ? new Color(0.12f, 0.70f, 0.22f, 0.90f) : new Color(0f, 0f, 0f, 0.55f);
-                    bg.color = normal;
-                    var hh = bg.GetComponent<QuickMenuSquareHover>();
-                    if (hh != null) { hh.normal = normal; hh.hover = hover; }
+                    if (QuickMenuAssignablesForceOpaque())
+                    {
+                        Color normal = m_QuickMenuEditMode ? QmBackdropEditOnOpaque : QmBackdropEditOffOpaque;
+                        Color hover = m_QuickMenuEditMode ? QmBackdropEditOnHoverOpaque : QmBackdropEditOffHoverOpaque;
+                        QuickMenuApplyBackdropColors(bg, normal, hover);
+                    }
+                    else
+                    {
+                        Color normal = m_QuickMenuEditMode ? new Color(0.10f, 0.55f, 0.18f, 0.75f) : new Color(0f, 0f, 0f, 0.35f);
+                        Color hover = m_QuickMenuEditMode ? new Color(0.12f, 0.70f, 0.22f, 0.90f) : new Color(0f, 0f, 0f, 0.55f);
+                        QuickMenuApplyBackdropColors(bg, normal, hover);
+                    }
                 }
                 return;
             }
@@ -1035,11 +1084,10 @@ namespace VPB
                 Image bg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
                 if (bg != null)
                 {
-                    Color normal = new Color(0f, 0f, 0f, 0.35f);
-                    Color hover  = new Color(0f, 0f, 0f, 0.55f);
-                    bg.color = normal;
-                    var hh = bg.GetComponent<QuickMenuSquareHover>();
-                    if (hh != null) { hh.normal = normal; hh.hover = hover; }
+                    if (QuickMenuAssignablesForceOpaque())
+                        QuickMenuApplyBackdropColors(bg, QmBackdropAssignedOpaque, QmBackdropAssignedHoverOpaque);
+                    else
+                        QuickMenuApplyBackdropColors(bg, QmBackdropAssignedTransparent, QmBackdropAssignedHoverTransparent);
                 }
                 return;
             }
@@ -1205,18 +1253,19 @@ namespace VPB
             Image bgImg = (m_QuickMenuGridBackdropImages != null && idx < m_QuickMenuGridBackdropImages.Length) ? m_QuickMenuGridBackdropImages[idx] : null;
             if (bgImg != null)
             {
-                // Match tooltip backdrop style: black tint with variable alpha.
-                Color normalAssigned = new Color(0f, 0f, 0f, 0.35f);
-                Color hoverAssigned  = new Color(0f, 0f, 0f, 0.55f);
-                Color normalEmpty    = new Color(0f, 0f, 0f, 0.0f);
-                Color hoverEmpty     = new Color(0f, 0f, 0f, 0.20f);
-
-                Color normal = isAssigned ? normalAssigned : normalEmpty;
-                Color hover  = isAssigned ? hoverAssigned  : hoverEmpty;
-
-                bgImg.color = normal;
-                var hh = bgImg.GetComponent<QuickMenuSquareHover>();
-                if (hh != null) { hh.normal = normal; hh.hover = hover; }
+                Color normal;
+                Color hover;
+                if (QuickMenuAssignablesForceOpaque())
+                {
+                    normal = isAssigned ? QmBackdropAssignedOpaque : QmBackdropEmptyOpaque;
+                    hover = isAssigned ? QmBackdropAssignedHoverOpaque : QmBackdropEmptyHoverOpaque;
+                }
+                else
+                {
+                    normal = isAssigned ? QmBackdropAssignedTransparent : QmBackdropEmptyTransparent;
+                    hover = isAssigned ? QmBackdropAssignedHoverTransparent : QmBackdropEmptyHoverTransparent;
+                }
+                QuickMenuApplyBackdropColors(bgImg, normal, hover);
             }
         }
 

@@ -66,8 +66,29 @@ namespace VPB
             }
         }
 
+        private static bool GalleryTransparencySubSettingsVisible()
+        {
+            try { return VPBConfig.Instance != null && !VPBConfig.Instance.DisableGalleryTransparency; }
+            catch { return true; }
+        }
+
+        private static bool GalleryPaneTransparencySubSettingsVisible()
+        {
+            try
+            {
+                return GalleryTransparencySubSettingsVisible()
+                    && VPBConfig.Instance != null
+                    && !VPBConfig.Instance.ShouldDisableGalleryPaneTransparency();
+            }
+            catch { return false; }
+        }
+
         private sealed class InternalSettingsSnapshot
         {
+            public bool DisableGalleryTransparency;
+            public bool DisableGalleryPaneTransparency;
+            public bool DisableGalleryAssignableButtonsTransparency;
+            public bool DisableGalleryDockHoverTransparency;
             public bool EnableGalleryFade;
             public bool EnableGalleryTranslucency;
             public bool GalleryManualRefreshOnly;
@@ -210,30 +231,100 @@ namespace VPB
 
             var defs = new List<InternalSettingDefinition>(64);
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.fade", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_fade", "Side Button Fade"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_fade", "Fades out side buttons when not hovering over them."),
-                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableGalleryFade,
-                SetBool = v => { VPBConfig.Instance.EnableGalleryFade = v; VPBConfig.Instance.TriggerChange(); }
+                Key = "visuals.disableTransparency", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.disable_all_transparency", "Disable all transparency"),
+                Tooltip = VPBTranslation.T("settings.tip.disable_all_transparency", "Keeps assignable quick-menu slots, dock collapse strips, and the gallery pane fully opaque. Overrides all transparency sub-options."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DisableGalleryTransparency,
+                SetBool = v => {
+                    VPBConfig.Instance.DisableGalleryTransparency = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.translucency", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_translucency", "Gallery Translucency"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_translucency", "Makes the entire gallery pane translucent."),
+                Key = "visuals.disablePaneTransparency", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.disable_gallery_transparency", "Disable gallery transparency"),
+                Tooltip = VPBTranslation.T("settings.tip.disable_gallery_transparency", "Keeps the gallery pane fully opaque (no idle translucency). Does not affect assignable slots, dock strips, or side-button fade."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DisableGalleryPaneTransparency,
+                SetBool = v => {
+                    VPBConfig.Instance.DisableGalleryPaneTransparency = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = GalleryTransparencySubSettingsVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.disableAssignableTransparency", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.disable_assignable_buttons_transparency", "Disable assignable button transparency"),
+                Tooltip = VPBTranslation.T("settings.tip.disable_assignable_buttons_transparency", "Makes quick-menu assignable slot backgrounds fully opaque (no see-through grid cells)."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DisableGalleryAssignableButtonsTransparency,
+                SetBool = v => {
+                    VPBConfig.Instance.DisableGalleryAssignableButtonsTransparency = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = GalleryTransparencySubSettingsVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.disableDockHoverTransparency", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.disable_dock_hover_transparency", "Disable dock hover-area transparency"),
+                Tooltip = VPBTranslation.T("settings.tip.disable_dock_hover_transparency", "Makes fixed-mode collapse expand strips fully opaque. Side buttons stay independent with no panel backdrop."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.DisableGalleryDockHoverTransparency,
+                SetBool = v => {
+                    VPBConfig.Instance.DisableGalleryDockHoverTransparency = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = GalleryTransparencySubSettingsVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.idleTransparency", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_idle_transparency", "Transparency when not hovered over"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_transparency", "Makes the gallery pane translucent when the pointer is not over it. Fully opaque while hovered."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableGalleryTranslucency,
-                SetBool = v => { VPBConfig.Instance.EnableGalleryTranslucency = v; VPBConfig.Instance.TriggerChange(); }
+                SetBool = v => {
+                    VPBConfig.Instance.EnableGalleryTranslucency = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = GalleryPaneTransparencySubSettingsVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.idleOpacity", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_idle_opacity", "Opacity when not hovered over"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_opacity", "How visible the gallery pane is when the pointer is not over it (1.0 = fully opaque, 0.1 = barely visible)."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryOpacity,
+                SetFloat = v => {
+                    VPBConfig.Instance.GalleryOpacity = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    VPBConfig.Instance.TriggerChange();
+                },
+                Min = 0.1f, Max = 1.0f, Step = 0.1f, Decimals = 1,
+                RowVisible = () => GalleryPaneTransparencySubSettingsVisible()
+                    && VPBConfig.Instance != null && VPBConfig.Instance.EnableGalleryTranslucency
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.fade", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.side_button_fade_idle", "Fade side buttons when not hovered over"),
+                Tooltip = VPBTranslation.T("settings.tip.side_button_fade_idle", "Hides side buttons when the pointer is not over the gallery pane or side strip."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableGalleryFade,
+                SetBool = v => {
+                    VPBConfig.Instance.EnableGalleryFade = v;
+                    ApplyGalleryTransparencyToAllPanels();
+                    VPBConfig.Instance.TriggerChange();
+                },
+                RowVisible = GalleryTransparencySubSettingsVisible
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.manualRefresh", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_manual_refresh_only", "Manual gallery refresh only"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_manual_refresh_only", "When enabled, package scans do not update the file grid until you press Refresh in the gallery. Reduces scroll jumps and load when the package index changes often."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryManualRefreshOnly,
                 SetBool = v => { VPBConfig.Instance.GalleryManualRefreshOnly = v; VPBConfig.Instance.TriggerChange(); }
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "visuals.opacity", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_opacity", "Gallery Opacity"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_opacity", "The opacity of the gallery pane when translucency is enabled. 0.1 = 10% visible, 1.0 = Opaque."),
-                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryOpacity,
-                SetFloat = v => { VPBConfig.Instance.GalleryOpacity = v; VPBConfig.Instance.TriggerChange(); },
-                Min = 0.1f, Max = 1.0f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.EnableGalleryTranslucency
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.sideScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_scale_vr", "Side Button Scale (VR)"),
@@ -820,6 +911,10 @@ namespace VPB
         {
             return new InternalSettingsSnapshot
             {
+                DisableGalleryTransparency = VPBConfig.Instance.DisableGalleryTransparency,
+                DisableGalleryPaneTransparency = VPBConfig.Instance.DisableGalleryPaneTransparency,
+                DisableGalleryAssignableButtonsTransparency = VPBConfig.Instance.DisableGalleryAssignableButtonsTransparency,
+                DisableGalleryDockHoverTransparency = VPBConfig.Instance.DisableGalleryDockHoverTransparency,
                 EnableGalleryFade = VPBConfig.Instance.EnableGalleryFade,
                 EnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency,
                 GalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly,
@@ -1548,6 +1643,10 @@ namespace VPB
             if (!internalSettingsSessionActive || internalSettingsBackup == null) return;
             try { SetHoverPreviewDummyActive(false); } catch { }
             var b = internalSettingsBackup;
+            VPBConfig.Instance.DisableGalleryTransparency = b.DisableGalleryTransparency;
+            VPBConfig.Instance.DisableGalleryPaneTransparency = b.DisableGalleryPaneTransparency;
+            VPBConfig.Instance.DisableGalleryAssignableButtonsTransparency = b.DisableGalleryAssignableButtonsTransparency;
+            VPBConfig.Instance.DisableGalleryDockHoverTransparency = b.DisableGalleryDockHoverTransparency;
             VPBConfig.Instance.EnableGalleryFade = b.EnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = b.GalleryManualRefreshOnly;
@@ -1611,6 +1710,7 @@ namespace VPB
                 RebuildGridLayout();
                 RefreshFiles(true);
             }
+            ApplyGalleryTransparencyToAllPanels();
             VPBConfig.Instance.TriggerChange();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;

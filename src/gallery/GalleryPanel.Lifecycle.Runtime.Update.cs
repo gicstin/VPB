@@ -374,20 +374,12 @@ namespace VPB
                 }
             }
 
-            bool pointerInsideGalleryWindowThisFrame = IsPointerInsideGalleryWindowRect();
-
-            // Gallery Translucency Logic
-            if (backgroundCanvasGroup != null && VPBConfig.Instance != null)
+            try
             {
-                bool isHovered = hoverCount > 0 || pointerInsideGalleryWindowThisFrame || isResizing;
-                float targetGalleryAlpha = 1.0f;
-                if (VPBConfig.Instance.EnableGalleryTranslucency && !isHovered)
-                {
-                    targetGalleryAlpha = Mathf.Max(0.1f, VPBConfig.Instance.GalleryOpacity);
-                }
-                if (backgroundCanvasGroup.alpha != targetGalleryAlpha)
-                    backgroundCanvasGroup.alpha = targetGalleryAlpha;
+                AdvanceSideButtonsFadeDelayTimer();
+                ApplyGalleryTransparencyVisuals();
             }
+            catch { }
 
             // Status Bar Logic
             if (temporaryStatusOwner != null && !temporaryStatusOwner.activeInHierarchy)
@@ -456,32 +448,6 @@ namespace VPB
                     fpsTimer = 0f;
                     fpsFrames = 0;
                 }
-            }
-
-            // Side Buttons Auto-Hide Logic
-            bool showSideButtons = hoverCount > 0;
-            if (!showSideButtons && pointerInsideGalleryWindowThisFrame)
-                showSideButtons = true;
-            if (showSideButtons)
-            {
-                sideButtonsFadeDelayTimer = 0f;
-            }
-            else
-            {
-                sideButtonsFadeDelayTimer += Time.deltaTime;
-                if (sideButtonsFadeDelayTimer < SideButtonsFadeDelay)
-                {
-                    showSideButtons = true;
-                }
-            }
-            
-            bool enableFade = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
-            float targetAlpha = (showSideButtons || isResizing || !enableFade) ? 1.0f : 0.0f;
-            sideButtonsAlpha = targetAlpha;
-            foreach (var cg in sideButtonGroups)
-            {
-                if (cg != null && cg.alpha != sideButtonsAlpha)
-                    cg.alpha = sideButtonsAlpha;
             }
 
             if (canvas != null)

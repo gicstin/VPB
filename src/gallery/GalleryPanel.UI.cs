@@ -2881,23 +2881,7 @@ namespace VPB
         /// <summary>Raycast + tint on dock-specific hover strip. Must run after dock changes — strips not touched by last SetCollapsed keep default raycast=true and block toolbar.</summary>
         private void ApplyFixedCollapseTriggerVisuals()
         {
-            if (VPBConfig.Instance == null) return;
-            string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-            GameObject activeTrigger = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseTriggerLeftGO
-                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseTriggerTopGO : collapseTriggerGO);
-            Text activeText = string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) ? collapseHandleLeftText
-                : (string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase) ? collapseHandleTopText : collapseHandleText);
-
-            if (activeTrigger != null)
-            {
-                Image img = activeTrigger.GetComponent<Image>();
-                if (img != null)
-                {
-                    img.color = isCollapsed ? new Color(0.15f, 0.15f, 0.15f, 0.4f) : new Color(1, 1, 1, 0f);
-                    img.raycastTarget = isCollapsed;
-                }
-            }
-            if (activeText != null) activeText.gameObject.SetActive(isCollapsed);
+            try { ApplyGalleryDockHoverVisuals(); } catch { }
         }
 
         public void SetCollapsed(bool collapsed)

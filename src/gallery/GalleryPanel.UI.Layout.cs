@@ -553,6 +553,8 @@ namespace VPB
             float extra = (fontScale > 0f) ? (scale / fontScale) : 1f;
             float containerW = 130f * scale;
             float containerOffset = 140f * scale;
+            float hoverStripW = GallerySideHoverStripWidth * scale;
+            float hoverStripOffset = GallerySideHoverStripOffset * scale;
 
             float squareW = 50f * scale;
             for (int i = 0; i < rightSideButtons.Count; i++)
@@ -582,7 +584,7 @@ namespace VPB
             if (rightSideHoverStrip != null)
             {
                 var rt = rightSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(hoverStripOffset, 0); }
             }
             if (leftSideContainer != null)
             {
@@ -592,7 +594,7 @@ namespace VPB
             if (leftSideHoverStrip != null)
             {
                 var rt = leftSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(-hoverStripOffset, 0); }
             }
 
             // Scale submenu buttons proportionally

@@ -851,6 +851,9 @@ namespace VPB
         private GameObject rightSideContainer;
         private GameObject leftSideHoverStrip;
         private GameObject rightSideHoverStrip;
+        /// <summary>Full-height invisible hit targets beside side buttons (half legacy 130px width).</summary>
+        private const float GallerySideHoverStripWidth = 30f;
+        private const float GallerySideHoverStripOffset = 35f;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
 
         private List<CanvasGroup> sideButtonGroups = new List<CanvasGroup>();
@@ -1218,6 +1221,10 @@ namespace VPB
 
         public bool isFixedLocally = false;
         private bool isCollapsed = false;
+        /// <summary>Fixed-mode dock collapse strip and &lt; &gt; bar (half legacy 60px).</summary>
+        private const float FixedCollapseTriggerThickness = 30f;
+        private const float FixedCollapseTriggerChamferSize = 50f;
+        private const int FixedCollapseTriggerArrowFontSize = 16;
         private GameObject collapseTriggerGO; // Right dock
         private Text collapseHandleText;
         private GameObject collapseTriggerLeftGO;

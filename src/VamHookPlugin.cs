@@ -943,6 +943,13 @@ namespace VPB
 
             AutoLoadALPackages();
 
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.ConfigChanged += RefreshQuickMenuAssignableTransparency;
+            }
+            catch { }
+
             // Auto-create gallery pane on startup if enabled
             if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
             {
@@ -1012,6 +1019,12 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.ConfigChanged -= RefreshQuickMenuAssignableTransparency;
+            }
+            catch { }
             try { UnsubscribeLocaleChanged(); } catch { }
             Settings.Instance.UIPosition.Value = new Vector2((int)m_Rect.x, (int)m_Rect.y);
             Settings.Instance.MiniMode.Value = MiniMode;

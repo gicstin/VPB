@@ -185,6 +185,14 @@ namespace VPB
         public float BringToFrontDistance = 1.5f;
         public float ReorientStartAngle = 20f;
         public float MovementThreshold = 0.1f;
+        /// <summary>When true, all transparency sub-options are overridden (assignable slots, dock strips, gallery pane).</summary>
+        public bool DisableGalleryTransparency = true;
+        /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), gallery pane idle translucency is off (fully opaque).</summary>
+        public bool DisableGalleryPaneTransparency = true;
+        /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), quick-menu assignable slot backdrops are fully opaque.</summary>
+        public bool DisableGalleryAssignableButtonsTransparency = true;
+        /// <summary>When true (or <see cref="DisableGalleryTransparency"/>), dock collapse strips are fully opaque when collapsed.</summary>
+        public bool DisableGalleryDockHoverTransparency = true;
         public bool EnableGalleryFade = true;
         public bool EnableGalleryTranslucency = false;
         /// <summary>When true, package scans do not update the gallery until the user uses Refresh.</summary>
@@ -593,6 +601,10 @@ namespace VPB
             BringToFrontDistance = 1.5f;
             ReorientStartAngle = 20f;
             MovementThreshold = 0.1f;
+            DisableGalleryTransparency = true;
+            DisableGalleryPaneTransparency = true;
+            DisableGalleryAssignableButtonsTransparency = true;
+            DisableGalleryDockHoverTransparency = true;
             EnableGalleryFade = true;
             EnableGalleryTranslucency = false;
             GalleryManualRefreshOnly = true;
@@ -708,8 +720,15 @@ namespace VPB
                         if (node["BringToFrontDistance"] != null) BringToFrontDistance = node["BringToFrontDistance"].AsFloat;
                         if (node["ReorientStartAngle"] != null) ReorientStartAngle = node["ReorientStartAngle"].AsFloat;
                         if (node["MovementThreshold"] != null) MovementThreshold = node["MovementThreshold"].AsFloat;
+                        if (node["DisableGalleryTransparency"] != null) DisableGalleryTransparency = node["DisableGalleryTransparency"].AsBool;
+                        if (node["DisableGalleryAssignableButtonsTransparency"] != null) DisableGalleryAssignableButtonsTransparency = node["DisableGalleryAssignableButtonsTransparency"].AsBool;
+                        if (node["DisableGalleryDockHoverTransparency"] != null) DisableGalleryDockHoverTransparency = node["DisableGalleryDockHoverTransparency"].AsBool;
                         if (node["EnableGalleryFade"] != null) EnableGalleryFade = node["EnableGalleryFade"].AsBool;
                         if (node["EnableGalleryTranslucency"] != null) EnableGalleryTranslucency = node["EnableGalleryTranslucency"].AsBool;
+                        if (node["DisableGalleryPaneTransparency"] != null)
+                            DisableGalleryPaneTransparency = node["DisableGalleryPaneTransparency"].AsBool;
+                        else
+                            DisableGalleryPaneTransparency = !EnableGalleryTranslucency;
                         if (node["GalleryManualRefreshOnly"] != null) GalleryManualRefreshOnly = node["GalleryManualRefreshOnly"].AsBool;
                         if (node["GalleryOpacity"] != null) GalleryOpacity = node["GalleryOpacity"].AsFloat;
                         if (node["DragDropReplaceMode"] != null) DragDropReplaceMode = node["DragDropReplaceMode"].AsBool;
@@ -1004,6 +1023,10 @@ namespace VPB
                 node["BringToFrontDistance"].AsFloat = BringToFrontDistance;
                 node["ReorientStartAngle"].AsFloat = ReorientStartAngle;
                 node["MovementThreshold"].AsFloat = MovementThreshold;
+                node["DisableGalleryTransparency"].AsBool = DisableGalleryTransparency;
+                node["DisableGalleryPaneTransparency"].AsBool = DisableGalleryPaneTransparency;
+                node["DisableGalleryAssignableButtonsTransparency"].AsBool = DisableGalleryAssignableButtonsTransparency;
+                node["DisableGalleryDockHoverTransparency"].AsBool = DisableGalleryDockHoverTransparency;
                 node["EnableGalleryFade"].AsBool = EnableGalleryFade;
                 node["EnableGalleryTranslucency"].AsBool = EnableGalleryTranslucency;
                 node["GalleryManualRefreshOnly"].AsBool = GalleryManualRefreshOnly;
@@ -1220,6 +1243,21 @@ namespace VPB
             if (v < min) return min;
             if (v > max) return max;
             return v;
+        }
+
+        public bool ShouldDisableGalleryPaneTransparency()
+        {
+            return DisableGalleryTransparency || DisableGalleryPaneTransparency;
+        }
+
+        public bool ShouldDisableGalleryAssignableButtonsTransparency()
+        {
+            return DisableGalleryTransparency || DisableGalleryAssignableButtonsTransparency;
+        }
+
+        public bool ShouldDisableGalleryDockHoverTransparency()
+        {
+            return DisableGalleryTransparency || DisableGalleryDockHoverTransparency;
         }
     }
 }
