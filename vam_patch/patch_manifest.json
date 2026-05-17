@@ -660,6 +660,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_themes",
+        "IsDirectory":  true
+    },
+    {
         "RelativePath":  "BepInEx/plugins/zstd",
         "IsDirectory":  true
     },

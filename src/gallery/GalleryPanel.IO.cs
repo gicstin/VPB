@@ -1772,6 +1772,11 @@ namespace VPB
                 try { StopCoroutine(_sideTabsTagCountSliceCo); } catch { }
                 _sideTabsTagCountSliceCo = null;
             }
+            if (_historyModeCountsCo != null)
+            {
+                try { StopCoroutine(_historyModeCountsCo); } catch { }
+                _historyModeCountsCo = null;
+            }
             if (_earlyMetaApplyCoroutine != null)
             {
                 try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }

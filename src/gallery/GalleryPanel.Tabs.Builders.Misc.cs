@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,7 +13,9 @@ namespace VPB
         {
             string filterNow = (historyTabFilter ?? "").Trim();
             var countsByMode = new Dictionary<GalleryHistoryFilterMode, int>();
-            bool hasCounts = VpbLocalDatabase.TryReadGalleryHistoryModeCounts(countsByMode);
+            bool hasCounts = VpbLocalDatabase.TryGetGalleryHistoryModeCountsCached(countsByMode);
+            if (!hasCounts)
+                ScheduleGalleryHistoryModeCountsNonBlocking();
             foreach (GalleryHistoryFilterMode mode in Enum.GetValues(typeof(GalleryHistoryFilterMode)))
             {
                 string modeLabel = GetGalleryHistoryFilterRowLabel(mode);
@@ -37,10 +41,53 @@ namespace VPB
             }
         }
 
+        private void ScheduleGalleryHistoryModeCountsNonBlocking()
+        {
+            if (_historyModeCountsCo != null)
+                return;
+            _historyModeCountsCo = StartCoroutine(CoGalleryHistoryModeCountsForSideTabs());
+        }
+
+        private IEnumerator CoGalleryHistoryModeCountsForSideTabs()
+        {
+            try
+            {
+                var probe = new Dictionary<GalleryHistoryFilterMode, int>();
+                if (VpbLocalDatabase.TryGetGalleryHistoryModeCountsCached(probe))
+                    yield break;
+
+                var counts = new Dictionary<GalleryHistoryFilterMode, int>();
+                var workerDone = new int[1];
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try { VpbLocalDatabase.TryReadGalleryHistoryModeCounts(counts); }
+                    finally { workerDone[0] = 1; }
+                });
+                while (workerDone[0] == 0)
+                    yield return null;
+
+                if (leftActiveContent != ContentType.History && rightActiveContent != ContentType.History)
+                    yield break;
+                try { RebuildHistorySideTabListsOnly(); } catch { }
+            }
+            finally
+            {
+                _historyModeCountsCo = null;
+            }
+        }
+
+        private void RebuildHistorySideTabListsOnly()
+        {
+            if (leftActiveContent == ContentType.History && leftTabContainerGO != null)
+                UpdateTabs(ContentType.History, leftTabContainerGO, leftActiveTabButtons, true);
+            if (rightActiveContent == ContentType.History && rightTabContainerGO != null)
+                UpdateTabs(ContentType.History, rightTabContainerGO, rightActiveTabButtons, false);
+        }
+
         private void BuildSettingsTabs(GameObject container, List<GameObject> trackedButtons)
         {
-            Color groupActive = new Color(0.35f, 0.35f, 0.65f, 1f);
-            Color groupInactive = new Color(0.18f, 0.18f, 0.18f, 1f);
+            Color groupActive = ColorTitleSearchFilterActive;
+            Color groupInactive = ColorInactiveRow;
             string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
             bool MatchFilter(string label) =>
                 string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;

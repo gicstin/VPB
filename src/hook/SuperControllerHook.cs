@@ -744,6 +744,18 @@ namespace VPB
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
         }
 
+        /// <summary>Gallery VR pointer over pane: thumbstick scroll consumes forward navigate axis.</summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "GetFreeNavigateVector")]
+        public static void PostGetFreeNavigateVector(ref Vector4 __result)
+        {
+            if (!GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate) return;
+            __result.x = 0f;
+            __result.y = 0f;
+            __result.z = 0f;
+            __result.w = 0f;
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "OpenLinkInBrowser", new Type[] { typeof(string) })]
         public static bool PreOpenLinkInBrowser(string url)

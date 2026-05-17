@@ -453,6 +453,7 @@ namespace VPB
                     }
                 }
                 try { MessageKit.post(MessageDef.GalleryItemUsageRecorded); } catch { }
+                InvalidateGalleryHistoryModeCountsCache();
                 if (LogHistoryRecordWrites)
                 {
                     try
@@ -562,6 +563,7 @@ namespace VPB
                         catch { }
                     }
                 }
+                InvalidateGalleryHistoryModeCountsCache();
             }
             catch (Exception ex)
             {
@@ -625,7 +627,54 @@ namespace VPB
             }
         }
 
+        private static int _galleryHistoryModeCountsCacheGen;
+        private static int _galleryHistoryModeCountsCacheValidGen = -1;
+        private static Dictionary<GalleryHistoryFilterMode, int> _galleryHistoryModeCountsCache;
+
+        internal static void InvalidateGalleryHistoryModeCountsCache()
+        {
+            Interlocked.Increment(ref _galleryHistoryModeCountsCacheGen);
+        }
+
+        /// <summary>Fast path for History side tabs: returns last aggregated counts without hitting SQLite.</summary>
+        internal static bool TryGetGalleryHistoryModeCountsCached(Dictionary<GalleryHistoryFilterMode, int> outCounts)
+        {
+            if (outCounts == null) return false;
+            outCounts.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            int gen = Interlocked.CompareExchange(ref _galleryHistoryModeCountsCacheGen, 0, 0);
+            var cache = _galleryHistoryModeCountsCache;
+            if (cache == null || _galleryHistoryModeCountsCacheValidGen != gen)
+                return false;
+
+            foreach (var kv in cache)
+                outCounts[kv.Key] = kv.Value;
+            return true;
+        }
+
         internal static bool TryReadGalleryHistoryModeCounts(Dictionary<GalleryHistoryFilterMode, int> outCounts)
+        {
+            if (outCounts == null) return false;
+            outCounts.Clear();
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            if (TryGetGalleryHistoryModeCountsCached(outCounts))
+                return true;
+
+            int genAtStart = Interlocked.CompareExchange(ref _galleryHistoryModeCountsCacheGen, 0, 0);
+            if (!TryReadGalleryHistoryModeCountsUncached(outCounts))
+                return false;
+
+            if (genAtStart == Interlocked.CompareExchange(ref _galleryHistoryModeCountsCacheGen, 0, 0))
+            {
+                _galleryHistoryModeCountsCache = new Dictionary<GalleryHistoryFilterMode, int>(outCounts);
+                _galleryHistoryModeCountsCacheValidGen = genAtStart;
+            }
+            return true;
+        }
+
+        private static bool TryReadGalleryHistoryModeCountsUncached(Dictionary<GalleryHistoryFilterMode, int> outCounts)
         {
             if (outCounts == null) return false;
             outCounts.Clear();
@@ -638,23 +687,47 @@ namespace VPB
                     EnsureSchema(conn);
 
                     string internalPathExpr = GalleryHistoryResolvedInternalPathSql();
-                    foreach (GalleryHistoryFilterMode mode in Enum.GetValues(typeof(GalleryHistoryFilterMode)))
-                    {
-                        string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
-                        var sb = new StringBuilder(768);
-                        sb.Append("SELECT COUNT(DISTINCT i.item_key) ");
-                        AppendGalleryHistoryJoinFromWhere(sb);
-                        sb.Append(kindSql);
-                        sb.Append(" AND length(trim(ifnull(p.uid,''))) > 0");
-                        sb.Append(" AND length(trim(").Append(internalPathExpr).Append(")) > 0");
+                    const string miscKindList = "'scene','appearance','clothing','hair','plugins','pose','skin','morphs'";
+                    var sb = new StringBuilder(1024);
+                    sb.Append("SELECT ");
+                    sb.Append("COUNT(DISTINCT i.item_key), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'scene' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'appearance' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'clothing' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'hair' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'plugins' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'pose' THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind IN ('skin','morphs') THEN i.item_key END), ");
+                    sb.Append("COUNT(DISTINCT CASE WHEN i.kind NOT IN (").Append(miscKindList).Append(") THEN i.item_key END) ");
+                    AppendGalleryHistoryJoinFromWhere(sb);
+                    sb.Append(" AND length(trim(ifnull(p.uid,''))) > 0");
+                    sb.Append(" AND length(trim(").Append(internalPathExpr).Append(")) > 0");
 
-                        using (var st = conn.Prepare(sb.ToString()))
-                        {
-                            int n = 0;
-                            if (st.Step() == VpbSqlite3.SqliteRow)
-                                n = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
-                            outCounts[mode] = n;
-                        }
+                    using (var st = conn.Prepare(sb.ToString()))
+                    {
+                        if (st.Step() != VpbSqlite3.SqliteRow)
+                            return false;
+
+                        int all = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
+                        int scenes = (int)Math.Min(Math.Max(st.ColumnInt64(1), 0), int.MaxValue);
+                        int appearance = (int)Math.Min(Math.Max(st.ColumnInt64(2), 0), int.MaxValue);
+                        int clothing = (int)Math.Min(Math.Max(st.ColumnInt64(3), 0), int.MaxValue);
+                        int hair = (int)Math.Min(Math.Max(st.ColumnInt64(4), 0), int.MaxValue);
+                        int plugins = (int)Math.Min(Math.Max(st.ColumnInt64(5), 0), int.MaxValue);
+                        int pose = (int)Math.Min(Math.Max(st.ColumnInt64(6), 0), int.MaxValue);
+                        int body = (int)Math.Min(Math.Max(st.ColumnInt64(7), 0), int.MaxValue);
+                        int misc = (int)Math.Min(Math.Max(st.ColumnInt64(8), 0), int.MaxValue);
+
+                        outCounts[GalleryHistoryFilterMode.Recent] = all;
+                        outCounts[GalleryHistoryFilterMode.MostUsed] = all;
+                        outCounts[GalleryHistoryFilterMode.Scenes] = scenes;
+                        outCounts[GalleryHistoryFilterMode.Appearance] = appearance;
+                        outCounts[GalleryHistoryFilterMode.Clothing] = clothing;
+                        outCounts[GalleryHistoryFilterMode.Hair] = hair;
+                        outCounts[GalleryHistoryFilterMode.Plugins] = plugins;
+                        outCounts[GalleryHistoryFilterMode.Pose] = pose;
+                        outCounts[GalleryHistoryFilterMode.Body] = body;
+                        outCounts[GalleryHistoryFilterMode.Misc] = misc;
                     }
 
                     return true;
@@ -767,6 +840,7 @@ namespace VPB
                             }
                         }
                         conn.ExecUtf8("COMMIT;");
+                        InvalidateGalleryHistoryModeCountsCache();
                         return true;
                     }
                     catch

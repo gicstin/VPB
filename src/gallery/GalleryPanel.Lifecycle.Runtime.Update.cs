@@ -69,6 +69,8 @@ namespace VPB
                 return;
             }
 
+            try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
+
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 
             if (canvas != null && VPBConfig.Instance != null)
@@ -137,7 +139,7 @@ namespace VPB
                     }
                 }
 
-                if (isFixedLocally)
+                if (isFixedLocally && backgroundBoxGO != null)
                 {
                     UpdateFooterPaddingForFloatingResizeHandles(false);
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
@@ -337,7 +339,7 @@ namespace VPB
 
                     // Separate triggers handle chamfer direction; nothing to mirror here.
                 }
-                else
+                else if (backgroundBoxGO != null)
                 {
                     UpdateFooterPaddingForFloatingResizeHandles(true);
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
@@ -351,6 +353,7 @@ namespace VPB
                         canvas.worldCamera = Camera.main;
                         canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                         
+                        if (backgroundBoxGO == null) return;
                         RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
                         bgRT.anchorMin = new Vector2(0.5f, 0.5f);
                         bgRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -467,7 +470,7 @@ namespace VPB
                         
                         bool anchoringActive = (GetAnchoredInstance() == this && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu && IsVamMenuVisible());
 
-                        if (followUser && !anchoringActive)
+                        if (followUser && !anchoringActive && VPBConfig.Instance != null)
                         {
                             if (!offsetsInitialized)
                             {
@@ -559,7 +562,13 @@ namespace VPB
             }
 
             if (_categoryQuickChromeRootGO != null && _categoryQuickChromeRootGO.activeSelf)
-                ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+            {
+                try
+                {
+                    ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                }
+                catch { }
+            }
 
             if (IsVisible && titleSearchInput != null)
             {
@@ -571,7 +580,7 @@ namespace VPB
             try { ValidateHoverPreviewActive(); } catch { }
 
             // Pointer Dot Logic
-            if (pointerDotGO != null)
+            if (pointerDotGO != null && canvas != null)
             {
                 if (hoverCount > 0 && currentPointerData != null && currentPointerData.pointerCurrentRaycast.isValid)
                 {

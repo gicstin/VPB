@@ -73,6 +73,8 @@ namespace VPB
         private Coroutine _earlyMetaApplyCoroutine;
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
+        /// <summary>Background History filter-tab counts (SQLite); avoids multi-second stalls on History toggle.</summary>
+        private Coroutine _historyModeCountsCo;
 
         // Thumbnail cache progress UI
         private GameObject _thumbCacheProgressGO;
@@ -602,9 +604,9 @@ namespace VPB
         private float _userTagDropPulseUntil = 0f;
         private Coroutine _userTagVisualPulseCoroutine;
 
-        private static readonly Color UserTagStateOnColor = new Color(0.20f, 0.50f, 0.25f, 1f);
-        private static readonly Color UserTagStateMixedColor = new Color(0.36f, 0.38f, 0.22f, 1f);
-        private static readonly Color UserTagStatePulseColor = new Color(0.72f, 0.62f, 0.25f, 1f);
+        private static readonly Color UserTagStateOnColor = new Color(0.14f, 0.42f, 0.48f, 1f);
+        private static readonly Color UserTagStateMixedColor = new Color(0.35f, 0.38f, 0.22f, 1f);
+        private static readonly Color UserTagStatePulseColor = new Color(0.20f, 0.55f, 0.58f, 1f);
         private static readonly Color UserTagFilterActiveColor = new Color(0.18f, 0.38f, 0.62f, 1f);
         private static readonly Color UserTagDropGlowColor = new Color(0.35f, 0.95f, 0.55f, 1f);
         private const float UserTagVisualPulseSeconds = 0.45f;
@@ -1001,6 +1003,7 @@ namespace VPB
         // True when hoverPathText is showing the filtered item count fallback (not an item path).
         private bool hoverPathIsCountMode = false;
         private RectTransform hoverPathRT;
+        private Image hoverPathBarImage;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
         // Hover preview overlay (bottom-left above tbox)
@@ -1201,19 +1204,16 @@ namespace VPB
         private Hub.GalleryHubItem selectedHubItem;
         #pragma warning restore CS0414
         
-        // Define colors for different content types
-        public static readonly Color ColorCategory = new Color(0.5f, 0.15f, 0.15f, 1f); // Darker Red
-        public static readonly Color ColorCreator = new Color(0.15f, 0.45f, 0.15f, 1f); // Darker Green
-        /// <summary>Title bar search field backdrop when empty (grey chip).</summary>
-        public static readonly Color ColorTitleSearchBackdropIdle = new Color(0.15f, 0.15f, 0.15f, 1f);
-        /// <summary>Title bar search when query non-empty; blue accent paired with <see cref="ColorCreator"/> tone.</summary>
-        public static readonly Color ColorTitleSearchFilterActive = new Color(0.15f, 0.30f, 0.52f, 1f);
-        public static readonly Color ColorPath = new Color(0.15f, 0.35f, 0.6f, 1f); // Darker Blue
-        public static readonly Color ColorHistory = new Color(0.38f, 0.28f, 0.52f, 1f);
-        /// <summary>Side-tab / chrome accent for History (slightly brighter than <see cref="ColorHistory"/>).</summary>
-        public static readonly Color ColorHistoryAccent = new Color(0.48f, 0.34f, 0.65f, 1f);
-        public static readonly Color ColorHub = new Color(0.8f, 0.4f, 0f, 1f); // Darker Orange
-        public static readonly Color ColorLicense = new Color(0.6f, 0f, 0.6f, 1f); // Darker Magenta
+        // Content-type accent colors (side tabs / title chrome).
+        public static readonly Color ColorCategory = new Color(0.60f, 0.15f, 0.15f, 1f);
+        public static readonly Color ColorCreator = new Color(0.60f, 0.45f, 0.15f, 1f);
+        public static readonly Color ColorTitleSearchBackdropIdle = new Color(0.07f, 0.07f, 0.09f, 1f);
+        public static readonly Color ColorTitleSearchFilterActive = new Color(0.18f, 0.38f, 0.62f, 1f);
+        public static readonly Color ColorPath = new Color(0.15f, 0.15f, 0.45f, 1f);
+        public static readonly Color ColorHistory = new Color(0.50f, 0.20f, 0.50f, 1f);
+        public static readonly Color ColorHistoryAccent = new Color(0.55f, 0.28f, 0.55f, 1f);
+        public static readonly Color ColorHub = new Color(0.20f, 0.50f, 0.35f, 1f);
+        public static readonly Color ColorLicense = new Color(0.45f, 0.45f, 0.20f, 1f);
 
         private string dragStatusMsg = null;
         private string temporaryStatusMsg = null;

@@ -435,6 +435,8 @@
     <Compile Include="src\gallery\UIDragBlocker.cs" />
     <Compile Include="src\gallery\UIScrollPassthrough.cs" />
     <Compile Include="src\gallery\GalleryViewportCtrlScrollColumns.cs" />
+    <Compile Include="src\gallery\GalleryVrThumbstickScroll.cs" />
+    <Compile Include="src\gallery\GalleryPanel.VrThumbstickScroll.cs" />
     <Compile Include="src\gallery\SpringScrollButton.cs" />
     <Compile Include="src\gallery\HoldToApplyOnHover.cs" />
     <Compile Include="src\gallery\UIRichValueHover.cs" />
@@ -521,6 +523,7 @@
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbThemes.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
@@ -562,6 +565,12 @@ if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(VaMPath)\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+)
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes\" (
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(VaMPath)\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 )</PostBuildEvent>
   </PropertyGroup>
