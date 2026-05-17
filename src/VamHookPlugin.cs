@@ -37,6 +37,14 @@ namespace VPB
 
             public void LogException(Exception exception, UnityEngine.Object context)
             {
+                try
+                {
+                    if (exception != null && ThirdPartyFixHook.ShouldSuppressCheesyFxNullReferenceLog(exception.ToString()))
+                        return;
+                }
+                catch
+                {
+                }
                 m_Inner.LogException(exception, context);
             }
 
@@ -45,6 +53,13 @@ namespace VPB
                 try
                 {
                     if (logType == LogType.Error && !string.IsNullOrEmpty(format) && IsMissingAddonDependencyMessage(format, args))
+                    {
+                        return;
+                    }
+
+                    if ((logType == LogType.Error || logType == LogType.Exception || logType == LogType.Assert)
+                        && !string.IsNullOrEmpty(format)
+                        && ThirdPartyFixHook.ShouldSuppressCheesyFxUnityLog(FormatLogMessage(format, args), null, logType))
                     {
                         return;
                     }
@@ -58,6 +73,20 @@ namespace VPB
                 {
                 }
                 m_Inner.LogFormat(logType, context, format, args);
+            }
+
+            private static string FormatLogMessage(string format, object[] args)
+            {
+                if (string.IsNullOrEmpty(format)) return "";
+                if (args == null || args.Length == 0) return format;
+                try
+                {
+                    return string.Format(format, args);
+                }
+                catch
+                {
+                    return format;
+                }
             }
 
             private static bool IsUnloadPersonMessage(string format, object[] args)

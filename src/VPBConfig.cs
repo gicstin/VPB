@@ -214,6 +214,8 @@ namespace VPB
         }
         /// <summary>True keeps target atom's current scale when an Appearance preset is applied (both toolbox and drag-drop). Default false.</summary>
         public bool SuppressAppearanceScaleChange { get; set; } = false;
+        /// <summary>When true, suppresses CheesyFX NullReferenceException spam in Unity/BepInEx logs (broken Update loops).</summary>
+        public bool SuppressCheesyFxNullReferenceLogs = true;
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
         /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
@@ -598,6 +600,7 @@ namespace VPB
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
             SuppressAppearanceScaleChange = false;
+            SuppressCheesyFxNullReferenceLogs = true;
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
             RequireDragHoldBeforeMove = false;
@@ -715,6 +718,7 @@ namespace VPB
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["SuppressAppearanceScaleChange"] != null) SuppressAppearanceScaleChange = node["SuppressAppearanceScaleChange"].AsBool;
+                        if (node["SuppressCheesyFxNullReferenceLogs"] != null) SuppressCheesyFxNullReferenceLogs = node["SuppressCheesyFxNullReferenceLogs"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["DragHoldThreshold"] != null)
@@ -1007,6 +1011,7 @@ namespace VPB
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
+                node["SuppressCheesyFxNullReferenceLogs"].AsBool = SuppressCheesyFxNullReferenceLogs;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
