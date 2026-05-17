@@ -455,6 +455,7 @@ namespace VPB
                     if (sc != null)
                     {
                         Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
+                        try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
                         LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                         sc.Load(normalizedPath);
                     }
@@ -484,6 +485,7 @@ namespace VPB
             }
             if (Messager.singleton != null)
                 Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
+            try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
             LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
             sc.Load(normalizedPath);
         }

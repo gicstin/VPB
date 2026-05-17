@@ -660,6 +660,32 @@ namespace VPB
             }
         }
 
+        /// <summary>When <see cref="VPBConfig.GalleryCollapseOnSceneLaunch"/> is on: fixed panes slide to dock edge; floating panes hide.</summary>
+        public static void CollapsePanelsOnSceneLaunch()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryCollapseOnSceneLaunch) return;
+                if (singleton == null || singleton.panels == null) return;
+                foreach (var p in singleton.panels)
+                {
+                    if (p == null) continue;
+                    bool visible = false;
+                    try { visible = p.IsVisible; } catch { }
+                    if (!visible) continue;
+                    if (p.isFixedLocally)
+                    {
+                        try { p.SetCollapsed(true); } catch { }
+                    }
+                    else
+                    {
+                        try { p.Hide(); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         public void Hide()
         {
             VpbPerfDiag.LogTransition("Gallery.Hide", "panels=" + panels.Count);

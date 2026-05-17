@@ -228,6 +228,8 @@ namespace VPB
         public bool EnableDragDrop = false;
         /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
         public bool GalleryAutoGenderFilter = true;
+        /// <summary>When true (default), visible gallery panes collapse (fixed dock) or hide (floating) when a scene is launched.</summary>
+        public bool GalleryCollapseOnSceneLaunch = true;
         /// <summary>
         /// Effective drag-and-drop state at runtime.
         /// Hold-to-launch uses same pointer-down gesture as drag start, so it suppresses drag even if user preference is enabled.
@@ -615,6 +617,7 @@ namespace VPB
             SuppressCheesyFxNullReferenceLogs = true;
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
+            GalleryCollapseOnSceneLaunch = true;
             RequireDragHoldBeforeMove = false;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
@@ -740,6 +743,7 @@ namespace VPB
                         if (node["SuppressCheesyFxNullReferenceLogs"] != null) SuppressCheesyFxNullReferenceLogs = node["SuppressCheesyFxNullReferenceLogs"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
+                        if (node["GalleryCollapseOnSceneLaunch"] != null) GalleryCollapseOnSceneLaunch = node["GalleryCollapseOnSceneLaunch"].AsBool;
                         if (node["DragHoldThreshold"] != null)
                             DragHoldThreshold = ClampDragHoldThreshold(node["DragHoldThreshold"].AsFloat);
                         if (node["RequireDragHoldBeforeMove"] != null)
@@ -1038,6 +1042,7 @@ namespace VPB
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;
+                node["GalleryCollapseOnSceneLaunch"].AsBool = GalleryCollapseOnSceneLaunch;
                 NormalizeDragDropHoldSettings();
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;

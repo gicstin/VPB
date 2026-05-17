@@ -242,6 +242,8 @@
   "settings.header.interaction": "交互",
   "settings.enable_drag_drop": "启用拖放",
   "settings.tip.enable_drag_drop": "关闭时只能通过点击应用图库项，无拖放；并关闭拖动时出现的上下文弹窗。",
+  "settings.gallery_collapse_on_scene_launch": "启动场景时收起图库",
+  "settings.tip.gallery_collapse_on_scene_launch": "开启后，启动场景时可见图库会收起到停靠边（固定模式）或隐藏（浮动模式）。",
   "settings.require_drag_hold": "拖动前需按住",
   "settings.tip.require_drag_hold": "关：无按住延迟（与增加按住功能之前相同）。开：使用下方时长，指针需保持静止后才开始拖动（减轻 VR 抖动与误触）。",
   "settings.drag_hold_threshold": "按住时长（秒）",

@@ -242,6 +242,8 @@
   "settings.header.interaction": "操作",
   "settings.enable_drag_drop": "ドラッグ＆ドロップを有効化",
   "settings.tip.enable_drag_drop": "オフのときはクリックでのみ適用。ドラッグ時のコンテキストも出ません。",
+  "settings.gallery_collapse_on_scene_launch": "シーン起動時にギャラリーを折りたたむ",
+  "settings.tip.gallery_collapse_on_scene_launch": "オン時、シーン起動で表示中のギャラリーは固定モードでドック端へ折りたたみ、フロートは非表示になります。",
   "settings.require_drag_hold": "ドラッグ前に長押しを必須にする",
   "settings.tip.require_drag_hold": "オフ＝従来どおり待ち時間なし。オン＝下の秒数だけ静止してからドラッグ開始（VRのブレや誤操作対策）。",
   "settings.drag_hold_threshold": "長押し時間（秒）",

@@ -67,6 +67,7 @@ namespace VPB
 
                 if (!merge)
                 {
+                    try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
                     // Prefer direct public API.
                     sc.Load(normalizedPath);
                     return true;
@@ -242,7 +243,7 @@ namespace VPB
 
             if (personUids.Count == 0)
             {
-                sc.Load(UI.NormalizePath(scenePath));
+                LoadScene(UI.NormalizePath(scenePath), false);
                 yield break;
             }
 

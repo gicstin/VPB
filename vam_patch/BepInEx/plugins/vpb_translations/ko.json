@@ -242,6 +242,8 @@
   "settings.header.interaction": "조작",
   "settings.enable_drag_drop": "드래그 앤 드롭 사용",
   "settings.tip.enable_drag_drop": "끄면 클릭으로만 적용. 드래그 시 나오는 메뉴도 끕니다.",
+  "settings.gallery_collapse_on_scene_launch": "씬 실행 시 갤러리 접기",
+  "settings.tip.gallery_collapse_on_scene_launch": "켜면 씬 실행 시 보이는 갤러리가 고정 모드에서는 도크 가장자리로 접히고, 플로팅은 숨겨집니다.",
   "settings.require_drag_hold": "드래그 전 길게 누르기 필요",
   "settings.tip.require_drag_hold": "끄기 = 예전처럼 대기 없음. 켜기 = 아래 시간만큼 가만히 둔 뒤 드래그 시작(VR 떨림·오클릭 완화).",
   "settings.drag_hold_threshold": "길게 누름 시간(초)",
