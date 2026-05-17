@@ -471,11 +471,13 @@ namespace VPB
                 + "|" + cat
                 + "|" + (int)(st != null ? st.Type : 0)
                 + "|" + (int)(st != null ? st.Direction : 0)
-                + "|" + scale.ToString("R");
+                + "|" + scale.ToString("R")
+                + "|" + _userTagPinRevision;
         }
 
         private void RebuildUserTagVirtViewList()
         {
+            _userTagStickyRows.Clear();
             _userTagVirtView.Clear();
             var sortUt = GetSortState("UserTags");
             var rowsUt = new List<UserTagSideTabEntry>(cachedUserTagSideTab.Count);
@@ -516,17 +518,30 @@ namespace VPB
                         }
                     }
                     if (!alreadyExists)
-                        _userTagVirtView.Add(new UserTagSideTabEntry { Name = normCandidate, Count = CreateRowCountSentinel });
+                        _userTagStickyRows.Add(new UserTagSideTabEntry { Name = normCandidate, Count = CreateRowCountSentinel });
                 }
             }
 
+            var filteredUt = new List<UserTagSideTabEntry>(rowsUt.Count);
             for (int ui = 0; ui < rowsUt.Count; ui++)
             {
                 UserTagSideTabEntry ut = rowsUt[ui];
                 if (string.IsNullOrEmpty(ut.Name)) continue;
                 if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                _userTagVirtView.Add(ut);
+                filteredUt.Add(ut);
             }
+            var pinnedUt = new List<UserTagSideTabEntry>(8);
+            var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
+            PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
+            for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagStickyRows.Add(pinnedUt[pi]);
+            for (int ni = 0; ni < normalUt.Count; ni++) _userTagVirtView.Add(normalUt[ni]);
+
+            try
+            {
+                ScrollRect sr = _leftUserTagVirtScroll ?? _rightUserTagVirtScroll;
+                if (sr != null) sr.verticalNormalizedPosition = 1f;
+            }
+            catch { }
         }
 
         private GameObject EnsureUserTagPickVirtualHolder(Transform parent)
@@ -770,20 +785,23 @@ namespace VPB
                 txt.verticalOverflow = VerticalWrapMode.Truncate;
                 txt.resizeTextForBestFit = false;
                 RectTransform txtRt = txt.GetComponent<RectTransform>();
+                float pinReserve = isCreateRow ? 0f : 34f * s;
+                float filterReserve = isFilterActive ? 34f * s : 0f;
                 if (txtRt != null)
                 {
-                    txtRt.offsetMin = new Vector2(isFilterActive ? 34f * s : 0f, txtRt.offsetMin.y);
-                    txtRt.offsetMax = new Vector2(0f, txtRt.offsetMax.y);
+                    txtRt.offsetMin = new Vector2(pinReserve, txtRt.offsetMin.y);
+                    txtRt.offsetMax = new Vector2(-filterReserve, txtRt.offsetMax.y);
                 }
                 RectTransform btnRtUt = btnGO.GetComponent<RectTransform>();
                 float padUt = 10f * s;
-                float iconReserve = isFilterActive ? 30f * s : 0f;
+                float iconReserve = pinReserve + filterReserve;
                 float innerUt = (btnRtUt != null ? btnRtUt.rect.width : 0f) - padUt - iconReserve;
                 if (innerUt <= 2f) innerUt = 125f * s;
                 string shownUt = EllipsizeTextPreferredWidth(txt, labelUt, innerUt);
                 txt.text = shownUt;
             }
             SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
+            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s);
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
@@ -825,7 +843,7 @@ namespace VPB
         {
             if (tabContainer == null) return;
             GameObject holderGo = EnsureUserTagPickVirtualHolder(tabContainer);
-            if (holderGo == null || !holderGo.activeInHierarchy) return;
+            if (holderGo == null) return;
 
             ScrollRect sr = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
             if (sr == null) sr = holderGo.GetComponentInParent<ScrollRect>();
@@ -834,11 +852,11 @@ namespace VPB
             string pickTip = _userTagAvailFilterMode
                 ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
-            float rowH = CreatorVirtRowHeight();
+            float rowH = UserTagPinnedRowHeightPx();
             if (rowH <= 1f) rowH = 37f;
 
             RectTransform viewport = sr.viewport != null ? sr.viewport : (sr.transform as RectTransform);
-            float viewportH = viewport != null ? viewport.rect.height : 600f;
+            float viewportH = MeasureUserTagVirtViewportHeight(viewport, rowH);
 
             int total = _userTagVirtView != null ? _userTagVirtView.Count : 0;
             LayoutElement holderLe = holderGo.GetComponent<LayoutElement>();

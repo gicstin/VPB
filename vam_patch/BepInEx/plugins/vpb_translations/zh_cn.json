@@ -90,6 +90,8 @@
   "gallery.usertags.editor_import_done": "导入已应用：更新 {0} 条标签链接。",
   "gallery.usertags.create_from_search": "创建标签",
   "gallery.usertags.create_from_search_tip": "根据搜索文本创建新标签（写入数据库并选中）。",
+  "gallery.usertags.pin_on_tip": "置顶 — 将此标签固定在列表顶部。",
+  "gallery.usertags.pin_off_tip": "取消置顶 — 标签回到排序位置。",
   "gallery.side.category": "分类",
   "gallery.side.creator": "作者",
   "gallery.side.hub": "中心",

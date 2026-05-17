@@ -114,12 +114,19 @@ namespace VPB
         private void updatePanelForSelection()
         {
             CacheAppliedUserTagsForSelection();
+            try { RefreshVisibleUserTagRows(); } catch { }
             try
             {
-                if (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null)
-                    UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
-                if (rightActiveContent == ContentType.UserTags && rightTabContainerGO != null)
-                    UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
+                if (leftActiveContent == ContentType.UserTags && leftSubTabContainerGO != null
+                    && leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf)
+                    UpdateTabs(ContentType.UserTagsApplied, leftSubTabContainerGO, leftSubActiveTabButtons, true);
+            }
+            catch { }
+            try
+            {
+                if (rightActiveContent == ContentType.UserTags && rightSubTabContainerGO != null
+                    && rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf)
+                    UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
             catch { }
         }
@@ -289,6 +296,8 @@ namespace VPB
             {
                 sticky.SetActive(false);
                 if (footer != null) footer.SetActive(false);
+                GameObject hidePinned = isLeft ? leftUserTagsAvailPinnedStickyGO : rightUserTagsAvailPinnedStickyGO;
+                if (hidePinned != null) hidePinned.SetActive(false);
                 return;
             }
 
@@ -300,8 +309,28 @@ namespace VPB
             srt.pivot = new Vector2(0.5f, 1f);
             srt.offsetMin = new Vector2(defMin.x, -h);
             srt.offsetMax = new Vector2(defMax.x, 0f);
+
+            float pinnedH = UserTagsAvailPinnedStickyHeightPx();
+            GameObject pinnedStrip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
+            if (pinnedStrip != null)
+            {
+                if (pinnedH > 0.5f)
+                {
+                    pinnedStrip.SetActive(true);
+                    RectTransform prt = pinnedStrip.GetComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0f, 1f);
+                    prt.anchorMax = new Vector2(1f, 1f);
+                    prt.pivot = new Vector2(0.5f, 1f);
+                    prt.offsetMin = new Vector2(defMin.x, -(h + pinnedH));
+                    prt.offsetMax = new Vector2(defMax.x, -h);
+                }
+                else
+                    pinnedStrip.SetActive(false);
+            }
+
+            float topChrome = h + pinnedH;
             vp.offsetMin = defMin;
-            vp.offsetMax = new Vector2(defMax.x, defMax.y - h);
+            vp.offsetMax = new Vector2(defMax.x, defMax.y - topChrome);
 
             // Footer: Inherit Tags toggle only for ALL VAR, pinned to bottom of Available half.
             if (footer != null)
@@ -368,6 +397,8 @@ namespace VPB
             if (ac != ContentType.UserTags || subScroll == null || !subScroll.activeSelf)
             {
                 sticky.SetActive(false);
+                GameObject ap = isLeft ? leftUserTagsAppliedPinnedStickyGO : rightUserTagsAppliedPinnedStickyGO;
+                if (ap != null) ap.SetActive(false);
                 return;
             }
 
@@ -379,13 +410,35 @@ namespace VPB
             srt.pivot = new Vector2(0.5f, 1f);
             srt.offsetMin = new Vector2(defMin.x, -h);
             srt.offsetMax = new Vector2(defMax.x, 0f);
+
+            float pinnedH = UserTagsAppliedPinnedStickyHeightPx();
+            GameObject pinnedStrip = EnsureUserTagsAppliedPinnedStickyGO(isLeft);
+            if (pinnedStrip != null)
+            {
+                if (pinnedH > 0.5f)
+                {
+                    pinnedStrip.SetActive(true);
+                    RectTransform prt = pinnedStrip.GetComponent<RectTransform>();
+                    prt.anchorMin = new Vector2(0f, 1f);
+                    prt.anchorMax = new Vector2(1f, 1f);
+                    prt.pivot = new Vector2(0.5f, 1f);
+                    prt.offsetMin = new Vector2(defMin.x, -(h + pinnedH));
+                    prt.offsetMax = new Vector2(defMax.x, -h);
+                }
+                else
+                    pinnedStrip.SetActive(false);
+            }
+
+            float topChrome = h + pinnedH;
             vp.offsetMin = defMin;
-            vp.offsetMax = new Vector2(defMax.x, defMax.y - h);
+            vp.offsetMax = new Vector2(defMax.x, defMax.y - topChrome);
         }
 
         private void SyncUserTagAvailTitleCount(bool isLeft)
         {
-            int n = _userTagVirtView != null ? _userTagVirtView.Count : 0;
+            int sticky = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
+            int scroll = _userTagVirtView != null ? _userTagVirtView.Count : 0;
+            int n = sticky + scroll;
             Text t = isLeft ? leftUserTagAvailTitleText : rightUserTagAvailTitleText;
             if (t == null) return;
             t.text = string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), n);
@@ -792,9 +845,15 @@ namespace VPB
             try
             {
                 if (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null)
+                {
+                    SyncUserTagAvailPinnedStickyRows(true, UserTagStateOnColor, leftTabContainerGO.transform);
                     UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
+                }
                 if (rightActiveContent == ContentType.UserTags && rightTabContainerGO != null)
+                {
+                    SyncUserTagAvailPinnedStickyRows(false, UserTagStateOnColor, rightTabContainerGO.transform);
                     UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
+                }
             }
             catch { }
         }
@@ -833,14 +892,491 @@ namespace VPB
             if (rt != null)
             {
                 float size = Mathf.Clamp(22f * scale, 16f, 30f);
-                rt.anchorMin = new Vector2(0f, 0.5f);
-                rt.anchorMax = new Vector2(0f, 0.5f);
-                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchorMin = new Vector2(1f, 0.5f);
+                rt.anchorMax = new Vector2(1f, 0.5f);
+                rt.pivot = new Vector2(1f, 0.5f);
                 rt.sizeDelta = new Vector2(size, size);
-                rt.anchoredPosition = new Vector2(8f * scale, 0f);
+                rt.anchoredPosition = new Vector2(-8f * scale, 0f);
             }
             iconGo.SetActive(true);
             iconGo.transform.SetAsLastSibling();
+        }
+
+        private float UserTagPinnedRowHeightPx()
+        {
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float rowH = 35f * s;
+            try
+            {
+                float virt = CreatorVirtRowHeight();
+                if (virt > 1f) rowH = virt;
+            }
+            catch { }
+            return rowH;
+        }
+
+        private float UserTagsAvailPinnedStickyHeightPx()
+        {
+            int n = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
+            if (n <= 0) return 0f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float rowH = UserTagPinnedRowHeightPx();
+            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+        }
+
+        private float UserTagsAppliedPinnedStickyHeightPx()
+        {
+            int n = _userTagAppliedPinnedRows != null ? _userTagAppliedPinnedRows.Count : 0;
+            if (n <= 0) return 0f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float rowH = UserTagPinnedRowHeightPx();
+            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+        }
+
+        private GameObject EnsureUserTagsAvailPinnedStickyGO(bool isLeft)
+        {
+            GameObject go = isLeft ? leftUserTagsAvailPinnedStickyGO : rightUserTagsAvailPinnedStickyGO;
+            if (go != null) return go;
+            GameObject tabScroll = isLeft ? leftTabScrollGO : rightTabScrollGO;
+            if (tabScroll == null) return null;
+            go = new GameObject(isLeft ? "VPB_UserTagsAvailPinnedSticky_L" : "VPB_UserTagsAvailPinnedSticky_R");
+            go.transform.SetParent(tabScroll.transform, false);
+            go.SetActive(false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = Vector2.zero;
+            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            vlg.spacing = 2f * s;
+            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            go.transform.SetAsLastSibling();
+            if (isLeft) leftUserTagsAvailPinnedStickyGO = go;
+            else rightUserTagsAvailPinnedStickyGO = go;
+            return go;
+        }
+
+        private GameObject EnsureUserTagsAppliedPinnedStickyGO(bool isLeft)
+        {
+            GameObject go = isLeft ? leftUserTagsAppliedPinnedStickyGO : rightUserTagsAppliedPinnedStickyGO;
+            if (go != null) return go;
+            GameObject subScroll = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
+            if (subScroll == null) return null;
+            go = new GameObject(isLeft ? "VPB_UserTagsAppliedPinnedSticky_L" : "VPB_UserTagsAppliedPinnedSticky_R");
+            go.transform.SetParent(subScroll.transform, false);
+            go.SetActive(false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = Vector2.zero;
+            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            vlg.spacing = 2f * s;
+            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            go.transform.SetAsLastSibling();
+            if (isLeft) leftUserTagsAppliedPinnedStickyGO = go;
+            else rightUserTagsAppliedPinnedStickyGO = go;
+            return go;
+        }
+
+        private void SyncUserTagAvailPinnedStickyRows(bool isLeft, Color utAccent, Transform tabContainer)
+        {
+            GameObject strip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
+            if (strip == null) return;
+            for (int i = strip.transform.childCount - 1; i >= 0; i--)
+                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+
+            int count = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
+            if (count == 0)
+            {
+                strip.SetActive(false);
+                return;
+            }
+
+            strip.SetActive(true);
+            string pickTip = _userTagAvailFilterMode
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
+            float rowH = UserTagPinnedRowHeightPx();
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+
+            for (int ri = 0; ri < count; ri++)
+            {
+                UserTagSideTabEntry ut = _userTagStickyRows[ri];
+                GameObject btnGO = UI.CreateUIButton(strip, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                AddHoverDelegate(btnGO);
+                LayoutElement le = btnGO.GetComponent<LayoutElement>();
+                if (le == null) le = btnGO.AddComponent<LayoutElement>();
+                le.minHeight = rowH;
+                le.preferredHeight = rowH;
+                le.flexibleWidth = 1f;
+                BindUserTagVirtButton(btnGO, ut, utAccent, pickTip);
+            }
+
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
+        }
+
+        private void SyncUserTagAppliedPinnedStickyRows(bool isLeft, List<UserTagSideTabEntry> pinnedRows, Color accent, float scale)
+        {
+            GameObject strip = EnsureUserTagsAppliedPinnedStickyGO(isLeft);
+            if (strip == null) return;
+            for (int i = strip.transform.childCount - 1; i >= 0; i--)
+                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+
+            int count = pinnedRows != null ? pinnedRows.Count : 0;
+            if (count == 0)
+            {
+                strip.SetActive(false);
+                return;
+            }
+
+            strip.SetActive(true);
+            float pinInset = 34f * scale;
+            for (int vi = 0; vi < count; vi++)
+            {
+                UserTagSideTabEntry ae = pinnedRows[vi];
+                bool isSel = userTagAppliedRemoveSelection.Contains(ae.Name);
+                string labelA = ae.Name + " (" + ae.Count + ")";
+                string tagFocusSnap = ae.Name;
+                int viCapture = vi;
+                var visiblePinned = pinnedRows;
+                CreateTabButton(strip.transform, labelA,
+                    isSel ? accent : ColorInactiveRow,
+                    isSel,
+                    () => { OnAppliedUserTagRowClicked(viCapture, visiblePinned, tagFocusSnap); },
+                    null, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInset, 0f);
+                Transform last = strip.transform.GetChild(strip.transform.childCount - 1);
+                if (last != null)
+                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale);
+            }
+
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
+        }
+
+        private float MeasureUserTagVirtViewportHeight(RectTransform viewport, float rowH)
+        {
+            float viewportH = viewport != null ? viewport.rect.height : 0f;
+            if (viewportH >= rowH * 2f) return viewportH;
+            try
+            {
+                if (viewport != null)
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(viewport);
+                    Canvas.ForceUpdateCanvases();
+                    viewportH = viewport.rect.height;
+                }
+            }
+            catch { }
+            if (viewportH < rowH * 2f)
+                viewportH = rowH * 10f;
+            return viewportH;
+        }
+
+        private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer)
+        {
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+            if (_userTagVirtLayoutCo != null)
+            {
+                try { StopCoroutine(_userTagVirtLayoutCo); } catch { }
+                _userTagVirtLayoutCo = null;
+            }
+            _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer));
+        }
+
+        private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer)
+        {
+            yield return null;
+            try
+            {
+                Canvas.ForceUpdateCanvases();
+                ScrollRect sr = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
+                if (sr != null) sr.verticalNormalizedPosition = 1f;
+                UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
+                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
+            }
+            catch { }
+            _userTagVirtLayoutCo = null;
+        }
+
+        private const char UserTagPinnedOrderLegacySep = '\x1e';
+        private const string UserTagPinBtnName = "VPB_UserTagPinBtn";
+
+        private static void ParseUserTagPinnedOrderSpec(string spec, List<string> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (string.IsNullOrEmpty(spec)) return;
+
+            string[] parts;
+            if (spec.IndexOf(UserTagPinnedOrderLegacySep) >= 0)
+                parts = spec.Split(UserTagPinnedOrderLegacySep);
+            else
+                parts = spec.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(parts[i]);
+                if (string.IsNullOrEmpty(norm)) continue;
+                bool dup = false;
+                for (int j = 0; j < dest.Count; j++)
+                {
+                    if (string.Equals(dest[j], norm, StringComparison.OrdinalIgnoreCase)) { dup = true; break; }
+                }
+                if (!dup) dest.Add(norm);
+            }
+        }
+
+        private static string EncodeUserTagPinOrder(IList<string> order)
+        {
+            if (order == null || order.Count == 0) return "";
+            var sb = new StringBuilder(order.Count * 12);
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (i > 0) sb.Append('\n');
+                sb.Append(order[i]);
+            }
+            return sb.ToString();
+        }
+
+        private void EnsureUserTagPinOrderRuntimeLoaded()
+        {
+            if (_userTagPinOrderRuntimeLoaded) return;
+            _userTagPinOrderRuntimeLoaded = true;
+            _userTagPinOrderRuntime.Clear();
+            if (VPBConfig.Instance != null)
+                ParseUserTagPinnedOrderSpec(VPBConfig.Instance.GalleryUserTagPinnedOrder, _userTagPinOrderRuntime);
+            try { PruneStaleUserTagPinsInRuntimeList(false); } catch { }
+        }
+
+        /// <summary>Drop pins for tags removed from DB. Never calls <see cref="CacheUserTagsSideTab"/> (avoids load-time freeze).</summary>
+        private bool PruneStaleUserTagPinsInRuntimeList(bool persistIfChanged)
+        {
+            if (_userTagPinOrderRuntime.Count == 0) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            var allNames = new List<string>(128);
+            if (!VpbLocalDatabase.TryReadAllGalleryUserTagNames(allNames) || allNames.Count == 0)
+                return false;
+
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < allNames.Count; i++)
+            {
+                string n = VpbLocalDatabase.NormalizeGalleryUserTagName(allNames[i]);
+                if (!string.IsNullOrEmpty(n)) known.Add(n);
+            }
+            if (known.Count == 0) return false;
+
+            bool changed = false;
+            for (int i = _userTagPinOrderRuntime.Count - 1; i >= 0; i--)
+            {
+                if (!known.Contains(_userTagPinOrderRuntime[i]))
+                {
+                    _userTagPinOrderRuntime.RemoveAt(i);
+                    changed = true;
+                }
+            }
+            if (changed && persistIfChanged)
+                PersistUserTagPinOrderToConfig(false);
+            return changed;
+        }
+
+        private void PersistUserTagPinOrderToConfig(bool immediate)
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.GalleryUserTagPinnedOrder = EncodeUserTagPinOrder(_userTagPinOrderRuntime);
+            if (immediate)
+            {
+                if (_userTagPinSaveCo != null)
+                {
+                    try { StopCoroutine(_userTagPinSaveCo); } catch { }
+                    _userTagPinSaveCo = null;
+                }
+                try { VPBConfig.Instance.Save(false); } catch { }
+                return;
+            }
+            ScheduleUserTagPinOrderSave();
+        }
+
+        private void ScheduleUserTagPinOrderSave()
+        {
+            if (!isActiveAndEnabled) return;
+            if (_userTagPinSaveCo != null)
+            {
+                try { StopCoroutine(_userTagPinSaveCo); } catch { }
+            }
+            _userTagPinSaveCo = StartCoroutine(CoDeferredUserTagPinOrderSave());
+        }
+
+        private IEnumerator CoDeferredUserTagPinOrderSave()
+        {
+            yield return new WaitForSeconds(0.35f);
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.Save(false);
+            }
+            catch { }
+            _userTagPinSaveCo = null;
+        }
+
+        private bool IsUserTagPinned(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return false;
+            string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(norm)) return false;
+            EnsureUserTagPinOrderRuntimeLoaded();
+            for (int i = 0; i < _userTagPinOrderRuntime.Count; i++)
+            {
+                if (string.Equals(_userTagPinOrderRuntime[i], norm, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private void ToggleUserTagPin(string tagName)
+        {
+            string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(norm)) return;
+            EnsureUserTagPinOrderRuntimeLoaded();
+            int found = -1;
+            for (int i = 0; i < _userTagPinOrderRuntime.Count; i++)
+            {
+                if (string.Equals(_userTagPinOrderRuntime[i], norm, StringComparison.OrdinalIgnoreCase)) { found = i; break; }
+            }
+            if (found >= 0) _userTagPinOrderRuntime.RemoveAt(found);
+            else _userTagPinOrderRuntime.Add(norm);
+            PersistUserTagPinOrderToConfig(true);
+            unchecked { _userTagPinRevision++; }
+            _userTagVirtViewSig = null;
+            try { UpdateTabs(); } catch { }
+        }
+
+        private void PartitionUserTagRowsPinnedFirst(List<UserTagSideTabEntry> rows, List<UserTagSideTabEntry> pinnedOut, List<UserTagSideTabEntry> normalOut)
+        {
+            if (pinnedOut != null) pinnedOut.Clear();
+            if (normalOut != null) normalOut.Clear();
+            if (rows == null || rows.Count == 0) return;
+            EnsureUserTagPinOrderRuntimeLoaded();
+            List<string> pinOrder = _userTagPinOrderRuntime;
+            if (pinOrder.Count == 0)
+            {
+                if (normalOut != null) normalOut.AddRange(rows);
+                return;
+            }
+            var pinIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < pinOrder.Count; i++) pinIndex[pinOrder[i]] = i;
+            for (int ri = 0; ri < rows.Count; ri++)
+            {
+                UserTagSideTabEntry e = rows[ri];
+                if (string.IsNullOrEmpty(e.Name)) continue;
+                int idx;
+                if (pinIndex.TryGetValue(e.Name, out idx))
+                {
+                    if (pinnedOut != null) pinnedOut.Add(e);
+                }
+                else if (normalOut != null)
+                    normalOut.Add(e);
+            }
+            if (pinnedOut != null && pinnedOut.Count > 1)
+            {
+                pinnedOut.Sort((a, b) =>
+                {
+                    int ia, ib;
+                    pinIndex.TryGetValue(a.Name, out ia);
+                    pinIndex.TryGetValue(b.Name, out ib);
+                    return ia.CompareTo(ib);
+                });
+            }
+        }
+
+        private void EnsureUserTagPinSprites()
+        {
+            if (_userTagPinOnSprite == null)
+                _userTagPinOnSprite = UI.LoadIconSprite("vpb_icons/pin_on.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+            if (_userTagPinOffSprite == null)
+                _userTagPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
+        }
+
+        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale)
+        {
+            if (rowGo == null) return;
+            Transform existing = rowGo.transform.Find(UserTagPinBtnName);
+            GameObject pinGo = existing != null ? existing.gameObject : null;
+            if (hide)
+            {
+                if (pinGo != null) pinGo.SetActive(false);
+                return;
+            }
+
+            string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(norm)) { if (pinGo != null) pinGo.SetActive(false); return; }
+
+            bool pinned = IsUserTagPinned(norm);
+            EnsureUserTagPinSprites();
+
+            if (pinGo == null)
+            {
+                pinGo = new GameObject(UserTagPinBtnName);
+                pinGo.transform.SetParent(rowGo.transform, false);
+                Image bg = pinGo.AddComponent<Image>();
+                bg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
+                bg.raycastTarget = true;
+                Button btn = pinGo.AddComponent<Button>();
+                ColorBlock cb = btn.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
+                cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+                btn.colors = cb;
+                btn.transition = Selectable.Transition.None;
+                btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                pinGo.AddComponent<UIHoverBorder>();
+            }
+
+            Button pinBtn = pinGo.GetComponent<Button>();
+            if (pinBtn != null)
+            {
+                pinBtn.onClick.RemoveAllListeners();
+                string snap = norm;
+                pinBtn.onClick.AddListener(() => ToggleUserTagPin(snap));
+            }
+
+            Image iconImg = pinGo.transform.Find("Icon")?.GetComponent<Image>();
+            Sprite spr = pinned ? _userTagPinOffSprite : _userTagPinOnSprite;
+            if (spr == null) spr = pinned ? _userTagPinOnSprite : _userTagPinOffSprite;
+            if (iconImg == null && spr != null)
+            {
+                UI.AddIconToButton(pinGo, spr, 6f, pinGo.GetComponent<Image>() != null ? pinGo.GetComponent<Image>().color : Color.white);
+                iconImg = pinGo.transform.Find("Icon")?.GetComponent<Image>();
+            }
+            if (iconImg != null && spr != null) iconImg.sprite = spr;
+
+            float edge = Mathf.Clamp(26f * scale, 20f, 36f);
+            RectTransform rt = pinGo.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 0.5f);
+                rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(edge, edge);
+                rt.anchoredPosition = new Vector2(6f * scale, 0f);
+            }
+            pinGo.SetActive(true);
+            pinGo.transform.SetAsLastSibling();
+
+            string tipKey = pinned ? "gallery.usertags.pin_off_tip" : "gallery.usertags.pin_on_tip";
+            string tipDefault = pinned ? "Unpin — return tag to sorted position." : "Pin — keep tag at top of list.";
+            AddTooltipPlain(pinGo, VPBTranslation.T(tipKey, tipDefault));
         }
 
         internal string BuildUserTagDragDropStatusHint(FileEntry galleryRowHit, List<string> tags)

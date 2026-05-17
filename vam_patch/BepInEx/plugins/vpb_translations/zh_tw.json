@@ -90,6 +90,8 @@
   "gallery.usertags.editor_import_done": "匯入已套用：更新 {0} 筆標籤連結。",
   "gallery.usertags.create_from_search": "建立標籤",
   "gallery.usertags.create_from_search_tip": "依搜尋文字建立新標籤（寫入資料庫並選取）。",
+  "gallery.usertags.pin_on_tip": "釘選 — 將此標籤固定在清單頂部。",
+  "gallery.usertags.pin_off_tip": "取消釘選 — 標籤回到排序位置。",
   "gallery.side.category": "分類",
   "gallery.side.creator": "作者",
   "gallery.side.hub": "中心",

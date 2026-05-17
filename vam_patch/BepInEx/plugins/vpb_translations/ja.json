@@ -90,6 +90,8 @@
   "gallery.usertags.editor_import_done": "インポート適用：{0} 件のリンクを更新しました。",
   "gallery.usertags.create_from_search": "タグを作成",
   "gallery.usertags.create_from_search_tip": "検索文字列から新しいタグを作成（DBに追加して選択）。",
+  "gallery.usertags.pin_on_tip": "ピン留め — このタグをリスト上部に固定。",
+  "gallery.usertags.pin_off_tip": "ピン解除 — 並び順の位置に戻す。",
   "gallery.side.category": "カテゴリ",
   "gallery.side.creator": "作者",
   "gallery.side.hub": "ハブ",

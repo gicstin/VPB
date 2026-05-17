@@ -90,6 +90,8 @@
   "gallery.usertags.editor_import_done": "가져오기 적용: 태그 링크 {0}개 업데이트.",
   "gallery.usertags.create_from_search": "태그 만들기",
   "gallery.usertags.create_from_search_tip": "검색 텍스트로 새 태그 생성(DB에 추가하고 선택).",
+  "gallery.usertags.pin_on_tip": "고정 — 이 태그를 목록 상단에 유지합니다.",
+  "gallery.usertags.pin_off_tip": "고정 해제 — 정렬 위치로 돌아갑니다.",
   "gallery.side.category": "분류",
   "gallery.side.creator": "제작자",
   "gallery.side.hub": "허브",

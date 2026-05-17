@@ -520,6 +520,9 @@ namespace VPB
         /// <summary>Comma-separated category names excluded from quick header menu and number keys only (side category list unchanged).</summary>
         public string GalleryCategoryQuickSwitchHidden = "";
 
+        /// <summary>Record separator–delimited gallery user tag names pinned to top of User Tags side lists (order preserved).</summary>
+        public string GalleryUserTagPinnedOrder = "";
+
         /// <summary>True when always-on grid label strip should render (respects auto-hide at highest two column counts).</summary>
         public bool GalleryGridLabelsStripVisible()
         {
@@ -672,6 +675,7 @@ namespace VPB
             QuickMenuPageToggleSlotIdx = 15;
             GalleryCategoryQuickOrder = "";
             GalleryCategoryQuickSwitchHidden = "";
+            GalleryUserTagPinnedOrder = "";
             BaMigrationPromptDismissed = false;
             GalleryScrollButtonStepViewportFraction = 0.65f;
             GalleryScrollButtonsEnabled = true;
@@ -902,6 +906,8 @@ namespace VPB
                             GalleryCategoryQuickOrder = node["GalleryCategoryQuickOrder"].Value ?? "";
                         if (node["GalleryCategoryQuickSwitchHidden"] != null)
                             GalleryCategoryQuickSwitchHidden = node["GalleryCategoryQuickSwitchHidden"].Value ?? "";
+                        if (node["GalleryUserTagPinnedOrder"] != null)
+                            GalleryUserTagPinnedOrder = node["GalleryUserTagPinnedOrder"].Value ?? "";
                     }
 
                     // Migration: older builds forced EnableDragDrop off when HoldToLaunchEnabled was on, and persisted that forced-off value.
@@ -1120,6 +1126,7 @@ namespace VPB
                 node["HiddenCategories"] = string.Join(",", new List<string>(HiddenCategories ?? new HashSet<string>()).ToArray());
                 node["GalleryCategoryQuickOrder"] = GalleryCategoryQuickOrder ?? "";
                 node["GalleryCategoryQuickSwitchHidden"] = GalleryCategoryQuickSwitchHidden ?? "";
+                node["GalleryUserTagPinnedOrder"] = GalleryUserTagPinnedOrder ?? "";
                 // Quick Menu buttons (pages)
                 try
                 {

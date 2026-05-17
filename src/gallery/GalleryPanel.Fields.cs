@@ -262,10 +262,14 @@ namespace VPB
         private Vector2 _rightSubTabViewportDefOffsetMax;
         private GameObject leftUserTagsAvailStickyGO;
         private GameObject rightUserTagsAvailStickyGO;
+        private GameObject leftUserTagsAvailPinnedStickyGO;
+        private GameObject rightUserTagsAvailPinnedStickyGO;
         private GameObject leftUserTagsAvailFooterGO;
         private GameObject rightUserTagsAvailFooterGO;
         private GameObject leftUserTagsAppliedStickyGO;
         private GameObject rightUserTagsAppliedStickyGO;
+        private GameObject leftUserTagsAppliedPinnedStickyGO;
+        private GameObject rightUserTagsAppliedPinnedStickyGO;
         private Text leftUserTagAvailTitleText;
         private Text rightUserTagAvailTitleText;
         private Text leftUserTagApplyBtnText;
@@ -584,8 +588,18 @@ namespace VPB
         private List<UserTagSideTabEntry> cachedUserTagSideTab = new List<UserTagSideTabEntry>(64);
 
         /// <summary>Filtered/sorted view for virtualized User Tags pick list (same role as <see cref="_creatorVirtView"/>).</summary>
+        /// <summary>Create-tag row + pinned tags; fixed above scroll (not virtualized).</summary>
+        private readonly List<UserTagSideTabEntry> _userTagStickyRows = new List<UserTagSideTabEntry>(24);
+        private readonly List<UserTagSideTabEntry> _userTagAppliedPinnedRows = new List<UserTagSideTabEntry>(24);
         private readonly List<UserTagSideTabEntry> _userTagVirtView = new List<UserTagSideTabEntry>(256);
         private string _userTagVirtViewSig = null;
+        private int _userTagPinRevision = 0;
+        private readonly List<string> _userTagPinOrderRuntime = new List<string>(24);
+        private bool _userTagPinOrderRuntimeLoaded;
+        private Coroutine _userTagPinSaveCo;
+        private Coroutine _userTagVirtLayoutCo;
+        private Sprite _userTagPinOnSprite;
+        private Sprite _userTagPinOffSprite;
         private readonly List<GameObject> _leftUserTagVirtButtons = new List<GameObject>(32);
         private readonly List<GameObject> _rightUserTagVirtButtons = new List<GameObject>(32);
         private ScrollRect _leftUserTagVirtScroll;

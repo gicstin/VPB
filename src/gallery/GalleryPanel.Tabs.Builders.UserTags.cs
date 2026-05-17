@@ -25,6 +25,7 @@ namespace VPB
                 utBulk = rightUserTagsAvailStickyGO.transform.Find("VPB_UserTagBulkBlock_v3");
             if (utBulk != null) utBulk.SetAsFirstSibling();
 
+            try { EnsureUserTagPinOrderRuntimeLoaded(); } catch { }
             if (!userTagsCached) CacheUserTagsSideTab();
             CacheAppliedUserTagsForSelection();
 
@@ -52,13 +53,17 @@ namespace VPB
 
             GameObject utVirtHolder = EnsureUserTagPickVirtualHolder(container.transform);
             EnsureUserTagVirtScrollHook(isLeft, utVirtHolder);
+            SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
+            RequestUserTagVirtLayoutRefresh(isLeft, container.transform);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
 
         private void BuildUserTagsAppliedTabs(GameObject container, List<GameObject> trackedButtons, bool isLeft)
         {
+            try { EnsureUserTagPinOrderRuntimeLoaded(); } catch { }
             EnsureUserTagsAppliedToolbar(container.transform, isLeft);
             Transform utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v3");
             if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v2");
@@ -110,7 +115,18 @@ namespace VPB
                 visibleApplied.Add(ae);
             }
 
-            int appliedVisibleCount = visibleApplied.Count;
+            var pinnedApplied = new List<UserTagSideTabEntry>(8);
+            var normalApplied = new List<UserTagSideTabEntry>(visibleApplied.Count);
+            PartitionUserTagRowsPinnedFirst(visibleApplied, pinnedApplied, normalApplied);
+            _userTagAppliedPinnedRows.Clear();
+            _userTagAppliedPinnedRows.AddRange(pinnedApplied);
+            visibleApplied.Clear();
+            visibleApplied.AddRange(normalApplied);
+
+            float sApp = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float pinInsetApp = 34f * sApp;
+            SyncUserTagAppliedPinnedStickyRows(isLeft, pinnedApplied, utAppAccent, sApp);
+            int appliedVisibleCount = pinnedApplied.Count + visibleApplied.Count;
             for (int vi = 0; vi < visibleApplied.Count; vi++)
             {
                 UserTagSideTabEntry ae = visibleApplied[vi];
@@ -119,17 +135,21 @@ namespace VPB
                 string labelA = ae.Name + " (" + ae.Count + ")";
                 string tagFocusSnap = ae.Name;
                 int viCapture = vi;
+                int trackedBefore = trackedButtons != null ? trackedButtons.Count : 0;
                 CreateTabButton(container.transform, labelA,
                     isSel ? utAppAccent : ColorInactiveRow,
                     isSel,
                     () => { OnAppliedUserTagRowClicked(viCapture, visibleApplied, tagFocusSnap); },
-                    trackedButtons, null, null, tagFocusSnap);
+                    trackedButtons, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInsetApp, 0f);
+                if (trackedButtons != null && trackedButtons.Count > trackedBefore)
+                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp);
             }
 
             SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);
             SyncUserTagsAppliedToolbarDropZones(container.transform);
             EnsureUserTagApplyDropCatchStrip(container.transform);
             EnsureUserTagApplyDropOverlay(container.transform);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
     }
 }
