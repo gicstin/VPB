@@ -181,6 +181,19 @@ namespace VPB
                 if (shouldRefreshCatalog)
                 {
                     try { VamOnDemandLoader.RequestCoalescedVamRefresh("preset_json_catalog"); } catch { }
+
+                    // VaM's per-type catalogs (DAZ morph/clothing/hair) only repopulate during MVR FileManager.Refresh.
+                    // Coalesced refresh fires 250ms+ later on a subsequent Update frame, after VaM has already
+                    // applied this preset against stale catalogs. For interactive preset clicks, flush now so
+                    // morphs/clothing/hair bind on first apply. Scene-load cascades stay coalesced to avoid N refreshes.
+                    bool sceneLoad = false;
+                    try { sceneLoad = VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene; } catch { }
+                    bool syncRefreshEnabled = true;
+                    try { syncRefreshEnabled = Settings.Instance != null && Settings.Instance.SyncRefreshOnPresetLoad != null ? Settings.Instance.SyncRefreshOnPresetLoad.Value : true; } catch { }
+                    if (!sceneLoad && syncRefreshEnabled)
+                    {
+                        try { VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("preset_json_catalog_interactive"); } catch { }
+                    }
                 }
             }
         }
