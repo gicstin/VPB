@@ -134,6 +134,7 @@ namespace VPB
         private float lastClickTime = 0f;
         
         public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
+        public bool IsSubtreeActive => backgroundBoxGO != null && backgroundBoxGO.activeSelf;
         public bool HasLoadedContent => hasLoadedContent;
 
         // Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.

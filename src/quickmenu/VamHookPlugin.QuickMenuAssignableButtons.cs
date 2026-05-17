@@ -900,14 +900,39 @@ namespace VPB
             }
             catch { }
 
-            try
-            {
-                var iconTr = buttonGO.transform.Find("Icon");
-                if (iconTr != null) DestroyImmediate(iconTr.gameObject);
-            }
-            catch { }
+            Transform existingIconTr = null;
+            try { existingIconTr = buttonGO.transform.Find("Icon"); } catch { }
 
-            if (icon == null) return;
+            if (icon == null)
+            {
+                if (existingIconTr != null)
+                {
+                    try { DestroyImmediate(existingIconTr.gameObject); } catch { }
+                }
+                return;
+            }
+
+            // Reuse path: same Image, same padding. Mutate only when actually different.
+            if (existingIconTr != null)
+            {
+                Image existingImg = existingIconTr.GetComponent<Image>();
+                RectTransform existingRT = existingIconTr.GetComponent<RectTransform>();
+                if (existingImg != null && existingRT != null)
+                {
+                    if (existingImg.sprite != icon)
+                    {
+                        if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmIconSwap++;
+                        existingImg.sprite = icon;
+                    }
+                    Vector2 desiredSize = new Vector2(-padding * 2f, -padding * 2f);
+                    if (existingRT.sizeDelta != desiredSize) existingRT.sizeDelta = desiredSize;
+                    return;
+                }
+                // Component shape doesn't match; fall through to rebuild.
+                try { DestroyImmediate(existingIconTr.gameObject); } catch { }
+            }
+
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmIconCreate++;
 
             GameObject iconGO = new GameObject("Icon");
             iconGO.transform.SetParent(buttonGO.transform, false);
@@ -964,6 +989,7 @@ namespace VPB
             if (m_QuickMenuGridButtons == null) return;
             var go = m_QuickMenuGridButtons[idx];
             if (go == null) return;
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.QmRefresh++;
             QuickMenuEnsureSlotLabelCache();
 
             // Note: this quick-menu grid is built from scratch (no VaM prefab),

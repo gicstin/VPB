@@ -578,6 +578,7 @@ namespace VPB
         {
             _userHidden = true;
             _hiddenByMenuGate = false;
+            VpbPerfDiag.LogTransition("GalleryPanel.Hide", "userHidden=true");
             SetCanvasVisible(false);
 
             hoverCount = 0;
@@ -589,11 +590,14 @@ namespace VPB
 
             bool isVR = XrUtils.IsVrActive();
 
-            void setImmediate(bool v)
+            bool wasEnabled = canvas.enabled;
+            if (VpbPerfDiag.CachedEnabled && wasEnabled != visible)
             {
-                canvas.enabled = v;
-                var raycaster = canvas.GetComponent<GraphicRaycaster>();
-                if (raycaster != null) raycaster.enabled = v;
+                if (visible) VpbPerfDiag.SetCanvasVisibleOn++;
+                else VpbPerfDiag.SetCanvasVisibleOff++;
+                VpbPerfDiag.LogTransition("SetCanvasVisible",
+                    "from=" + (wasEnabled ? "on" : "off") + " to=" + (visible ? "on" : "off")
+                    + " userHidden=" + _userHidden + " menuGate=" + _hiddenByMenuGate + " isVR=" + isVR);
             }
 
             if (!visible)
@@ -604,7 +608,7 @@ namespace VPB
                     try { StopCoroutine(_deferredSetVisibleCoroutine); } catch { }
                     _deferredSetVisibleCoroutine = null;
                 }
-                setImmediate(false);
+                ApplyImmediateVisibility(false);
                 _queuedRaycastRefreshOnVisible = false;
                 return;
             }
@@ -617,11 +621,11 @@ namespace VPB
                 if (_deferredSetVisibleCoroutine == null)
                     _deferredSetVisibleCoroutine = StartCoroutine(DeferredSetVisibleAfterStartupReady());
                 // Keep disabled until ready to avoid stuck non-interactible canvas.
-                setImmediate(false);
+                ApplyImmediateVisibility(false);
                 return;
             }
 
-            setImmediate(true);
+            ApplyImmediateVisibility(true);
 
             // Robust cold-boot fix: if first refresh got deferred while menu-gated hidden,
             // ensure we run (or schedule) initial refresh on any transition to visible.
@@ -681,6 +685,17 @@ namespace VPB
             }
         }
 
+        private void ApplyImmediateVisibility(bool v)
+        {
+            if (canvas == null) return;
+            canvas.enabled = v;
+            var raycaster = canvas.GetComponent<GraphicRaycaster>();
+            if (raycaster != null) raycaster.enabled = v;
+            // canvas.enabled=false halts rendering but every child MonoBehaviour keeps ticking; deactivate the subtree too.
+            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != v)
+                backgroundBoxGO.SetActive(v);
+        }
+
         private IEnumerator DeferredSetVisibleAfterStartupReady()
         {
             while (!LogUtil.IsStartupReadyLogged())
@@ -695,9 +710,7 @@ namespace VPB
             while (!IsVamMenuVisible())
                 yield return null;
 
-            canvas.enabled = true;
-            var raycaster = canvas.GetComponent<GraphicRaycaster>();
-            if (raycaster != null) raycaster.enabled = true;
+            ApplyImmediateVisibility(true);
 
             try { EnsureCanvasRegisteredWithSuperController(); } catch { }
 
@@ -736,10 +749,10 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || canvas == null) return;
             bool isVR = XrUtils.IsVrActive();
-            
+
             // The anchor-based gate only applies to the specific panel that is anchored.
             bool isAnchoredInstance = (GetAnchoredInstance() == this);
-            
+
             bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
             bool menuVisible = IsVamMenuVisible();
 
@@ -747,6 +760,7 @@ namespace VPB
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(true);
                     _hiddenByMenuGate = false;
                 }
@@ -757,6 +771,7 @@ namespace VPB
             {
                 if (canvas.enabled)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(false);
                     _hiddenByMenuGate = true;
                 }
@@ -765,6 +780,7 @@ namespace VPB
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(true);
                     _hiddenByMenuGate = false;
                 }
@@ -799,10 +815,13 @@ namespace VPB
             Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
             Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
 
-            canvas.transform.position = targetPos;
-            
-            // Follow the VaM menu rotation with a 180-degree flip to face the user
-            canvas.transform.rotation = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+            // WorldSpace canvas transform writes force a full canvas rebuild; skip when menu hasn't moved.
+            if (canvas.transform.position != targetPos)
+                canvas.transform.position = targetPos;
+
+            Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+            if (canvas.transform.rotation != targetRot)
+                canvas.transform.rotation = targetRot;
 
             // Keep offsets reset so follow mode captures the anchored position when anchoring ends
             offsetsInitialized = false;

@@ -1092,11 +1092,13 @@ namespace VPB
 
         void Update()
         {
+            VpbPerfDiag.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
             UpdateUpdater();
             VpbPerfTelemetry.EmitSnapshotIfDue();
+            VpbPerfDiag.EmitFrameSummaryIfDue();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle

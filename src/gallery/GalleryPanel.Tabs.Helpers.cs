@@ -188,7 +188,9 @@ namespace VPB
             rt.pivot = pivot;
             rt.sizeDelta = sizeDelta;
             rt.anchoredPosition = Vector2.zero;
-            go.AddComponent<UnityEngine.UI.Image>().color = color;
+            var img = go.AddComponent<UnityEngine.UI.Image>();
+            img.color = color;
+            img.raycastTarget = false;
         }
 
         /// <summary>Removes side-tab rows that pair a primary tab button with optional trailing controls (see <see cref="UI.CreateSideTabSquareIconButton"/>).</summary>

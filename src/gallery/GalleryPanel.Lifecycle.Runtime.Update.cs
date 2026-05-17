@@ -69,6 +69,8 @@ namespace VPB
                 return;
             }
 
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
+
             if (canvas != null && VPBConfig.Instance != null)
             {
                 HandleKeyboardInput();
@@ -372,18 +374,19 @@ namespace VPB
                 }
             }
 
+            bool pointerInsideGalleryWindowThisFrame = IsPointerInsideGalleryWindowRect();
+
             // Gallery Translucency Logic
             if (backgroundCanvasGroup != null && VPBConfig.Instance != null)
             {
-                bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
-                bool isHovered = hoverCount > 0 || isPointerInsideGalleryWindow || isResizing;
+                bool isHovered = hoverCount > 0 || pointerInsideGalleryWindowThisFrame || isResizing;
                 float targetGalleryAlpha = 1.0f;
                 if (VPBConfig.Instance.EnableGalleryTranslucency && !isHovered)
                 {
                     targetGalleryAlpha = Mathf.Max(0.1f, VPBConfig.Instance.GalleryOpacity);
                 }
-                // No fade/transition: snap alpha immediately.
-                backgroundCanvasGroup.alpha = targetGalleryAlpha;
+                if (backgroundCanvasGroup.alpha != targetGalleryAlpha)
+                    backgroundCanvasGroup.alpha = targetGalleryAlpha;
             }
 
             // Status Bar Logic
@@ -419,8 +422,12 @@ namespace VPB
 
             if (statusBarText != null)
             {
-                statusBarText.text = finalStatus ?? "";
-                statusBarText.gameObject.SetActive(!string.IsNullOrEmpty(finalStatus));
+                string newStatus = finalStatus ?? "";
+                if (statusBarText.text != newStatus)
+                    statusBarText.text = newStatus;
+                bool showStatus = !string.IsNullOrEmpty(finalStatus);
+                if (statusBarText.gameObject.activeSelf != showStatus)
+                    statusBarText.gameObject.SetActive(showStatus);
             }
 
             if (hoverPathText != null)
@@ -453,11 +460,8 @@ namespace VPB
 
             // Side Buttons Auto-Hide Logic
             bool showSideButtons = hoverCount > 0;
-            if (!showSideButtons)
-            {
-                if (IsPointerInsideGalleryWindowRect())
-                    showSideButtons = true;
-            }
+            if (!showSideButtons && pointerInsideGalleryWindowThisFrame)
+                showSideButtons = true;
             if (showSideButtons)
             {
                 sideButtonsFadeDelayTimer = 0f;
@@ -473,11 +477,11 @@ namespace VPB
             
             bool enableFade = (VPBConfig.Instance != null) ? VPBConfig.Instance.EnableGalleryFade : true;
             float targetAlpha = (showSideButtons || isResizing || !enableFade) ? 1.0f : 0.0f;
-            // No fade/transition: snap alpha immediately.
             sideButtonsAlpha = targetAlpha;
             foreach (var cg in sideButtonGroups)
             {
-                if (cg != null) cg.alpha = sideButtonsAlpha;
+                if (cg != null && cg.alpha != sideButtonsAlpha)
+                    cg.alpha = sideButtonsAlpha;
             }
 
             if (canvas != null)
@@ -606,7 +610,12 @@ namespace VPB
                     if (!pointerDotGO.activeSelf) pointerDotGO.SetActive(true);
                     // Use standard 5mm offset to prevent z-fighting
                     pointerDotGO.transform.position = currentPointerData.pointerCurrentRaycast.worldPosition - canvas.transform.forward * 0.005f;
-                    pointerDotGO.transform.SetAsLastSibling(); 
+                    Transform pdParent = pointerDotGO.transform.parent;
+                    if (pdParent != null && pointerDotGO.transform.GetSiblingIndex() != pdParent.childCount - 1)
+                    {
+                        if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.PointerSib++;
+                        pointerDotGO.transform.SetAsLastSibling();
+                    }
                 }
                 else
                 {

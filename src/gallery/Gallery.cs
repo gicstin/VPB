@@ -527,6 +527,7 @@ namespace VPB
         public void Show(string title, string extension, string path)
         {
             LogUtil.Log("[Gallery] Gallery.Show: title='" + title + "' path='" + path + "' panelCount=" + panels.Count + " anyLoaded=" + AnyPanelHasLoadedContent);
+            VpbPerfDiag.LogTransition("Gallery.Show", "title=" + title + " panels=" + panels.Count);
             if (panels.Count == 0)
             {
                 // Create the panel without its internal Show() so we can call Show() exactly
@@ -661,6 +662,7 @@ namespace VPB
 
         public void Hide()
         {
+            VpbPerfDiag.LogTransition("Gallery.Hide", "panels=" + panels.Count);
             foreach(var p in panels)
             {
                 p.Hide();
@@ -669,6 +671,7 @@ namespace VPB
 
         public void CloseAll()
         {
+            VpbPerfDiag.LogTransition("Gallery.CloseAll", "panels=" + panels.Count);
             foreach (var p in panels.ToList())
             {
                 if (p == null) continue;

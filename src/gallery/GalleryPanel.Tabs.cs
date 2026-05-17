@@ -1606,6 +1606,7 @@ namespace VPB
             thumbGO.transform.SetParent(btnGO.transform, false);
             RawImage thumbImg = thumbGO.AddComponent<RawImage>();
             thumbImg.color = new Color(0, 0, 0, 0.5f);
+            thumbImg.raycastTarget = false;
             RectTransform thumbRT = thumbGO.GetComponent<RectTransform>();
             thumbRT.anchorMin = Vector2.zero;
             thumbRT.anchorMax = Vector2.one;
@@ -2083,7 +2084,9 @@ namespace VPB
             rt.pivot = pivot;
             rt.sizeDelta = sizeDelta;
             rt.anchoredPosition = Vector2.zero;
-            go.AddComponent<UnityEngine.UI.Image>().color = Color.yellow;
+            var img = go.AddComponent<UnityEngine.UI.Image>();
+            img.color = Color.yellow;
+            img.raycastTarget = false;
         }
 
         private static void SetBorderThickness(GameObject borderGO, float thickness)
