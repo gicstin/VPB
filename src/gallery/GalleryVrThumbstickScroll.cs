@@ -27,12 +27,23 @@ namespace VPB
 
         public static bool ShouldSuppressFreeNavigate { get; private set; }
 
+        public static bool IsFeatureEnabled()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null) return true;
+                return VPBConfig.Instance.GalleryVrThumbstickScrollEnabled;
+            }
+            catch { return true; }
+        }
+
         public static void TickOncePerFrame()
         {
             if (Time.frameCount == _lastTickFrame) return;
             _lastTickFrame = Time.frameCount;
             ShouldSuppressFreeNavigate = false;
 
+            if (!IsFeatureEnabled()) return;
             if (!XrUtils.IsVrActive()) return;
             if (Gallery.singleton == null) return;
 

@@ -145,7 +145,11 @@ namespace VPB
         {
             Color appearanceColor = new Color(0.2f, 0.4f, 0.7f, 1f);
 
-            if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
+            if (!tagsCached)
+            {
+                if (!TryPrimeAppearanceSubPaneCounts())
+                    ScheduleTagCountsForSideTabsNonBlocking();
+            }
 
             bool localOnly = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
 
@@ -157,6 +161,7 @@ namespace VPB
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
                 currentAppearanceSourceFilter = localOnly ? "" : "local";
+                InvalidateTags();
                 RefreshFilesAndTabs();
             }, trackedButtons);
 
@@ -164,19 +169,18 @@ namespace VPB
                 Color inactive = ColorInactiveRow;
                 Color active = ColorFacetActiveRow;
 
-                // Futa fold: button removed for now; classifiers map Futa→Male so those items still surface
-                // under the Male badge. Clear a stale Futa bit from prior configs so the grid doesn't filter
-                // to an empty set with no UI to recover from.
+                // Futa fold: no UI chip; clear stale Futa bit from prior configs.
                 if ((appearanceSubfilter & AppearanceSubfilter.Futa) != 0)
                     appearanceSubfilter &= ~AppearanceSubfilter.Futa;
 
-                string[] options = new string[] { "Female", "Male" };
+                string[] options = new string[] { "Female", "Male", "Unknown" };
                 for (int gi = 0; gi < options.Length; gi++)
                 {
                     string opt = options[gi];
                     AppearanceSubfilter flag = 0;
                     if (opt == "Male") flag = AppearanceSubfilter.Male;
                     else if (opt == "Female") flag = AppearanceSubfilter.Female;
+                    else if (opt == "Unknown") flag = AppearanceSubfilter.Unknown;
 
                     bool isGenderActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
                     Color btnColor2 = isGenderActive ? active : inactive;
@@ -184,6 +188,7 @@ namespace VPB
                     int cnt = 0;
                     if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
                     else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
+                    else if (opt == "Unknown") cnt = isGenderActive ? appearanceSubfilterCurrentCountUnknown : appearanceSubfilterFacetCountUnknown;
 
                     string label2 = opt + " (" + cnt + ")";
 
@@ -193,8 +198,7 @@ namespace VPB
                             if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
                             else appearanceSubfilter |= flag;
                         }
-                        tagsCached = false;
-                        RefreshFilesAndTabs();
+                        OnAppearanceGenderFilterChanged();
                     }, trackedButtons);
                 }
             }

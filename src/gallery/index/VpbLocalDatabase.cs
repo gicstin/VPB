@@ -3317,7 +3317,8 @@ namespace VPB
             GalleryPanel.ClothingSubfilter clothingSubfilter = 0,
             GalleryPanel.HairSubfilter hairSubfilter = 0,
             GalleryPanel.AppearanceSubfilter appearanceSubfilter = 0,
-            HashSet<string> activeTags = null)
+            HashSet<string> activeTags = null,
+            Dictionary<string, HashSet<string>> appearanceTagsByRowKey = null)
         {
             outFacets = new TagScanTotals();
             if (!VpbSqlite3.IsAvailable) return false;
@@ -3388,6 +3389,11 @@ namespace VPB
                         bool isClothing = string.Equals(categoryTitle, "Clothing", StringComparison.OrdinalIgnoreCase);
                         bool isHair = string.Equals(categoryTitle, "Hair", StringComparison.OrdinalIgnoreCase);
                         bool isAppearance = string.Equals(categoryTitle, "Appearance", StringComparison.OrdinalIgnoreCase);
+                        if (isAppearance && appearanceTagsByRowKey == null)
+                        {
+                            appearanceTagsByRowKey = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+                            try { TryLoadGalleryUserTagsForCategory(categoryTitle, appearanceTagsByRowKey); } catch { }
+                        }
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -3492,13 +3498,11 @@ namespace VPB
                                     bool isCustomAppearance = p.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                                     bool isPresetAppearance = p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                                     
-                                    // Heuristic gender (simplified version of the one in GalleryTagCountBackgroundScan).
-                                    // Futa fold: surfaces as Male (2) per current UI scope.
-                                    int g = 0; // Unknown
-                                    string combined = (p + " " + (pkgUid ?? "")).ToLowerInvariant();
-                                    if (combined.Contains("female") || combined.Contains("woman") || combined.Contains("girl")) g = 1;
-                                    else if (combined.Contains("futa") || combined.Contains("herm")) g = 2;
-                                    else if (combined.Contains("male") || combined.Contains("man") || combined.Contains("boy")) g = 2;
+                                    string fileName = internalPath;
+                                    int ls = internalPath.LastIndexOfAny(new char[] { '/', '\\' });
+                                    if (ls >= 0 && ls + 1 < internalPath.Length) fileName = internalPath.Substring(ls + 1);
+                                    int g = AppearanceGenderClassifier.ToGenderCode(
+                                        AppearanceGenderClassifier.ClassifyVarAppearance(categoryTitle ?? "", p, fileName, pkgUid ?? "", appearanceTagsByRowKey));
 
                                     outFacets.AppearanceSubfilterCountAll++;
                                     if (isPresetAppearance) outFacets.AppearanceSubfilterCountPresets++;
@@ -3506,6 +3510,7 @@ namespace VPB
                                     if (g == 2) outFacets.AppearanceSubfilterCountMale++;
                                     if (g == 1) outFacets.AppearanceSubfilterCountFemale++;
                                     if (g == 3) outFacets.AppearanceSubfilterCountFuta++;
+                                    if (g == 0) outFacets.AppearanceSubfilterCountUnknown++;
 
                                     // Simplified PassesAppearanceSubfilters check
                                     bool PassesApp(GalleryPanel.AppearanceSubfilter f, bool isPre, bool isCus, int gen)
@@ -3513,17 +3518,16 @@ namespace VPB
                                         if (f == 0) return true;
                                         if ((f & GalleryPanel.AppearanceSubfilter.Presets) != 0 && !isPre) return false;
                                         if ((f & GalleryPanel.AppearanceSubfilter.Custom) != 0 && !isCus) return false;
-                                        if ((f & GalleryPanel.AppearanceSubfilter.Male) != 0 && gen != 2) return false;
-                                        if ((f & GalleryPanel.AppearanceSubfilter.Female) != 0 && gen != 1) return false;
-                                        if ((f & GalleryPanel.AppearanceSubfilter.Futa) != 0 && gen != 3) return false;
+                                        if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(gen, f)) return false;
                                         return true;
                                     }
 
                                     if (PassesApp(appearanceSubfilter ^ GalleryPanel.AppearanceSubfilter.Presets, isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountPresets++;
                                     if (PassesApp(appearanceSubfilter ^ GalleryPanel.AppearanceSubfilter.Custom, isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountCustom++;
-                                    if (PassesApp(appearanceSubfilter ^ GalleryPanel.AppearanceSubfilter.Male, isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountMale++;
-                                    if (PassesApp(appearanceSubfilter ^ GalleryPanel.AppearanceSubfilter.Female, isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountFemale++;
-                                    if (PassesApp(appearanceSubfilter ^ GalleryPanel.AppearanceSubfilter.Futa, isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountFuta++;
+                                    if (PassesApp(AppearanceGenderClassifier.HypotheticalGenderFacet(appearanceSubfilter, GalleryPanel.AppearanceSubfilter.Male), isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountMale++;
+                                    if (PassesApp(AppearanceGenderClassifier.HypotheticalGenderFacet(appearanceSubfilter, GalleryPanel.AppearanceSubfilter.Female), isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountFemale++;
+                                    if (PassesApp(AppearanceGenderClassifier.HypotheticalGenderFacet(appearanceSubfilter, GalleryPanel.AppearanceSubfilter.Unknown), isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountUnknown++;
+                                    if (PassesApp(AppearanceGenderClassifier.HypotheticalGenderFacet(appearanceSubfilter, GalleryPanel.AppearanceSubfilter.Futa), isPresetAppearance, isCustomAppearance, g)) outFacets.AppearanceSubfilterFacetCountFuta++;
 
                                     if (PassesApp(appearanceSubfilter, isPresetAppearance, isCustomAppearance, g))
                                     {
@@ -3531,6 +3535,7 @@ namespace VPB
                                         if (g == 2) outFacets.AppearanceSubfilterCurrentCountMale++;
                                         if (g == 1) outFacets.AppearanceSubfilterCurrentCountFemale++;
                                         if (g == 3) outFacets.AppearanceSubfilterCurrentCountFuta++;
+                                        if (g == 0) outFacets.AppearanceSubfilterCurrentCountUnknown++;
                                     }
                                     
                                     if (isPresetAppearance)
@@ -3590,6 +3595,7 @@ namespace VPB
             public int AppearanceSubfilterCountMale;
             public int AppearanceSubfilterCountFemale;
             public int AppearanceSubfilterCountFuta;
+            public int AppearanceSubfilterCountUnknown;
             public int ClothingSubfilterFacetCountReal;
             public int ClothingSubfilterFacetCountPresets;
             public int ClothingSubfilterFacetCountCustom;
@@ -3607,10 +3613,12 @@ namespace VPB
             public int AppearanceSubfilterFacetCountMale;
             public int AppearanceSubfilterFacetCountFemale;
             public int AppearanceSubfilterFacetCountFuta;
+            public int AppearanceSubfilterFacetCountUnknown;
             public int AppearanceSubfilterCurrentCountAll;
             public int AppearanceSubfilterCurrentCountMale;
             public int AppearanceSubfilterCurrentCountFemale;
             public int AppearanceSubfilterCurrentCountFuta;
+            public int AppearanceSubfilterCurrentCountUnknown;
         }
 
         /// <summary>
@@ -3627,6 +3635,7 @@ namespace VPB
             int loadedState = -1,
             string[] nameTerms = null,
             List<string> pathExclusions = null,
+            List<string> pathInclusions = null,
             HashSet<string> activeTags = null,
             HashSet<string> activeUserTags = null,
             SortState sortState = null)
@@ -3730,6 +3739,24 @@ namespace VPB
                         exclusionSqlAnd = sb.ToString();
                     }
 
+                    string inclusionSqlAnd = "";
+                    if (pathInclusions != null && pathInclusions.Count > 0)
+                    {
+                        var sb = new StringBuilder();
+                        sb.Append(" AND (");
+                        bool firstInc = true;
+                        for (int i = 0; i < pathInclusions.Count; i++)
+                        {
+                            if (string.IsNullOrEmpty(pathInclusions[i])) continue;
+                            if (!firstInc) sb.Append(" OR ");
+                            firstInc = false;
+                            sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                        }
+                        if (!firstInc) sb.Append(")");
+                        else inclusionSqlAnd = "";
+                        if (!firstInc) inclusionSqlAnd = sb.ToString();
+                    }
+
                     string tagSqlAnd = "";
                     List<string> activeTagsList = null;
                     if (activeTags != null && activeTags.Count > 0)
@@ -3771,7 +3798,7 @@ namespace VPB
                     sbSql.Append(", ifnull(p.first_scanned, 0)");
                     sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
-                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(tagSqlAnd).Append(userTagSqlAnd).Append(orderBy);
+                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(inclusionSqlAnd).Append(tagSqlAnd).Append(userTagSqlAnd).Append(orderBy);
                     string sql = sbSql.ToString();
                     
                     using (var stmt = conn.Prepare(sql))
@@ -3797,6 +3824,16 @@ namespace VPB
                             {
                                 if (string.IsNullOrEmpty(pathExclusions[i])) continue;
                                 string esc = EscapeLike(pathExclusions[i]) + "%";
+                                stmt.BindText(bind++, esc);
+                            }
+                        }
+
+                        if (pathInclusions != null && pathInclusions.Count > 0)
+                        {
+                            for (int i = 0; i < pathInclusions.Count; i++)
+                            {
+                                if (string.IsNullOrEmpty(pathInclusions[i])) continue;
+                                string esc = EscapeLike(pathInclusions[i].Replace('\\', '/').TrimEnd('/')) + "/%";
                                 stmt.BindText(bind++, esc);
                             }
                         }

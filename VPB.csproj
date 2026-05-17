@@ -374,6 +374,9 @@
     <Compile Include="src\gallery\GalleryPanel.TitleSearchResponsive.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
+    <Compile Include="src\gallery\AppearanceGenderClassifier.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderFacetCounts.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />

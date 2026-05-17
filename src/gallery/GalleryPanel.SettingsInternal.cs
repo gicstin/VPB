@@ -118,6 +118,7 @@ namespace VPB
             public string GalleryDefaultRightSidePanel;
             public float GalleryScrollButtonStepViewportFraction;
             public bool GalleryScrollButtonsEnabled;
+            public bool GalleryVrThumbstickScrollEnabled;
             public bool GalleryHideCreatorSideButtons;
             public bool PluginGalleryGridThumbnails;
             public bool GalleryListNamesLegacyFileName;
@@ -544,6 +545,14 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryScrollButtonsEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "lists.vrThumbstickScroll", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.gallery_vr_thumbstick_scroll", "VR thumbstick gallery scroll"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_vr_thumbstick_scroll", "When the VR pointer is over a gallery pane, thumbstick up/down scrolls the list instead of moving in the world."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.scrollStep", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_scroll_button_step", "Scroll button step"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_scroll_button_step", "How far big up/down scroll buttons move, measured in visible panel heights."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
@@ -951,6 +960,7 @@ namespace VPB
                 GalleryDefaultRightSidePanel = VPBConfig.Instance.GalleryDefaultRightSidePanel,
                 GalleryScrollButtonStepViewportFraction = VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
                 GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
+                GalleryVrThumbstickScrollEnabled = VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
@@ -1684,6 +1694,7 @@ namespace VPB
             VPBConfig.Instance.GalleryDefaultRightSidePanel = b.GalleryDefaultRightSidePanel;
             VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = b.GalleryScrollButtonStepViewportFraction;
             VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
+            VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = b.GalleryVrThumbstickScrollEnabled;
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;

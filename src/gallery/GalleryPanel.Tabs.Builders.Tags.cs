@@ -127,14 +127,17 @@ namespace VPB
                     Color inactive = ColorInactiveRow;
                     Color active = ColorFacetActiveRow;
 
-                    string[] options = new string[] { "Female", "Male", "Futa" };
+                    if ((appearanceSubfilter & AppearanceSubfilter.Futa) != 0)
+                        appearanceSubfilter &= ~AppearanceSubfilter.Futa;
+
+                    string[] options = new string[] { "Female", "Male", "Unknown" };
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
                         AppearanceSubfilter flag = 0;
                         if (opt == "Male") flag = AppearanceSubfilter.Male;
                         else if (opt == "Female") flag = AppearanceSubfilter.Female;
-                        else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
+                        else if (opt == "Unknown") flag = AppearanceSubfilter.Unknown;
 
                         bool isActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
                         Color btnColor = isActive ? active : inactive;
@@ -142,7 +145,7 @@ namespace VPB
                         int cnt = 0;
                         if (opt == "Male") cnt = isActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
                         else if (opt == "Female") cnt = isActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                        else if (opt == "Futa") cnt = isActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
+                        else if (opt == "Unknown") cnt = isActive ? appearanceSubfilterCurrentCountUnknown : appearanceSubfilterFacetCountUnknown;
 
                         string label = opt + " (" + cnt + ")";
 
@@ -152,8 +155,7 @@ namespace VPB
                                 if ((appearanceSubfilter & flag) != 0) appearanceSubfilter = 0;
                                 else appearanceSubfilter = flag;
                             }
-                            tagsCached = false;
-                            RefreshFilesAndTabs();
+                            OnAppearanceGenderFilterChanged();
                         }, trackedButtons);
                     }
                 }

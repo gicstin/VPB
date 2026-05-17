@@ -194,7 +194,7 @@ namespace VPB
         }
 
         /// <summary>True if internal path is under prefix (after slash normalization).</summary>
-        private static bool GalleryInternalPathStartsWithPrefix(string internalPath, string prefix)
+        internal static bool GalleryInternalPathStartsWithPrefix(string internalPath, string prefix)
         {
             if (string.IsNullOrEmpty(prefix)) return true;
             return GalleryNormalizePathSlashes(internalPath).StartsWith(GalleryNormalizePathSlashes(prefix), StringComparison.OrdinalIgnoreCase);
@@ -878,6 +878,7 @@ namespace VPB
 
         public void InvalidateTags()
         {
+            ClearAppearanceGenderRefreshCaches();
             tagsCached = false;
             userTagsCached = false;
             try { GalleryTagCountSnapshotCache.Clear(); } catch { }
@@ -971,6 +972,7 @@ namespace VPB
             appearanceSubfilterCountMale = t.AppearanceSubfilterCountMale;
             appearanceSubfilterCountFemale = t.AppearanceSubfilterCountFemale;
             appearanceSubfilterCountFuta = t.AppearanceSubfilterCountFuta;
+            appearanceSubfilterCountUnknown = t.AppearanceSubfilterCountUnknown;
             clothingSubfilterFacetCountReal = t.ClothingSubfilterFacetCountReal;
             clothingSubfilterFacetCountPresets = t.ClothingSubfilterFacetCountPresets;
             clothingSubfilterFacetCountCustom = t.ClothingSubfilterFacetCountCustom;
@@ -988,10 +990,12 @@ namespace VPB
             appearanceSubfilterFacetCountMale = t.AppearanceSubfilterFacetCountMale;
             appearanceSubfilterFacetCountFemale = t.AppearanceSubfilterFacetCountFemale;
             appearanceSubfilterFacetCountFuta = t.AppearanceSubfilterFacetCountFuta;
+            appearanceSubfilterFacetCountUnknown = t.AppearanceSubfilterFacetCountUnknown;
             appearanceSubfilterCurrentCountAll = t.AppearanceSubfilterCurrentCountAll;
             appearanceSubfilterCurrentCountMale = t.AppearanceSubfilterCurrentCountMale;
             appearanceSubfilterCurrentCountFemale = t.AppearanceSubfilterCurrentCountFemale;
             appearanceSubfilterCurrentCountFuta = t.AppearanceSubfilterCurrentCountFuta;
+            appearanceSubfilterCurrentCountUnknown = t.AppearanceSubfilterCurrentCountUnknown;
         }
 
         private IEnumerator CoCacheTagCountsInternal(int maxMsPerSlice, int deferredSessionId)
@@ -1009,6 +1013,17 @@ namespace VPB
                     tagsCached = true;
                     yield break;
                 }
+            }
+
+            if (IsAppearanceLooseScopedBrowsing())
+            {
+                TryRecomputeAppearanceGenderFacetCountsScoped();
+                tagsCached = true;
+                if (TryBuildTagCountCacheKey(out tagCountCacheKey))
+                {
+                    try { GalleryTagCountSnapshotCache.Put(tagCountCacheKey, CaptureTagCountSnapshot()); } catch { }
+                }
+                yield break;
             }
 
             Stopwatch sliceWatch = (maxMsPerSlice < TagCountScanNoSliceMs) ? Stopwatch.StartNew() : null;
@@ -1039,6 +1054,7 @@ namespace VPB
             appearanceSubfilterCountMale = 0;
             appearanceSubfilterCountFemale = 0;
             appearanceSubfilterCountFuta = 0;
+            appearanceSubfilterCountUnknown = 0;
 
             clothingSubfilterFacetCountReal = 0;
             clothingSubfilterFacetCountPresets = 0;
@@ -1059,11 +1075,13 @@ namespace VPB
             appearanceSubfilterFacetCountMale = 0;
             appearanceSubfilterFacetCountFemale = 0;
             appearanceSubfilterFacetCountFuta = 0;
+            appearanceSubfilterFacetCountUnknown = 0;
 
             appearanceSubfilterCurrentCountAll = 0;
             appearanceSubfilterCurrentCountMale = 0;
             appearanceSubfilterCurrentCountFemale = 0;
             appearanceSubfilterCurrentCountFuta = 0;
+            appearanceSubfilterCurrentCountUnknown = 0;
 
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             // Build extension set for fast lookup
@@ -1162,6 +1180,7 @@ namespace VPB
                     appearanceSubfilterCountMale = sqlFacets.AppearanceSubfilterCountMale;
                     appearanceSubfilterCountFemale = sqlFacets.AppearanceSubfilterCountFemale;
                     appearanceSubfilterCountFuta = sqlFacets.AppearanceSubfilterCountFuta;
+                    appearanceSubfilterCountUnknown = sqlFacets.AppearanceSubfilterCountUnknown;
                     clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
                     clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
                     clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
@@ -1179,10 +1198,12 @@ namespace VPB
                     appearanceSubfilterFacetCountMale = sqlFacets.AppearanceSubfilterFacetCountMale;
                     appearanceSubfilterFacetCountFemale = sqlFacets.AppearanceSubfilterFacetCountFemale;
                     appearanceSubfilterFacetCountFuta = sqlFacets.AppearanceSubfilterFacetCountFuta;
+                    appearanceSubfilterFacetCountUnknown = sqlFacets.AppearanceSubfilterFacetCountUnknown;
                     appearanceSubfilterCurrentCountAll = sqlFacets.AppearanceSubfilterCurrentCountAll;
                     appearanceSubfilterCurrentCountMale = sqlFacets.AppearanceSubfilterCurrentCountMale;
                     appearanceSubfilterCurrentCountFemale = sqlFacets.AppearanceSubfilterCurrentCountFemale;
                     appearanceSubfilterCurrentCountFuta = sqlFacets.AppearanceSubfilterCurrentCountFuta;
+                    appearanceSubfilterCurrentCountUnknown = sqlFacets.AppearanceSubfilterCurrentCountUnknown;
                 }
             }
 
@@ -1397,6 +1418,7 @@ namespace VPB
                         if (g == AppearanceGender.Male) appearanceSubfilterCountMale++;
                         if (g == AppearanceGender.Female) appearanceSubfilterCountFemale++;
                         if (g == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
+                        if (g == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
 
                         AppearanceSubfilter cur = appearanceSubfilter;
                         bool PassesAppearanceSubfilters(AppearanceSubfilter f)
@@ -1404,11 +1426,7 @@ namespace VPB
                             if (f == 0) return true;
                             bool wantsPresets = (f & AppearanceSubfilter.Presets) != 0;
                             bool wantsCustom = (f & AppearanceSubfilter.Custom) != 0;
-                            bool wantsMale = (f & AppearanceSubfilter.Male) != 0;
-                            bool wantsFemale = (f & AppearanceSubfilter.Female) != 0;
-                            bool wantsFuta = (f & AppearanceSubfilter.Futa) != 0;
 
-                            // If both are selected, it's effectively no type restriction.
                             bool typeOk = true;
                             if (wantsPresets || wantsCustom)
                             {
@@ -1417,34 +1435,24 @@ namespace VPB
                                 else if (wantsCustom) typeOk = isCustomAppearance;
                             }
                             if (!typeOk) return false;
-
-                            bool wantsAnyGender = wantsMale || wantsFemale || wantsFuta;
-                            if (wantsAnyGender)
-                            {
-                                bool genderOk = false;
-                                if (wantsMale && g == AppearanceGender.Male) genderOk = true;
-                                if (wantsFemale && g == AppearanceGender.Female) genderOk = true;
-                                if (wantsFuta && g == AppearanceGender.Futa) genderOk = true;
-                                if (!genderOk) return false;
-                            }
-
+                            if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(g, f)) return false;
                             return true;
                         }
 
-                        // Facet counts: how many would be shown if the user toggled that flag now.
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
                         if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Custom)) appearanceSubfilterFacetCountCustom++;
-                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Male)) appearanceSubfilterFacetCountMale++;
-                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Female)) appearanceSubfilterFacetCountFemale++;
-                        if (PassesAppearanceSubfilters(cur ^ AppearanceSubfilter.Futa)) appearanceSubfilterFacetCountFuta++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Male))) appearanceSubfilterFacetCountMale++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Female))) appearanceSubfilterFacetCountFemale++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Futa))) appearanceSubfilterFacetCountFuta++;
+                        if (PassesAppearanceSubfilters(AppearanceGenderClassifier.HypotheticalGenderFacet(cur, AppearanceSubfilter.Unknown))) appearanceSubfilterFacetCountUnknown++;
 
-                        // Current counts: how many are shown under the current active subfilter set.
                         if (PassesAppearanceSubfilters(appearanceSubfilter))
                         {
                             appearanceSubfilterCurrentCountAll++;
                             if (g == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
                             if (g == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
                             if (g == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
+                            if (g == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
                         }
 
                         // Apply active subfilters (if any) to tag counting.
@@ -1989,13 +1997,7 @@ namespace VPB
                         bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                         bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                         AppearanceGender lg = AppearanceGender.Unknown;
-                        try
-                        {
-                            var pg = VPB.src.util.LooseVapGenderProbe.Classify(sysPath);
-                            if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Female) lg = AppearanceGender.Female;
-                            else if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Male) lg = AppearanceGender.Male;
-                            else if (pg == VPB.src.util.LooseVapGenderProbe.Gender.Futa) lg = AppearanceGender.Futa;
-                        }
+                        try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? ""); }
                         catch { lg = AppearanceGender.Unknown; }
 
                         appearanceSubfilterCountAll++;
@@ -2004,15 +2006,13 @@ namespace VPB
                         if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
                         if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
                         if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
+                        if (lg == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
 
                         bool LoosePasses(AppearanceSubfilter f)
                         {
                             if (f == 0) return true;
                             bool wPresets = (f & AppearanceSubfilter.Presets) != 0;
                             bool wCustom  = (f & AppearanceSubfilter.Custom) != 0;
-                            bool wMale    = (f & AppearanceSubfilter.Male) != 0;
-                            bool wFemale  = (f & AppearanceSubfilter.Female) != 0;
-                            bool wFuta    = (f & AppearanceSubfilter.Futa) != 0;
                             bool typeOk = true;
                             if (wPresets || wCustom)
                             {
@@ -2021,28 +2021,24 @@ namespace VPB
                                 else if (wCustom) typeOk = isCustomLoose;
                             }
                             if (!typeOk) return false;
-                            if (wMale || wFemale || wFuta)
-                            {
-                                bool gOk = (wMale && lg == AppearanceGender.Male)
-                                        || (wFemale && lg == AppearanceGender.Female)
-                                        || (wFuta && lg == AppearanceGender.Futa);
-                                if (!gOk) return false;
-                            }
+                            if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(lg, f)) return false;
                             return true;
                         }
 
                         AppearanceSubfilter aSub = appearanceSubfilter;
                         if (LoosePasses(aSub ^ AppearanceSubfilter.Presets)) appearanceSubfilterFacetCountPresets++;
                         if (LoosePasses(aSub ^ AppearanceSubfilter.Custom))  appearanceSubfilterFacetCountCustom++;
-                        if (LoosePasses(aSub ^ AppearanceSubfilter.Male))    appearanceSubfilterFacetCountMale++;
-                        if (LoosePasses(aSub ^ AppearanceSubfilter.Female))  appearanceSubfilterFacetCountFemale++;
-                        if (LoosePasses(aSub ^ AppearanceSubfilter.Futa))    appearanceSubfilterFacetCountFuta++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male)))    appearanceSubfilterFacetCountMale++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female)))  appearanceSubfilterFacetCountFemale++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa)))    appearanceSubfilterFacetCountFuta++;
+                        if (LoosePasses(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown))) appearanceSubfilterFacetCountUnknown++;
                         if (LoosePasses(aSub))
                         {
                             appearanceSubfilterCurrentCountAll++;
                             if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
                             if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
                             if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
+                            if (lg == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
                         }
                     }
                 }
@@ -2140,7 +2136,8 @@ namespace VPB
                 sb.Append(pr).Append('\u001E');
                 int utc = 0;
                 try { utc = TagsManager.Instance.GetAllUserTags().Count; } catch { utc = 0; }
-                sb.Append(utc);
+                sb.Append(utc).Append('\u001E');
+                sb.Append(userTagSideTabDataRevision);
                 key = sb.ToString();
                 return true;
             }
@@ -2238,6 +2235,7 @@ namespace VPB
                 AppearanceSubfilterCountMale = appearanceSubfilterCountMale,
                 AppearanceSubfilterCountFemale = appearanceSubfilterCountFemale,
                 AppearanceSubfilterCountFuta = appearanceSubfilterCountFuta,
+                AppearanceSubfilterCountUnknown = appearanceSubfilterCountUnknown,
                 ClothingSubfilterFacetCountReal = clothingSubfilterFacetCountReal,
                 ClothingSubfilterFacetCountPresets = clothingSubfilterFacetCountPresets,
                 ClothingSubfilterFacetCountCustom = clothingSubfilterFacetCountCustom,
@@ -2255,10 +2253,12 @@ namespace VPB
                 AppearanceSubfilterFacetCountMale = appearanceSubfilterFacetCountMale,
                 AppearanceSubfilterFacetCountFemale = appearanceSubfilterFacetCountFemale,
                 AppearanceSubfilterFacetCountFuta = appearanceSubfilterFacetCountFuta,
+                AppearanceSubfilterFacetCountUnknown = appearanceSubfilterFacetCountUnknown,
                 AppearanceSubfilterCurrentCountAll = appearanceSubfilterCurrentCountAll,
                 AppearanceSubfilterCurrentCountMale = appearanceSubfilterCurrentCountMale,
                 AppearanceSubfilterCurrentCountFemale = appearanceSubfilterCurrentCountFemale,
                 AppearanceSubfilterCurrentCountFuta = appearanceSubfilterCurrentCountFuta,
+                AppearanceSubfilterCurrentCountUnknown = appearanceSubfilterCurrentCountUnknown,
             };
         }
 
@@ -2294,6 +2294,7 @@ namespace VPB
             appearanceSubfilterCountMale = s.AppearanceSubfilterCountMale;
             appearanceSubfilterCountFemale = s.AppearanceSubfilterCountFemale;
             appearanceSubfilterCountFuta = s.AppearanceSubfilterCountFuta;
+            appearanceSubfilterCountUnknown = s.AppearanceSubfilterCountUnknown;
             clothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal;
             clothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets;
             clothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom;
@@ -2311,10 +2312,12 @@ namespace VPB
             appearanceSubfilterFacetCountMale = s.AppearanceSubfilterFacetCountMale;
             appearanceSubfilterFacetCountFemale = s.AppearanceSubfilterFacetCountFemale;
             appearanceSubfilterFacetCountFuta = s.AppearanceSubfilterFacetCountFuta;
+            appearanceSubfilterFacetCountUnknown = s.AppearanceSubfilterFacetCountUnknown;
             appearanceSubfilterCurrentCountAll = s.AppearanceSubfilterCurrentCountAll;
             appearanceSubfilterCurrentCountMale = s.AppearanceSubfilterCurrentCountMale;
             appearanceSubfilterCurrentCountFemale = s.AppearanceSubfilterCurrentCountFemale;
             appearanceSubfilterCurrentCountFuta = s.AppearanceSubfilterCurrentCountFuta;
+            appearanceSubfilterCurrentCountUnknown = s.AppearanceSubfilterCurrentCountUnknown;
         }
 
         public void SetCategories(List<Gallery.Category> cats)

@@ -1539,24 +1539,20 @@ namespace VPB
                 if (appearanceLocalToggleOn)
                 {
                     if (IsVarBacked(entry)) return false;
+                    if (AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
+                        && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
+                        return false;
                 }
 
                 if (appearanceSubfilter != 0)
                 {
-                    bool isCustomAppearance = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
-                    bool isPresetAppearance = false;
-                    if (entry is VarFileEntry vfe2)
-                    {
-                        string ip2 = (vfe2.InternalPath ?? "").Replace('\\', '/');
-                        isPresetAppearance = isVap && ip2.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        isPresetAppearance = isVap && norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
-                    }
+                    bool isCustomAppearance = AppearanceGenderClassifier.ResolveIsCustomAppearance(entry);
+                    bool isPresetAppearance = isVap && AppearanceGenderClassifier.ResolveIsPresetAppearance(entry);
 
+                    string catForGender = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+                    EnsureAppearanceGenderRefreshCaches(catForGender ?? "");
                     AppearanceGender g = AppearanceGender.Unknown;
-                    try { g = GetAppearanceGender(entry); } catch { g = AppearanceGender.Unknown; }
+                    try { g = AppearanceGenderClassifier.ClassifyForGenderFilter(entry, catForGender ?? "", _appearanceUserTagsByRowKey); } catch { g = AppearanceGender.Unknown; }
 
                     bool wantsPresets = (appearanceSubfilter & AppearanceSubfilter.Presets) != 0;
                     bool wantsCustom = (appearanceSubfilter & AppearanceSubfilter.Custom) != 0;
@@ -1569,18 +1565,8 @@ namespace VPB
                         }
                     }
 
-                    bool wantsMale = (appearanceSubfilter & AppearanceSubfilter.Male) != 0;
-                    bool wantsFemale = (appearanceSubfilter & AppearanceSubfilter.Female) != 0;
-                    bool wantsFuta = (appearanceSubfilter & AppearanceSubfilter.Futa) != 0;
-                    bool wantsAnyGender = wantsMale || wantsFemale || wantsFuta;
-                    if (wantsAnyGender)
-                    {
-                        bool ok = false;
-                        if (wantsMale && g == AppearanceGender.Male) ok = true;
-                        if (wantsFemale && g == AppearanceGender.Female) ok = true;
-                        if (wantsFuta && g == AppearanceGender.Futa) ok = true;
-                        if (!ok) return false;
-                    }
+                    if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(g, appearanceSubfilter))
+                        return false;
                 }
             }
 
@@ -2019,7 +2005,14 @@ namespace VPB
             lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
             refreshOnNextShow = false;
             creatorsCached = false;
-            tagsCached = false;
+            if (ShouldSkipHeavyAppearanceTagParallelScan())
+            {
+                if (!TryRecomputeAppearanceGenderFacetCountsScoped())
+                    TryApplyAppearanceFacetCountsFromSql();
+                tagsCached = true;
+            }
+            else
+                tagsCached = false;
             userTagsCached = false;
             categoriesCached = false;
             pathsCached = false;
@@ -2638,7 +2631,7 @@ namespace VPB
             string titleForCounts = currentCategoryTitle ?? (titleText != null ? titleText.text : "");
             bool isPoseCategory = titleForCounts.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            if (!tagsCached && DeferredSubPaneNeedsTagCountCachePass())
+            if (!tagsCached && DeferredSubPaneNeedsTagCountCachePass() && !ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 string tagSnapKeyProbe;
                 bool haveSnap = TryBuildTagCountCacheKey(out tagSnapKeyProbe) && GalleryTagCountSnapshotCache.HasSnapshot(tagSnapKeyProbe);
@@ -2899,6 +2892,15 @@ namespace VPB
 
             if (!fileListFromCache)
             {
+            string titleForAppearanceCaches = !string.IsNullOrEmpty(currentCategoryTitle)
+                ? currentCategoryTitle
+                : ((titleText != null ? titleText.text : "") ?? "");
+            if (titleForAppearanceCaches.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                ClearAppearanceGenderRefreshCaches();
+                EnsureAppearanceGenderRefreshCaches(titleForAppearanceCaches);
+            }
+
             if (FileManager.PackagesByUid != null)
             {
                 string localLoadingGroupId = currentLoadingGroupId;
@@ -2926,6 +2928,19 @@ namespace VPB
                 GalleryHistoryFilterMode histFilterSnap = galleryHistoryFilterMode;
                 ClothingSubfilter sqliteWorkerClothingSub = clothingSubfilter;
                 string pathForIndexMain = currentPath ?? "";
+                string workerPathSnap = pathForIndexMain;
+                List<string> workerPathsSnap = currentPaths != null ? new List<string>(currentPaths) : null;
+                bool appearanceWorkerLocalOnly = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
+                    && (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
+                        || ResolveEffectiveSourceFilterMode(true, pathForIndexMain) == 1);
+                bool appearanceWorkerSkipPathMatch = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
+                    && !appearanceWorkerLocalOnly;
+                List<string> pathInclusionsForSql = null;
+                if (appearanceWorkerLocalOnly && !string.IsNullOrEmpty(pathForIndexMain))
+                {
+                    pathInclusionsForSql = new List<string>();
+                    pathInclusionsForSql.Add(pathForIndexMain.Replace('\\', '/').TrimEnd('/'));
+                }
                 bool sqliteDrainSkipClothingGateOnMain = (titleForIndexMain.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
                     || pathForIndexMain.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
                     || pathForIndexMain.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -2976,18 +2991,18 @@ namespace VPB
                             {
                             if (!Gallery.IsEverythingCategoryName(titleForIndexMain))
                             {
-                            if (currentPaths != null && currentPaths.Count > 0)
+                            if (workerPathsSnap != null && workerPathsSnap.Count > 0)
                             {
-                                for (int i = 0; i < currentPaths.Count; i++)
+                                for (int i = 0; i < workerPathsSnap.Count; i++)
                                 {
-                                    if (string.Equals(currentPaths[i], "Saves/Person", StringComparison.OrdinalIgnoreCase))
+                                    if (string.Equals(workerPathsSnap[i], "Saves/Person", StringComparison.OrdinalIgnoreCase))
                                     {
                                         if (pathExclusions == null) pathExclusions = new List<string>();
                                         pathExclusions.Add("Saves/Person/appearance");
                                     }
                                 }
                             }
-                            else if (string.Equals(currentPath, "Saves/Person", StringComparison.OrdinalIgnoreCase))
+                            else if (string.Equals(workerPathSnap, "Saves/Person", StringComparison.OrdinalIgnoreCase))
                             {
                                 pathExclusions = new List<string> { "Saves/Person/appearance" };
                             }
@@ -3003,6 +3018,7 @@ namespace VPB
                                 loadedState: wantsLoadedStateForIndexMain,
                                 nameTerms: nameTerms,
                                 pathExclusions: pathExclusions,
+                                pathInclusions: pathInclusionsForSql,
                                 activeTags: activeTags,
                                 activeUserTags: userTagNamesForGridSqlSnap,
                                 sortState: fileListSortSnapForWorker);
@@ -3047,7 +3063,9 @@ namespace VPB
                                             continue;
                                     }
 
-                                    if (!RefreshWorkerPathMatches(internalPath, currentPaths, currentPath)) continue;
+                                    if (!appearanceWorkerSkipPathMatch
+                                        && !RefreshWorkerPathMatches(internalPath, workerPathsSnap, workerPathSnap))
+                                        continue;
 
                                     string varHint = r.VarPath ?? "";
                                     string listPath = r.ListPath ?? "";
@@ -3326,7 +3344,9 @@ namespace VPB
                                     }
                                     if (!extMatch) continue;
 
-                                    if (!RefreshWorkerPathMatches(checkPath, currentPaths, currentPath)) continue;
+                                    if (!appearanceWorkerSkipPathMatch
+                                        && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
+                                        continue;
 
                                     if (hasNameFilter)
                                     {
@@ -4050,6 +4070,27 @@ namespace VPB
             // Phase 1: main side strips (category/creator). Sub-pane is cleared here; tag UI fills in phase 2 after "interactive DONE".
             LogGalleryCategoryTypeNavPhase("deferred_sideTabs_phase1_main_before");
             try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+            if (DeferredSubPaneNeedsTagCountCachePass())
+            {
+                string titleSnap = titleText != null ? titleText.text : "";
+                if (titleSnap.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    string tckSnap;
+                    TagCountSnapshot snap = null;
+                    bool haveSnap = false;
+                    if (TryBuildTagCountCacheKey(out tckSnap))
+                        haveSnap = GalleryTagCountSnapshotCache.TryGet(tckSnap, out snap) && snap != null;
+                    if (haveSnap)
+                    {
+                        try { RestoreTagCountSnapshot(snap); tagsCached = true; } catch { }
+                    }
+                    else if (!TryPrimeAppearanceSubPaneCounts())
+                    {
+                        tagsCached = false;
+                    }
+                    try { RebuildSubPaneSideTabListsOnly(); } catch { }
+                }
+            }
             LogGalleryCategoryTypeNavPhase("deferred_sideTabs_phase1_main_after");
             yield return null;
 
@@ -4078,7 +4119,23 @@ namespace VPB
 
             // CS1626: cannot yield inside try/catch — keep yields here, wrap only the sync rebuild in try/catch.
             bool ranSlicedTagScan = false;
-            if (tagParallelWaiterForThisRefresh != null)
+            if (ShouldSkipHeavyAppearanceTagParallelScan())
+            {
+                bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
+                if (!primed)
+                    primed = TryApplyAppearanceFacetCountsFromSql();
+                if (primed)
+                {
+                    tagsCached = true;
+                    ranSlicedTagScan = true;
+                    string tckScoped;
+                    if (TryBuildTagCountCacheKey(out tckScoped))
+                    {
+                        try { GalleryTagCountSnapshotCache.Put(tckScoped, CaptureTagCountSnapshot()); } catch { }
+                    }
+                }
+            }
+            if (tagParallelWaiterForThisRefresh != null && !ranSlicedTagScan)
             {
                 System.Diagnostics.Stopwatch waitSw = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
                 while (!tagParallelWaiterForThisRefresh.Finished)

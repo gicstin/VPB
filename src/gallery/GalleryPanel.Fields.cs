@@ -664,6 +664,7 @@ namespace VPB
             Male = 1 << 2,
             Female = 1 << 3,
             Futa = 1 << 4,
+            Unknown = 1 << 5,
         }
 
         private enum PosePeopleFilter
@@ -717,17 +718,20 @@ namespace VPB
         private int appearanceSubfilterCountMale = 0;
         private int appearanceSubfilterCountFemale = 0;
         private int appearanceSubfilterCountFuta = 0;
+        private int appearanceSubfilterCountUnknown = 0;
 
         private int appearanceSubfilterFacetCountPresets = 0;
         private int appearanceSubfilterFacetCountCustom = 0;
         private int appearanceSubfilterFacetCountMale = 0;
         private int appearanceSubfilterFacetCountFemale = 0;
         private int appearanceSubfilterFacetCountFuta = 0;
+        private int appearanceSubfilterFacetCountUnknown = 0;
 
         private int appearanceSubfilterCurrentCountAll = 0;
         private int appearanceSubfilterCurrentCountMale = 0;
         private int appearanceSubfilterCurrentCountFemale = 0;
         private int appearanceSubfilterCurrentCountFuta = 0;
+        private int appearanceSubfilterCurrentCountUnknown = 0;
 
         private int posePeopleFacetCountSingle = 0;
         private int posePeopleFacetCountDual = 0;
@@ -761,91 +765,22 @@ namespace VPB
         private Text tboxTargetDropdownBtnText;
         private bool tboxTargetMenuOpen;
 
-        private enum AppearanceGender
-        {
-            Unknown,
-            Female,
-            Male,
-            Futa,
-        }
-
-        private static AppearanceGender GetAppearanceGender(FileEntry entry)
+        private AppearanceGender GetAppearanceGender(FileEntry entry)
         {
             if (entry == null) return AppearanceGender.Unknown;
-
-            string p = entry.Path ?? "";
-            string ip = null;
-            try
+            string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            cat = cat ?? "";
+            EnsureAppearanceGenderRefreshCaches(cat);
+            string uid = entry.Uid ?? "";
+            if (!string.IsNullOrEmpty(uid) && _appearanceGenderByUid != null)
             {
-                if (entry is VarFileEntry vfe) ip = vfe.InternalPath;
+                AppearanceGender cached;
+                if (_appearanceGenderByUid.TryGetValue(uid, out cached)) return cached;
             }
-            catch { }
-
-            HashSet<string> userTags = null;
-            try { userTags = TagsManager.Instance.GetTags(entry.Uid); } catch { userTags = null; }
-            if (userTags != null && userTags.Count > 0)
-            {
-                // Futa fold: surfaces as Male per current UI scope.
-                foreach (var t in userTags)
-                {
-                    if (string.IsNullOrEmpty(t)) continue;
-                    string tl = t.Trim().ToLowerInvariant();
-                    if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Male;
-                }
-                foreach (var t in userTags)
-                {
-                    if (string.IsNullOrEmpty(t)) continue;
-                    string tl = t.Trim().ToLowerInvariant();
-                    if (tl == "female" || tl == "woman" || tl == "girl") return AppearanceGender.Female;
-                    if (tl == "male" || tl == "man" || tl == "boy") return AppearanceGender.Male;
-                }
-            }
-
-            // Loose .vap presets carry the authoritative gender inside the geometry storable's "character" field.
-            // Probe and cache per (path, mtime, size) so adjacent presets pay the parse once.
-            if (entry is SystemFileEntry sfeProbe
-                && !sfeProbe.isVar
-                && !string.IsNullOrEmpty(p)
-                && p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
-            {
-                VPB.src.util.LooseVapGenderProbe.Gender g;
-                try { g = VPB.src.util.LooseVapGenderProbe.Classify(p); }
-                catch { g = VPB.src.util.LooseVapGenderProbe.Gender.Unknown; }
-                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Female) return AppearanceGender.Female;
-                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Male)   return AppearanceGender.Male;
-                if (g == VPB.src.util.LooseVapGenderProbe.Gender.Futa)   return AppearanceGender.Male;
-                // Unknown: drop through to the filename-token heuristic.
-            }
-
-            string name = entry.Name ?? "";
-            string pkgUid = "";
-            try
-            {
-                if (entry is VarFileEntry vfe2 && vfe2.Package != null) pkgUid = vfe2.Package.Uid ?? "";
-            }
-            catch { }
-
-            string s = (string.IsNullOrEmpty(ip) ? p : ip).Replace('\\', '/');
-            string combined = (s + " " + name + " " + pkgUid).ToLowerInvariant();
-
-            char[] seps = new char[] { '/', '\\', '.', '_', '-', ' ', '(', ')', '[', ']', '{', '}', ',', ';', ':' };
-            string[] tokens = combined.Split(seps, StringSplitOptions.RemoveEmptyEntries);
-
-            bool HasToken(string tok)
-            {
-                for (int i = 0; i < tokens.Length; i++)
-                {
-                    if (tokens[i] == tok) return true;
-                }
-                return false;
-            }
-
-            // Futa fold: surfaces as Male per current UI scope.
-            if (HasToken("futa") || HasToken("herm") || HasToken("shemale") || HasToken("dickgirl")) return AppearanceGender.Male;
-            if (HasToken("female") || HasToken("woman") || HasToken("girl")) return AppearanceGender.Female;
-            if (HasToken("male") || HasToken("man") || HasToken("boy")) return AppearanceGender.Male;
-
-            return AppearanceGender.Unknown;
+            AppearanceGender g = AppearanceGenderClassifier.Classify(entry, cat, _appearanceUserTagsByRowKey);
+            if (!string.IsNullOrEmpty(uid) && _appearanceGenderByUid != null)
+                _appearanceGenderByUid[uid] = g;
+            return g;
         }
         private List<Atom> personAtoms = new List<Atom>();
         private System.Collections.Generic.List<System.Action<float>> innerPaneScaleActions = new System.Collections.Generic.List<System.Action<float>>();

@@ -949,6 +949,50 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// One connection: all user tags for a gallery category keyed by <see cref="FormatCatMemRowLookupKey"/>.
+        /// Used during Appearance gender filtering to avoid per-row SQLite opens.
+        /// </summary>
+        internal static bool TryLoadGalleryUserTagsForCategory(string categoryTitle, Dictionary<string, HashSet<string>> tagsByRowKey)
+        {
+            tagsByRowKey?.Clear();
+            if (!VpbSqlite3.IsAvailable || tagsByRowKey == null || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (IsGalleryAllVarPseudoCategory(categoryTitle)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare(
+                        "SELECT gut.pkg_uid, gut.internal_path, gt.name FROM gallery_item_user_tag gut " +
+                        "INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.category=?"))
+                    {
+                        st.BindText(1, categoryTitle);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string pkg = st.ColumnText(0) ?? "";
+                            string ip = st.ColumnText(1) ?? "";
+                            string tag = st.ColumnText(2) ?? "";
+                            if (string.IsNullOrEmpty(pkg) || string.IsNullOrEmpty(ip) || string.IsNullOrEmpty(tag)) continue;
+                            string key = FormatCatMemRowLookupKey(pkg, ip);
+                            HashSet<string> set;
+                            if (!tagsByRowKey.TryGetValue(key, out set) || set == null)
+                            {
+                                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                                tagsByRowKey[key] = set;
+                            }
+                            set.Add(tag);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>True if <c>gallery_item_user_tag</c> has at least one row for this item (lightweight for grid badge).</summary>
         internal static bool TryHasAnyGalleryUserTagsForRow(string categoryTitle, string pkgUid, string internalPath)
         {

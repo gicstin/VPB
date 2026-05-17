@@ -34,6 +34,7 @@ namespace VPB
         public int AppearanceSubfilterCountMale;
         public int AppearanceSubfilterCountFemale;
         public int AppearanceSubfilterCountFuta;
+        public int AppearanceSubfilterCountUnknown;
 
         public int ClothingSubfilterFacetCountReal;
         public int ClothingSubfilterFacetCountPresets;
@@ -54,11 +55,13 @@ namespace VPB
         public int AppearanceSubfilterFacetCountMale;
         public int AppearanceSubfilterFacetCountFemale;
         public int AppearanceSubfilterFacetCountFuta;
+        public int AppearanceSubfilterFacetCountUnknown;
 
         public int AppearanceSubfilterCurrentCountAll;
         public int AppearanceSubfilterCurrentCountMale;
         public int AppearanceSubfilterCurrentCountFemale;
         public int AppearanceSubfilterCurrentCountFuta;
+        public int AppearanceSubfilterCurrentCountUnknown;
     }
 
     /// <summary>
@@ -146,6 +149,7 @@ namespace VPB
                 AppearanceSubfilterCountMale = s.AppearanceSubfilterCountMale,
                 AppearanceSubfilterCountFemale = s.AppearanceSubfilterCountFemale,
                 AppearanceSubfilterCountFuta = s.AppearanceSubfilterCountFuta,
+                AppearanceSubfilterCountUnknown = s.AppearanceSubfilterCountUnknown,
                 ClothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal,
                 ClothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets,
                 ClothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom,
@@ -163,10 +167,12 @@ namespace VPB
                 AppearanceSubfilterFacetCountMale = s.AppearanceSubfilterFacetCountMale,
                 AppearanceSubfilterFacetCountFemale = s.AppearanceSubfilterFacetCountFemale,
                 AppearanceSubfilterFacetCountFuta = s.AppearanceSubfilterFacetCountFuta,
+                AppearanceSubfilterFacetCountUnknown = s.AppearanceSubfilterFacetCountUnknown,
                 AppearanceSubfilterCurrentCountAll = s.AppearanceSubfilterCurrentCountAll,
                 AppearanceSubfilterCurrentCountMale = s.AppearanceSubfilterCurrentCountMale,
                 AppearanceSubfilterCurrentCountFemale = s.AppearanceSubfilterCurrentCountFemale,
                 AppearanceSubfilterCurrentCountFuta = s.AppearanceSubfilterCurrentCountFuta,
+                AppearanceSubfilterCurrentCountUnknown = s.AppearanceSubfilterCurrentCountUnknown,
             };
         }
     }

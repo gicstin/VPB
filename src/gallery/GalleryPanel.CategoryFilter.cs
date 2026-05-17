@@ -114,6 +114,7 @@ namespace VPB
             _clothingGenderUserOverride = false;
             _hairGenderUserOverride = false;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
+            appearanceSubfilter &= ~AppearanceSubfilter.Futa;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
 
             if (state.FileSortState != null)

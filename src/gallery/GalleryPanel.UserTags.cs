@@ -1115,9 +1115,22 @@ namespace VPB
             return true;
         }
 
-        private void RefreshUiAfterUserTagMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
+        private void RefreshUiAfterUserTagMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows, List<string> tags)
         {
-            InvalidateTags();
+            bool appearanceGenderLive = false;
+            if (tags != null && tags.Count > 0)
+            {
+                try { appearanceGenderLive = TryHandleAppearanceGenderTagLiveUpdate(tags, remove, updatedRows); } catch { }
+            }
+
+            if (!appearanceGenderLive)
+                InvalidateTags();
+            else
+            {
+                userTagsCached = false;
+                unchecked { userTagSideTabDataRevision++; }
+            }
+
             CacheAppliedUserTagsForSelection();
 
             bool filterModeRemove = remove
@@ -1156,6 +1169,12 @@ namespace VPB
                         UpdateTabs(ContentType.UserTags, rightTabContainerGO, rightActiveTabButtons, false);
                 }
                 catch { }
+            }
+
+            if (appearanceGenderLive)
+            {
+                try { RebuildSubPaneSideTabListsOnly(); } catch { }
+                try { UpdateTabs(); } catch { }
             }
         }
 
@@ -1209,7 +1228,7 @@ namespace VPB
                 yield break;
             }
 
-            RefreshUiAfterUserTagMutate(remove, rows);
+            RefreshUiAfterUserTagMutate(remove, rows, tags);
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2f);
         }
 
@@ -1277,7 +1296,7 @@ namespace VPB
                 yield break;
             }
 
-            RefreshUiAfterUserTagMutate(remove, rows);
+            RefreshUiAfterUserTagMutate(remove, rows, tags);
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.done_count", "Updated {0} item(s)."), touchedOut[0]), 2.2f);
         }
 

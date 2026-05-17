@@ -406,6 +406,8 @@ namespace VPB
         public float GalleryScrollButtonStepViewportFraction = 0.65f;
         /// <summary>When true, show big VR up/down scroll buttons on gallery and tag lists.</summary>
         public bool GalleryScrollButtonsEnabled = true;
+        /// <summary>When true, VR thumbstick forward/back scrolls the gallery while the pointer is over a pane (blocks free-move on that axis).</summary>
+        public bool GalleryVrThumbstickScrollEnabled = true;
         /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
         public bool GalleryHideCreatorSideButtons = false;
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
@@ -673,6 +675,7 @@ namespace VPB
             BaMigrationPromptDismissed = false;
             GalleryScrollButtonStepViewportFraction = 0.65f;
             GalleryScrollButtonsEnabled = true;
+            GalleryVrThumbstickScrollEnabled = true;
             GlobalSourceFilter = GlobalSourceFilterValue.All;
 
             try
@@ -779,6 +782,8 @@ namespace VPB
                             GalleryScrollButtonStepViewportFraction = Mathf.Clamp(node["GalleryScrollButtonStepViewportFraction"].AsFloat, 0.10f, 2.00f);
                         if (node["GalleryScrollButtonsEnabled"] != null)
                             GalleryScrollButtonsEnabled = node["GalleryScrollButtonsEnabled"].AsBool;
+                        if (node["GalleryVrThumbstickScrollEnabled"] != null)
+                            GalleryVrThumbstickScrollEnabled = node["GalleryVrThumbstickScrollEnabled"].AsBool;
                         if (node["GalleryHideCreatorSideButtons"] != null)
                             GalleryHideCreatorSideButtons = node["GalleryHideCreatorSideButtons"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
@@ -1054,6 +1059,7 @@ namespace VPB
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
                 node["GalleryScrollButtonStepViewportFraction"].AsFloat = Mathf.Clamp(GalleryScrollButtonStepViewportFraction, 0.10f, 2.00f);
                 node["GalleryScrollButtonsEnabled"].AsBool = GalleryScrollButtonsEnabled;
+                node["GalleryVrThumbstickScrollEnabled"].AsBool = GalleryVrThumbstickScrollEnabled;
                 node["GalleryHideCreatorSideButtons"].AsBool = GalleryHideCreatorSideButtons;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
