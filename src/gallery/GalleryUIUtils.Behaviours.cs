@@ -774,14 +774,57 @@ namespace VPB
         public GalleryPanel panel;
         public FileEntry file;
 
+        private bool hovering;
+
+        public bool IsHovering => hovering;
+
+        void OnDisable()
+        {
+            if (!hovering) return;
+            hovering = false;
+            try { if (panel != null) panel.NotifyHoverPreviewTriggerExited(this); } catch { }
+        }
+
+        public bool ContainsScreenPoint(Vector2 screenPos)
+        {
+            var rt = transform as RectTransform;
+            if (rt == null || !isActiveAndEnabled) return false;
+
+            Camera cam = null;
+            try
+            {
+                if (panel != null && panel.canvas != null && panel.canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = panel.canvas.worldCamera != null ? panel.canvas.worldCamera : Camera.main;
+            }
+            catch { cam = null; }
+
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
+            catch { return false; }
+        }
+
+        /// <summary>After list row recycle rebind: refresh preview file or clear stale hover state.</summary>
+        public void SyncHoverPreviewAfterRebind()
+        {
+            if (!hovering) return;
+            if (panel == null || file == null)
+            {
+                hovering = false;
+                try { panel?.NotifyHoverPreviewTriggerExited(this); } catch { }
+                return;
+            }
+            try { panel.NotifyHoverPreviewTriggerEntered(this, file); } catch { }
+        }
+
         public void OnPointerEnter(PointerEventData eventData)
         {
-            try { if (panel != null && file != null) panel.ShowHoverPreview(file); } catch { }
+            hovering = true;
+            try { if (panel != null && file != null) panel.NotifyHoverPreviewTriggerEntered(this, file); } catch { }
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            try { if (panel != null) panel.HideHoverPreview(file); } catch { }
+            hovering = false;
+            try { if (panel != null) panel.NotifyHoverPreviewTriggerExited(this); } catch { }
         }
     }
 

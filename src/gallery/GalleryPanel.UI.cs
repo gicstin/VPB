@@ -1854,10 +1854,23 @@ namespace VPB
             return mode == GalleryLayoutMode.List;
         }
 
+        public void NotifyHoverPreviewTriggerEntered(UIHoverPreviewTrigger source, FileEntry file)
+        {
+            if (source != null) hoverPreviewSource = source;
+            ShowHoverPreview(file);
+        }
+
+        public void NotifyHoverPreviewTriggerExited(UIHoverPreviewTrigger source)
+        {
+            if (source != null && hoverPreviewSource != null && !ReferenceEquals(source, hoverPreviewSource)) return;
+            hoverPreviewSource = null;
+            HideHoverPreview(null);
+        }
+
         public void ShowHoverPreview(FileEntry file)
         {
-            if (!CanShowHoverPreviewForLayout(layoutMode)) { HideHoverPreview(file); return; }
-            if (file == null) { HideHoverPreview(file); return; }
+            if (!CanShowHoverPreviewForLayout(layoutMode)) { HideHoverPreview(null); return; }
+            if (file == null) { HideHoverPreview(null); return; }
             if (hoverPreviewGO == null || hoverPreviewRT == null || hoverPreviewImage == null) return;
 
             hoverPreviewDummyActive = false;
@@ -1875,8 +1888,32 @@ namespace VPB
             if (hoverPreviewGO == null) return;
             if (file != null && hoverPreviewFile != null && !ReferenceEquals(file, hoverPreviewFile)) return;
             hoverPreviewFile = null;
+            hoverPreviewSource = null;
             if (!hoverPreviewDummyActive)
                 hoverPreviewGO.SetActive(false);
+        }
+
+        private void ValidateHoverPreviewActive()
+        {
+            if (hoverPreviewFile == null || hoverPreviewDummyActive) return;
+            if (!CanShowHoverPreviewForLayout(layoutMode))
+            {
+                HideHoverPreview(null);
+                return;
+            }
+
+            bool stale = isCollapsed
+                || hoverPreviewSource == null
+                || !hoverPreviewSource.isActiveAndEnabled
+                || !hoverPreviewSource.IsHovering
+                || !hoverPreviewSource.ContainsScreenPoint(Input.mousePosition);
+
+            if (!stale)
+            {
+                try { stale = !IsPointerInsideGalleryWindowRect(); } catch { }
+            }
+
+            if (stale) HideHoverPreview(null);
         }
 
         public void SetHoverPreviewDummyActive(bool active)
@@ -2889,7 +2926,11 @@ namespace VPB
             if (isCollapsed == collapsed) return;
             isCollapsed = collapsed;
             collapseTimer = 0f;
-            
+            if (collapsed)
+            {
+                try { HideHoverPreview(null); } catch { }
+            }
+
             if (backgroundBoxGO != null)
             {
                 RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();

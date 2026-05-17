@@ -17,14 +17,19 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
-        // ── Universal chrome colors (avoid build-dependent invisibility) ──
-        // Some builds end up with popups behind other chrome / groups; keep colors high-contrast,
-        // but still translucent so underlying UI reads through.
+        // Universal gallery chrome colors.
         public static readonly Color PopupBackdrop = new Color(0.12f, 0.12f, 0.14f, 0.72f);
-        public static readonly Color PopupRowBackdrop = new Color(0.16f, 0.16f, 0.18f, 0.60f);
-        public static readonly Color PopupRowActiveBackdrop = new Color(0.22f, 0.26f, 0.32f, 0.78f);
-        public static readonly Color PopupText = new Color(1f, 1f, 1f, 1f);
-        public static readonly Color PopupMutedText = new Color(0.72f, 0.74f, 0.78f, 1f);
+        public static readonly Color PopupRowBackdrop = new Color(0.18f, 0.18f, 0.20f, 1f);
+        public static readonly Color PopupRowActiveBackdrop = new Color(0.28f, 0.30f, 0.34f, 1f);
+        public static readonly Color PopupText = Color.white;
+        public static readonly Color PopupMutedText = new Color(0.65f, 0.65f, 0.68f, 1f);
+        public static readonly Color TextPrimary = new Color(0.92f, 0.92f, 0.92f, 1f);
+        public static readonly Color TextMuted = new Color(0.72f, 0.72f, 0.75f, 1f);
+        public static readonly Color TextDim = new Color(0.55f, 0.55f, 0.58f, 1f);
+        public static readonly Color InputFieldTextColor = Color.white;
+        public static readonly Color InputFieldPlaceholderColor = new Color(0.5f, 0.5f, 0.52f, 1f);
+        public static readonly Color InputFieldBg = new Color(0.10f, 0.10f, 0.12f, 1f);
+        public static readonly Color TextShadowColor = new Color(0f, 0f, 0f, 0.75f);
 
         /// <summary>
         /// Kills Unity <see cref="Selectable"/> ColorTint hover/press (the gray “fill” on neutral buttons).
@@ -862,7 +867,7 @@ namespace VPB
             t.text = label;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.color = Color.white;
+            t.color = TextPrimary;
             t.alignment = TextAnchor.MiddleCenter;
 
             RectTransform textRT = textGO.GetComponent<RectTransform>();
@@ -990,8 +995,8 @@ namespace VPB
             catch { return null; }
         }
 
-        /// <summary>Standard translucent-black backdrop applied to every icon button.</summary>
-        public static readonly Color IconButtonBackdrop = new Color(0f, 0f, 0f, 0.5f);
+        /// <summary>Standard backdrop applied to every icon button.</summary>
+        public static readonly Color IconButtonBackdrop = new Color(0.25f, 0.25f, 0.25f, 1f);
 
         /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icon PNGs (glyph pixels only).</summary>
         public static readonly Color SideRailIconGlyphTint = Color.white;
@@ -1026,6 +1031,65 @@ namespace VPB
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = new Vector2(-padding * 2, -padding * 2);
             rt.anchoredPosition = Vector2.zero;
+        }
+
+        /// <summary>Updates or creates the Icon child from <paramref name="relativePathFromPluginsDir"/> using bar glyph tint.</summary>
+        public static void RegisterIconButtonPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            ApplyBarIconFromPath(buttonGO, relativePathFromPluginsDir, padding, backdropOverride);
+        }
+
+        public static bool ApplyBarIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
+            Sprite s = LoadIconSprite(relativePathFromPluginsDir, BarIconGlyphTint);
+            if (s == null) return false;
+            Image btnImg = buttonGO.GetComponent<Image>();
+            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            Transform iconTr = buttonGO.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                Image img = iconTr.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.sprite = s;
+                    img.color = Color.white;
+                    return true;
+                }
+            }
+            AddIconToButton(buttonGO, s, padding, backdropOverride);
+            return true;
+        }
+
+        /// <summary>Like <see cref="ApplyBarIconFromPath"/> but uses <see cref="SideRailIconGlyphTint"/>.</summary>
+        public static bool ApplySideRailIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
+            Sprite s = LoadIconSprite(relativePathFromPluginsDir, SideRailIconGlyphTint);
+            if (s == null) return false;
+            Image btnImg = buttonGO.GetComponent<Image>();
+            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            Transform iconTr = buttonGO.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                Image img = iconTr.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.sprite = s;
+                    img.color = Color.white;
+                    return true;
+                }
+            }
+            AddIconToButton(buttonGO, s, padding, backdropOverride);
+            return true;
+        }
+
+        /// <summary>Swaps a live button icon after theme change (tint is baked into <paramref name="sprite"/> pixels).</summary>
+        public static void SetButtonIconGlyph(Image iconImage, Sprite sprite)
+        {
+            if (iconImage == null || sprite == null) return;
+            iconImage.sprite = sprite;
+            iconImage.color = Color.white;
         }
 
         public static GameObject CreateUIToggle(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)
@@ -1252,7 +1316,7 @@ namespace VPB
 
         public static GameObject CreateTextInput(GameObject parentGO, float width, float height, string defaultText, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<string> onEndEdit)
         {
-            GameObject inputGO = AddChildGOImage(parentGO, new Color(0.1f, 0.1f, 0.1f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            GameObject inputGO = AddChildGOImage(parentGO, InputFieldBg, anchorPreset, width, height, new Vector2(xOffset, yOffset));
             inputGO.name = "TextInput";
             
             InputField inputField = inputGO.AddComponent<InputField>();
@@ -1262,7 +1326,7 @@ namespace VPB
             Text t = textGO.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.color = Color.white;
+            t.color = InputFieldTextColor;
             t.alignment = TextAnchor.MiddleLeft;
             t.supportRichText = false;
             
@@ -1280,7 +1344,7 @@ namespace VPB
             p.text = defaultText;
             p.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             p.fontSize = fontSize;
-            p.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            p.color = InputFieldPlaceholderColor;
             p.alignment = TextAnchor.MiddleLeft;
             p.fontStyle = FontStyle.Italic;
             

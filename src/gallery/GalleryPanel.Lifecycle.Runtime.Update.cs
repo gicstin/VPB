@@ -568,6 +568,8 @@ namespace VPB
                 try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
             }
 
+            try { ValidateHoverPreviewActive(); } catch { }
+
             // Pointer Dot Logic
             if (pointerDotGO != null)
             {

@@ -1009,6 +1009,7 @@ namespace VPB
         private RawImage hoverPreviewImage;
         private FileEntry hoverPreviewFile;
         private bool hoverPreviewDummyActive;
+        private UIHoverPreviewTrigger hoverPreviewSource;
         private GameObject paginationPrevBtn;
         private GameObject paginationPrev10Btn;
         private GameObject paginationNextBtn;

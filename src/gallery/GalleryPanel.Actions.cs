@@ -582,6 +582,7 @@ namespace VPB
             SetCanvasVisible(false);
 
             hoverCount = 0;
+            try { HideHoverPreview(null); } catch { }
         }
 
         private void SetCanvasVisible(bool visible)

@@ -376,7 +376,6 @@ namespace VPB
                 txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
                 float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
                 txt.transform.localScale = new Vector3(extra, extra, 1f);
-                txt.color = Color.white;
             }
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -767,7 +766,6 @@ namespace VPB
                 txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
                 float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
                 txt.transform.localScale = new Vector3(extra, extra, 1f);
-                txt.color = Color.white;
                 txt.horizontalOverflow = HorizontalWrapMode.Overflow;
                 txt.verticalOverflow = VerticalWrapMode.Truncate;
                 txt.resizeTextForBestFit = false;
@@ -1202,7 +1200,7 @@ namespace VPB
             rightClickDelegate.OnRightClick = (onRightClick != null) ? (Action)(() => onRightClick.Invoke()) : null;
             
             Image img = btnGO.GetComponent<Image>();
-            img.color = color;
+            if (img != null) img.color = color;
 
             float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
             float insetL = Mathf.Max(0f, labelInsetLeft);
@@ -1217,7 +1215,6 @@ namespace VPB
                 float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
                 txt.transform.localScale = new Vector3(extra, extra, 1f);
             }
-            txt.color = Color.white;
             txt.alignment = labelAnchor;
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             txt.verticalOverflow = VerticalWrapMode.Truncate;
@@ -1282,7 +1279,7 @@ namespace VPB
             inputGO.transform.SetParent(parent.transform, false);
             
             Image bg = inputGO.AddComponent<Image>();
-            bg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            bg.color = UI.InputFieldBg;
             
             // Add Hover Border
             inputGO.AddComponent<UIHoverBorder>();
@@ -1327,7 +1324,7 @@ namespace VPB
             placeholderText.text = VPBTranslation.T("gallery.search.main", "Search...");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             placeholderText.fontSize = 18; // Increased from 14
-            placeholderText.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            placeholderText.color = UI.InputFieldPlaceholderColor;
             placeholderText.fontStyle = FontStyle.Italic;
             placeholderText.alignment = TextAnchor.MiddleLeft; // Vertically centered
             RectTransform placeholderRT = placeholder.GetComponent<RectTransform>();
@@ -1341,7 +1338,7 @@ namespace VPB
             Text textComponent = text.AddComponent<Text>();
             textComponent.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             textComponent.fontSize = 18; // Increased from 14
-            textComponent.color = Color.white;
+            textComponent.color = UI.InputFieldTextColor;
             textComponent.supportRichText = false;
             textComponent.alignment = TextAnchor.MiddleLeft; // Vertically centered
             RectTransform textRT = text.GetComponent<RectTransform>();
@@ -2612,6 +2609,7 @@ namespace VPB
                     if (hp == null) hp = thumbTr.gameObject.AddComponent<UIHoverPreviewTrigger>();
                     hp.panel = this;
                     hp.file = file;
+                    hp.SyncHoverPreviewAfterRebind();
                     thumbImg.raycastTarget = true;
                     // RawImage steals raycasts; forward to row root handler (UIDraggableItem + slop live on btnGO).
                     try
