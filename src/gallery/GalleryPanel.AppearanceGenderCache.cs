@@ -39,6 +39,8 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable) return false;
 
             string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            if (!string.IsNullOrEmpty(title))
+                EnsureAppearanceGenderRefreshCaches(title);
             string extJ = string.IsNullOrEmpty(currentExtension) ? "" : currentExtension;
             var tagCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             VpbLocalDatabase.TagScanTotals sqlFacets;
@@ -95,6 +97,7 @@ namespace VPB
 
             if (TryApplyAppearanceFacetCountsFromSql())
             {
+                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
                 return true;
             }
@@ -112,7 +115,10 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
+            {
+                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
+            }
             else
                 InvalidateTags();
 
@@ -165,7 +171,10 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
+            {
+                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
+            }
 
             string tckPut;
             if (TryBuildTagCountCacheKey(out tckPut))

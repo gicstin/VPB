@@ -2008,7 +2008,10 @@ namespace VPB
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 if (!TryRecomputeAppearanceGenderFacetCountsScoped())
-                    TryApplyAppearanceFacetCountsFromSql();
+                {
+                    if (TryApplyAppearanceFacetCountsFromSql())
+                        TryMergeLooseVapAppearanceGenderFacetCounts();
+                }
                 tagsCached = true;
             }
             else
@@ -4122,8 +4125,11 @@ namespace VPB
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
-                if (!primed)
-                    primed = TryApplyAppearanceFacetCountsFromSql();
+                if (!primed && TryApplyAppearanceFacetCountsFromSql())
+                {
+                    TryMergeLooseVapAppearanceGenderFacetCounts();
+                    primed = true;
+                }
                 if (primed)
                 {
                     tagsCached = true;

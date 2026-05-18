@@ -44,7 +44,7 @@ namespace VPB
             var headerBtn = cqRoot.AddComponent<Button>();
             headerBtn.transition = Selectable.Transition.None;
             headerBtn.targetGraphic = hitImg;
-            headerBtn.onClick.AddListener(() => ToggleCategoryQuickMenuVisible());
+            // Tap/hold handled by CategoryQuickSwitchHeaderBehaviour only — onClick here double-toggled on desktop (PointerUp + onClick).
 
             var headerBehaviour = cqRoot.AddComponent<CategoryQuickSwitchHeaderBehaviour>();
             headerBehaviour.Panel = this;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 namespace VPB
 {
@@ -32,6 +33,13 @@ namespace VPB
             return VpbSqlite3.IsAvailable;
         }
 
+        /// <summary>Loose .vap gender chips apply when source filter is not Var-only.</summary>
+        private bool ShouldCountLooseAppearanceGenderFiles()
+        {
+            if (!IsAppearanceCategoryTitle()) return false;
+            return ResolveEffectiveSourceFilterMode(true, currentPath ?? "") != 2;
+        }
+
         private void ResetAppearanceGenderFacetCounts()
         {
             appearanceSubfilterCountAll = 0;
@@ -56,33 +64,90 @@ namespace VPB
             appearanceSubfilterCurrentCountUnknown = 0;
 
             appearanceSourceCountAll = 0;
+            appearanceSourceCountPresets = 0;
             appearanceSourceCountCustom = 0;
         }
 
-        /// <summary>Recount gender/source chips from loose .vap under the current path only (milliseconds).</summary>
-        private bool TryRecomputeAppearanceGenderFacetCountsScoped()
+        private void CollectAppearanceSearchPaths(List<string> pathsToSearch)
         {
-            if (!IsAppearanceLooseScopedBrowsing()) return false;
+            pathsToSearch.Clear();
+            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
+            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+        }
 
-            ResetAppearanceGenderFacetCounts();
+        /// <summary>Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).</summary>
+        private void AccumulateLooseVapAppearanceGenderCounts(bool resetCountsFirst)
+        {
+            if (resetCountsFirst)
+                ResetAppearanceGenderFacetCounts();
 
             string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             EnsureAppearanceGenderRefreshCaches(cat ?? "");
 
-            List<string> pathsToSearch = new List<string>();
-            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
-            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+            var pathsToSearch = new List<string>();
+            CollectAppearanceSearchPaths(pathsToSearch);
+            if (pathsToSearch.Count == 0) return;
 
             AppearanceSubfilter aSub = appearanceSubfilter;
+
+            string sysCacheKey = null;
+            string sysCacheSig = null;
+            List<VpbLocalDatabase.SystemFileRow> sysCached = null;
+            bool sysCacheHit = false;
+            try
+            {
+                var p2 = new List<string>(pathsToSearch);
+                p2.Sort(StringComparer.OrdinalIgnoreCase);
+                var sbKey = new StringBuilder(256);
+                sbKey.Append("tags:loose:appearance|ext=vap|paths=");
+                for (int i = 0; i < p2.Count; i++)
+                {
+                    if (i != 0) sbKey.Append(';');
+                    sbKey.Append((p2[i] ?? "").Replace('\\', '/').TrimEnd('/'));
+                }
+                sysCacheKey = sbKey.ToString();
+
+                var sbSig = new StringBuilder(128);
+                for (int i = 0; i < p2.Count; i++)
+                {
+                    long t = 0;
+                    try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
+                    if (i != 0) sbSig.Append('|');
+                    sbSig.Append(t.ToString());
+                }
+                sysCacheSig = sbSig.ToString();
+
+                sysCached = new List<VpbLocalDatabase.SystemFileRow>();
+                sysCacheHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysCached);
+            }
+            catch
+            {
+                sysCacheHit = false;
+                sysCached = null;
+            }
 
             for (int pi = 0; pi < pathsToSearch.Count; pi++)
             {
                 string searchPath = pathsToSearch[pi];
                 if (string.IsNullOrEmpty(searchPath) || !Directory.Exists(searchPath)) continue;
 
-                List<string> sysFileList = new List<string>();
-                try { FileManager.SafeGetFiles(searchPath, "*.vap", sysFileList); }
-                catch { continue; }
+                List<string> sysFileList;
+                if (sysCacheHit && sysCached != null && sysCached.Count > 0)
+                {
+                    sysFileList = new List<string>();
+                    for (int i = 0; i < sysCached.Count; i++)
+                    {
+                        string p = sysCached[i].Path ?? "";
+                        if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+                            sysFileList.Add(p);
+                    }
+                }
+                else
+                {
+                    sysFileList = new List<string>();
+                    try { FileManager.SafeGetFiles(searchPath, "*.vap", sysFileList); }
+                    catch { continue; }
+                }
 
                 for (int fi = 0; fi < sysFileList.Count; fi++)
                 {
@@ -90,15 +155,14 @@ namespace VPB
                     string norm = sysPath.Replace('\\', '/');
                     if (!norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) &&
                         !norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
-                    {
                         continue;
-                    }
-
-                    appearanceSourceCountCustom++;
-                    appearanceSourceCountAll++;
 
                     bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                     bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+
+                    appearanceSourceCountAll++;
+                    if (isCustomLoose) appearanceSourceCountCustom++;
+                    if (isPresetLoose) appearanceSourceCountPresets++;
 
                     AppearanceGender lg;
                     try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey); }
@@ -129,7 +193,21 @@ namespace VPB
                     }
                 }
             }
+        }
 
+        /// <summary>After SQL var counts, add loose .vap gender chips from probe cache (skipped by heavy-scan fast path).</summary>
+        private void TryMergeLooseVapAppearanceGenderFacetCounts()
+        {
+            if (!ShouldCountLooseAppearanceGenderFiles()) return;
+            if (IsAppearanceLooseScopedBrowsing()) return;
+            AccumulateLooseVapAppearanceGenderCounts(resetCountsFirst: false);
+        }
+
+        /// <summary>Recount gender/source chips from loose .vap under the current path only (milliseconds).</summary>
+        private bool TryRecomputeAppearanceGenderFacetCountsScoped()
+        {
+            if (!IsAppearanceLooseScopedBrowsing()) return false;
+            AccumulateLooseVapAppearanceGenderCounts(resetCountsFirst: true);
             return true;
         }
 
