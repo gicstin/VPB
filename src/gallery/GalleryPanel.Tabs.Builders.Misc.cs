@@ -155,7 +155,7 @@ namespace VPB
 
             // Single toggle: "Local only" overrides the global source filter on Appearance when ON.
             // When OFF, the title-bar global filter applies normally.
-            string label = "Local only (" + appearanceSourceCountCustom + ")";
+            string label = "Local only";
             Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
@@ -169,17 +169,14 @@ namespace VPB
                 Color inactive = ColorInactiveRow;
                 Color active = ColorFacetActiveRow;
 
-                // Futa fold: no UI chip; clear stale Futa bit from prior configs.
-                if ((appearanceSubfilter & AppearanceSubfilter.Futa) != 0)
-                    appearanceSubfilter &= ~AppearanceSubfilter.Futa;
-
-                string[] options = new string[] { "Female", "Male", "Unknown" };
+                string[] options = new string[] { "Female", "Male", "Futa", "Unknown" };
                 for (int gi = 0; gi < options.Length; gi++)
                 {
                     string opt = options[gi];
                     AppearanceSubfilter flag = 0;
                     if (opt == "Male") flag = AppearanceSubfilter.Male;
                     else if (opt == "Female") flag = AppearanceSubfilter.Female;
+                    else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
                     else if (opt == "Unknown") flag = AppearanceSubfilter.Unknown;
 
                     bool isGenderActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
@@ -188,6 +185,7 @@ namespace VPB
                     int cnt = 0;
                     if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
                     else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
+                    else if (opt == "Futa") cnt = isGenderActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
                     else if (opt == "Unknown") cnt = isGenderActive ? appearanceSubfilterCurrentCountUnknown : appearanceSubfilterFacetCountUnknown;
 
                     string label2 = opt + " (" + cnt + ")";

@@ -5,7 +5,7 @@ using VPB.src.util;
 
 namespace VPB
 {
-    /// <summary>Appearance preset gender: Unknown=0, Female=1, Male=2, Futa=3 (Futa folded to Male in UI).</summary>
+    /// <summary>Appearance preset gender: Unknown=0, Female=1, Male=2, Futa=3.</summary>
     internal enum AppearanceGender
     {
         Unknown = 0,
@@ -37,6 +37,15 @@ namespace VPB
                 | GalleryPanel.AppearanceSubfilter.Futa
                 | GalleryPanel.AppearanceSubfilter.Unknown;
             return (active & ~genderMask) | genderFlag;
+        }
+
+        /// <summary>Facet badge for Presets/Custom chips (replace type bits, keep gender flags).</summary>
+        internal static GalleryPanel.AppearanceSubfilter HypotheticalTypeFacet(GalleryPanel.AppearanceSubfilter active, GalleryPanel.AppearanceSubfilter typeFlag)
+        {
+            if ((active & typeFlag) != 0) return active;
+            const GalleryPanel.AppearanceSubfilter typeMask =
+                GalleryPanel.AppearanceSubfilter.Presets | GalleryPanel.AppearanceSubfilter.Custom;
+            return (active & ~typeMask) | typeFlag;
         }
 
         /// <summary>VaM-relative path used for appearance folder / preset vs custom checks.</summary>
@@ -153,7 +162,6 @@ namespace VPB
                     if (VpbLocalDatabase.TryReadLooseVapGender(loosePath, wtBin, sz, out dbGender))
                     {
                         AppearanceGender cached = FromGenderCode(dbGender);
-                        if (cached == AppearanceGender.Futa) cached = AppearanceGender.Male;
                         if (cached != AppearanceGender.Unknown) return cached;
                     }
                 }
@@ -375,7 +383,7 @@ namespace VPB
 
             if (pg == LooseVapGenderProbe.Gender.Female) return AppearanceGender.Female;
             if (pg == LooseVapGenderProbe.Gender.Male) return AppearanceGender.Male;
-            if (pg == LooseVapGenderProbe.Gender.Futa) return AppearanceGender.Male;
+            if (pg == LooseVapGenderProbe.Gender.Futa) return AppearanceGender.Futa;
             return AppearanceGender.Unknown;
         }
 
@@ -387,7 +395,7 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(t)) continue;
                 string tl = t.Trim().ToLowerInvariant();
-                if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Male;
+                if (tl == "futa" || tl == "herm" || tl == "shemale" || tl == "dickgirl") return AppearanceGender.Futa;
             }
             foreach (var t in userTags)
             {
@@ -406,7 +414,7 @@ namespace VPB
             string[] tokens = combined.Split(s_TokenSeps, StringSplitOptions.RemoveEmptyEntries);
 
             if (HasToken(tokens, "futa") || HasToken(tokens, "herm") || HasToken(tokens, "shemale") || HasToken(tokens, "dickgirl"))
-                return AppearanceGender.Male;
+                return AppearanceGender.Futa;
             if (HasToken(tokens, "female") || HasToken(tokens, "woman") || HasToken(tokens, "girl"))
                 return AppearanceGender.Female;
             if (HasToken(tokens, "male") || HasToken(tokens, "man") || HasToken(tokens, "boy"))

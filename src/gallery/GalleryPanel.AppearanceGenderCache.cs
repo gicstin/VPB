@@ -126,7 +126,7 @@ namespace VPB
         }
 
         /// <summary>
-        /// After gallery user-tag assign/remove: refresh gender chips and grid when Female/Male/Unknown tags change.
+        /// After gallery user-tag assign/remove: refresh gender chips and grid when gender tags change.
         /// </summary>
         internal bool TryHandleAppearanceGenderTagLiveUpdate(List<string> tags, bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
@@ -158,8 +158,6 @@ namespace VPB
 
                 if (mightAddToActiveFacet)
                 {
-                    ClearAppearanceGenderRefreshCaches();
-                    EnsureAppearanceGenderRefreshCaches(cat ?? "");
                     try { RefreshFiles(); } catch { }
                 }
                 else
@@ -211,24 +209,32 @@ namespace VPB
 
         private void InvalidateAppearanceGenderCacheForRowKeys(List<VpbLocalDatabase.GalleryUserTagRowKey> rows)
         {
-            if (rows == null || _appearanceGenderByUid == null) return;
-            if (currentFilteredFiles == null) return;
-            for (int fi = 0; fi < currentFilteredFiles.Count; fi++)
+            if (rows == null || rows.Count == 0 || _appearanceGenderByUid == null || _appearanceGenderByUid.Count == 0) return;
+
+            var rowKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int ri = 0; ri < rows.Count; ri++)
             {
-                FileEntry fe = currentFilteredFiles[fi];
+                VpbLocalDatabase.GalleryUserTagRowKey r = rows[ri];
+                rowKeys.Add(VpbLocalDatabase.FormatCatMemRowLookupKey(r.PkgUid ?? "", r.InternalPath ?? ""));
+            }
+
+            InvalidateAppearanceGenderCacheForRowKeysInList(currentFilteredFiles, rowKeys);
+            InvalidateAppearanceGenderCacheForRowKeysInList(lastFilteredFiles, rowKeys);
+            InvalidateAppearanceGenderCacheForRowKeysInList(topSearchBaseFiles, rowKeys);
+            InvalidateAppearanceGenderCacheForRowKeysInList(filterSearchBaseFiles, rowKeys);
+        }
+
+        private void InvalidateAppearanceGenderCacheForRowKeysInList(IList<FileEntry> files, HashSet<string> rowKeys)
+        {
+            if (files == null || files.Count == 0 || rowKeys == null || rowKeys.Count == 0) return;
+            for (int fi = 0; fi < files.Count; fi++)
+            {
+                FileEntry fe = files[fi];
                 if (fe == null || string.IsNullOrEmpty(fe.Uid)) continue;
                 if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
                 string key = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg ?? "", ip ?? "");
-                for (int ri = 0; ri < rows.Count; ri++)
-                {
-                    VpbLocalDatabase.GalleryUserTagRowKey r = rows[ri];
-                    string rk = VpbLocalDatabase.FormatCatMemRowLookupKey(r.PkgUid ?? "", r.InternalPath ?? "");
-                    if (string.Equals(key, rk, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _appearanceGenderByUid.Remove(fe.Uid);
-                        break;
-                    }
-                }
+                if (rowKeys.Contains(key))
+                    _appearanceGenderByUid.Remove(fe.Uid);
             }
         }
 
