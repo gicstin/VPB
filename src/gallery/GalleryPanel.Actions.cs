@@ -1150,6 +1150,11 @@ namespace VPB
         internal void OnFileClick(FileEntry file)
         {
             if (file == null) return;
+            if (file is InternalSettingRowEntry)
+            {
+                HandleInternalSettingsRowClick(file, secondary: false);
+                return;
+            }
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);

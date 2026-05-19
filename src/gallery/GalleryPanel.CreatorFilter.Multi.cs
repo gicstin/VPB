@@ -29,12 +29,61 @@ namespace VPB
             return _currentCreatorSet.Count > 0;
         }
 
+        private bool CreatorNameMatchesActiveFilter(string creator)
+        {
+            EnsureCurrentCreatorSet();
+            if (_currentCreatorSet.Count == 0) return true;
+            if (string.IsNullOrEmpty(creator)) return false;
+            if (GalleryConsolidateCreatorNamesEnabled)
+            {
+                foreach (string sel in _currentCreatorSet)
+                {
+                    if (string.Equals(sel, creator, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                return false;
+            }
+            return _currentCreatorSet.Contains(creator);
+        }
+
         private bool CreatorFilterContains(string creator)
+        {
+            return CreatorNameMatchesActiveFilter(creator);
+        }
+
+        private bool ActiveFilterContainsCreatorSelection(string selectedCreator)
         {
             EnsureCurrentCreatorSet();
             if (_currentCreatorSet.Count == 0) return false;
-            if (string.IsNullOrEmpty(creator)) return false;
-            return _currentCreatorSet.Contains(creator);
+            if (string.IsNullOrEmpty(selectedCreator)) return false;
+            if (GalleryConsolidateCreatorNamesEnabled)
+            {
+                foreach (string sel in _currentCreatorSet)
+                {
+                    if (string.Equals(sel, selectedCreator, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                return false;
+            }
+            return _currentCreatorSet.Contains(selectedCreator);
+        }
+
+        private void RemoveCreatorFromActiveFilter(string creator)
+        {
+            if (string.IsNullOrEmpty(creator)) return;
+            if (GalleryConsolidateCreatorNamesEnabled)
+            {
+                var remove = new List<string>();
+                foreach (string sel in _currentCreatorSet)
+                {
+                    if (string.Equals(sel, creator, StringComparison.OrdinalIgnoreCase))
+                        remove.Add(sel);
+                }
+                for (int i = 0; i < remove.Count; i++)
+                    _currentCreatorSet.Remove(remove[i]);
+            }
+            else
+                _currentCreatorSet.Remove(creator);
         }
 
         private string CanonicalizeCreatorFilterFromSet()
@@ -42,7 +91,9 @@ namespace VPB
             EnsureCurrentCreatorSet();
             if (_currentCreatorSet.Count == 0) return "";
             var list = _currentCreatorSet.ToList();
-            list.Sort(StringComparer.OrdinalIgnoreCase);
+            list.Sort(GalleryConsolidateCreatorNamesEnabled
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal);
             return string.Join("|", list.ToArray());
         }
 
@@ -58,7 +109,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(creator)) return;
             EnsureCurrentCreatorSet();
-            if (_currentCreatorSet.Contains(creator)) _currentCreatorSet.Remove(creator);
+            if (ActiveFilterContainsCreatorSelection(creator)) RemoveCreatorFromActiveFilter(creator);
             else
             {
                 _currentCreatorSet.Add(creator);
@@ -90,17 +141,18 @@ namespace VPB
 
         private bool CreatorFilterMatchesPackageCreator(string packageCreator)
         {
-            EnsureCurrentCreatorSet();
-            if (_currentCreatorSet.Count == 0) return true;
-            if (string.IsNullOrEmpty(packageCreator)) return false;
-            return _currentCreatorSet.Contains(packageCreator);
+            return CreatorNameMatchesActiveFilter(packageCreator);
         }
 
         private void OnCreatorFilterChanged(bool refreshFilesAndTabs)
         {
+            PushCreatorFilterSqlModeForDatabase();
             categoriesCached = false;
             pathsCached = false;
             tagsCached = false;
+            creatorsCached = false;
+            InvalidateDisplayCreatorsCache();
+            try { GalleryFileListSnapshotCache.Clear(); } catch { }
             try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             if (refreshFilesAndTabs) RefreshFilesAndTabs();
@@ -116,4 +168,3 @@ namespace VPB
         }
     }
 }
-

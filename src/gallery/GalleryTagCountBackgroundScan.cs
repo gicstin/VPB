@@ -471,6 +471,13 @@ namespace VPB
 
             if (!varScanFromSql)
             {
+            HashSet<string> creatorFilterSet = null;
+            if (!string.IsNullOrEmpty(input.CurrentCreator))
+            {
+                bool ci = VpbLocalDatabase.GalleryCreatorFilterCaseInsensitive;
+                creatorFilterSet = new HashSet<string>(ci ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                GalleryPanel.AddCreatorFilterPartsToSet(input.CurrentCreator, creatorFilterSet);
+            }
             int pkgIter = 0;
             foreach (var pkg in FileManager.PackagesByUid.Values)
             {
@@ -481,9 +488,9 @@ namespace VPB
                 }
 
                 if (pkg == null) continue;
-                if (!string.IsNullOrEmpty(input.CurrentCreator))
+                if (creatorFilterSet != null && creatorFilterSet.Count > 0)
                 {
-                    if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != input.CurrentCreator) continue;
+                    if (string.IsNullOrEmpty(pkg.Creator) || !creatorFilterSet.Contains(pkg.Creator)) continue;
                 }
 
                 List<string> names;

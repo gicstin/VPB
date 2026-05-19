@@ -1734,6 +1734,12 @@ namespace VPB
                 return;
             }
 
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                RefreshInternalSettingsListRows(keepScroll);
+                return;
+            }
+
             // Reset the retry guard on user-triggered refreshes so future loads can retry again.
             // When called from RetryRefreshAfterNoCacheDelay (isRetry=true) we intentionally keep
             // _cacheRetryPending=true so that the retry run does NOT spawn yet another retry.
@@ -1800,6 +1806,7 @@ namespace VPB
         {
             if (Gallery.IsSuppressed()) return;
             if (IsHubMode) return;
+            if (IsSettingsPanelOpen() || settingsListViewActive) return;
 
             // If we have never loaded, the scan just completed and we have a full PackagesByUid
             // for the first time – do a clean initial load now.
@@ -2047,7 +2054,8 @@ namespace VPB
                     }
                 }
                 sb.Append('\u001E');
-                sb.Append(currentCreator ?? "").Append('\u001E');
+                sb.Append(GalleryConsolidateCreatorNamesEnabled ? '1' : '0').Append('\u001E');
+                sb.Append(GetCreatorFilterForQueries()).Append('\u001E');
                 sb.Append(currentPackagePathFilter ?? "").Append('\u001E');
                 sb.Append(nameFilterLower ?? "").Append('\u001E');
                 sb.Append(VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName").Append('\u001E');
@@ -2692,6 +2700,8 @@ namespace VPB
             string[] skippedForNoCacheSample = new string[3];
             int skippedForNoCacheSampleCount = 0;
 
+            PushCreatorFilterSqlModeForDatabase();
+
             string fileListSnapKey;
             bool canFileListCache = TryBuildFileListSnapshotCacheKey(out fileListSnapKey);
             List<FileEntry> snapList = null;
@@ -2745,7 +2755,7 @@ namespace VPB
             {
                 InvalidateSharedSideMetaIfPackageScanAdvanced();
                 sideMetaCacheKey = BuildSharedSideMetaCacheKey(
-                    currentCreator, currentExtension, currentPath, currentPaths, categories, currentCategoryTitle);
+                    GetCreatorFilterForQueries(), currentExtension, currentPath, currentPaths, categories, currentCategoryTitle);
                 List<CreatorCacheEntry> sharedCreators;
                 Dictionary<string, int> sharedCounts;
                 if (TryGetSharedSideMeta(sideMetaCacheKey, out sharedCreators, out sharedCounts))
@@ -2759,7 +2769,8 @@ namespace VPB
 
             if (earlyMetaNeeded && !skipEarlyMetaThread)
             {
-                string _bCreator = currentCreator;
+                string _bCreator = GetCreatorFilterForQueries();
+                bool _bCreatorCaseInsensitive = GalleryConsolidateCreatorNamesEnabled;
                 string _bExtension = currentExtension;
                 List<string> _bPaths = currentPaths != null ? new List<string>(currentPaths) : null;
                 string _bPath = currentPath;
@@ -2853,9 +2864,19 @@ namespace VPB
                                 }
                                 if (FileManager.PackagesByUid != null)
                                 {
+                                    HashSet<string> earlyCreatorFilterSet = null;
+                                    if (!string.IsNullOrEmpty(_bCreator))
+                                    {
+                                        earlyCreatorFilterSet = new HashSet<string>(
+                                            _bCreatorCaseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                                        AddCreatorFilterPartsToSet(_bCreator, earlyCreatorFilterSet);
+                                    }
                                     foreach (var pkg in FileManager.PackagesByUid.Values)
                                     {
-                                        if (!string.IsNullOrEmpty(_bCreator) && (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != _bCreator)) continue;
+                                        if (earlyCreatorFilterSet != null && earlyCreatorFilterSet.Count > 0)
+                                        {
+                                            if (string.IsNullOrEmpty(pkg.Creator) || !earlyCreatorFilterSet.Contains(pkg.Creator)) continue;
+                                        }
                                         if (!string.IsNullOrEmpty(_bPackagePathFilter) &&
                                             !GalleryPathFilterMatchesRawPath(pkg.Path, _bPackagePathFilter))
                                             continue;
@@ -2917,8 +2938,16 @@ namespace VPB
                 bool canFileListSnapKeyMain = TryBuildFileListSnapshotCacheKey(out snapKeyProbeMain);
                 string titleForIndexMain = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : ((titleText != null ? titleText.text : "") ?? "");
                 string extForIndexMain = currentExtension ?? "";
-                string creatorForIndexMain = currentCreator ?? "";
+                string creatorForIndexMain = GetCreatorFilterForQueries();
+                bool creatorFilterCiSnap = GalleryConsolidateCreatorNamesEnabled;
                 string packagePathFilterForIndexMain = currentPackagePathFilter ?? "";
+                HashSet<string> creatorFilterSetForWorker = null;
+                if (!string.IsNullOrEmpty(creatorForIndexMain))
+                {
+                    creatorFilterSetForWorker = new HashSet<string>(
+                        creatorFilterCiSnap ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                    AddCreatorFilterPartsToSet(creatorForIndexMain, creatorFilterSetForWorker);
+                }
                 int wantsLoadedStateForIndexMain = -1;
                 try
                 {
@@ -2962,6 +2991,7 @@ namespace VPB
 
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
+                    VpbLocalDatabase.GalleryCreatorFilterCaseInsensitive = creatorFilterCiSnap;
                     var swWorker = System.Diagnostics.Stopwatch.StartNew();
                     bool useSqliteIndex = false;
                     try
@@ -3255,10 +3285,9 @@ namespace VPB
                                         {
                                             if (localLoadingGroupId != currentLoadingGroupId) return;
                                             if (pkg == null) continue;
-                                            string filterCreator = creatorForIndexMain;
-                                            if (!string.IsNullOrEmpty(filterCreator))
+                                            if (creatorFilterSetForWorker != null && creatorFilterSetForWorker.Count > 0)
                                             {
-                                                if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                                                if (string.IsNullOrEmpty(pkg.Creator) || !creatorFilterSetForWorker.Contains(pkg.Creator)) continue;
                                             }
                                             if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                                 !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
@@ -3283,10 +3312,9 @@ namespace VPB
                                 if (localLoadingGroupId != currentLoadingGroupId) return;
 
                                 // Use captured snapshot to avoid cross-thread stale reads
-                                string filterCreator = creatorForIndexMain;
-                                if (!string.IsNullOrEmpty(filterCreator))
+                                if (creatorFilterSetForWorker != null && creatorFilterSetForWorker.Count > 0)
                                 {
-                                    if (string.IsNullOrEmpty(pkg.Creator) || pkg.Creator != filterCreator) continue;
+                                    if (string.IsNullOrEmpty(pkg.Creator) || !creatorFilterSetForWorker.Contains(pkg.Creator)) continue;
                                 }
                                 if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                     !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
@@ -3778,6 +3806,13 @@ namespace VPB
                     GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
             }
             if (swDeep != null) deepAfterSortMs = swDeep.ElapsedMilliseconds;
+
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                RefreshInternalSettingsListRows(keepScroll);
+                refreshCoroutine = null;
+                yield break;
+            }
 
             // Cache the filtered list for selection operations (Select All, counts, etc)
             lastFilteredFiles.Clear();

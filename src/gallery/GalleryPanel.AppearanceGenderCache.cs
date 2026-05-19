@@ -47,7 +47,7 @@ namespace VPB
             if (!VpbLocalDatabase.TryReadTagCounts(
                     title,
                     extJ,
-                    currentCreator ?? "",
+                    GetCreatorFilterForQueries(),
                     new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                     tagCounts,
                     out sqlFacets,

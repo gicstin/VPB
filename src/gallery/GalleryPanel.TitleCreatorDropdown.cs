@@ -336,6 +336,7 @@ namespace VPB
             SortState st = GetSortState("Creator");
             float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
             return "v1|" + creatorSideTabDataRevision
+                + CreatorConsolidationSignatureFragment()
                 + "|" + (titleCreatorDropdownFilter ?? "")
                 + "|" + (nameFilterLower ?? "")
                 + "|" + (VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName")
@@ -349,7 +350,8 @@ namespace VPB
         private void RebuildTitleCreatorVirtView(bool force)
         {
             if (!creatorsCached) CacheCreators();
-            if (cachedCreators == null) return;
+            var displayCreators = GetCreatorsForDisplay();
+            if (displayCreators == null) return;
 
             string sig = ComputeTitleCreatorVirtViewSignature();
             if (!force && string.Equals(_titleCreatorVirtViewSig, sig, StringComparison.Ordinal) && _titleCreatorVirtView.Count > 0) return;
@@ -357,15 +359,15 @@ namespace VPB
             _titleCreatorVirtView.Clear();
 
             var sortState = GetSortState("Creator");
-            try { GallerySortManager.Instance.SortCreators(cachedCreators, sortState); } catch { }
+            try { GallerySortManager.Instance.SortCreators(displayCreators, sortState); } catch { }
 
             string filterNow = titleCreatorDropdownFilter ?? "";
             string filterLower = string.IsNullOrEmpty(filterNow) ? "" : filterNow.ToLowerInvariant();
             bool hasFilter = filterLower.Length > 0;
 
-            for (int i = 0; i < cachedCreators.Count; i++)
+            for (int i = 0; i < displayCreators.Count; i++)
             {
-                var c = cachedCreators[i];
+                var c = displayCreators[i];
                 if (string.IsNullOrEmpty(c.Name)) continue;
                 if (hasFilter && (c.Name == null || !c.Name.ToLowerInvariant().Contains(filterLower))) continue;
                 _titleCreatorVirtView.Add(c);

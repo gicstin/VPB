@@ -120,6 +120,7 @@ namespace VPB
             public bool GalleryScrollButtonsEnabled;
             public bool GalleryVrThumbstickScrollEnabled;
             public bool GalleryHideCreatorSideButtons;
+            public bool GalleryConsolidateCreatorNames;
             public bool PluginGalleryGridThumbnails;
             public bool GalleryListNamesLegacyFileName;
             public string GalleryHoverPreviewMode;
@@ -573,6 +574,26 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "helpers.consolidateCreatorNames", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.gallery_consolidate_creator_names", "Consolidate creator names"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_consolidate_creator_names", "Merge creator list entries that differ only by letter case. Shows the spelling with the most packages and sums counts. Filtering still matches all case variants."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryConsolidateCreatorNames,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryConsolidateCreatorNames = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    try { ClearCreatorFilters(); } catch { }
+                    try { GalleryFileListSnapshotCache.Clear(); } catch { }
+                    PushCreatorFilterSqlModeForDatabase();
+                    InvalidateDisplayCreatorsCache();
+                    unchecked { creatorSideTabDataRevision++; }
+                    try { RebuildTitleCreatorVirtView(force: true); UpdateTitleCreatorVirtualVisible(); } catch { }
+                    try { UpdateTabs(); } catch { }
+                    try { RefreshFilesAndTabs(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginThumbs", GroupKey = "lists", Label = VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"),
                 Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "Use sister-image thumbnails for plugin files in grid."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.PluginGalleryGridThumbnails,
@@ -777,6 +798,7 @@ namespace VPB
                         else VPBConfig.Instance.HiddenCategories.Add(capturedName);
                         categoriesCached = false;
                         UpdateTabs();
+                        if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
                     }
                 });
             }
@@ -962,6 +984,7 @@ namespace VPB
                 GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
                 GalleryVrThumbstickScrollEnabled = VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
+                GalleryConsolidateCreatorNames = VPBConfig.Instance.GalleryConsolidateCreatorNames,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
                 GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
@@ -1075,6 +1098,11 @@ namespace VPB
         private void RefreshInternalSettingsListRows(bool keepScroll = false)
         {
             if (!IsSettingsPanelOpen()) return;
+            if (refreshCoroutine != null)
+            {
+                try { StopCoroutine(refreshCoroutine); } catch { }
+                refreshCoroutine = null;
+            }
             try
             {
                 string c = CanonicalSettingsSideSearchText();
@@ -1696,6 +1724,7 @@ namespace VPB
             VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
             VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = b.GalleryVrThumbstickScrollEnabled;
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
+            VPBConfig.Instance.GalleryConsolidateCreatorNames = b.GalleryConsolidateCreatorNames;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryHoverPreviewMode = b.GalleryHoverPreviewMode;

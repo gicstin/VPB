@@ -474,7 +474,7 @@ namespace VPB
         // Example: "foo|bar". Empty = no filter.
         private string currentCreator = "";
         private string _currentCreatorSetSrc = null;
-        private readonly HashSet<string> _currentCreatorSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _currentCreatorSet = new HashSet<string>(StringComparer.Ordinal);
 
         // Title bar creator dropdown
         private GameObject titleCreatorBtn;

@@ -366,7 +366,7 @@ namespace VPB
             // Category side list should only "filter down" by creator selection.
             // If tags are active but no creator selected, keep counts global so categories don't disappear.
             var tagFilterForCategoryCounts = HasCreatorFilter() ? activeTags : null;
-            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, currentCreator, tagFilterForCategoryCounts, currentPackagePathFilter, null))
+            if (VpbLocalDatabase.TryReadCategoryMemberCounts(categoryCounts, GetCreatorFilterForQueries(), tagFilterForCategoryCounts, currentPackagePathFilter, null))
             {
                 // SQL path succeeded.
             }
@@ -503,7 +503,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(c.name) || string.IsNullOrEmpty(c.extension)) continue;
                     if (!string.Equals(c.extension, "varpkg", StringComparison.OrdinalIgnoreCase)) continue;
                     string pkgPathFilterForVarPkg = HasCreatorFilter() ? currentPackagePathFilter : "";
-                    if (VpbLocalDatabase.TryCountVarPackages(currentCreator, pkgPathFilterForVarPkg, applyPathOnlyWhenCreator: true, out int n))
+                    if (VpbLocalDatabase.TryCountVarPackages(GetCreatorFilterForQueries(), pkgPathFilterForVarPkg, applyPathOnlyWhenCreator: true, out int n))
                         categoryCounts[c.name] = n;
                 }
             }
@@ -639,6 +639,7 @@ namespace VPB
         private void CacheCreators()
         {
             if (FileManager.PackagesByUid == null) return;
+            PushCreatorFilterSqlModeForDatabase();
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
             // Package-only category: creators list must be package creators (not internal-file creators).
@@ -836,7 +837,7 @@ namespace VPB
                 currentPath,
                 activeTags,
                 currentCategoryTitle,
-                currentCreator,
+                GetCreatorFilterForQueries(),
                 null);
 
             // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
@@ -2159,11 +2160,12 @@ namespace VPB
             inputs = null;
             if (FileManager.PackagesByUid == null) return false;
 
+            PushCreatorFilterSqlModeForDatabase();
             inputs = new TagCountParallelInputs();
             inputs.Title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             inputs.CurrentPath = currentPath ?? "";
             inputs.CurrentPathsCopy = currentPaths != null ? new List<string>(currentPaths) : null;
-            inputs.CurrentCreator = currentCreator ?? "";
+            inputs.CurrentCreator = GetCreatorFilterForQueries();
             inputs.ActiveTagsCopy = activeTags != null && activeTags.Count > 0 ? new HashSet<string>(activeTags, StringComparer.OrdinalIgnoreCase) : null;
             inputs.ClothingSubfilterVal = clothingSubfilter;
             inputs.HairSubfilterVal = hairSubfilter;

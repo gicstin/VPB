@@ -123,7 +123,9 @@ namespace VPB
 
                 if (showTitle)
                 {
-                    if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
+                    if (IsSettingsPanelOpen())
+                        titleText.text = VPBTranslation.T("settings.title", "Settings");
+                    else if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
                     else titleText.text = currentCategoryTitle;
                 }
             }

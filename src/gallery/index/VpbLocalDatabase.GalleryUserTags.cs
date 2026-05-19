@@ -240,7 +240,11 @@ namespace VPB
                     sb.Append(" WHERE 1=1");
                     if (!allVarPseudo)
                         sb.Append(" AND gut.category=?");
-                    if (hasCreator) sb.Append(" AND p.creator=?");
+                    if (hasCreator)
+                    {
+                        var creatorList = SplitCreatorFilterList(creatorFilter);
+                        AppendCreatorFilterSql(sb, "p.creator", creatorList);
+                    }
                     if (pathFilterBind)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
                     sb.Append(" GROUP BY gt.name");
@@ -250,7 +254,11 @@ namespace VPB
                         int bind = 1;
                         if (!allVarPseudo)
                             stmt.BindText(bind++, categoryTitle);
-                        if (hasCreator) stmt.BindText(bind++, creatorFilter);
+                        if (hasCreator)
+                        {
+                            var creatorList = SplitCreatorFilterList(creatorFilter);
+                            BindCreatorFilterSql(stmt, ref bind, creatorList);
+                        }
                         if (pathFilterBind)
                             stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
 

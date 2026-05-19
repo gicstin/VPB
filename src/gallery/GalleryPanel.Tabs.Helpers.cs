@@ -210,6 +210,12 @@ namespace VPB
 
         private void RefreshFilesAndTabs()
         {
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                RefreshInternalSettingsListRows(true);
+                UpdateTabs();
+                return;
+            }
             ReconcileAutoGenderForCurrentTarget();
             RefreshFiles();
             UpdateTabs();

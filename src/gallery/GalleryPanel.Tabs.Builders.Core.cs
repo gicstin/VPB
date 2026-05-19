@@ -72,7 +72,8 @@ namespace VPB
         private void BuildCreatorTabs(GameObject container, bool isLeft)
         {
             if (!creatorsCached) CacheCreators();
-            if (cachedCreators == null || cachedCreators.Count == 0)
+            var displayCreators = GetCreatorsForDisplay();
+            if (displayCreators == null || displayCreators.Count == 0)
             {
                 _creatorVirtView.Clear();
                 _creatorVirtViewSig = null;
@@ -82,7 +83,7 @@ namespace VPB
 
             // Sort once (in-place) then virtualize visible rows only.
             var sortState = GetSortState("Creator");
-            GallerySortManager.Instance.SortCreators(cachedCreators, sortState);
+            GallerySortManager.Instance.SortCreators(displayCreators, sortState);
 
             string sig = ComputeCreatorVirtViewSignature();
             if (!string.Equals(_creatorVirtViewSig, sig, StringComparison.Ordinal))
@@ -111,9 +112,9 @@ namespace VPB
                     }
                 }
 
-                for (int i = 0; i < cachedCreators.Count; i++)
+                for (int i = 0; i < displayCreators.Count; i++)
                 {
-                    var c = cachedCreators[i];
+                    var c = displayCreators[i];
                     if (string.IsNullOrEmpty(c.Name)) continue;
                     if (!string.IsNullOrEmpty(filterNow) && c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
                     if (creatorsInResults != null && !creatorsInResults.Contains(c.Name)) continue;

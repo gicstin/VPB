@@ -16,6 +16,9 @@ namespace VPB
     /// </summary>
     internal static partial class VpbLocalDatabase
     {
+        /// <summary>Set on main thread by <see cref="GalleryPanel"/> before creator-filtered DB queries for the active browse.</summary>
+        internal static bool GalleryCreatorFilterCaseInsensitive;
+
         private static List<string> SplitCreatorFilterList(string creatorFilter)
         {
             var list = new List<string>();
@@ -34,6 +37,18 @@ namespace VPB
         private static void AppendCreatorFilterSql(StringBuilder sb, string columnSql, List<string> creators)
         {
             if (sb == null || creators == null || creators.Count == 0) return;
+            bool nocase = GalleryCreatorFilterCaseInsensitive;
+            if (nocase)
+            {
+                sb.Append(" AND (");
+                for (int i = 0; i < creators.Count; i++)
+                {
+                    if (i > 0) sb.Append(" OR ");
+                    sb.Append("lower(").Append(columnSql).Append(") = lower(?)");
+                }
+                sb.Append(')');
+                return;
+            }
             if (creators.Count == 1)
             {
                 sb.Append(" AND ").Append(columnSql).Append(" = ?");
@@ -3057,6 +3072,7 @@ namespace VPB
                         normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
                         hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
                     }
+                    bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
                     var sb = new StringBuilder();
                     string countExpr = hasCat ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
                     sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
@@ -3065,6 +3081,42 @@ namespace VPB
                     if (hasCat) sb.Append(" AND m.category = ?");
                     if (hasPackagePathFilter)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
+
+                    if (extSet.Count > 0)
+                    {
+                        sb.Append(" AND (");
+                        int ei = 0;
+                        foreach (var ext in extSet)
+                        {
+                            if (ei++ > 0) sb.Append(" OR ");
+                            sb.Append("lower(m.internal_path) LIKE ? ESCAPE '\\'");
+                        }
+                        sb.Append(")");
+                    }
+
+                    if (hasPathPrefix)
+                    {
+                        sb.Append(" AND (");
+                        bool firstPath = true;
+                        if (pathPrefixes != null && pathPrefixes.Count > 0)
+                        {
+                            for (int pi = 0; pi < pathPrefixes.Count; pi++)
+                            {
+                                if (string.IsNullOrEmpty(pathPrefixes[pi])) continue;
+                                if (!firstPath) sb.Append(" OR ");
+                                sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                                firstPath = false;
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(singlePathPrefix))
+                        {
+                            if (!firstPath) sb.Append(" OR ");
+                            sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                            firstPath = false;
+                        }
+                        if (firstPath) sb.Append("1");
+                        sb.Append(")");
+                    }
                     
                     List<string> tagsList = null;
                     if (hasTags)
@@ -3086,6 +3138,28 @@ namespace VPB
                         if (hasCat) stmt.BindText(bind++, categoryTitle);
                         if (hasPackagePathFilter)
                             stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
+
+                        if (extSet.Count > 0)
+                        {
+                            foreach (var ext in extSet)
+                                stmt.BindText(bind++, "%." + EscapeLike(ext));
+                        }
+
+                        if (hasPathPrefix)
+                        {
+                            if (pathPrefixes != null && pathPrefixes.Count > 0)
+                            {
+                                for (int pi = 0; pi < pathPrefixes.Count; pi++)
+                                {
+                                    string pref = pathPrefixes[pi];
+                                    if (string.IsNullOrEmpty(pref)) continue;
+                                    stmt.BindText(bind++, EscapeLike(pref.Replace('\\', '/')) + "%");
+                                }
+                            }
+                            if (!string.IsNullOrEmpty(singlePathPrefix))
+                                stmt.BindText(bind++, EscapeLike(singlePathPrefix.Replace('\\', '/')) + "%");
+                        }
+
                         if (hasTags)
                         {
                             foreach (var tag in tagsList)

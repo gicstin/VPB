@@ -410,6 +410,8 @@ namespace VPB
         public bool GalleryVrThumbstickScrollEnabled = true;
         /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
         public bool GalleryHideCreatorSideButtons = false;
+        /// <summary>When true, creator side/title lists merge names that differ only by case; label uses the variant with the most packages and counts are summed.</summary>
+        public bool GalleryConsolidateCreatorNames = true;
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
         public bool BaMigrationPromptDismissed = false;
 
@@ -649,6 +651,7 @@ namespace VPB
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
             GalleryHideCreatorSideButtons = false;
+            GalleryConsolidateCreatorNames = true;
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
@@ -790,6 +793,8 @@ namespace VPB
                             GalleryVrThumbstickScrollEnabled = node["GalleryVrThumbstickScrollEnabled"].AsBool;
                         if (node["GalleryHideCreatorSideButtons"] != null)
                             GalleryHideCreatorSideButtons = node["GalleryHideCreatorSideButtons"].AsBool;
+                        if (node["GalleryConsolidateCreatorNames"] != null)
+                            GalleryConsolidateCreatorNames = node["GalleryConsolidateCreatorNames"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
                         if (node["DesktopFixedAutoCollapse"] != null) DesktopFixedAutoCollapse = node["DesktopFixedAutoCollapse"].AsBool;
                         if (node["DesktopFixedAutoHideSeconds"] != null) DesktopFixedAutoHideSeconds = node["DesktopFixedAutoHideSeconds"].AsFloat;
@@ -1067,6 +1072,7 @@ namespace VPB
                 node["GalleryScrollButtonsEnabled"].AsBool = GalleryScrollButtonsEnabled;
                 node["GalleryVrThumbstickScrollEnabled"].AsBool = GalleryVrThumbstickScrollEnabled;
                 node["GalleryHideCreatorSideButtons"].AsBool = GalleryHideCreatorSideButtons;
+                node["GalleryConsolidateCreatorNames"].AsBool = GalleryConsolidateCreatorNames;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
                 node["DesktopFixedAutoHideSeconds"].AsFloat = Mathf.Clamp(DesktopFixedAutoHideSeconds, 0.1f, 10f);

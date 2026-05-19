@@ -923,7 +923,7 @@ namespace VPB
         {
             SortState st = GetSortState("Creator");
             float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
-            return creatorSideTabDataRevision + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
+            return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
         }
 
 
@@ -2417,10 +2417,6 @@ namespace VPB
 
                 ConfigureInternalSettingsRowUI(btnGO, file);
 
-                InternalSettingRowEntry iseRow = file as InternalSettingRowEntry;
-                InternalSettingDefinition iseDef = iseRow != null ? GetInternalSettingDefinition(iseRow.RowKey) : null;
-                bool textAreaSettingsRow = iseDef != null && iseDef.ControlType == InternalSettingControlType.TextArea;
-                if (textAreaSettingsRow)
                 {
                     Button rootBt = btnGO.GetComponent<Button>();
                     if (rootBt != null)
@@ -2429,8 +2425,8 @@ namespace VPB
                         rootBt.interactable = false;
                     }
                     if (img != null) img.raycastTarget = false;
-                    var leftUpTa = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-                    if (leftUpTa != null) leftUpTa.enabled = false;
+                    var leftUpSettings = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                    if (leftUpSettings != null) leftUpSettings.enabled = false;
                 }
 
                 void HideChild(string p)

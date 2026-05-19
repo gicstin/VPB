@@ -110,6 +110,7 @@ namespace VPB
             AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
             AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
             AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
+            AddGroupRow("helpers", VPBTranslation.T("settings.group.side_tabs", "Helpers"));
             AddGroupRow("categories", VPBTranslation.T("settings.header.category_visibility", "Category Visibility"));
             AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
             AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
