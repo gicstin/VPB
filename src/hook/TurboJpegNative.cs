@@ -257,8 +257,12 @@ namespace VPB
                 }
 
                 int effDenom = EffectiveScaleDenom(scaleDenom, w, h);
-                int outW = effDenom <= 1 ? w : Math.Max(1, w / effDenom);
-                int outH = effDenom <= 1 ? h : Math.Max(1, h / effDenom);
+                // libjpeg-turbo TJSCALED(dim, 1/N) = ceil(dim / N). Floor division under-allocates
+                // by one pixel when dim isn't a multiple of N: tjDecompress2 silently widens output
+                // to its natural scaled width and writes past the row stride we passed, producing
+                // diagonal drift visible as a noise stripe on the right (BOTTOMUP → also on top).
+                int outW = effDenom <= 1 ? w : Math.Max(1, (w + effDenom - 1) / effDenom);
+                int outH = effDenom <= 1 ? h : Math.Max(1, (h + effDenom - 1) / effDenom);
                 int flags = TJFLAG_BOTTOMUP | TJFLAG_FASTUPSAMPLE | TJFLAG_FASTDCT;
 
                 for (int attempt = 0; attempt < 2; attempt++)
