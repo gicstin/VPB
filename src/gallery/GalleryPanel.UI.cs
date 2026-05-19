@@ -736,6 +736,13 @@ namespace VPB
 
         private string GetDefaultPresetSaveName(Atom target, string storableId, string rootFolder)
         {
+            string personName = TryGetPersonAtomPresetBaseName(target);
+            if (string.Equals(storableId, "AppearancePresets", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(personName))
+            {
+                return personName;
+            }
+
             try
             {
                 JSONStorable storable = target != null ? target.GetStorableByID(storableId) : null;
@@ -747,7 +754,8 @@ namespace VPB
                     {
                         try
                         {
-                            string currentPresetName = MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetName.val);
+                            string currentPresetName = NormalizePresetSaveBaseName(
+                                MVR.FileManagementSecure.FileManagerSecure.GetFileName(presetName.val));
                             if (!string.IsNullOrEmpty(currentPresetName))
                             {
                                 return currentPresetName;
@@ -759,7 +767,41 @@ namespace VPB
             }
             catch { }
 
+            if (!string.IsNullOrEmpty(personName))
+                return personName;
+
             return "preset_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        }
+
+        private static string TryGetPersonAtomPresetBaseName(Atom target)
+        {
+            if (target == null) return null;
+            try
+            {
+                if (!string.Equals(target.type, "Person", StringComparison.Ordinal))
+                    return null;
+            }
+            catch { return null; }
+
+            string name = null;
+            try { name = target.name; } catch { name = null; }
+            if (string.IsNullOrEmpty(name))
+            {
+                try { name = target.uid; } catch { name = null; }
+            }
+            return NormalizePresetSaveBaseName(name);
+        }
+
+        private static string NormalizePresetSaveBaseName(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return null;
+            string name = raw.Trim();
+            if (name.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(0, name.Length - 4);
+            if (name.StartsWith("Preset_", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring("Preset_".Length);
+            name = TextureUtil.SanitizeFileName(name);
+            return string.IsNullOrEmpty(name) ? null : name;
         }
 
         private void SavePresetFileSelected(Atom target, string storableId, string rootFolder, string fileNamePath, bool useScreenshot)
