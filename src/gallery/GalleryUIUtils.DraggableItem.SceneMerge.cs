@@ -399,50 +399,90 @@ namespace VPB
             }
         }
 
+        private Atom TryGetSelectedSubSceneTarget()
+        {
+            if (Panel == null) return null;
+            try
+            {
+                if (!Panel.IsSubSceneTargetMode()) return null;
+                Atom a = Panel.SelectedTargetAtom;
+                if (SceneUtils.IsSubSceneAtom(a)) return a;
+            }
+            catch { }
+            return null;
+        }
+
+        private static void InvokeLoadSubSceneWithPath(Atom subSceneAtom, string path)
+        {
+            if (subSceneAtom == null) return;
+            SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
+            if (subScene == null)
+            {
+                LogUtil.LogError("[VPB] SubScene component not found on atom " + subSceneAtom.uid);
+                return;
+            }
+
+            LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
+            MethodInfo loadMethod = typeof(SubScene).GetMethod(
+                "LoadSubSceneWithPath",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (loadMethod != null)
+                loadMethod.Invoke(subScene, new object[] { path });
+            else
+                LogUtil.LogError("[VPB] Method LoadSubSceneWithPath not found on SubScene component");
+        }
+
+        private static void RemoveAllSubSceneAtoms()
+        {
+            if (SuperController.singleton == null) return;
+            List<Atom> toRemove = new List<Atom>();
+            foreach (var a in SuperController.singleton.GetAtoms())
+            {
+                if (a != null && SceneUtils.IsSubSceneAtom(a))
+                    toRemove.Add(a);
+            }
+            if (toRemove.Count <= 0) return;
+            LogUtil.Log($"[VPB] Replace mode: Removing {toRemove.Count} existing SubScenes");
+            foreach (var a in toRemove)
+            {
+                try { SuperController.singleton.RemoveAtom(a); } catch { }
+            }
+        }
+
         private System.Collections.IEnumerator LoadSubSceneCoroutine(string path)
         {
-            // Track existing atoms to find the new one
-            HashSet<string> existingAtoms = new HashSet<string>();
-            foreach (var a in SuperController.singleton.GetAtoms()) existingAtoms.Add(a.uid);
+            Atom subSceneAtom = TryGetSelectedSubSceneTarget();
 
-            yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
-            yield return new WaitForEndOfFrame();
-            
-            // Find the newly created SubScene atom
-            Atom subSceneAtom = null;
-            foreach (var atom in SuperController.singleton.GetAtoms())
+            if (subSceneAtom == null)
             {
-                if (atom.type == "SubScene" && !existingAtoms.Contains(atom.uid))
+                if (Panel != null && Panel.DragDropReplaceMode)
+                    RemoveAllSubSceneAtoms();
+
+                HashSet<string> existingAtoms = new HashSet<string>();
+                foreach (var a in SuperController.singleton.GetAtoms()) existingAtoms.Add(a.uid);
+
+                yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
+                yield return new WaitForEndOfFrame();
+
+                foreach (var atom in SuperController.singleton.GetAtoms())
                 {
-                    subSceneAtom = atom;
-                    break;
+                    if (SceneUtils.IsSubSceneAtom(atom) && !existingAtoms.Contains(atom.uid))
+                    {
+                        subSceneAtom = atom;
+                        break;
+                    }
                 }
+
+                if (subSceneAtom == null)
+                    LogUtil.LogError("[VPB] Could not find newly created SubScene atom");
             }
-            
+
             if (subSceneAtom != null)
+                InvokeLoadSubSceneWithPath(subSceneAtom, path);
+
+            if (Panel != null)
             {
-                SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
-                if (subScene != null)
-                {
-                    LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
-                    MethodInfo loadMethod = typeof(SubScene).GetMethod("LoadSubSceneWithPath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadMethod != null)
-                    {
-                        loadMethod.Invoke(subScene, new object[] { path });
-                    }
-                    else
-                    {
-                        LogUtil.LogError("[VPB] Method LoadSubSceneWithPath not found on SubScene component");
-                    }
-                }
-                else
-                {
-                    LogUtil.LogError("[VPB] SubScene component not found on newly created atom");
-                }
-            }
-            else
-            {
-                LogUtil.LogError("[VPB] Could not find newly created SubScene atom");
+                try { Panel.RefreshTargetDropdown(); } catch { }
             }
 
             if (VPBConfig.Instance != null)

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace VPB
@@ -18,6 +19,18 @@ namespace VPB
         {
             if (atom == null) return false;
             try { return IsPersonLikeAtomType(atom.type); }
+            catch { return false; }
+        }
+
+        public static bool IsSubSceneAtomType(string type)
+        {
+            return string.Equals(type, "SubScene", StringComparison.Ordinal);
+        }
+
+        public static bool IsSubSceneAtom(Atom atom)
+        {
+            if (atom == null) return false;
+            try { return IsSubSceneAtomType(atom.type); }
             catch { return false; }
         }
 

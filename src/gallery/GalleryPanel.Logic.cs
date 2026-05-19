@@ -351,6 +351,12 @@ namespace VPB
             }
         }
 
+        public bool IsSubSceneTargetMode()
+        {
+            string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            return !string.IsNullOrEmpty(title) && title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         private void CacheCategoryCounts()
         {
             if (categories == null) return;
@@ -2792,6 +2798,7 @@ namespace VPB
             personAtoms.Clear();
             targetDropdownOptions.Clear();
 
+            bool subSceneMode = IsSubSceneTargetMode();
             if (SuperController.singleton != null)
             {
                 List<Atom> allAtoms = null;
@@ -2803,7 +2810,8 @@ namespace VPB
                         if (a == null) continue;
                         try
                         {
-                            if (SceneUtils.IsPersonLikeAtom(a))
+                            bool include = subSceneMode ? SceneUtils.IsSubSceneAtom(a) : SceneUtils.IsPersonLikeAtom(a);
+                            if (include)
                             {
                                 string uid = a.uid;
                                 if (uid != null)
@@ -2918,10 +2926,7 @@ namespace VPB
                         Atom a = (personAtoms != null && i >= 0 && i < personAtoms.Count) ? personAtoms[i] : null;
                         string uid = (targetDropdownOptions != null && i >= 0 && i < targetDropdownOptions.Count) ? targetDropdownOptions[i] : null;
                         if (a != null)
-                        {
-                            // GetPersonAtomDisplayLabel lives in SelectionContextMenu partial; safe to call.
-                            label = GetPersonAtomDisplayLabel(a, uid ?? "Unknown");
-                        }
+                            label = GetTargetAtomDisplayLabel(a, uid ?? "Unknown");
                     }
                     catch { }
                     tboxTargetDropdownBtnText.text = label + "  ▲";

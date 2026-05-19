@@ -352,27 +352,9 @@ namespace VPB
                 // Handle subscenes differently - load directly without requiring atom
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
-                    if (Panel != null && Panel.DragDropReplaceMode)
-                    {
-                        List<Atom> toRemove = new List<Atom>();
-                        foreach (var a in SuperController.singleton.GetAtoms())
-                        {
-                            if (a.type == "SubScene")
-                            {
-                                toRemove.Add(a);
-                            }
-                        }
-                        
-                        if (toRemove.Count > 0)
-                        {
-                            LogUtil.Log($"[VPB] Replace mode: Removing {toRemove.Count} existing SubScenes");
-                            foreach (var a in toRemove)
-                            {
-                                SuperController.singleton.RemoveAtom(a);
-                            }
-                        }
-                    }
-                    
+                    if (Panel != null && Panel.DragDropReplaceMode && TryGetSelectedSubSceneTarget() == null)
+                        RemoveAllSubSceneAtoms();
+
                     LoadSubScene(FileEntry.Uid);
                 }
                 else if (itemType == ItemType.Scene && FileEntry != null)
@@ -695,28 +677,6 @@ namespace VPB
             string normalizedPath = UI.NormalizePath(path);
 
             LogUtil.Log($"[VPB] LoadSubScene: {normalizedPath}");
-            
-            // Handle Replace mode for clicks too
-            if (Panel != null && Panel.DragDropReplaceMode)
-            {
-                List<Atom> toRemove = new List<Atom>();
-                foreach (var a in SuperController.singleton.GetAtoms())
-                {
-                    if (a.type == "SubScene")
-                    {
-                        toRemove.Add(a);
-                    }
-                }
-                
-                if (toRemove.Count > 0)
-                {
-                    LogUtil.Log($"[VPB] Replace mode (click): Removing {toRemove.Count} existing SubScenes");
-                    foreach (var a in toRemove)
-                    {
-                        SuperController.singleton.RemoveAtom(a);
-                    }
-                }
-            }
 
             try
             {

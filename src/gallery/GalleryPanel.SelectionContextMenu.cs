@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -1598,6 +1599,40 @@ namespace VPB
             catch { }
         }
 
+        private string GetTargetAtomDisplayLabel(Atom atom, string uid)
+        {
+            if (IsSubSceneTargetMode()) return GetSubSceneAtomDisplayLabel(atom, uid);
+            return GetPersonAtomDisplayLabel(atom, uid);
+        }
+
+        private string GetSubSceneAtomDisplayLabel(Atom atom, string uid)
+        {
+            if (atom == null) return uid ?? "Unknown";
+            try
+            {
+                SubScene subScene = atom.GetComponentInChildren<SubScene>();
+                if (subScene != null)
+                {
+                    MethodInfo getStorePathMethod = typeof(SubScene).GetMethod(
+                        "GetStorePath",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (getStorePathMethod != null)
+                    {
+                        object ret = getStorePathMethod.Invoke(subScene, new object[] { true });
+                        string path = ret as string;
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            string name = MVR.FileManagementSecure.FileManagerSecure.GetFileName(path);
+                            if (!string.IsNullOrEmpty(name))
+                                return $"{name} ({uid})";
+                        }
+                    }
+                }
+            }
+            catch { }
+            return uid ?? "Unknown";
+        }
+
         private string GetPersonAtomDisplayLabel(Atom atom, string uid)
         {
             string gender = "";
@@ -1679,14 +1714,16 @@ namespace VPB
             try { if (VPBConfig.Instance != null) sScale = VPBConfig.Instance.InnerPaneScale; } catch { sScale = 1f; }
             int dropdownFont = Mathf.RoundToInt(Mathf.Max(18f, 18f * sScale));
 
-            string activeLabel = "Target";
+            string activeLabel = IsSubSceneTargetMode()
+                ? VPBTranslation.T("gallery.tbox.subscene_target", "SubScene")
+                : "Target";
             try
             {
                 int i = targetDropdownValue;
                 Atom a = (i >= 0 && i < personAtoms.Count) ? personAtoms[i] : null;
                 string uid = (targetDropdownOptions.Count > i) ? targetDropdownOptions[i] : null;
                 if (a != null)
-                    activeLabel = GetPersonAtomDisplayLabel(a, uid ?? "Unknown");
+                    activeLabel = GetTargetAtomDisplayLabel(a, uid ?? "Unknown");
             }
             catch { }
 
@@ -1700,7 +1737,9 @@ namespace VPB
             le.preferredHeight = innerRowH; le.flexibleHeight = 1f;
             tboxTargetDropdownBtnText = btn.GetComponentInChildren<Text>(true);
             if (tboxTargetDropdownBtnText != null) tboxTargetDropdownBtnText.gameObject.SetActive(true);
-            AddTooltipPlain(btn, VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets"));
+            AddTooltipPlain(btn, IsSubSceneTargetMode()
+                ? VPBTranslation.T("gallery.tbox.subscene_target_select", "Select active SubScene target. Right click: cycle targets")
+                : VPBTranslation.T("gallery.tbox.target_select", "Select active person target. Right click: cycle targets"));
             try { AddRightClickDelegate(btn, () => CycleTarget(true)); } catch { }
 
             try
@@ -1793,7 +1832,7 @@ namespace VPB
 
                 string uid = null;
                 try { uid = (targetDropdownOptions.Count > i) ? targetDropdownOptions[i] : null; } catch { uid = null; }
-                string label = GetPersonAtomDisplayLabel(atom, uid ?? "Unknown");
+                string label = GetTargetAtomDisplayLabel(atom, uid ?? "Unknown");
                 bool isCurrent = (i == targetDropdownValue);
                 int captured = i;
 
@@ -1854,23 +1893,26 @@ namespace VPB
                 }
 
                 float iconSz = Mathf.Min(rowH - 6f, 40f * sScale);
-                if (saveSpr != null)
+                if (!IsSubSceneTargetMode())
                 {
-                    Atom capturedAtom = atom;
-                    var saveBtn = UI.CreateSideTabSquareIconButton(
-                        rowGO, iconSz, saveSpr,
-                        () => SavePresetFromStorable(capturedAtom, "AppearancePresets"),
-                        saveBackdrop, Mathf.Max(3f, 4f * sScale));
-                    AddTooltipPlain(saveBtn, VPBTranslation.T("gallery.tbox.save_appearance", "Save appearance preset for this person"));
-                }
-                if (renameSpr != null)
-                {
-                    Atom capturedAtom = atom;
-                    var renameBtn = UI.CreateSideTabSquareIconButton(
-                        rowGO, iconSz, renameSpr,
-                        () => ShowPersonAtomRenameOverlay(capturedAtom),
-                        renameBackdrop, Mathf.Max(3f, 4f * sScale));
-                    AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
+                    if (saveSpr != null)
+                    {
+                        Atom capturedAtom = atom;
+                        var saveBtn = UI.CreateSideTabSquareIconButton(
+                            rowGO, iconSz, saveSpr,
+                            () => SavePresetFromStorable(capturedAtom, "AppearancePresets"),
+                            saveBackdrop, Mathf.Max(3f, 4f * sScale));
+                        AddTooltipPlain(saveBtn, VPBTranslation.T("gallery.tbox.save_appearance", "Save appearance preset for this person"));
+                    }
+                    if (renameSpr != null)
+                    {
+                        Atom capturedAtom = atom;
+                        var renameBtn = UI.CreateSideTabSquareIconButton(
+                            rowGO, iconSz, renameSpr,
+                            () => ShowPersonAtomRenameOverlay(capturedAtom),
+                            renameBackdrop, Mathf.Max(3f, 4f * sScale));
+                        AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.rename.tooltip", "Rename this person"));
+                    }
                 }
             }
         }
