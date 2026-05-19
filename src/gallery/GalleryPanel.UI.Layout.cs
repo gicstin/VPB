@@ -88,6 +88,9 @@ namespace VPB
         /// <param name="allowSynchronousUserTagsSideTabCache">When false, skips synchronous user-tag side tab scan.</param>
         public void UpdateLayout(bool allowSynchronousCreatorCategoryCaches, bool allowSynchronousUserTagsSideTabCache)
         {
+            EnsureUserTagAvailScrollTrackingHooks();
+            SnapshotUserTagAvailScrollForPreserveBoth();
+
             float paneScale = VPBConfig.Instance.CurrentInnerPaneScale;
             if (backgroundBoxGO != null)
             {
@@ -279,6 +282,8 @@ namespace VPB
                     ApplyUserTagsStickyScrollChrome(tabTopOffset);
             }
             catch { }
+
+            RestorePreservedUserTagAvailScroll();
         }
 
         /// <summary>Places side-pane sort/refresh/search row so top edge matches <see cref="contentScrollRT"/> top (not title bar).</summary>

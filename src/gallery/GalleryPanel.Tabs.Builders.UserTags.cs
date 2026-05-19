@@ -14,6 +14,8 @@ namespace VPB
 
         private void renderTagsPanel(GameObject container, List<GameObject> trackedButtons, bool isLeft)
         {
+            EnsureUserTagAvailScrollTrackingHooks();
+            SnapshotUserTagAvailScrollForPreserve(isLeft);
             EnsureUserTagSideTabBulkBlock(container.transform, isLeft);
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
@@ -34,7 +36,7 @@ namespace VPB
             if (dataSigChanged)
             {
                 _userTagVirtViewSig = sigNew;
-                RebuildUserTagVirtViewList();
+                RebuildUserTagVirtViewList(isLeft, resetScrollToTop: false);
             }
 
             if (activeUserTags.Count > 0)
@@ -46,8 +48,8 @@ namespace VPB
                     {
                         activeUserTags.Clear();
                         userTagsCached = false;
-                        if (_userTagAvailFilterMode) { try { RefreshFiles(true); } catch { } }
-                        try { UpdateTabs(); } catch { }
+                        if (_userTagAvailFilterMode) { try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { } }
+                        try { RefreshUserTagsAvailPaneInPlace(isLeft); } catch { }
                     }, trackedButtons);
             }
 
@@ -55,10 +57,11 @@ namespace VPB
             EnsureUserTagVirtScrollHook(isLeft, utVirtHolder);
             SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
-            RequestUserTagVirtLayoutRefresh(isLeft, container.transform);
+            RequestUserTagVirtLayoutRefresh(isLeft, container.transform, preserveScroll: true);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            RestorePreservedUserTagAvailScroll();
         }
 
         private void BuildUserTagsAppliedTabs(GameObject container, List<GameObject> trackedButtons, bool isLeft)
@@ -142,7 +145,7 @@ namespace VPB
                     () => { OnAppliedUserTagRowClicked(viCapture, visibleApplied, tagFocusSnap); },
                     trackedButtons, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInsetApp, 0f);
                 if (trackedButtons != null && trackedButtons.Count > trackedBefore)
-                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp);
+                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp, isLeft);
             }
 
             SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);

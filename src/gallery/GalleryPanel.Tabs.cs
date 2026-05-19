@@ -475,8 +475,12 @@ namespace VPB
                 + "|" + _userTagPinRevision;
         }
 
-        private void RebuildUserTagVirtViewList()
+        private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
         {
+            float offsetPx = 0f;
+            if (!resetScrollToTop)
+                offsetPx = TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f;
+
             _userTagStickyRows.Clear();
             _userTagVirtView.Clear();
             var sortUt = GetSortState("UserTags");
@@ -536,12 +540,17 @@ namespace VPB
             for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagStickyRows.Add(pinnedUt[pi]);
             for (int ni = 0; ni < normalUt.Count; ni++) _userTagVirtView.Add(normalUt[ni]);
 
-            try
+            if (resetScrollToTop)
             {
-                ScrollRect sr = _leftUserTagVirtScroll ?? _rightUserTagVirtScroll;
-                if (sr != null) sr.verticalNormalizedPosition = 1f;
+                try
+                {
+                    ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
+                    if (sr != null) sr.verticalNormalizedPosition = 1f;
+                }
+                catch { }
             }
-            catch { }
+            else
+                RequestRestoreUserTagAvailScrollPx(isLeft, offsetPx);
         }
 
         private GameObject EnsureUserTagPickVirtualHolder(Transform parent)
@@ -705,7 +714,7 @@ namespace VPB
             }
         }
 
-        private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip)
+        private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)
         {
             if (btnGO == null) return;
             const int CreateRowCountSentinel = int.MinValue;
@@ -736,6 +745,7 @@ namespace VPB
             if (btnComp != null)
             {
                 btnComp.onClick.RemoveAllListeners();
+                bool sideLeft = isLeft;
                 btnComp.onClick.AddListener(() =>
                 {
                     try
@@ -745,21 +755,21 @@ namespace VPB
                             if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(tagSnap, out string norm) && !string.IsNullOrEmpty(norm))
                             {
                                 userTagsCached = false;
+                                _userTagVirtViewSig = null;
                             }
+                        }
+                        else if (_userTagAvailFilterMode)
+                        {
+                            if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
+                            else activeUserTags.Add(tagSnap);
+                            RefreshFiles(true, false, false, "user_tag_filter_toggle");
                         }
                         else
                         {
-                            if (_userTagAvailFilterMode)
-                            {
-                                if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
-                                else activeUserTags.Add(tagSnap);
-                                RefreshFiles(true, false, false, null);
-                            }
-                            else
-                                toggleTagForSelectedItems(tagSnap);
+                            toggleTagForSelectedItems(tagSnap);
                         }
 
-                        UpdateTabs();
+                        RefreshUserTagsAvailPaneInPlace(sideLeft);
                     }
                     catch { }
                 });
@@ -801,7 +811,7 @@ namespace VPB
                 txt.text = shownUt;
             }
             SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
-            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s);
+            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s, isLeft);
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
@@ -888,7 +898,7 @@ namespace VPB
                 if (idx >= 0 && idx < total)
                 {
                     btnGO.SetActive(true);
-                    BindUserTagVirtButton(btnGO, _userTagVirtView[idx], utAccent, pickTip);
+                    BindUserTagVirtButton(btnGO, _userTagVirtView[idx], utAccent, pickTip, isLeft);
                     RectTransform rt = btnGO.GetComponent<RectTransform>();
                     if (rt != null)
                     {

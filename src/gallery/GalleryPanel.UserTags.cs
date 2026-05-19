@@ -1022,7 +1022,7 @@ namespace VPB
                 le.minHeight = rowH;
                 le.preferredHeight = rowH;
                 le.flexibleWidth = 1f;
-                BindUserTagVirtButton(btnGO, ut, utAccent, pickTip);
+                BindUserTagVirtButton(btnGO, ut, utAccent, pickTip, isLeft);
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
@@ -1059,7 +1059,7 @@ namespace VPB
                     null, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInset, 0f);
                 Transform last = strip.transform.GetChild(strip.transform.childCount - 1);
                 if (last != null)
-                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale);
+                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale, isLeft);
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
@@ -1084,7 +1084,7 @@ namespace VPB
             return viewportH;
         }
 
-        private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer)
+        private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool preserveScroll)
         {
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
             if (_userTagVirtLayoutCo != null)
@@ -1092,18 +1092,26 @@ namespace VPB
                 try { StopCoroutine(_userTagVirtLayoutCo); } catch { }
                 _userTagVirtLayoutCo = null;
             }
-            _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer));
+            float offsetPx = preserveScroll ? (TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f) : 0f;
+            bool resetTop = !preserveScroll;
+            _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer, resetTop, offsetPx));
         }
 
-        private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer)
+        private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool resetScrollToTop, float preserveOffsetPx)
         {
             yield return null;
             try
             {
                 Canvas.ForceUpdateCanvases();
-                ScrollRect sr = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
-                if (sr != null) sr.verticalNormalizedPosition = 1f;
-                UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
+                if (resetScrollToTop)
+                {
+                    ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
+                    if (sr != null) sr.verticalNormalizedPosition = 1f;
+                }
+                else
+                    ApplyUserTagAvailScrollOffsetPx(isLeft, preserveOffsetPx);
+                if (tabContainer != null)
+                    UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
                 ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
             }
             catch { }
@@ -1244,7 +1252,7 @@ namespace VPB
             return false;
         }
 
-        private void ToggleUserTagPin(string tagName)
+        private void ToggleUserTagPin(string tagName, bool isLeft)
         {
             string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
             if (string.IsNullOrEmpty(norm)) return;
@@ -1259,7 +1267,7 @@ namespace VPB
             PersistUserTagPinOrderToConfig(true);
             unchecked { _userTagPinRevision++; }
             _userTagVirtViewSig = null;
-            try { UpdateTabs(); } catch { }
+            try { RefreshUserTagsAvailPaneInPlace(isLeft); } catch { }
         }
 
         private void PartitionUserTagRowsPinnedFirst(List<UserTagSideTabEntry> rows, List<UserTagSideTabEntry> pinnedOut, List<UserTagSideTabEntry> normalOut)
@@ -1308,7 +1316,7 @@ namespace VPB
                 _userTagPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
         }
 
-        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale)
+        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale, bool isLeft)
         {
             if (rowGo == null) return;
             Transform existing = rowGo.transform.Find(UserTagPinBtnName);
@@ -1348,7 +1356,8 @@ namespace VPB
             {
                 pinBtn.onClick.RemoveAllListeners();
                 string snap = norm;
-                pinBtn.onClick.AddListener(() => ToggleUserTagPin(snap));
+                bool sideLeft = isLeft;
+                pinBtn.onClick.AddListener(() => ToggleUserTagPin(snap, sideLeft));
             }
 
             Image iconImg = pinGo.transform.Find("Icon")?.GetComponent<Image>();

@@ -552,6 +552,7 @@ namespace VPB
                     vlg.padding = new RectOffset(5, 5, 0, 0);
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
+                try { EnsureUserTagAvailScrollTrackingHooks(); } catch { }
                 {
                     Transform vp = rightTabScrollGO.transform.Find("Viewport");
                     _rightTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
@@ -873,6 +874,7 @@ namespace VPB
                     innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
                 }
                 leftTabScrollGO.SetActive(false); // Hidden by default
+                try { EnsureUserTagAvailScrollTrackingHooks(); } catch { }
                 {
                     Transform vp = leftTabScrollGO.transform.Find("Viewport");
                     _leftTabViewportRT = vp != null ? vp.GetComponent<RectTransform>() : null;
