@@ -35,6 +35,19 @@ namespace VPB
         private void ToggleRatingSort()
         {
             isRatingSortToggleEnabled = !isRatingSortToggleEnabled;
+            ApplyRatingSortFilterChange();
+        }
+
+        /// <summary>Right-click on ★ while rated-only filter active: turn filter off without toggling on.</summary>
+        private void DisableRatingSortFilterIfEnabled()
+        {
+            if (!isRatingSortToggleEnabled) return;
+            isRatingSortToggleEnabled = false;
+            ApplyRatingSortFilterChange();
+        }
+
+        private void ApplyRatingSortFilterChange()
+        {
             SyncRatingSortToggleState();
             if (IsFilterActive)
             {
@@ -54,6 +67,16 @@ namespace VPB
             {
                 Sprite target = isRatingSortToggleEnabled ? ratingStarOffSprite : ratingStarNormalSprite;
                 if (target != null) ratingSortIconImage.sprite = target;
+            }
+            if (ratingSortToggleBtn != null)
+            {
+                Image backdrop = ratingSortToggleBtn.GetComponent<Image>();
+                if (backdrop != null)
+                {
+                    backdrop.color = isRatingSortToggleEnabled
+                        ? ColorHistoryAccent
+                        : new Color(0.15f, 0.15f, 0.15f, 1f);
+                }
             }
         }
 

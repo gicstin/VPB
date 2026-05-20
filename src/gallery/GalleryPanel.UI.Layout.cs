@@ -97,7 +97,8 @@ namespace VPB
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
             }
             Canvas.ForceUpdateCanvases();
-            if (allowSynchronousCreatorCategoryCaches)
+            bool skipBrowseSideCaches = IsSettingsPanelOpen() || settingsListViewActive;
+            if (allowSynchronousCreatorCategoryCaches && !skipBrowseSideCaches)
             {
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();

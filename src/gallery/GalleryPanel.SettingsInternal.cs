@@ -50,6 +50,60 @@ namespace VPB
             public Action<Color> SetColor;
         }
 
+        private List<InternalSettingDefinition> _internalSettingsDefsCache;
+        private Dictionary<string, InternalSettingDefinition> _internalSettingsDefsByKey;
+        private int _internalSettingsDefsCacheSig = int.MinValue;
+
+        private void InvalidateInternalSettingsDefsCache()
+        {
+            _internalSettingsDefsCache = null;
+            _internalSettingsDefsByKey = null;
+            _internalSettingsDefsCacheSig = int.MinValue;
+        }
+
+        private int ComputeInternalSettingsDefsCacheSignature()
+        {
+            int sig = 0;
+            try { if (categories != null) sig = categories.Count; } catch { }
+            try
+            {
+                var hidden = VPBConfig.Instance != null ? VPBConfig.Instance.HiddenCategories : null;
+                if (hidden != null) sig = unchecked(sig * 31 + hidden.Count);
+            }
+            catch { }
+            if (BaImporter.TryDetectBaDataDir(out _)) sig = unchecked(sig * 31 + 1);
+            if (BaImporter.MigrationManifestExists()) sig = unchecked(sig * 31 + 2);
+            return sig;
+        }
+
+        private List<InternalSettingDefinition> GetInternalSettingDefinitionsCached()
+        {
+            int sig = ComputeInternalSettingsDefsCacheSignature();
+            if (_internalSettingsDefsCache != null && _internalSettingsDefsCacheSig == sig)
+                return _internalSettingsDefsCache;
+
+            var defs = BuildInternalSettingDefinitions();
+            var byKey = new Dictionary<string, InternalSettingDefinition>(defs.Count, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < defs.Count; i++)
+            {
+                var d = defs[i];
+                if (d != null && !string.IsNullOrEmpty(d.Key))
+                    byKey[d.Key] = d;
+            }
+            _internalSettingsDefsCache = defs;
+            _internalSettingsDefsByKey = byKey;
+            _internalSettingsDefsCacheSig = sig;
+            return defs;
+        }
+
+        private void ApplyInternalSettingsListGridConfig(RecyclingGridView rgv, bool deferRefresh)
+        {
+            if (rgv == null) return;
+            rgv.fixedColumns = 1;
+            rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh);
+            rgv.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh);
+        }
+
         private sealed class InternalSettingRowEntry : VirtualFileEntry
         {
             public string RowKey;
@@ -797,6 +851,7 @@ namespace VPB
                         if (v) VPBConfig.Instance.HiddenCategories.Remove(capturedName);
                         else VPBConfig.Instance.HiddenCategories.Add(capturedName);
                         categoriesCached = false;
+                        InvalidateInternalSettingsDefsCache();
                         UpdateTabs();
                         if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
                     }
@@ -831,6 +886,7 @@ namespace VPB
                                 r.TagRowsImported, r.PackagesTagged, r.HideMarkersWritten, r.ItemsSkipped)
                             : VPBTranslation.T("settings.ba.import.failed", "Import failed — see log.");
                         ShowTemporaryStatus(msg, 5f);
+                        InvalidateInternalSettingsDefsCache();
                         RefreshInternalSettingsListRows(true);
                     }
                 });
@@ -852,6 +908,7 @@ namespace VPB
                             ShowTemporaryStatus(string.Format(
                                 VPBTranslation.T("settings.ba.reset.done", "Reset: {0} tag entries removed, {1} hide markers removed."),
                                 tags, hides), 5f);
+                            InvalidateInternalSettingsDefsCache();
                             RefreshInternalSettingsListRows(true);
                         }
                     });
@@ -872,6 +929,7 @@ namespace VPB
                     OnAction = (updater.HasPendingUpdate || updater.IsBusy) ? (Action)null : () =>
                     {
                         updater.CheckForUpdateAsync();
+                        InvalidateInternalSettingsDefsCache();
                         RefreshInternalSettingsListRows(true);
                     }
                 });
@@ -936,12 +994,9 @@ namespace VPB
         private InternalSettingDefinition GetInternalSettingDefinition(string rowKey)
         {
             if (string.IsNullOrEmpty(rowKey)) return null;
-            var defs = BuildInternalSettingDefinitions();
-            for (int i = 0; i < defs.Count; i++)
-            {
-                if (string.Equals(defs[i].Key, rowKey, StringComparison.OrdinalIgnoreCase))
-                    return defs[i];
-            }
+            GetInternalSettingDefinitionsCached();
+            if (_internalSettingsDefsByKey != null && _internalSettingsDefsByKey.TryGetValue(rowKey, out var def))
+                return def;
             return null;
         }
 
@@ -1027,6 +1082,7 @@ namespace VPB
 
         public void NotifyUpdaterStatusChanged()
         {
+            InvalidateInternalSettingsDefsCache();
             if (IsSettingsPanelOpen())
                 RefreshInternalSettingsListRows(true);
         }
@@ -1118,25 +1174,6 @@ namespace VPB
             try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
             internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
 
-            if (layoutMode != GalleryLayoutMode.List)
-                SetLayoutMode(GalleryLayoutMode.List, false, true);
-            // SetLayoutMode no-ops when already List — must reapply session min row height for settings.
-            try
-            {
-                if (contentGO != null && layoutMode == GalleryLayoutMode.List)
-                {
-                    var rgv = contentGO.GetComponent<RecyclingGridView>();
-                    if (rgv != null)
-                    {
-                        rgv.fixedColumns = 1;
-                        rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
-                        // Settings list must adapt to viewport width (Top dock/full width resize).
-                        rgv.SetAdaptiveConfig(true, 0f, 1, true);
-                    }
-                }
-            }
-            catch { }
-
             if (titleText != null)
                 titleText.text = VPBTranslation.T("settings.title", "Settings");
 
@@ -1146,11 +1183,24 @@ namespace VPB
             selectedFiles.Clear();
             selectedFilePaths.Clear();
 
-            if (recyclingGrid != null)
+            RecyclingGridView rgv = recyclingGrid;
+            if (rgv == null && contentGO != null)
             {
-                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                try { rgv = contentGO.GetComponent<RecyclingGridView>(); } catch { }
+            }
+
+            if (rgv != null)
+                rgv.SetItemCount(currentFilteredFiles.Count, deferRefresh: true);
+
+            if (layoutMode != GalleryLayoutMode.List)
+                SetLayoutMode(GalleryLayoutMode.List, false, true);
+
+            try { ApplyInternalSettingsListGridConfig(rgv, deferRefresh: true); } catch { }
+
+            if (rgv != null)
+            {
                 if (!keepScroll) ScrollGalleryToTop();
-                recyclingGrid.Refresh();
+                rgv.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
             try { UpdateFooterLayoutState(); } catch { }
@@ -1182,7 +1232,7 @@ namespace VPB
                 rows.Add(new InternalSettingRowEntry(key, group, label));
             }
 
-            var defs = BuildInternalSettingDefinitions();
+            var defs = GetInternalSettingDefinitionsCached();
             for (int i = 0; i < defs.Count; i++) Add(defs[i]);
             return rows;
         }

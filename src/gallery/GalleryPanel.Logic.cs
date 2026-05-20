@@ -281,7 +281,8 @@ namespace VPB
             if (scrollRect != null) scrollRect.gameObject.SetActive(true);
 
             UpdateFooterLayoutState();
-            UpdateLayout();
+            if (!keepInternalSettingsMode)
+                UpdateLayout();
 
             // Layout switch should not force a full RefreshFiles().
             // The grid items support both modes, so we just reconfigure and rebind visible rows.
@@ -294,18 +295,20 @@ namespace VPB
                     {
                         try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
 
+                        bool deferGridRefresh = keepInternalSettingsMode;
                         if (layoutMode == GalleryLayoutMode.List)
                         {
-                            rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1);
-                            rgv.SetAdaptiveConfig(true, 0f, 1, true);
+                            rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferGridRefresh);
+                            rgv.SetAdaptiveConfig(true, 0f, 1, true, deferGridRefresh);
                         }
                         else
                         {
                             int cols = GridColumnCount;
-                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols);
-                            rgv.SetAdaptiveConfig(true, 200f, cols, false);
+                            rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols, deferGridRefresh);
+                            rgv.SetAdaptiveConfig(true, 200f, cols, false, deferGridRefresh);
                         }
-                        rgv.Refresh();
+                        if (!deferGridRefresh)
+                            rgv.Refresh();
                     }
                 }
             }

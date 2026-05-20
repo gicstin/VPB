@@ -318,6 +318,27 @@ namespace VPB
             if (compactIconImg != null) compactIconImg.color = Color.white;
             _titleSearchCompactRT = crt;
             try { AddTooltip(_titleSearchCompactGO, "gallery.search.main", "Search..."); } catch { }
+            AddRightClickDelegate(_titleSearchCompactGO, ClearTitleBarSearch);
+        }
+
+        private void ClearTitleBarSearch()
+        {
+            if (titleSearchInput == null) return;
+            string cur = titleSearchInput.text ?? "";
+            if (string.IsNullOrEmpty(nameFilter) && cur.Trim().Length == 0) return;
+
+            try { CloseTitleSearchPopup(); } catch { }
+            if (_titleSearchPopupField != null)
+            {
+                try
+                {
+                    _suppressTitleBarSearchValueChanged = true;
+                    _titleSearchPopupField.text = "";
+                }
+                finally { _suppressTitleBarSearchValueChanged = false; }
+            }
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged); } catch { }
+            SetNameFilter("");
         }
 
         private void EnsureTitleSearchPopupBuilt()

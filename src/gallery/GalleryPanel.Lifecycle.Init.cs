@@ -435,7 +435,8 @@ namespace VPB
             Button ratingSortToggleButton = ratingSortToggleBtn.GetComponent<Button>();
             ratingSortToggleButton.onClick.RemoveAllListeners();
             ratingSortToggleButton.onClick.AddListener(ToggleRatingSort);
-            AddTooltip(ratingSortToggleBtn, "gallery.tooltip.rated_only", "Show Only Rated Items");
+            AddRightClickDelegate(ratingSortToggleBtn, DisableRatingSortFilterIfEnabled);
+            AddTooltip(ratingSortToggleBtn, "gallery.tooltip.rated_only", "Show Only Rated Items (right-click to clear)");
             SyncRatingSortToggleState();
 
             // Refresh Button (to the right of Star) — square icon button
