@@ -13,11 +13,107 @@ This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/`.
 
 ## Screenshots
 
-<img width="1327" height="1476" alt="image" src="https://github.com/user-attachments/assets/d1568790-1314-4bbf-aebe-ae29e2d295e2" />
+### Screenshots
 
-<img width="1362" height="907" alt="image" src="https://github.com/user-attachments/assets/1ab375c0-ffe6-4d42-b25a-50fca051c750" />
+A visual tour so you can find where the new stuff lives.
 
-<img width="1124" height="499" alt="image" src="https://github.com/user-attachments/assets/d50a60fa-d496-432e-ad4d-f832994214fe" />
+**Gallery layout**
+
+Panel docking mode:
+
+<img width="771" height="193" alt="image" src="https://gist.github.com/user-attachments/assets/23e0bcb0-9b68-4308-b10d-43f49f62ca85" />
+*Three docking modes: left, top, right.*
+
+---
+
+Column count via ctrl+scroll
+
+<img width="620" height="98" alt="image" src="https://gist.github.com/user-attachments/assets/34a9f58f-f5a1-4705-a972-1206011ead38" />
+
+*Ctrl+scroll inside the gallery to change column count on the fly.*
+
+
+**Search and sort**
+
+Date sorting, Hide old version, New vs Updated.
+
+<img width="343" height="876" alt="image" src="https://gist.github.com/user-attachments/assets/2c5b78f6-af12-446e-89b1-214bd3fc1c8e" />
+<img width="219" height="318" alt="image" src="https://gist.github.com/user-attachments/assets/0634d5c2-e1f5-4336-a9dc-091b04708b69" />
+
+Pretty names
+<img width="1193" height="685" alt="image" src="https://gist.github.com/user-attachments/assets/cf9dfae4-880b-486e-a83d-acdb81343fc4" />
+
+History tab
+
+<img width="784" height="892" alt="image" src="https://gist.github.com/user-attachments/assets/a2333077-05c5-416b-9b7c-d98c84dab050" />
+
+---
+
+**Tags**
+
+
+<img width="783" height="557" alt="image" src="https://gist.github.com/user-attachments/assets/5bcd3892-2c9c-418b-8bbe-2c4e90046ad7" />
+<img width="216" height="287" alt="image" src="https://gist.github.com/user-attachments/assets/bf46bb67-1272-4b65-98f6-d0a4b85bb03d" />
+<img width="494" height="617" alt="image" src="https://gist.github.com/user-attachments/assets/387f512c-413d-4111-b53e-4ecad6c70be5" />
+<img width="253" height="423" alt="image" src="https://gist.github.com/user-attachments/assets/53873186-8a51-4dce-892e-dd9b83a10957" />
+
+**Toolbox**
+
+**Suppress-scale toggle**
+
+<img width="565" height="103" alt="image" src="https://gist.github.com/user-attachments/assets/594b5629-c66a-4dfb-88a6-92a30458987b" />
+
+
+**load/unload texture cache button**
+
+<img width="1171" height="1281" alt="image" src="https://gist.github.com/user-attachments/assets/32dce820-019f-4ce1-80e6-af7677138fb2" />
+<img width="1014" height="427" alt="image" src="https://gist.github.com/user-attachments/assets/18c63c5c-ce5f-4e3a-95a9-4b2002f6ac7a" />
+
+**texture caching**
+
+<img width="1493" height="465" alt="image" src="https://gist.github.com/user-attachments/assets/17bdcf8d-2fa8-4e44-af05-99d9c6dadb17" />
+
+
+**Scan whitelist**
+
+**Scan whitelist settings**
+
+<img width="949" height="814" alt="image" src="https://gist.github.com/user-attachments/assets/cab664e2-391e-4f15-b518-4b4b5826c0c2" />
+
+*Pick which folders or packages VaM is allowed to scan at startup; everything else stays on disk, hidden, and gets loaded on demand.*
+
+
+**VaM integration**
+
+**VaM Quick Menu assignable grid**
+
+<img width="590" height="871" alt="image" src="https://gist.github.com/user-attachments/assets/f9c60f85-35ba-4a0a-ba07-b6818c34f6f2" />
+<img width="207" height="187" alt="image" src="https://gist.github.com/user-attachments/assets/8058e229-04cf-459b-9e59-5168e3e56d56" />
+
+*4×4 grid across 10 pages of VPB actions wired into VaM's Quick Menu.*
+
+
+**VaM Hub browser**
+
+Hub pagination and hide-downloaded
+
+<img width="1166" height="430" alt="image" src="https://gist.github.com/user-attachments/assets/2adec068-7f1d-4374-9912-12acb48f84d8" />
+
+<img width="1096" height="1254" alt="image" src="https://gist.github.com/user-attachments/assets/9b154e7b-35cb-4a2d-8c97-0a5e50d10e6d" />
+
+*Pagination, hide-downloaded toggle, download-all, persistent Hub config.*
+
+**Settings**
+
+**Reorganized settings panel, color picker for outlines**
+<img width="1241" height="513" alt="image" src="https://gist.github.com/user-attachments/assets/56629f2c-ddfd-4b15-90d5-cf876fef8253" />
+
+<img width="797" height="283" alt="image" src="https://gist.github.com/user-attachments/assets/08a76601-811e-45e1-a584-289508e05984" />
+
+
+**Auto-updater**
+
+<img width="1218" height="462" alt="image" src="https://gist.github.com/user-attachments/assets/58e865d6-5e2d-4172-8ea8-ca5a76957df8" />
 
 ## Features (high-level)
 
