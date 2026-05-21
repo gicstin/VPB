@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -122,6 +123,7 @@ namespace VPB
         protected bool _hasBeenRefreshed;
 
         protected Coroutine refreshResourcesRoutine;
+        protected int _lastApiPerPage = -1;
 
         protected JSONStorableAction refreshResourcesAction;
 
@@ -155,7 +157,7 @@ namespace VPB
 
         protected JSONStorableStringChooser hostedOptionChooser;
 
-        protected string _payTypeFilter = "Free";
+        protected string _payTypeFilter = "All";
 
         protected JSONStorableStringChooser payTypeFilterChooser;
 
@@ -193,6 +195,7 @@ namespace VPB
 
         protected bool hubSettingsApplied;
         protected bool suppressHubSettingsSave;
+        protected bool suppressRefresh;
 
         protected Dictionary<string, HubResourceItemDetailUI> savedResourceDetailsPanels;
 
@@ -214,6 +217,100 @@ namespace VPB
 
         protected JSONStorableAction downloadAllMissingPackagesAction;
 
+        // Missing-packages network flow can be expensive (thousands of ids).
+        // Keep it single-flight and rate-limited to avoid tight error loops that stall VaM.
+        protected Coroutine missingPackagesCoroutine;
+        protected bool missingPackagesRequestInFlight;
+        protected float nextMissingPackagesRequestAllowedRealtime;
+
+        // UI: Hide "Not On Hub" missing-package rows
+        protected JSONStorableBool hideMissingNotOnHubJSON;
+        protected UIDynamicToggle hideMissingNotOnHubToggleUI;
+        protected UIDynamicButton copyMissingFromHubButtonUI;
+        protected Color? copyMissingFromHubButtonDefaultColor;
+
+        private void PositionHideNotOnHubToggle(MVR.Hub.HubBrowseUI ui, RectTransform toggleRt)
+        {
+            if (ui == null || toggleRt == null) return;
+            var closeBtn = ui.closeMissingPackagesPanelButton;
+            RectTransform closeRt = closeBtn != null ? (closeBtn.transform as RectTransform) : null;
+            if (closeRt == null) return;
+
+            // Ensure same parent space as the close button.
+            if (toggleRt.parent != closeRt.parent)
+            {
+                toggleRt.SetParent(closeRt.parent, worldPositionStays: false);
+            }
+
+            // Prevent stretching to full width by forcing fixed anchors/pivot/size.
+            toggleRt.anchorMin = closeRt.anchorMin;
+            toggleRt.anchorMax = closeRt.anchorMax;
+            toggleRt.pivot = new Vector2(0f, 0f);
+
+            float h = closeRt.rect.height > 1f ? closeRt.rect.height : 60f;
+            toggleRt.sizeDelta = new Vector2(320f, h);
+
+            const float gap = 20f;
+            toggleRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap, 0f);
+        }
+
+        private void PositionCopyMissingFromHubButton(MVR.Hub.HubBrowseUI ui, RectTransform btnRt)
+        {
+            if (ui == null || btnRt == null) return;
+            RectTransform closeRt = ui.closeMissingPackagesPanelButton != null ? (ui.closeMissingPackagesPanelButton.transform as RectTransform) : null;
+            if (closeRt == null) return;
+
+            RectTransform toggleRt = hideMissingNotOnHubToggleUI != null ? (hideMissingNotOnHubToggleUI.transform as RectTransform) : null;
+            if (toggleRt == null) return;
+
+            if (btnRt.parent != closeRt.parent)
+            {
+                btnRt.SetParent(closeRt.parent, worldPositionStays: false);
+            }
+
+            btnRt.anchorMin = closeRt.anchorMin;
+            btnRt.anchorMax = closeRt.anchorMax;
+            btnRt.pivot = new Vector2(0f, 0f);
+
+            float h = closeRt.rect.height > 1f ? closeRt.rect.height : 60f;
+            btnRt.sizeDelta = new Vector2(420f, h);
+
+            const float gap = 20f;
+            float toggleW = toggleRt.rect.width > 1f ? toggleRt.rect.width : toggleRt.sizeDelta.x;
+            btnRt.anchoredPosition = closeRt.anchoredPosition + new Vector2(closeRt.rect.width + gap + toggleW + gap, 0f);
+        }
+
+        private void CopyMissingFromHubListToClipboard()
+        {
+            try
+            {
+                if (missingPackages == null) return;
+
+                HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var ui in missingPackages)
+                {
+                    if (ui == null || ui.connectedItem == null) continue;
+                    if (ui.connectedItem.HasValidDownloadUrl) continue; // only "Not On Hub"
+                    string n = ui.connectedItem.Name;
+                    if (string.IsNullOrEmpty(n)) continue;
+                    ids.Add(n);
+                }
+
+                var list = ids.ToList();
+                list.Sort(StringComparer.OrdinalIgnoreCase);
+
+                GUIUtility.systemCopyBuffer = string.Join("\n", list.ToArray());
+
+                if (copyMissingFromHubButtonUI != null)
+                {
+                    if (!copyMissingFromHubButtonDefaultColor.HasValue)
+                        copyMissingFromHubButtonDefaultColor = copyMissingFromHubButtonUI.buttonColor;
+                    copyMissingFromHubButtonUI.buttonColor = new Color32(133, 255, 133, 255);
+                }
+            }
+            catch { }
+        }
+
         protected GameObject updatesPanel;
 
         protected RectTransform updatesContainer;
@@ -225,6 +322,8 @@ namespace VPB
         protected Dictionary<string, int> packageGroupToLatestVersion;
 
         protected Dictionary<string, string> packageIdToResourceId;
+
+        protected Dictionary<string, string> resourceIdToCategory;
 
         protected JSONStorableAction openUpdatesPanelAction;
 
@@ -414,8 +513,10 @@ namespace VPB
             {
                 // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
                 // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
-                const int timeoutSeconds = 30;
+                const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
+
+                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
 
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
@@ -445,12 +546,12 @@ namespace VPB
                 }
                 long waitMs = sw.ElapsedMilliseconds;
 
-                if (webRequest.isNetworkError)
+                if (webRequest.isNetworkError || webRequest.isHttpError)
                 {
                     LogUtil.LogError($"HubBrowse.GetRequest DONE_ERROR uri={uri} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} err={webRequest.error}");
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(webRequest.error + " (Code: " + webRequest.responseCode + ")");
                     }
                 }
                 else
@@ -462,20 +563,38 @@ namespace VPB
 
                     sw.Reset();
                     sw.Start();
-                    SimpleJSON.JSONNode jsonNode = JSON.Parse(text);
+                    SimpleJSON.JSONNode jsonNode = null;
+                    try
+                    {
+                        jsonNode = JSON.Parse(text);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError($"HubBrowse.GetRequest JSON_PARSE_EXCEPTION uri={uri} textLen={textLen} err={ex.Message}");
+                    }
                     long parseMs = sw.ElapsedMilliseconds;
                     if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                         LogUtil.Log($"HubBrowse.GetRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
 
-                    sw.Reset();
-                    sw.Start();
-                    if (callback != null)
+                    if (jsonNode == null)
                     {
-                        callback(jsonNode);
+                        string truncatedResponse = TruncateForLog(text, 200);
+                        string errText = "Error - Invalid JSON response (len=" + textLen + "): " + truncatedResponse;
+                        LogUtil.LogError($"HubBrowse.GetRequest JSON_PARSE_ERROR uri={uri} {errText}");
+                        if (errorCallback != null) errorCallback(errText);
                     }
-                    long callbackMs = sw.ElapsedMilliseconds;
-                    if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
-                        LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    else
+                    {
+                        sw.Reset();
+                        sw.Start();
+                        if (callback != null)
+                        {
+                            callback(jsonNode);
+                        }
+                        long callbackMs = sw.ElapsedMilliseconds;
+                        if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
+                            LogUtil.Log($"HubBrowse.GetRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
+                    }
                 }
             }
         }
@@ -511,12 +630,13 @@ namespace VPB
                     }
                     yield return null;
                 }
-                if (request.stop || webRequest.isNetworkError)
+                if (request.stop || webRequest.isNetworkError || webRequest.isHttpError)
                 {
-                    LogUtil.LogError(uri + ": Error: " + webRequest.error);
+                    string err = request.stop ? "Cancelled" : (webRequest.error + " (Code: " + webRequest.responseCode + ")");
+                    LogUtil.LogError(uri + ": Error: " + err);
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(err);
                     }
                 }
                 else
@@ -542,12 +662,13 @@ namespace VPB
             {
                 // UnityWebRequest can occasionally hang indefinitely on some systems/networks.
                 // Add a hard timeout so the Hub UI doesn't get stuck on "Fetching Hub Info".
-                const int timeoutSeconds = 30;
+                const int timeoutSeconds = 60;
                 try { webRequest.timeout = timeoutSeconds; } catch { }
 
                 webRequest.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(postData));
                 webRequest.SetRequestHeader("Content-Type", "application/json");
                 webRequest.SetRequestHeader("Accept", "application/json");
+                // webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
                 long createMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.PostRequest CREATED uri={uri} ms={createMs}");
@@ -578,12 +699,12 @@ namespace VPB
 
                 string[] pages = uri.Split('/');
                 int page = pages.Length - 1;
-                if (webRequest.isNetworkError)
+                if (webRequest.isNetworkError || webRequest.isHttpError)
                 {
                     LogUtil.LogError($"HubBrowse.PostRequest DONE_ERROR uri={uri} page={pages[page]} waitMs={waitMs} totalMs={totalSw.ElapsedMilliseconds} code={webRequest.responseCode} err={webRequest.error}");
                     if (errorCallback != null)
                     {
-                        errorCallback(webRequest.error);
+                        errorCallback(webRequest.error + " (Code: " + webRequest.responseCode + ")");
                     }
                     yield break;
                 }
@@ -595,14 +716,23 @@ namespace VPB
 
                 sw.Reset();
                 sw.Start();
-                SimpleJSON.JSONNode jSONNode = JSON.Parse(text);
+                SimpleJSON.JSONNode jSONNode = null;
+                try
+                {
+                    jSONNode = JSON.Parse(text);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError($"HubBrowse.PostRequest JSON_PARSE_EXCEPTION uri={uri} textLen={textLen} err={ex.Message}");
+                }
                 long parseMs = sw.ElapsedMilliseconds;
                 if (Settings.Instance != null && Settings.Instance.LogHubRequests != null && Settings.Instance.LogHubRequests.Value)
                     LogUtil.Log($"HubBrowse.PostRequest PARSED uri={uri} parseMs={parseMs} totalMs={totalSw.ElapsedMilliseconds}");
                 if (jSONNode == null)
                 {
-                    string errText = "Error - Invalid JSON response: " + text;
-                    //Debug.LogError(pages[page] + ": " + text);
+                    string truncatedResponse = TruncateForLog(text, 200);
+                    string errText = "Error - Invalid JSON response (len=" + textLen + "): " + truncatedResponse;
+                    LogUtil.LogError($"HubBrowse.PostRequest JSON_PARSE_ERROR uri={uri} {errText}");
                     if (errorCallback != null)
                     {
                         errorCallback(errText);
@@ -618,6 +748,12 @@ namespace VPB
                         LogUtil.Log($"HubBrowse.PostRequest CALLBACK_DONE uri={uri} callbackMs={callbackMs} totalMs={totalSw.ElapsedMilliseconds}");
                 }
             }
+        }
+
+        private string TruncateForLog(string s, int maxLen = 100)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length <= maxLen) return s;
+            return s.Substring(0, maxLen) + "...";
         }
 
         protected void SyncHubEnabled(bool b)
@@ -666,6 +802,8 @@ namespace VPB
 
         public void Show()
         {
+            bool alreadyShowing = _isShowing;
+            LogUtil.Log($"HubBrowse.Show: alreadyShowing={alreadyShowing}, hubEnabled={_hubEnabled}");
             if (preShowCallbacks != null)
             {
                 preShowCallbacks();
@@ -694,6 +832,8 @@ namespace VPB
                 {
                     return;
                 }
+                // If sorting by Submission Date, we always want to check for new stuff when opening the hub.
+                if (_sortPrimary != SortSubmissionDate && _sortSecondary != SortSubmissionDate)
                 {
                     foreach (HubResourceItemUI item in items)
                     {
@@ -705,6 +845,22 @@ namespace VPB
                     return;
                 }
             }
+
+            // If we are opening the hub from a hidden state and sorting by Submission Date, 
+            // reset to page 1 to ensure the user sees the latest submissions.
+            if (!alreadyShowing && (_sortPrimary == SortSubmissionDate || _sortSecondary == SortSubmissionDate))
+            {
+                _currentPageString = "1";
+                _currentPageInt = 1;
+                currentPageJSON.valNoCallback = _currentPageString;
+
+                if (!suppressHubSettingsSave && Settings.Instance != null)
+                {
+                    if (Settings.Instance.HubCurrentPage != null) Settings.Instance.HubCurrentPage.Value = 1;
+                    Settings.SaveConfig();
+                }
+            }
+
             RefreshResources();
         }
 
@@ -743,6 +899,7 @@ namespace VPB
 
         protected void RefreshCallback(SimpleJSON.JSONNode jsonNode, string page)
         {
+            Stopwatch sw = Stopwatch.StartNew();
             if (refreshIndicator != null)
             {
                 refreshIndicator.SetActive(false);
@@ -764,7 +921,7 @@ namespace VPB
                 {
                     return;
                 }
-                numResourcesJSON.val = "Total: " + asObject2["total_found"];
+                int totalFound = asObject2["total_found"].AsInt;
                 numPagesJSON.val = asObject2["total_pages"];
                 if (items != null)
                 {
@@ -791,21 +948,26 @@ namespace VPB
                 {
                     return;
                 }
+                int count = 0;
+                bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+                bool hideDl = hideDownloaded != null && hideDownloaded.val;
+                int clientFilteredCount = 0;
+
                 IEnumerator enumerator2 = asArray.GetEnumerator();
                 try
                 {
                     while (enumerator2.MoveNext())
                     {
                         JSONClass resource = (JSONClass)enumerator2.Current;
-                        bool canShow = true;
-                        bool asBool = resource["hubDownloadable"].AsBool;
-                        if(onlyDownloadable.val)
-                        {
-                            canShow = asBool;
-                        }
+                        bool canShow = CanShowResourceAfterClientFilters(resource, onlyDl, hideDl);
                         // Do not show items that cannot be downloaded
                         if (canShow)
                         {
+                            clientFilteredCount++;
+                            if (count >= _numPerPageInt)
+                            {
+                                continue;
+                            }
                             HubResourceItem hubResourceItem = new HubResourceItem(resource, this, page);
                             hubResourceItem.Refresh();
 
@@ -819,9 +981,26 @@ namespace VPB
                             {
                                 hubResourceItem.RegisterUI(component);
                                 items.Add(component);
+                                count++;
                             }
                         }
                     }
+                    // "total_found" is the server-side total for the query; clientFilteredCount reflects local filters
+                    // (e.g. hide downloaded / only downloadable) applied to the current page payload.
+                    if (onlyDl || hideDl)
+                    {
+                        int totalPages = asObject2["total_pages"].AsInt;
+                        // total_pages comes from the API pagination. In client-filter/backfill mode, the API uses a
+                        // larger perpage (e.g. 192/200) than the UI displays (e.g. 48). The user expects totals in
+                        // UI-page units, so estimate using _numPerPageInt.
+                        int estimatedFilteredTotal = (totalPages > 0) ? (totalPages * _numPerPageInt) : totalFound;
+                        numResourcesJSON.val = "Total: " + estimatedFilteredTotal;
+                    }
+                    else
+                    {
+                        numResourcesJSON.val = "Total: " + totalFound;
+                    }
+                    LogUtil.Log($"HubBrowse.RefreshCallback DONE page={page} items={count} ms={sw.ElapsedMilliseconds}");
                     return;
                 }
                 finally
@@ -839,6 +1018,7 @@ namespace VPB
 
         public void RefreshResources()
         {
+            LogUtil.Log($"HubBrowse.RefreshResources: Page={_currentPageString}, Sort={_sortPrimary},{_sortSecondary}, Filter=[Hosted:{_hostedOption}, Pay:{_payTypeFilter}, Cat:{_categoryFilter}, Creator:{_creatorFilter}, Tags:{_tagsFilter}, Search:{_searchFilter}, OnlyDl:{(onlyDownloadable != null && onlyDownloadable.val)}, HideDownloaded:{(hideDownloaded != null && hideDownloaded.val)}]");
             _hasBeenRefreshed = true;
             if (_hubEnabled)
             {
@@ -850,7 +1030,9 @@ namespace VPB
                 jSONClass["source"] = "VaM";
                 jSONClass["action"] = "getResources";
                 jSONClass["latest_image"] = "Y";
-                jSONClass["perpage"] = _numPerPageInt.ToString();
+                bool hasClientSideFilter = (onlyDownloadable != null && onlyDownloadable.val) || (hideDownloaded != null && hideDownloaded.val);
+                int apiPerPage = _numPerPageInt;
+                jSONClass["perpage"] = apiPerPage.ToString();
                 string page = _currentPageString;
                 jSONClass["page"] = page;
                 if (_hostedOption != "All")
@@ -867,7 +1049,7 @@ namespace VPB
                     jSONClass["category"] = _payTypeFilter;
                 }
                 // If "Only Downloadable" is checked, payType must be free, reducing the returned data
-                if (onlyDownloadable.val)
+                if (onlyDownloadable != null && onlyDownloadable.val)
                 {
                     jSONClass["category"] = "Free";
                 }
@@ -889,16 +1071,173 @@ namespace VPB
                     text = text + "," + _sortSecondary;
                 }
                 jSONClass["sort"] = text;
-                string postData = jSONClass.ToString();
-                refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData, 
-                    jsonNode => { RefreshCallback(jsonNode, page); }, 
-                    RefreshErrorCallback));
+                if (hasClientSideFilter)
+                {
+                    int backfillApiPerPage = Mathf.Clamp(_numPerPageInt * 4, 100, 200);
+                    apiPerPage = backfillApiPerPage;
+                    jSONClass["perpage"] = apiPerPage.ToString();
+                    refreshResourcesRoutine = StartCoroutine(RefreshResourcesWithBackfill(jSONClass, page));
+                }
+                else
+                {
+                    string postData = jSONClass.ToString();
+                    refreshResourcesRoutine = StartCoroutine(PostRequest(apiUrl, postData,
+                        jsonNode => { RefreshCallback(jsonNode, page); },
+                        RefreshErrorCallback));
+                }
+
+                // Track the API perpage used to compute estimated totals quickly.
+                _lastApiPerPage = apiPerPage;
                 if (refreshIndicator != null)
                 {
                     refreshIndicator.SetActive(true);
                 }
             }
         }
+
+        private bool CanShowResourceAfterClientFilters(JSONClass resource)
+        {
+            bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+            bool hideDl = hideDownloaded != null && hideDownloaded.val;
+            return CanShowResourceAfterClientFilters(resource, onlyDl, hideDl);
+        }
+
+        private bool CanShowResourceAfterClientFilters(JSONClass resource, bool onlyDl, bool hideDl)
+        {
+            if (resource == null) return false;
+
+            if (onlyDl && !resource["hubDownloadable"].AsBool)
+            {
+                return false;
+            }
+            if (hideDl && IsResourceAlreadyDownloaded(resource))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private IEnumerator RefreshResourcesWithBackfill(JSONClass requestTemplate, string initialPage)
+        {
+            int requestedVisiblePage = 1;
+            if (!int.TryParse(initialPage, out requestedVisiblePage) || requestedVisiblePage < 1)
+            {
+                requestedVisiblePage = 1;
+            }
+            int currentApiPage = 1;
+            int targetSkipVisible = (requestedVisiblePage - 1) * _numPerPageInt;
+
+            const int maxPagesToScan = 20;
+            int scannedPages = 0;
+            int totalPages = -1;
+            int seenVisible = 0;
+            bool onlyDl = onlyDownloadable != null && onlyDownloadable.val;
+            bool hideDl = hideDownloaded != null && hideDownloaded.val;
+
+            JSONClass mergedResponse = null;
+            JSONArray mergedResources = new JSONArray();
+
+            while (scannedPages < maxPagesToScan && (totalPages < 0 || currentApiPage <= totalPages))
+            {
+                scannedPages++;
+                requestTemplate["page"] = currentApiPage.ToString();
+                string postData = requestTemplate.ToString();
+
+                SimpleJSON.JSONNode responseNode = null;
+                string requestError = null;
+                yield return StartCoroutine(PostRequest(apiUrl, postData,
+                    jsonNode => { responseNode = jsonNode; },
+                    err => { requestError = err; }));
+
+                if (!string.IsNullOrEmpty(requestError))
+                {
+                    RefreshErrorCallback(requestError);
+                    yield break;
+                }
+
+                JSONClass responseObj = responseNode != null ? responseNode.AsObject : null;
+                string status = responseObj != null ? responseObj["status"] : null;
+                bool successByStatus = !string.IsNullOrEmpty(status) && string.Equals(status.Trim(), "success", StringComparison.OrdinalIgnoreCase);
+                bool successByResources = responseObj != null && responseObj["resources"] != null;
+                if (responseObj == null || (!successByStatus && !successByResources))
+                {
+                    RefreshCallback(responseNode, initialPage);
+                    yield break;
+                }
+
+                JSONClass pagination = responseObj["pagination"].AsObject;
+                if (pagination != null)
+                {
+                    int parsedPages;
+                    if (int.TryParse(pagination["total_pages"], out parsedPages) && parsedPages > 0)
+                    {
+                        totalPages = parsedPages;
+                    }
+                }
+
+                JSONArray pageResources = responseObj["resources"].AsArray;
+                if (pageResources == null || pageResources.Count == 0)
+                {
+                    break;
+                }
+
+                if (mergedResponse == null)
+                {
+                    mergedResponse = responseObj;
+                    mergedResponse["resources"] = mergedResources;
+                }
+
+                IEnumerator enumerator = pageResources.GetEnumerator();
+                try
+                {
+                    while (enumerator.MoveNext())
+                    {
+                        SimpleJSON.JSONNode node = enumerator.Current as SimpleJSON.JSONNode;
+                        JSONClass resource = node != null ? node.AsObject : null;
+                        if (resource == null) continue;
+                        if (!CanShowResourceAfterClientFilters(resource, onlyDl, hideDl)) continue;
+
+                        if (seenVisible < targetSkipVisible)
+                        {
+                            seenVisible++;
+                            continue;
+                        }
+
+                        mergedResources.Add(node);
+                        if (mergedResources.Count >= _numPerPageInt)
+                        {
+                            break;
+                        }
+                    }
+                }
+                finally
+                {
+                    IDisposable disposable;
+                    if ((disposable = enumerator as IDisposable) != null)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+
+                if (mergedResources.Count >= _numPerPageInt)
+                {
+                    break;
+                }
+
+                currentApiPage++;
+            }
+
+            if (mergedResponse != null)
+            {
+                RefreshCallback(mergedResponse, initialPage);
+            }
+            else
+            {
+                RefreshErrorCallback("No Hub data returned");
+            }
+        }
+
+        // (removed) full filtered-total scan: replaced by fast estimate using total_pages * perpage
 
         protected void SyncNumResources(string s)
         {
@@ -939,6 +1278,7 @@ namespace VPB
 
         protected void ResetRefresh()
         {
+            if (suppressRefresh) return;
             CancelOldPageImages();
             _currentPageString = "1";
             _currentPageInt = 1;
@@ -991,6 +1331,9 @@ namespace VPB
 
         protected void ResetFilters()
         {
+            LogUtil.Log("HubBrowse.ResetFilters called");
+            _hostedOption = "All";
+            if (hostedOptionChooser != null) hostedOptionChooser.valNoCallback = "All";
             _payTypeFilter = "All";
             payTypeFilterChooser.valNoCallback = "All";
             _searchFilter = string.Empty;
@@ -1001,10 +1344,27 @@ namespace VPB
             creatorFilterChooser.valNoCallback = "All";
             _tagsFilter = "All";
             tagsFilterChooser.valNoCallback = "All";
+            if (onlyDownloadable != null) onlyDownloadable.valNoCallback = false;
+            if (hideDownloaded != null) hideDownloaded.valNoCallback = false;
+
+            // Persist the cleared state to settings
+            if (Settings.Instance != null)
+            {
+                if (Settings.Instance.HubHostedOption != null) Settings.Instance.HubHostedOption.Value = "All";
+                if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = "All";
+                if (Settings.Instance.HubSearchText != null) Settings.Instance.HubSearchText.Value = string.Empty;
+                if (Settings.Instance.HubCategoryFilter != null) Settings.Instance.HubCategoryFilter.Value = "All";
+                if (Settings.Instance.HubCreatorFilter != null) Settings.Instance.HubCreatorFilter.Value = "All";
+                if (Settings.Instance.HubTagsFilter != null) Settings.Instance.HubTagsFilter.Value = "All";
+                if (Settings.Instance.HubOnlyDownloadable != null) Settings.Instance.HubOnlyDownloadable.Value = false;
+                if (Settings.Instance.HubHideDownloaded != null) Settings.Instance.HubHideDownloaded.Value = false;
+                Settings.SaveConfig();
+            }
         }
 
         protected void ResetFiltersAndRefresh()
         {
+            LogUtil.Log("HubBrowse.ResetFiltersAndRefresh (Reset Filters button) pressed");
             ResetFilters();
             ResetRefresh();
         }
@@ -1015,6 +1375,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHostedOption != null)
             {
                 Settings.Instance.HubHostedOption.Value = _hostedOption;
+                Settings.SaveConfig();
             }
             ResetRefresh();
         }
@@ -1025,6 +1386,7 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
             {
                 Settings.Instance.HubPayTypeFilter.Value = _payTypeFilter;
+                Settings.SaveConfig();
             }
             if (_payTypeFilter != "Free" && _hostedOption != "All")
             {
@@ -1036,23 +1398,13 @@ namespace VPB
             }
         }
 
-        protected IEnumerator TriggerResetRefesh()
-        {
-            while (triggerCountdown > 0f)
-            {
-                triggerCountdown -= Time.unscaledDeltaTime;
-                yield return null;
-            }
-            triggerResetRefreshRoutine = null;
-            ResetRefresh();
-        }
-
         protected void SyncSearchFilter(string s)
         {
             _searchFilter = s;
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSearchText != null)
             {
                 Settings.Instance.HubSearchText.Value = _searchFilter;
+                Settings.SaveConfig();
             }
             bool flag = false;
             if (_searchFilter.Length > 2)
@@ -1070,12 +1422,30 @@ namespace VPB
             }
             if (flag)
             {
-                triggerCountdown = 0.5f;
-                if (triggerResetRefreshRoutine == null)
-                {
-                    triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefesh());
-                }
+                ScheduleResetRefresh(0.5f);
             }
+        }
+
+        protected void ScheduleResetRefresh(float delaySeconds)
+        {
+            if (suppressRefresh) return;
+
+            triggerCountdown = Mathf.Max(0f, delaySeconds);
+
+            // Debounce: if user keeps typing / changing filters, only refresh once after they pause.
+            if (triggerResetRefreshRoutine != null)
+            {
+                StopCoroutine(triggerResetRefreshRoutine);
+                triggerResetRefreshRoutine = null;
+            }
+            triggerResetRefreshRoutine = StartCoroutine(TriggerResetRefresh());
+        }
+
+        protected IEnumerator TriggerResetRefresh()
+        {
+            yield return new WaitForSeconds(triggerCountdown);
+            ResetRefresh();
+            triggerResetRefreshRoutine = null;
         }
 
         protected void SyncCategoryFilter(string s)
@@ -1084,8 +1454,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCategoryFilter != null)
             {
                 Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
+                Settings.SaveConfig();
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.2f);
         }
 
         public void SetPayTypeAndCategoryFilter(string payType, string category, bool onlyTheseFilters = true)
@@ -1099,6 +1470,12 @@ namespace VPB
             payTypeFilterChooser.valNoCallback = payType;
             _categoryFilter = category;
             categoryFilterChooser.valNoCallback = category;
+            if (!suppressHubSettingsSave && Settings.Instance != null)
+            {
+                if (Settings.Instance.HubPayTypeFilter != null) Settings.Instance.HubPayTypeFilter.Value = _payTypeFilter;
+                if (Settings.Instance.HubCategoryFilter != null) Settings.Instance.HubCategoryFilter.Value = _categoryFilter;
+                Settings.SaveConfig();
+            }
             ResetRefresh();
         }
 
@@ -1108,8 +1485,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubCreatorFilter != null)
             {
                 Settings.Instance.HubCreatorFilter.Value = _creatorFilter;
+                Settings.SaveConfig();
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.2f);
         }
 
         protected void SyncTagsFilter(string s)
@@ -1118,8 +1496,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubTagsFilter != null)
             {
                 Settings.Instance.HubTagsFilter.Value = _tagsFilter;
+                Settings.SaveConfig();
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.35f);
         }
 
         protected void SyncSortPrimary(string s)
@@ -1128,8 +1507,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortPrimary != null)
             {
                 Settings.Instance.HubSortPrimary.Value = _sortPrimary;
+                Settings.SaveConfig();
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.1f);
         }
 
         protected void SyncSortSecondary(string s)
@@ -1138,8 +1518,9 @@ namespace VPB
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubSortSecondary != null)
             {
                 Settings.Instance.HubSortSecondary.Value = _sortSecondary;
+                Settings.SaveConfig();
             }
-            ResetRefresh();
+            ScheduleResetRefresh(0.1f);
         }
 
         public void NavigateWebPanel(string url)
@@ -1180,6 +1561,43 @@ namespace VPB
                     hubResourceItemDetail.RegisterUI(hridui);
                 }
             }
+        }
+
+        public void DirectDownloadAllFromResourceDetail(string resourceId)
+        {
+            if (!_hubEnabled) return;
+            if (string.IsNullOrEmpty(resourceId) || resourceId == "null") return;
+            StartCoroutine(DirectDownloadAllFromResourceDetailRoutine(resourceId));
+        }
+
+        private IEnumerator DirectDownloadAllFromResourceDetailRoutine(string resourceId)
+        {
+            JSONClass request = new JSONClass();
+            request["source"] = "VaM";
+            request["action"] = "getResourceDetail";
+            request["latest_image"] = "Y";
+            request["resource_id"] = resourceId;
+
+            SimpleJSON.JSONNode responseNode = null;
+            string requestError = null;
+            yield return StartCoroutine(PostRequest(apiUrl, request.ToString(),
+                jsonNode => { responseNode = jsonNode; },
+                err => { requestError = err; }));
+
+            if (!string.IsNullOrEmpty(requestError) || responseNode == null)
+            {
+                yield break;
+            }
+
+            JSONClass resource = responseNode.AsObject;
+            if (resource == null)
+            {
+                yield break;
+            }
+
+            HubResourceItem item = new HubResourceItem(resource, this, "DirectDownloadAllDetail", true);
+            List<HubResourcePackage> packages = item.GetDownloadPackageList();
+            item.StartDirectDownloads(packages);
         }
 
         public void OpenDetail(string resource_id, bool isPackageName = false)
@@ -1352,88 +1770,29 @@ namespace VPB
 
         protected void FindMissingPackagesCallback(SimpleJSON.JSONNode jsonNode)
         {
-            if (!(jsonNode != null))
+            // Legacy single-request path kept for compatibility; now render via shared renderer.
+            if (jsonNode == null) return;
+            JSONClass root = jsonNode.AsObject;
+            if (root == null) return;
+            string status = root["status"];
+            if (status != null && status == "error")
             {
+                string err = jsonNode["error"];
+                LogUtil.LogError("findPackages returned error " + err);
                 return;
             }
-            JSONClass asObject = jsonNode.AsObject;
-            if (!(asObject != null))
+            JSONClass pkgsObj = jsonNode["packages"].AsObject;
+            if (pkgsObj == null) return;
+
+            Dictionary<string, JSONClass> serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
+            if (checkMissingPackageNames != null)
             {
-                return;
-            }
-            string text = asObject["status"];
-            if (text != null && text == "error")
-            {
-                string text2 = jsonNode["error"];
-                LogUtil.LogError("findPackages returned error " + text2);
-                return;
-            }
-            JSONClass asObject2 = jsonNode["packages"].AsObject;
-            if (!(asObject2 != null))
-            {
-                return;
-            }
-            if (missingPackages != null)
-            {
-                foreach (HubResourcePackageUI missingPackage in missingPackages)
+                foreach (string pkgId in checkMissingPackageNames)
                 {
-                    UnityEngine.Object.Destroy(missingPackage.gameObject);
+                    JSONClass pkg = pkgsObj[pkgId].AsObject;
+                    if (pkg != null) serverPackages[pkgId] = pkg;
                 }
-                missingPackages.Clear();
-            }
-            else
-            {
-                missingPackages = new List<HubResourcePackageUI>();
-            }
-            foreach (string checkMissingPackageName in checkMissingPackageNames)
-            {
-                JSONClass jSONClass = asObject2[checkMissingPackageName].AsObject;
-                if (jSONClass == null)
-                {
-                    jSONClass = new JSONClass();
-                    jSONClass["filename"] = checkMissingPackageName;
-                    jSONClass["downloadUrl"] = "null";
-                }
-                else
-                {
-                    if (Regex.IsMatch(checkMissingPackageName, "[0-9]+$"))
-                    {
-                        string text3 = jSONClass["filename"];
-                        if (text3 == null || text3 == "null" || text3 != checkMissingPackageName + ".var")
-                        {
-                            LogUtil.LogError("Missing file name " + text3 + " does not match missing package name " + checkMissingPackageName);
-                            jSONClass["filename"] = checkMissingPackageName;
-                            jSONClass["file_size"] = "null";
-                            jSONClass["licenseType"] = "null";
-                            jSONClass["downloadUrl"] = "null";
-                        }
-                    }
-                    else
-                    {
-                        string text4 = jSONClass["filename"];
-                        if (text4 == null || text4 == "null")
-                        {
-                            jSONClass["filename"] = checkMissingPackageName;
-                        }
-                    }
-                    string text5 = jSONClass["resource_id"];
-                    if (text5 == null || text5 == "null")
-                    {
-                        jSONClass["downloadUrl"] = "null";
-                    }
-                }
-                HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
-                RectTransform rectTransform = CreateDownloadPrefabInstance();
-                if (rectTransform != null)
-                {
-                    rectTransform.SetParent(missingPackagesContainer, false);
-                    HubResourcePackageUI component = rectTransform.GetComponent<HubResourcePackageUI>();
-                    if (component != null)
-                    {
-                        missingPackages.Add(component);
-                        hubResourcePackage.RegisterUI(component);
-                    }
-                }
+                RenderMissingPackages(serverPackages, checkMissingPackageNames);
             }
         }
 
@@ -1456,17 +1815,27 @@ namespace VPB
                     return;
                 }
 
+                // Debounce / single-flight: opening the panel repeatedly (or UI re-entrancy)
+                // must not start multiple concurrent requests.
+                if (missingPackagesRequestInFlight)
+                {
+                    return;
+                }
+                if (Time.realtimeSinceStartup < nextMissingPackagesRequestAllowedRealtime)
+                {
+                    return;
+                }
 
                 List<string> missingPackageNames = FileManager.singleton.GetMissingDependenciesNames();
                 if (missingPackageNames.Count > 0)
                 {
-                    JSONClass jSONClass = new JSONClass();
-                    jSONClass["source"] = "VaM";
-                    jSONClass["action"] = "findPackages";
                     checkMissingPackageNames = missingPackageNames;
-                    jSONClass["packages"] = string.Join(",", missingPackageNames.ToArray());
-                    string postData = jSONClass.ToString();
-                    StartCoroutine(PostRequest(apiUrl, postData, FindMissingPackagesCallback, FindMissingPackagesErrorCallback));
+                    if (missingPackagesCoroutine != null)
+                    {
+                        try { StopCoroutine(missingPackagesCoroutine); } catch { }
+                        missingPackagesCoroutine = null;
+                    }
+                    missingPackagesCoroutine = StartCoroutine(FindMissingPackagesBatched(missingPackageNames));
                 }
                 else if (missingPackages != null)
                 {
@@ -1489,10 +1858,202 @@ namespace VPB
 
         public void CloseMissingPackagesPanel()
         {
+            // Cancel in-flight batched lookups to prevent background CPU/network churn.
+            if (missingPackagesCoroutine != null)
+            {
+                try { StopCoroutine(missingPackagesCoroutine); } catch { }
+                missingPackagesCoroutine = null;
+            }
+            missingPackagesRequestInFlight = false;
             if (missingPackagesPanel != null)
             {
                 missingPackagesPanel.SetActive(false);
             }
+        }
+
+        private IEnumerator FindMissingPackagesBatched(List<string> missingPackageNames)
+        {
+            missingPackagesRequestInFlight = true;
+            try
+            {
+                // Avoid huge payloads that can yield empty/invalid JSON responses from the hub.
+                // Keep batches modest and add minimal delay between them.
+                const int batchSize = 200;
+
+                // If the hub is having issues, don't hammer it: backoff after errors.
+                int attempts = 0;
+                float backoffSeconds = 1f;
+
+                // Accumulate server results (keyed by missing package id).
+                Dictionary<string, JSONClass> serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
+
+                // Clear UI once, then render once at the end.
+                if (missingPackages != null)
+                {
+                    foreach (HubResourcePackageUI missingPackage in missingPackages)
+                    {
+                        UnityEngine.Object.Destroy(missingPackage.gameObject);
+                    }
+                    missingPackages.Clear();
+                }
+                else
+                {
+                    missingPackages = new List<HubResourcePackageUI>();
+                }
+
+                for (int i = 0; i < missingPackageNames.Count; i += batchSize)
+                {
+                    if (missingPackagesPanel == null || !missingPackagesPanel.activeInHierarchy)
+                    {
+                        yield break;
+                    }
+
+                    int take = Math.Min(batchSize, missingPackageNames.Count - i);
+                    List<string> batch = missingPackageNames.GetRange(i, take);
+
+                    JSONClass req = new JSONClass();
+                    req["source"] = "VaM";
+                    req["action"] = "findPackages";
+                    req["packages"] = string.Join(",", batch.ToArray());
+                    string postData = req.ToString();
+
+                    bool done = false;
+                    bool ok = false;
+                    string err = null;
+                    SimpleJSON.JSONNode respNode = null;
+
+                    yield return StartCoroutine(PostRequest(apiUrl, postData,
+                        jsonNode => { ok = true; respNode = jsonNode; done = true; },
+                        e => { ok = false; err = e; done = true; }
+                    ));
+
+                    // PostRequest is synchronous in the coroutine sense, but keep this in case of early abort paths.
+                    while (!done) yield return null;
+
+                    if (!ok || respNode == null)
+                    {
+                        attempts++;
+                        // Rate limit further attempts for a bit even after we return.
+                        nextMissingPackagesRequestAllowedRealtime = Time.realtimeSinceStartup + Math.Min(30f, backoffSeconds);
+                        if (attempts >= 5)
+                        {
+                            if (!string.IsNullOrEmpty(err))
+                                LogUtil.LogError("[VPB] Hub missing-packages: aborting after repeated errors: " + err);
+                            yield break;
+                        }
+                        yield return new WaitForSeconds(Math.Min(30f, backoffSeconds));
+                        backoffSeconds = Math.Min(30f, backoffSeconds * 2f);
+                        // retry same batch
+                        i -= batchSize;
+                        continue;
+                    }
+
+                    attempts = 0;
+                    backoffSeconds = 1f;
+
+                    JSONClass root = respNode.AsObject;
+                    if (root != null)
+                    {
+                        JSONClass pkgsObj = root["packages"].AsObject;
+                        if (pkgsObj != null)
+                        {
+                            foreach (string pkgId in batch)
+                            {
+                                JSONClass pkg = pkgsObj[pkgId].AsObject;
+                                if (pkg != null)
+                                {
+                                    serverPackages[pkgId] = pkg;
+                                }
+                            }
+                        }
+                    }
+
+                    // Small yield to keep the UI responsive.
+                    yield return null;
+                }
+
+                // Render once using the accumulated results.
+                RenderMissingPackages(serverPackages, missingPackageNames);
+            }
+            finally
+            {
+                missingPackagesRequestInFlight = false;
+                missingPackagesCoroutine = null;
+                // After a full run, add a small cooldown to prevent immediate re-entry spam.
+                nextMissingPackagesRequestAllowedRealtime = Time.realtimeSinceStartup + 1.0f;
+            }
+        }
+
+        private void RenderMissingPackages(Dictionary<string, JSONClass> serverPackages, List<string> missingPackageNames)
+        {
+            int filenameMismatchLogsRemaining = 3;
+            foreach (string checkMissingPackageName in missingPackageNames)
+            {
+                JSONClass jSONClass = null;
+                if (serverPackages != null)
+                {
+                    serverPackages.TryGetValue(checkMissingPackageName, out jSONClass);
+                }
+                if (jSONClass == null)
+                {
+                    jSONClass = new JSONClass();
+                    jSONClass["filename"] = checkMissingPackageName;
+                    jSONClass["downloadUrl"] = "null";
+                }
+                else
+                {
+                    if (Regex.IsMatch(checkMissingPackageName, "[0-9]+$"))
+                    {
+                        string text3 = jSONClass["filename"];
+                        string expected = checkMissingPackageName + ".var";
+                        if (string.IsNullOrEmpty(text3) || text3 == "null" || !string.Equals(text3, expected, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (filenameMismatchLogsRemaining > 0)
+                            {
+                                filenameMismatchLogsRemaining--;
+                                LogUtil.LogWarning("[VPB] Hub missing-packages: server filename '" + text3 + "' does not match expected '" + expected + "' for '" + checkMissingPackageName + "'. Using package id.");
+                                if (filenameMismatchLogsRemaining == 0)
+                                {
+                                    LogUtil.LogWarning("[VPB] Hub missing-packages: suppressing further filename mismatch logs.");
+                                }
+                            }
+                            jSONClass["filename"] = checkMissingPackageName;
+                            jSONClass["file_size"] = "null";
+                            jSONClass["licenseType"] = "null";
+                            jSONClass["downloadUrl"] = "null";
+                        }
+                    }
+                    else
+                    {
+                        string text4 = jSONClass["filename"];
+                        if (text4 == null || text4 == "null")
+                        {
+                            jSONClass["filename"] = checkMissingPackageName;
+                        }
+                    }
+                    string text5 = jSONClass["resource_id"];
+                    if (text5 == null || text5 == "null")
+                    {
+                        jSONClass["downloadUrl"] = "null";
+                    }
+                }
+
+                HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
+                RectTransform rectTransform = CreateDownloadPrefabInstance();
+                if (rectTransform != null)
+                {
+                    rectTransform.SetParent(missingPackagesContainer, false);
+                    HubResourcePackageUI component = rectTransform.GetComponent<HubResourcePackageUI>();
+                    if (component != null)
+                    {
+                        missingPackages.Add(component);
+                        hubResourcePackage.RegisterUI(component);
+                    }
+                }
+            }
+
+            // Apply user filtering after populating the list.
+            ApplyMissingPackagesNotOnHubVisibility();
         }
 
         public void DownloadAllMissingPackages()
@@ -1515,6 +2076,51 @@ namespace VPB
                 packageIdToResourceId.TryGetValue(packageId, out value);
             }
             return value;
+        }
+
+        public void ResolveResourceCategory(string resourceId, Action<string> callback)
+        {
+            if (string.IsNullOrEmpty(resourceId) || resourceId == "null")
+            {
+                if (callback != null) callback(null);
+                return;
+            }
+
+            if (resourceIdToCategory == null) resourceIdToCategory = new Dictionary<string, string>();
+
+            string cached;
+            if (resourceIdToCategory.TryGetValue(resourceId, out cached))
+            {
+                if (callback != null) callback(cached);
+                return;
+            }
+
+            JSONClass request = new JSONClass();
+            request["source"] = "VaM";
+            request["action"] = "getResourceDetail";
+            request["resource_id"] = resourceId;
+            StartCoroutine(PostRequest(apiUrl, request.ToString(), jsonNode =>
+            {
+                string category = null;
+                try
+                {
+                    JSONClass resource = jsonNode != null ? jsonNode.AsObject : null;
+                    if (resource != null)
+                    {
+                        category = resource["type"];
+                        if (string.IsNullOrEmpty(category) || category == "null") category = resource["category"];
+                    }
+                }
+                catch { }
+
+                if (category == "null") category = null;
+                resourceIdToCategory[resourceId] = category;
+                if (callback != null) callback(category);
+            }, err =>
+            {
+                resourceIdToCategory[resourceId] = null;
+                if (callback != null) callback(null);
+            }));
         }
 
         protected void GetPackagesJSONErrorCallback(string err)
@@ -1757,17 +2363,40 @@ namespace VPB
                     downloadQueuedCountJSON.val = "Queued: " + downloadQueue.Count;
                     DownloadRequest request = downloadQueue.Dequeue();
                     yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
+
+                    // Only refresh once after the entire queue drains; avoids heavy package rescans per file.
                     if (downloadQueue.Count == 0)
                     {
-                        VPB.FileManager.Refresh(true, false, false);
+                        TryRunDeferredRefreshAfterDownloads();
                     }
                 }
                 else
                 {
                     isDownloadingJSON.val = false;
+                    // In case the queue drained between frames, flush any pending refresh.
+                    TryRunDeferredRefreshAfterDownloads();
                 }
                 yield return null;
             }
+        }
+
+        private bool _deferredRefreshAfterDownloads;
+
+        public void DeferRefreshUntilQueueDrains()
+        {
+            _deferredRefreshAfterDownloads = true;
+        }
+
+        private void TryRunDeferredRefreshAfterDownloads()
+        {
+            if (!_deferredRefreshAfterDownloads) return;
+            if (downloadQueue != null && downloadQueue.Count > 0) return;
+
+            _deferredRefreshAfterDownloads = false;
+
+            try { FileManager.Refresh(); } catch { }
+            try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+            RefreshResources();
         }
 
         protected void OnPackageRefresh()
@@ -1838,6 +2467,11 @@ namespace VPB
             }
         }
 
+        public void OpenDownloadQueue()
+        {
+            OpenDownloading();
+        }
+
         protected void GetInfoCallback(SimpleJSON.JSONNode jsonNode)
         {
             if (refreshingGetInfoPanel != null)
@@ -1856,156 +2490,166 @@ namespace VPB
             {
                 return;
             }
-            if (asObject["location"] != null)
-            {
-                JSONArray asArray = asObject["location"].AsArray;
-                if (asArray != null)
-                {
-                    List<string> list = new List<string>();
-                    list.Add("All");
-                    IEnumerator enumerator = asArray.GetEnumerator();
-                    try
-                    {
-                        while (enumerator.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode = (SimpleJSON.JSONNode)enumerator.Current;
-                            list.Add(jSONNode);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable;
-                        if ((disposable = enumerator as IDisposable) != null)
-                        {
-                            disposable.Dispose();
-                        }
-                    }
-                    hostedOptionChooser.choices = list;
-                }
-            }
-            if (asObject["category"] != null)
-            {
-                JSONArray asArray2 = asObject["category"].AsArray;
-                if (asArray2 != null)
-                {
-                    List<string> list2 = new List<string>();
-                    list2.Add("All");
-                    IEnumerator enumerator2 = asArray2.GetEnumerator();
-                    try
-                    {
-                        while (enumerator2.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode2 = (SimpleJSON.JSONNode)enumerator2.Current;
-                            list2.Add(jSONNode2);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable2;
-                        if ((disposable2 = enumerator2 as IDisposable) != null)
-                        {
-                            disposable2.Dispose();
-                        }
-                    }
-                    payTypeFilterChooser.choices = list2;
-                }
-            }
-            if (asObject["type"] != null)
-            {
-                JSONArray asArray3 = asObject["type"].AsArray;
-                if (asArray3 != null)
-                {
-                    List<string> list3 = new List<string>();
-                    list3.Add("All");
-                    IEnumerator enumerator3 = asArray3.GetEnumerator();
-                    try
-                    {
-                        while (enumerator3.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode3 = (SimpleJSON.JSONNode)enumerator3.Current;
-                            list3.Add(jSONNode3);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable3;
-                        if ((disposable3 = enumerator3 as IDisposable) != null)
-                        {
-                            disposable3.Dispose();
-                        }
-                    }
-                    categoryFilterChooser.choices = list3;
-                }
-            }
-            if (asObject["users"] != null)
-            {
-                JSONClass asObject2 = asObject["users"].AsObject;
-                if (asObject2 != null)
-                {
-                    List<string> list4 = new List<string>();
-                    list4.Add("All");
-                    foreach (string key in asObject2.Keys)
-                    {
-                        list4.Add(key);
-                    }
-                    creatorFilterChooser.choices = list4;
-                }
-            }
-            if (asObject["tags"] != null)
-            {
-                JSONClass asObject3 = asObject["tags"].AsObject;
-                if (asObject3 != null)
-                {
-                    List<string> list5 = new List<string>();
-                    list5.Add("All");
-                    foreach (string key2 in asObject3.Keys)
-                    {
-                        list5.Add(key2);
-                    }
-                    tagsFilterChooser.choices = list5;
-                }
-            }
-            if (asObject["sort"] != null)
-            {
-                JSONArray asArray4 = asObject["sort"].AsArray;
-                if (asArray4 != null)
-                {
-                    List<string> list6 = new List<string>();
-                    List<string> list7 = new List<string>();
-                    list7.Add("None");
-                    IEnumerator enumerator6 = asArray4.GetEnumerator();
-                    try
-                    {
-                        while (enumerator6.MoveNext())
-                        {
-                            SimpleJSON.JSONNode jSONNode4 = (SimpleJSON.JSONNode)enumerator6.Current;
-                            list6.Add(jSONNode4);
-                            list7.Add(jSONNode4);
-                        }
-                    }
-                    finally
-                    {
-                        IDisposable disposable4;
-                        if ((disposable4 = enumerator6 as IDisposable) != null)
-                        {
-                            disposable4.Dispose();
-                        }
-                    }
 
-                    // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
-                    // We only add it if the API didn't include it in the getInfo sort array.
-                    // If present, keep it first to match the VPB UI convention.
-                    list6.Remove(SortSubmissionDate);
-                    list6.Insert(0, SortSubmissionDate);
-
-                    list7.Remove(SortSubmissionDate);
-                    list7.Insert(0, SortSubmissionDate);
-                    sortPrimaryChooser.choices = list6;
-                    sortSecondaryChooser.choices = list7;
+            suppressRefresh = true;
+            try
+            {
+                if (asObject["location"] != null)
+                {
+                    JSONArray asArray = asObject["location"].AsArray;
+                    if (asArray != null)
+                    {
+                        List<string> list = new List<string>();
+                        list.Add("All");
+                        IEnumerator enumerator = asArray.GetEnumerator();
+                        try
+                        {
+                            while (enumerator.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode = (SimpleJSON.JSONNode)enumerator.Current;
+                                list.Add(jSONNode);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable;
+                            if ((disposable = enumerator as IDisposable) != null)
+                            {
+                                disposable.Dispose();
+                            }
+                        }
+                        if (hostedOptionChooser != null) hostedOptionChooser.choices = list;
+                    }
                 }
-            }
+                if (asObject["category"] != null)
+                {
+                    JSONArray asArray2 = asObject["category"].AsArray;
+                    if (asArray2 != null)
+                    {
+                        List<string> list2 = new List<string>();
+                        list2.Add("All");
+                        IEnumerator enumerator2 = asArray2.GetEnumerator();
+                        try
+                        {
+                            while (enumerator2.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode2 = (SimpleJSON.JSONNode)enumerator2.Current;
+                                list2.Add(jSONNode2);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable2;
+                            if ((disposable2 = enumerator2 as IDisposable) != null)
+                            {
+                                disposable2.Dispose();
+                            }
+                        }
+                        if (payTypeFilterChooser != null) payTypeFilterChooser.choices = list2;
+                    }
+                }
+                if (asObject["type"] != null)
+                {
+                    JSONArray asArray3 = asObject["type"].AsArray;
+                    if (asArray3 != null)
+                    {
+                        List<string> list3 = new List<string>();
+                        list3.Add("All");
+                        IEnumerator enumerator3 = asArray3.GetEnumerator();
+                        try
+                        {
+                            while (enumerator3.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode3 = (SimpleJSON.JSONNode)enumerator3.Current;
+                                list3.Add(jSONNode3);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable3;
+                            if ((disposable3 = enumerator3 as IDisposable) != null)
+                            {
+                                disposable3.Dispose();
+                            }
+                        }
+                        if (categoryFilterChooser != null) categoryFilterChooser.choices = list3;
+                    }
+                }
+                if (asObject["users"] != null)
+                {
+                    JSONClass asObject2 = asObject["users"].AsObject;
+                    if (asObject2 != null)
+                    {
+                        List<string> list4 = new List<string>();
+                        list4.Add("All");
+                        foreach (string key in asObject2.Keys)
+                        {
+                            list4.Add(key);
+                        }
+                        if (creatorFilterChooser != null) creatorFilterChooser.choices = list4;
+                    }
+                }
+                if (asObject["tags"] != null)
+                {
+                    JSONClass asObject3 = asObject["tags"].AsObject;
+                    if (asObject3 != null)
+                    {
+                        List<string> list5 = new List<string>();
+                        list5.Add("All");
+                        foreach (string key2 in asObject3.Keys)
+                        {
+                            list5.Add(key2);
+                        }
+                        if (tagsFilterChooser != null) tagsFilterChooser.choices = list5;
+                    }
+                }
+                if (asObject["sort"] != null)
+                {
+                    JSONArray asArray4 = asObject["sort"].AsArray;
+                    if (asArray4 != null)
+                    {
+                        List<string> list6 = new List<string>();
+                        List<string> list7 = new List<string>();
+                        list7.Add("None");
+                        IEnumerator enumerator6 = asArray4.GetEnumerator();
+                        try
+                        {
+                            while (enumerator6.MoveNext())
+                            {
+                                SimpleJSON.JSONNode jSONNode4 = (SimpleJSON.JSONNode)enumerator6.Current;
+                                list6.Add(jSONNode4);
+                                list7.Add(jSONNode4);
+                            }
+                        }
+                        finally
+                        {
+                            IDisposable disposable4;
+                            if ((disposable4 = enumerator6 as IDisposable) != null)
+                            {
+                                disposable4.Dispose();
+                            }
+                        }
 
-            ApplyPersistedHubSettingsIfNeeded();
+                        // VaM Hub supports "Submission Date" sorting on the website; ensure it's available in the in-game UI.
+                        // We only add it if the API didn't include it in the getInfo sort array.
+                        // If present, keep it first to match the VPB UI convention.
+                        list6.Remove(SortSubmissionDate);
+                        list6.Insert(0, SortSubmissionDate);
+
+                        list7.Remove(SortSubmissionDate);
+                        list7.Insert(0, SortSubmissionDate);
+
+                        if (sortPrimaryChooser != null) sortPrimaryChooser.choices = list6;
+                        if (sortSecondaryChooser != null) sortSecondaryChooser.choices = list7;
+                    }
+                }
+
+                ApplyPersistedHubSettingsIfNeeded();
+            }
+            finally
+            {
+                suppressRefresh = false;
+            }
 
             string text = asObject["last_update"];
             if (packagesJSONUrl != null && packagesJSONUrl != string.Empty && text != null)
@@ -2013,6 +2657,12 @@ namespace VPB
                 string uri = packagesJSONUrl + "?" + text;
                 LogUtil.Log($"HubBrowse requesting packages.json uri={uri}");
                 StartCoroutine(GetRequest(uri, GetPackagesJSONCallback, GetPackagesJSONErrorCallback));
+            }
+
+            // Only refresh if items haven't been loaded yet (e.g. by Show())
+            if (items == null || items.Count == 0)
+            {
+                RefreshResources();
             }
         }
 
@@ -2054,10 +2704,15 @@ namespace VPB
             suppressHubSettingsSave = true;
             try
             {
-                bool onlyDl = (Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+                bool onlyDl = (Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
                 if (onlyDownloadable != null)
                 {
                     onlyDownloadable.valNoCallback = onlyDl;
+                }
+                bool hideDl = (Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
+                if (hideDownloaded != null)
+                {
+                    hideDownloaded.valNoCallback = hideDl;
                 }
 
                 string hosted = (Settings.Instance.HubHostedOption != null) ? Settings.Instance.HubHostedOption.Value : _hostedOption;
@@ -2384,7 +3039,8 @@ namespace VPB
             try
             {
                 componentInChildren.categoryFilterPopup.useFiltering = false;
-                componentInChildren.categoryFilterPopup.numPopupValues = 0;
+                componentInChildren.categoryFilterPopup.useFiltering = true;
+                componentInChildren.categoryFilterPopup.numPopupValues = 30;
                 categoryFilterChooser.RegisterPopup(componentInChildren.categoryFilterPopup, isAlt);
             }
             catch (Exception e)
@@ -2394,7 +3050,8 @@ namespace VPB
             try
             {
                 componentInChildren.creatorFilterPopup.useFiltering = false;
-                componentInChildren.creatorFilterPopup.numPopupValues = 0;
+                componentInChildren.creatorFilterPopup.useFiltering = true;
+                componentInChildren.creatorFilterPopup.numPopupValues = 30;
                 creatorFilterChooser.RegisterPopup(componentInChildren.creatorFilterPopup, isAlt);
             }
             catch (Exception e)
@@ -2404,7 +3061,8 @@ namespace VPB
             try
             {
                 componentInChildren.tagsFilterPopup.useFiltering = false;
-                componentInChildren.tagsFilterPopup.numPopupValues = 0;
+                componentInChildren.tagsFilterPopup.useFiltering = true;
+                componentInChildren.tagsFilterPopup.numPopupValues = 30;
                 tagsFilterChooser.RegisterPopup(componentInChildren.tagsFilterPopup, isAlt);
 
             }
@@ -2450,8 +3108,10 @@ namespace VPB
             var relPos = openMissingPackagesPanelButton.transform.localPosition;
             Transform parent = openMissingPackagesPanelButton.transform.parent;
 
-            bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : true;
+            bool initialOnlyDownloadable = (Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null) ? Settings.Instance.HubOnlyDownloadable.Value : false;
             onlyDownloadable = new JSONStorableBool("Only Downloadable", initialOnlyDownloadable, SyncOnlyDownloadable);
+            bool initialHideDownloaded = (Settings.Instance != null && Settings.Instance.HubHideDownloaded != null) ? Settings.Instance.HubHideDownloaded.Value : false;
+            hideDownloaded = new JSONStorableBool("Hide Downloaded Packages", initialHideDownloaded, SyncHideDownloaded);
             var manager = SuperController.singleton.transform.Find("ScenePluginManager").GetComponent<MVRPluginManager>();
             if (manager != null && manager.configurableTogglePrefab != null)
             {
@@ -2467,18 +3127,150 @@ namespace VPB
 
                     uIDynamicToggle.backgroundImage.color = new Color32(133,255,133,255);
                 }
+
+                RectTransform hideTransform = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, parent) as RectTransform;
+                hideTransform.localPosition = new Vector3(relPos.x, relPos.y + 140, relPos.z);
+                hideTransform.gameObject.SetActive(true);
+                var hideToggle = hideTransform.GetComponent<UIDynamicToggle>();
+                if (hideToggle != null)
+                {
+                    hideToggle.label = hideDownloaded.name;
+                    hideDownloaded.toggle = hideToggle.toggle;
+                    hideToggle.backgroundImage.color = new Color32(163, 111, 214, 255);
+                }
+
+                // Missing-packages panel toggle (bottom): hide "Not On Hub" entries.
+                // (Create once for the main UI. Alt UI can reuse JSONStorable if it binds separately.)
+                if (!isAlt && missingPackagesPanel != null && hideMissingNotOnHubToggleUI == null)
+                {
+                    hideMissingNotOnHubJSON = new JSONStorableBool(
+                        "Hide Not On Hub",
+                        true,
+                        (JSONStorableBool.SetBoolCallback)(b => ApplyMissingPackagesNotOnHubVisibility()));
+
+                    // Place it next to the panel "Close" button for intuitive UX.
+                    var closeBtn = componentInChildren.closeMissingPackagesPanelButton;
+                    RectTransform closeBtnRt = closeBtn != null ? closeBtn.transform as RectTransform : null;
+                    Transform toggleParent = closeBtnRt != null ? closeBtnRt.parent : missingPackagesPanel.transform;
+                    if (toggleParent != null)
+                    {
+                        RectTransform toggleRt = UnityEngine.Object.Instantiate(manager.configurableTogglePrefab, toggleParent) as RectTransform;
+                        if (toggleRt != null)
+                        {
+                            toggleRt.gameObject.SetActive(true);
+                            toggleRt.localScale = Vector3.one;
+                            PositionHideNotOnHubToggle(componentInChildren, toggleRt);
+
+                            hideMissingNotOnHubToggleUI = toggleRt.GetComponent<UIDynamicToggle>();
+                            if (hideMissingNotOnHubToggleUI != null)
+                            {
+                                hideMissingNotOnHubToggleUI.label = hideMissingNotOnHubJSON.name;
+                                hideMissingNotOnHubJSON.toggle = hideMissingNotOnHubToggleUI.toggle;
+                                hideMissingNotOnHubToggleUI.backgroundImage.color = new Color32(255, 170, 110, 255);
+                            }
+                            // Apply immediately so the initial ON state takes effect without user interaction.
+                            ApplyMissingPackagesNotOnHubVisibility();
+
+                            // Button: copy list of "Not On Hub" items to clipboard.
+                            RectTransform btnRt = UnityEngine.Object.Instantiate(manager.configurableButtonPrefab, toggleParent) as RectTransform;
+                            if (btnRt != null)
+                            {
+                                btnRt.gameObject.SetActive(true);
+                                copyMissingFromHubButtonUI = btnRt.GetComponent<UIDynamicButton>();
+                                if (copyMissingFromHubButtonUI != null)
+                                {
+                                    copyMissingFromHubButtonUI.label = "Copy Missing From Hub List";
+                                    copyMissingFromHubButtonDefaultColor = copyMissingFromHubButtonUI.buttonColor;
+                                    if (copyMissingFromHubButtonUI.button != null)
+                                    {
+                                        copyMissingFromHubButtonUI.button.onClick.AddListener(() =>
+                                        {
+                                            CopyMissingFromHubListToClipboard();
+                                        });
+                                    }
+                                }
+                                PositionCopyMissingFromHubButton(componentInChildren, btnRt);
+                            }
+                        }
+                    }
+                }
+                else if (!isAlt && hideMissingNotOnHubToggleUI != null)
+                {
+                    // UI can be rebuilt; keep it positioned correctly.
+                    PositionHideNotOnHubToggle(componentInChildren, hideMissingNotOnHubToggleUI.transform as RectTransform);
+                    if (copyMissingFromHubButtonUI != null)
+                        PositionCopyMissingFromHubButton(componentInChildren, copyMissingFromHubButtonUI.transform as RectTransform);
+                }
             }
             
 
                 LogUtil.LogVerboseUi("HubBrowse Init End " + _uiSw.ElapsedMilliseconds + "ms");
         }
         JSONStorableBool onlyDownloadable;
+        JSONStorableBool hideDownloaded;
+
+        private void ApplyMissingPackagesNotOnHubVisibility()
+        {
+            try
+            {
+                bool hide = hideMissingNotOnHubJSON != null && hideMissingNotOnHubJSON.val;
+                if (!hide || missingPackages == null) 
+                {
+                    if (missingPackages != null)
+                    {
+                        foreach (var ui in missingPackages)
+                        {
+                            if (ui != null) ui.gameObject.SetActive(true);
+                        }
+                    }
+                    return;
+                }
+
+                foreach (var ui in missingPackages)
+                {
+                    if (ui == null) continue;
+                    bool notOnHub = (ui.connectedItem == null) || !ui.connectedItem.HasValidDownloadUrl;
+                    ui.gameObject.SetActive(!notOnHub);
+                }
+            }
+            catch { }
+        }
+
+        protected bool IsResourceAlreadyDownloaded(JSONClass resource)
+        {
+            if (resource == null) return false;
+            JSONArray hubFiles = resource["hubFiles"].AsArray;
+            if (hubFiles == null || hubFiles.Count == 0) return false;
+
+            IEnumerator enumerator = hubFiles.GetEnumerator();
+            try
+            {
+                while (enumerator.MoveNext())
+                {
+                    SimpleJSON.JSONNode fileNode = (SimpleJSON.JSONNode)enumerator.Current;
+                    string filename = fileNode["filename"];
+                    if (string.IsNullOrEmpty(filename)) return false;
+                    string packageName = Regex.Replace(filename, ".var$", string.Empty);
+                    if (FileManager.GetPackage(packageName, ensureInstalled: false) == null) return false;
+                }
+            }
+            finally
+            {
+                IDisposable disposable;
+                if ((disposable = enumerator as IDisposable) != null)
+                {
+                    disposable.Dispose();
+                }
+            }
+            return true;
+        }
 
         protected void SyncOnlyDownloadable(bool b)
         {
             if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubOnlyDownloadable != null)
             {
                 Settings.Instance.HubOnlyDownloadable.Value = b;
+                Settings.SaveConfig();
             }
 
             if (b)
@@ -2491,10 +3283,21 @@ namespace VPB
                     if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubPayTypeFilter != null)
                     {
                         Settings.Instance.HubPayTypeFilter.Value = "Free";
+                        Settings.SaveConfig();
                     }
                 }
             }
 
+            ResetRefresh();
+        }
+
+        protected void SyncHideDownloaded(bool b)
+        {
+            if (!suppressHubSettingsSave && Settings.Instance != null && Settings.Instance.HubHideDownloaded != null)
+            {
+                Settings.Instance.HubHideDownloaded.Value = b;
+                Settings.SaveConfig();
+            }
             ResetRefresh();
         }
         protected void OnLoad(ZenFulcrum.EmbeddedBrowser.JSONNode loadData)

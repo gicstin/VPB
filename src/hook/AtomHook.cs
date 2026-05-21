@@ -15,6 +15,9 @@ namespace VPB
 {
     class AtomHook
     {
+        private static readonly HashSet<string> s_PresetCatalogRefreshedUids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // Load-look feature
         //prefab:TabControlAtom
         [HarmonyPrefix]
@@ -22,6 +25,7 @@ namespace VPB
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
+            SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -40,6 +44,7 @@ namespace VPB
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
+            SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (MVR.FileManagement.FileManager.FileExists(saveName))
             {
                 using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
@@ -171,12 +176,31 @@ namespace VPB
             LogUtil.Log($"[VPB hook]PresetManager PreLoadPresetPreFromJSON {atomName} {storableId} {__instance.presetName}");
             if (processJSON != null)
             {
-                EnsureInstalledFromJSON(processJSON);
+                SuperControllerHook.ParsePresetForSimTextures(processJSON, __instance.presetName);
+                bool shouldRefreshCatalog = EnsureInstalledFromJSON(processJSON);
+                if (shouldRefreshCatalog)
+                {
+                    try { VamOnDemandLoader.RequestCoalescedVamRefresh("preset_json_catalog"); } catch { }
+
+                    // VaM's per-type catalogs (DAZ morph/clothing/hair) only repopulate during MVR FileManager.Refresh.
+                    // Coalesced refresh fires 250ms+ later on a subsequent Update frame, after VaM has already
+                    // applied this preset against stale catalogs. For interactive preset clicks, flush now so
+                    // morphs/clothing/hair bind on first apply. Scene-load cascades stay coalesced to avoid N refreshes.
+                    bool sceneLoad = false;
+                    try { sceneLoad = VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene; } catch { }
+                    bool syncRefreshEnabled = true;
+                    try { syncRefreshEnabled = Settings.Instance != null && Settings.Instance.SyncRefreshOnPresetLoad != null ? Settings.Instance.SyncRefreshOnPresetLoad.Value : true; } catch { }
+                    if (!sceneLoad && syncRefreshEnabled)
+                    {
+                        try { VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("preset_json_catalog_interactive"); } catch { }
+                    }
+                }
             }
         }
 
-        static void EnsureInstalledFromJSON(JSONNode node)
+        static bool EnsureInstalledFromJSON(JSONNode node)
         {
+            bool shouldRefreshCatalog = false;
             var results = new HashSet<string>();
             JSONOptimization.ExtractAllVariableReferences(node, results);
             if (results.Count > 0)
@@ -193,6 +217,39 @@ namespace VPB
                     if (pkg == null && !key.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                     {
                         pkg = FileManager.GetPackage(key + ".latest");
+                    }
+
+                    string touchedUid = null;
+                    if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                        touchedUid = pkg.Uid;
+                    else
+                        touchedUid = key;
+
+                    // In scan-whitelist mode, installing via VPB's package registry alone is not enough.
+                    // Pre-register the resolved UID in VaM FileManager before preset item lookups (hair/clothing).
+                    if (ScanWhitelistManager.Instance.IsEnabled)
+                    {
+                        try
+                        {
+                            string od = null;
+                            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                                od = VamOnDemandLoader.TryRegisterPackageOnDemand(pkg.Uid);
+                            else
+                                od = VamOnDemandLoader.TryRegisterPackageOnDemand(key);
+                            if (!string.IsNullOrEmpty(od)) shouldRefreshCatalog = true;
+                        }
+                        catch { }
+
+                        // Edge case: first UIA preset load can still miss catalog population until a later browse/refresh.
+                        // Force a one-time refresh per dependency UID encountered through preset JSON.
+                        if (!string.IsNullOrEmpty(touchedUid))
+                        {
+                            if (!s_PresetCatalogRefreshedUids.Contains(touchedUid))
+                            {
+                                s_PresetCatalogRefreshedUids.Add(touchedUid);
+                                shouldRefreshCatalog = true;
+                            }
+                        }
                     }
 
                     if (pkg == null)
@@ -218,6 +275,7 @@ namespace VPB
                     LogUtil.LogWarning(sb.ToString());
                 }
             }
+            return shouldRefreshCatalog;
         }
     }
 }

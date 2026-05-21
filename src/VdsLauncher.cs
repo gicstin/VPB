@@ -256,6 +256,18 @@ namespace VPB
             }
             catch { }
 
+            // In whitelist mode, dependency install by text can still leave AddonPackages
+            // excluded from VaM registration. Prewarm on-demand registrations from scene
+            // metadata/dependency graph before invoking load so hair/morph entries resolve
+            // in the first scene bootstrap pass.
+            try
+            {
+                FileEntry entry = null;
+                try { entry = FileManager.GetFileEntry(resolved); } catch { entry = null; }
+                SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, resolved);
+            }
+            catch { }
+
             try
             {
                 // In normal UI usage, VPB starts the "scene click" timer when the user clicks a scene file.
@@ -275,7 +287,7 @@ namespace VPB
                 LogUtil.LogError("VDS could not invoke scene load");
             }
             executed = true;
-            LogUtil.LogReadyOnce("VDS initialized");
+            LogUtil.LogUiReadyOnce("VDS initialized");
         }
 
         static void ApplyOverridesOnce()
@@ -673,11 +685,6 @@ namespace VPB
                                 Environment.CurrentDirectory = root;
                             }
 
-                            try
-                            {
-                                LogUtil.Log("VDS cwd=" + Environment.CurrentDirectory + " dataPath=" + dataPath + " root=" + (root ?? "<null>"));
-                            }
-                            catch { }
                         }
                     }
                     catch { }
@@ -690,11 +697,6 @@ namespace VPB
                         var fmType = vamAsm.GetType("MVR.FileManagement.FileManager");
                         if (fmType != null)
                         {
-                            try
-                            {
-                                LogUtil.Log("VDS FileManager type=" + fmType.AssemblyQualifiedName);
-                            }
-                            catch { }
 
                             // Ensure VaM considers the install root/Custom readable.
                             try
@@ -755,49 +757,6 @@ namespace VPB
                                 setSave.Invoke(null, new object[] { saveName, true });
                             }
 
-                            try
-                            {
-                                var pLoad = fmType.GetProperty("CurrentLoadDir", BindingFlags.Public | BindingFlags.Static);
-                                var pPkg = fmType.GetProperty("CurrentPackageUid", BindingFlags.Public | BindingFlags.Static);
-                                string curLoad = pLoad != null ? pLoad.GetValue(null, null) as string : null;
-                                string curPkg = pPkg != null ? pPkg.GetValue(null, null) as string : null;
-                                LogUtil.Log("VDS FileManager ctx loadDir=" + (curLoad ?? "<null>") + " pkg=" + (curPkg ?? "<null>"));
-
-                                string probe = "Custom/Atom/Person/Textures/Arin/Arin_Face_2.jpg";
-                                var mNorm = fmType.GetMethod("NormalizeLoadPath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
-                                if (mNorm != null)
-                                {
-                                    var norm = mNorm.Invoke(null, new object[] { probe }) as string;
-                                    LogUtil.Log("VDS FileManager NormalizeLoadPath(" + probe + ")=" + (norm ?? "<null>"));
-                                }
-
-                                var mFull = fmType.GetMethod("GetFullPath", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
-                                if (mFull != null)
-                                {
-                                    var full = mFull.Invoke(null, new object[] { probe }) as string;
-                                    LogUtil.Log("VDS FileManager GetFullPath(" + probe + ")=" + (full ?? "<null>"));
-                                }
-
-                                var mExists1 = fmType.GetMethod("FileExists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string) }, null);
-                                if (mExists1 != null)
-                                {
-                                    var existsObj = mExists1.Invoke(null, new object[] { probe });
-                                    LogUtil.Log("VDS FileManager FileExists(" + probe + ")=" + (existsObj != null ? existsObj.ToString() : "<null>"));
-                                }
-                                else
-                                {
-                                    var mExists2 = fmType.GetMethod("FileExists", BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(string), typeof(bool) }, null);
-                                    if (mExists2 != null)
-                                    {
-                                        var existsObj = mExists2.Invoke(null, new object[] { probe, true });
-                                        LogUtil.Log("VDS FileManager FileExists(" + probe + ",true)=" + (existsObj != null ? existsObj.ToString() : "<null>"));
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                try { LogUtil.Log("VDS FileManager diag failed: " + ex.Message); } catch { }
-                            }
                         }
                     }
                 }

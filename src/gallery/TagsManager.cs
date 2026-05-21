@@ -75,7 +75,7 @@ namespace VPB
                 if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
                     Directory.CreateDirectory(GlobalInfo.PluginInfoDirectory);
 
-                File.WriteAllText(tagsPath, root.ToString());
+                File.WriteAllText(tagsPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 8192));
             }
             catch (Exception ex)
             {

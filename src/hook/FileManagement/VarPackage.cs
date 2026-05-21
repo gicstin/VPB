@@ -25,6 +25,8 @@ namespace VPB
         public long VarFileSize;
         public long VarLastWriteTimeUtcTicks;
         public bool IsInvalid;
+        /// <summary>Internal "created" from zip header (meta.json entry time), stored as <see cref="DateTime.ToBinary"/>.</summary>
+        public long VarInternalCreationTimeBinary;
 
         public List<string> ClothingFileEntryNames;
         public List<string> ClothingTags;
@@ -140,6 +142,7 @@ namespace VPB
                 VarFileSize = reader.ReadInt64();
                 VarLastWriteTimeUtcTicks = reader.ReadInt64();
                 IsInvalid = reader.ReadBoolean();
+                VarInternalCreationTimeBinary = reader.ReadInt64();
             }
         }
 
@@ -245,6 +248,7 @@ namespace VPB
             writer.Write(VarFileSize);
             writer.Write(VarLastWriteTimeUtcTicks);
             writer.Write(IsInvalid);
+            writer.Write(VarInternalCreationTimeBinary);
         }
     }
 
@@ -260,7 +264,7 @@ namespace VPB
 		private const int CodePageGbk = 936;
 		private const int CodePageSystemDefault = 0;
 
-		/// <summary>Browser Assist: plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
+		/// <summary>Plugins under Custom/Scripts as .cs / .cslist / .dll (paths may use \ or / in zip).</summary>
 		private static bool IsPluginScriptZipEntry(string entryName)
 		{
 			if (string.IsNullOrEmpty(entryName)) return false;
@@ -741,6 +745,41 @@ namespace VPB
 			protected set;
 		}
 
+		/// <summary>
+		/// Internal "created" timestamp from zip header (meta.json <see cref="ZipEntry.DateTime"/>), stored as <see cref="DateTime.ToBinary"/>.
+		/// Falls back to <see cref="DateTime.MinValue"/> when unknown.
+		/// </summary>
+		public long InternalCreationTimeBinary
+		{
+			get;
+			protected set;
+		} = long.MinValue;
+
+		/// <summary>
+		/// First time VPB's gallery index saw this VAR uid, as <see cref="DateTime.ToBinary"/> (UTC).
+		/// Set once at first scan; preserved across index rebuilds via SQLite snapshot+restore.
+		/// <see cref="long.MinValue"/> when unknown. Populated from <c>pkg.first_scanned</c> column when reading rows from the gallery index.
+		/// </summary>
+		public long FirstScannedBinary { get; set; } = long.MinValue;
+
+		private static long NormalizeZipHeaderTimeBinary(long binaryOrMin)
+		{
+			if (binaryOrMin == long.MinValue) return long.MinValue;
+			try
+			{
+				var dt = DateTime.FromBinary(binaryOrMin);
+				// ZIP/DOS timestamps commonly cannot represent < 1980; some libs surface invalid as 1979-12-31.
+				if (dt.Year < 1980) return long.MinValue;
+				// Reject clearly bogus future timestamps (clock skew / invalid header).
+				if (dt > DateTime.Now.AddDays(2)) return long.MinValue;
+				return binaryOrMin;
+			}
+			catch
+			{
+				return long.MinValue;
+			}
+		}
+
 		public long Size
 		{
 			get;
@@ -1058,6 +1097,7 @@ namespace VPB
 			IsCorruptedArchive = false;
 			MissingDependenciesChecked = false;
 			metaEntry = null;
+			InternalCreationTimeBinary = long.MinValue;
 			try
 			{
 				lock (m_ZipFileLock)
@@ -1169,6 +1209,7 @@ namespace VPB
 							this.HairFileEntryNames = vp.HairFileEntryNames;
 							this.HairTags = vp.HairTags;
 							this.RecursivePackageDependencies = vp.RecursivePackageDependencies;
+							this.InternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(vp.VarInternalCreationTimeBinary);
 							flag = true;
 							Interlocked.Increment(ref scanCacheHit);
 							Interlocked.Increment(ref scanCacheValidatedHit);
@@ -1196,6 +1237,7 @@ namespace VPB
 										{
 											if (zipEntry.Name == "meta.json")
 											{
+												try { InternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(zipEntry.DateTime.ToBinary()); } catch { InternalCreationTimeBinary = long.MinValue; }
 												VarFileEntry varFileEntry = new VarFileEntry(this, zipEntry.Name, zipEntry.DateTime, zipEntry.Size);
 												FileEntries.Add(varFileEntry);
 												if (zipEntry.Name == "meta.json")
@@ -1297,7 +1339,7 @@ namespace VPB
 												}
 											}
 										}
-										// Session plugins in VARs (BA indexes full archive; VPB previously skipped .cs/.cslist/.dll entirely).
+										// Session plugins in VARs.
 										else if (IsPluginScriptZipEntry(entryName))
 										{
 											VarFileEntry varFileEntry = new VarFileEntry(this, entryName, zipEntry.DateTime, zipEntry.Size);
@@ -1647,6 +1689,7 @@ namespace VPB
 			svp.FileEntrySizes = list3;//.ToArray();
 			svp.VarFileSize = Size;
 			svp.VarLastWriteTimeUtcTicks = LastWriteTime.ToUniversalTime().Ticks;
+			svp.VarInternalCreationTimeBinary = NormalizeZipHeaderTimeBinary(InternalCreationTimeBinary);
 			if (clothingFileList != null && clothingFileList.Count > 0)
                 svp.ClothingFileEntryNames = clothingFileList;//.ToArray();
 			if (clothingTags != null && clothingTags.Count > 0)

@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Diagnostics;
 using BepInEx;
 using UnityEngine;
 using HarmonyLib;
@@ -15,8 +16,16 @@ namespace VPB
 {
     public class SuperControllerHook
     {
+        private static readonly Regex s_HubResourcePathRegex =
+            new Regex(@"^/resources/(?<id>\d+)(/|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly object pluginCreateLock = new object();
+        private static readonly Dictionary<int, Stopwatch> pluginCreateSwByThread = new Dictionary<int, Stopwatch>();
+        private static readonly Dictionary<int, string> pluginCreateNameByThread = new Dictionary<int, string>();
+
         // Registry of confirmed simulation texture paths extracted from preset files
         private static HashSet<string> simTextureRegistry = new HashSet<string>();
+        private static HashSet<string> simTexturePatchedThisLoad = new HashSet<string>();
         private static readonly object registryLock = new object();
 
         /// <summary>
@@ -24,11 +33,19 @@ namespace VPB
         /// </summary>
         public static void RegisterSimTexture(string path)
         {
+            RegisterSimTexture(path, null);
+        }
+
+        public static void RegisterSimTexture(string path, string presetPath)
+        {
             if (string.IsNullOrEmpty(path)) return;
-            string normalized = path.ToLowerInvariant();
+            List<string> candidates = BuildSimTextureRegistryCandidates(path, presetPath);
             lock (registryLock)
             {
-                simTextureRegistry.Add(normalized);
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    simTextureRegistry.Add(candidates[i]);
+                }
             }
         }
 
@@ -40,6 +57,7 @@ namespace VPB
             lock (registryLock)
             {
                 simTextureRegistry.Clear();
+                simTexturePatchedThisLoad.Clear();
             }
         }
 
@@ -55,12 +73,25 @@ namespace VPB
                 JSONNode root = UI.LoadJSONWithFallback(presetPath, null);
                 if (root == null) return;
 
-                // Recursively search for simEnabled entries with texture URLs
                 ParseNodeForSimTexturesRecursive(root, presetPath);
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning($"[VPB SIM] Failed to parse preset for sim textures: {presetPath} - {ex.Message}");
+            }
+        }
+
+        public static void ParsePresetForSimTextures(JSONNode root, string presetPath)
+        {
+            if (root == null) return;
+
+            try
+            {
+                ParseNodeForSimTexturesRecursive(root, presetPath);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB SIM] Failed to parse preset JSON for sim textures: " + ex.Message);
             }
         }
 
@@ -76,10 +107,17 @@ namespace VPB
                     string key = kv.Key;
                     JSONNode value = kv.Value;
 
+                    if (IsSimulationTextureKey(key) && LooksLikeImagePath(value != null ? value.Value : null))
+                    {
+                        string textureUrl = value.Value;
+                        RegisterSimTexture(textureUrl, presetPath);
+                        LogUtil.Log($"[VPB SIM] Registered sim texture from key '{key}': {textureUrl}");
+                    }
+
                     // Check if this entry has simEnabled="true"
                     if (key.Equals("simEnabled", StringComparison.OrdinalIgnoreCase))
                     {
-                        string valStr = value.Value?.ToLowerInvariant();
+                        string valStr = value != null ? value.Value?.ToLowerInvariant() : null;
                         if (valStr == "true" || valStr == "1")
                         {
                             // Look for texture URL in the parent or sibling nodes
@@ -90,7 +128,7 @@ namespace VPB
                             string textureUrl = FindTextureUrlInObject(obj);
                             if (!string.IsNullOrEmpty(textureUrl))
                             {
-                                RegisterSimTexture(textureUrl);
+                                RegisterSimTexture(textureUrl, presetPath);
                                 LogUtil.Log($"[VPB SIM] Registered sim texture from preset: {textureUrl}");
                             }
                         }
@@ -116,7 +154,9 @@ namespace VPB
             if (obj == null) return null;
 
             // Common keys for texture URLs in clothing presets
-            string[] urlKeys = new[] { "url", "Url", "textureUrl", "TextureUrl", 
+            string[] urlKeys = new[] { "simTexture", "SimTexture", "simulationTexture", "SimulationTexture",
+                                       "stimulationTexture", "StimulationTexture", "physicsTexture", "PhysicsTexture",
+                                       "url", "Url", "textureUrl", "TextureUrl",
                                        "diffuseUrl", "normalUrl", "specularUrl", "glossUrl" };
 
             foreach (var key in urlKeys)
@@ -124,8 +164,7 @@ namespace VPB
                 if (obj[key] != null)
                 {
                     string val = obj[key].Value;
-                    if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || 
-                                                        val.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+                    if (LooksLikeImagePath(val))
                     {
                         return val;
                     }
@@ -146,7 +185,7 @@ namespace VPB
                             kv.Key.IndexOf("url", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
                             string val = kv.Value?.Value;
-                            if (!string.IsNullOrEmpty(val) && (val.EndsWith(".png") || val.EndsWith(".jpg")))
+                            if (LooksLikeImagePath(val))
                                 return val;
                         }
                     }
@@ -156,13 +195,142 @@ namespace VPB
             return null;
         }
 
-        private static bool IsPluginsAlwaysEnabledSettingOn()
+        private static List<string> BuildSimTextureRegistryCandidates(string path, string presetPath)
         {
+            var candidates = new List<string>();
+            AddNormalizedSimTextureCandidate(candidates, path);
+
+            string resolved = ResolveTexturePathRelativeToPreset(path, presetPath);
+            AddNormalizedSimTextureCandidate(candidates, resolved);
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                string trimmed = path.Trim();
+                if (trimmed.StartsWith("./", StringComparison.Ordinal) || trimmed.StartsWith(".\\", StringComparison.Ordinal))
+                {
+                    AddNormalizedSimTextureCandidate(candidates, trimmed.Substring(2));
+                }
+            }
+
+            return candidates;
+        }
+
+        private static void AddNormalizedSimTextureCandidate(List<string> candidates, string path)
+        {
+            string normalized = NormalizeSimTexturePath(path);
+            if (string.IsNullOrEmpty(normalized)) return;
+            if (!candidates.Contains(normalized)) candidates.Add(normalized);
+        }
+
+        private static string NormalizeSimTexturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+
+            string normalized = path.Trim().Replace('\\', '/').ToLowerInvariant();
+            while (normalized.StartsWith("./", StringComparison.Ordinal))
+                normalized = normalized.Substring(2);
+
+            return normalized;
+        }
+
+        private static string ResolveTexturePathRelativeToPreset(string texturePath, string presetPath)
+        {
+            if (string.IsNullOrEmpty(texturePath) || string.IsNullOrEmpty(presetPath)) return null;
+
+            string tex = texturePath.Trim().Replace('\\', '/');
+            if (tex.IndexOf(":/", StringComparison.Ordinal) >= 0 || tex.StartsWith("/", StringComparison.Ordinal))
+                return tex;
+
+            while (tex.StartsWith("./", StringComparison.Ordinal))
+                tex = tex.Substring(2);
+
+            string preset = presetPath.Trim().Replace('\\', '/');
+            int slash = preset.LastIndexOf('/');
+            if (slash < 0) return null;
+
+            return preset.Substring(0, slash + 1) + tex;
+        }
+
+        private static bool RegistryContainsSimulationTexture(string lowerPath)
+        {
+            string normalized = NormalizeSimTexturePath(lowerPath);
+            if (string.IsNullOrEmpty(normalized)) return false;
+
+            lock (registryLock)
+            {
+                if (simTextureRegistry.Contains(normalized))
+                    return true;
+
+                foreach (string registered in simTextureRegistry)
+                {
+                    if (string.IsNullOrEmpty(registered) || registered.Length < 8) continue;
+                    if (normalized.EndsWith("/" + registered, StringComparison.Ordinal)) return true;
+                    if (registered.EndsWith("/" + normalized, StringComparison.Ordinal)) return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool LooksLikeImagePath(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            return value.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                || value.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                || value.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool IsSimulationTextureKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+
+            if (key.Equals("simTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("simulationTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("stimulationTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("physicsTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.IndexOf("simTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("simulationTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("stimulationTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.IndexOf("physicsTexture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+            return false;
+        }
+
+        private static bool IsClothingSimulationMapName(string lowerPath, string filename)
+        {
+            if (string.IsNullOrEmpty(lowerPath) || string.IsNullOrEmpty(filename)) return false;
+            if (lowerPath.IndexOf("/clothing/", StringComparison.Ordinal) < 0) return false;
+
+            if (filename.IndexOf("simtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("simulationtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("stimulationtexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("physicstexture", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heatmap", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat_map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat-map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heatzone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat_zone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("heat-zone", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weightmap", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weight_map", StringComparison.Ordinal) >= 0) return true;
+            if (filename.IndexOf("weight-map", StringComparison.Ordinal) >= 0) return true;
+
+            if (Regex.IsMatch(filename, @"(^|[_\-])stim(ulation)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])heat([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])zone([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+
+            return false;
+        }
+
+        private static bool IsTextureReadableCompat(Texture2D tex)
+        {
+            if (tex == null) return false;
             try
             {
-                return Settings.Instance != null
-                    && Settings.Instance.PluginsAlwaysEnabled != null
-                    && Settings.Instance.PluginsAlwaysEnabled.Value;
+                // Unity versions used by VaM may not expose Texture2D.isReadable.
+                // Probe via GetPixel, which throws when the texture is non-readable.
+                tex.GetPixel(0, 0);
+                return true;
             }
             catch
             {
@@ -170,55 +338,13 @@ namespace VPB
             }
         }
 
+        private static bool IsPluginsAlwaysEnabledSettingOn()
+        {
+            return true;
+        }
+
         static Dictionary<string, int> _priorityCache = new Dictionary<string, int>(StringComparer.Ordinal);
         static object _priorityCacheLock = new object();
-
-        static int _forcedLoadingUiFrame = -1;
-
-        static void TryForceLoadingUiEarly(SuperController sc, string saveName)
-        {
-            try
-            {
-                if (sc == null) return;
-                if (string.IsNullOrEmpty(saveName)) return;
-                if (_forcedLoadingUiFrame == Time.frameCount) return;
-                if (LogUtil.IsSceneLoading()) return;
-
-                _forcedLoadingUiFrame = Time.frameCount;
-
-                // Best-effort: enable VaM's loading UI *only* if a well-known flag exists.
-                // Do NOT invoke unknown methods or force 'isLoading' flags, as that can block scene loads.
-                try
-                {
-                    var t = sc.GetType();
-                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-
-                    try
-                    {
-                        var p = t.GetProperty("loadingUIActive", flags);
-                        if (p != null && p.PropertyType == typeof(bool) && p.CanWrite)
-                        {
-                            p.SetValue(sc, true, null);
-                            return;
-                        }
-                    }
-                    catch { }
-
-                    try
-                    {
-                        var f = t.GetField("loadingUIActive", flags);
-                        if (f != null && f.FieldType == typeof(bool))
-                        {
-                            f.SetValue(sc, true);
-                            return;
-                        }
-                    }
-                    catch { }
-                }
-                catch { }
-            }
-            catch { }
-        }
 
         static bool Has(string source, string value)
         {
@@ -253,35 +379,52 @@ namespace VPB
             if (string.IsNullOrEmpty(path)) return false;
             string lower = path.ToLowerInvariant();
 
-            // First check the registry of confirmed sim textures from preset parsing
-            lock (registryLock)
-            {
-                if (simTextureRegistry.Contains(lower))
-                    return true;
-            }
+            // First check the registry of confirmed sim textures from preset parsing.
+            // Many VaM clothing presets use neutral names for their sim/heat maps, so
+            // preset keys are more reliable than filename heuristics when available.
+            if (RegistryContainsSimulationTexture(lower))
+                return true;
 
             // Fall back to heuristic detection
             if (lower.Contains("phys")) return true;
             if (lower.Contains("simulation")) return true;
 
+            string[] pathSegments = lower.Split(new char[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < pathSegments.Length - 1; i++)
+            {
+                string segment = pathSegments[i];
+                if (segment == "sim" || segment == "simulation" || segment == "phys" || segment == "physics")
+                    return true;
+            }
+
             int lastSlash = lower.LastIndexOfAny(new char[] { '/', '\\' });
             string filename = lastSlash >= 0 ? lower.Substring(lastSlash + 1) : lower;
             int lastDot = filename.LastIndexOf('.');
-            string ext = lastDot > 0 ? filename.Substring(lastDot) : "";
             if (lastDot > 0) filename = filename.Substring(0, lastDot);
-            
-            if (filename.Contains("sim")) return true;
-            
-            // Clothing sim textures often have short names like rbn1.png, psim1.png, bsim1.png
-            // Detect: in clothing path + short filename (<=8 chars) + ends with digit
-            if (lower.Contains("/clothing/") && filename.Length <= 8)
-            {
-                if (filename.Length > 0 && char.IsDigit(filename[filename.Length - 1]))
-                {
-                    return true;
-                }
-            }
 
+            if (IsClothingSimulationMapName(lower, filename)) return true;
+
+            // Conservative fallback only: match "sim" as a token to avoid false positives like "simone".
+            // Accepted examples: sim_foo, foo_sim, foo-sim1, sim1, phys_foo, physics-2
+            if (Regex.IsMatch(filename, @"(^|[_\-])sim([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"(^|[_\-])phys(ics)?([_\-]|\d|$)", RegexOptions.IgnoreCase)) return true;
+
+            // Some clothing packages use names like "pnt3lsim1" without delimiters.
+            // Treat a trailing "sim<digits>" / "phys<digits>" as SIM to prevent non-readable loads.
+            if (Regex.IsMatch(filename, @"sim\d+$", RegexOptions.IgnoreCase)) return true;
+            if (Regex.IsMatch(filename, @"phys(ics)?\d+$", RegexOptions.IgnoreCase)) return true;
+
+            return false;
+        }
+
+        internal static bool IsLutTexturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string lower = path.ToLowerInvariant();
+            // LUT (Look-Up Table) textures for color grading
+            if (lower.Contains("lut")) return true;
+            if (lower.Contains("lensdirt")) return true;
+            if (lower.IndexOf("lens dirt", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
         }
 
@@ -382,7 +525,13 @@ namespace VPB
             {
                 var m = AccessTools.Method(fm, "FileExists", sig);
                 if (m == null) continue;
-                harmony.Patch(m, prefix: new HarmonyMethod(prefix));
+                string postfixName = sig.Length == 3
+                    ? nameof(PostFileExists3)
+                    : (sig.Length == 2 ? nameof(PostFileExists2) : nameof(PostFileExists1));
+                var postfix = AccessTools.Method(typeof(SuperControllerHook), postfixName);
+                harmony.Patch(m,
+                    prefix: new HarmonyMethod(prefix),
+                    postfix: postfix != null ? new HarmonyMethod(postfix) : null);
                 return;
             }
         }
@@ -429,7 +578,6 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefresh()
         {
-            LogUtil.Log("FileManager PreRefresh");
             try { PackageHidePrefs.InvalidateHideMarkerCache(); } catch { }
         }
 
@@ -442,6 +590,14 @@ namespace VPB
             {
                 path = rewritten;
             }
+
+            // If VaM is about to resolve a var entry path, ensure it targets a concrete newest UID
+            // so plugin compiles/includes don't keep using an older missing versioned prefix.
+            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+            if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+            {
+                path = best;
+            }
         }
 
         public static void PreFileExists(ref string __0)
@@ -450,6 +606,88 @@ namespace VPB
             if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
             {
                 __0 = rewritten;
+            }
+
+            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
+            if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+            {
+                __0 = best;
+            }
+        }
+
+        public static void PostFileExists3(string __0, bool __1, ref bool __result)
+        {
+            PostFileExistsOnDemand(__0, __1, ref __result);
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
+        public static void PostFileExists2(string __0, bool __1, ref bool __result)
+        {
+            PostFileExistsOnDemand(__0, __1, ref __result);
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
+        public static void PostFileExists1(string __0, ref bool __result)
+        {
+            PostFileExistsOnDemand(__0, false, ref __result);
+            LogUtil.RecordFileExistsResult(__result);
+        }
+
+        private static void PostFileExistsOnDemand(string path, bool onlySystemFiles, ref bool result)
+        {
+            try
+            {
+                if (result) return;
+                if (onlySystemFiles) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                if (string.IsNullOrEmpty(uid)) return;
+                LogUtil.RecordVarEntryMiss();
+
+                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                    return;
+
+                LogUtil.RecordOnDemandRetry();
+                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
+                VamOnDemandLoader.s_InOnDemand = true;
+                try
+                {
+                    if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
+                    {
+                        result = true;
+                        return;
+                    }
+
+                    // VaM may check FileExists against a *.latest:/... plugin path even
+                    // after the package registered under its concrete UID.
+                    string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        if (MVR.FileManagement.FileManager.GetVarFileEntry(rewritten) != null)
+                            result = true;
+                    }
+
+                    // VaM may also request a specific version that isn't installed anymore
+                    // (e.g. Author.Pkg.11), while a newer version exists (e.g. .14).
+                    string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        if (MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest) != null)
+                            result = true;
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.s_InOnDemand = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostFileExistsOnDemand error: " + ex.Message);
             }
         }
 
@@ -464,6 +702,13 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStream", new Type[] { typeof(string), typeof(bool) })]
+        public static void PostOpenStream(object __result)
+        {
+            LogUtil.RecordOpenStreamResult(__result != null);
+        }
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
         public static void PreOpenStreamReader(ref string path)
@@ -475,12 +720,18 @@ namespace VPB
             }
         }
 
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "OpenStreamReader", new Type[] { typeof(string), typeof(bool) })]
+        public static void PostOpenStreamReader(object __result)
+        {
+            LogUtil.RecordOpenStreamResult(__result != null);
+        }
+
         // Click "Return To Scene View"
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "DeactivateWorldUI")]
         public static void PostDeactivateWorldUI(SuperController __instance)
         {
-            LogUtil.Log("PostDeactivateWorldUI");
             MessageKit.post(MessageDef.DeactivateWorldUI);
         }
 
@@ -489,21 +740,185 @@ namespace VPB
         public static void PostActivateWorldUI(SuperController __instance)
         {
             LogUtil.LogStartupReadyOnce("World UI activated");
+            LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
+        }
+
+        /// <summary>Gallery VR pointer over pane: thumbstick scroll consumes forward navigate axis.</summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "GetFreeNavigateVector")]
+        public static void PostGetFreeNavigateVector(ref Vector4 __result)
+        {
+            if (!GalleryVrThumbstickScroll.ShouldSuppressFreeNavigate) return;
+            __result.x = 0f;
+            __result.y = 0f;
+            __result.z = 0f;
+            __result.w = 0f;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(SuperController), "OpenLinkInBrowser", new Type[] { typeof(string) })]
+        public static bool PreOpenLinkInBrowser(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return true;
+            if (VamHookPlugin.singleton == null || HubBrowse.singleton == null) return true;
+
+            Uri uri;
+            try
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return true;
+            }
+            catch { return true; }
+
+            // Redirect Hub web opens to VPB's in-game Hub browser ("Hook Hub").
+            // This catches buttons/links anywhere in VaM that open hub.virtamate.com pages.
+            if (!string.Equals(uri.Host, "hub.virtamate.com", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Always open the Hook Hub UI; optionally jump to a resource detail.
+            try { VamHookPlugin.singleton.OpenHubBrowse(); } catch { return true; }
+
+            string resourceId = null;
+            try
+            {
+                string path = uri.AbsolutePath ?? "";
+                var m = s_HubResourcePathRegex.Match(path);
+                if (m.Success) resourceId = m.Groups["id"]?.Value;
+            }
+            catch { resourceId = null; }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(resourceId)) HubBrowse.singleton.OpenDetail(resourceId);
+                else HubBrowse.singleton.Show();
+            }
+            catch { return true; }
+
+            // Skip the original browser-open.
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.Hub.HubBrowse), "Show")]
+        public static bool PreVamNativeHubShow()
+        {
+            // Redirect VaM's native Hub UI to VPB "Hook Hub".
+            var plugin = VamHookPlugin.singleton;
+            if (plugin == null) return true;
+
+            try { plugin.OpenHubBrowse(); }
+            catch { return true; }
+
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
+        public static void PreCreateScriptController(object mvrp, object type)
+        {
+            try
+            {
+                string pluginName = "unknown";
+                try
+                {
+                    if (mvrp != null)
+                    {
+                        string uid = null;
+                        string path = null;
+                        var t = mvrp.GetType();
+                        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                        try
+                        {
+                            var p = t.GetProperty("storeId", flags);
+                            if (p != null && p.PropertyType == typeof(string))
+                                uid = p.GetValue(mvrp, null) as string;
+                        }
+                        catch { }
+                        try
+                        {
+                            if (string.IsNullOrEmpty(uid))
+                            {
+                                var f = t.GetField("storeId", flags);
+                                if (f != null && f.FieldType == typeof(string))
+                                    uid = f.GetValue(mvrp) as string;
+                            }
+                        }
+                        catch { }
+                        try
+                        {
+                            var p = t.GetProperty("pluginPath", flags);
+                            if (p != null && p.PropertyType == typeof(string))
+                                path = p.GetValue(mvrp, null) as string;
+                        }
+                        catch { }
+                        try
+                        {
+                            if (string.IsNullOrEmpty(path))
+                            {
+                                var f = t.GetField("pluginPath", flags);
+                                if (f != null && f.FieldType == typeof(string))
+                                    path = f.GetValue(mvrp) as string;
+                            }
+                        }
+                        catch { }
+                        pluginName = !string.IsNullOrEmpty(uid) ? uid : (!string.IsNullOrEmpty(path) ? path : mvrp.GetType().Name);
+                    }
+                }
+                catch { }
+
+                string scriptType = type != null ? type.ToString() : "unknown";
+                int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                var sw = Stopwatch.StartNew();
+                lock (pluginCreateLock)
+                {
+                    pluginCreateSwByThread[tid] = sw;
+                    pluginCreateNameByThread[tid] = pluginName + "|" + scriptType;
+                }
+                LogUtil.Log("[VPB.Startup] plugin_create START tid=" + tid + " plugin=" + pluginName + " type=" + scriptType);
+            }
+            catch { }
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(MVRPluginManager), "CreateScriptController")]
+        public static Exception FinalizeCreateScriptController(Exception __exception)
+        {
+            try
+            {
+                int tid = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                Stopwatch sw = null;
+                string name = "unknown";
+                lock (pluginCreateLock)
+                {
+                    if (pluginCreateSwByThread.TryGetValue(tid, out sw))
+                        pluginCreateSwByThread.Remove(tid);
+                    if (pluginCreateNameByThread.TryGetValue(tid, out name))
+                        pluginCreateNameByThread.Remove(tid);
+                }
+                long ms = 0;
+                try { if (sw != null) { sw.Stop(); ms = sw.ElapsedMilliseconds; } } catch { }
+                if (__exception == null)
+                {
+                    LogUtil.Log("[VPB.Startup] plugin_create DONE tid=" + tid + " target=" + name + " ms=" + ms);
+                }
+                else
+                {
+                    LogUtil.LogWarning("[VPB.Startup] plugin_create FAIL tid=" + tid + " target=" + name + " ms=" + ms + " ex=" + __exception.GetType().Name + ": " + __exception.Message);
+                }
+            }
+            catch { }
+            return __exception;
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "Load", new Type[] { typeof(string) })]
         public static void PreLoad(SuperController __instance, string saveName)
         {
-            TryForceLoadingUiEarly(__instance, saveName);
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "LoadMerge", new Type[] { typeof(string) })]
         public static void PreLoadMerge(SuperController __instance, string saveName)
         {
-            TryForceLoadingUiEarly(__instance, saveName);
         }
 
         [HarmonyPrefix]
@@ -514,10 +929,13 @@ namespace VPB
             string saveName, bool loadMerge, bool editMode)
         {
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
+            LogUtil.BeginSceneLoad(saveName);
+            LogUtil.MarkScenePhasePreLoadInternal();
             try
             {
                 // Clear sim texture registry for new scene
                 ClearSimTextureRegistry();
+                ParsePresetForSimTextures(saveName);
 
                 try
                 {
@@ -551,7 +969,6 @@ namespace VPB
                 }
             }
             catch { }
-            LogUtil.BeginSceneLoad(saveName);
 
             if (saveName == "Saves\\scene\\MeshedVR\\default.json")
             {
@@ -570,7 +987,19 @@ namespace VPB
         public static void PostLoadInternal(SuperController __instance,
             string saveName, bool loadMerge, bool editMode)
         {
+            LogUtil.MarkScenePhasePostLoadInternal();
             LogUtil.EndSceneLoadInternal("LoadInternal");
+            try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
+        }
+
+        /// <summary>
+        /// Keep gallery target picker in sync when an atom is removed (no polling).
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SuperController), "RemoveAtom", new Type[] { typeof(Atom) })]
+        public static void PostRemoveAtom(SuperController __instance, Atom atom)
+        {
+            try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
         }
 
         /// <summary>
@@ -582,7 +1011,6 @@ namespace VPB
         public static void PostLoadUserPrefs(MVR.FileManagement.VarPackage __instance)
         {
             if (__instance == null) return;
-            if (!IsPluginsAlwaysEnabledSettingOn()) return;
             try
             {
                 Traverse.Create(__instance).Field("_pluginsAlwaysEnabled").SetValue(true);
@@ -594,14 +1022,14 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysEnabled")]
         public static void PostGetPluginsAlwaysEnabled(ref bool __result)
         {
-            if (IsPluginsAlwaysEnabledSettingOn()) __result = true;
+            __result = true;
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MVR.FileManagement.VarPackage), "get_PluginsAlwaysDisabled")]
         public static void PostGetPluginsAlwaysDisabled(ref bool __result)
         {
-            if (IsPluginsAlwaysEnabledSettingOn()) __result = false;
+            __result = false;
         }
 
         [HarmonyPrefix]
@@ -808,6 +1236,34 @@ namespace VPB
             // Track image activity for scene-load timing even when caching/resize is disabled.
             LogUtil.MarkImageActivity();
 
+            // Robust SIM detection: do not rely on filename heuristics.
+            // If this request's callback is VaM's sim-texture handler, register the exact path as SIM now.
+            // This makes the rest of VPB treat it as readable and purge any corrupted .zvamcache before use.
+            try
+            {
+                var cb = qi.callback;
+                if (cb != null)
+                {
+                    var m = cb.Method;
+                    string mName = m != null ? (m.Name ?? "") : "";
+                    string tName = (m != null && m.DeclaringType != null) ? (m.DeclaringType.FullName ?? m.DeclaringType.Name ?? "") : "";
+
+                    bool looksLikeSimCallback =
+                        mName.IndexOf("OnSimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
+                        || mName.IndexOf("SimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (looksLikeSimCallback)
+                    {
+                        RegisterSimTexture(qi.imgPath);
+                        if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 1)
+                            LogUtil.Log($"[VPB SIM] Detected SIM request by callback: {qi.imgPath} | cb={tName}.{mName}");
+                    }
+                }
+            }
+            catch { }
+
             try
             {
                 if (Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 2)
@@ -869,47 +1325,44 @@ namespace VPB
                 {
                     try
                     {
-                        // Force re-apply with isReadable=true by recreating the texture
-                        // We need to get the raw data and recreate with proper settings
-                        var tex = __instance.tex;
-                        if (tex != null && tex.format != TextureFormat.RGBA32 && tex.format != TextureFormat.RGB24)
+                        bool alreadyPatched;
+                        lock (registryLock)
                         {
-                            // Texture is compressed (DXT), we need to decompress to make it readable
-                            // This is expensive but necessary for sim textures
-                            LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
-                            
-                            // Create a temporary readable copy by rendering to a RenderTexture
-                            RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
-                            Graphics.Blit(tex, rt);
-                            
-                            RenderTexture.active = rt;
-                            Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
-                            readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
-                            readableTex.Apply(false, false); // Keep it readable!
-                            RenderTexture.active = null;
-                            RenderTexture.ReleaseTemporary(rt);
-                            
-                            UnityEngine.Object.Destroy(tex);
-                            __instance.tex = readableTex;
-                            
-                            LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                            alreadyPatched = simTexturePatchedThisLoad.Contains(__instance.imgPath);
+                            if (!alreadyPatched) simTexturePatchedThisLoad.Add(__instance.imgPath);
                         }
-                        else if (tex != null)
+
+                        // Avoid repeatedly running expensive conversion for the same asset path in one scene load.
+                        if (!alreadyPatched)
                         {
-                            // Already uncompressed, just re-apply with readable flag
-                            tex.Apply(false, false);
-                            LogUtil.Log($"[VPB SIM] PostFinish: Applied readable flag to sim texture: {__instance.imgPath}");
+                            var tex = __instance.tex as Texture2D;
+                            if (tex != null && !IsTextureReadableCompat(tex))
+                            {
+                                LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
+
+                                // Recreate as readable using GPU copy -> ReadPixels.
+                                RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
+                                Graphics.Blit(tex, rt);
+
+                                RenderTexture prev = RenderTexture.active;
+                                RenderTexture.active = rt;
+                                Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
+                                readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
+                                readableTex.Apply(false, false); // keep readable
+                                RenderTexture.active = prev;
+                                RenderTexture.ReleaseTemporary(rt);
+
+                                UnityEngine.Object.Destroy(tex);
+                                __instance.tex = readableTex;
+
+                                LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                            }
                         }
                     }
                     catch (Exception ex)
                     {
                         LogUtil.LogError($"[VPB SIM] PostFinish: Failed to fix up sim texture {__instance.imgPath}: {ex.Message}");
                     }
-                }
-
-                if (__instance.createAlphaFromGrayscale)
-                {
-                    ImageLoadingMgr.WriteAlphaTextureToZstdCache(__instance);
                 }
 
                 if (ImageLoadingMgr.singleton != null)
@@ -962,36 +1415,8 @@ namespace VPB
 
     }
 
-    //[HarmonyPatch(typeof(HairLODSettings), nameof(HairLODSettings.GetDencity))]
-    //class PatchHairLODSettings1
-    //{
-    //    static void Postfix(HairLODSettings __instance,ref int __result)
-    //    {
-    //        //if (!Settings.Instance.UseNewCahe.Value) return;
-    //        //if (!__instance.UseFixedSettings)
-    //            __result = 1;// (int)__instance.Density.Min;
-    //    }
-    //}
-    //[HarmonyPatch(typeof(HairLODSettings), nameof(HairLODSettings.GetWidth))]
-    //class PatchHairLODSettings2
-    //{
-    //    static void Postfix(HairLODSettings __instance, ref float __result)
-    //    {
-    //        //if (!Settings.Instance.UseNewCahe.Value) return;
-    //        //if (!__instance.UseFixedSettings)
-    //        __result = __result*5;
-    //    }
-    //}
-
     class PatchAssetLoader
     {
-        //[HarmonyPrefix]
-        //[HarmonyPatch(typeof(MeshVR.AssetLoader),"Start")]
-        //static bool Start(MeshVR.AssetLoader __instance)
-        //{
-        //    LogUtil.Log("PatchAssetLoader Start");
-        //    return false; // Prevent the original method from running
-        //}
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MeshVR.AssetLoader), "QueueLoadAssetBundleFromFile")]
         static bool QueueLoadAssetBundleFromFile(MeshVR.AssetLoader.AssetBundleFromFileRequest abffr)
@@ -1011,6 +1436,129 @@ namespace VPB
         static bool DoneWithAssetBundleFromFile(string path)
         {
             return true;
+        }
+
+        // --- Scan Whitelist Patches ---
+
+        /// <summary>
+        /// Blocks VaM from registering non-whitelisted packages during its startup scan.
+        /// PREFIX patch so VaM never opens the .var zip or reads the manifest for excluded
+        /// packages — the expensive I/O is skipped entirely, not just cleaned up afterward.
+        /// On-demand registration (via VamOnDemandLoader) bypasses this via s_AllowRegistration.
+        /// </summary>
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "RegisterPackage")]
+        public static bool PreRegisterPackageScanFilter(string __0)
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
+                if (VamOnDemandLoader.s_AllowRegistration) return true;
+                if (string.IsNullOrEmpty(__0)) return true;
+
+                string norm = __0.Replace('\\', '/');
+                if (!norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return true;
+
+                string uid = System.IO.Path.GetFileNameWithoutExtension(norm);
+                if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
+                {
+                    VamScanFilter.RecordScanAllowed();
+                    return true;
+                }
+
+                bool allowed = ScanWhitelistManager.Instance.IsPathWhitelisted(norm);
+                if (allowed) VamScanFilter.RecordScanAllowed();
+                else VamScanFilter.RecordScanBlocked();
+                return allowed;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanFilter] PreRegisterPackageScanFilter error: " + ex.Message);
+                return true; // fail open
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static void PreRefreshResetScanCounters()
+        {
+            VamScanFilter.MarkVamRefreshBegin();
+            VamScanFilter.ResetScanCounters();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static void PostRefreshLogScanResult()
+        {
+            VamScanFilter.MarkVamRefreshed();
+            VamScanFilter.LogScanResult();
+        }
+
+        [HarmonyFinalizer]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
+        public static Exception FinalizeRefresh(Exception __exception)
+        {
+            VamScanFilter.MarkVamRefreshEnd();
+            return __exception;
+        }
+
+        /// <summary>
+        /// After VaM's GetVarFileEntry returns null for a scan-excluded package,
+        /// register the package on-demand in VaM's FileManager and retry.
+        /// This ensures MVRScript plugins can still load dependencies from
+        /// non-whitelisted packages without requiring a full scan.
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetVarFileEntry", new Type[] { typeof(string) })]
+        public static void PostGetVarFileEntryOnDemand(string path, ref MVR.FileManagement.VarFileEntry __result)
+        {
+            try
+            {
+                if (__result != null) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (VamOnDemandLoader.s_InOnDemand) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                if (string.IsNullOrEmpty(uid)) return;
+                LogUtil.RecordVarEntryMiss();
+
+                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                    return;
+
+                LogUtil.RecordOnDemandRetry();
+                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
+                VamOnDemandLoader.s_InOnDemand = true;
+                try
+                {
+                    __result = MVR.FileManagement.FileManager.GetVarFileEntry(path);
+                    if (__result != null) return;
+
+                    // Some VaM call sites pass *.latest:/... and do not resolve aliases
+                    // after registration. Retry with a concrete UID path when possible.
+                    string rewritten = VamOnDemandLoader.TryRewriteLatestEntryPath(path, attemptRegister: true);
+                    if (!string.IsNullOrEmpty(rewritten) && !string.Equals(rewritten, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewritten);
+                    }
+
+                    // Also handle versioned UIDs where the requested version doesn't exist.
+                    string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
+                    if (__result == null && !string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        LogUtil.RecordOnDemandRetry();
+                        __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest);
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.s_InOnDemand = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostGetVarFileEntryOnDemand error: " + ex.Message);
+            }
         }
     }
 

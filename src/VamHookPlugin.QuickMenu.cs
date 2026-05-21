@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -7,15 +8,14 @@ namespace VPB
     {
         private void ResetQuickMenuPositionDefaults()
         {
-            var def = new Vector2(-470f, -66f);
-
-            m_QuickMenuPosCreateX = def.x;
-            m_QuickMenuPosCreateY = def.y;
+            // "0,0" is the baseline anchor (see QuickMenuAnchorBaseline in VamHookPlugin).
+            m_QuickMenuPosCreateX = 0f;
+            m_QuickMenuPosCreateY = 0f;
             m_QuickMenuPosCreateXText = ((int)m_QuickMenuPosCreateX).ToString();
             m_QuickMenuPosCreateYText = ((int)m_QuickMenuPosCreateY).ToString();
 
-            m_QuickMenuPosCreateXVR = def.x;
-            m_QuickMenuPosCreateYVR = def.y;
+            m_QuickMenuPosCreateXVR = 0f;
+            m_QuickMenuPosCreateYVR = 0f;
             m_QuickMenuPosCreateXVRText = ((int)m_QuickMenuPosCreateXVR).ToString();
             m_QuickMenuPosCreateYVRText = ((int)m_QuickMenuPosCreateYVR).ToString();
 
@@ -26,8 +26,7 @@ namespace VPB
 
         private void OpenQuickMenuPositionWindow()
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (isVR)
                 return;
 
@@ -39,12 +38,13 @@ namespace VPB
             m_QuickMenuPosOriginalCreate = createPos;
             m_QuickMenuPosOriginalShowHide = showHidePos;
 
-            m_QuickMenuPosCreateX = createPos.x;
-            m_QuickMenuPosCreateY = createPos.y;
+            // UI shows X/Y relative to baseline.
+            m_QuickMenuPosCreateX = createPos.x - QuickMenuAnchorBaseline.x;
+            m_QuickMenuPosCreateY = createPos.y - QuickMenuAnchorBaseline.y;
             m_QuickMenuPosShowHideX = showHidePos.x;
             m_QuickMenuPosShowHideY = showHidePos.y;
-            m_QuickMenuPosCreateXVR = createPosVR.x;
-            m_QuickMenuPosCreateYVR = createPosVR.y;
+            m_QuickMenuPosCreateXVR = createPosVR.x - QuickMenuAnchorBaseline.x;
+            m_QuickMenuPosCreateYVR = createPosVR.y - QuickMenuAnchorBaseline.y;
             m_QuickMenuPosShowHideXVR = showHidePosVR.x;
             m_QuickMenuPosShowHideYVR = showHidePosVR.y;
 
@@ -68,25 +68,9 @@ namespace VPB
             if (!m_ShowQuickMenuPosWindow)
                 return;
 
-            if (m_CreateGalleryButtonRT != null)
-            {
-                m_CreateGalleryButtonRT.anchoredPosition = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
-            }
-
-            Vector2 step = new Vector2(0f, -50f);
-            Vector2 createPos = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
-            if (m_ShowHideButtonRT != null)
-            {
-                m_ShowHideButtonRT.anchoredPosition = createPos + step;
-            }
-            if (m_BringFrontButtonRT != null)
-            {
-                m_BringFrontButtonRT.anchoredPosition = createPos + step * 2f;
-            }
-            if (m_CloseAllButtonRT != null)
-            {
-                m_CloseAllButtonRT.anchoredPosition = createPos + step * 3f;
-            }
+            // Grid-based quick menu: treat CreateGallery position as the anchor for the entire grid.
+            // Do not move individual buttons here; that would override the grid layout and "rearrange" it.
+            try { QuickMenuApplyGridLayoutFromAnchor(QuickMenuAnchorBaseline + new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY)); } catch { }
         }
 
         private void DrawQuickMenuPosRow(string label, string controlNamePrefix, ref float x, ref string xText, ref float y, ref string yText, float xMin, float xMax, float yMin, float yMax)
@@ -187,9 +171,11 @@ namespace VPB
         {
             if (save)
             {
-                var newCreate = new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
+                var newCreate = QuickMenuAnchorBaseline + new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
 
-                var newCreateVR = m_QuickMenuPosUseSameCreateInVR ? newCreate : new Vector2(m_QuickMenuPosCreateXVR, m_QuickMenuPosCreateYVR);
+                var newCreateVR = m_QuickMenuPosUseSameCreateInVR
+                    ? newCreate
+                    : (QuickMenuAnchorBaseline + new Vector2(m_QuickMenuPosCreateXVR, m_QuickMenuPosCreateYVR));
 
                 Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value = newCreate;
                 Settings.Instance.QuickMenuCreateGalleryPosVR.Value = newCreateVR;
@@ -200,16 +186,8 @@ namespace VPB
             }
             else
             {
-                if (m_CreateGalleryButtonRT != null)
-                    m_CreateGalleryButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate;
-
-                Vector2 step = new Vector2(0f, -60f);
-                if (m_ShowHideButtonRT != null)
-                    m_ShowHideButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step;
-                if (m_BringFrontButtonRT != null)
-                    m_BringFrontButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step * 2f;
-                if (m_CloseAllButtonRT != null)
-                    m_CloseAllButtonRT.anchoredPosition = m_QuickMenuPosOriginalCreate + step * 3f;
+                // Restore preview to the original anchor (grid moves as a unit).
+                try { QuickMenuApplyGridLayoutFromAnchor(m_QuickMenuPosOriginalCreate); } catch { }
             }
 
             m_ShowQuickMenuPosWindow = false;

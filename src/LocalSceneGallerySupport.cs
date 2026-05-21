@@ -11,6 +11,8 @@ namespace VPB
     {
         /// <summary>Prefix for keys in <see cref="FileEntry.AutoInstallLookup"/> / AutoInstall.txt so local scenes never collide with package UIDs.</summary>
         public const string AutoInstallLookupKeyPrefix = "VPB_LS:";
+        private const string SceneImportCachePrefix = "Saves/scene/VPB/";
+        private const string TempScenesPrefix = "Saves/scene/VPB_TempScenes/";
 
         public static string GetSavesSceneDirectoryFullPath()
         {
@@ -53,12 +55,57 @@ namespace VPB
 
             string lower = p.ToLowerInvariant();
             if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
-            if (lower.Contains("/saves/scene/vpb_tmpscenes/") || lower.Contains("vpb_tmpscenes")) return false;
+            if (IsVpbGeneratedLocalScenePath(p)) return false;
             if (lower.Contains("/deletedscenes/")) return false;
 
             if (lower.IndexOf("/saves/scene/", StringComparison.Ordinal) >= 0) return true;
             if (lower.StartsWith("saves/scene/", StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        public static bool IsVpbGeneratedLocalScenePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string p = path.Replace('\\', '/').TrimStart('/');
+            return p.StartsWith(SceneImportCachePrefix, StringComparison.OrdinalIgnoreCase)
+                || p.StartsWith(TempScenesPrefix, StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/" + SceneImportCachePrefix, StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf("/" + TempScenesPrefix, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        public static bool TryEnsureVpbGeneratedSceneHideMarker(string jsonPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonPath)) return false;
+                if (!jsonPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+                if (!IsVpbGeneratedLocalScenePath(jsonPath)) return false;
+
+                string full;
+                try
+                {
+                    full = Path.IsPathRooted(jsonPath)
+                        ? Path.GetFullPath(jsonPath)
+                        : FileManager.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+                }
+                catch
+                {
+                    full = jsonPath;
+                }
+
+                string hidePath = full + ".hide";
+                if (File.Exists(hidePath)) return true;
+
+                string dir = Path.GetDirectoryName(hidePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(hidePath, string.Empty);
+                return File.Exists(hidePath);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -76,11 +123,18 @@ namespace VPB
             if (string.IsNullOrEmpty(p)) return false;
             p = p.Replace('\\', '/');
 
-            try
+            // IMPORTANT: On Windows, absolute disk paths like "C:/.../Saves/scene/foo.json" contain ":/" and can be
+            // misclassified as a package path by VaM helpers that treat any ":/" as "pkg:/internalPath".
+            // Treat rooted drive-letter paths as local disk paths, not package refs.
+            bool isWindowsDriveAbs = (p.Length >= 3 && char.IsLetter(p[0]) && p[1] == ':' && p[2] == '/');
+            if (!isWindowsDriveAbs)
             {
-                if (FileManager.IsPackagePath(p)) return false;
+                try
+                {
+                    if (FileManager.IsPackagePath(p)) return false;
+                }
+                catch { }
             }
-            catch { }
 
             if (!LooksLikeLocalUserScenePath(p)) return false;
 
@@ -90,7 +144,14 @@ namespace VPB
             string full;
             try
             {
-                full = FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                if (Path.IsPathRooted(p))
+                {
+                    full = Path.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                }
+                else
+                {
+                    full = FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                }
             }
             catch
             {
@@ -114,7 +175,28 @@ namespace VPB
             }
 
             absoluteJsonPath = full;
-            galleryRelativePath = p;
+            // Normalize to a VaM-relative path ("Saves/scene/...") so FileManager.ReadAllText can open it.
+            try
+            {
+                string rootFull = Path.GetFullPath(sceneRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string fileFull = Path.GetFullPath(full);
+                if (fileFull.Length > rootFull.Length + 1 &&
+                    fileFull.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
+                {
+                    string relPart = fileFull.Substring(rootFull.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    relPart = relPart.Replace('\\', '/');
+                    galleryRelativePath = "Saves/scene/" + relPart;
+                }
+                else
+                {
+                    // Fallback: keep the original path as provided by the gallery.
+                    galleryRelativePath = p.TrimStart('/');
+                }
+            }
+            catch
+            {
+                galleryRelativePath = p.TrimStart('/');
+            }
             return true;
         }
 

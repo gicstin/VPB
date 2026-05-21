@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using Prime31.MessageKit;
 using UnityEngine;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -50,6 +51,55 @@ namespace VPB
             public List<string> paths;
         }
 
+        /// <summary>Gallery category that lists every indexed VAR internal path (see <c>cat_mem</c> EVERYTHING rows) plus loose-disk roots.</summary>
+        public const string EverythingCategoryName = "EVERYTHING";
+        /// <summary>Non-file extension token; matches all extensions in refresh / index logic.</summary>
+        public const string EverythingExtensionToken = "vpbeverything";
+
+        /// <summary>Extensions used when enumerating loose files on disk for <see cref="EverythingCategoryName"/> (VAR internals already cover package files).</summary>
+        public static readonly string[] EverythingLooseDiskExtensions = new[]
+        {
+            "json", "vam", "vap", "var",
+            "cs", "cslist", "dll",
+            "assetbundle", "unity3d",
+        };
+
+        public static bool IsEverythingCategoryName(string name)
+        {
+            return string.Equals(name, EverythingCategoryName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsEverythingCategoryExtension(string extensionPipeSeparated)
+        {
+            if (string.IsNullOrEmpty(extensionPipeSeparated)) return false;
+            string[] parts = extensionPipeSeparated.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i] != null ? parts[i].Trim() : "";
+                if (string.Equals(p, EverythingExtensionToken, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Preview textures inside VARs; omitted from EVERYTHING grid/index.</summary>
+        public static bool IsEverythingExcludedPreviewExtension(string extensionNoDot)
+        {
+            if (string.IsNullOrEmpty(extensionNoDot)) return false;
+            return string.Equals(extensionNoDot, "jpg", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extensionNoDot, "jpeg", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extensionNoDot, "png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Returns <paramref name="splitExtensions"/> or, for EVERYTHING mode, <see cref="EverythingLooseDiskExtensions"/> for SafeGetFiles loops.</summary>
+        public static string[] DiskScanExtensionsOrEverything(string currentExtensionPipe, string[] splitExtensions)
+        {
+            if (IsEverythingCategoryExtension(currentExtensionPipe) && splitExtensions != null && splitExtensions.Length == 1
+                && string.Equals(splitExtensions[0]?.Trim(), EverythingExtensionToken, StringComparison.OrdinalIgnoreCase))
+                return EverythingLooseDiskExtensions;
+            return splitExtensions;
+        }
+
         private List<Category> categories = new List<Category>();
         
         // Panels management
@@ -70,6 +120,9 @@ namespace VPB
 
         private Coroutine autoRefreshCoroutine;
         private bool autoRefreshPending;
+        private Coroutine startupDeferredAutoRefreshCoroutine;
+        private bool startupDeferredAutoRefreshPending;
+        private Coroutine genderMapInitCoroutine;
 
         void Awake()
         {
@@ -94,11 +147,41 @@ namespace VPB
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            MessageKit.addObserver(MessageDef.GalleryItemUsageRecorded, OnGalleryItemUsageRecorded);
+            if (genderMapInitCoroutine == null)
+                genderMapInitCoroutine = StartCoroutine(InitCharacterGenderMapEarly());
         }
 
         void OnDisable()
         {
             MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+            MessageKit.removeObserver(MessageDef.GalleryItemUsageRecorded, OnGalleryItemUsageRecorded);
+            if (genderMapInitCoroutine != null)
+            {
+                StopCoroutine(genderMapInitCoroutine);
+                genderMapInitCoroutine = null;
+            }
+        }
+
+        private IEnumerator InitCharacterGenderMapEarly()
+        {
+            // Start immediately so this heavy task can overlap with startup work.
+            // READY still waits on completion via StartupSettleUpdate pending checks.
+            yield return JSONExtensions.LoadCharacterGenderMap();
+            genderMapInitCoroutine = null;
+        }
+
+        private void OnGalleryItemUsageRecorded()
+        {
+            if (IsSuppressed()) return;
+            var ps = panels;
+            if (ps == null) return;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                var p = ps[i];
+                if (p == null || p.IsHubMode) continue;
+                try { p.RefreshHistoryBrowseIfActive(true); } catch { }
+            }
         }
 
         private void OnFileManagerRefresh()
@@ -145,6 +228,15 @@ namespace VPB
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
+            try { TryQueueBaMigrationPrompt(); } catch { }
+
+            if (!LogUtil.IsStartupReadyLogged())
+            {
+                startupDeferredAutoRefreshPending = true;
+                if (startupDeferredAutoRefreshCoroutine == null)
+                    startupDeferredAutoRefreshCoroutine = StartCoroutine(RunDeferredAutoRefreshAfterStartupReady());
+                return;
+            }
 
             if (autoRefreshCoroutine != null)
             {
@@ -152,6 +244,42 @@ namespace VPB
                 return;
             }
             autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+        }
+
+        private IEnumerator RunDeferredAutoRefreshAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            startupDeferredAutoRefreshCoroutine = null;
+            if (!startupDeferredAutoRefreshPending) yield break;
+            startupDeferredAutoRefreshPending = false;
+
+            if (autoRefreshCoroutine != null)
+            {
+                autoRefreshPending = true;
+                yield break;
+            }
+            autoRefreshCoroutine = StartCoroutine(AutoRefreshAfterPackageScan());
+        }
+
+        public static bool HasStartupDeferredWork()
+        {
+            var g = singleton;
+            if (g == null) return false;
+            if (g.genderMapInitCoroutine != null) return true;
+            if (g.startupDeferredAutoRefreshCoroutine != null) return true;
+            if (g.autoRefreshCoroutine != null) return true;
+            if (g.panels != null)
+            {
+                for (int i = 0; i < g.panels.Count; i++)
+                {
+                    var p = g.panels[i];
+                    if (p != null && p.HasDeferredStartupRefreshPending)
+                        return true;
+                }
+            }
+            return false;
         }
 
         private IEnumerator AutoRefreshAfterPackageScan()
@@ -312,10 +440,14 @@ namespace VPB
             
             p.SetCategories(original.categories);
             
-            // Sync state
+            // Sync state (clone duplicates gallery browse context; do not copy Settings side-tab — original uses internal session/list state clone never synced)
             p.SetFilters(original.GetCurrentPath(), original.GetCurrentExtension(), original.GetCurrentCreator());
-            p.SetLeftActiveContent(original.GetLeftActiveContent());
-            p.SetRightActiveContent(original.GetRightActiveContent());
+            ContentType? cloneLeft = original.GetLeftActiveContent();
+            ContentType? cloneRight = original.GetRightActiveContent();
+            if (cloneLeft == ContentType.Settings) cloneLeft = null;
+            if (cloneRight == ContentType.Settings) cloneRight = null;
+            p.SetLeftActiveContent(cloneLeft);
+            p.SetRightActiveContent(cloneRight);
             p.SetFollowMode(original.GetFollowMode());
             
             // Sync size
@@ -395,6 +527,7 @@ namespace VPB
         public void Show(string title, string extension, string path)
         {
             LogUtil.Log("[Gallery] Gallery.Show: title='" + title + "' path='" + path + "' panelCount=" + panels.Count + " anyLoaded=" + AnyPanelHasLoadedContent);
+            VpbPerfDiag.LogTransition("Gallery.Show", "title=" + title + " panels=" + panels.Count);
             if (panels.Count == 0)
             {
                 // Create the panel without its internal Show() so we can call Show() exactly
@@ -527,8 +660,35 @@ namespace VPB
             }
         }
 
+        /// <summary>When <see cref="VPBConfig.GalleryCollapseOnSceneLaunch"/> is on: fixed panes slide to dock edge; floating panes hide.</summary>
+        public static void CollapsePanelsOnSceneLaunch()
+        {
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryCollapseOnSceneLaunch) return;
+                if (singleton == null || singleton.panels == null) return;
+                foreach (var p in singleton.panels)
+                {
+                    if (p == null) continue;
+                    bool visible = false;
+                    try { visible = p.IsVisible; } catch { }
+                    if (!visible) continue;
+                    if (p.isFixedLocally)
+                    {
+                        try { p.SetCollapsed(true); } catch { }
+                    }
+                    else
+                    {
+                        try { p.Hide(); } catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
         public void Hide()
         {
+            VpbPerfDiag.LogTransition("Gallery.Hide", "panels=" + panels.Count);
             foreach(var p in panels)
             {
                 p.Hide();
@@ -537,6 +697,7 @@ namespace VPB
 
         public void CloseAll()
         {
+            VpbPerfDiag.LogTransition("Gallery.CloseAll", "panels=" + panels.Count);
             foreach (var p in panels.ToList())
             {
                 if (p == null) continue;
@@ -610,6 +771,50 @@ namespace VPB
                 if (p == null) continue;
                 try { p.RefreshDisplayedVarPathsAfterPackageMoves(set); } catch { }
             }
+        }
+
+        /// <summary>
+        /// Refreshes row bindings for visible non-hub panels only (no full list rebuild).
+        /// Useful for badge-only state changes while auto-refresh is suppressed.
+        /// </summary>
+        public static void RefreshVisiblePanelRowVisuals()
+        {
+            if (singleton == null) return;
+            List<GalleryPanel> pl = singleton.Panels;
+            if (pl == null) return;
+            for (int i = 0; i < pl.Count; i++)
+            {
+                GalleryPanel p = pl[i];
+                if (p == null) continue;
+                try { p.RefreshVisibleGridVisualsOnly(); } catch { }
+            }
+        }
+
+        private bool _baMigrationPromptPending;
+
+        private void TryQueueBaMigrationPrompt()
+        {
+            if (VPBConfig.Instance == null || VPBConfig.Instance.BaMigrationPromptDismissed)
+            {
+                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: skipped (dismissed=" + (VPBConfig.Instance?.BaMigrationPromptDismissed) + ")");
+                return;
+            }
+            if (!BaImporter.TryDetectBaDataDir(out _))
+            {
+                LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: BA data dir not found — prompt suppressed");
+                return;
+            }
+            _baMigrationPromptPending = true;
+            LogUtil.Log("[VPB BA] TryQueueBaMigrationPrompt: prompt pending — will fire next time gallery panel opens");
+        }
+
+        // Called from GalleryPanel.Show() when a panel becomes visible
+        internal static bool TryConsumeBaMigrationPromptPending()
+        {
+            if (singleton == null || !singleton._baMigrationPromptPending) return false;
+            singleton._baMigrationPromptPending = false;
+            LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
+            return true;
         }
     }
 }

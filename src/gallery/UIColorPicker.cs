@@ -1,13 +1,18 @@
 using System;
+using System.Globalization;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 namespace VPB
 {
+    /// <summary>Modal RGB picker: full-gallery dim + centered panel, own Canvas sorting so it stacks above gallery grid.</summary>
     public class UIColorPicker : MonoBehaviour
     {
         private static UIColorPicker _instance;
+        private const float WindowWidth = 400f;
+        private const float WindowHeight = 460f;
+
         public static UIColorPicker Instance
         {
             get
@@ -27,248 +32,530 @@ namespace VPB
         private Slider sliderR, sliderG, sliderB;
         private InputField inputHex;
         private Action<Color> onConfirm;
-        private Color currentColor;
-        private bool ignoreCallbacks = false;
+        private Color currentColor = Color.white;
+        private bool ignoreCallbacks;
+        private Text titleTextComponent;
 
-        private void Awake()
+        public void Show(Color startColor, Action<Color> callback)
         {
-            CreateUI();
+            Show(startColor, callback, null, null);
         }
 
-        private void CreateUI()
+        /// <param name="modalHost">Typically gallery <see cref="GalleryPanel"/> background rect (full window card).</param>
+        public void Show(Color startColor, Action<Color> callback, string optionalTitle, Transform modalHost)
         {
-            Canvas canvas = FindObjectOfType<Canvas>(); // Basic find, better if parented to main UI
-            if (canvas == null) return;
+            Transform host = ResolveModalHost(modalHost);
+            if (host == null) return;
 
-            panelGO = new GameObject("ColorPickerPanel");
-            panelGO.transform.SetParent(canvas.transform, false);
-            
-            // Backdrop
-            Image bg = panelGO.AddComponent<Image>();
-            bg.color = new Color(0, 0, 0, 0.8f);
-            RectTransform rt = panelGO.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
+            // Old picker layout lacked separate window / overlay Canvas.
+            if (panelGO == null || panelGO.transform.Find("ColorPickerWindow") == null)
+                BuildPanelUi(host);
 
-            // Center Box
-            GameObject box = new GameObject("Box");
-            box.transform.SetParent(panelGO.transform, false);
-            Image boxImg = box.AddComponent<Image>();
-            boxImg.color = new Color(0.2f, 0.2f, 0.2f, 1f);
-            RectTransform boxRT = box.GetComponent<RectTransform>();
-            boxRT.sizeDelta = new Vector2(300, 350);
-            boxRT.anchorMin = new Vector2(0.5f, 0.5f);
-            boxRT.anchorMax = new Vector2(0.5f, 0.5f);
+            AttachPanelToHost(host);
+            EnsureModalSorting(host);
 
-            // VLayout
-            VerticalLayoutGroup vlg = box.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(20, 20, 20, 20);
-            vlg.spacing = 10;
-            vlg.childControlHeight = false;
+            if (titleTextComponent != null)
+                titleTextComponent.text = string.IsNullOrEmpty(optionalTitle) ? "Pick a Color" : optionalTitle;
+
+            onConfirm = callback;
+            panelGO.transform.SetAsLastSibling();
+            panelGO.SetActive(true);
+            SetColor(startColor, false);
+        }
+
+        public void Hide()
+        {
+            onConfirm = null;
+            if (panelGO != null) panelGO.SetActive(false);
+        }
+
+        private static Transform ResolveModalHost(Transform modalHost)
+        {
+            if (modalHost != null) return modalHost;
+            Canvas c = FindObjectOfType<Canvas>();
+            return c != null ? c.transform : null;
+        }
+
+        private void AttachPanelToHost(Transform host)
+        {
+            if (panelGO == null || host == null) return;
+            panelGO.transform.SetParent(host, false);
+            StretchFull(panelGO.GetComponent<RectTransform>());
+            try { ApplyLayerRecursive(panelGO, host.gameObject.layer); } catch { }
+        }
+
+        private void EnsureModalSorting(Transform host)
+        {
+            if (panelGO == null) return;
+            Canvas overlayCanvas = panelGO.GetComponent<Canvas>();
+            if (overlayCanvas == null) overlayCanvas = panelGO.AddComponent<Canvas>();
+            overlayCanvas.overrideSorting = true;
+
+            Canvas parentCanvas = host != null ? host.GetComponentInParent<Canvas>() : null;
+            overlayCanvas.sortingOrder = parentCanvas != null ? parentCanvas.sortingOrder + 200 : 5000;
+
+            if (panelGO.GetComponent<GraphicRaycaster>() == null)
+                panelGO.AddComponent<GraphicRaycaster>();
+        }
+
+        private static void ApplyLayerRecursive(GameObject go, int layer)
+        {
+            if (go == null) return;
+            go.layer = layer;
+            for (int i = 0; i < go.transform.childCount; i++)
+                ApplyLayerRecursive(go.transform.GetChild(i).gameObject, layer);
+        }
+
+        private void BuildPanelUi(Transform initialHost)
+        {
+            if (panelGO != null)
+            {
+                Destroy(panelGO);
+                panelGO = null;
+                previewImg = null;
+                sliderR = sliderG = sliderB = null;
+                inputHex = null;
+                titleTextComponent = null;
+            }
+
+            panelGO = new GameObject("ColorPickerModalRoot");
+            panelGO.transform.SetParent(initialHost, false);
+            StretchFull(panelGO);
+
+            Canvas canvas = panelGO.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.pixelPerfect = false;
+            panelGO.AddComponent<GraphicRaycaster>();
+
+            GameObject dim = new GameObject("DimBackdrop");
+            dim.transform.SetParent(panelGO.transform, false);
+            StretchFull(dim);
+            Image dimImg = dim.AddComponent<Image>();
+            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
+            dimImg.raycastTarget = true;
+
+            GameObject window = new GameObject("ColorPickerWindow");
+            window.transform.SetParent(panelGO.transform, false);
+            RectTransform windowRT = window.AddComponent<RectTransform>();
+            windowRT.anchorMin = new Vector2(0.5f, 0.5f);
+            windowRT.anchorMax = new Vector2(0.5f, 0.5f);
+            windowRT.pivot = new Vector2(0.5f, 0.5f);
+            windowRT.anchoredPosition = Vector2.zero;
+            windowRT.sizeDelta = new Vector2(WindowWidth, WindowHeight);
+
+            Image winBg = window.AddComponent<Image>();
+            winBg.color = new Color(0.17f, 0.17f, 0.19f, 1f);
+            winBg.raycastTarget = true;
+
+            Outline winOutline = window.AddComponent<Outline>();
+            winOutline.effectDistance = new Vector2(2f, -2f);
+            winOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
+
+            VerticalLayoutGroup vlg = window.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(20, 20, 22, 20);
+            vlg.spacing = 12;
+            vlg.childAlignment = TextAnchor.UpperCenter;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
             vlg.childForceExpandHeight = false;
+            vlg.childForceExpandWidth = true;
 
-            // Title
-            CreateText(box, "Pick a Color", 24, Color.white);
+            GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Bold, Color.white, TextAnchor.UpperCenter, true);
+            titleTextComponent = titleGo.GetComponent<Text>();
 
-            // Preview
-            GameObject previewGO = new GameObject("Preview");
-            previewGO.transform.SetParent(box.transform, false);
-            previewImg = previewGO.AddComponent<Image>();
-            LayoutElement le = previewGO.AddComponent<LayoutElement>();
-            le.preferredHeight = 50;
-            le.preferredWidth = 260;
+            GameObject hintGo = CreateWindowText(
+                window,
+                "Hex #RRGGBB, bare hex, or R,G,B (0–255 or 0–1).",
+                13,
+                FontStyle.Normal,
+                new Color(0.74f, 0.74f, 0.76f),
+                TextAnchor.MiddleCenter,
+                false);
+            Text hintT = hintGo.GetComponent<Text>();
+            hintT.horizontalOverflow = HorizontalWrapMode.Wrap;
+            hintT.verticalOverflow = VerticalWrapMode.Truncate;
+            LayoutElement hintLe = hintGo.AddComponent<LayoutElement>();
+            hintLe.flexibleHeight = 0;
+            hintLe.preferredHeight = 52;
 
-            // Sliders
-            sliderR = CreateSlider(box, "R", Color.red);
-            sliderG = CreateSlider(box, "G", Color.green);
-            sliderB = CreateSlider(box, "B", Color.blue);
+            previewImg = CreatePreviewStripe(window).GetComponent<Image>();
 
-            // Hex Input
-            GameObject hexGO = CreateInputField(box, 260, 30, "#FFFFFF", (val) => {
-                if (ignoreCallbacks) return;
-                if (ColorUtility.TryParseHtmlString(val, out Color c))
-                {
-                    SetColor(c, false);
-                }
-            });
-            inputHex = hexGO.GetComponent<InputField>();
+            sliderR = CreateSliderRow(window, "R", Color.red);
+            sliderG = CreateSliderRow(window, "G", Color.green);
+            sliderB = CreateSliderRow(window, "B", Color.blue);
 
-            // Buttons
-            GameObject btnRow = new GameObject("Buttons");
-            btnRow.transform.SetParent(box.transform, false);
+            inputHex = CreateCodeInput(window, TryApplyCodeInput);
+
+            GameObject btnRow = new GameObject("ButtonRow");
+            btnRow.transform.SetParent(window.transform, false);
             HorizontalLayoutGroup hlg = btnRow.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = 20;
+            hlg.spacing = 14;
+            hlg.childAlignment = TextAnchor.MiddleCenter;
             hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
             hlg.childForceExpandWidth = true;
-            LayoutElement rowLE = btnRow.AddComponent<LayoutElement>();
-            rowLE.preferredHeight = 40;
-            rowLE.preferredWidth = 260;
+            hlg.childForceExpandHeight = false;
+            LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
+            rowLe.flexibleHeight = 0;
+            rowLe.preferredHeight = 48;
 
-            UI.CreateUIButton(btnRow, 100, 40, "Cancel", 18, 0, 0, AnchorPresets.middleCenter, Hide);
-            UI.CreateUIButton(btnRow, 100, 40, "Confirm", 18, 0, 0, AnchorPresets.middleCenter, () => {
-                onConfirm?.Invoke(currentColor);
+            CreateDialogButton(hlg.transform, "Cancel", Hide);
+            CreateDialogButton(hlg.transform, "OK", () =>
+            {
+                if (onConfirm != null) onConfirm(currentColor);
                 Hide();
             });
 
             panelGO.SetActive(false);
         }
 
-        private GameObject CreateText(GameObject parent, string text, int fontSize, Color color)
+        private static GameObject CreatePreviewStripe(GameObject parent)
         {
-            GameObject go = new GameObject("Text");
+            GameObject go = new GameObject("Preview");
+            go.transform.SetParent(parent.transform, false);
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.flexibleHeight = 0;
+            le.preferredHeight = 52;
+            Image img = go.AddComponent<Image>();
+            img.color = Color.white;
+            img.raycastTarget = false;
+            return go;
+        }
+
+        private static GameObject CreateWindowText(
+            GameObject parent,
+            string text,
+            int fontSize,
+            FontStyle style,
+            Color color,
+            TextAnchor align,
+            bool boldLine)
+        {
+            GameObject go = new GameObject("Text_" + (boldLine ? "Title" : "Body"));
             go.transform.SetParent(parent.transform, false);
             Text t = go.AddComponent<Text>();
             t.text = text;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
+            t.fontStyle = style;
             t.color = color;
+            t.alignment = align;
+            t.raycastTarget = false;
+            try { VPBUiFont.ApplyTo(t); } catch { }
+
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.flexibleHeight = 0;
+            le.preferredHeight = boldLine ? 30 : 48;
+            le.minWidth = 1;
+            return go;
+        }
+
+        private static void CreateDialogButton(Transform row, string label, UnityAction onClick)
+        {
+            GameObject go = new GameObject("Btn_" + label);
+            go.transform.SetParent(row, false);
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.preferredHeight = 44f;
+
+            Image img = go.AddComponent<Image>();
+            img.color = new Color(0.26f, 0.26f, 0.3f, 1f);
+            img.raycastTarget = true;
+
+            // Match gallery hover border behavior on buttons too.
+            try
+            {
+                UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
+                hb.targetGraphic = img;
+                hb.hoverColor = VPBConfig.Instance != null ? VPBConfig.Instance.GetGalleryGridBorderColor() : new Color(1f, 1f, 0f, 1f);
+                hb.borderSize = 2f;
+                hb.inward = false;
+                hb.isSelected = false;
+                hb.ApplyBorderSettings();
+            }
+            catch { }
+
+            Button btn = go.AddComponent<Button>();
+            ColorBlock cb = btn.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
+            cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+            btn.colors = cb;
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            if (onClick != null) btn.onClick.AddListener(onClick);
+
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(go.transform, false);
+            Text t = textGO.AddComponent<Text>();
+            t.text = label;
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 17;
+            t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.raycastTarget = false;
-            
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minHeight = fontSize + 4;
-            le.preferredHeight = fontSize + 4;
-            
-            return go;
+            try { VPBUiFont.ApplyTo(t); } catch { }
+            StretchFull(textGO);
         }
 
-        private GameObject CreateInputField(GameObject parent, float width, float height, string defaultText, UnityEngine.Events.UnityAction<string> onValueChanged)
+        private Slider CreateSliderRow(GameObject parent, string label, Color tint)
         {
-            GameObject go = new GameObject("InputField");
-            go.transform.SetParent(parent.transform, false);
-            
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width;
-            le.preferredHeight = height;
+            GameObject row = new GameObject("Row_" + label);
+            row.transform.SetParent(parent.transform, false);
+            LayoutElement rowLe = row.AddComponent<LayoutElement>();
+            rowLe.flexibleHeight = 0;
+            rowLe.preferredHeight = 34;
 
-            Image bg = go.AddComponent<Image>();
-            bg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
+            h.spacing = 10;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+            h.childForceExpandWidth = true;
+            h.childForceExpandHeight = false;
 
-            InputField input = go.AddComponent<InputField>();
-            
-            // Text Area
-            GameObject textArea = new GameObject("TextArea");
-            textArea.transform.SetParent(go.transform, false);
-            RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
-            textAreaRT.anchorMin = Vector2.zero;
-            textAreaRT.anchorMax = Vector2.one;
-            textAreaRT.offsetMin = new Vector2(5, 5);
-            textAreaRT.offsetMax = new Vector2(-5, -5);
+            GameObject lab = new GameObject("Label");
+            lab.transform.SetParent(row.transform, false);
+            Text lt = lab.AddComponent<Text>();
+            lt.text = label;
+            lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            lt.fontSize = 16;
+            lt.fontStyle = FontStyle.Bold;
+            lt.color = Color.white;
+            lt.alignment = TextAnchor.MiddleLeft;
+            lt.raycastTarget = false;
+            try { VPBUiFont.ApplyTo(lt); } catch { }
+            LayoutElement labLe = lab.AddComponent<LayoutElement>();
+            labLe.flexibleWidth = 0;
+            labLe.preferredWidth = 22;
 
-            GameObject text = new GameObject("Text");
-            text.transform.SetParent(textArea.transform, false);
-            Text t = text.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 14;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
-            
-            input.textComponent = t;
-            input.text = defaultText;
+            GameObject sliderHost = new GameObject("Slider");
+            sliderHost.transform.SetParent(row.transform, false);
+            LayoutElement shLe = sliderHost.AddComponent<LayoutElement>();
+            shLe.flexibleWidth = 1f;
+            shLe.minWidth = 50;
+            shLe.preferredHeight = 30;
 
-            // Standard editor shortcut: Ctrl+Backspace deletes previous word.
-            go.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
-            
-            if (onValueChanged != null) input.onValueChanged.AddListener(onValueChanged);
-
-            return go;
-        }
-
-        private Slider CreateSlider(GameObject parent, string label, Color tint)
-        {
-            GameObject go = new GameObject("Slider" + label);
-            go.transform.SetParent(parent.transform, false);
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredHeight = 30;
-            le.preferredWidth = 260;
-
-            Slider s = go.AddComponent<Slider>();
+            Slider s = sliderHost.AddComponent<Slider>();
             s.minValue = 0;
             s.maxValue = 1;
 
-            // Background
             GameObject bg = new GameObject("Background");
-            bg.transform.SetParent(go.transform, false);
+            bg.transform.SetParent(sliderHost.transform, false);
             Image bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+            bgImg.color = new Color(0.08f, 0.08f, 0.09f, 1f);
             RectTransform bgRT = bg.GetComponent<RectTransform>();
-            bgRT.anchorMin = new Vector2(0, 0.25f);
-            bgRT.anchorMax = new Vector2(1, 0.75f);
+            bgRT.anchorMin = new Vector2(0, 0.2f);
+            bgRT.anchorMax = new Vector2(1, 0.8f);
             bgRT.offsetMin = Vector2.zero;
             bgRT.offsetMax = Vector2.zero;
 
-            // Fill Area
             GameObject fillArea = new GameObject("Fill Area");
-            fillArea.transform.SetParent(go.transform, false);
+            fillArea.transform.SetParent(sliderHost.transform, false);
             RectTransform fillAreaRT = fillArea.AddComponent<RectTransform>();
-            fillAreaRT.anchorMin = new Vector2(0, 0.25f);
-            fillAreaRT.anchorMax = new Vector2(1, 0.75f);
-            fillAreaRT.offsetMin = new Vector2(5, 0);
-            fillAreaRT.offsetMax = new Vector2(-5, 0);
+            fillAreaRT.anchorMin = new Vector2(0, 0.2f);
+            fillAreaRT.anchorMax = new Vector2(1, 0.8f);
+            fillAreaRT.offsetMin = new Vector2(6, 0);
+            fillAreaRT.offsetMax = new Vector2(-18, 0);
 
-            // Fill
             GameObject fill = new GameObject("Fill");
             fill.transform.SetParent(fillArea.transform, false);
             Image fillImg = fill.AddComponent<Image>();
             fillImg.color = tint;
             RectTransform fillRT = fill.GetComponent<RectTransform>();
-            fillRT.sizeDelta = Vector2.zero;
-
+            fillRT.anchorMin = Vector2.zero;
+            fillRT.anchorMax = Vector2.one;
+            fillRT.offsetMin = Vector2.zero;
+            fillRT.offsetMax = Vector2.zero;
             s.fillRect = fillRT;
 
-            // Handle Area
             GameObject handleArea = new GameObject("Handle Area");
-            handleArea.transform.SetParent(go.transform, false);
+            handleArea.transform.SetParent(sliderHost.transform, false);
             RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
-            handleAreaRT.anchorMin = new Vector2(0, 0);
-            handleAreaRT.anchorMax = new Vector2(1, 1);
+            handleAreaRT.anchorMin = Vector2.zero;
+            handleAreaRT.anchorMax = Vector2.one;
             handleAreaRT.offsetMin = new Vector2(10, 0);
-            handleAreaRT.offsetMax = new Vector2(-10, 0);
+            handleAreaRT.offsetMax = new Vector2(-18, 0);
 
-            // Handle
             GameObject handle = new GameObject("Handle");
             handle.transform.SetParent(handleArea.transform, false);
             Image handleImg = handle.AddComponent<Image>();
             handleImg.color = Color.white;
             RectTransform handleRT = handle.GetComponent<RectTransform>();
-            handleRT.sizeDelta = new Vector2(20, 0);
-            
-            s.handleRect = handleRT;
-            s.onValueChanged.AddListener((v) => UpdateFromSliders());
+            handleRT.anchorMin = new Vector2(0.5f, 0.5f);
+            handleRT.anchorMax = new Vector2(0.5f, 0.5f);
+            handleRT.sizeDelta = new Vector2(12f, 16f);
 
+            s.handleRect = handleRT;
+            s.targetGraphic = handleImg;
+            s.onValueChanged.AddListener(_ => UpdateFromSliders());
             return s;
         }
 
-        public void Show(Color startColor, Action<Color> callback)
+        private InputField CreateCodeInput(GameObject parent, UnityAction<string> apply)
         {
-            if (panelGO == null) CreateUI(); // Re-create if missing (e.g. scene change)
-            
-            // Ensure visible and on top
-            panelGO.transform.SetAsLastSibling();
-            panelGO.SetActive(true);
-            
-            onConfirm = callback;
-            SetColor(startColor, false);
+            GameObject go = new GameObject("ColorCodeInput");
+            go.transform.SetParent(parent.transform, false);
+            LayoutElement rowLe = go.AddComponent<LayoutElement>();
+            rowLe.flexibleHeight = 0;
+            rowLe.preferredHeight = 40;
+
+            Image bgImg = go.AddComponent<Image>();
+            bgImg.color = new Color(0.07f, 0.07f, 0.08f, 1f);
+
+            InputField input = go.AddComponent<InputField>();
+            GameObject textArea = new GameObject("TextArea");
+            textArea.transform.SetParent(go.transform, false);
+            RectTransform textAreaRT = textArea.AddComponent<RectTransform>();
+            textAreaRT.anchorMin = Vector2.zero;
+            textAreaRT.anchorMax = Vector2.one;
+            textAreaRT.offsetMin = new Vector2(10, 5);
+            textAreaRT.offsetMax = new Vector2(-10, -5);
+
+            GameObject textGo = new GameObject("Text");
+            textGo.transform.SetParent(textArea.transform, false);
+            Text t = textGo.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = 15;
+            t.color = Color.white;
+            t.alignment = TextAnchor.MiddleLeft;
+            try { VPBUiFont.ApplyTo(t); } catch { }
+            StretchFull(textGo);
+
+            GameObject placeholder = new GameObject("Placeholder");
+            placeholder.transform.SetParent(textArea.transform, false);
+            Text ph = placeholder.AddComponent<Text>();
+            ph.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            ph.fontSize = 14;
+            ph.color = new Color(1f, 1f, 1f, 0.35f);
+            ph.text = "#RRGGBB or R,G,B";
+            try { VPBUiFont.ApplyTo(ph); } catch { }
+            StretchFull(placeholder);
+
+            input.textComponent = t;
+            input.placeholder = ph;
+            input.text = "";
+
+            StretchFull(go);
+            go.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
+
+            if (apply != null)
+            {
+                input.onValueChanged.AddListener(apply);
+                input.onEndEdit.AddListener(apply);
+            }
+            return input;
         }
 
-        public void Hide()
+        private void TryApplyCodeInput(string val)
         {
-            if (panelGO != null) panelGO.SetActive(false);
+            if (ignoreCallbacks) return;
+            Color alphaFb = currentColor;
+            if (TryParseFlexibleColor(val, alphaFb, out Color c))
+                SetColor(c, false);
         }
 
-        private void SetColor(Color c, bool updateInputs)
+        public static bool TryParseFlexibleColor(string raw, Color alphaFallback, out Color result)
+        {
+            result = alphaFallback;
+            if (raw == null) return false;
+            string s = raw.Trim();
+            if (s.Length == 0) return false;
+
+            int commaIdx = s.IndexOf(',');
+            if (commaIdx >= 0)
+            {
+                string[] parts = s.Split(',');
+                if (parts.Length >= 3)
+                {
+                    if (!TryParseRgbToken(parts[0], out float r0)) return false;
+                    if (!TryParseRgbToken(parts[1], out float g0)) return false;
+                    if (!TryParseRgbToken(parts[2], out float b0)) return false;
+                    float r = NormalizeUnitOrByte(r0);
+                    float g = NormalizeUnitOrByte(g0);
+                    float b = NormalizeUnitOrByte(b0);
+                    float a = alphaFallback.a;
+                    if (parts.Length >= 4 && TryParseRgbToken(parts[3], out float aIn))
+                        a = NormalizeUnitOrByte(aIn);
+                    result = new Color(r, g, b, Mathf.Clamp01(a));
+                    return true;
+                }
+                return false;
+            }
+
+            string hex = s;
+            if (hex.Length > 0 && hex[0] != '#')
+            {
+                bool allHex = true;
+                for (int i = 0; i < hex.Length; i++)
+                {
+                    char ch = hex[i];
+                    bool ok = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+                    if (!ok) { allHex = false; break; }
+                }
+                if ((hex.Length == 6 || hex.Length == 8) && allHex)
+                    hex = "#" + hex;
+            }
+
+            if (ColorUtility.TryParseHtmlString(hex, out Color hc))
+            {
+                if (hex != null && hex.Length >= 9 && hex[0] == '#')
+                    result = hc;
+                else
+                    result = new Color(hc.r, hc.g, hc.b, alphaFallback.a);
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryParseRgbToken(string tok, out float v)
+        {
+            v = 0f;
+            return float.TryParse(tok.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v);
+        }
+
+        private static float NormalizeUnitOrByte(float x)
+        {
+            if (x > 1.002f) return Mathf.Clamp01(x / 255f);
+            return Mathf.Clamp01(x);
+        }
+
+        private static void StretchFull(GameObject go)
+        {
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt == null) rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+        }
+        private static void StretchFull(RectTransform rt)
+        {
+            if (rt == null) return;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.localScale = Vector3.one;
+        }
+
+        private void SetColor(Color c, bool updateInputsOnly)
         {
             currentColor = c;
-            previewImg.color = c;
-            
-            if (!updateInputs)
+            if (previewImg != null) previewImg.color = c;
+
+            if (!updateInputsOnly)
             {
                 ignoreCallbacks = true;
-                sliderR.value = c.r;
-                sliderG.value = c.g;
-                sliderB.value = c.b;
-                inputHex.text = "#" + ColorUtility.ToHtmlStringRGBA(c);
+                if (sliderR != null) sliderR.value = c.r;
+                if (sliderG != null) sliderG.value = c.g;
+                if (sliderB != null) sliderB.value = c.b;
+                if (inputHex != null)
+                    inputHex.text = "#" + ColorUtility.ToHtmlStringRGBA(new Color(c.r, c.g, c.b, 1f)).Substring(0, 6);
                 ignoreCallbacks = false;
             }
         }
@@ -276,11 +563,15 @@ namespace VPB
         private void UpdateFromSliders()
         {
             if (ignoreCallbacks) return;
-            Color c = new Color(sliderR.value, sliderG.value, sliderB.value, 1f);
-            SetColor(c, true);
-            
+            if (sliderR == null || sliderG == null || sliderB == null) return;
+            float aKeep = currentColor.a;
+            Color c = new Color(sliderR.value, sliderG.value, sliderB.value, aKeep);
+            currentColor = c;
+            if (previewImg != null) previewImg.color = c;
+
             ignoreCallbacks = true;
-            inputHex.text = "#" + ColorUtility.ToHtmlStringRGBA(c);
+            if (inputHex != null)
+                inputHex.text = "#" + ColorUtility.ToHtmlStringRGBA(new Color(c.r, c.g, c.b, 1f)).Substring(0, 6);
             ignoreCallbacks = false;
         }
     }

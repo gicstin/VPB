@@ -7,8 +7,8 @@ namespace VPB
     public partial class GalleryPanel
     {
         // ── Colors for the language button ──────────────────────────────────────
-        private static readonly Color LangBtnColorNormal = new Color(0.15f, 0.20f, 0.45f, 1f);
-        private static readonly Color LangBtnColorOpen   = new Color(0.28f, 0.40f, 0.72f, 1f);
+        private static readonly Color LangBtnColorNormal = new Color(0f, 0f, 0f, 0.5f);
+        private static readonly Color LangBtnColorOpen   = new Color(0.15f, 0.15f, 0.15f, 1f);
 
         private void SubscribeLocaleChanged()
         {
@@ -28,7 +28,7 @@ namespace VPB
                 CloseLanguageMenu();
                 try { CloseFileSortTypeMenu(); } catch { }
                 RefreshLocalizedUi();
-                try { settingsPanel?.RefreshLocalizedUi(); } catch { }
+                try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
             }
             catch { }
@@ -60,6 +60,9 @@ namespace VPB
                 case ContentType.Category:     return VPBTranslation.T("gallery.search.categories", "Categories...");
                 case ContentType.Creator:
                 case ContentType.HubCreators:  return VPBTranslation.T("gallery.search.creators", "Search Creators...");
+                case ContentType.UserTags:     return VPBTranslation.T("gallery.search.user_tags", "Search your tags...");
+                case ContentType.UserTagsApplied: return VPBTranslation.T("gallery.search.user_tags_applied", "Search applied tags...");
+                case ContentType.Path:         return VPBTranslation.T("gallery.search.paths", "Search Paths...");
                 case ContentType.Tags:
                 case ContentType.HubTags:      return VPBTranslation.T("gallery.search.tags", "Search Tags...");
                 case ContentType.RemoveClothing: return VPBTranslation.T("gallery.search.clothing", "Filter Clothing...");
@@ -67,7 +70,39 @@ namespace VPB
                 case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");
                 case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
                 case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
+                case ContentType.CleanupStaleBuckets: return VPBTranslation.T("gallery.search.cleanup_stale", "Filter Stale Cache Buckets...");
+                case ContentType.History:      return VPBTranslation.T("gallery.search.history_tabs", "Filter history tabs...");
+                case ContentType.Settings:     return VPBTranslation.T("gallery.search.settings", "Filter settings...");
                 default:                       return VPBTranslation.T("gallery.search.main", "Search...");
+            }
+        }
+
+        internal static string GetGalleryHistoryFilterRowLabel(GalleryHistoryFilterMode mode)
+        {
+            switch (mode)
+            {
+                case GalleryHistoryFilterMode.Recent:
+                    return VPBTranslation.T("gallery.history.row.history", "History");
+                case GalleryHistoryFilterMode.MostUsed:
+                    return VPBTranslation.T("gallery.history.row.most_used", "Most used");
+                case GalleryHistoryFilterMode.Scenes:
+                    return VPBTranslation.T("gallery.history.row.scenes", "Scenes");
+                case GalleryHistoryFilterMode.Appearance:
+                    return VPBTranslation.T("gallery.history.row.appearance", "Appearance");
+                case GalleryHistoryFilterMode.Clothing:
+                    return VPBTranslation.T("gallery.history.row.clothing", "Clothing");
+                case GalleryHistoryFilterMode.Hair:
+                    return VPBTranslation.T("gallery.history.row.hair", "Hair");
+                case GalleryHistoryFilterMode.Plugins:
+                    return VPBTranslation.T("gallery.history.row.plugins", "Plugins");
+                case GalleryHistoryFilterMode.Pose:
+                    return VPBTranslation.T("gallery.history.row.pose", "Poses");
+                case GalleryHistoryFilterMode.Body:
+                    return VPBTranslation.T("gallery.history.row.body", "Body");
+                case GalleryHistoryFilterMode.Misc:
+                    return VPBTranslation.T("gallery.history.row.misc", "Misc");
+                default:
+                    return VPBTranslation.T("gallery.history.row.history", "History");
             }
         }
 
@@ -122,6 +157,10 @@ namespace VPB
                 rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
             if (leftCreatorBtnIconImage == null && leftCreatorBtnText != null)
                 leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+            if (rightPathBtnIconImage == null && rightPathBtnText != null)
+                rightPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
+            if (leftPathBtnIconImage == null && leftPathBtnText != null)
+                leftPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
             if (rightReplaceBtnIconImage == null && rightReplaceBtnText != null)
                 rightReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
@@ -144,8 +183,6 @@ namespace VPB
             if (leftRemoveAtomBtnIconImage == null) RefreshGoText(leftRemoveAtomBtn, "gallery.side.remove", "Remove");
             if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
             if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
-            if (rightRemoveAllHairBtnIconImage == null) RefreshGoText(rightRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
-            if (leftRemoveAllHairBtnIconImage == null) RefreshGoText(leftRemoveAllHairBtn, "gallery.side.remove_hair", "Remove\nHair");
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
@@ -276,11 +313,15 @@ namespace VPB
             panelRT.sizeDelta = new Vector2(230f, 50f); // height grows via ContentSizeFitter
 
             Image panelImg = panel.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
+            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
             VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
             vlg.padding           = new RectOffset(6, 6, 6, 6);
             vlg.spacing           = 4;
+            {
+                var v = vlg;
+                innerPaneScaleActions.Add(s => { if (v) { v.spacing = 4f * s; v.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s)); } });
+            }
             vlg.childControlHeight    = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlWidth     = true;
@@ -289,34 +330,6 @@ namespace VPB
 
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            // Header label
-            GameObject headerGO = new GameObject("LangMenuHeader");
-            headerGO.transform.SetParent(panel.transform, false);
-
-            Image headerImg = headerGO.AddComponent<Image>();
-            headerImg.color = new Color(0.13f, 0.13f, 0.24f, 1f);
-
-            LayoutElement headerLE = headerGO.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 28f;
-            headerLE.flexibleWidth   = 1f;
-
-            GameObject headerTextGO = new GameObject("Text");
-            headerTextGO.transform.SetParent(headerGO.transform, false);
-
-            Text headerT = headerTextGO.AddComponent<Text>();
-            headerT.text      = "Language / \u8bed\u8a00";   // "语言" in Unicode escapes
-            headerT.fontSize  = 12;
-            headerT.color     = new Color(0.65f, 0.78f, 1f, 1f);
-            headerT.alignment = TextAnchor.MiddleCenter;
-            headerT.fontStyle = FontStyle.Bold;
-            VPBUiFont.ApplyTo(headerT);
-
-            RectTransform headerTextRT = headerTextGO.GetComponent<RectTransform>();
-            headerTextRT.anchorMin = Vector2.zero;
-            headerTextRT.anchorMax = Vector2.one;
-            headerTextRT.offsetMin = Vector2.zero;
-            headerTextRT.offsetMax = Vector2.zero;
 
             RebuildLanguageMenuOptions();
         }
@@ -329,12 +342,9 @@ namespace VPB
             Transform panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel");
             if (panel == null) return;
 
-            // Remove all children except the header row
+            // Remove all previous rows
             for (int i = panel.childCount - 1; i >= 0; i--)
-            {
-                if (panel.GetChild(i).name != "LangMenuHeader")
-                    UnityEngine.Object.DestroyImmediate(panel.GetChild(i).gameObject);
-            }
+                UnityEngine.Object.DestroyImmediate(panel.GetChild(i).gameObject);
 
             string currentLocale = VPBTranslation.CurrentLocale;
             List<string> locales = VPBTranslation.GetAvailableLocaleIds();
@@ -357,14 +367,12 @@ namespace VPB
                     });
 
                 Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent
-                    ? new Color(0.15f, 0.30f, 0.52f, 1f)   // blue highlight for active
-                    : new Color(0.16f, 0.16f, 0.24f, 1f);  // dark tile for others
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color     = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.color     = UI.PopupText;
                     rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
@@ -388,6 +396,20 @@ namespace VPB
             if (languageMenuOpen)
             {
                 RebuildLanguageMenuOptions();
+                try
+                {
+                    var panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel") as RectTransform;
+                    var btnRT = languageSwitcherBtnGO != null ? languageSwitcherBtnGO.GetComponent<RectTransform>() : null;
+                    if (panel != null && btnRT != null)
+                    {
+                        panel.anchorMin = new Vector2(0.5f, 1f);
+                        panel.anchorMax = new Vector2(0.5f, 1f);
+                        panel.pivot = new Vector2(0.5f, 1f);
+                        // Drop directly under button, centered on its X (matches other title-bar dropdowns).
+                        panel.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -72f);
+                    }
+                }
+                catch { }
                 languageMenuPopupGO.transform.SetAsLastSibling();
             }
             languageMenuPopupGO.SetActive(languageMenuOpen);

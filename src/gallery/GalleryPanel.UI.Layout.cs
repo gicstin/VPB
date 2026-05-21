@@ -15,53 +15,104 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
 {
-        public void UpdateLayout()
+        private void SetTitleSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
         {
-            UpdateLayout(true);
+            if (input == null) return;
+            string t = text ?? "";
+            if (input.text == t) return;
+            _suppressTitleBarSearchValueChanged = true;
+            try
+            {
+                if (handler != null)
+                {
+                    input.onValueChanged.RemoveListener(handler);
+                    input.text = t;
+                    input.onValueChanged.AddListener(handler);
+                }
+                else input.text = t;
+            }
+            finally
+            {
+                _suppressTitleBarSearchValueChanged = false;
+            }
+            if (input == titleSearchInput)
+            {
+                try { SyncTitleBarSearchBackdrop(); } catch { }
+            }
         }
 
-        /// <param name="allowSynchronousCatalogCaches">When false, skips main-thread scans of all VARs for creator/category tab counts.
-        /// <see cref="GalleryPanel.RefreshFilesRoutine"/> builds the same data on a worker thread during a pending full refresh.</param>
-        public void UpdateLayout(bool allowSynchronousCatalogCaches)
+        /// <summary>Keeps title bar search aligned: package name filter in browse mode, settings row filter while settings side is open.</summary>
+        private void SyncTitleSearchInputWithActiveMode()
         {
+            if (titleSearchInput == null || _titleBarSearchOnValueChanged == null) return;
+            if (IsSettingsPanelOpen())
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, CanonicalSettingsSideSearchText(), _titleBarSearchOnValueChanged);
+            else
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged);
+        }
+
+        private void SetSideSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
+        {
+            if (input == null) return;
+            string t = text ?? "";
+            if (input.text == t) return;
+            _suppressMainSideSearchValueChanged = true;
+            try
+            {
+                if (handler != null)
+                {
+                    input.onValueChanged.RemoveListener(handler);
+                    input.text = t;
+                    input.onValueChanged.AddListener(handler);
+                }
+                else input.text = t;
+            }
+            finally
+            {
+                _suppressMainSideSearchValueChanged = false;
+            }
+        }
+
+        public void UpdateLayout()
+        {
+            UpdateLayout(true, true);
+        }
+
+        /// <summary>When false, skips all synchronous side-tab cache fills (legacy single flag).</summary>
+        public void UpdateLayout(bool allowAllSynchronousCaches)
+        {
+            UpdateLayout(allowAllSynchronousCaches, allowAllSynchronousCaches);
+        }
+
+        /// <param name="allowSynchronousCreatorCategoryCaches">When false, skips main-thread creator/category scans (worker or <see cref="GalleryPanel.RefreshFilesRoutine"/> overlap).</param>
+        /// <param name="allowSynchronousUserTagsSideTabCache">When false, skips synchronous user-tag side tab scan.</param>
+        public void UpdateLayout(bool allowSynchronousCreatorCategoryCaches, bool allowSynchronousUserTagsSideTabCache)
+        {
+            EnsureUserTagAvailScrollTrackingHooks();
+            SnapshotUserTagAvailScrollForPreserveBoth();
+
+            float paneScale = VPBConfig.Instance.CurrentInnerPaneScale;
             if (backgroundBoxGO != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
             }
             Canvas.ForceUpdateCanvases();
-            if (allowSynchronousCatalogCaches)
+            bool skipBrowseSideCaches = IsSettingsPanelOpen() || settingsListViewActive;
+            if (allowSynchronousCreatorCategoryCaches && !skipBrowseSideCaches)
             {
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();
             }
+            if (allowSynchronousUserTagsSideTabCache && !userTagsCached)
+                CacheUserTagsSideTab();
 
             if (contentScrollRT == null) return;
 
             try
             {
-                if (titleSearchInput != null)
-                {
-                    RectTransform bgRT = backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
-                    RectTransform searchRT = titleSearchInput.GetComponent<RectTransform>();
-                    if (bgRT != null && searchRT != null)
-                    {
-                        float w = bgRT.rect.width;
-
-                        // Keep some safety space for the left title area and the right-side FPS display,
-                        // plus buttons to the right of search.
-                        float reservedLeft = 320f;
-                        float reservedRight = 240f;
-                        float reservedButtonsRightOfSearch = 190f;
-
-                        float available = w - reservedLeft - reservedRight - reservedButtonsRightOfSearch;
-                        float target = Mathf.Clamp(available, 100f, 240f);
-
-                        if (Mathf.Abs(searchRT.sizeDelta.x - target) > 0.5f)
-                        {
-                            searchRT.sizeDelta = new Vector2(target, searchRT.sizeDelta.y);
-                        }
-                    }
-                }
+                try { SyncTitleSearchInputWithActiveMode(); } catch { }
+                try { ApplyTitleBarResponsiveLayout(paneScale); } catch { }
+                try { ApplyTopDockSideButtonsLayout(paneScale); } catch { }
             }
             catch { }
 
@@ -90,12 +141,16 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.UserTags) target = userTagFilter;
+                    else if (type == ContentType.Path) target = pathFilter;
+                    else if (type == ContentType.History) target = historyTabFilter;
+                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = ""; // Status filter?
 
-                    if (leftSearchInput.text != target) leftSearchInput.text = target;
+                    SetSideSearchInputTextWithoutNotify(leftSearchInput, target, _leftMainSideSearchOnValueChanged);
                     
                     if (leftSearchInput.placeholder is Text ph)
                     {
@@ -134,12 +189,16 @@ namespace VPB
 
                     if (type == ContentType.Category) target = categoryFilter;
                     else if (type == ContentType.Creator) target = creatorFilter;
+                    else if (type == ContentType.UserTags) target = userTagFilter;
+                    else if (type == ContentType.Path) target = pathFilter;
+                    else if (type == ContentType.History) target = historyTabFilter;
+                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
                     else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
                     else if (type == ContentType.RemoveHair) target = removeHairFilter;
                     else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = "";
 
-                    if (rightSearchInput.text != target) rightSearchInput.text = target;
+                    SetSideSearchInputTextWithoutNotify(rightSearchInput, target, _rightMainSideSearchOnValueChanged);
 
                     if (rightSearchInput.placeholder is Text ph)
                     {
@@ -162,9 +221,9 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
-            float paneScale = VPBConfig.Instance.InnerPaneScale;
             float topOffset = -65f * paneScale;
-            float tabTopOffset = TabScrollTopOffset(); // clears fixed sort/search row (pos -55, height 35*s)
+            float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top (65*s)
+            ApplySideTabFilterRowVerticalLayout(paneScale);
 
             // Footer first: main grid/tab insets use the top of this stack (grows when tbox expands).
             if (paginationRT != null)
@@ -177,7 +236,11 @@ namespace VPB
                 {
                     // Info bar: stretch to full width, sits above the buttons bar
                     hoverPathRT.offsetMin = new Vector2(0, 60 * paneScale);
-                    hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
+                    // Only set offsetMax if toolbox is not yet initialized (tbox == null)
+                    // Once initialized, the animation system handles the height via tboxRT.offsetMax.y
+                    // Setting it here after initialization causes flashing during category switches
+                    if (tbox == null)
+                        hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
                     // Update tbox expansion references so animation uses the correct scale
                     tboxTopOffsetBase  = 120f * paneScale;
                     tboxInfoRowHeight  = 60f  * paneScale;
@@ -211,12 +274,54 @@ namespace VPB
             UpdateFooterLayoutState();
 
             try { RefreshHoverPreviewLayoutImmediate(); } catch { }
+
+            // Layout rebuild / hover refresh can reset ScrollRect viewports after SyncGalleryMainAreaBottomEdge;
+            // sticky chrome must win last so Available / Applied toolbars stay visible in Tags mode.
+            try
+            {
+                if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
+                    ApplyUserTagsStickyScrollChrome(tabTopOffset);
+            }
+            catch { }
+
+            RestorePreservedUserTagAvailScroll();
+        }
+
+        /// <summary>Places side-pane sort/refresh/search row so top edge matches <see cref="contentScrollRT"/> top (not title bar).</summary>
+        private void ApplySideTabFilterRowVerticalLayout(float paneScale)
+        {
+            float y = -65f * paneScale;
+            if (leftSearchInput != null)
+            {
+                RectTransform rt = leftSearchInput.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightSearchInput != null)
+            {
+                RectTransform rt = rightSearchInput.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (leftSortBtn != null)
+            {
+                RectTransform rt = leftSortBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightSortBtn != null)
+            {
+                RectTransform rt = rightSortBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
+            if (rightRefreshBtn != null)
+            {
+                RectTransform rt = rightRefreshBtn.GetComponent<RectTransform>();
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+            }
         }
 
         /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
         private float GalleryMainAreaBottomInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             if (hoverPathRT != null) return hoverPathRT.offsetMax.y;
             return 120f * s;
         }
@@ -230,7 +335,7 @@ namespace VPB
         /// <summary>Small gap at the horizontal split only (upper pane — not footer clearance).</summary>
         private float SideTabSplitSeamInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             return 5f * s;
         }
 
@@ -238,7 +343,8 @@ namespace VPB
         private static bool IsUpperStackedSideTabPane(RectTransform rt)
         {
             if (rt == null) return false;
-            return rt.anchorMax.y >= 0.92f && rt.anchorMin.y >= 0.25f;
+            // Top stack in split column: UserTags (0.5/1), category/tags (0.5/1), hub right (0.7/1), etc.
+            return rt.anchorMax.y >= 0.85f && rt.anchorMin.y >= 0.4f;
         }
 
         private static float SceneSourceSortBarBreadth(float s) => 35f * s;
@@ -286,7 +392,7 @@ namespace VPB
         /// <summary>Top inset for sub-tab scroll rects (anchors end at mid-split / hub line). Do not use TabScrollTopOffset (title-bar row — far too large here).</summary>
         private float SubTabScrollPaneTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             return -(15f + 35f * s + 5f * s);
         }
 
@@ -338,6 +444,8 @@ namespace VPB
                 RectTransform rt = rightSubClearBtn.GetComponent<RectTransform>();
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, tabBottomInset);
             }
+
+            try { ApplyUserTagsStickyScrollChrome(tabTopOffset); } catch { }
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
@@ -427,23 +535,32 @@ namespace VPB
 
         public void ApplyInnerPaneScale()
         {
-            float s = VPBConfig.Instance.InnerPaneScale;
+            float s = VPBConfig.Instance.CurrentInnerPaneScale;
             foreach (var action in innerPaneScaleActions)
             {
                 try { action(s); } catch { }
             }
+            try { ApplySideTabFilterRowVerticalLayout(s); } catch { }
+            try { ApplyTitleBarResponsiveLayout(s); } catch { }
             // Layout / tab scroll chrome: rely on VPBConfig.ConfigChanged (UpdateLayout then
             // RefreshSideTabAreasForConfigChange — no side-tab list rebuild) when callers TriggerChange.
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
 
         public void ApplySideButtonScale()
         {
-            float scale = VPBConfig.Instance.SideButtonScale;
+            float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float w = 120f * scale;
             float h = 50f * scale;
-            int fontSize = Mathf.RoundToInt(20f * scale);
+            const int baseFont = 20;
+            const int minFont = 11;
+            float fontScale = Mathf.Clamp(scale, (float)minFont / (float)baseFont, 100f);
+            int fontSize = Mathf.RoundToInt(baseFont * fontScale);
+            float extra = (fontScale > 0f) ? (scale / fontScale) : 1f;
             float containerW = 130f * scale;
             float containerOffset = 140f * scale;
+            float hoverStripW = GallerySideHoverStripWidth * scale;
+            float hoverStripOffset = GallerySideHoverStripOffset * scale;
 
             float squareW = 50f * scale;
             for (int i = 0; i < rightSideButtons.Count; i++)
@@ -453,7 +570,7 @@ namespace VPB
                 bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
                 rt.sizeDelta = new Vector2(square ? squareW : w, h);
                 var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) t.fontSize = fontSize;
+                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
             }
             for (int i = 0; i < leftSideButtons.Count; i++)
             {
@@ -462,7 +579,7 @@ namespace VPB
                 bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
                 rt.sizeDelta = new Vector2(square ? squareW : w, h);
                 var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) t.fontSize = fontSize;
+                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
             }
 
             if (rightSideContainer != null)
@@ -473,7 +590,7 @@ namespace VPB
             if (rightSideHoverStrip != null)
             {
                 var rt = rightSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(hoverStripOffset, 0); }
             }
             if (leftSideContainer != null)
             {
@@ -483,7 +600,7 @@ namespace VPB
             if (leftSideHoverStrip != null)
             {
                 var rt = leftSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 0f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(-hoverStripOffset, 0); }
             }
 
             // Scale submenu buttons proportionally
@@ -512,7 +629,12 @@ namespace VPB
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
-            float scale = VPBConfig.Instance.SideButtonScale;
+            if (IsFixedTopDockMode())
+            {
+                ApplyTopDockSideButtonsLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                return;
+            }
+            float scale = VPBConfig.Instance.CurrentSideButtonScale;
             float spacing = 60f * scale;
             float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f * scale : 0f;
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
@@ -853,6 +975,155 @@ namespace VPB
             catch { }
         }
 
+        private bool IsFixedTopDockMode()
+        {
+            if (!isFixedLocally) return false;
+            if (VPBConfig.Instance == null) return false;
+            string dock = "Right";
+            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
+            return string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ApplyTopDockSideButtonsLayout(float paneScale)
+        {
+            if (_footerSideButtonsGroupRT == null || _footerSideButtonsGroupGO == null) return;
+            if (_footerLeftSectionRT == null || _footerRightSectionRT == null) return;
+            if (paginationRT == null) return;
+            if (leftSideButtons == null || leftSideButtons.Count == 0) return;
+
+            bool active = IsFixedTopDockMode() && !isCollapsed;
+
+            if (!active)
+            {
+                if (_footerSideButtonsGroupGO.activeSelf) _footerSideButtonsGroupGO.SetActive(false);
+                if (_titleBarSideButtonsReparented)
+                {
+                    _titleBarSideButtonsReparented = false;
+                    if (leftSideContainer != null)
+                    {
+                        for (int i = 0; i < leftSideButtons.Count; i++)
+                        {
+                            RectTransform rt = leftSideButtons[i];
+                            if (rt == null) continue;
+                            rt.SetParent(leftSideContainer.transform, worldPositionStays: false);
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Hide side rails in Top dock; buttons move to title bar.
+            if (leftSideContainer != null && leftSideContainer.activeSelf) leftSideContainer.SetActive(false);
+            if (rightSideContainer != null && rightSideContainer.activeSelf) rightSideContainer.SetActive(false);
+
+            if (!_footerSideButtonsGroupGO.activeSelf) _footerSideButtonsGroupGO.SetActive(true);
+
+            if (!_titleBarSideButtonsReparented)
+            {
+                _titleBarSideButtonsReparented = true;
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    RectTransform rt = leftSideButtons[i];
+                    if (rt == null) continue;
+                    rt.SetParent(_footerSideButtonsGroupRT, worldPositionStays: false);
+                }
+            }
+
+            float s = paneScale <= 0f ? 1f : paneScale;
+            RectTransform footerRT = paginationRT;
+
+            // Compute free space between left/right footer sections.
+            Bounds bLeft = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerLeftSectionRT);
+            Bounds bRight = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerRightSectionRT);
+            float gap = 6f * s;
+            float leftEdge = bLeft.max.x + gap;
+            float rightEdge = bRight.min.x - gap;
+            float spaceW = Mathf.Max(0f, rightEdge - leftEdge);
+
+            // Build single row from visible buttons (never remove buttons in Top dock).
+            List<RectTransform> buttons = new List<RectTransform>(leftSideButtons.Count);
+            for (int i = 0; i < leftSideButtons.Count; i++)
+            {
+                RectTransform rt = leftSideButtons[i];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                buttons.Add(rt);
+            }
+
+            float GetWidth(RectTransform rt)
+            {
+                if (rt == null) return 0f;
+                float w = 0f;
+                try { w = rt.rect.width; } catch { w = rt.sizeDelta.x; }
+                if (w <= 1f) w = rt.sizeDelta.x;
+                return w;
+            }
+
+            float GetHeight(RectTransform rt)
+            {
+                if (rt == null) return 0f;
+                float h = 0f;
+                try { h = rt.rect.height; } catch { h = rt.sizeDelta.y; }
+                if (h <= 1f) h = rt.sizeDelta.y;
+                return h;
+            }
+
+            float rowH = 40f * s;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                float h = GetHeight(buttons[i]);
+                if (h > rowH) rowH = h;
+            }
+
+            // Reset scale before measuring/layout.
+            _footerSideButtonsGroupRT.localScale = Vector3.one;
+
+            float totalW = 0f;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                float w = GetWidth(buttons[i]);
+                if (i > 0) totalW += gap;
+                totalW += w;
+            }
+
+            float scale = 1f;
+            if (spaceW > 1f && totalW > 1f && totalW > spaceW + 0.5f)
+            {
+                scale = spaceW / totalW;
+                // Clamp: keep usable, but still guarantee single row.
+                if (scale < 0.5f) scale = 0.5f;
+                if (scale > 1f) scale = 1f;
+            }
+            _footerSideButtonsGroupRT.localScale = new Vector3(scale, scale, 1f);
+
+            // Size group in unscaled units so visual width matches available space after scaling.
+            float groupW = totalW;
+            float groupH = rowH;
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(groupW, groupH);
+
+            // Layout row (unscaled coordinates).
+            float x0 = 0f;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                RectTransform rt = buttons[i];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                float w = GetWidth(rt);
+                rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchoredPosition = new Vector2(x0, 0f);
+                x0 += w + gap;
+            }
+
+            // Center within available free space.
+            float cx = leftEdge + spaceW * 0.5f;
+            float half = (groupW * scale) * 0.5f;
+            if (spaceW > 1f)
+            {
+                if (cx - half < leftEdge) cx = leftEdge + half;
+                if (cx + half > rightEdge) cx = rightEdge - half;
+            }
+            _footerSideButtonsGroupRT.anchoredPosition = new Vector2(cx, 0f);
+        }
+
         /// <summary>
         /// Edge-anchored side button vs centre-anchored submenu rows: submenu opens on the outer side of the rail
         /// (left rail: left of anchor; right rail: right of anchor), away from the gallery. Used for Save and Remove submenus.
@@ -891,7 +1162,9 @@ namespace VPB
             int idxFollow = -1;
             int idxCategory = -1;
             int idxCreator = -1;
-            int idxCreatorClear = -1;
+            int idxPath = -1;
+            int idxHistory = -1;
+            int idxUserTags = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxKeepOutfit = -1;
@@ -915,7 +1188,8 @@ namespace VPB
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
                     idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
-                    idxTarget = FindIndexByTextRef(rightTargetBtnText != null ? rightTargetBtnText : leftTargetBtnText);
+                    idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
+                    // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
                     idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
                     idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
@@ -924,11 +1198,11 @@ namespace VPB
 
                     idxClone    = FindIndexByTextRef(rightCloneBtnText    != null ? rightCloneBtnText    : leftCloneBtnText);
 
-                    GameObject clearGo = rightClearCreatorBtn != null ? rightClearCreatorBtn : leftClearCreatorBtn;
-                    if (clearGo != null)
+                    GameObject utGo = rightUserTagsSideBtn != null ? rightUserTagsSideBtn : leftUserTagsSideBtn;
+                    if (utGo != null)
                     {
-                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == clearGo);
-                        if (i >= 0) idxCreatorClear = i;
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == utGo);
+                        if (i >= 0) idxUserTags = i;
                     }
 
                     if (rightRemoveAllHairBtn != null)
@@ -956,6 +1230,14 @@ namespace VPB
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == saveGo);
                         if (i >= 0) idxSave = i;
                     }
+
+                    GameObject histGo = rightHistoryBtnImage != null ? rightHistoryBtnImage.gameObject : null;
+                    if (histGo == null && leftHistoryBtnImage != null) histGo = leftHistoryBtnImage.gameObject;
+                    if (histGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == histGo);
+                        if (i >= 0) idxHistory = i;
+                    }
                 }
             }
             catch { }
@@ -966,9 +1248,11 @@ namespace VPB
                 new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
                 new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
 
-                new SideButtonLayoutEntry(idxCategory, 0, 2), // Category
-                new SideButtonLayoutEntry(idxCreatorClear, 0, 0), // Clear Creator
+                new SideButtonLayoutEntry(idxUserTags, 0, 2), // Tags (UserTags) — above Category
+                new SideButtonLayoutEntry(idxCategory, 0, 0), // Category
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
+                new SideButtonLayoutEntry(idxPath, 0, 0), // Path
+                new SideButtonLayoutEntry(idxHistory, 0, 0), // History (directly under Path)
 
                 new SideButtonLayoutEntry(idxSave, 0, 2), // Save
 
@@ -1029,34 +1313,7 @@ namespace VPB
 
         private void ToggleTargetSubmenuFromSideButtons(bool? forceLeftSide = null)
         {
-            bool useLeftSide = forceLeftSide ?? isFixedLocally;
-            CloseOtherSideIfSubmenu(useLeftSide);
-            if (useLeftSide)
-            {
-                if (leftActiveContent == ContentType.Target)
-                {
-                    leftActiveContent = leftPrevActiveContent;
-                }
-                else
-                {
-                    leftPrevActiveContent = leftActiveContent;
-                    leftActiveContent = ContentType.Target;
-                }
-            }
-            else
-            {
-                if (rightActiveContent == ContentType.Target)
-                {
-                    rightActiveContent = rightPrevActiveContent;
-                }
-                else
-                {
-                    rightPrevActiveContent = rightActiveContent;
-                    rightActiveContent = ContentType.Target;
-                }
-            }
-            UpdateLayout();
-            UpdateTabs();
+            // Removed: target selection is now in the toolbox.
         }
 
         private void PushUndoSnapshotForAtomRemoval(Atom atom)
@@ -1125,7 +1382,7 @@ namespace VPB
                 mini["atoms"] = one;
 
                 string undoTempPath = Path.Combine(SuperController.singleton.savesDir, "vpb_temp_undo_atom_" + Guid.NewGuid().ToString() + ".json");
-                File.WriteAllText(undoTempPath, mini.ToString());
+                File.WriteAllText(undoTempPath, VPB.src.util.JsonSerializationUtil.Serialize(mini, 100_000));
 
                 PushUndo(() => {
                     try
@@ -1417,17 +1674,19 @@ namespace VPB
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
 
             // Update arrow indicators immediately (not only after submenu hover).
-            if (isClothing)
+            bool anyClothingChanged = false;
+            bool isRemoveClothingOpen = (leftActiveContent == ContentType.RemoveClothing || rightActiveContent == ContentType.RemoveClothing);
+
+            if (isClothing || isRemoveClothingOpen)
             {
                 int count = 0;
                 try
                 {
-                    List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
-                        : new List<Atom>();
-
-                    foreach (Atom tgt in targets)
+                    var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                    if (atoms != null) foreach (Atom tgt in atoms)
                     {
+                        if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
+                        HashSet<string> currentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                         JSONStorable geometry = tgt.GetStorableByID("geometry");
                         if (geometry != null)
                         {
@@ -1445,14 +1704,43 @@ namespace VPB
                                     && previewRemoveClothingPrevGeometryVal.Value);
 
                                 JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                if (jsb != null && (jsb.val || isPreviewItem)) count++;
+                                bool isActive = jsb != null && (jsb.val || isPreviewItem);
+                                if (isActive)
+                                {
+                                    count++;
+                                    currentUids.Add(clothingUid);
+                                }
                             }
+                        }
+
+                        // Initialize session-initial UIDs for this atom if not already tracked.
+                        if (!_sessionInitialClothingUids.ContainsKey(tgt.uid))
+                        {
+                            _sessionInitialClothingUids[tgt.uid] = new HashSet<string>(currentUids, StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        // Detect changes for auto-refresh.
+                        if (!_lastActiveClothingUids.TryGetValue(tgt.uid, out var lastUids))
+                        {
+                            lastUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        }
+
+                        if (!currentUids.SetEquals(lastUids))
+                        {
+                            anyClothingChanged = true;
+                            _lastActiveClothingUids[tgt.uid] = currentUids;
                         }
                     }
                 }
                 catch { }
 
-                UpdateRemoveClothingButtonLabels(count);
+                if (isClothing) UpdateRemoveClothingButtonLabels(count);
+
+                // Auto-refresh the side tab if the list changed and the tab is open.
+                if (anyClothingChanged && isRemoveClothingOpen)
+                {
+                    UpdateTabs();
+                }
             }
             else
             {
@@ -1464,12 +1752,10 @@ namespace VPB
                 int count = 0;
                 try
                 {
-                    List<Atom> targets = SuperController.singleton != null
-                        ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
-                        : new List<Atom>();
-
-                    foreach (Atom tgt in targets)
+                    var atoms = SuperController.singleton != null ? SuperController.singleton.GetAtoms() : null;
+                    if (atoms != null) foreach (Atom tgt in atoms)
                     {
+                        if (tgt == null || !SceneUtils.IsPersonLikeAtom(tgt)) continue;
                         DAZCharacterSelector dcs = tgt.GetComponentInChildren<DAZCharacterSelector>();
                         if (dcs != null && dcs.hairItems != null)
                         {
@@ -1569,12 +1855,14 @@ namespace VPB
             if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
             if (isRight)
             {
-                if (galleryCreatorOffSprite != null && rightClearCreatorBtn != null && go == rightClearCreatorBtn) return true;
+                if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && rightCreatorBtnIconImage != null && rightCreatorBtnImage != null && go == rightCreatorBtnImage.gameObject)
                     return true;
-                if (galleryTargetSprite != null && rightTargetBtnIconImage != null && rightTargetBtnImage != null && go == rightTargetBtnImage.gameObject)
+                if (galleryPathSprite != null && rightPathBtnIconImage != null && rightPathBtnImage != null && go == rightPathBtnImage.gameObject)
+                    return true;
+                if (rightHistoryBtnImage != null && go == rightHistoryBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
@@ -1589,12 +1877,14 @@ namespace VPB
             }
             else
             {
-                if (galleryCreatorOffSprite != null && leftClearCreatorBtn != null && go == leftClearCreatorBtn) return true;
+                if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
                 if (galleryCreatorSprite != null && leftCreatorBtnIconImage != null && leftCreatorBtnImage != null && go == leftCreatorBtnImage.gameObject)
                     return true;
-                if (galleryTargetSprite != null && leftTargetBtnIconImage != null && leftTargetBtnImage != null && go == leftTargetBtnImage.gameObject)
+                if (galleryPathSprite != null && leftPathBtnIconImage != null && leftPathBtnImage != null && go == leftPathBtnImage.gameObject)
+                    return true;
+                if (leftHistoryBtnImage != null && go == leftHistoryBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
                     return true;

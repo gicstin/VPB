@@ -123,6 +123,15 @@ namespace VPB
             if (m_DepWhitelistAllGroupsCache != null && (now - m_DepWhitelistAllGroupsCacheTime) < 10f)
                 return m_DepWhitelistAllGroupsCache;
 
+            // Prefer indexed SQL package inventory to avoid recursive disk scans.
+            var sqlGroups = new List<string>();
+            if (VpbLocalDatabase.TryReadIndexedPackageGroups(sqlGroups))
+            {
+                m_DepWhitelistAllGroupsCache = sqlGroups;
+                m_DepWhitelistAllGroupsCacheTime = now;
+                return m_DepWhitelistAllGroupsCache;
+            }
+
             HashSet<string> groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
@@ -140,9 +149,8 @@ namespace VPB
             }
             catch { }
 
-            var list = groups.ToList();
-            list.Sort(StringComparer.OrdinalIgnoreCase);
-            m_DepWhitelistAllGroupsCache = list;
+            m_DepWhitelistAllGroupsCache = groups.ToList();
+            m_DepWhitelistAllGroupsCache.Sort(StringComparer.OrdinalIgnoreCase);
             m_DepWhitelistAllGroupsCacheTime = now;
             return m_DepWhitelistAllGroupsCache;
         }
@@ -365,11 +373,10 @@ namespace VPB
             triRT.anchorMax = Vector2.one;
             triRT.sizeDelta = Vector2.zero;
 
-            // Hover indicator: turn triangle green on hover/drag.
-            var triHover = resizeHandle.AddComponent<UIHoverColor>();
-            triHover.targetText = triText;
-            triHover.normalColor = triText.color;
-            triHover.hoverColor = Color.green;
+            // Border-only hover (no fill/text color change)
+            var rhHoverBorder = resizeHandle.AddComponent<UIHoverBorder>();
+            rhHoverBorder.hoverColor = new Color(1f, 1f, 0f, 1f);
+            rhHoverBorder.borderSize = 2f;
 
             var resizer = resizeHandle.AddComponent<DepWhitelistResizeHandler>();
             resizer.Target = panelRT;

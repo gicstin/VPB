@@ -2,7 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,6 +12,8 @@ namespace VPB
     {
         public string ExpectedTag;
         public Texture2D CurrentTexture;
+        /// <summary>Decode retries for this binding (resets when ExpectedTag changes or load succeeds).</summary>
+        public int ThumbRetryCount;
 
         private void OnDisable()
         {
@@ -34,15 +36,408 @@ namespace VPB
 
     public partial class GalleryPanel
     {
+        private const int MaxThumbnailDecodeRetries = 3;
+        private const float ThumbnailHangWatchDelaySec = 0.35f;
+        private const float ThumbnailHangWatchMaxDelaySec = 1.50f;
+        private const float ThumbnailHangWatchScrollQuietSec = 0.25f;
+        private const int AllVarThumbQueuePressureThreshold = 80;
+        private static readonly Color ThumbnailPlaceholderBackdrop = new Color(0.25f, 0.25f, 0.25f, 0.55f);
+
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Cache for fast ALL VAR sister JPG existence checks: package UID -> set of internal .jpg paths (normalized, no leading "/").
+        private readonly Dictionary<string, HashSet<string>> _packageInternalJpgSetCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Gallery thumbnails / previews: <c>.jpg</c> only (no <c>.png</c> / <c>.jpeg</c> probes).</summary>
         private static bool IsImagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            string p = path.ToLowerInvariant();
-            return p.EndsWith(".jpg") || p.EndsWith(".png");
+            return path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// <c>pkg.var_path</c> should be the .var on disk; if wrong column / bad data yields an internal image path,
+        /// do not use it for <see cref="FileManager.GetPackage"/> or loose-file thumbnail shortcuts (ALL VAR grid).
+        /// </summary>
+        private static bool IndexedVarPathHintLooksUsableForPackageResolve(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return false;
+            string n = p.Trim().Replace('\\', '/');
+            if (n.Length == 0) return false;
+            if (n.IndexOf(":/", StringComparison.Ordinal) >= 0) return true;
+            if (IsImagePath(n)) return false;
+            string nl = n.ToLowerInvariant();
+            if (nl.EndsWith(".png", StringComparison.Ordinal) || nl.EndsWith(".jpeg", StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Gallery <see cref="VarFileEntry.Path"/>: <c>pkg.var:/internal</c> or bare <c>…/pkg.var</c> (e.g. SQLite <c>meta.json</c> row uses var_path only — no <c>:/</c>).
+        /// </summary>
+        private static bool TryGetVarPackageRootPathFromGalleryPath(string galleryPath, out string pkgRoot)
+        {
+            pkgRoot = null;
+            if (string.IsNullOrEmpty(galleryPath)) return false;
+            try
+            {
+                string p = galleryPath.Trim().Replace('\\', '/');
+                int split = p.IndexOf(":/", StringComparison.Ordinal);
+                if (split > 0)
+                {
+                    pkgRoot = p.Substring(0, split);
+                    return !string.IsNullOrEmpty(pkgRoot);
+                }
+                if (p.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    pkgRoot = p;
+                    return true;
+                }
+            }
+            catch { pkgRoot = null; }
+            return false;
+        }
+
+        /// <summary>SQLite / ALL VAR rows often use relative var paths; <see cref="FileManager.GetPackage"/> expects package UID.</summary>
+        private static string CanonicalVarPackageUidFromPathOrHint(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return null;
+            string s = raw.Trim().Replace('\\', '/');
+            if (s.Length == 0) return null;
+            if (s.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) s = s.Substring("AddonPackages/".Length);
+            else if (s.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase)) s = s.Substring("AllPackages/".Length);
+            int slash = s.LastIndexOf('/');
+            if (slash >= 0 && slash < s.Length - 1) s = s.Substring(slash + 1);
+            if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - 4);
+            else if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - 4);
+            return string.IsNullOrEmpty(s) ? null : s;
+        }
+
+        private static void AppendUniquePackageLookupKey(List<string> keys, string hint)
+        {
+            if (keys == null || string.IsNullOrEmpty(hint)) return;
+            string a = hint.Trim();
+            if (a.Length == 0) return;
+            string b = CanonicalVarPackageUidFromPathOrHint(a);
+            string[] two = new string[] { a, b };
+            for (int ti = 0; ti < two.Length; ti++)
+            {
+                string cand = two[ti];
+                if (string.IsNullOrEmpty(cand)) continue;
+                bool dup = false;
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    if (string.Equals(keys[i], cand, StringComparison.OrdinalIgnoreCase)) { dup = true; break; }
+                }
+                if (!dup) keys.Add(cand);
+            }
+        }
+
+        private static VarPackage TryResolveVarPackageForPackageListEntry(PackageListEntry ple)
+        {
+            if (ple == null) return null;
+            VarPackage pkg = null;
+            try { pkg = ple.Package; } catch { pkg = null; }
+            if (pkg != null) return pkg;
+
+            List<string> keys = new List<string>(4);
+            try { AppendUniquePackageLookupKey(keys, ple.GetPackageUidForGalleryUserTags()); } catch { }
+            string rowPath = null;
+            try { rowPath = ple.Path; } catch { rowPath = null; }
+            if (IndexedVarPathHintLooksUsableForPackageResolve(rowPath))
+                try { AppendUniquePackageLookupKey(keys, rowPath); } catch { }
+            try
+            {
+                string u = ple.Uid;
+                if (!string.IsNullOrEmpty(u) && !string.Equals(u, rowPath, StringComparison.OrdinalIgnoreCase))
+                    AppendUniquePackageLookupKey(keys, u);
+            }
+            catch { }
+
+            for (int i = 0; i < keys.Count; i++)
+            {
+                string k = keys[i];
+                if (string.IsNullOrEmpty(k)) continue;
+                try { pkg = FileManager.GetPackage(k, ensureInstalled: false); } catch { pkg = null; }
+                if (pkg != null) return pkg;
+                try { pkg = FileManager.GetPackageForDependency(k, false); } catch { pkg = null; }
+                if (pkg != null) return pkg;
+            }
+            return null;
+        }
+
+        private static bool IsNonImageSiblingExt(string extWithDotLower)
+        {
+            if (string.IsNullOrEmpty(extWithDotLower)) return false;
+            return extWithDotLower != ".jpg" && extWithDotLower != ".jpeg" && extWithDotLower != ".png";
+        }
+
+        /// <summary>
+        /// <c>Saves/scene</c> and any nested folder (e.g. <c>Saves/scene/Sharr LOOKS/*.jpg</c>). Uses <see cref="NormalizeVarInternalEntryPath"/>.
+        /// </summary>
+        private static bool IsUnderSavesSceneTree(string pathNormalizedOrRaw)
+        {
+            if (string.IsNullOrEmpty(pathNormalizedOrRaw)) return false;
+            string n = NormalizeVarInternalEntryPath(pathNormalizedOrRaw);
+            if (string.IsNullOrEmpty(n)) return false;
+            return string.Equals(n, "Saves/scene", StringComparison.OrdinalIgnoreCase)
+                || n.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// VAR zip paths: parent via last <c>/</c> only (Unicode, apostrophe, leading spaces in folder names — e.g.
+        /// <c>Custom/Hair/Female/Miki/ C├┤te d'Azur Hair/file.jpg</c>). Avoids Windows <see cref="Path.GetDirectoryName"/> mangling.
+        /// </summary>
+        private static string GetInternalPathParentDirectory(string normSlashPath)
+        {
+            if (string.IsNullOrEmpty(normSlashPath)) return "";
+            string n = NormalizeVarInternalEntryPath(normSlashPath);
+            int li = n.LastIndexOf('/');
+            if (li > 0)
+                return n.Substring(0, li);
+            try
+            {
+                string mixed = n.Replace('/', Path.DirectorySeparatorChar);
+                string d = Path.GetDirectoryName(mixed);
+                if (!string.IsNullOrEmpty(d))
+                    return NormalizeVarInternalEntryPath(d.Replace('\\', '/'));
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>File name segment after last <c>/</c> (zip-internal; same rules as <see cref="GetInternalPathParentDirectory"/>).</summary>
+        private static string GetZipInternalLeafFileName(string normSlashPath)
+        {
+            if (string.IsNullOrEmpty(normSlashPath)) return "";
+            string n = NormalizeVarInternalEntryPath(normSlashPath);
+            int li = n.LastIndexOf('/');
+            if (li < 0) return n;
+            if (li >= n.Length - 1) return "";
+            return n.Substring(li + 1);
+        }
+
+        /// <summary>Matches zip/FileEntry paths with <see cref="FileManager"/> (<c>pkg:/</c>) — trim leading slash, unify slashes. (No Unicode NFC: not on .NET 3.5 ref Assemblies.)</summary>
+        private static string NormalizeVarInternalEntryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string n = path.Replace('\\', '/').TrimStart('/');
+            for (int guard = 0; guard < 64 && n.IndexOf("//", StringComparison.Ordinal) >= 0; guard++)
+                n = n.Replace("//", "/");
+            return n;
+        }
+
+        /// <summary>Heuristic: UTF-8 bytes were decoded as ISO-8859-1 (common <c>Ã´</c> vs <c>ô</c> in SQLite vs zip).</summary>
+        private static bool LooksLikeUtf8MisreadAsLatin1(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (c == '\uFFFD') return true;
+                if (c == 'Ã' || c == 'Â' || c == 'Ä' || c == 'Å' || c == 'Ð' || c == 'Ñ' || c == 'Ó')
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Repair UTF-8 bytes misread as legacy 8-bit encoding (per segment only — full paths mix UTF-8 + mojibake).</summary>
+        private static string TryRepairUtf8MisreadAsLatin1(string segmentNoSlashes)
+        {
+            if (string.IsNullOrEmpty(segmentNoSlashes)) return segmentNoSlashes;
+            try
+            {
+                Encoding latin1 = Encoding.GetEncoding("iso-8859-1");
+                byte[] bytes = latin1.GetBytes(segmentNoSlashes);
+                string repaired = Encoding.UTF8.GetString(bytes);
+                if (!string.IsNullOrEmpty(repaired) && repaired.IndexOf('\uFFFD') < 0)
+                    return repaired;
+                Encoding cp1252 = Encoding.GetEncoding(1252);
+                bytes = cp1252.GetBytes(segmentNoSlashes);
+                repaired = Encoding.UTF8.GetString(bytes);
+                if (!string.IsNullOrEmpty(repaired) && repaired.IndexOf('\uFFFD') < 0)
+                    return repaired;
+            }
+            catch { }
+            return segmentNoSlashes;
+        }
+
+        /// <summary>Repair each <c>/</c> segment separately so mixed UTF-8 + mojibake (e.g. <c>d'Azur</c> + <c>CÃ´te</c>) does not corrupt the path.</summary>
+        private static string NormalizeVarInternalPathForThumbKeys(string path)
+        {
+            string n = NormalizeVarInternalEntryPath(path);
+            if (string.IsNullOrEmpty(n)) return n;
+            StringBuilder sb = new StringBuilder(n.Length + 16);
+            int start = 0;
+            for (int i = 0; i <= n.Length; i++)
+            {
+                if (i < n.Length && n[i] != '/')
+                    continue;
+                string seg = n.Substring(start, i - start);
+                if (LooksLikeUtf8MisreadAsLatin1(seg))
+                {
+                    string r = TryRepairUtf8MisreadAsLatin1(seg);
+                    if (!string.IsNullOrEmpty(r) && r.IndexOf('\uFFFD') < 0)
+                        seg = r;
+                }
+                if (sb.Length > 0) sb.Append('/');
+                sb.Append(seg);
+                start = i + 1;
+            }
+            return sb.ToString();
+        }
+
+        private static bool PathsEqualWithUtf8Latin1Alias(string a, string b)
+        {
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            string ac = NormalizeVarInternalPathForThumbKeys(a);
+            string bc = NormalizeVarInternalPathForThumbKeys(b);
+            if (string.Equals(ac, bc, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(ac, b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(a, bc, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>Returns zip-listed path string to pass to <c>pkg:/</c> (canonical member from set).</summary>
+        private static string FindMatchingInternalJpgPathInSet(HashSet<string> set, string keyNorm)
+        {
+            if (set == null || string.IsNullOrEmpty(keyNorm)) return null;
+            if (set.Contains(keyNorm)) return keyNorm;
+            foreach (string member in set)
+            {
+                if (PathsEqualWithUtf8Latin1Alias(member, keyNorm)) return member;
+            }
+            return null;
+        }
+
+        private struct VarInternalMember
+        {
+            public string FullPathNorm;
+            public string ExtLower;
+            public bool IsImage;
+        }
+
+        /// <summary>
+        /// Package-row preview: sister pairs (<c>foo.jpg</c> + non-image <c>foo.*</c>) — first match in entry order.
+        /// EVERYTHING mode: prefer pairs under <c>Saves/scene</c>, then other pairs; orphan <c>.jpg</c> prefers <c>Saves/scene</c> path.
+        /// </summary>
+        private static string PickPackagePreviewInternalPathFromFileList(List<string> names, bool prioritizeSavesSceneForEverything)
+        {
+            if (names == null || names.Count == 0) return null;
+
+            var groups = new Dictionary<string, List<VarInternalMember>>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string normRaw = NormalizeVarInternalEntryPath(n);
+                if (normRaw.Length == 0) continue;
+                string normKey = NormalizeVarInternalPathForThumbKeys(n);
+                try
+                {
+                    string dir = GetInternalPathParentDirectory(normKey);
+
+                    string leaf = GetZipInternalLeafFileName(normKey);
+                    if (string.IsNullOrEmpty(leaf)) continue;
+                    string baseNo = Path.GetFileNameWithoutExtension(leaf);
+                    if (string.IsNullOrEmpty(baseNo)) continue;
+                    string ext = Path.GetExtension(leaf).ToLowerInvariant();
+                    if (string.IsNullOrEmpty(ext)) continue;
+                    bool isImg = ext == ".jpg";
+                    string key = dir + "|" + baseNo;
+                    List<VarInternalMember> list;
+                    if (!groups.TryGetValue(key, out list) || list == null)
+                    {
+                        list = new List<VarInternalMember>(2);
+                        groups[key] = list;
+                    }
+                    VarInternalMember vm;
+                    vm.FullPathNorm = normRaw;
+                    vm.ExtLower = ext;
+                    vm.IsImage = isImg;
+                    list.Add(vm);
+                }
+                catch { }
+            }
+
+            string PickFirstSisterJpg(bool savesSceneDirOnly)
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (string.IsNullOrEmpty(n)) continue;
+                    string normRaw = NormalizeVarInternalEntryPath(n);
+                    if (normRaw.Length == 0 || !IsImagePath(normRaw)) continue;
+                    string normKey = NormalizeVarInternalPathForThumbKeys(n);
+                    try
+                    {
+                        string dir = GetInternalPathParentDirectory(normKey);
+
+                        if (savesSceneDirOnly && !IsUnderSavesSceneTree(dir))
+                            continue;
+
+                        string leaf = GetZipInternalLeafFileName(normKey);
+                        if (string.IsNullOrEmpty(leaf)) continue;
+                        string baseNo = Path.GetFileNameWithoutExtension(leaf);
+                        if (string.IsNullOrEmpty(baseNo)) continue;
+                        if (string.IsNullOrEmpty(Path.GetExtension(leaf))) continue;
+                        string key = dir + "|" + baseNo;
+                        if (!groups.TryGetValue(key, out List<VarInternalMember> list) || list == null || list.Count < 2)
+                            continue;
+
+                        bool hasNonImage = false;
+                        for (int j = 0; j < list.Count; j++)
+                        {
+                            VarInternalMember m = list[j];
+                            if (!m.IsImage && IsNonImageSiblingExt(m.ExtLower))
+                            {
+                                hasNonImage = true;
+                                break;
+                            }
+                        }
+                        if (!hasNonImage) continue;
+
+                        return normRaw;
+                    }
+                    catch { }
+                }
+                return null;
+            }
+
+            if (prioritizeSavesSceneForEverything)
+            {
+                string sceneFirst = PickFirstSisterJpg(savesSceneDirOnly: true);
+                if (!string.IsNullOrEmpty(sceneFirst))
+                    return sceneFirst;
+            }
+
+            string anySister = PickFirstSisterJpg(savesSceneDirOnly: false);
+            if (!string.IsNullOrEmpty(anySister))
+                return anySister;
+
+            if (prioritizeSavesSceneForEverything)
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string n = names[i];
+                    if (string.IsNullOrEmpty(n)) continue;
+                    string normRaw = NormalizeVarInternalEntryPath(n);
+                    if (normRaw.Length > 0 && IsImagePath(normRaw) && IsUnderSavesSceneTree(normRaw))
+                        return normRaw;
+                }
+            }
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string n = names[i];
+                if (string.IsNullOrEmpty(n)) continue;
+                string normRaw = NormalizeVarInternalEntryPath(n);
+                if (normRaw.Length > 0 && IsImagePath(normRaw))
+                    return normRaw;
+            }
+
+            return null;
         }
 
         private string GetOrChoosePackagePreviewInternalPath(VarPackage pkg)
@@ -51,45 +446,70 @@ namespace VPB
             try
             {
                 string uid = pkg.Uid;
-                if (!string.IsNullOrEmpty(uid) && _packagePreviewInternalPathCache.TryGetValue(uid, out string cached))
+                bool prioritizeSavesScene = false;
+                try { prioritizeSavesScene = Gallery.IsEverythingCategoryName((CurrentCategoryTitle ?? "").Trim()); } catch { prioritizeSavesScene = false; }
+
+                string cacheKey = null;
+                if (!string.IsNullOrEmpty(uid))
+                    cacheKey = uid + "\x1F" + (prioritizeSavesScene ? "EV" : "DEF");
+
+                if (!string.IsNullOrEmpty(cacheKey) && _packagePreviewInternalPathCache.TryGetValue(cacheKey, out string cached))
                     return cached;
 
                 List<string> names; List<long> ticks; List<long> sizes;
                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
 
-                string chosen = null;
+                string chosen = PickPackagePreviewInternalPathFromFileList(names, prioritizeSavesScene);
 
-                // Prefer preview-ish names.
+                if (!string.IsNullOrEmpty(cacheKey))
+                {
+                    if (_packagePreviewInternalPathCache.Count > 8000) _packagePreviewInternalPathCache.Clear();
+                    _packagePreviewInternalPathCache[cacheKey] = chosen;
+                }
+
+                return chosen;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private HashSet<string> GetOrBuildPackageInternalJpgSet(VarPackage pkg)
+        {
+            if (pkg == null) return null;
+            try
+            {
+                string uid = pkg.Uid;
+                if (!string.IsNullOrEmpty(uid) && _packageInternalJpgSetCache.TryGetValue(uid, out HashSet<string> cached) && cached != null)
+                    return cached;
+
+                List<string> names; List<long> ticks; List<long> sizes;
+                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) return null;
+
+                var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < names.Count; i++)
                 {
                     string n = names[i];
                     if (!IsImagePath(n)) continue;
-                    string ln = n.ToLowerInvariant();
-                    if (ln.Contains("preview") || ln.Contains("thumbnail") || ln.Contains("thumb") || ln.Contains("screenshot"))
+                    try
                     {
-                        chosen = n;
-                        break;
+                        string normRaw = NormalizeVarInternalEntryPath(n);
+                        if (normRaw.Length == 0) continue;
+                        set.Add(normRaw);
+                        string canon = NormalizeVarInternalPathForThumbKeys(n);
+                        if (!string.Equals(canon, normRaw, StringComparison.Ordinal))
+                            set.Add(canon);
                     }
-                }
-
-                // Fallback: first image found.
-                if (chosen == null)
-                {
-                    for (int i = 0; i < names.Count; i++)
-                    {
-                        string n = names[i];
-                        if (IsImagePath(n)) { chosen = n; break; }
-                    }
+                    catch { }
                 }
 
                 if (!string.IsNullOrEmpty(uid))
                 {
-                    // Cap growth to avoid unbounded memory use.
-                    if (_packagePreviewInternalPathCache.Count > 8000) _packagePreviewInternalPathCache.Clear();
-                    _packagePreviewInternalPathCache[uid] = chosen;
+                    if (_packageInternalJpgSetCache.Count > 4000) _packageInternalJpgSetCache.Clear();
+                    _packageInternalJpgSetCache[uid] = set;
                 }
-
-                return chosen;
+                return set;
             }
             catch
             {
@@ -103,6 +523,8 @@ namespace VPB
             public Texture2D Texture;
             public long LastWriteTime;
             public string GroupId;
+            /// <summary>Matches <see cref="CustomImageLoaderThreaded.QueuedImage.turboJpegScaleDenom"/> for disk cache key <c>|tjN</c>.</summary>
+            public int TurboJpegScaleDenom;
         }
 
         private IEnumerator ProcessThumbnailCacheQueue()
@@ -144,7 +566,7 @@ namespace VPB
                     if (string.IsNullOrEmpty(job.Path) || job.Texture == null) { yield return null; continue; }
                     if (!string.IsNullOrEmpty(job.GroupId) && job.GroupId != currentLoadingGroupId) { yield return null; continue; }
 
-                    yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime));
+                    yield return StartCoroutine(GalleryThumbnailCache.Instance.GenerateAndSaveThumbnailRoutine(job.Path, job.Texture, job.LastWriteTime, job.TurboJpegScaleDenom));
                     _thumbCacheSaved++;
 
                     // Pause at least 2 frames between saves so ReadPixels/flush don't stack up
@@ -159,27 +581,36 @@ namespace VPB
             }
         }
 
-        private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId)
+        private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
-            pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId });
+            pendingThumbnailCacheJobs.Enqueue(new ThumbnailCacheJob { Path = path, Texture = tex, LastWriteTime = lastWriteTime, GroupId = groupId, TurboJpegScaleDenom = turboJpegScaleDenom });
             _thumbCacheTotalEnqueued++;
             _thumbCacheFinishTime = -1f;
             ShowThumbnailCacheProgress();
         }
 
-        private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true)
+        private void LoadThumbnail(FileEntry file, RawImage target, bool gridThumbnailContext = true, int turboJpegThumbnailDenom = 0, bool thumbnailUnityDecodeOnly = false)
         {
-            // Skip thumbnails for missing/virtual entries
-            if (file is VirtualFileEntry || file is MissingPackageListEntry)
+            if (file is MissingPackageListEntry)
             {
                 ClearThumbnailTarget(target);
                 return;
             }
 
+            if (file is VirtualFileEntry vfeOuter)
+            {
+                string thumbUrl;
+                if (_hubThumbnailUrlCache.TryGetValue(vfeOuter.Uid, out thumbUrl) && !string.IsNullOrEmpty(thumbUrl))
+                    LoadHubThumbnailToTarget(thumbUrl, vfeOuter.Uid, target);
+                else
+                    ClearThumbnailTarget(target);
+                return;
+            }
+
             try
             {
-                LoadThumbnailInternal(file, target, gridThumbnailContext);
+                LoadThumbnailInternal(file, target, gridThumbnailContext, turboJpegThumbnailDenom, thumbnailUnityDecodeOnly);
             }
             catch (Exception ex)
             {
@@ -187,7 +618,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Plugin script paths under Custom/Scripts (same convention as Browser Assist).</summary>
+        /// <summary>Plugin script paths under Custom/Scripts.</summary>
         private static bool IsPluginScriptGalleryFile(FileEntry file)
         {
             if (file == null || string.IsNullOrEmpty(file.Path)) return false;
@@ -197,9 +628,9 @@ namespace VPB
             return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
         }
 
-        private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext)
+        private void LoadThumbnailInternal(FileEntry file, RawImage target, bool gridThumbnailContext, int turboJpegThumbnailDenom, bool thumbnailUnityDecodeOnly)
         {
-            // Skip thumbnails for missing/virtual entries - clear any existing texture
+            // Virtual/missing entries are handled before reaching here
             if (file is VirtualFileEntry || file is MissingPackageListEntry)
             {
                 ClearThumbnailTarget(target);
@@ -216,8 +647,9 @@ namespace VPB
             }
 
             string imgPath = "";
-            string lowerPath = file.Path.ToLowerInvariant();
-            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+            // Package list rows use Path as indexed var_path hint; never treat that as a loose disk image
+            // (bad/mis-typed DB → wrong branch → FileExists miss → decode retry storm when grid relayouts).
+            if (!(file is PackageListEntry) && IsImagePath(file.Path))
             {
                 imgPath = file.Path;
             }
@@ -243,78 +675,135 @@ namespace VPB
                 }
                 else
                 {
-                    // Local cleanup rows: prefer sidecar image next to source (.json -> .jpg/.png).
+                    // Local cleanup rows: sidecar .jpg next to source (.json -> .jpg).
                     try
                     {
                         string testJpg = Path.ChangeExtension(file.Path, ".jpg");
                         if (File.Exists(testJpg) || FileManager.FileExists(testJpg))
-                        {
                             imgPath = testJpg;
-                        }
-                        else
-                        {
-                            string testPng = Path.ChangeExtension(file.Path, ".png");
-                            if (File.Exists(testPng) || FileManager.FileExists(testPng))
-                                imgPath = testPng;
-                        }
                     }
                     catch { }
                 }
             }
-            else if (file is PackageListEntry ple && ple.Package != null)
+            else if (file is PackageListEntry ple)
             {
-                // For package list rows, pick an internal image (jpg/png) inside the .var.
-                // IMPORTANT: do not request thumbnails from the .var file itself; that can trigger package
-                // ensure-install paths and fails on some setups. Use an internal image path instead.
-                string chosen = GetOrChoosePackagePreviewInternalPath(ple.Package);
-                if (!string.IsNullOrEmpty(chosen))
-                    imgPath = ple.Package.Path + ":/" + chosen.Replace('\\', '/');
-            }
-            else if (file is VarFileEntry vfe && vfe.Package != null)
-            {
-                // First try per-item sister file: same internal path but .jpg/.png extension.
-                // This gives each clothing variation its own thumbnail instead of sharing the
-                // package-wide preview image.
-                string internalNoExt = System.IO.Path.GetFileNameWithoutExtension(vfe.InternalPath);
-                string internalDir   = System.IO.Path.GetDirectoryName(vfe.InternalPath);
-                string baseInternal  = string.IsNullOrEmpty(internalDir)
-                    ? internalNoExt
-                    : internalDir.Replace('\\', '/') + "/" + internalNoExt;
-
-                string sisterJpg = vfe.Package.Path + ":/" + baseInternal + ".jpg";
-                string sisterPng = vfe.Package.Path + ":/" + baseInternal + ".png";
-
-                if (FileManager.FileExists(sisterJpg))
-                    imgPath = sisterJpg;
-                else if (FileManager.FileExists(sisterPng))
-                    imgPath = sisterPng;
-                else
+                // Package list row: resolve VarPackage then pick internal preview (sister JPG/PNG + non-image sibling, etc.).
+                VarPackage pkg = TryResolveVarPackageForPackageListEntry(ple);
+                if (pkg != null && !string.IsNullOrEmpty(pkg.Path))
                 {
-                    // Fall back to the package-wide preview image
-                    string chosen = GetOrChoosePackagePreviewInternalPath(vfe.Package);
+                    string chosen = GetOrChoosePackagePreviewInternalPath(pkg);
                     if (!string.IsNullOrEmpty(chosen))
-                        imgPath = vfe.Package.Path + ":/" + chosen.Replace('\\', '/');
+                        imgPath = pkg.Path + ":/" + chosen.Replace('\\', '/');
+                }
+            }
+            else if (file is VarFileEntry vfe)
+            {
+                // Cached package index (jpgSet + package preview pick); FileExists sister only if package unresolved / still empty.
+                string pkgPath = null;
+                try
+                {
+                    if (!TryGetVarPackageRootPathFromGalleryPath(vfe.Path, out pkgPath))
+                        pkgPath = null;
+                }
+                catch { pkgPath = null; }
+                if (string.IsNullOrEmpty(pkgPath))
+                {
+                    ClearThumbnailTarget(target);
+                    return;
+                }
+
+                string pkgNorm = NormalizeVarInternalEntryPath(pkgPath);
+
+                VarPackage vPkg = null;
+                string rowPkgUid = null;
+                try
+                {
+                    string u = vfe.Uid ?? "";
+                    int ix = u.IndexOf(":/", StringComparison.Ordinal);
+                    rowPkgUid = ix > 0 ? u.Substring(0, ix) : u;
+                }
+                catch { rowPkgUid = null; }
+                // Indexed resolve (SQLite UID + var_path): matches packagesByPath / filename fallback when bare GetPackage(uid) misses (Unicode paths).
+                if (!string.IsNullOrEmpty(rowPkgUid) && !string.IsNullOrEmpty(pkgNorm))
+                {
+                    try
+                    {
+                        if (FileManager.TryResolveVarPackageForIndexedGalleryRow(rowPkgUid, pkgNorm, out VarPackage pIx))
+                            vPkg = pIx;
+                    }
+                    catch { }
+                }
+                if (vPkg == null)
+                {
+                    try { vPkg = vfe.Package; } catch { vPkg = null; }
+                }
+                if (vPkg == null)
+                {
+                    try
+                    {
+                        string uid = CanonicalVarPackageUidFromPathOrHint(pkgPath);
+                        if (!string.IsNullOrEmpty(uid))
+                            vPkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                    }
+                    catch { vPkg = null; }
+                }
+
+                // Per-row sister: same basename, .jpg only (then package-wide preview if missing).
+                // Use encoding-repaired internal path for folder/file segments so sister path matches zip listing when SQLite has Latin1-mojibake (Ã´ vs ô).
+                string ipKey = NormalizeVarInternalPathForThumbKeys(vfe.InternalPath ?? "");
+                string leafInternal = GetZipInternalLeafFileName(ipKey);
+                string internalNoExt = string.IsNullOrEmpty(leafInternal)
+                    ? ""
+                    : Path.GetFileNameWithoutExtension(leafInternal);
+                string internalDir = GetInternalPathParentDirectory(ipKey);
+                string baseInternal = string.IsNullOrEmpty(internalDir)
+                    ? internalNoExt
+                    : internalDir + "/" + internalNoExt;
+
+                string internalSisterJpg = (baseInternal + ".jpg").Replace('\\', '/');
+                if (internalSisterJpg.StartsWith("/")) internalSisterJpg = internalSisterJpg.Substring(1);
+                string sisterKeyNorm = NormalizeVarInternalPathForThumbKeys(internalSisterJpg);
+
+                if (vPkg != null)
+                {
+                    HashSet<string> jpgSet = GetOrBuildPackageInternalJpgSet(vPkg);
+                    string matchedJpg = null;
+                    if (jpgSet != null && sisterKeyNorm.Length > 0)
+                        matchedJpg = FindMatchingInternalJpgPathInSet(jpgSet, sisterKeyNorm);
+                    if (!string.IsNullOrEmpty(matchedJpg))
+                    {
+                        imgPath = vPkg.Path + ":/" + matchedJpg;
+                    }
+                    else
+                    {
+                        string chosen = GetOrChoosePackagePreviewInternalPath(vPkg);
+                        if (!string.IsNullOrEmpty(chosen))
+                            imgPath = vPkg.Path + ":/" + chosen.Replace('\\', '/');
+                    }
+                }
+
+                if (string.IsNullOrEmpty(imgPath))
+                {
+                    string sisterJpg = pkgNorm + ":/" + internalSisterJpg;
+                    if (FileManager.FileExists(sisterJpg))
+                        imgPath = sisterJpg;
+                    else if (!string.Equals(sisterKeyNorm, internalSisterJpg, StringComparison.Ordinal))
+                    {
+                        string sisterAlt = pkgNorm + ":/" + sisterKeyNorm;
+                        if (FileManager.FileExists(sisterAlt))
+                            imgPath = sisterAlt;
+                    }
                 }
             }
             else
             {
-                // Sister-file rule: same name, .jpg or .png extension
+                // Sister-file rule: same basename, .jpg only
                 // Optimized discovery via archive flattening (FileManager.FileExists)
                 try
                 {
                     string testJpg = Path.ChangeExtension(file.Path, ".jpg");
                     if (FileManager.FileExists(testJpg))
-                    {
                         imgPath = testJpg;
-                    }
-                    else
-                    {
-                        string testPng = Path.ChangeExtension(file.Path, ".png");
-                        if (FileManager.FileExists(testPng))
-                        {
-                            imgPath = testPng;
-                        }
-                    }
                 }
                 catch (ArgumentException)
                 {
@@ -354,6 +843,8 @@ namespace VPB
                     return;
                 }
 
+                if (bind.ExpectedTag != expectedTag)
+                    bind.ThumbRetryCount = 0;
                 bind.ExpectedTag = expectedTag;
 
                 if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
@@ -361,10 +852,23 @@ namespace VPB
                     CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
                     bind.CurrentTexture = null;
                 }
+
+                // New binding: immediately blank old texture so pooled rows never "flash" stale previews
+                // while async load resolves (notably visible in ALL VAR package list).
+                try
+                {
+                    target.texture = null;
+                    if (target.material != null) target.material.mainTexture = null;
+                    target.color = ThumbnailPlaceholderBackdrop;
+                }
+                catch { }
             }
 
-            // 1. Memory Cache
-            Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath);
+            // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
+            int thumbTd = turboJpegThumbnailDenom > 0
+                ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
+                : TurboJpegNative.ScaleDenomFromGridColumns(EffectiveGridColumnsForThumbDecode());
+            Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath, thumbTd, thumbnailUnityDecodeOnly);
             if (tex != null)
             {
                 if (bind != null)
@@ -378,29 +882,35 @@ namespace VPB
                 return;
             }
 
-            // 3. Request Load
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true, turboJpegScaleDenom: thumbTd, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+        }
+
+        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
+        {
+            if (CustomImageLoaderThreaded.singleton == null || target == null) return;
+
             CustomImageLoaderThreaded.QueuedImage qi = CustomImageLoaderThreaded.singleton.GetQI();
             qi.imgPath = imgPath;
             qi.isThumbnail = true;
+            qi.turboJpegScaleDenom = turboJpegScaleDenom;
+            qi.thumbnailUnityDecodeOnly = thumbnailUnityDecodeOnly;
             qi.compress = false;
-            qi.priority = _nextThumbPriority;
+            qi.skipCache = skipCache;
+            qi.priority = skipCache ? Mathf.Min(-2, _nextThumbPriority - 30) : _nextThumbPriority;
             qi.groupId = currentLoadingGroupId;
-            qi.callback = (res) => {
-                if (res != null && res.tex != null)
+            qi.callback = (res) =>
+            {
+                if (res != null && res.tex != null && !res.cancel)
                 {
-                    ThumbnailBindingTag cbBind = null;
-                    if (target != null) cbBind = target.GetComponent<ThumbnailBindingTag>();
+                    ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
                     if (cbBind != null && cbBind.ExpectedTag == expectedTag)
                     {
                         if (cbBind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
-                        {
                             CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(cbBind.CurrentTexture);
-                        }
                         cbBind.CurrentTexture = res.tex;
+                        cbBind.ThumbRetryCount = 0;
                         if (CustomImageLoaderThreaded.singleton != null)
-                        {
                             CustomImageLoaderThreaded.singleton.RegisterThumbnailUse(res.tex);
-                        }
                         target.texture = res.tex;
                         target.color = Color.white;
                         UpdateAspectRatio(target, res.tex);
@@ -408,13 +918,9 @@ namespace VPB
 
                     long imgTime = 0;
                     if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                    {
                         imgTime = 0;
-                    }
                     else if (imgPath == file.Path)
-                    {
                         imgTime = file.LastWriteTime.ToFileTime();
-                    }
                     else
                     {
                         FileEntry fe = FileManager.GetFileEntry(imgPath);
@@ -423,12 +929,93 @@ namespace VPB
                     }
 
                     if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId)
-                    {
-                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId);
-                    }
+                        EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId, res.turboJpegScaleDenom);
+                    return;
                 }
+
+                if (res != null && res.cancel) return;
+                ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
+                if (failBind == null || failBind.ExpectedTag != expectedTag) return;
+                if (capturedGroupId != currentLoadingGroupId) return;
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: true);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
+            if (scheduleHangWatchdog)
+                StartCoroutine(ThumbnailHangWatchdogCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly));
+        }
+
+        private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
+        {
+            if (target == null) return;
+            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+            if (b == null || b.ExpectedTag != expectedTag) return;
+            if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
+            b.ThumbRetryCount++;
+            StartCoroutine(ThumbnailRetryAfterDelayCo(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache));
+        }
+
+        private IEnumerator ThumbnailRetryAfterDelayCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
+        {
+            float delay = aggressiveSkipCache ? 0.02f : 0.10f;
+            yield return new WaitForSecondsRealtime(delay);
+            if (target == null) yield break;
+            ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+            if (b == null || b.ExpectedTag != expectedTag) yield break;
+            if (capturedGroupId != currentLoadingGroupId) yield break;
+            if (target.texture != null)
+            {
+                if (b.ThumbRetryCount > 0) b.ThumbRetryCount--;
+                yield break;
+            }
+            if (CustomImageLoaderThreaded.singleton == null) yield break;
+            if (aggressiveSkipCache)
+            {
+                CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            }
+            else
+            {
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            }
+        }
+
+        private IEnumerator ThumbnailHangWatchdogCo(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
+        {
+            float startRt = Time.realtimeSinceStartup;
+            float wait = ThumbnailHangWatchDelaySec;
+            while (true)
+            {
+                yield return new WaitForSecondsRealtime(wait);
+                if (target == null) yield break;
+                ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
+                if (b == null || b.ExpectedTag != expectedTag) yield break;
+                if (capturedGroupId != currentLoadingGroupId) yield break;
+                if (target.texture != null) yield break;
+                if (b.ThumbRetryCount > 0) yield break;
+
+                float now = Time.realtimeSinceStartup;
+                float sinceScroll = now - RecyclingGridView.LastScrollRealtime;
+                float sinceDrag = now - ScrollbarSync.LastScrollbarDragRealtime;
+                bool scrolling = sinceScroll < ThumbnailHangWatchScrollQuietSec || sinceDrag < ThumbnailHangWatchScrollQuietSec;
+
+                int pendTh = 0;
+                try { if (CustomImageLoaderThreaded.singleton != null) pendTh = CustomImageLoaderThreaded.singleton.PendingThumbnailCount; } catch { pendTh = 0; }
+                bool queuePressure = pendTh >= AllVarThumbQueuePressureThreshold;
+
+                if (scrolling || queuePressure)
+                {
+                    if ((now - startRt) < ThumbnailHangWatchMaxDelaySec)
+                    {
+                        // Still scrolling / backlog high: do not amplify with skip-cache retries.
+                        wait = 0.25f;
+                        continue;
+                    }
+                }
+
+                // Timeout after quiet + low-pressure window: re-queue once, but do not clear cache / skip-cache.
+                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: false);
+                yield break;
+            }
         }
 
         private static void ClearThumbnailTarget(RawImage target)
@@ -449,19 +1036,78 @@ namespace VPB
 
                 target.texture = null;
                 if (target.material != null) target.material.mainTexture = null;
-                target.color = new Color(0, 0, 0, 0);
+                target.color = ThumbnailPlaceholderBackdrop;
             }
             catch { }
         }
 
+        private const float ThumbCropRatioMin = 0.75f;
+        private const float ThumbCropRatioMax = 1.33f;
+
         private void UpdateAspectRatio(RawImage target, Texture tex)
         {
             if (target == null || tex == null) return;
+            float ratio = (float)tex.width / Mathf.Max(1, tex.height);
             AspectRatioFitter arf = target.GetComponent<AspectRatioFitter>();
+
             if (arf != null)
             {
-                arf.aspectRatio = (float)tex.width / tex.height;
+                // List rows: cell resizes to natural image ratio via ARF.
+                target.uvRect = new Rect(0f, 0f, 1f, 1f);
+                arf.aspectRatio = ratio;
+                return;
             }
+
+            // Grid cells: always center-crop to square via uvRect — no stretching for any ratio.
+            float uSize = ratio >= 1f ? 1f / ratio : 1f;
+            float vSize = ratio >= 1f ? 1f : ratio;
+            target.uvRect = new Rect((1f - uSize) * 0.5f, (1f - vSize) * 0.5f, uSize, vSize);
+        }
+
+        /// <summary>
+        /// Downloads and applies a Hub CDN thumbnail URL to a gallery RawImage target.
+        /// Uses HubImageLoaderThreaded so it benefits from its in-memory cache and download queue.
+        /// Uses ThumbnailBindingTag to avoid applying stale textures to recycled list rows.
+        /// </summary>
+        private void LoadHubThumbnailToTarget(string thumbUrl, string uid, RawImage target)
+        {
+            if (string.IsNullOrEmpty(thumbUrl) || target == null) return;
+            if (HubImageLoaderThreaded.singleton == null) { ClearThumbnailTarget(target); return; }
+
+            string expectedTag = "hub|" + uid;
+
+            ThumbnailBindingTag bind = target.GetComponent<ThumbnailBindingTag>();
+            if (bind == null) bind = target.gameObject.AddComponent<ThumbnailBindingTag>();
+
+            // Already showing this Hub thumbnail — keep it
+            if (bind.ExpectedTag == expectedTag && target.texture != null)
+            {
+                target.color = Color.white;
+                return;
+            }
+
+            // Release any previously bound local texture before switching to a Hub one
+            if (bind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
+            {
+                CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(bind.CurrentTexture);
+                bind.CurrentTexture = null;
+            }
+            bind.ExpectedTag = expectedTag;
+
+            HubImageLoaderThreaded.QueuedImage qi = HubImageLoaderThreaded.singleton.GetQI();
+            qi.imgPath = thumbUrl;
+            qi.isThumbnail = true;
+            qi.groupId = currentLoadingGroupId;
+            qi.callback = (res) => {
+                if (res?.tex == null) return;
+                if (target == null) return;
+                ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
+                if (cbBind == null || cbBind.ExpectedTag != expectedTag) return;
+                target.texture = res.tex;
+                target.color = Color.white;
+                UpdateAspectRatio(target, res.tex);
+            };
+            HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(qi);
         }
     }
 }

@@ -18,9 +18,14 @@ namespace VPB
             s.NameFilter = nameFilter ?? "";
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
+            s.UserTags = new List<string>(activeUserTags);
+            s.UserTagAvailFilterMode = _userTagAvailFilterMode ? 1 : 0;
+            s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
+            s.PackagePathFilter = currentPackagePathFilter ?? "";
             s.ClothingSubfilter = (int)clothingSubfilter;
+            s.HairSubfilter = (int)hairSubfilter;
             s.AppearanceSubfilter = (int)appearanceSubfilter;
             s.PosePeopleFilter = (int)posePeopleFilter;
             var sort = GetSortState("Files");
@@ -84,14 +89,30 @@ namespace VPB
             if (titleSearchInput != null) titleSearchInput.text = restoredSearch;
 
             currentCreator = state.Creator ?? "";
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             activeTags.Clear();
             if (state.Tags != null)
                 foreach (var t in state.Tags) activeTags.Add(t);
 
+            activeUserTags.Clear();
+            if (state.UserTags != null)
+                foreach (var t in state.UserTags)
+                {
+                    string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                    if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
+                }
+            _userTagAvailFilterMode = state.UserTagAvailFilterMode != 0;
+            _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
+
             currentSceneSourceFilter = state.SceneSourceFilter ?? "";
             currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
+            currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
+            hairSubfilter = (HairSubfilter)state.HairSubfilter;
+            _clothingGenderUserOverride = false;
+            _hairGenderUserOverride = false;
             appearanceSubfilter = (AppearanceSubfilter)state.AppearanceSubfilter;
             posePeopleFilter = (PosePeopleFilter)state.PosePeopleFilter;
 
@@ -110,10 +131,23 @@ namespace VPB
             nameFilterTerms = new string[0];
             if (titleSearchInput != null) titleSearchInput.text = "";
 
+            // Category navigation reset: creator selection is a filter and should not silently carry
+            // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).
+            currentCreator = "";
+            _currentCreatorSetSrc = null;
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
+
             activeTags.Clear();
+            activeUserTags.Clear();
+            _userTagAvailFilterMode = false;
+            _userTagInheritVarToChildren = false;
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";
+            currentPackagePathFilter = "";
             clothingSubfilter = 0;
+            hairSubfilter = 0;
+            _clothingGenderUserOverride = false;
+            _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
         }

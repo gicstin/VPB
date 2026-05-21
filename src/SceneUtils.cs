@@ -15,6 +15,18 @@ namespace VPB
         static int sceneLoadSerial;
         static int lastScheduledSceneLoadSerial;
 
+        public struct EnsureInstalledResult
+        {
+            public bool DepsChanged;
+            public int ReferencedCount;
+            public int MissingCount;
+
+            public bool IsDegraded
+            {
+                get { return MissingCount > 0; }
+            }
+        }
+
         private static MethodInfo s_LoadMergeMethod;
         private static MethodInfo s_LoadInternalMethod;
 
@@ -55,6 +67,7 @@ namespace VPB
 
                 if (!merge)
                 {
+                    try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
                     // Prefer direct public API.
                     sc.Load(normalizedPath);
                     return true;
@@ -120,9 +133,11 @@ namespace VPB
 
                 string name = (string.IsNullOrEmpty(filePrefix) ? "vpb_scene" : filePrefix) + "_" + Guid.NewGuid().ToString() + ".json";
                 string tempPath = Path.Combine(dir, name);
-                File.WriteAllText(tempPath, root.ToString());
+                File.WriteAllText(tempPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 100_000));
+                LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(tempPath);
 
                 ScheduleTempFileDelete(tempPath, 20);
+                ScheduleTempFileDelete(tempPath + ".hide", 20);
                 return tempPath.Replace('\\', '/');
             }
             catch
@@ -185,7 +200,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(scenePath)) return false;
                 if (SuperController.singleton == null) return false;
 
-                string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && atom["type"].Value != "Person", true);
+                string tempPath = CreateFilteredSceneJSON(scenePath, entry, (atom) => atom != null && !SceneUtils.IsPersonLikeAtomType(atom["type"].Value), true);
                 if (string.IsNullOrEmpty(tempPath)) return false;
 
                 string loadPath = UI.NormalizePath(tempPath);
@@ -223,12 +238,12 @@ namespace VPB
             List<string> personUids = new List<string>();
             foreach (Atom a in sc.GetAtoms())
             {
-                if (a.type == "Person") personUids.Add(a.uid);
+                if (SceneUtils.IsPersonLikeAtom(a)) personUids.Add(a.uid);
             }
 
             if (personUids.Count == 0)
             {
-                sc.Load(UI.NormalizePath(scenePath));
+                LoadScene(UI.NormalizePath(scenePath), false);
                 yield break;
             }
 
@@ -244,7 +259,7 @@ namespace VPB
                 sc.Save(currentSceneTemp);
             }
 
-            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && atom["type"].Value == "Person", false);
+            string personsOnlyTemp = CreateFilteredSceneJSON(currentSceneTemp, null, (atom) => atom != null && SceneUtils.IsPersonLikeAtomType(atom["type"].Value), false);
             try { if (File.Exists(currentSceneTemp)) File.Delete(currentSceneTemp); } catch { }
 
             if (string.IsNullOrEmpty(personsOnlyTemp))
@@ -260,7 +275,7 @@ namespace VPB
                 {
                     if (atom == null) return false;
                     string t = atom["type"].Value;
-                    if (t == "Person") return false;
+                    if (SceneUtils.IsPersonLikeAtomType(t)) return false;
                     return true;
                 },
                 false);
@@ -402,7 +417,14 @@ namespace VPB
         /// <param name="outMovedPackageUids">When non-null, receives UIDs for packages whose .var was moved during this call.</param>
         public static bool EnsureInstalled(FileEntry entry, List<string> outMovedPackageUids)
         {
-            if (entry == null) return false;
+            EnsureInstalledResult result = EnsureInstalledDetailed(entry, outMovedPackageUids);
+            return result.DepsChanged;
+        }
+
+        public static EnsureInstalledResult EnsureInstalledDetailed(FileEntry entry, List<string> outMovedPackageUids)
+        {
+            EnsureInstalledResult result = default(EnsureInstalledResult);
+            if (entry == null) return result;
 
             try
             {
@@ -446,6 +468,7 @@ namespace VPB
                                     try
                                     {
                                         int depCount = deps.Count;
+                                        result.ReferencedCount = depCount;
                                         if (depCount > 0)
                                         {
                                             string sample = string.Join(", ", deps.Take(5).ToArray());
@@ -453,16 +476,23 @@ namespace VPB
                                         }
 
                                         int missing = 0;
+                                        List<string> missingKeys = null;
                                         foreach (string key in deps)
                                         {
                                             VarPackage pkg = FileManager.GetPackageForDependency(key, false);
                                             if (pkg != null) continue;
                                             missing++;
+                                            if (missingKeys == null) missingKeys = new List<string>(8);
+                                            missingKeys.Add(key);
                                         }
                                         if (missing > 0)
                                         {
-                                            LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}");
+                                            // Listing only the missing keys (not all parsed deps) so the warning
+                                            // line is actionable: each entry is one package the user needs.
+                                            string list = missingKeys != null ? string.Join("; ", missingKeys.ToArray()) : "";
+                                            LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
                                         }
+                                        result.MissingCount = missing;
                                     }
                                     catch { }
 
@@ -474,13 +504,207 @@ namespace VPB
                     }
                 }
 
-                return flag;
+                result.DepsChanged = flag;
+                return result;
             }
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
-                return false;
+                return result;
             }
+        }
+
+        /// <summary>
+        /// Collects package UIDs needed by this entry's load path:
+        /// host package UID (when entry is from a var) plus dependency references in JSON-like content
+        /// that can be resolved to an installed package UID.
+        /// </summary>
+        public static HashSet<string> CollectReferencedPackageUids(FileEntry entry)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (entry == null) return result;
+
+            try
+            {
+                if (entry is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                    result.Add(vfe.Package.Uid);
+                else if (entry is SystemFileEntry sfe && sfe.package != null && !string.IsNullOrEmpty(sfe.package.Uid))
+                    result.Add(sfe.package.Uid);
+                else if (entry is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
+                    result.Add(ple.Package.Uid);
+            }
+            catch { }
+
+            try
+            {
+                string path = entry.Path ?? "";
+                string ext = Path.GetExtension(path).ToLowerInvariant();
+                if (ext != ".json" && ext != ".vap" && ext != ".cslist")
+                    return result;
+
+                using (var reader = entry.OpenStreamReader())
+                {
+                    string content = reader.ReadToEnd();
+                    if (string.IsNullOrEmpty(content)) return result;
+
+                    HashSet<string> deps = null;
+                    try { deps = VarNameParser.Parse(content); } catch { deps = null; }
+                    if (deps == null || deps.Count == 0) return result;
+
+                    foreach (string dep in deps)
+                    {
+                        if (string.IsNullOrEmpty(dep)) continue;
+                        VarPackage pkg = null;
+                        try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
+                        if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                            result.Add(pkg.Uid);
+                    }
+                }
+            }
+            catch { }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Pre-register host/dependency packages in VaM's FileManager before a preset load pass.
+        /// This avoids one-shot missing item failures where VaM does not retry lookups after an initial miss.
+        /// Returns the number of unique UID candidates attempted.
+        /// </summary>
+        public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null)
+        {
+            if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
+            if (entry == null && string.IsNullOrEmpty(pathHint)) return 0;
+
+            var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void addUid(string uid)
+            {
+                if (string.IsNullOrEmpty(uid)) return;
+                uid = uid.Trim();
+                if (string.IsNullOrEmpty(uid)) return;
+                uidCandidates.Add(uid);
+            }
+
+            try
+            {
+                if (entry != null)
+                {
+                    foreach (var uid in CollectReferencedPackageUids(entry))
+                        addUid(uid);
+                }
+            }
+            catch { }
+
+            string candidatePath = pathHint;
+            if (string.IsNullOrEmpty(candidatePath) && entry != null)
+                candidatePath = entry.Path;
+            if (!string.IsNullOrEmpty(candidatePath))
+            {
+                string normalized = UI.NormalizePath(candidatePath);
+                if (UI.IsLikelyVarPackageReference(normalized))
+                {
+                    int colon = normalized.IndexOf(':');
+                    if (colon > 0)
+                    {
+                        addUid(normalized.Substring(0, colon));
+                    }
+                }
+            }
+
+            // SQLite transitive dependency lookup — resolves full dep tree for the host package(s)
+            // without requiring deps to already be registered in VaM's FileManager.
+            if (uidCandidates.Count > 0)
+            {
+                var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var hostUids = new List<string>(uidCandidates);
+                foreach (string hostUid in hostUids)
+                {
+                    try
+                    {
+                        sqlDeps.Clear();
+                        if (VpbLocalDatabase.TryReadRecursiveDependencyUids(hostUid, sqlDeps))
+                        {
+                            foreach (string dep in sqlDeps)
+                                addUid(dep);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            if (entry != null && !string.IsNullOrEmpty(entry.Path))
+            {
+                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
+                if (ext == ".json" || ext == ".vap" || ext == ".cslist")
+                {
+                    try
+                    {
+                        using (var reader = entry.OpenStreamReader())
+                        {
+                            string content = reader.ReadToEnd();
+                            if (!string.IsNullOrEmpty(content))
+                            {
+                                HashSet<string> deps = VarNameParser.Parse(content);
+                                if (deps != null)
+                                {
+                                    foreach (string dep in deps)
+                                    {
+                                        addUid(dep);
+                                        try
+                                        {
+                                            VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
+                                            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
+                                                addUid(pkg.Uid);
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning($"[VPB OnDemand] Prewarm dependency parse failed for {entry.Name}: {ex.Message}");
+                    }
+                }
+            }
+
+            if (uidCandidates.Count == 0) return 0;
+
+            int newlyRegistered = 0;
+            foreach (string uid in uidCandidates)
+            {
+                try
+                {
+                    string result = VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                    if (result != null) newlyRegistered++;
+                }
+                catch { }
+            }
+
+            try
+            {
+                string sample = string.Join(", ", uidCandidates.Take(5).ToArray());
+                LogUtil.Log($"[VPB OnDemand] Prewarm attempted {uidCandidates.Count} package(s) ({newlyRegistered} new) for {(entry != null ? entry.Name : candidatePath)}. Sample: {sample}");
+            }
+            catch { }
+
+            // In whitelist mode, VaM's clothing catalog (geometry 'clothing:*' bool params) is only
+            // populated during a full FileManager.Refresh(). Without this, on-demand registered packages
+            // have their files accessible but their clothing items are invisible to VaM's clothing system,
+            // causing 'Param not found' / 'Clothing item missing' errors.
+            // This mirrors what EnsureInstalled + Refresh() does in non-whitelist mode.
+            if (newlyRegistered > 0)
+            {
+                try
+                {
+                    LogUtil.Log($"[VPB OnDemand] Queueing coalesced FileManager.Refresh for clothing catalog update ({newlyRegistered} new package(s))");
+                    VamOnDemandLoader.RequestCoalescedVamRefresh("scene_prewarm_clothing_catalog");
+                }
+                catch { }
+            }
+
+            return uidCandidates.Count;
         }
 
         /// <summary>
@@ -557,7 +781,7 @@ namespace VPB
         {
             if (atom == null) return;
             if (SuperController.singleton == null) return;
-            if (atom.type != "Person") return;
+            if (!SceneUtils.IsPersonLikeAtom(atom)) return;
 
             try
             {
@@ -574,7 +798,7 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             if (atom == null) yield break;
-            if (atom.type != "Person") yield break;
+            if (!SceneUtils.IsPersonLikeAtom(atom)) yield break;
 
             if (lateRestoreTargets != null)
             {
@@ -605,6 +829,48 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             if (serial != sceneLoadSerial) yield break;
+        }
+
+        /// <summary>
+        /// After LoadInternal returns, atoms may still be spawning for a few frames — defer so the target list matches the new scene.
+        /// </summary>
+        public static void ScheduleGalleryTargetListRefresh()
+        {
+            try
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc == null) return;
+                sc.StartCoroutine(GalleryTargetListRefreshAfterSceneCoroutine());
+            }
+            catch { }
+        }
+
+        static IEnumerator GalleryTargetListRefreshAfterSceneCoroutine()
+        {
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            // LoadInternal has returned, but VPB may still set IsLoadingScene until WorldUI / idle completion.
+            // GetAtoms() often does not yet list Person targets during that window — refreshing then leaves "None"
+            // until some later UI pass (e.g. category change). Wait for the load flag to clear first.
+            float loadWaitStart = Time.realtimeSinceStartup;
+            while (VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene
+                   && (Time.realtimeSinceStartup - loadWaitStart) < 45f)
+                yield return null;
+
+            GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
+
+            // Person atoms can still register a few frames after loading ends; re-sync briefly.
+            for (int i = 0; i < 3; i++)
+            {
+                yield return new WaitForEndOfFrame();
+                yield return new WaitForEndOfFrame();
+                yield return new WaitForEndOfFrame();
+                GalleryPanel.NotifyAllPanelsSceneTargetsChanged();
+            }
         }
 
 

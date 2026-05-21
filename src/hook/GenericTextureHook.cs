@@ -15,27 +15,39 @@ namespace VPB
         [ThreadStatic]
         private static string _lastReadImagePath;
 
+        // Transit map: byte[] -> source path, populated on File.ReadAllBytes and consumed
+        // when the bytes are passed to Texture2D.LoadImage / LoadRawTextureData. Consumers
+        // MUST call Remove after their TryGetValue so the buffer is not retained beyond decode.
+        // MaxCapacity is a safety backstop for byte[]s that are read but never decoded; in
+        // steady state the map should hold only in-flight entries (single digits).
         private class BufferPathMap
         {
             private readonly Dictionary<byte[], string> _map = new Dictionary<byte[], string>();
             private readonly List<byte[]> _keys = new List<byte[]>();
-            private const int MaxCapacity = 500;
+            private const int MaxEntries = 100;
+            private const long MaxBytes = 64L * 1024L * 1024L; // 64MB safety cap
+            private long _totalBytes;
 
             public void Add(byte[] data, string path)
             {
+                if (data == null) return;
                 lock (_map)
                 {
                     if (_map.ContainsKey(data)) return;
-                    
-                    if (_keys.Count >= MaxCapacity)
+
+                    _map[data] = path;
+                    _keys.Add(data);
+                    _totalBytes += data.Length;
+
+                    // Evict oldest until both caps satisfied. Decode path may skip Remove (exceptions,
+                    // unmatched LoadImage), so unbounded growth would otherwise pin large image buffers.
+                    while ((_keys.Count > MaxEntries || _totalBytes > MaxBytes) && _keys.Count > 0)
                     {
                         var oldest = _keys[0];
                         _keys.RemoveAt(0);
                         _map.Remove(oldest);
+                        if (oldest != null) _totalBytes -= oldest.Length;
                     }
-                    
-                    _map[data] = path;
-                    _keys.Add(data);
                 }
             }
 
@@ -49,17 +61,27 @@ namespace VPB
 
             public void Remove(byte[] data)
             {
+                if (data == null) return;
                 lock (_map)
                 {
                     if (_map.Remove(data))
                     {
                         _keys.Remove(data);
+                        _totalBytes -= data.Length;
                     }
                 }
+            }
+
+            public int Count
+            {
+                get { lock (_map) { return _map.Count; } }
             }
         }
 
         private static BufferPathMap _dataToPath = new BufferPathMap();
+
+        // Read-only counter for VpbPerfTelemetry.
+        public static int DataToPathCount { get { return _dataToPath != null ? _dataToPath.Count : 0; } }
         
         public static void PatchAll(Harmony harmony)
         {
@@ -294,6 +316,7 @@ namespace VPB
             if (data != null)
             {
                 _dataToPath.TryGetValue(data, out path);
+                _dataToPath.Remove(data); // bytes about to be decoded; drop the transit entry
             }
 
             if (string.IsNullOrEmpty(path))
@@ -474,6 +497,11 @@ namespace VPB
                 _dataToPath.TryGetValue(data, out path);
             }
 
+            if (data != null)
+            {
+                _dataToPath.Remove(data); // bytes about to be decoded; drop the transit entry
+            }
+
             if (string.IsNullOrEmpty(path) && !string.IsNullOrEmpty(__instance.name))
             {
                 // VaM often sets texture name to path
@@ -561,6 +589,7 @@ namespace VPB
             if (Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return false;
 
             if (SuperControllerHook.IsSimulationTexturePath(path)) return false;
+            if (SuperControllerHook.IsLutTexturePath(path)) return false;
 
             try
             {

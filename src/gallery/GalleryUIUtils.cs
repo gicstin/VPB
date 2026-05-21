@@ -17,6 +17,181 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
+        // Universal gallery chrome colors.
+        public static readonly Color PopupBackdrop = new Color(0.12f, 0.12f, 0.14f, 0.72f);
+        public static readonly Color PopupRowBackdrop = new Color(0.18f, 0.18f, 0.20f, 1f);
+        public static readonly Color PopupRowActiveBackdrop = new Color(0.28f, 0.30f, 0.34f, 1f);
+        public static readonly Color PopupText = Color.white;
+        public static readonly Color PopupMutedText = new Color(0.65f, 0.65f, 0.68f, 1f);
+        public static readonly Color TextPrimary = new Color(0.92f, 0.92f, 0.92f, 1f);
+        public static readonly Color TextMuted = new Color(0.72f, 0.72f, 0.75f, 1f);
+        public static readonly Color TextDim = new Color(0.55f, 0.55f, 0.58f, 1f);
+        public static readonly Color InputFieldTextColor = Color.white;
+        public static readonly Color InputFieldPlaceholderColor = new Color(0.5f, 0.5f, 0.52f, 1f);
+        public static readonly Color InputFieldBg = new Color(0.10f, 0.10f, 0.12f, 1f);
+        public static readonly Color TextShadowColor = new Color(0f, 0f, 0f, 0.75f);
+
+        /// <summary>
+        /// Kills Unity <see cref="Selectable"/> ColorTint hover/press (the gray “fill” on neutral buttons).
+        /// Keeps <see cref="ColorBlock.disabledColor"/> so disabled chrome still dims.
+        /// </summary>
+        public static void NeutralizeSelectableColorTint(Selectable sel)
+        {
+            if (sel == null) return;
+            try
+            {
+                ColorBlock cb = sel.colors;
+                Color dis = cb.disabledColor;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = Color.white;
+                cb.pressedColor = Color.white;
+                // Older Unity ColorBlock has no selectedColor (VaM stack).
+                cb.disabledColor = dis;
+                cb.colorMultiplier = 1f;
+                cb.fadeDuration = 0f;
+                sel.colors = cb;
+                sel.transition = Selectable.Transition.None;
+                sel.navigation = new Navigation { mode = Navigation.Mode.None };
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Gallery pane: no ColorTint fill on any <see cref="Selectable"/>; buttons get
+        /// <see cref="UIHoverBorder"/>. Run once at init and continuously via <see cref="GalleryPaneChromeEnforcer"/>
+        /// so tabs/redraws cannot restore default hover fill.
+        /// </summary>
+        public static void ApplyGalleryPaneHoverPolicy(GameObject root)
+        {
+            if (root == null) return;
+            try
+            {
+                Color border = new Color(1f, 1f, 0f, 1f);
+                try { if (VPBConfig.Instance != null) border = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
+
+                var sels = root.GetComponentsInChildren<Selectable>(true);
+                for (int i = 0; i < sels.Length; i++)
+                {
+                    var s = sels[i];
+                    if (s == null) continue;
+                    NeutralizeSelectableColorTint(s);
+                    if (s is Button)
+                    {
+                        var hb = s.GetComponent<UIHoverBorder>();
+                        if (hb == null) hb = s.gameObject.AddComponent<UIHoverBorder>();
+                        // Global default for buttons that don't override (file rows override per-row already)
+                        hb.hoverColor = border;
+                        hb.ApplyBorderSettings();
+                    }
+                }
+
+                // Also apply color to non-Button hover borders (resize handles, input fields, etc).
+                var hbs = root.GetComponentsInChildren<UIHoverBorder>(true);
+                for (int i = 0; i < hbs.Length; i++)
+                {
+                    var hb = hbs[i];
+                    if (hb == null) continue;
+                    hb.hoverColor = border;
+                    hb.ApplyBorderSettings();
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Obsolete name — use <see cref="ApplyGalleryPaneHoverPolicy"/>.</summary>
+        public static void EnforceBorderHoverForAllButtons(GameObject root)
+        {
+            ApplyGalleryPaneHoverPolicy(root);
+        }
+        
+        private static List<string> BuildSceneLoadUidAllowList(FileEntry entry, List<string> movedUids)
+        {
+            var needed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void addUidFromPath(string raw)
+            {
+                if (string.IsNullOrEmpty(raw)) return;
+                string p = raw.Replace('\\', '/').Trim();
+                if (p.Length == 0) return;
+                int sep = p.IndexOf(":/", StringComparison.Ordinal);
+                if (sep <= 0) return;
+                // Ignore Windows drive paths like C:/...
+                if (sep == 1 && char.IsLetter(p[0])) return;
+                string uid = p.Substring(0, sep);
+                if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+            }
+
+            try
+            {
+                foreach (var uid in SceneLoadingUtils.CollectReferencedPackageUids(entry))
+                {
+                    if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+                }
+            }
+            catch { }
+
+            if (movedUids != null)
+            {
+                for (int i = 0; i < movedUids.Count; i++)
+                {
+                    string uid = movedUids[i];
+                    if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+                }
+            }
+
+            // History rows can be lazy/deferred and dependency parsing may fail before package resolution.
+            // Always include the host package UID from entry identifiers as fallback.
+            try
+            {
+                if (entry != null)
+                {
+                    addUidFromPath(entry.Uid);
+                    addUidFromPath(entry.Path);
+                }
+            }
+            catch { }
+
+            return needed.ToList();
+        }
+
+        private static List<string> ApplyTemporarySceneLoadWhitelist(FileEntry entry, List<string> movedUids)
+        {
+            try
+            {
+                if (!ScanWhitelistManager.Instance.IsEnabled) return null;
+
+                List<string> needed = BuildSceneLoadUidAllowList(entry, movedUids);
+                if (needed == null || needed.Count == 0) return null;
+
+                List<string> added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
+                if (added != null && added.Count > 0)
+                {
+                    LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list: +" + string.Join(", ", added.ToArray()));
+                    try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+                }
+                return added;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanWhitelist] Temporary allow-list apply failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void RemoveTemporarySceneLoadWhitelist(List<string> temporaryUids)
+        {
+            if (temporaryUids == null || temporaryUids.Count == 0) return;
+            try
+            {
+                ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(temporaryUids);
+                LogUtil.Log("[VPB ScanWhitelist] Temporary scene-load allow-list removed: -" + string.Join(", ", temporaryUids.ToArray()));
+                try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanWhitelist] Temporary allow-list removal failed: " + ex.Message);
+            }
+        }
+
         private static void TryRefreshEntryDisplayPathAfterVarMoves(FileEntry entry)
         {
             if (entry == null) return;
@@ -39,27 +214,65 @@ namespace VPB
             catch { }
         }
 
-        private static IEnumerator DisableSuppressionAfterSceneLoad()
+        private sealed class SceneLoadCleanupState
+        {
+            public List<string> TemporaryUidOverrides;
+            public float SuppressionStartRealtime;
+            public int SceneLoadTotalSerialAtStart;
+            private bool _done;
+
+            public bool TryMarkDone()
+            {
+                if (_done) return false;
+                _done = true;
+                return true;
+            }
+        }
+
+        private static void FinalizeSceneLoadCleanup(SceneLoadCleanupState state, string reason, bool asWarning = false)
+        {
+            if (state == null || !state.TryMarkDone()) return;
+
+            float waited = Time.realtimeSinceStartup - state.SuppressionStartRealtime;
+            string msg = $"[VPB] DisableSuppressionAfterSceneLoad: {reason} after {waited:0.00}s, disabling suppression";
+            if (asWarning) LogUtil.LogWarning(msg);
+            else LogUtil.Log(msg);
+
+            RemoveTemporarySceneLoadWhitelist(state.TemporaryUidOverrides);
+            Gallery.SuppressAutoRefresh(false);
+        }
+
+        private static IEnumerator DisableSuppressionAfterSceneLoad(SceneLoadCleanupState cleanupState)
         {
             LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Waiting for scene to finish loading...");
-            
-            // Wait for scene to start loading
-            yield return new WaitForSeconds(0.5f);
-            
-            // Wait until scene loading is complete
+            int startSerial = cleanupState != null ? cleanupState.SceneLoadTotalSerialAtStart : LogUtil.GetSceneLoadTotalSerial();
             float timeout = 60f; // Max 60 seconds
             float elapsed = 0f;
-            while (LogUtil.IsSceneLoading() && elapsed < timeout)
+            bool completedBySceneTotal = false;
+
+            while (elapsed < timeout)
             {
-                yield return new WaitForSeconds(0.5f);
-                elapsed += 0.5f;
+                if (LogUtil.GetSceneLoadTotalSerial() != startSerial)
+                {
+                    completedBySceneTotal = true;
+                    break;
+                }
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
             }
-            
-            // Wait a bit more to ensure all post-load refreshes complete
-            yield return new WaitForSeconds(1.0f);
-            
-            LogUtil.Log("[VPB] DisableSuppressionAfterSceneLoad: Scene load complete, disabling suppression");
-            Gallery.SuppressAutoRefresh(false);
+
+            if (completedBySceneTotal)
+            {
+                yield return null; // allow one frame for end-of-load side effects
+                FinalizeSceneLoadCleanup(cleanupState, "scene total ended");
+                yield break;
+            }
+
+            // Fallback for edge cases where scene-total auto-end is not reached in time.
+            if (LogUtil.IsSceneLoading())
+                FinalizeSceneLoadCleanup(cleanupState, "scene-load-total signal timeout reached (cleanup fallback)", true);
+            else
+                FinalizeSceneLoadCleanup(cleanupState, "scene loading flag cleared (fallback)");
         }
 
         public static IEnumerator DisableSuppressionAfterDelay(float delay)
@@ -108,38 +321,57 @@ namespace VPB
             }
             _lastLoadSceneStartTime = now;
 
+            // History: record only this scene entry (not EnsureInstalled / dependency work below).
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "scene"); } catch { }
+
+            List<string> temporaryUidOverrides = null;
+            SceneLoadCleanupState cleanupState = null;
             try
             {
                 string path = entry.Uid;
                 LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
                 
-                bool installed = false;
+                bool depsChanged = false;
+                SceneLoadingUtils.EnsureInstalledResult ensureResult = default(SceneLoadingUtils.EnsureInstalledResult);
                 List<string> movedUids = null;
                 
                 // Suppress gallery auto-refresh to preserve scroll position and state
                 // Must activate BEFORE EnsureInstalled since it may trigger FileManager.Refresh internally
-                // NOTE: Suppression is NOT disabled in a finally block because sc.Load() is async
-                // Instead, a coroutine will disable it after scene loading completes
+                // Suppression is disabled by explicit cleanup paths and a scene-load completion coroutine.
                 try
                 {
                     Gallery.SuppressAutoRefresh(true);
+                    cleanupState = new SceneLoadCleanupState
+                    {
+                        SuppressionStartRealtime = Time.realtimeSinceStartup,
+                        SceneLoadTotalSerialAtStart = LogUtil.GetSceneLoadTotalSerial()
+                    };
                     
                     movedUids = new List<string>(32);
-                    installed = EnsureInstalled(entry, movedUids);
-                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged: {installed}");
-                    if (!installed)
-                    {
-                        LogUtil.Log("[VPB] UI.EnsureInstalled: depsChanged=false means no packages were moved; missing deps (if any) are logged above by EnsureInstalled.");
-                    }
+                    ensureResult = SceneLoadingUtils.EnsureInstalledDetailed(entry, movedUids);
+                    depsChanged = ensureResult.DepsChanged;
 
-                    if (installed)
+                    temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, movedUids);
+                    if (cleanupState != null) cleanupState.TemporaryUidOverrides = temporaryUidOverrides;
+                    bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
+                    bool packageStateChanged = depsChanged || hasTemporaryAllowList;
+
+                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:{depsChanged} missing:{ensureResult.MissingCount}/{ensureResult.ReferencedCount} whitelistChanged:{hasTemporaryAllowList} packageStateChanged:{packageStateChanged}");
+                    if (ensureResult.IsDegraded)
+                        LogUtil.LogWarning($"[VPB] Scene load will continue in DEGRADED mode: missing {ensureResult.MissingCount}/{ensureResult.ReferencedCount} referenced package(s)");
+                    else if (!depsChanged)
+                        LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected.");
+
+                    if (packageStateChanged)
                     {
-                        LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        if (depsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
+                        else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
                         
                         if (MVR.FileManagement.FileManager.singleton != null)
                             MVR.FileManagement.FileManager.Refresh();
-                        
-                        FileManager.Refresh();
+
+                        if (depsChanged)
+                            FileManager.Refresh();
 
                         try
                         {
@@ -184,8 +416,7 @@ namespace VPB
                 catch (Exception installEx)
                 {
                     LogUtil.LogError($"[VPB] EnsureInstalled or FileManager refresh error: {installEx.Message}");
-                    // On error, disable suppression immediately since we won't be loading
-                    Gallery.SuppressAutoRefresh(false);
+                    FinalizeSceneLoadCleanup(cleanupState, "install/refresh error");
                     return;
                 }
 
@@ -208,50 +439,53 @@ namespace VPB
                 if (Messager.singleton == null)
                 {
                     LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start load coroutines");
-                    Gallery.SuppressAutoRefresh(false);
+                    FinalizeSceneLoadCleanup(cleanupState, "messager unavailable");
                 }
-                else if (installed)
+                else if (depsChanged)
                 {
                     // Packages were just moved from AllPackages to AddonPackages.
                     // Yield one frame so MVR FileManager.Refresh can finish processing
                     // before LoadInternal runs, preventing atom-list race exceptions.
                     LogUtil.Log("[VPB] Packages installed; deferring sc.Load by one frame");
-                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath));
+                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath, cleanupState));
                 }
                 else
                 {
                     SuperController sc = SuperController.singleton;
                     if (sc != null)
                     {
-                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
+                        try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
                         LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
                         sc.Load(normalizedPath);
                     }
                     else
                     {
                         LogUtil.LogError("[VPB] SuperController.singleton is null!");
-                        Gallery.SuppressAutoRefresh(false);
+                        FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable");
                     }
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+                FinalizeSceneLoadCleanup(cleanupState, "load crash");
             }
         }
 
-        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath)
+        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath, SceneLoadCleanupState cleanupState)
         {
             yield return null; // one frame for MVR refresh operations to settle
             SuperController sc = SuperController.singleton;
             if (sc == null)
             {
                 LogUtil.LogError("[VPB] SuperController.singleton is null in LoadSceneAfterRefresh!");
-                Gallery.SuppressAutoRefresh(false);
+                FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable after refresh");
                 yield break;
             }
             if (Messager.singleton != null)
-                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad());
+                Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
+            try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
             LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
             sc.Load(normalizedPath);
         }
@@ -360,30 +594,58 @@ namespace VPB
 
             try
             {
-                if (entry != null && FileEntryMatchesPathForJsonLoad(entry, path))
-                    readEntry = entry;
-                else
+                // Selected VarFileEntry row: read this file from the .var directly. Do not require the
+                // virtual path string to match entry.Path/Uid (spacing/slashes often differ from rebuilt paths).
+                if (entry is VarFileEntry directVfe)
                 {
-                    VarFileEntry vfe = FileManager.GetVarFileEntry(path);
-                    if (vfe == null)
+                    try
                     {
-                        try
+                        using (var reader = directVfe.OpenStreamReader())
                         {
-                            string norm = FileManager.NormalizePath(path);
-                            if (!string.IsNullOrEmpty(norm))
-                                vfe = FileManager.GetVarFileEntry(norm);
+                            if (reader != null)
+                            {
+                                string directContent = reader.ReadToEnd();
+                                if (!string.IsNullOrEmpty(directContent))
+                                {
+                                    content = directContent;
+                                    readEntry = directVfe;
+                                }
+                            }
                         }
-                        catch { }
                     }
-                    readEntry = vfe;
+                    catch (Exception exDirect)
+                    {
+                        LogUtil.LogVerboseUi($"[VPB] LoadJSONWithFallback: direct VarFileEntry read skipped: {exDirect.Message}");
+                    }
                 }
 
-                if (readEntry != null)
+                if (string.IsNullOrEmpty(content))
                 {
-                    using (var reader = readEntry.OpenStreamReader())
+                    if (entry != null && FileEntryMatchesPathForJsonLoad(entry, path))
+                        readEntry = entry;
+                    else
                     {
-                        if (reader != null)
-                            content = reader.ReadToEnd();
+                        VarFileEntry vfe = FileManager.GetVarFileEntry(path);
+                        if (vfe == null)
+                        {
+                            try
+                            {
+                                string norm = FileManager.NormalizePath(path);
+                                if (!string.IsNullOrEmpty(norm))
+                                    vfe = FileManager.GetVarFileEntry(norm);
+                            }
+                            catch { }
+                        }
+                        readEntry = vfe;
+                    }
+
+                    if (readEntry != null && string.IsNullOrEmpty(content))
+                    {
+                        using (var reader = readEntry.OpenStreamReader())
+                        {
+                            if (reader != null)
+                                content = reader.ReadToEnd();
+                        }
                     }
                 }
             }
@@ -480,6 +742,7 @@ namespace VPB
             ScrollRect scrollRect = scrollableContentGO.AddComponent<ScrollRect>();
             scrollRect.content = contentRT;
             scrollRect.viewport = viewportRT;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             // IMPORTANT: Do NOT assign scrollRect.verticalScrollbar directly, as it triggers Unity's 
@@ -541,6 +804,8 @@ namespace VPB
             var bc = scrollbarGO.AddComponent<BoxCollider>();
             bc.size = new Vector3(width, height > 0 ? height : 800f, 1f);
             bc.center = new Vector3(-width / 2, 0, 0); // Pivot is (1, 0.5)
+            // UI collider must not participate in physics collisions with scene atoms.
+            bc.isTrigger = true;
 
             return scrollbarGO;
         }
@@ -604,7 +869,7 @@ namespace VPB
             t.text = label;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.color = Color.white;
+            t.color = TextPrimary;
             t.alignment = TextAnchor.MiddleCenter;
 
             RectTransform textRT = textGO.GetComponent<RectTransform>();
@@ -618,7 +883,56 @@ namespace VPB
             return buttonGO;
         }
 
+        /// <summary>
+        /// Square trailing control for optional actions on gallery side-tab rows (rename today; other categories later).
+        /// Uses a fixed <paramref name="edgeLengthPx"/> for both axes so layout groups cannot collapse one dimension.
+        /// Pair <paramref name="edgeLengthPx"/> with the same value used for the row’s tab height (e.g. 35 × InnerPaneScale).
+        /// </summary>
+        public static GameObject CreateSideTabSquareIconButton(GameObject rowParent, float edgeLengthPx, Sprite icon, UnityAction onClick, Color backdrop, float iconPadding)
+        {
+            GameObject go = new GameObject("SideTabSquareIcon");
+            go.transform.SetParent(rowParent.transform, false);
+            Image img = go.AddComponent<Image>();
+            img.color = backdrop;
+            img.raycastTarget = true;
+            Button btn = go.AddComponent<Button>();
+            ColorBlock cb = btn.colors;
+            cb.normalColor = Color.white;
+            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
+            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            btn.colors = cb;
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            if (onClick != null) btn.onClick.AddListener(onClick);
+            go.AddComponent<UIHoverBorder>();
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(edgeLengthPx, edgeLengthPx);
+
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = edgeLengthPx;
+            le.minHeight = le.preferredHeight = edgeLengthPx;
+            le.flexibleWidth = 0f;
+            le.flexibleHeight = 0f;
+
+            // HorizontalLayoutGroup row height can exceed edgeLengthPx; match width to height so icon stays square.
+            AspectRatioFitter arf = go.AddComponent<AspectRatioFitter>();
+            arf.aspectMode = AspectRatioFitter.AspectMode.HeightControlsWidth;
+            arf.aspectRatio = 1f;
+
+            if (icon != null)
+                AddIconToButton(go, icon, iconPadding, backdrop);
+
+            return go;
+        }
+
         private static readonly Dictionary<string, Sprite> _iconSpriteCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
+
+        // Read-only counter for VpbPerfTelemetry.
+        public static int IconSpriteCacheCount { get { return _iconSpriteCache != null ? _iconSpriteCache.Count : 0; } }
 
         /// <summary>
         /// Pre-loads all PNGs from the vpb_icons/ directory into the sprite cache.
@@ -683,8 +997,14 @@ namespace VPB
             catch { return null; }
         }
 
-        /// <summary>Standard translucent-black backdrop applied to every icon button.</summary>
-        public static readonly Color IconButtonBackdrop = new Color(0f, 0f, 0f, 0.5f);
+        /// <summary>Standard backdrop applied to every icon button.</summary>
+        public static readonly Color IconButtonBackdrop = new Color(0.25f, 0.25f, 0.25f, 1f);
+
+        /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icon PNGs (glyph pixels only).</summary>
+        public static readonly Color SideRailIconGlyphTint = Color.white;
+
+        /// <summary>Neutral glyph tint for top/bottom bar icon PNGs (glyph pixels only).</summary>
+        public static readonly Color BarIconGlyphTint = Color.white;
 
         /// <summary>
         /// Adds an icon Image child to <paramref name="buttonGO"/>, hides its text label, and sets
@@ -713,6 +1033,65 @@ namespace VPB
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = new Vector2(-padding * 2, -padding * 2);
             rt.anchoredPosition = Vector2.zero;
+        }
+
+        /// <summary>Updates or creates the Icon child from <paramref name="relativePathFromPluginsDir"/> using bar glyph tint.</summary>
+        public static void RegisterIconButtonPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            ApplyBarIconFromPath(buttonGO, relativePathFromPluginsDir, padding, backdropOverride);
+        }
+
+        public static bool ApplyBarIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
+            Sprite s = LoadIconSprite(relativePathFromPluginsDir, BarIconGlyphTint);
+            if (s == null) return false;
+            Image btnImg = buttonGO.GetComponent<Image>();
+            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            Transform iconTr = buttonGO.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                Image img = iconTr.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.sprite = s;
+                    img.color = Color.white;
+                    return true;
+                }
+            }
+            AddIconToButton(buttonGO, s, padding, backdropOverride);
+            return true;
+        }
+
+        /// <summary>Like <see cref="ApplyBarIconFromPath"/> but uses <see cref="SideRailIconGlyphTint"/>.</summary>
+        public static bool ApplySideRailIconFromPath(GameObject buttonGO, string relativePathFromPluginsDir, float padding = 4f, Color? backdropOverride = null)
+        {
+            if (buttonGO == null || string.IsNullOrEmpty(relativePathFromPluginsDir)) return false;
+            Sprite s = LoadIconSprite(relativePathFromPluginsDir, SideRailIconGlyphTint);
+            if (s == null) return false;
+            Image btnImg = buttonGO.GetComponent<Image>();
+            if (btnImg != null) btnImg.color = backdropOverride ?? IconButtonBackdrop;
+            Transform iconTr = buttonGO.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                Image img = iconTr.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.sprite = s;
+                    img.color = Color.white;
+                    return true;
+                }
+            }
+            AddIconToButton(buttonGO, s, padding, backdropOverride);
+            return true;
+        }
+
+        /// <summary>Swaps a live button icon after theme change (tint is baked into <paramref name="sprite"/> pixels).</summary>
+        public static void SetButtonIconGlyph(Image iconImage, Sprite sprite)
+        {
+            if (iconImage == null || sprite == null) return;
+            iconImage.sprite = sprite;
+            iconImage.color = Color.white;
         }
 
         public static GameObject CreateUIToggle(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<bool> onValueChanged)
@@ -939,7 +1318,7 @@ namespace VPB
 
         public static GameObject CreateTextInput(GameObject parentGO, float width, float height, string defaultText, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<string> onEndEdit)
         {
-            GameObject inputGO = AddChildGOImage(parentGO, new Color(0.1f, 0.1f, 0.1f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            GameObject inputGO = AddChildGOImage(parentGO, InputFieldBg, anchorPreset, width, height, new Vector2(xOffset, yOffset));
             inputGO.name = "TextInput";
             
             InputField inputField = inputGO.AddComponent<InputField>();
@@ -949,7 +1328,7 @@ namespace VPB
             Text t = textGO.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.color = Color.white;
+            t.color = InputFieldTextColor;
             t.alignment = TextAnchor.MiddleLeft;
             t.supportRichText = false;
             
@@ -967,7 +1346,7 @@ namespace VPB
             p.text = defaultText;
             p.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             p.fontSize = fontSize;
-            p.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            p.color = InputFieldPlaceholderColor;
             p.alignment = TextAnchor.MiddleLeft;
             p.fontStyle = FontStyle.Italic;
             

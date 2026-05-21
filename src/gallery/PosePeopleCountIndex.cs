@@ -96,7 +96,7 @@ namespace VPB
                 if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
                     Directory.CreateDirectory(GlobalInfo.PluginInfoDirectory);
 
-                File.WriteAllText(IndexPath, root.ToString());
+                File.WriteAllText(IndexPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 8192));
                 _dirty = false;
                 _dirtyWrites = 0;
             }

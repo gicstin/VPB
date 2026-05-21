@@ -1,21 +1,20 @@
-﻿using System;
+﻿using HarmonyLib;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
-using System.IO;
-using BepInEx.Logging;
-using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Profiling;
+using VPB.src.util;
 
 namespace VPB
 {
     class LogUtil
     {
         public static readonly object JsonLock = new object();
-        static ManualLogSource logSource;
+        private static VPBLogSource logSource = VPBLogger.GetInstance(VPBModule.Main);
 
         static readonly DateTime processStartTime;
         static DateTime pluginSessionStartTime;
@@ -38,6 +37,7 @@ namespace VPB
         static bool sceneLoadActive;
         static bool sceneLoadInternalActive;
         static double? sceneLoadLastSeconds;
+        static int sceneLoadTotalSerial;
 
         static int sceneLoadStartFrame;
         static int sceneLoadEndFrame;
@@ -54,6 +54,41 @@ namespace VPB
         static bool sceneLoadEndArmed;
         static float sceneLoadEndArmRealtime;
         static bool sceneLoadAutoEndFailedLogged;
+        static float sceneLoadFirstNotLoadingRealtime;
+        static float sceneLoadFirstNotBusyRealtime;
+        static float sceneLoadEndCriteriaRealtime;
+        static float sceneLoadPreLoadInternalRealtime;
+        static float sceneLoadPostLoadInternalRealtime;
+        static float sceneLoadWorldUiActivatedRealtime;
+        static float sceneLoadFirstImageActivityRealtime;
+        static float sceneSettleNextSampleRealtime;
+        static int sceneSettleSampleCount;
+        static int sceneSettleBusySampleCount;
+        static int sceneSettleQueueMax;
+        static int sceneSettleQueueLast;
+        static int sceneSettleAtomsMin;
+        static int sceneSettleAtomsMax;
+        static int sceneSettleAtomsLast;
+        static int sceneSettlePersonsMin;
+        static int sceneSettlePersonsMax;
+        static int sceneSettlePersonsLast;
+        static int sceneSettlePrevAtoms;
+        static int sceneSettlePrevPersons;
+        static int sceneSettleStableSampleStreak;
+        static float sceneSettleSoftReadyRealtime;
+        static int sceneSettleFileExistsMissCount;
+        static int sceneSettleOpenStreamMissCount;
+        static int sceneSettleVarEntryMissCount;
+        static int sceneSettleOnDemandRetryCount;
+        static int sceneLoadTailUpdateCount;
+        static int sceneLoadTailBusyCount;
+        static int sceneLoadTailIdleWindowBlockCount;
+        static int sceneLoadLoadingFlapTransitions;
+        static int sceneLoadBusyFlapTransitions;
+        static bool sceneLoadPrevLoadingKnown;
+        static bool sceneLoadPrevLoadingValue;
+        static bool sceneLoadPrevBusyKnown;
+        static bool sceneLoadPrevBusyValue;
 
         static long memAllocStart;
         static long memAllocEnd;
@@ -86,12 +121,18 @@ namespace VPB
         static readonly Dictionary<string, float> recentLogRealtime = new Dictionary<string, float>(StringComparer.Ordinal);
         static readonly List<SlowDiskSample> slowDisk = new List<SlowDiskSample>(128);
         static bool pluginAwakeMarked;
+        static bool uiReadyLogged;
         static bool readyLogged;
         static double? readyProcessSeconds;
+        static float readyLoggedRealtime;
         static bool startupReadyLogged;
         static bool startupAutoReadyLogged;
-
-
+        static bool startupSettledLogged;
+        static float startupSettledQuietSinceRealtime;
+        const float StartupSettleInitialDelaySeconds = 2.0f;
+        const float StartupSettleQuietWindowSeconds = 0.5f;
+        static readonly Queue<Action> postReadyQueue = new Queue<Action>();
+        static readonly object postReadyQueueLock = new object();
 
         static LogUtil()
         {
@@ -107,28 +148,50 @@ namespace VPB
             ResetPluginSession();
         }
 
-        static void ResetPluginSession()
+        public static void ResetPluginSession()
         {
             pluginSessionStartTime = DateTime.Now;
             pluginSessionEngineStartSeconds = Time.realtimeSinceStartup;
+            uiReadyLogged = false;
             readyLogged = false;
             startupReadyLogged = false;
             startupAutoReadyLogged = false;
+            startupSettledLogged = false;
+            startupSettledQuietSinceRealtime = 0f;
             readyProcessSeconds = null;
+            readyLoggedRealtime = 0f;
             sincePluginAwake.Reset();
             pluginAwakeMarked = false;
         }
 
-
-        public static void SetLogSource(ManualLogSource source)
+        public static void RegisterPostReadyOnce(Action action)
         {
-            logSource = source;
-            // Treat a new log source as a new plugin session. This ensures timing output
-            // is meaningful across BepInEx hot reloads (game/process not restarted).
-            ResetPluginSession();
+            if (action == null) return;
+            lock (postReadyQueueLock)
+            {
+                postReadyQueue.Enqueue(action);
+            }
         }
 
+        public static void DrainPostReadyQueue()
+        {
+            if (!readyLogged) return;
+            while (true)
+            {
+                Action action = null;
+                lock (postReadyQueueLock)
+                {
+                    if (postReadyQueue.Count == 0) break;
+                    action = postReadyQueue.Dequeue();
+                }
 
+                try { action?.Invoke(); }
+                catch (Exception ex)
+                {
+                    LogWarning("[VPB] PostReady action failed: " + ex.Message);
+                }
+            }
+        }
 
         static string lastTimeString;
         static long lastTimeTicks;
@@ -155,128 +218,79 @@ namespace VPB
             sincePluginAwake.Start();
         }
 
-        const int LevelInfo = 0;
-        const int LevelWarn = 1;
-        const int LevelErr = 2;
-
-        static void LogString(int level, string msg)
-        {
-            if (logSource != null)
-            {
-                if (level == LevelInfo) logSource.LogInfo(msg);
-                else if (level == LevelWarn) logSource.LogWarning(msg);
-                else if (level == LevelErr) logSource.LogError(msg);
-                return;
-            }
-            if (level == LevelInfo) UnityEngine.Debug.Log(msg);
-            else if (level == LevelWarn) UnityEngine.Debug.LogWarning(msg);
-            else if (level == LevelErr) UnityEngine.Debug.LogError(msg);
-        }
-
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo(log);
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, string p2, string p3)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            sb.Append(p3);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+
+            logSource.LogInfo($"{p1} {p2} {p3}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, int p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogInfo(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogInfo")]
         public static void Log(string p1, float p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_log) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelInfo, msg);
+            logSource.LogInfo($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogError(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_err) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelErr, msg);
+            logSource.LogError(log);
         }
 
+        /// <see cref="VPBLogSource.LogError(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogError")]
         public static void LogError(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_err) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelErr, msg);
+            logSource.LogError($"{p1} {p2}");
         }
 
+        /// <see cref="VPBLogSource.LogWarning(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string log)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append(log);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            logSource.LogWarning(log);
         }
 
+
+        /// <see cref="VPBLogSource.LogWarning(object)"/>
+        /// <see cref="VPBLogger.GetInstance(VPBModule, bool)"/>
+        [Obsolete("Prefer VPBLogSource.LogWarning")]
         public static void LogWarning(string p1, string p2)
         {
-            var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append(p1);
-            sb.Append(p2);
-            string msg = sb.ToString();
-            StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            logSource.LogWarning($"{p1} {p2}");
         }
 
         static int GetTextureLogLevel()
@@ -341,20 +355,10 @@ namespace VPB
             }
 
             var sb = StringBuilderPool.Get();
-            sb.Append(GetTimeString());
-            sb.Append(" (vb_warn) ");
-            sb.Append("TEX_SLOW_DISK ");
-            sb.Append(op);
-            sb.Append(" ");
-            sb.Append(ms.ToString("0.00"));
-            sb.Append("ms (");
             FormatBytes(sb, bytes);
-            sb.Append(") | ");
-            sb.Append(path);
-
             string msg = sb.ToString();
             StringBuilderPool.Return(sb);
-            LogString(LevelWarn, msg);
+            LogWarning($"TEX_SLOW_DISK {op} {ms.ToString("0.00")}ms ({msg}) | {path}");
         }
 
         public static void LogVerboseUi(string message)
@@ -378,6 +382,16 @@ namespace VPB
 
             startupReadyLogged = true;
             LogWarning("STARTUP_MILESTONE " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
+        }
+
+        public static bool IsStartupReadyLogged()
+        {
+            return startupReadyLogged || readyLogged;
+        }
+
+        public static bool IsStartupPresetBootstrapActive()
+        {
+            return false;
         }
 
         public static void BeginSceneClick(string saveName)
@@ -497,6 +511,44 @@ namespace VPB
             LogReadyOnce("AutoReady.Timeout");
         }
 
+        public static void StartupSettleUpdate()
+        {
+            if (readyLogged) return;
+            if (startupSettledLogged) return;
+            if (!uiReadyLogged) return;
+            if (readyLoggedRealtime <= 0f) return;
+
+            float now = Time.realtimeSinceStartup;
+            // Give post-READY bootstrap a chance to schedule follow-up work.
+            if ((now - readyLoggedRealtime) < StartupSettleInitialDelaySeconds) return;
+
+            bool hasPendingWork = false;
+            try
+            {
+                if (VamOnDemandLoader.HasPendingCoalescedVamRefresh()) hasPendingWork = true;
+                if (!hasPendingWork && Gallery.HasStartupDeferredWork()) hasPendingWork = true;
+                if (!hasPendingWork && !VPB.src.util.JSONExtensions.IsCharacterGenderMapInitComplete()) hasPendingWork = true;
+            }
+            catch { }
+
+            if (hasPendingWork)
+            {
+                startupSettledQuietSinceRealtime = 0f;
+                return;
+            }
+
+            if (startupSettledQuietSinceRealtime <= 0f)
+            {
+                startupSettledQuietSinceRealtime = now;
+                return;
+            }
+
+            if ((now - startupSettledQuietSinceRealtime) < StartupSettleQuietWindowSeconds) return;
+
+            startupSettledLogged = true;
+            LogReadyOnce("Startup settled");
+        }
+
         public static double? GetSceneClickSecondsForDisplay()
         {
             if (sceneClickActive)
@@ -543,6 +595,41 @@ namespace VPB
             sceneLoadNotBusyStableFrames = 0;
             sceneLoadEndArmed = false;
             sceneLoadEndArmRealtime = 0f;
+            sceneLoadFirstNotLoadingRealtime = -1f;
+            sceneLoadFirstNotBusyRealtime = -1f;
+            sceneLoadEndCriteriaRealtime = -1f;
+            sceneLoadPreLoadInternalRealtime = -1f;
+            sceneLoadPostLoadInternalRealtime = -1f;
+            sceneLoadWorldUiActivatedRealtime = -1f;
+            sceneLoadFirstImageActivityRealtime = -1f;
+            sceneSettleNextSampleRealtime = 0f;
+            sceneSettleSampleCount = 0;
+            sceneSettleBusySampleCount = 0;
+            sceneSettleQueueMax = -1;
+            sceneSettleQueueLast = -1;
+            sceneSettleAtomsMin = -1;
+            sceneSettleAtomsMax = -1;
+            sceneSettleAtomsLast = -1;
+            sceneSettlePersonsMin = -1;
+            sceneSettlePersonsMax = -1;
+            sceneSettlePersonsLast = -1;
+            sceneSettlePrevAtoms = -1;
+            sceneSettlePrevPersons = -1;
+            sceneSettleStableSampleStreak = 0;
+            sceneSettleSoftReadyRealtime = -1f;
+            sceneSettleFileExistsMissCount = 0;
+            sceneSettleOpenStreamMissCount = 0;
+            sceneSettleVarEntryMissCount = 0;
+            sceneSettleOnDemandRetryCount = 0;
+            sceneLoadTailUpdateCount = 0;
+            sceneLoadTailBusyCount = 0;
+            sceneLoadTailIdleWindowBlockCount = 0;
+            sceneLoadLoadingFlapTransitions = 0;
+            sceneLoadBusyFlapTransitions = 0;
+            sceneLoadPrevLoadingKnown = false;
+            sceneLoadPrevLoadingValue = false;
+            sceneLoadPrevBusyKnown = false;
+            sceneLoadPrevBusyValue = false;
 
             imageLastActivityRealtime = Time.realtimeSinceStartup;
 
@@ -590,6 +677,58 @@ namespace VPB
             return sceneLoadInternalActive;
         }
 
+        public static int GetSceneLoadTotalSerial()
+        {
+            return sceneLoadTotalSerial;
+        }
+
+        public static void MarkScenePhasePreLoadInternal()
+        {
+            if (!sceneLoadActive) return;
+            if (sceneLoadPreLoadInternalRealtime < 0f)
+                sceneLoadPreLoadInternalRealtime = Time.realtimeSinceStartup;
+        }
+
+        public static void MarkScenePhasePostLoadInternal()
+        {
+            if (!sceneLoadActive) return;
+            if (sceneLoadPostLoadInternalRealtime < 0f)
+                sceneLoadPostLoadInternalRealtime = Time.realtimeSinceStartup;
+        }
+
+        public static void MarkScenePhaseWorldUiActivated()
+        {
+            if (!sceneLoadActive) return;
+            if (sceneLoadWorldUiActivatedRealtime < 0f)
+                sceneLoadWorldUiActivatedRealtime = Time.realtimeSinceStartup;
+        }
+
+        public static void RecordFileExistsResult(bool exists)
+        {
+            if (!sceneLoadActive) return;
+            if (exists) return;
+            sceneSettleFileExistsMissCount++;
+        }
+
+        public static void RecordOpenStreamResult(bool success)
+        {
+            if (!sceneLoadActive) return;
+            if (success) return;
+            sceneSettleOpenStreamMissCount++;
+        }
+
+        public static void RecordVarEntryMiss()
+        {
+            if (!sceneLoadActive) return;
+            sceneSettleVarEntryMissCount++;
+        }
+
+        public static void RecordOnDemandRetry()
+        {
+            if (!sceneLoadActive) return;
+            sceneSettleOnDemandRetryCount++;
+        }
+
         public static void SceneLoadFrameTick(float unscaledDeltaTime)
         {
             if (!sceneLoadActive)
@@ -618,6 +757,8 @@ namespace VPB
                 return;
             }
 
+            SampleSceneSettleWindow();
+
             // Hard safety timeout so we never get stuck.
             if ((Time.realtimeSinceStartup - sceneLoadBeginRealtime) > 600f)
             {
@@ -638,24 +779,51 @@ namespace VPB
                 return;
             }
 
+            if (sceneLoadPrevLoadingKnown && !sceneLoadPrevLoadingValue && loading.Value && sceneLoadFirstNotLoadingRealtime >= 0f)
+            {
+                sceneLoadLoadingFlapTransitions++;
+            }
+            sceneLoadPrevLoadingKnown = true;
+            sceneLoadPrevLoadingValue = loading.Value;
+
             if (loading.Value)
             {
                 sceneLoadNotLoadingStableFrames = 0;
                 sceneLoadNotBusyStableFrames = 0;
                 sceneLoadEndArmed = false;
+                sceneLoadPrevBusyKnown = false;
                 return;
+            }
+
+            if (sceneLoadFirstNotLoadingRealtime < 0f)
+            {
+                sceneLoadFirstNotLoadingRealtime = Time.realtimeSinceStartup;
             }
 
             // Require not-loading for a few frames to avoid flapping.
             sceneLoadNotLoadingStableFrames++;
+            sceneLoadTailUpdateCount++;
 
 
             bool busy = IsImageLoadingBusy();
+            if (sceneLoadPrevBusyKnown && !sceneLoadPrevBusyValue && busy && sceneLoadFirstNotBusyRealtime >= 0f)
+            {
+                sceneLoadBusyFlapTransitions++;
+            }
+            sceneLoadPrevBusyKnown = true;
+            sceneLoadPrevBusyValue = busy;
+
             if (busy)
             {
                 sceneLoadNotBusyStableFrames = 0;
                 sceneLoadEndArmed = false;
+                sceneLoadTailBusyCount++;
                 return;
+            }
+
+            if (sceneLoadFirstNotBusyRealtime < 0f)
+            {
+                sceneLoadFirstNotBusyRealtime = Time.realtimeSinceStartup;
             }
 
             // Require a quiet window after the last image activity.
@@ -665,6 +833,7 @@ namespace VPB
             {
                 sceneLoadNotBusyStableFrames = 0;
                 sceneLoadEndArmed = false;
+                sceneLoadTailIdleWindowBlockCount++;
                 return;
             }
 
@@ -674,6 +843,10 @@ namespace VPB
                 if (!sceneLoadEndArmed)
                 {
                     // Arm end and wait a moment; this avoids ending in the same frame a new burst starts.
+                    if (sceneLoadEndCriteriaRealtime < 0f)
+                    {
+                        sceneLoadEndCriteriaRealtime = Time.realtimeSinceStartup;
+                    }
                     sceneLoadEndArmed = true;
                     sceneLoadEndArmRealtime = Time.realtimeSinceStartup;
                     return;
@@ -688,6 +861,138 @@ namespace VPB
             {
                 sceneLoadEndArmed = false;
             }
+        }
+
+        static void SampleSceneSettleWindow()
+        {
+            // Focus on the expensive settle window after LoadInternal returns and before not-loading.
+            if (sceneLoadPostLoadInternalRealtime < 0f) return;
+            if (sceneLoadFirstNotLoadingRealtime >= 0f) return;
+
+            float now = Time.realtimeSinceStartup;
+            if (now < sceneSettleNextSampleRealtime) return;
+            sceneSettleNextSampleRealtime = now + 0.5f;
+
+            sceneSettleSampleCount++;
+
+            bool busy = IsImageLoadingBusy();
+            if (busy) sceneSettleBusySampleCount++;
+
+            int queueDepth = TryGetCombinedImageQueueDepth();
+            sceneSettleQueueLast = queueDepth;
+            if (queueDepth >= 0)
+            {
+                if (sceneSettleQueueMax < 0 || queueDepth > sceneSettleQueueMax)
+                    sceneSettleQueueMax = queueDepth;
+            }
+
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return;
+
+            try
+            {
+                var atoms = sc.GetAtoms();
+                int atomCount = atoms != null ? atoms.Count : 0;
+                int personCount = 0;
+                if (atoms != null)
+                {
+                    for (int i = 0; i < atoms.Count; i++)
+                    {
+                        Atom a = atoms[i];
+                        if (a != null && SceneUtils.IsPersonLikeAtom(a)) personCount++;
+                    }
+                }
+
+                sceneSettleAtomsLast = atomCount;
+                if (sceneSettleAtomsMin < 0 || atomCount < sceneSettleAtomsMin) sceneSettleAtomsMin = atomCount;
+                if (sceneSettleAtomsMax < 0 || atomCount > sceneSettleAtomsMax) sceneSettleAtomsMax = atomCount;
+
+                sceneSettlePersonsLast = personCount;
+                if (sceneSettlePersonsMin < 0 || personCount < sceneSettlePersonsMin) sceneSettlePersonsMin = personCount;
+                if (sceneSettlePersonsMax < 0 || personCount > sceneSettlePersonsMax) sceneSettlePersonsMax = personCount;
+
+                // "Soft-ready": settle window shows stable atom/person counts and no active image busy for >=1s.
+                bool stableCounts = sceneSettlePrevAtoms == atomCount && sceneSettlePrevPersons == personCount;
+                sceneSettlePrevAtoms = atomCount;
+                sceneSettlePrevPersons = personCount;
+                if (stableCounts && !busy && queueDepth >= 0 && queueDepth <= 2)
+                {
+                    sceneSettleStableSampleStreak++;
+                    if (sceneSettleStableSampleStreak >= 2 && sceneSettleSoftReadyRealtime < 0f)
+                    {
+                        sceneSettleSoftReadyRealtime = now;
+                    }
+                }
+                else
+                {
+                    sceneSettleStableSampleStreak = 0;
+                }
+            }
+            catch { }
+        }
+
+        static int TryGetCombinedImageQueueDepth()
+        {
+            int total = 0;
+            bool any = false;
+
+            try
+            {
+                if (ImageLoaderThreaded.singleton != null)
+                {
+                    int c = TryGetImageQueueDepthFromLoader(Traverse.Create(ImageLoaderThreaded.singleton));
+                    if (c >= 0)
+                    {
+                        total += c;
+                        any = true;
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (CustomImageLoaderThreaded.singleton != null)
+                {
+                    int c = TryGetImageQueueDepthFromLoader(Traverse.Create(CustomImageLoaderThreaded.singleton));
+                    if (c >= 0)
+                    {
+                        total += c;
+                        any = true;
+                    }
+                }
+            }
+            catch { }
+
+            return any ? total : -1;
+        }
+
+        static int TryGetImageQueueDepthFromLoader(Traverse tr)
+        {
+            if (tr == null) return -1;
+            try
+            {
+                object n = tr.Field("numRealQueuedImages").GetValue();
+                if (n is int ni && ni >= 0) return ni;
+            }
+            catch { }
+
+            try
+            {
+                object q = tr.Field("queuedImages").GetValue();
+                if (q != null)
+                {
+                    var countProp = q.GetType().GetProperty("Count");
+                    if (countProp != null)
+                    {
+                        object cObj = countProp.GetValue(q, null);
+                        if (cObj is int ci && ci >= 0) return ci;
+                    }
+                }
+            }
+            catch { }
+
+            return -1;
         }
 
         static bool IsImageLoadingBusy()
@@ -790,6 +1095,10 @@ namespace VPB
         {
             // realtimeSinceStartup is fine here; we only compare deltas.
             imageLastActivityRealtime = Time.realtimeSinceStartup;
+            if (sceneLoadActive && sceneLoadFirstImageActivityRealtime < 0f)
+            {
+                sceneLoadFirstImageActivityRealtime = imageLastActivityRealtime;
+            }
             if (sceneClickActive)
             {
                 sceneClickSawImageWork = true;
@@ -885,6 +1194,7 @@ namespace VPB
             sceneLoadName = null;
             sceneLoadPackageUid = null;
             sceneLoadInternalActive = false;
+            unchecked { sceneLoadTotalSerial++; }
 
             sceneLoadEndFrame = Time.frameCount;
             CaptureMemoryEnd();
@@ -901,6 +1211,9 @@ namespace VPB
 
             try
             {
+                LogSceneLoadLifecycleBreakdown(context, name, ms / 1000.0);
+                LogSceneLoadPhaseBreakdown(context, name, ms / 1000.0);
+                LogSceneLoadSettleBreakdown(context, name, ms / 1000.0);
                 LogSceneLoadStats(name, ms / 1000.0);
                 LogPerfSummary();
                 LogTextureOffenderSummary();
@@ -920,9 +1233,206 @@ namespace VPB
                 VPBConfig.Instance.EndSceneLoad();
             }
 
+            // Scene content (including Person atoms in GetAtoms()) is reliably settled once total load completes.
+            try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
+
             if (ImageLoadingMgr.singleton != null)
             {
                 ImageLoadingMgr.singleton.ProcessCandidates();
+            }
+
+            CacheCleanupManager.FlushHitsBatch();
+        }
+
+        static void LogSceneLoadLifecycleBreakdown(string context, string sceneName, double durSeconds)
+        {
+            float endRealtime = Time.realtimeSinceStartup;
+            float preLoadInternalSec = sceneLoadPreLoadInternalRealtime >= 0f
+                ? Mathf.Max(0f, sceneLoadPreLoadInternalRealtime - sceneLoadBeginRealtime)
+                : -1f;
+            float loadInternalWindowSec = (sceneLoadPreLoadInternalRealtime >= 0f && sceneLoadPostLoadInternalRealtime >= 0f)
+                ? Mathf.Max(0f, sceneLoadPostLoadInternalRealtime - sceneLoadPreLoadInternalRealtime)
+                : -1f;
+            float postLoadInternalToNotLoadingSec = (sceneLoadPostLoadInternalRealtime >= 0f && sceneLoadFirstNotLoadingRealtime >= 0f)
+                ? Mathf.Max(0f, sceneLoadFirstNotLoadingRealtime - sceneLoadPostLoadInternalRealtime)
+                : -1f;
+            float firstImageActivitySec = sceneLoadFirstImageActivityRealtime >= 0f
+                ? Mathf.Max(0f, sceneLoadFirstImageActivityRealtime - sceneLoadBeginRealtime)
+                : -1f;
+            float worldUiSec = sceneLoadWorldUiActivatedRealtime >= 0f
+                ? Mathf.Max(0f, sceneLoadWorldUiActivatedRealtime - sceneLoadBeginRealtime)
+                : -1f;
+            float worldUiToEndSec = (sceneLoadWorldUiActivatedRealtime >= 0f)
+                ? Mathf.Max(0f, endRealtime - sceneLoadWorldUiActivatedRealtime)
+                : -1f;
+
+            var sb = StringBuilderPool.Get();
+            try
+            {
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("SCENE_LOAD_LIFECYCLE ");
+                sb.Append(context);
+                sb.Append(" | ");
+                sb.Append(sceneName);
+                sb.Append(" | dur:");
+                sb.Append(durSeconds.ToString("0.00"));
+                sb.Append("s preLoadInternal:");
+                sb.Append(preLoadInternalSec >= 0f ? preLoadInternalSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" loadInternalWindow:");
+                sb.Append(loadInternalWindowSec >= 0f ? loadInternalWindowSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" postLoadInternalToNotLoading:");
+                sb.Append(postLoadInternalToNotLoadingSec >= 0f ? postLoadInternalToNotLoadingSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" firstImageActivity:");
+                sb.Append(firstImageActivitySec >= 0f ? firstImageActivitySec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" worldUi:");
+                sb.Append(worldUiSec >= 0f ? worldUiSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" worldUiToEnd:");
+                sb.Append(worldUiToEndSec >= 0f ? worldUiToEndSec.ToString("0.00") + "s" : "n/a");
+                logSource.LogWarning(sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
+            }
+        }
+
+        static void LogSceneLoadPhaseBreakdown(string context, string sceneName, double durSeconds)
+        {
+            float endRealtime = Time.realtimeSinceStartup;
+            float firstNotLoading = sceneLoadFirstNotLoadingRealtime;
+
+            float preNotLoadingSec = -1f;
+            float tailSec = -1f;
+            if (firstNotLoading >= 0f)
+            {
+                preNotLoadingSec = Mathf.Max(0f, firstNotLoading - sceneLoadBeginRealtime);
+                tailSec = Mathf.Max(0f, endRealtime - firstNotLoading);
+            }
+
+            float firstNotBusyDelaySec = -1f;
+            if (firstNotLoading >= 0f && sceneLoadFirstNotBusyRealtime >= 0f)
+            {
+                firstNotBusyDelaySec = Mathf.Max(0f, sceneLoadFirstNotBusyRealtime - firstNotLoading);
+            }
+
+            float criteriaReadyDelaySec = -1f;
+            if (firstNotLoading >= 0f && sceneLoadEndCriteriaRealtime >= 0f)
+            {
+                criteriaReadyDelaySec = Mathf.Max(0f, sceneLoadEndCriteriaRealtime - firstNotLoading);
+            }
+
+            float armedToEndSec = -1f;
+            if (sceneLoadEndCriteriaRealtime >= 0f)
+            {
+                armedToEndSec = Mathf.Max(0f, endRealtime - sceneLoadEndCriteriaRealtime);
+            }
+
+            var sb = StringBuilderPool.Get();
+            try
+            {
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("SCENE_LOAD_PHASES ");
+                sb.Append(context);
+                sb.Append(" | ");
+                sb.Append(sceneName);
+                sb.Append(" | dur:");
+                sb.Append(durSeconds.ToString("0.00"));
+                sb.Append("s preNotLoading:");
+                sb.Append(preNotLoadingSec >= 0f ? preNotLoadingSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" tail:");
+                sb.Append(tailSec >= 0f ? tailSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" firstNotBusy:");
+                sb.Append(firstNotBusyDelaySec >= 0f ? firstNotBusyDelaySec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" criteriaReady:");
+                sb.Append(criteriaReadyDelaySec >= 0f ? criteriaReadyDelaySec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" armedToEnd:");
+                sb.Append(armedToEndSec >= 0f ? armedToEndSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" | tailTicks:");
+                sb.Append(sceneLoadTailUpdateCount);
+                sb.Append(" busyTicks:");
+                sb.Append(sceneLoadTailBusyCount);
+                sb.Append(" idleBlocks:");
+                sb.Append(sceneLoadTailIdleWindowBlockCount);
+                sb.Append(" loadingFlaps:");
+                sb.Append(sceneLoadLoadingFlapTransitions);
+                sb.Append(" busyFlaps:");
+                sb.Append(sceneLoadBusyFlapTransitions);
+
+                logSource.LogWarning(sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
+            }
+        }
+
+        static void LogSceneLoadSettleBreakdown(string context, string sceneName, double durSeconds)
+        {
+            float settleWindowSec = -1f;
+            if (sceneLoadPostLoadInternalRealtime >= 0f && sceneLoadFirstNotLoadingRealtime >= 0f)
+            {
+                settleWindowSec = Mathf.Max(0f, sceneLoadFirstNotLoadingRealtime - sceneLoadPostLoadInternalRealtime);
+            }
+
+            string atomsRange = (sceneSettleAtomsMin >= 0 && sceneSettleAtomsMax >= 0)
+                ? (sceneSettleAtomsMin + "->" + sceneSettleAtomsMax + " (last:" + sceneSettleAtomsLast + ")")
+                : "n/a";
+            string personsRange = (sceneSettlePersonsMin >= 0 && sceneSettlePersonsMax >= 0)
+                ? (sceneSettlePersonsMin + "->" + sceneSettlePersonsMax + " (last:" + sceneSettlePersonsLast + ")")
+                : "n/a";
+            string queueStats = sceneSettleQueueMax >= 0
+                ? ("max:" + sceneSettleQueueMax + " last:" + sceneSettleQueueLast)
+                : "n/a";
+            string busyRatio = sceneSettleSampleCount > 0
+                ? ((sceneSettleBusySampleCount * 100.0f / sceneSettleSampleCount).ToString("0.0") + "%")
+                : "n/a";
+            float softReadyDelaySec = (sceneSettleSoftReadyRealtime >= 0f && sceneLoadPostLoadInternalRealtime >= 0f)
+                ? Mathf.Max(0f, sceneSettleSoftReadyRealtime - sceneLoadPostLoadInternalRealtime)
+                : -1f;
+
+            var sb = StringBuilderPool.Get();
+            try
+            {
+                sb.Append(GetTimeString());
+                sb.Append(" (vb_warn) ");
+                sb.Append("SCENE_LOAD_SETTLE ");
+                sb.Append(context);
+                sb.Append(" | ");
+                sb.Append(sceneName);
+                sb.Append(" | dur:");
+                sb.Append(durSeconds.ToString("0.00"));
+                sb.Append("s window:");
+                sb.Append(settleWindowSec >= 0f ? settleWindowSec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" samples:");
+                sb.Append(sceneSettleSampleCount);
+                sb.Append(" busy:");
+                sb.Append(sceneSettleBusySampleCount);
+                sb.Append(" (");
+                sb.Append(busyRatio);
+                sb.Append(")");
+                sb.Append(" queue:");
+                sb.Append(queueStats);
+                sb.Append(" softReady:");
+                sb.Append(softReadyDelaySec >= 0f ? softReadyDelaySec.ToString("0.00") + "s" : "n/a");
+                sb.Append(" atoms:");
+                sb.Append(atomsRange);
+                sb.Append(" persons:");
+                sb.Append(personsRange);
+                sb.Append(" misses[file/open/var]:");
+                sb.Append(sceneSettleFileExistsMissCount);
+                sb.Append("/");
+                sb.Append(sceneSettleOpenStreamMissCount);
+                sb.Append("/");
+                sb.Append(sceneSettleVarEntryMissCount);
+                sb.Append(" onDemandRetries:");
+                sb.Append(sceneSettleOnDemandRetryCount);
+                logSource.LogWarning(sb.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Return(sb);
             }
         }
 
@@ -1042,7 +1552,7 @@ namespace VPB
             FormatBytes(sb, memManagedEnd - memManagedStart);
             sb.Append(")");
 
-            LogString(LevelWarn, sb.ToString());
+            LogWarning(sb.ToString());
             }
             finally
             {
@@ -1148,12 +1658,27 @@ namespace VPB
                     sb.Append(")");
                 }
 
-                LogString(LevelWarn, sb.ToString());
+                LogWarning(sb.ToString());
             }
             finally
             {
                 StringBuilderPool.Return(sb);
             }
+        }
+
+        public static void LogUiReadyOnce(string context)
+        {
+            if (uiReadyLogged)
+            {
+                return;
+            }
+
+            uiReadyLogged = true;
+            readyLoggedRealtime = Time.realtimeSinceStartup;
+            var sinceProcessStart = DateTime.Now - processStartTime;
+            var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
+            var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
+            LogWarning(string.Format("UI_READY {0} | since plugin session start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, sincePluginSessionStart.TotalSeconds, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
         }
 
         public static void LogReadyOnce(string context)
@@ -1165,7 +1690,8 @@ namespace VPB
 
             readyLogged = true;
 
-            readyProcessSeconds = (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
+            // Keep hook-pane startup display aligned with READY log's "since process start" metric.
+            readyProcessSeconds = GetSecondsSinceProcessStart();
             var sinceProcessStart = DateTime.Now - processStartTime;
             var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
             var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
@@ -1177,6 +1703,11 @@ namespace VPB
             return (DateTime.Now - processStartTime).TotalSeconds;
         }
 
+        public static bool IsReadyLogged()
+        {
+            return readyLogged;
+        }
+
         public static double GetStartupSecondsForDisplay()
         {
             if (readyProcessSeconds.HasValue)
@@ -1184,7 +1715,7 @@ namespace VPB
                 return readyProcessSeconds.Value;
             }
 
-            return (double)(Time.realtimeSinceStartup - pluginSessionEngineStartSeconds);
+            return GetSecondsSinceProcessStart();
         }
 
         static class StringBuilderPool

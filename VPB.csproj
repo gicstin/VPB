@@ -13,7 +13,7 @@
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
-    <VaMPath Condition="'$(VaMPath)' == ''">C:\vam</VaMPath>
+    <VaMPath Condition="'$(VaMPath)' == ''">F:/VamDev</VaMPath>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
   </PropertyGroup>
@@ -27,6 +27,7 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -38,10 +39,15 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <!-- Native SQLite: never copy next to VPB.dll in bin — users often paste bin into BepInEx\scripts and break Script Engine. Deploy only via PostBuild to BepInEx\plugins. -->
     <Content Include="lib\sqlite-native\sqlite3.dll">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Content>
+    <!-- libjpeg-turbo TurboJPEG API; optional dev override in lib — PostBuild also syncs from vam_patch when lib absent. -->
+    <Content Include="lib\turbojpeg\turbojpeg.dll">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
@@ -271,6 +277,14 @@
     <Compile Include="src\ClothingLoadingUtils.cs" />
     <Compile Include="src\SceneUtils.cs" />
     <Compile Include="src\GlobalInfo.cs" />
+    <Compile Include="src\util\VPBLogger.cs" />
+    <Compile Include="src\util\XrUtils.cs" />
+    <Compile Include="src\util\AtomGenderUtils.cs" />
+    <Compile Include="src\util\AppearancePresetSuppress.cs" />
+    <Compile Include="src\util\VpbPerfTelemetry.cs" />
+    <Compile Include="src\util\VpbPerfDiag.cs" />
+    <Compile Include="src\util\LooseVapGenderProbe.cs" />
+    <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
@@ -283,7 +297,10 @@
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\TurboJpegNative.cs" />
+    <Compile Include="src\hook\TurboJpegStats.cs" />
     <Compile Include="src\hook\HubImageLoaderThreaded.cs" />
+    <Compile Include="src\hook\HubPixelPackingJobs.cs" />
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\TextureUtil.cs" />
@@ -321,7 +338,7 @@
     <Compile Include="src\MessageKit\MessageKitLite.cs" />
     <Compile Include="src\Messager.cs" />
     <Compile Include="src\Settings.cs" />
-    <Compile Include="src\SettingsPanel.cs" />
+    <Compile Include="src\BaImporter.cs" />
     <Compile Include="src\VPBConfig.cs" />
     <Compile Include="src\VPBTranslation.cs" />
     <Compile Include="src\VPBUiFont.cs" />
@@ -334,32 +351,61 @@
     <Compile Include="src\VamHookPlugin.Settings.cs" />
     <Compile Include="src\VamHookPlugin.QuickMenu.cs" />
     <Compile Include="src\VamHookPlugin.State.cs" />
+    <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
+    <Compile Include="src\gallery\CacheCleanupManager.cs" />
     <Compile Include="src\gallery\index\VpbSqlite3.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTags.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UserTags.Scroll.cs" />
+    <Compile Include="src\gallery\GalleryUserTagEditorText.cs" />
+    <Compile Include="src\gallery\GalleryUserTagYamlBrain.cs" />
+    <Compile Include="src\gallery\MultilineInputFieldHomeEndFix.cs" />
     <Compile Include="src\gallery\GalleryPanel.CategoryFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitch.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitchEditor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleSearchResponsive.cs" />
     <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
+    <Compile Include="src\gallery\AppearanceGenderClassifier.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderFacetCounts.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.GlobalSourceFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
     <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Init.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Runtime.Update.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Transparency.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorConsolidation.cs" />
+    <Compile Include="src\gallery\CreatorNameConsolidation.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleCreatorDropdown.cs" />
     <Compile Include="src\gallery\GalleryPanel.Sorting.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Remove.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
@@ -368,8 +414,16 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalPresets.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.AutoInstallHide.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
+    <Compile Include="src\util\JSONExtensions.cs" />
+    <Compile Include="src\util\JsonSerializationUtil.cs" />
+    <Compile Include="src\util\CUAConverter.cs" />
+    <Compile Include="src\util\CUAClothing.cs" />
+    <Compile Include="src\util\CUAClothing.Data.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
@@ -387,6 +441,9 @@
     <Compile Include="src\gallery\ChamferedRect.cs" />
     <Compile Include="src\gallery\UIDragBlocker.cs" />
     <Compile Include="src\gallery\UIScrollPassthrough.cs" />
+    <Compile Include="src\gallery\GalleryViewportCtrlScrollColumns.cs" />
+    <Compile Include="src\gallery\GalleryVrThumbstickScroll.cs" />
+    <Compile Include="src\gallery\GalleryPanel.VrThumbstickScroll.cs" />
     <Compile Include="src\gallery\SpringScrollButton.cs" />
     <Compile Include="src\gallery\HoldToApplyOnHover.cs" />
     <Compile Include="src\gallery\UIRichValueHover.cs" />
@@ -394,9 +451,9 @@
     <Compile Include="src\gallery\QuickFilterSettings.cs" />
     <Compile Include="src\gallery\QuickFiltersUI.cs" />
     <Compile Include="src\gallery\UIColorPicker.cs" />
-    <Compile Include="src\gallery\Hub\GalleryHubController.cs" />
-    <Compile Include="src\gallery\Hub\GalleryHubItem.cs" />
-    <Compile Include="src\gallery\Hub\GalleryPanel.Hub.cs" />
+    <Compile Include="src\gallery\VPBUiPickers.cs" />
+    <Compile Include="src\gallery\GalleryPanel.HubCompat.cs" />
+    <Compile Include="src\gallery\HubStubs.cs" />
     <Compile Include="src\RatingsManager.cs" />
     <Compile Include="src\LocalSceneGallerySupport.cs" />
     <Compile Include="src\PackageHidePrefs.cs" />
@@ -421,6 +478,9 @@
     <Compile Include="src\hook\FileManagement\VarFileEntryStreamReader.cs" />
     <Compile Include="src\hook\FileManagement\VarPackage.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageGroup.cs" />
+    <Compile Include="src\hook\FileManagement\VamScanFilter.cs" />
+    <Compile Include="src\hook\FileManagement\VamOnDemandLoader.cs" />
+    <Compile Include="src\ScanWhitelistManager.cs" />
     <Compile Include="src\hook\Hub\HubBrowse.cs" />
     <Compile Include="src\hook\Hub\HubResourceCreatorSupportUI.cs" />
     <Compile Include="src\hook\Hub\HubResourceItem.cs" />
@@ -432,19 +492,19 @@
     <Compile Include="src\hook\VarUtil.cs" />
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
+    <Compile Include="src\updater\VpbUpdaterService.cs" />
+    <Compile Include="src\updater\VpbUpdateConfig.cs" />
+    <Compile Include="src\updater\VamHookPlugin.Updater.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="$(IntermediateOutputPath)PluginVersion.g.cs" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Remove="_vam_patch\**" />
     <EmbeddedResource Remove="vam_patch\**" />
     <None Remove="vam_patch\**" />
     <Page Remove="vam_patch\**" />
   </ItemGroup>
-
   <!--
     plugin_version.txt: line 1 = base (e.g. 0.28.0 or v0.28.0), line 2 = next build counter (integer).
     Before each compile: if line 1 changed vs last build (see obj/VPB_last_plugin_base.txt), line 2 resets to 1;
@@ -461,7 +521,6 @@
     <MakeDir Directories="$(PluginVersionIntermediateDir)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_PVProjDir)\scripts\PreparePluginVersion.ps1&quot; -VersionFile &quot;$(_PVProjDir)\plugin_version.txt&quot; -IntermediateDir &quot;$(PluginVersionIntermediateDir)&quot; -ProjectDir &quot;$(_PVProjDir)&quot;" WorkingDirectory="$(_PVProjDir)" />
   </Target>
-
   <!--
     Keeps vam_patch/patch_manifest.json vpb_icons rows in sync with vam_patch/BepInEx/plugins/vpb_icons on disk.
     Set SkipVPBPatchManifestSync=true to skip (e.g. CI). Design-time builds are skipped.
@@ -471,13 +530,12 @@
       <_SMProjDir>$([System.String]::Copy('$(MSBuildProjectDirectory)').TrimEnd('\'))</_SMProjDir>
     </PropertyGroup>
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbIcons.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_SMProjDir)\scripts\SyncPatchManifestVpbThemes.ps1&quot; -ProjectDir &quot;$(_SMProjDir)&quot;" WorkingDirectory="$(_SMProjDir)" />
   </Target>
-
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-
   <PropertyGroup>
     <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\scripts\VPB.dll"
+    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
 copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
 if exist "$(VaMPath)\BepInEx\scripts\sqlite3.dll" del /F /Q "$(VaMPath)\BepInEx\scripts\sqlite3.dll"
 if exist "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" (
@@ -485,6 +543,18 @@ if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
 copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(VaMPath)\BepInEx\plugins\sqlite3.dll"
 if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
 copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\sqlite3.dll"
+)
+if exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
+if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
+if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
+copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll"
+)
+if not exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" (
+if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
+if not exist "$(VaMPath)\BepInEx\plugins\turbojpeg.dll" copy /Y "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
+)
 )
 if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(VaMPath)\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
@@ -502,6 +572,12 @@ if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons\" (
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(VaMPath)\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+)
+if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes\" (
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(VaMPath)\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
+if errorlevel 8 exit 1
+robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
 if errorlevel 8 exit 1
 )</PostBuildEvent>
   </PropertyGroup>

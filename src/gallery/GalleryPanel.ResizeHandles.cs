@@ -81,13 +81,10 @@ namespace VPB
             dragHandler.MinSize = new Vector2(800, 600);
             dragHandler.MaxSize = new Vector2(1920, 1200);
 
-            // Add hover effect
-            UIHoverColor hoverColor = resizeHandleGO.AddComponent<UIHoverColor>();
-            if (hoverColor != null)
-            {
-                hoverColor.normalColor = new Color(0.7f, 0.7f, 0.7f, 0.8f);
-                hoverColor.hoverColor = new Color(1f, 1f, 1f, 1f);
-            }
+            // Border-only hover
+            UIHoverBorder hb = resizeHandleGO.AddComponent<UIHoverBorder>();
+            hb.hoverColor = new Color(1f, 1f, 0f, 1f);
+            hb.borderSize = 2f;
         }
     }
 }

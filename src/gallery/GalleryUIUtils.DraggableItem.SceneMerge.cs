@@ -219,7 +219,7 @@ namespace VPB
                 }
                 LogUtil.Log($"[VPB] Scene data application complete: {appliedCount} storables applied, {skippedCount} storables missing on target.");
 
-                // Align with BA SceneImportCache lifecycle: LateRestore next frame + reset sim clothing.
+                // Keep LateRestore on next frame and reset sim clothing.
                 // We only LateRestore storables restored via RestoreFromJSON; preset managers handle their own internal lifecycle.
                 SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom, lateRestoreTargets);
             }
@@ -399,50 +399,90 @@ namespace VPB
             }
         }
 
+        private Atom TryGetSelectedSubSceneTarget()
+        {
+            if (Panel == null) return null;
+            try
+            {
+                if (!Panel.IsSubSceneTargetMode()) return null;
+                Atom a = Panel.SelectedTargetAtom;
+                if (SceneUtils.IsSubSceneAtom(a)) return a;
+            }
+            catch { }
+            return null;
+        }
+
+        private static void InvokeLoadSubSceneWithPath(Atom subSceneAtom, string path)
+        {
+            if (subSceneAtom == null) return;
+            SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
+            if (subScene == null)
+            {
+                LogUtil.LogError("[VPB] SubScene component not found on atom " + subSceneAtom.uid);
+                return;
+            }
+
+            LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
+            MethodInfo loadMethod = typeof(SubScene).GetMethod(
+                "LoadSubSceneWithPath",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (loadMethod != null)
+                loadMethod.Invoke(subScene, new object[] { path });
+            else
+                LogUtil.LogError("[VPB] Method LoadSubSceneWithPath not found on SubScene component");
+        }
+
+        private static void RemoveAllSubSceneAtoms()
+        {
+            if (SuperController.singleton == null) return;
+            List<Atom> toRemove = new List<Atom>();
+            foreach (var a in SuperController.singleton.GetAtoms())
+            {
+                if (a != null && SceneUtils.IsSubSceneAtom(a))
+                    toRemove.Add(a);
+            }
+            if (toRemove.Count <= 0) return;
+            LogUtil.Log($"[VPB] Replace mode: Removing {toRemove.Count} existing SubScenes");
+            foreach (var a in toRemove)
+            {
+                try { SuperController.singleton.RemoveAtom(a); } catch { }
+            }
+        }
+
         private System.Collections.IEnumerator LoadSubSceneCoroutine(string path)
         {
-            // Track existing atoms to find the new one
-            HashSet<string> existingAtoms = new HashSet<string>();
-            foreach (var a in SuperController.singleton.GetAtoms()) existingAtoms.Add(a.uid);
+            Atom subSceneAtom = TryGetSelectedSubSceneTarget();
 
-            yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
-            yield return new WaitForEndOfFrame();
-            
-            // Find the newly created SubScene atom
-            Atom subSceneAtom = null;
-            foreach (var atom in SuperController.singleton.GetAtoms())
+            if (subSceneAtom == null)
             {
-                if (atom.type == "SubScene" && !existingAtoms.Contains(atom.uid))
+                if (Panel != null && Panel.DragDropReplaceMode)
+                    RemoveAllSubSceneAtoms();
+
+                HashSet<string> existingAtoms = new HashSet<string>();
+                foreach (var a in SuperController.singleton.GetAtoms()) existingAtoms.Add(a.uid);
+
+                yield return SuperController.singleton.AddAtomByType("SubScene", "", true, true, true);
+                yield return new WaitForEndOfFrame();
+
+                foreach (var atom in SuperController.singleton.GetAtoms())
                 {
-                    subSceneAtom = atom;
-                    break;
+                    if (SceneUtils.IsSubSceneAtom(atom) && !existingAtoms.Contains(atom.uid))
+                    {
+                        subSceneAtom = atom;
+                        break;
+                    }
                 }
+
+                if (subSceneAtom == null)
+                    LogUtil.LogError("[VPB] Could not find newly created SubScene atom");
             }
-            
+
             if (subSceneAtom != null)
+                InvokeLoadSubSceneWithPath(subSceneAtom, path);
+
+            if (Panel != null)
             {
-                SubScene subScene = subSceneAtom.GetComponentInChildren<SubScene>();
-                if (subScene != null)
-                {
-                    LogUtil.Log($"[VPB] Calling LoadSubSceneWithPath on SubScene atom {subSceneAtom.uid} with path: {path}");
-                    MethodInfo loadMethod = typeof(SubScene).GetMethod("LoadSubSceneWithPath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadMethod != null)
-                    {
-                        loadMethod.Invoke(subScene, new object[] { path });
-                    }
-                    else
-                    {
-                        LogUtil.LogError("[VPB] Method LoadSubSceneWithPath not found on SubScene component");
-                    }
-                }
-                else
-                {
-                    LogUtil.LogError("[VPB] SubScene component not found on newly created atom");
-                }
-            }
-            else
-            {
-                LogUtil.LogError("[VPB] Could not find newly created SubScene atom");
+                try { Panel.RefreshTargetDropdown(); } catch { }
             }
 
             if (VPBConfig.Instance != null)
@@ -886,7 +926,7 @@ namespace VPB
             }
 
             JSONClass mergedBase;
-            try { mergedBase = JSON.Parse(rawBase.ToString()).AsObject; }
+            try { mergedBase = JSON.Parse(VPB.src.util.JsonSerializationUtil.Serialize(rawBase, 32_768)).AsObject; }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[DragDropDebug] Appearance clothes-only: clone geometry JSON failed: " + ex.Message);
@@ -906,7 +946,7 @@ namespace VPB
                 if (srcVal == null) continue;
                 try
                 {
-                    mergedBase[key] = JSON.Parse(srcVal.ToString());
+                    mergedBase[key] = JSON.Parse(VPB.src.util.JsonSerializationUtil.Serialize(srcVal, 4096));
                     patched++;
                 }
                 catch (Exception ex)
@@ -931,7 +971,7 @@ namespace VPB
                             if (item == null) continue;
                             string uid = item["id"]?.Value ?? "";
                             if (!IsGarmentClothingUid(uid)) continue;
-                            filteredArr.Add(JSON.Parse(item.ToString()));
+                            filteredArr.Add(JSON.Parse(VPB.src.util.JsonSerializationUtil.Serialize(item, 2048)));
                         }
                     }
                     if (filteredArr.Count > 0)
@@ -1051,7 +1091,7 @@ namespace VPB
         private static JSONClass CloneJsonClass(JSONClass jc)
         {
             if (jc == null) return null;
-            try { return JSON.Parse(jc.ToString()).AsObject; }
+            try { return JSON.Parse(VPB.src.util.JsonSerializationUtil.Serialize(jc, 8192)).AsObject; }
             catch { return jc; }
         }
 
@@ -1243,322 +1283,6 @@ namespace VPB
             LogUtil.LogVerboseUi($"[DragDropDebug][KeepGarment] {phase}: atom clothingItem ids now: " + CollectClothingItemStorableIds(atom));
         }
 
-        private KeepGarmentAppearanceState BuildKeepGarmentAppearanceState(Atom atom)
-        {
-            var state = new KeepGarmentAppearanceState
-            {
-                GarmentGeometryBools = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase),
-                GarmentClothingItemJsons = new List<KeyValuePair<string, JSONClass>>()
-            };
-            if (atom == null) return state;
-
-            JSONStorable geometry = atom.GetStorableByID("geometry");
-            if (geometry != null)
-            {
-                List<string> names = geometry.GetBoolParamNames();
-                if (names != null)
-                {
-                    foreach (string key in names)
-                    {
-                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                        string uid = key.Substring("clothing:".Length);
-                        if (!IsGarmentClothingUid(uid)) continue;
-                        JSONStorableBool b = geometry.GetBoolJSONParam(key);
-                        if (b != null) state.GarmentGeometryBools[key] = b.val;
-                    }
-                }
-            }
-
-            try
-            {
-                foreach (string sid in atom.GetStorableIDs())
-                {
-                    if (!IsClothingItemStorableId(sid)) continue;
-                    JSONStorable st = atom.GetStorableByID(sid);
-                    if (st == null) continue;
-                    JSONClass jc = null;
-                    try { jc = st.GetJSON(); } catch { continue; }
-                    string url = ExtractClothingUrlFromStorableJson(jc);
-                    if (string.IsNullOrEmpty(url) || !IsGarmentClothingUid(url)) continue;
-                    bool on = false;
-                    if (geometry != null)
-                    {
-                        foreach (var kv in state.GarmentGeometryBools)
-                        {
-                            if (!kv.Value) continue;
-                            string gUid = kv.Key.Substring("clothing:".Length);
-                            if (ClothingGeometryUrlsLikelyMatch(url, gUid)) { on = true; break; }
-                        }
-                    }
-                    if (!on) continue;
-                    state.GarmentClothingItemJsons.Add(new KeyValuePair<string, JSONClass>(sid, CloneJsonClass(jc)));
-                }
-            }
-            catch { }
-
-            try
-            {
-                JSONStorable cps = atom.GetStorableByID("ClothingPresets");
-                if (cps != null) state.ClothingPresetsJson = CloneJsonClass(cps.GetJSON());
-            }
-            catch { }
-
-            LogKeepGarmentSnapshotBuilt(atom, state);
-            return state;
-        }
-
-        private static void ApplyKeepGarmentAppearanceRestore(Atom atom, KeepGarmentAppearanceState state)
-        {
-            if (atom == null || state == null) return;
-            string atomLabel = "<atom>";
-            try { atomLabel = atom.name; } catch { }
-            if (state.GarmentGeometryBools != null && state.GarmentGeometryBools.Count > 0)
-            {
-                JSONStorable geo = atom.GetStorableByID("geometry");
-                if (geo == null)
-                {
-                    LogUtil.LogWarning($"[DragDropDebug][KeepGarment] immediate: geometry storable missing atom={atomLabel}");
-                }
-                else
-                {
-                    int gOk = 0, gMiss = 0;
-                    foreach (var kv in state.GarmentGeometryBools)
-                    {
-                        JSONStorableBool b = geo.GetBoolJSONParam(kv.Key);
-                        if (b != null) { b.val = kv.Value; gOk++; }
-                        else
-                        {
-                            gMiss++;
-                            LogUtil.LogVerboseUi($"[DragDropDebug][KeepGarment] immediate: geometry param missing key={kv.Key}");
-                        }
-                    }
-                    LogUtil.Log($"[DragDropDebug][KeepGarment] immediate: garmentGeometryBools applied={gOk} missingParam={gMiss} atom={atomLabel}");
-                }
-            }
-
-            RestoreKeepGarmentClothingPresetsAndItems(atom, state, "immediate");
-        }
-
-        private static IEnumerator DelayedKeepGarmentAppearanceRestoreAtom(string atomUid, KeepGarmentAppearanceState state)
-        {
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            if (string.IsNullOrEmpty(atomUid) || state == null) yield break;
-            try
-            {
-                Atom a = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null;
-                if (a != null)
-                {
-                    LogUtil.Log("[DragDropDebug][KeepGarment] delayed: second pass (3 frames after appearance load)");
-                    RestoreKeepGarmentClothingPresetsAndItems(a, state, "delayed");
-                }
-                else
-                {
-                    LogUtil.LogWarning("[DragDropDebug][KeepGarment] delayed: atom not found uid=" + atomUid);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning("[DragDropDebug][KeepGarment] DelayedKeepGarmentAppearanceRestore: " + ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// Capture the current body/morph/hair state of <paramref name="atom"/> so it can be restored after
-        /// a full appearance preset is applied in "clothes only" mode.  The <c>clothing:</c> keys are
-        /// intentionally excluded from the geometry snapshot so the preset's clothing remains in place.
-        /// </summary>
-        private static KeepBodyAppearanceState BuildKeepBodyAppearanceState(Atom atom)
-        {
-            if (atom == null) return null;
-            var state = new KeepBodyAppearanceState();
-
-            JSONStorable geom = null;
-            try { geom = atom.GetStorableByID("geometry"); } catch { }
-            if (geom != null)
-            {
-                JSONClass fullGeom = null;
-                try { fullGeom = geom.GetJSON()?.AsObject; } catch { }
-                if (fullGeom != null)
-                {
-                    JSONClass bodyGeom = CloneJsonClass(fullGeom);
-                    if (bodyGeom != null)
-                    {
-                        var keysToRemove = new List<string>();
-                        foreach (string key in bodyGeom.Keys)
-                        {
-                            if (key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase))
-                                keysToRemove.Add(key);
-                        }
-                        foreach (string k in keysToRemove)
-                            try { bodyGeom.Remove(k); } catch { }
-                        state.BodyGeometryJson = bodyGeom;
-                    }
-                }
-            }
-
-            JSONStorable hairPresets = null;
-            try { hairPresets = atom.GetStorableByID("HairPresets"); } catch { }
-            if (hairPresets != null)
-                try { state.HairPresetsJson = hairPresets.GetJSON()?.AsObject; } catch { }
-
-            string atomLabel = "<atom>";
-            try { atomLabel = atom.uid; } catch { }
-            int nBodyKeys = 0;
-            try { nBodyKeys = state.BodyGeometryJson != null ? state.BodyGeometryJson.Keys.Count() : 0; } catch { }
-            LogUtil.Log($"[DragDropDebug][ClothingOnly] Body snapshot built: atom={atomLabel} bodyGeomKeys={nBodyKeys} hairPresets={(state.HairPresetsJson != null ? "yes" : "no")}");
-            return state;
-        }
-
-        /// <summary>
-        /// After the full appearance preset has been applied in "clothes only" mode, restore the
-        /// body/morph/hair state captured by <see cref="BuildKeepBodyAppearanceState"/>.
-        /// The body JSON is restored first (which resets clothing booleans), then each
-        /// <see cref="KeepBodyAppearanceState.ClothingBoolsFromPreset"/> value is re-applied directly
-        /// via <c>JSONStorableBool.val</c> so VaM's clothing system sees the correct false→true
-        /// transitions and starts loading the preset's clothing items.
-        /// </summary>
-        private static void ApplyClothingOnlyBodyRestore(Atom atom, KeepBodyAppearanceState state, string phase)
-        {
-            if (atom == null || state == null) return;
-            string atomLabel = "<atom>";
-            try { atomLabel = atom.uid; } catch { }
-
-            JSONStorable geom = null;
-            if (state.BodyGeometryJson != null)
-            {
-                try { geom = atom.GetStorableByID("geometry"); } catch { }
-                if (geom != null)
-                {
-                    // Detect if restoring the body would trigger a character mesh reload (which unloads CPM clothing).
-                    string origChar = null;
-                    string currentChar = null;
-                    try { origChar = state.BodyGeometryJson["character"]?.Value; } catch { }
-                    try
-                    {
-                        JSONNode gj = geom.GetJSON();
-                        if (gj != null) currentChar = gj["character"]?.Value;
-                    }
-                    catch { }
-                    bool charWillChange = !string.IsNullOrEmpty(origChar) && !string.IsNullOrEmpty(currentChar) && origChar != currentChar;
-                    LogUtil.Log($"[DragDropDebug][ClothingOnly] {phase}: char orig={origChar ?? "null"} current={currentChar ?? "null"} willChange={charWillChange}");
-
-                    try
-                    {
-                        // Step 1: restore original body.
-                        // Use the 5-arg overload with setMissingToDefault=true so ALL params not
-                        // present in the body snapshot (preset morphs, eye color, skin textures, etc.)
-                        // are reset to their VaM defaults — matching the original person's state.
-                        geom.RestoreFromJSON(state.BodyGeometryJson, true, true, null, true);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogWarning($"[DragDropDebug][ClothingOnly] {phase}: geometry restore failed atom={atomLabel} — {ex.Message}");
-                    }
-
-                    // Step 2: clear ALL currently-active clothing bools to prevent accumulation from
-                    // previous applies (RestoreFromJSON uses setMissingToDefault=false by default,
-                    // so old bools survive the body restore and must be cleared explicitly).
-                    int cleared = 0;
-                    try
-                    {
-                        foreach (string bname in geom.GetBoolParamNames())
-                        {
-                            if (!bname.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                            JSONStorableBool jsb = null;
-                            try { jsb = geom.GetBoolJSONParam(bname); } catch { }
-                            if (jsb != null && jsb.val) { jsb.val = false; cleared++; }
-                        }
-                    }
-                    catch { }
-
-                    // Step 3: re-enable only the preset's non-cosmetic clothing items.
-                    int reapplied = 0;
-                    int skipped = 0;
-                    int skippedCosmetic = 0;
-                    if (state.ClothingBoolsFromPreset != null && state.ClothingBoolsFromPreset.Count > 0)
-                    {
-                        foreach (var kv in state.ClothingBoolsFromPreset)
-                        {
-                            if (!kv.Value) continue;
-                            string uid = kv.Key.Length > 9 ? kv.Key.Substring(9) : kv.Key; // strip "clothing:" prefix
-                            if (IsCosmeticClothingUidHeuristic(uid)) { skippedCosmetic++; continue; }
-                            try
-                            {
-                                JSONStorableBool jsb = geom.GetBoolJSONParam(kv.Key);
-                                if (jsb != null) { jsb.val = true; reapplied++; }
-                                else skipped++;
-                            }
-                            catch { skipped++; }
-                        }
-                    }
-
-                    // Count active clothing bools post-restore for diagnostics.
-                    int postRestoreActive = 0;
-                    try
-                    {
-                        foreach (string bn in geom.GetBoolParamNames())
-                        {
-                            if (!bn.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                            JSONStorableBool jsb2 = null;
-                            try { jsb2 = geom.GetBoolJSONParam(bn); } catch { }
-                            if (jsb2 != null && jsb2.val) postRestoreActive++;
-                        }
-                    }
-                    catch { }
-                    LogUtil.Log($"[DragDropDebug][ClothingOnly] {phase}: body geometry restored, cleared={cleared} reapplied={reapplied} skippedCosmetic={skippedCosmetic} skipped={skipped} activeAfterRestore={postRestoreActive} atom={atomLabel}");
-                }
-                else
-                {
-                    LogUtil.LogWarning($"[DragDropDebug][ClothingOnly] {phase}: geometry storable not found atom={atomLabel}");
-                }
-            }
-
-            if (state.HairPresetsJson != null)
-            {
-                JSONStorable hairPresets = null;
-                try { hairPresets = atom.GetStorableByID("HairPresets"); } catch { }
-                if (hairPresets != null)
-                {
-                    try
-                    {
-                        hairPresets.RestoreFromJSON(state.HairPresetsJson);
-                        LogUtil.Log($"[DragDropDebug][ClothingOnly] {phase}: HairPresets restored atom={atomLabel}");
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogWarning($"[DragDropDebug][ClothingOnly] {phase}: HairPresets restore failed atom={atomLabel} — {ex.Message}");
-                    }
-                }
-            }
-        }
-
-        private static IEnumerator DelayedClothingOnlyBodyRestoreAtom(string atomUid, KeepBodyAppearanceState state)
-        {
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            if (string.IsNullOrEmpty(atomUid) || state == null) yield break;
-            try
-            {
-                Atom a = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null;
-                if (a != null)
-                {
-                    LogUtil.Log("[DragDropDebug][ClothingOnly] delayed: second body-restore pass (3 frames after preset load)");
-                    ApplyClothingOnlyBodyRestore(a, state, "delayed");
-                }
-                else
-                {
-                    LogUtil.LogWarning("[DragDropDebug][ClothingOnly] delayed: atom not found uid=" + atomUid);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning("[DragDropDebug][ClothingOnly] DelayedClothingOnlyBodyRestore: " + ex.Message);
-            }
-        }
-
         private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)
         {
             string normalizedPath = UI.NormalizePath(path);
@@ -1603,12 +1327,6 @@ namespace VPB
                 }
             }
 
-            if (itemType == ItemType.Appearance)
-            {
-                string cfgM = VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace";
-                LogUtil.Log($"[DragDropDebug] Appearance clothing mode={appearanceMode} AppearanceClothingCfg={cfgM}");
-            }
-
             bool isPoseCategory = false;
             if (Panel != null)
             {
@@ -1633,16 +1351,41 @@ namespace VPB
 
             bool installed;
             var movedUids = new List<string>();
-            if (itemType == ItemType.Appearance && string.Equals(appearanceMode, "clothingOnly", StringComparison.Ordinal))
-                installed = SceneLoadingUtils.InstallHostPackageRecursive(FileEntry, movedUids);
-            else
-                installed = UI.EnsureInstalled(FileEntry, movedUids);
+            installed = UI.EnsureInstalled(FileEntry, movedUids);
 
             if (installed)
             {
                 MVR.FileManagement.FileManager.Refresh();
                 if (movedUids.Count > 0)
                     FileManager.NotifyInstalled(movedUids);
+            }
+
+            bool shouldPrewarmOnDemand =
+                itemType == ItemType.Clothing ||
+                itemType == ItemType.Hair ||
+                itemType == ItemType.ClothingItem ||
+                itemType == ItemType.HairItem ||
+                itemType == ItemType.ClothingPreset ||
+                itemType == ItemType.HairPreset ||
+                itemType == ItemType.Skin ||
+                itemType == ItemType.Pose ||
+                itemType == ItemType.Morphs;
+            if (shouldPrewarmOnDemand)
+            {
+                try
+                {
+                    SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath);
+                    if (ShouldForcePrewarmRefreshBeforeApply(itemType))
+                    {
+                        // First-click reliability: if prewarm queued a coalesced refresh, run it now
+                        // before one-shot preset/material lookup work starts.
+                        VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("pre_apply_prewarm_flush");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] Asset prewarm failed: " + ex.Message);
+                }
             }
 
             LogUtil.Log($"[DragDropDebug] Attempting to apply. FullPath: {normalizedPath}, LegacyPath: {legacyPath}, Installed: {installed}");
@@ -1666,77 +1409,7 @@ namespace VPB
                     }
                     catch { }
 
-                    if (itemType == ItemType.Appearance && atom.type == "Person")
-                    {
-                        if (string.Equals(appearanceMode, "clothingOnly", StringComparison.Ordinal))
-                        {
-                            // Scoped snapshot: only captures clothing state, so undo never touches hair
-                            PushUndoSnapshotForClothingOnly(atom);
-                        }
-                        else
-                        if (!PushUndoSnapshotForFullAtomState(atom))
-                        {
-                            LogUtil.LogWarning("[VPB] Full atom undo snapshot unavailable; falling back to storable snapshot for " + atom.uid);
-
-                            List<JSONClass> storableSnapshotsAll = new List<JSONClass>();
-                            JSONClass geometrySnapshotAll = null;
-                            JSONClass skinSnapshotAll = null;
-                            try
-                            {
-                                foreach (var sid in atom.GetStorableIDs())
-                                {
-                                    if (IsPluginLikeStorableId(sid)) continue;
-                                    JSONStorable s = null;
-                                    try { s = atom.GetStorableByID(sid); } catch { }
-                                    if (s == null) continue;
-                                    JSONClass snap = null;
-                                    try { snap = s.GetJSON(); } catch { }
-                                    if (snap != null)
-                                    {
-                                        if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) geometrySnapshotAll = snap;
-                                        if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) skinSnapshotAll = snap;
-                                    }
-                                    if (snap != null) storableSnapshotsAll.Add(snap);
-                                }
-                            }
-                            catch { }
-
-                            string atomUid = atom.uid;
-                            Panel.PushUndo(() =>
-                            {
-                                Atom targetAtom = null;
-                                try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
-                                if (targetAtom == null)
-                                {
-                                    LogUtil.LogError("[VPB] Undo failed: Atom " + atomUid + " not found.");
-                                    return;
-                                }
-
-                                for (int i = 0; i < storableSnapshotsAll.Count; i++)
-                                {
-                                    JSONClass snap = storableSnapshotsAll[i];
-                                    if (snap == null) continue;
-                                    string sid = null;
-                                    try { sid = snap["id"].Value; } catch { }
-                                    if (string.IsNullOrEmpty(sid)) continue;
-                                    if (IsPluginLikeStorableId(sid)) continue;
-                                    JSONStorable s = null;
-                                    try { s = targetAtom.GetStorableByID(sid); } catch { }
-                                    if (s == null) continue;
-                                    try { s.RestoreFromJSON(snap); } catch { }
-                                }
-
-                                try
-                                {
-                                    if (Panel != null) Panel.StartCoroutine(PostUndoPersonRefreshCoroutine(atomUid, geometrySnapshotAll, skinSnapshotAll, 5));
-                                }
-                                catch { }
-
-                                LogUtil.Log("[VPB] Undo performed on " + atomUid + " (AllStorables)");
-                            });
-                        }
-                    }
-                    else
+                    if (true)
                     {
                         // Only snapshot relevant storables to avoid breaking physics/scene state
                         // We primarily care about geometry (clothing/hair items) and StorableIds for presets
@@ -1843,6 +1516,20 @@ namespace VPB
                 }
             }
 
+            if (itemType == ItemType.Appearance)
+            {
+                ClothingApplyMode clothingMode = ClothingApplyMode.Replace;
+                if (string.Equals(appearanceMode, "keep", StringComparison.OrdinalIgnoreCase))
+                    clothingMode = ClothingApplyMode.Keep;
+                else if (string.Equals(appearanceMode, "clothingOnly", StringComparison.OrdinalIgnoreCase))
+                    clothingMode = ClothingApplyMode.ClothingOnly;
+                else if (string.Equals(appearanceMode, "merge", StringComparison.OrdinalIgnoreCase))
+                    clothingMode = ClothingApplyMode.Merge;
+
+                VpbImport.LoadPreset(FileEntry, atom, VpbResourceType.Appearance, clothingMode);
+                return;
+            }
+
             bool replaceMode = Panel != null && Panel.DragDropReplaceMode;
             bool isClothingOrHair = (itemType == ItemType.Clothing || itemType == ItemType.Hair || itemType == ItemType.ClothingItem || itemType == ItemType.HairItem || itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset);
             LogUtil.Log($"[DragDropDebug] Panel={Panel != null}, ReplaceMode={replaceMode}, ItemType={itemType}, IsClothingOrHair={isClothingOrHair}");
@@ -1918,22 +1605,6 @@ namespace VPB
                 LogUtil.Log($"[DragDropDebug] Add Mode (Replace OFF). Skipping overlap checks for {normalizedPath}");
             }
 
-            if (itemType == ItemType.Appearance && appearanceMode == "replace" && geometry != null)
-            {
-                foreach (var name in geometry.GetBoolParamNames())
-                {
-                    if (name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || name.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        JSONStorableBool p = geometry.GetBoolJSONParam(name);
-                        if (p != null) p.val = false;
-                    }
-                }
-            }
-            else if (itemType == ItemType.Appearance && appearanceMode == "clothingOnly")
-            {
-                ClearAtomGeometryGarmentClothingBools(atom);
-            }
-
             if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
             {
                 // Clothing/Hair Item Presets (.vap)
@@ -1944,7 +1615,7 @@ namespace VPB
 
             // Try to load as preset first (standard for Clothing/Hair presets and Poses)
             ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
-            if (ext == ".vap" || ext == ".json" || ext == ".vac" || (ext == ".vam" && itemType == ItemType.Appearance))
+            if (ext == ".vap" || ext == ".json" || ext == ".vac")
             {
                 string storableId = GetStorableIdForItemType(itemType);
                 if (storableId != null && atom.type == "Person")
@@ -1954,12 +1625,11 @@ namespace VPB
 
                     if (atom.presetManagerControls != null)
                     {
-                        bool isAppearance = itemType == ItemType.Appearance;
                         bool lockClothing = isPose;
                         bool lockMorphs = isPose;
 
                         // Clear all locks, and specifically lock what we don't want changed
-                        if (isPose || (isAppearance && appearanceMode == "replace"))
+                        if (isPose)
                         {
                             lockStore.StorePresetLocks(atom, true, lockClothing, lockMorphs);
                         }
@@ -2056,41 +1726,7 @@ namespace VPB
                                         }
                                     }
 
-                                    if (itemType == ItemType.Appearance && appearanceMode == "keep")
-                                    {
-                                        keepGarmentState = BuildKeepGarmentAppearanceState(atom);
-                                        if (presetJSON["storables"] != null)
-                                        {
-                                            JSONArray storables = presetJSON["storables"].AsArray;
-                                            JSONArray filteredStorables = new JSONArray();
-                                            foreach (JSONNode node in storables)
-                                            {
-                                                JSONClass sn = node as JSONClass;
-                                                if (sn == null) continue;
-                                                if (ShouldDropStorableFromKeepGarmentPreset(sn)) continue;
-                                                filteredStorables.Add(node);
-                                            }
-                                            presetJSON["storables"] = filteredStorables;
-                                            if (keepGarmentState != null)
-                                            {
-                                                InjectKeepGarmentGeometryIntoPresetGeometry(presetJSON, keepGarmentState);
-                                                AppendKeepGarmentStorablesToPreset(presetJSON, keepGarmentState);
-                                            }
-                                        }
-                                    }
-                                    else if (itemType == ItemType.Appearance && appearanceMode == "clothingOnly")
-                                    {
-                                        // Save full preset before filtering — we need the unfiltered version for the
-                                        // new snapshot+apply+restore approach (plugin-based clothing lives in plugin
-                                        // storables that the garment filter would otherwise discard).
-                                        fullPresetJSONForClothingOnly = CloneJsonClass(presetJSON);
-                                        FilterAppearancePresetToGarmentClothingOnly(presetJSON);
-                                        LogUtil.Log("[DragDropDebug] Appearance clothes-only: preset filtered to garment clothing storables");
-                                    }
-
-                                    string ensureDepsText = (itemType == ItemType.Appearance && string.Equals(appearanceMode, "clothingOnly", StringComparison.Ordinal))
-                                        ? BuildDependencyScanTextForAppearanceClothesOnly(presetJSON)
-                                        : presetJSON.ToString();
+                                    string ensureDepsText = presetJSON.ToString();
                                     if (FileButton.EnsureInstalledByText(ensureDepsText))
                                     {
                                         MVR.FileManagement.FileManager.Refresh();
@@ -2099,12 +1735,7 @@ namespace VPB
 
                                     LogUtil.Log($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");
 
-                                    if (itemType == ItemType.Appearance)
-                                    {
-                                        presetJSON["setUnlistedParamsToDefault"].AsBool = appearanceMode != "clothingOnly";
-                                    }
-
-                                        // Function to clean presets array (Shared logic)
+                                    // Function to clean presets array (Shared logic)
                                         void CleanPresets(JSONArray presets)
                                         {
                                             if (presets == null) return;
@@ -2165,6 +1796,7 @@ namespace VPB
                                         // This bypasses the complexity of storable actions + temp files
                                         try
                                         {
+                                            // VPB-refactor: native atom restore, deferred from import-unification
                                             if (itemType == ItemType.Pose)
                                             {
                                                 LogUtil.Log($"[DragDropDebug] Loading Pose via direct PresetManager injection (Bypassing temp files)");
@@ -2290,312 +1922,36 @@ namespace VPB
                                             // But if they are direct dumps, they usually have "id" matched or null.
                                             // The CleanPresets logic already handles "presets" vs "storables" vs direct.
                                             
-                                            // Ensure we are setting the last restored data so 'Undo' might work (or just system consistency)
-                                            atom.SetLastRestoredData(presetJSON, true, true);
-
-                                            if (itemType == ItemType.Appearance && appearanceMode == "clothingOnly")
+                                            bool ddReplaceMode = Panel != null && Panel.DragDropReplaceMode;
+                                            bool isPersonClothingPreset = itemType == ItemType.Clothing && ext == ".vap" && storableId == "ClothingPresets";
+                                            ClothingApplyMode mode = ClothingApplyMode.Merge;
+                                            if (itemType == ItemType.Pose) mode = ClothingApplyMode.Replace;
+                                            if (ddReplaceMode && isPersonClothingPreset)
                                             {
-                                                JSONClass fullPreset = fullPresetJSONForClothingOnly ?? presetJSON;
+                                                ClothingLoadingUtils.RemoveAllClothing(atom);
+                                                mode = ClothingApplyMode.Replace;
+                                            }
 
-                                                // ── Extract geometry node from the full preset ────────────────────────
-                                                JSONClass presetGeomNode = null;
-                                                if (fullPreset["storables"] != null)
-                                                {
-                                                    JSONArray arr = fullPreset["storables"].AsArray;
-                                                    if (arr != null)
+                                            VpbResourceType resType;
+                                            string storableOverride = null;
+                                            switch (itemType)
+                                            {
+                                                case ItemType.Pose:     resType = VpbResourceType.Pose;     break;
+                                                case ItemType.Clothing: resType = VpbResourceType.Clothing; break;
+                                                case ItemType.Hair:     resType = VpbResourceType.Hair;     break;
+                                                default:
+                                                    if (string.IsNullOrEmpty(storableId))
                                                     {
-                                                        for (int si = 0; si < arr.Count; si++)
-                                                        {
-                                                            JSONClass sn = arr[si] as JSONClass;
-                                                            if (sn != null && string.Equals(sn["id"]?.Value, "geometry", StringComparison.OrdinalIgnoreCase))
-                                                            { presetGeomNode = sn; break; }
-                                                        }
+                                                        LogUtil.LogWarning($"[VpbImport] No storableId resolved for itemType={itemType}; aborting.");
+                                                        return;
                                                     }
-                                                }
-
-                                                // Build geometry-only JSON containing just the garment clothing items.
-                                                // .vap files use a "clothing" array; legacy scene formats use "clothing:uid" bool keys.
-                                                JSONClass clothingBoolsGeom = new JSONClass();
-                                                clothingBoolsGeom["id"] = new JSONData("geometry");
-                                                int boolsTotal = 0, boolsActive = 0;
-                                                if (presetGeomNode != null)
-                                                {
-                                                    foreach (string key in presetGeomNode.Keys)
-                                                    {
-                                                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                                                        clothingBoolsGeom[key] = presetGeomNode[key];
-                                                        boolsTotal++;
-                                                        JSONNode v = presetGeomNode[key];
-                                                        bool bval = (v is JSONClass vc) ? (vc["val"]?.AsBool ?? false) : v.AsBool;
-                                                        if (bval) boolsActive++;
-                                                    }
-                                                    if (boolsTotal == 0 && presetGeomNode["clothing"] != null)
-                                                    {
-                                                        JSONArray srcArr = presetGeomNode["clothing"].AsArray;
-                                                        JSONArray filteredArr = new JSONArray();
-                                                        if (srcArr != null)
-                                                        {
-                                                            for (int ci = 0; ci < srcArr.Count; ci++)
-                                                            {
-                                                                JSONClass item = srcArr[ci] as JSONClass;
-                                                                if (item == null) continue;
-                                                                string uid = item["id"]?.Value ?? "";
-                                                                if (!IsGarmentClothingUid(uid)) continue;
-                                                                filteredArr.Add(item);
-                                                                boolsTotal++;
-                                                                JSONNode av = item["active"];
-                                                                if (av != null && (av.AsBool || av.Value == "1")) boolsActive++;
-                                                            }
-                                                        }
-                                                        if (filteredArr.Count > 0)
-                                                            clothingBoolsGeom["clothing"] = filteredArr;
-                                                    }
-                                                }
-
-                                                // Build plugins-only preset (MVRPluginManager) for plugin-based clothing.
-                                                JSONClass pluginsOnlyPreset = null;
-                                                if (fullPreset["storables"] != null)
-                                                {
-                                                    JSONArray arr = fullPreset["storables"].AsArray;
-                                                    if (arr != null)
-                                                    {
-                                                        JSONArray pluginStorables = new JSONArray();
-                                                        for (int si = 0; si < arr.Count; si++)
-                                                        {
-                                                            JSONClass sn = arr[si] as JSONClass;
-                                                            if (sn == null) continue;
-                                                            if (string.Equals(sn["id"]?.Value, "MVRPluginManager", StringComparison.OrdinalIgnoreCase))
-                                                                pluginStorables.Add(CloneJsonClass(sn));
-                                                        }
-                                                        if (pluginStorables.Count > 0)
-                                                        {
-                                                            pluginsOnlyPreset = CloneJsonClass(fullPreset);
-                                                            pluginsOnlyPreset["storables"] = pluginStorables;
-                                                        }
-                                                    }
-                                                }
-
-                                                LogUtil.Log($"[DragDropDebug][ClothingOnly] boolsInPreset={boolsTotal} activeInPreset={boolsActive} hasPlugins={pluginsOnlyPreset != null}");
-
-                                                // Apply ClothingPresets from the appearance preset BEFORE activating clothing items.
-                                                // Items read ClothingPresets on first activation; pre-setting it ensures they load
-                                                // with the configured sub-preset (colour variant, etc.) rather than the base default.
-                                                JSONArray fullStorablesEarly = fullPreset["storables"] != null ? fullPreset["storables"].AsArray : null;
-                                                for (int siEarly = 0; fullStorablesEarly != null && siEarly < fullStorablesEarly.Count; siEarly++)
-                                                {
-                                                    JSONClass snEarly = fullStorablesEarly[siEarly] as JSONClass;
-                                                    if (snEarly == null) continue;
-                                                    if (!string.Equals(snEarly["id"]?.Value, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) continue;
-                                                    JSONStorable cpsEarly = atom.GetStorableByID("ClothingPresets");
-                                                    if (cpsEarly != null)
-                                                    {
-                                                        try
-                                                        {
-                                                            try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath); } catch { }
-                                                            cpsEarly.RestoreFromJSON(snEarly);
-                                                            LogUtil.Log("[DragDropDebug][ClothingOnly] ClothingPresets pre-applied from preset before item activation");
-                                                        }
-                                                        catch { }
-                                                        finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
-                                                    }
+                                                    resType = VpbResourceType.General;
+                                                    storableOverride = storableId;
                                                     break;
-                                                }
-
-                                                ClearAtomGeometryGarmentClothingBools(atom);
-                                                try
-                                                {
-                                                    JSONStorable geom = atom.GetStorableByID("geometry");
-                                                    if (geom != null)
-                                                    {
-                                                        // setMissingToDefault=false ensures only supplied clothing keys change;
-                                                        // character, morphs, skin, hair, eye colour are untouched.
-                                                        geom.RestoreFromJSON(clothingBoolsGeom, true, true, null, false);
-                                                        presetLoaded = true;
-
-                                                        // Apply per-item material/subpreset storables from the full preset.
-                                                        // Preset storable IDs use "{Creator}:{AssetFileBase}{Suffix}" (e.g. "JackyCracky:Zelda_BootsMaterialCombined").
-                                                        // Build a prefix set from garment UIDs to match and restore only garment storables.
-                                                        JSONArray fullStorables = fullPreset["storables"] != null ? fullPreset["storables"].AsArray : null;
-                                                        if (fullStorables != null)
-                                                        {
-                                                            HashSet<string> garmentPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                                            JSONArray clothingArr = clothingBoolsGeom["clothing"] != null ? clothingBoolsGeom["clothing"].AsArray : null;
-                                                            if (clothingArr != null)
-                                                                for (int ci2 = 0; ci2 < clothingArr.Count; ci2++)
-                                                                {
-                                                                    JSONClass citem = clothingArr[ci2] as JSONClass;
-                                                                    string cuid = citem?["id"]?.Value ?? "";
-                                                                    if (!string.IsNullOrEmpty(cuid)) BuildGarmentPrefix(cuid, garmentPrefixes);
-                                                                }
-                                                            foreach (string bkey in clothingBoolsGeom.Keys)
-                                                                if (bkey.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase))
-                                                                    BuildGarmentPrefix(bkey.Substring("clothing:".Length), garmentPrefixes);
-
-                                                            if (garmentPrefixes.Count > 0)
-                                                            {
-                                                                int subCount = 0;
-                                                                try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath); } catch { }
-                                                                try
-                                                                {
-                                                                    for (int si2 = 0; si2 < fullStorables.Count; si2++)
-                                                                    {
-                                                                        JSONClass sn2 = fullStorables[si2] as JSONClass;
-                                                                        if (sn2 == null) continue;
-                                                                        string sid = sn2["id"]?.Value ?? "";
-                                                                        bool match = false;
-                                                                        foreach (string pfx in garmentPrefixes)
-                                                                            if (sid.StartsWith(pfx, StringComparison.OrdinalIgnoreCase)) { match = true; break; }
-                                                                        if (!match) continue;
-                                                                        JSONStorable cs = atom.GetStorableByID(sid);
-                                                                        if (cs != null) { try { cs.RestoreFromJSON(sn2); subCount++; } catch { } }
-                                                                    }
-                                                                }
-                                                                finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
-                                                                LogUtil.Log($"[DragDropDebug][ClothingOnly] subpreset storables applied: {subCount}");
-
-                                                                // If items weren't loaded yet (subCount==0), schedule a delayed pass
-                                                                // that polls until the material storables appear on the atom.
-                                                                if (subCount == 0)
-                                                                {
-                                                                    string atomUidDelay = null;
-                                                                    try { atomUidDelay = atom.uid; } catch { }
-                                                                    if (!string.IsNullOrEmpty(atomUidDelay) && SuperController.singleton != null)
-                                                                    {
-                                                                        var pendingList = new List<KeyValuePair<string, JSONClass>>();
-                                                                        for (int si3 = 0; si3 < fullStorables.Count; si3++)
-                                                                        {
-                                                                            JSONClass sn3 = fullStorables[si3] as JSONClass;
-                                                                            if (sn3 == null) continue;
-                                                                            string sid3 = sn3["id"]?.Value ?? "";
-                                                                            bool match3 = false;
-                                                                            foreach (string pfx3 in garmentPrefixes)
-                                                                                if (sid3.StartsWith(pfx3, StringComparison.OrdinalIgnoreCase)) { match3 = true; break; }
-                                                                            if (match3) pendingList.Add(new KeyValuePair<string, JSONClass>(sid3, CloneJsonClass(sn3)));
-                                                                        }
-                                                                        if (pendingList.Count > 0)
-                                                                        {
-                                                                            JSONClass cpJsonDelay = null;
-                                                                            for (int si4 = 0; si4 < fullStorables.Count; si4++)
-                                                                            {
-                                                                                JSONClass sn4 = fullStorables[si4] as JSONClass;
-                                                                                if (sn4 != null && string.Equals(sn4["id"]?.Value, "ClothingPresets", StringComparison.OrdinalIgnoreCase))
-                                                                                { cpJsonDelay = CloneJsonClass(sn4); break; }
-                                                                            }
-                                                                            var pendingState = new PendingClothingOnlySubpresetState
-                                                                            {
-                                                                                AtomUid = atomUidDelay,
-                                                                                StorablesToApply = pendingList,
-                                                                                ClothingPresetsJson = cpJsonDelay,
-                                                                                LoadDirPath = normalizedPath
-                                                                            };
-                                                                            SuperController.singleton.StartCoroutine(DelayedClothingOnlySubpresetRestoreCoroutine(pendingState));
-                                                                            LogUtil.Log($"[DragDropDebug][ClothingOnly] scheduled delayed subpreset restore for {pendingList.Count} storables");
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    LogUtil.LogWarning($"[DragDropDebug][ClothingOnly] geometry restore failed: {ex.Message}");
-                                                }
-
-                                                if (pluginsOnlyPreset != null)
-                                                {
-                                                    try
-                                                    {
-                                                        MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
-                                                        presetManager.LoadPresetFromJSON(pluginsOnlyPreset, false);
-                                                        presetLoaded = true;
-                                                    }
-                                                    catch (Exception ex)
-                                                    {
-                                                        LogUtil.LogWarning($"[DragDropDebug][ClothingOnly] plugins apply failed: {ex.Message}");
-                                                    }
-                                                    finally
-                                                    {
-                                                        MVR.FileManagement.FileManager.PopLoadDir();
-                                                    }
-                                                }
-
-                                                keepBodyState = null;
-                                            }
-                                            else
-                                            {
-                                                bool merge = true;
-                                                // keep: merge=false so morphs/hair/skin replace from preset; garments come from injected snapshot in JSON (merge=true would compound morphs/hair).
-                                                if (itemType == ItemType.Appearance)
-                                                    merge = (appearanceMode == "merge");
-                                                else if (itemType == ItemType.Pose) merge = false;
-
-                                                bool ddReplaceMode = Panel != null && Panel.DragDropReplaceMode;
-                                                bool isPersonClothingPreset = itemType == ItemType.Clothing && ext == ".vap" && storableId == "ClothingPresets";
-                                                if (ddReplaceMode && isPersonClothingPreset)
-                                                {
-                                                    ClothingLoadingUtils.RemoveAllClothing(atom);
-                                                    merge = false;
-                                                }
-
-                                                if (itemType == ItemType.Appearance && appearanceMode == "keep")
-                                                {
-                                                    // Apply ClothingPresetsJson BEFORE LoadPresetFromJSON so that when geometry bools
-                                                    // activate clothing items, they read the correct sub-preset selection rather than base.
-                                                    if (keepGarmentState?.ClothingPresetsJson != null)
-                                                    {
-                                                        JSONStorable cpsKeep = atom.GetStorableByID("ClothingPresets");
-                                                        if (cpsKeep != null)
-                                                        {
-                                                            try
-                                                            {
-                                                                try { MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath); } catch { }
-                                                                cpsKeep.RestoreFromJSON(keepGarmentState.ClothingPresetsJson);
-                                                                LogUtil.Log("[DragDropDebug] Appearance keep: ClothingPresets pre-applied before LoadPresetFromJSON");
-                                                            }
-                                                            catch { }
-                                                            finally { try { MVR.FileManagement.FileManager.PopLoadDir(); } catch { } }
-                                                        }
-                                                    }
-                                                    LogUtil.Log($"[DragDropDebug] Appearance keep: LoadPresetFromJSON merge={merge} (garment state injected into preset JSON; post-restore still runs)");
-                                                }
-                                                LogUtil.Log($"[DragDropDebug] Calling LoadPresetFromJSON (merge={merge})...");
-                                                try
-                                                {
-                                                    MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
-                                                    presetManager.LoadPresetFromJSON(presetJSON, merge);
-                                                    presetLoaded = true;
-                                                }
-                                                finally
-                                                {
-                                                    MVR.FileManagement.FileManager.PopLoadDir();
-                                                }
-                                                LogUtil.Log($"[DragDropDebug] Successfully loaded preset via PresetManager.LoadPresetFromJSON");
                                             }
 
-                                            if (itemType == ItemType.Appearance && appearanceMode == "keep" && keepGarmentState != null)
-                                            {
-                                                ApplyKeepGarmentAppearanceRestore(atom, keepGarmentState);
-                                                try
-                                                {
-                                                    string uid = null;
-                                                    try { uid = atom.uid; } catch { }
-                                                    if (!string.IsNullOrEmpty(uid) && SuperController.singleton != null)
-                                                        SuperController.singleton.StartCoroutine(DelayedKeepGarmentAppearanceRestoreAtom(uid, keepGarmentState));
-                                                }
-                                                catch (Exception ex)
-                                                {
-                                                    LogUtil.LogWarning("[DragDropDebug] Keep-garment delayed restore schedule failed: " + ex.Message);
-                                                }
-                                            }
-
-                                            if (itemType == ItemType.Appearance && appearanceMode == "clothingOnly" && keepBodyState != null)
-                                            {
-                                                // The immediate restore was already done inside the clothingOnly block above;
-                                                // this is a safety second pass in case LoadPresetFromJSON triggered
-                                                // synchronous storable callbacks that overwrote the body params.
-                                                ApplyClothingOnlyBodyRestore(atom, keepBodyState, "post-load");
-                                            }
+                                            VpbImport.LoadPreset(FileEntry, atom, resType, mode, presetJC: presetJSON, storableNameOverride: storableOverride);
+                                            presetLoaded = true;
 
                                             // Post-fixup: after applying appearance/clothing/morph/pose presets, reset sim clothing.
                                             // This helps ensure clothing respects updated body physics/colliders.
@@ -2644,36 +2000,13 @@ namespace VPB
 
             if (geometry != null)
             {
-                // Helper to try toggling
-                bool TryToggle(string p)
-                {
-                    string paramName = "clothing:" + p;
-                    JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
-                    if (param != null) 
-                    {
-                        LogUtil.Log($"[DragDropDebug] Found clothing param: {paramName}, setting to true.");
-                        param.val = true;
-                        return true;
-                    }
-                    paramName = "hair:" + p;
-                    param = geometry.GetBoolJSONParam(paramName);
-                    if (param != null)
-                    {
-                        LogUtil.Log($"[DragDropDebug] Found hair param: {paramName}, setting to true.");
-                        param.val = true;
-                        return true;
-                    }
-                    LogUtil.Log($"[DragDropDebug] Param not found: {paramName}");
-                    return false;
-                }
-
                 LogUtil.Log($"[DragDropDebug] Trying legacy toggle with: {legacyPath}");
-                if (TryToggle(legacyPath)) return;
+                if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug]")) return;
 
                 if (normalizedPath != legacyPath)
                 {
                     LogUtil.Log($"[DragDropDebug] Trying legacy toggle with full path: {normalizedPath}");
-                    if (TryToggle(normalizedPath)) return;
+                    if (TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug]")) return;
                 }
 
                 // Try .vaj replacement for .vam (legacy handling)
@@ -2681,20 +2014,144 @@ namespace VPB
                 {
                     string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
                     LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with: {vajPath}");
-                    if (TryToggle(vajPath)) return;
+                    if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug]")) return;
 
                     if (normalizedPath != legacyPath)
                     {
                         string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
                         LogUtil.Log($"[DragDropDebug] Trying .vaj toggle with full path: {vajFullPath}");
-                        if (TryToggle(vajFullPath)) return;
+                        if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug]")) return;
                     }
+                }
+
+                // On-demand registration can queue a delayed FileManager.Refresh; during that window
+                // geometry bools are not yet populated, so first click can miss.
+                // Retry briefly so the same click still succeeds once handlers finish.
+                if (ShouldRetryLegacyToggle(itemType) && SuperController.singleton != null && atom != null)
+                {
+                    string atomUid = atom.uid;
+                    SuperController.singleton.StartCoroutine(RetryLegacyToggleAfterRefreshCoroutine(atomUid, legacyPath, normalizedPath, ext));
                 }
             }
             else
             {
                 LogUtil.Log("[DragDropDebug] Geometry storable not found on atom.");
             }
+        }
+
+        private IEnumerator RetryLegacyToggleAfterRefreshCoroutine(string atomUid, string legacyPath, string normalizedPath, string ext)
+        {
+            if (string.IsNullOrEmpty(atomUid)) yield break;
+
+            DateTime start = DateTime.UtcNow;
+            bool loggedWait = false;
+            while ((DateTime.UtcNow - start).TotalSeconds < 5.0)
+            {
+                Atom atom = null;
+                try { atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
+                if (atom == null) yield break;
+
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { }
+                if (geometry != null)
+                {
+                    if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug] Deferred toggle")) yield break;
+                    if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal)
+                        && TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug] Deferred toggle")) yield break;
+
+                    if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
+                        if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug] Deferred toggle")) yield break;
+                        if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal))
+                        {
+                            string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
+                            if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug] Deferred toggle")) yield break;
+                        }
+                    }
+                }
+
+                if (!loggedWait)
+                {
+                    LogUtil.Log($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
+                    loggedWait = true;
+                }
+
+                yield return new WaitForSeconds(0.15f);
+            }
+
+            LogUtil.LogWarning($"[DragDropDebug] Deferred toggle timed out waiting for param: {legacyPath}");
+        }
+
+        private static bool TryToggleLegacyClothingHairParam(JSONStorable geometry, string path, string logPrefix)
+        {
+            if (geometry == null || string.IsNullOrEmpty(path)) return false;
+
+            string paramName = "clothing:" + path;
+            JSONStorableBool param = geometry.GetBoolJSONParam(paramName);
+            if (param != null)
+            {
+                LogUtil.Log($"{logPrefix} found clothing param: {paramName}, setting to true.");
+                param.val = true;
+                return true;
+            }
+
+            paramName = "hair:" + path;
+            param = geometry.GetBoolJSONParam(paramName);
+            if (param != null)
+            {
+                LogUtil.Log($"{logPrefix} found hair param: {paramName}, setting to true.");
+                param.val = true;
+                return true;
+            }
+
+            // Fallback: some VaM builds/store variants expose bool names that don't match the file path exactly.
+            // Best-effort scan for any bool whose suffix matches the provided path.
+            try
+            {
+                string p0 = path.Replace('\\', '/');
+                string p1 = p0;
+                while (p1.StartsWith("/")) p1 = p1.Substring(1);
+                foreach (var n in geometry.GetBoolParamNames())
+                {
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (!(n.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase) || n.StartsWith("hair:", StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    if (n.EndsWith(path, StringComparison.OrdinalIgnoreCase) || n.EndsWith(p0, StringComparison.OrdinalIgnoreCase) || n.EndsWith(p1, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var p = geometry.GetBoolJSONParam(n);
+                        if (p != null)
+                        {
+                            LogUtil.Log($"{logPrefix} found param by suffix match: {n}, setting to true.");
+                            p.val = true;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            LogUtil.Log($"{logPrefix} param not found: {paramName}");
+            return false;
+        }
+
+        private static bool ShouldRetryLegacyToggle(ItemType itemType)
+        {
+            return itemType == ItemType.Clothing
+                || itemType == ItemType.Hair
+                || itemType == ItemType.ClothingItem
+                || itemType == ItemType.HairItem;
+        }
+
+        private static bool ShouldForcePrewarmRefreshBeforeApply(ItemType itemType)
+        {
+            return itemType == ItemType.Appearance
+                || itemType == ItemType.Clothing
+                || itemType == ItemType.Hair
+                || itemType == ItemType.ClothingPreset
+                || itemType == ItemType.HairPreset
+                || itemType == ItemType.ClothingItem
+                || itemType == ItemType.HairItem;
         }
 
         private void CreateGhost(PointerEventData eventData)
@@ -2705,6 +2162,8 @@ namespace VPB
 
              ghostRenderer = null;
              ghostImg = null;
+             ghostText = null;
+             ghostBorder = null;
 
              // 8b — resolve thumbnail texture; fall back to memory cache if async load is still pending
              Texture ghostTex = GetGhostTexture();
@@ -2714,92 +2173,19 @@ namespace VPB
 
              if (fixedMode)
              {
-                 ghostObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                 ghostObject.name = "DragGhost";
-                 ghostObject.layer = 2;
-                 Collider c = null;
-                 try { c = ghostObject.GetComponent<Collider>(); } catch { }
-                 try { if (c != null) Destroy(c); } catch { }
-
-                 try
+                 // Fixed-mode ghost renders in world space.
+                 CreateGhostUi(ghostTex, null, true);
+                 if (ghostObject != null)
                  {
-                     ghostRenderer = ghostObject.GetComponent<Renderer>();
-                     if (ghostRenderer != null)
-                     {
-                         // 8b — use Sprites/Default (always available, unlit, alpha-blended)
-                         Shader ghostShader = Shader.Find("Sprites/Default");
-                         if (ghostShader == null) ghostShader = Shader.Find("Unlit/Transparent");
-                         Material m = new Material(ghostShader);
-                         m.mainTexture = ghostTex;
-                         // hide the quad until we have a real texture to avoid a white flash
-                         m.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.9f) : Color.clear;
-                         ghostRenderer.material = m;
-                         ghostRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                         ghostRenderer.receiveShadows = false;
-                     }
+                     var rt = ghostObject.GetComponent<RectTransform>();
+                     if (rt != null) rt.localScale = new Vector3(0.0022f, 0.0022f, 0.0022f);
                  }
-                 catch { }
-
-                 try { ghostObject.transform.localScale = new Vector3(0.22f, 0.22f, 0.22f); } catch { }
              }
              else
              {
-                 ghostObject = new GameObject("DragGhost");
-
                  Canvas rootCanvas = GetComponentInParent<Canvas>();
                  if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
-
-                 if (rootCanvas != null)
-                 {
-                     ghostObject.transform.SetParent(rootCanvas.transform, false);
-                     ghostObject.layer = rootCanvas.gameObject.layer;
-                     ghostObject.transform.localScale = Vector3.one;
-                 }
-
-                 ghostBorder = ghostObject.AddComponent<Image>();
-                 ghostBorder.raycastTarget = false;
-                 ghostBorder.color = new Color(1, 1, 1, 0.2f);
-
-                 GameObject textGO = new GameObject("ActionText");
-                 textGO.transform.SetParent(ghostObject.transform, false);
-                 ghostText = textGO.AddComponent<Text>();
-                 ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                 ghostText.fontSize = 24;
-                 ghostText.color = Color.white;
-                 ghostText.alignment = TextAnchor.UpperCenter;
-                 ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                 ghostText.verticalOverflow = VerticalWrapMode.Overflow;
-
-                 textGO.AddComponent<Outline>().effectColor = Color.black;
-
-                 RectTransform textRT = textGO.GetComponent<RectTransform>();
-                 textRT.anchorMin = new Vector2(0.5f, 0);
-                 textRT.anchorMax = new Vector2(0.5f, 0);
-                 textRT.pivot = new Vector2(0.5f, 1);
-                 textRT.anchoredPosition = new Vector2(0, -10);
-                 textRT.sizeDelta = new Vector2(400, 60);
-
-                 GameObject contentGO = new GameObject("Content");
-                 contentGO.transform.SetParent(ghostObject.transform, false);
-                 contentGO.layer = ghostObject.layer;
-                 RawImage img = contentGO.AddComponent<RawImage>();
-                 img.raycastTarget = false;
-                 // 8b — hide until we have a real texture; coroutine restores color when it arrives
-                 img.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.7f) : Color.clear;
-                 img.texture = ghostTex;
-                 ghostImg = img; // 8b — store for late texture update
-
-                 RectTransform rt = ghostObject.GetComponent<RectTransform>();
-                 if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
-                 rt.sizeDelta = new Vector2(80, 80);
-                 rt.pivot = new Vector2(0.5f, 0.5f);
-
-                 RectTransform contentRT = contentGO.GetComponent<RectTransform>();
-                 if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
-                 contentRT.anchorMin = Vector2.zero;
-                 contentRT.anchorMax = Vector2.one;
-                 contentRT.offsetMin = new Vector2(5, 5);
-                 contentRT.offsetMax = new Vector2(-5, -5);
+                 CreateGhostUi(ghostTex, rootCanvas, false);
              }
 
              // 8b — if texture was unavailable at drag start, poll until ThumbnailImage loads it
@@ -2808,6 +2194,85 @@ namespace VPB
              planeDistance = Vector3.Dot(transform.position - cam.transform.position, cam.transform.forward);
 
              UpdateGhost(eventData, null, planeDistance);
+        }
+
+        private void CreateGhostUi(Texture ghostTex, Canvas parentCanvasOrNull, bool worldSpace)
+        {
+            try
+            {
+                ghostObject = new GameObject("DragGhost");
+
+                if (worldSpace)
+                {
+                    ghostObject.layer = 2;
+                    var wc = ghostObject.AddComponent<Canvas>();
+                    wc.renderMode = RenderMode.WorldSpace;
+                    wc.sortingOrder = 5000;
+                    ghostObject.AddComponent<CanvasRenderer>();
+                }
+                else
+                {
+                    if (parentCanvasOrNull != null)
+                    {
+                        ghostObject.transform.SetParent(parentCanvasOrNull.transform, false);
+                        ghostObject.layer = parentCanvasOrNull.gameObject.layer;
+                        ghostObject.transform.localScale = Vector3.one;
+                    }
+                }
+
+                ghostBorder = ghostObject.AddComponent<Image>();
+                ghostBorder.raycastTarget = false;
+                ghostBorder.color = new Color(1, 1, 1, 0.2f);
+
+                GameObject textGO = new GameObject("ActionText");
+                textGO.transform.SetParent(ghostObject.transform, false);
+                ghostText = textGO.AddComponent<Text>();
+                ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                ghostText.fontSize = 24;
+                ghostText.color = Color.white;
+                ghostText.alignment = TextAnchor.UpperCenter;
+                ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+                textGO.AddComponent<Outline>().effectColor = Color.black;
+
+                RectTransform textRT = textGO.GetComponent<RectTransform>();
+                textRT.anchorMin = new Vector2(0.5f, 0);
+                textRT.anchorMax = new Vector2(0.5f, 0);
+                textRT.pivot = new Vector2(0.5f, 1);
+                textRT.anchoredPosition = new Vector2(0, -10);
+                textRT.sizeDelta = new Vector2(400, 60);
+                // Desktop: keep fontSize high for glyph detail, scale transform down for ~3x smaller label.
+                bool vr = VPB.src.util.XrUtils.IsVrActive();
+                if (!vr) textRT.localScale = new Vector3(0.3333f, 0.3333f, 1f);
+
+                GameObject contentGO = new GameObject("Content");
+                contentGO.transform.SetParent(ghostObject.transform, false);
+                contentGO.layer = ghostObject.layer;
+                RawImage img = contentGO.AddComponent<RawImage>();
+                img.raycastTarget = false;
+                img.color = ghostTex != null ? new Color(1f, 1f, 1f, 0.7f) : Color.clear;
+                img.texture = ghostTex;
+                ghostImg = img;
+
+                RectTransform rt = ghostObject.GetComponent<RectTransform>();
+                if (rt == null) rt = ghostObject.AddComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(80, 80);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+
+                RectTransform contentRT = contentGO.GetComponent<RectTransform>();
+                if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
+                contentRT.anchorMin = Vector2.zero;
+                contentRT.anchorMax = Vector2.one;
+                contentRT.offsetMin = new Vector2(5, 5);
+                contentRT.offsetMax = new Vector2(-5, -5);
+            }
+            catch
+            {
+                ghostObject = null;
+                ghostBorder = null;
+                ghostText = null;
+                ghostImg = null;
+            }
         }
 
         // 8b — returns the best available thumbnail texture at drag start
@@ -2833,13 +2298,12 @@ namespace VPB
         private string GetThumbnailImgPath()
         {
             if (FileEntry == null) return null;
-            string lowerPath = FileEntry.Path.ToLowerInvariant();
-            if (lowerPath.EndsWith(".jpg") || lowerPath.EndsWith(".png"))
+            if (FileEntry is PackageListEntry) return null;
+            string p = FileEntry.Path ?? "";
+            if (p.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
                 return FileEntry.Path;
             string testJpg = Path.ChangeExtension(FileEntry.Path, ".jpg");
             if (FileManager.FileExists(testJpg)) return testJpg;
-            string testPng = Path.ChangeExtension(FileEntry.Path, ".png");
-            if (FileManager.FileExists(testPng)) return testPng;
             return null;
         }
 
@@ -2876,7 +2340,7 @@ namespace VPB
              if (cam == null) cam = Camera.main;
              if (ghostObject == null || cam == null) return;
              
-             bool isValidTarget = (atom != null && atom.type == "Person");
+             bool isValidTarget = (atom != null && SceneUtils.IsPersonLikeAtom(atom));
 
              if (HubItem != null)
              {
@@ -2966,14 +2430,15 @@ namespace VPB
                          else typeStr = "Item";
                      }
 
-                     if (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair))
+                     bool replace = (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair));
+                     if (replace)
                      {
                          ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
                          ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
                      }
                      else
                      {
-                         string action = (itemType == ItemType.Pose) ? "Applying" : "Adding";
+                         string action = GetDragActionVerb(itemType, false);
                          ghostText.text = $"{action} {typeStr} to\n" + atom.name;
                          ghostText.color = new Color(0.5f, 1f, 0.5f); // Greenish
                      }
@@ -3083,8 +2548,7 @@ namespace VPB
              else
              {
                  // In desktop, ensure it's at least 0.4m away so it doesn't fill the screen
-                 bool isVr = UnityEngine.XR.XRSettings.enabled;
-                 if (!isVr)
+                 if (!VPB.src.util.XrUtils.IsVrActive())
                  {
                      finalDist = Mathf.Max(distance, 0.4f);
                  }

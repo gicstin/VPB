@@ -8,9 +8,46 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private static readonly int SortTypeCount = Enum.GetValues(typeof(SortType)).Length;
+
+        private void ApplyHistorySortPresetForMode(GalleryHistoryFilterMode mode)
+        {
+            SortState st = GetSortState("Files");
+            if (st == null) return;
+
+            if (mode == GalleryHistoryFilterMode.MostUsed)
+            {
+                st.Type = SortType.UsageCount;
+                st.Direction = SortDirection.Descending;
+                ShowTemporaryStatus(VPBTranslation.T("gallery.history.sort_preset_most_used", "History sort preset: Usage count (desc)."), 1.8f);
+            }
+            else
+            {
+                st.Type = SortType.Date;
+                st.Direction = SortDirection.Descending;
+                ShowTemporaryStatus(VPBTranslation.T("gallery.history.sort_preset_recent", "History sort preset: Last used (desc)."), 1.8f);
+            }
+
+            SaveSortState("Files", st);
+            UpdateSortButtonText(fileSortTypeText, fileSortDirText, st);
+        }
+
         private void ToggleRatingSort()
         {
             isRatingSortToggleEnabled = !isRatingSortToggleEnabled;
+            ApplyRatingSortFilterChange();
+        }
+
+        /// <summary>Right-click on ★ while rated-only filter active: turn filter off without toggling on.</summary>
+        private void DisableRatingSortFilterIfEnabled()
+        {
+            if (!isRatingSortToggleEnabled) return;
+            isRatingSortToggleEnabled = false;
+            ApplyRatingSortFilterChange();
+        }
+
+        private void ApplyRatingSortFilterChange()
+        {
             SyncRatingSortToggleState();
             if (IsFilterActive)
             {
@@ -31,15 +68,26 @@ namespace VPB
                 Sprite target = isRatingSortToggleEnabled ? ratingStarOffSprite : ratingStarNormalSprite;
                 if (target != null) ratingSortIconImage.sprite = target;
             }
+            if (ratingSortToggleBtn != null)
+            {
+                Image backdrop = ratingSortToggleBtn.GetComponent<Image>();
+                if (backdrop != null)
+                {
+                    backdrop.color = isRatingSortToggleEnabled
+                        ? ColorHistoryAccent
+                        : new Color(0.15f, 0.15f, 0.15f, 1f);
+                }
+            }
         }
 
         private SortState GetSortState(string context)
         {
-            if (!contentSortStates.ContainsKey(context))
+            if (!contentSortStates.TryGetValue(context, out SortState state) || state == null)
             {
-                contentSortStates[context] = GallerySortManager.Instance.GetDefaultSortState(context);
+                state = GallerySortManager.Instance.GetDefaultSortState(context);
+                contentSortStates[context] = state;
             }
-            return contentSortStates[context];
+            return state;
         }
 
         // Overload: Old method for backward compatibility
@@ -52,12 +100,11 @@ namespace VPB
         {
             var state = GetSortState(context);
             int currentType = (int)state.Type;
-            int maxType = Enum.GetNames(typeof(SortType)).Length;
 
             SortType nextType = state.Type;
             do
             {
-                currentType = (currentType + 1) % maxType;
+                currentType = (currentType + 1) % SortTypeCount;
                 nextType = (SortType)currentType;
             } while (!IsSortTypeValid(context, nextType));
 
@@ -72,7 +119,7 @@ namespace VPB
             var state = GetSortState(context);
             SortType prevType = state.Type;
             state.Type = newType;
-            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly)
+            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly || state.Type == SortType.UnusedOnly)
                 state.Direction = SortDirection.Ascending;
             else
                 state.Direction = SortDirection.Descending;
@@ -86,21 +133,28 @@ namespace VPB
                 {
                     try
                     {
-                        if (filterSearchBaseFiles != null)
+                        if (activeContentType == ContentType.History)
                         {
-                            List<FileEntry> rebuilt = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
-                            currentFilteredFiles.Clear();
-                            currentFilteredFiles.AddRange(rebuilt);
+                            RefreshHistoryListInPlace(true);
                         }
-                        ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, state.Type);
-                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
-                        if (recyclingGrid != null)
+                        else
                         {
-                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                            recyclingGrid.Refresh();
+                            if (filterSearchBaseFiles != null)
+                            {
+                                List<FileEntry> rebuilt = BuildFilterModeView(filterSearchBaseFiles, filterSearchLower);
+                                currentFilteredFiles.Clear();
+                                currentFilteredFiles.AddRange(rebuilt);
+                            }
+                            ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, state.Type);
+                            GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                            if (recyclingGrid != null)
+                            {
+                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                                recyclingGrid.Refresh();
+                            }
+                            ScrollGalleryToTop();
+                            UpdatePaginationText();
                         }
-                        ScrollGalleryToTop();
-                        UpdatePaginationText();
                     }
                     catch { }
                 }
@@ -110,12 +164,14 @@ namespace VPB
                         prevType == SortType.HiddenOnly ||
                         prevType == SortType.AutoInstallOnly ||
                         prevType == SortType.LoadedOnly ||
-                        prevType == SortType.UnloadedOnly;
+                        prevType == SortType.UnloadedOnly ||
+                        prevType == SortType.UnusedOnly;
                     bool nextExclusive =
                         newType == SortType.HiddenOnly ||
                         newType == SortType.AutoInstallOnly ||
                         newType == SortType.LoadedOnly ||
-                        newType == SortType.UnloadedOnly;
+                        newType == SortType.UnloadedOnly ||
+                        newType == SortType.UnusedOnly;
 
                     // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
                     // otherwise the user can't "clear" the mode without changing categories.
@@ -145,6 +201,12 @@ namespace VPB
 
             try
             {
+                if (activeContentType == ContentType.History)
+                {
+                    RefreshHistoryListInPlace(true);
+                    return true;
+                }
+
                 SortState st = GetSortState("Files");
                 ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
                 GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
@@ -170,7 +232,11 @@ namespace VPB
 
         private static readonly SortType[] FileSortDropdownOrder =
         {
-            SortType.Name, SortType.Date, SortType.DateCreated, SortType.Size, SortType.Rating,
+            SortType.Name, SortType.Date, SortType.DateCreated,
+            SortType.DateAdded, SortType.DateUpdated,
+            SortType.Size, SortType.Rating,
+            SortType.UsageCount,
+            SortType.UnusedOnly,
             SortType.Deps, SortType.Dependents, SortType.Missing,
             SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
         };
@@ -182,8 +248,12 @@ namespace VPB
                 case SortType.Name: return VPBTranslation.T("gallery.sort.full.name", "Alphabetical (name)");
                 case SortType.Date: return VPBTranslation.T("gallery.sort.full.date", "Date modified");
                 case SortType.DateCreated: return VPBTranslation.T("gallery.sort.full.date_created", "Date created");
+                case SortType.DateAdded: return VPBTranslation.T("gallery.sort.full.date_added", "Date added (New)");
+                case SortType.DateUpdated: return VPBTranslation.T("gallery.sort.full.date_updated", "Date updated");
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
+                case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
+                case SortType.UnusedOnly: return VPBTranslation.T("gallery.sort.full.unused_only", "Unused (only)");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
                 case SortType.Dependents: return VPBTranslation.T("gallery.sort.full.dependents", "Dependents");
                 case SortType.Missing: return VPBTranslation.T("gallery.sort.full.missing", "Missing dependencies");
@@ -233,10 +303,7 @@ namespace VPB
             panelRT.sizeDelta = new Vector2(260f, 50f);
 
             Image panelImg = fileSortTypeMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
-            var outline = fileSortTypeMenuPanelGO.AddComponent<Outline>();
-            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            outline.effectDistance = new Vector2(1f, -1f);
+            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
             VerticalLayoutGroup vlg = fileSortTypeMenuPanelGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(6, 6, 6, 6);
@@ -309,10 +376,7 @@ namespace VPB
             sidePaneSortMenuPanelRT.sizeDelta = new Vector2(240f, 50f);
 
             Image panelImg = sidePaneSortMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
-            var outline = sidePaneSortMenuPanelGO.AddComponent<Outline>();
-            outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            outline.effectDistance = new Vector2(1f, -1f);
+            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
             VerticalLayoutGroup vlg = sidePaneSortMenuPanelGO.AddComponent<VerticalLayoutGroup>();
             vlg.padding = new RectOffset(6, 6, 6, 6);
@@ -381,14 +445,12 @@ namespace VPB
                     });
 
                 Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent
-                    ? new Color(0.15f, 0.30f, 0.52f, 1f)
-                    : new Color(0.16f, 0.16f, 0.24f, 1f);
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.color = UI.PopupText;
                     rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
@@ -418,7 +480,8 @@ namespace VPB
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
             float gapY = 6f;
-            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -55f);
+            float sc = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -65f * sc);
             Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
 
             sidePaneSortMenuPanelRT.anchorMin = sidePaneSortMenuPanelRT.anchorMax = (anchorButtonRT != null ? anchorButtonRT.anchorMin : new Vector2(0f, 1f));
@@ -479,14 +542,12 @@ namespace VPB
                     });
 
                 Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent
-                    ? new Color(0.15f, 0.30f, 0.52f, 1f)
-                    : new Color(0.16f, 0.16f, 0.24f, 1f);
+                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
+                    rowT.color = UI.PopupText;
                     rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
@@ -496,18 +557,60 @@ namespace VPB
                 le.preferredHeight = 38f;
                 le.flexibleWidth = 1f;
             }
+
+            AppendHideOldVersionsMenuRow();
         }
 
-        // Overload: Old method for backward compatibility
-        private void ToggleSortDirection(string context, Text buttonText)
+        // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
+        private void AppendHideOldVersionsMenuRow()
         {
-            ToggleSortDirection(context, buttonText, null);
+            bool on = false;
+            try { on = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { }
+            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T("gallery.sort.full.hide_old_versions", "Hide old versions (keep newest only)");
+
+            GameObject row = UI.CreateUIButton(
+                fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
+                AnchorPresets.middleCenter,
+                () =>
+                {
+                    try
+                    {
+                        if (Settings.Instance != null && Settings.Instance.HideOldVersions != null)
+                            Settings.Instance.HideOldVersions.Value = !Settings.Instance.HideOldVersions.Value;
+                    }
+                    catch { }
+                    CloseFileSortTypeMenu();
+                    try { RefreshFiles(); } catch { }
+                });
+
+            Image rowImg = row.GetComponent<Image>();
+            rowImg.color = on ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
+
+            Text rowT = row.GetComponentInChildren<Text>();
+            if (rowT != null)
+            {
+                rowT.color = UI.PopupText;
+                rowT.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
+                rowT.alignment = TextAnchor.MiddleLeft;
+                VPBUiFont.ApplyTo(rowT);
+            }
+
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = 38f;
+            le.flexibleWidth = 1f;
         }
 
-        private void ToggleSortDirection(string context, Text typeText, Text dirText)
+        private void ToggleFileSortDirection()
+        {
+            SortState st = GetSortState("Files");
+            SortDirection next = st.Direction == SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending;
+            CommitSortDirectionChange("Files", next, fileSortTypeText, fileSortDirText);
+        }
+
+        private void CommitSortDirectionChange(string context, SortDirection dir, Text typeText, Text dirText)
         {
             var state = GetSortState(context);
-            state.Direction = (state.Direction == SortDirection.Ascending) ? SortDirection.Descending : SortDirection.Ascending;
+            state.Direction = dir;
             SaveSortState(context, state);
             UpdateSortButtonText(typeText, dirText, state);
 
@@ -517,14 +620,19 @@ namespace VPB
                 {
                     try
                     {
-                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
-                        if (recyclingGrid != null)
+                        if (activeContentType == ContentType.History)
+                            RefreshHistoryListInPlace(true);
+                        else
                         {
-                            recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                            recyclingGrid.Refresh();
+                            GallerySortManager.Instance.SortFiles(currentFilteredFiles, state);
+                            if (recyclingGrid != null)
+                            {
+                                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                                recyclingGrid.Refresh();
+                            }
+                            ScrollGalleryToTop();
+                            UpdatePaginationText();
                         }
-                        ScrollGalleryToTop();
-                        UpdatePaginationText();
                     }
                     catch { }
                 }
@@ -541,10 +649,14 @@ namespace VPB
         {
             if (context == "Files")
             {
-                return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
+                return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated
+                    || type == SortType.DateAdded || type == SortType.DateUpdated
+                    || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
+                    || type == SortType.UsageCount
+                    || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -553,7 +665,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Status" || context == "Tags" || context == "Hub";
+            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
@@ -631,13 +743,22 @@ namespace VPB
                 SyncSidePaneFourModeSortButtonVisual(rightSortBtnBackdrop, rightSortBtnIconImage, rightSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
             }
 
-            const string tagCtx = "Tags";
-            SortState tagSt = GetSortState(tagCtx);
-            bool tagIcon = SupportsSidePaneFourModeSort(tagCtx);
             if (leftSubSortBtn != null && leftSubSortBtn.activeSelf)
+            {
+                string subCtx = "Tags";
+                if (leftActiveContent == ContentType.UserTags) subCtx = "UserTagsApplied";
+                SortState tagSt = GetSortState(subCtx);
+                bool tagIcon = SupportsSidePaneFourModeSort(subCtx);
                 SyncSidePaneFourModeSortButtonVisual(leftSubSortBtnBackdrop, leftSubSortBtnIconImage, leftSubSortBtnText, tagSt, tagIcon);
+            }
             if (rightSubSortBtn != null && rightSubSortBtn.activeSelf)
-                SyncSidePaneFourModeSortButtonVisual(rightSubSortBtnBackdrop, rightSubSortBtnIconImage, rightSubSortBtnText, tagSt, tagIcon);
+            {
+                string subCtxR = "Tags";
+                if (rightActiveContent == ContentType.UserTags) subCtxR = "UserTagsApplied";
+                SortState tagStR = GetSortState(subCtxR);
+                bool tagIconR = SupportsSidePaneFourModeSort(subCtxR);
+                SyncSidePaneFourModeSortButtonVisual(rightSubSortBtnBackdrop, rightSubSortBtnIconImage, rightSubSortBtnText, tagStR, tagIconR);
+            }
         }
 
         private void SyncSidePaneFourModeSortButtonVisual(Image backdrop, Image iconImg, Text legacyText, SortState st, bool iconMode)
@@ -685,10 +806,14 @@ namespace VPB
                 case SortType.Name: symbol = "Az"; break;
                 case SortType.Date: symbol = "Dt"; break;
                 case SortType.DateCreated: symbol = "Dc"; break;
+                case SortType.DateAdded: symbol = "Nw"; break;
+                case SortType.DateUpdated: symbol = "Up"; break;
                 case SortType.Size: symbol = "Sz"; break;
                 case SortType.Count: symbol = "#"; break;
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
+                case SortType.UsageCount: symbol = "Us"; break;
+                case SortType.UnusedOnly: symbol = "U0"; break;
                 case SortType.Deps: symbol = "Dp"; break;
                 case SortType.Dependents: symbol = "Dn"; break;
                 case SortType.Missing: symbol = "Ms"; break;
@@ -714,10 +839,14 @@ namespace VPB
                     case SortType.Name: symbol = "Az"; break;
                     case SortType.Date: symbol = "Dt"; break;
                     case SortType.DateCreated: symbol = "Dc"; break;
+                    case SortType.DateAdded: symbol = "Nw"; break;
+                    case SortType.DateUpdated: symbol = "Up"; break;
                     case SortType.Size: symbol = "Sz"; break;
                     case SortType.Count: symbol = "#"; break;
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
+                    case SortType.UsageCount: symbol = "Us"; break;
+                    case SortType.UnusedOnly: symbol = "U0"; break;
                     case SortType.Deps: symbol = "Dp"; break;
                     case SortType.Dependents: symbol = "Dn"; break;
                     case SortType.Missing: symbol = "Ms"; break;

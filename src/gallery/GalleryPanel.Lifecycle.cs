@@ -12,6 +12,7 @@ namespace VPB
 {
         public void Close()
         {
+            VpbPerfDiag.LogTransition("GalleryPanel.Close", null);
             if (Gallery.singleton != null)
             {
                 Gallery.singleton.RemovePanel(this);
@@ -31,88 +32,57 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             string mode = VPBConfig.Instance.ShowSideButtons;
             bool fixedMode = isFixedLocally;
+            string dock = "Right";
+            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
+            bool topDock = fixedMode && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
 
             if (leftSideContainer != null) 
             {
-                if (isCollapsed) leftSideContainer.SetActive(false);
-                else leftSideContainer.SetActive(mode == "Both" || mode == "Left");
+                if (isCollapsed || topDock) leftSideContainer.SetActive(false);
+                else if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                    leftSideContainer.SetActive(false);
+                else
+                    leftSideContainer.SetActive(mode == "Both" || mode == "Left");
             }
             
             if (rightSideContainer != null) 
             {
-                if (fixedMode || isCollapsed) rightSideContainer.SetActive(false);
-                else rightSideContainer.SetActive(mode == "Both" || mode == "Right");
+                if (isCollapsed || topDock) rightSideContainer.SetActive(false);
+                else if (fixedMode)
+                    rightSideContainer.SetActive(string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) && (mode == "Both" || mode == "Right"));
+                else
+                    rightSideContainer.SetActive(mode == "Both" || mode == "Right");
             }
 
             bool showLeftSide = !isCollapsed && (mode == "Both" || mode == "Left");
-            bool showRightSide = !fixedMode && !isCollapsed && (mode == "Both" || mode == "Right");
+            if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showLeftSide = false;
 
-            if (leftClearCreatorBtn != null) leftClearCreatorBtn.SetActive(showLeftSide && !string.IsNullOrEmpty(currentCreator));
-            if (rightClearCreatorBtn != null) rightClearCreatorBtn.SetActive(showRightSide && !string.IsNullOrEmpty(currentCreator));
+            bool showRightSide = !isCollapsed && (mode == "Both" || mode == "Right");
+            if (fixedMode && !string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showRightSide = false;
+
+            bool hideCreatorRail = VPBConfig.Instance.GalleryHideCreatorSideButtons;
+            if (hideCreatorRail)
+            {
+                bool cleared = false;
+                if (leftActiveContent == ContentType.Creator) { leftActiveContent = null; cleared = true; }
+                if (rightActiveContent == ContentType.Creator) { rightActiveContent = null; cleared = true; }
+                if (cleared) SyncActiveContentTypeFromSidePanels();
+            }
+
+            bool showLeftCreatorBtn = showLeftSide && !hideCreatorRail;
+            bool showRightCreatorBtn = showRightSide && !hideCreatorRail;
+            if (leftCreatorBtnImage != null && leftCreatorBtnImage.gameObject.activeSelf != showLeftCreatorBtn)
+                leftCreatorBtnImage.gameObject.SetActive(showLeftCreatorBtn);
+            if (rightCreatorBtnImage != null && rightCreatorBtnImage.gameObject.activeSelf != showRightCreatorBtn)
+                rightCreatorBtnImage.gameObject.SetActive(showRightCreatorBtn);
+
+            // Keep History side buttons on the same purple family as active side-tab buttons.
+            Color historyBackdrop = ColorHistoryAccent;
+            if (rightHistoryBtnImage != null) rightHistoryBtnImage.color = historyBackdrop;
+            if (leftHistoryBtnImage != null) leftHistoryBtnImage.color = historyBackdrop;
+            if (rightHistoryBtnIconImage != null) rightHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
+            if (leftHistoryBtnIconImage != null) leftHistoryBtnIconImage.color = UI.SideRailIconGlyphTint;
         }
-
-        private void UpdateClearButtonPosition(bool isRight, ContentType type)
-        {
-            GameObject btn = null;
-            if (type == ContentType.Creator) btn = isRight ? rightClearCreatorBtn : leftClearCreatorBtn;
-            if (btn == null) return;
-
-            // Find the button for this content type
-            RectTransform targetBtnRT = null;
-            
-            // We need to find the specific button rect. 
-            // We store them in sideButtons list but we need to know WHICH one corresponds to the type.
-            // Indices based on GalleryPanel.UI.cs creation order:
-            // 0: Fixed/Floating
-            // 1: Settings
-            // 2: Follow
-            // 3: Clone
-            // 4: Category
-            // 5: Creator
-            // 6: Target
-            // 9: Apply Mode
-            // 10: Replace
-            // 11: Hub
-            // 12: Undo
-            // 13: Remove Clothing (context)
-            // 14: Remove Hair (context)
-            // 15: Random
-
-            int targetIndex = -1;
-            switch(type)
-            {
-                case ContentType.Creator: targetIndex = 5; break;
-            }
-
-            if (targetIndex >= 0)
-            {
-                List<RectTransform> list = isRight ? rightSideButtons : leftSideButtons;
-                if (targetIndex < list.Count)
-                {
-                    targetBtnRT = list[targetIndex];
-                }
-            }
-
-            if (targetBtnRT != null && targetBtnRT.gameObject.activeInHierarchy)
-            {
-                RectTransform btnRT = btn.GetComponent<RectTransform>();
-                // Clear creator button now lives in the side container, so position it relative to the Creator icon:
-                // always immediately to the LEFT of the creator button (same Y).
-                float gap = 6f;
-                float tw = 0f;
-                float bw = 0f;
-                try { tw = targetBtnRT.rect.width; } catch { tw = targetBtnRT.sizeDelta.x; }
-                try { bw = btnRT.rect.width; } catch { bw = btnRT.sizeDelta.x; }
-                if (tw <= 0f) tw = targetBtnRT.sizeDelta.x;
-                if (bw <= 0f) bw = btnRT.sizeDelta.x;
-
-                // anchoredPosition is at the pivot (typically center), so use half-widths.
-                float targetX = targetBtnRT.anchoredPosition.x - (tw * 0.5f + bw * 0.5f + gap);
-                float targetY = targetBtnRT.anchoredPosition.y;
-                btnRT.anchoredPosition = new Vector2(targetX, targetY);
-            }
-        }
-
 
         private void AddHoverDelegate(GameObject go)
         {
@@ -151,6 +121,8 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += UpdateLayout;
             VPBConfig.Instance.ConfigChanged += RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
+            VPBConfig.Instance.ConfigChanged += RefreshCategoryQuickSwitchOnConfigChanged;
+            VPBConfig.Instance.ConfigChanged += OnGalleryTransparencyConfigChanged;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -164,10 +136,23 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= UpdateLayout;
             VPBConfig.Instance.ConfigChanged -= RefreshSideTabAreasForConfigChange;
             VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
+            VPBConfig.Instance.ConfigChanged -= RefreshCategoryQuickSwitchOnConfigChanged;
+            VPBConfig.Instance.ConfigChanged -= OnGalleryTransparencyConfigChanged;
+        }
+
+        private void OnGalleryTransparencyConfigChanged()
+        {
+            try { ApplyGalleryTransparencyVisuals(); } catch { }
         }
 
         void OnDestroy()
         {
+            if (_categoryQuickApplyCoroutine != null)
+            {
+                try { StopCoroutine(_categoryQuickApplyCoroutine); } catch { }
+                _categoryQuickApplyCoroutine = null;
+            }
+
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)
                 GalleryThumbnailCache.Instance.SavingPaused = false;
@@ -231,7 +216,7 @@ namespace VPB
         {
             bool shouldShow = hoverCount > 0 && (canvas != null && canvas.gameObject.activeInHierarchy);
             Atom target = SelectedTargetAtom;
-            if (!shouldShow || target == null || target.type != "Person")
+            if (!shouldShow || target == null || !SceneUtils.IsPersonLikeAtom(target))
             {
                 if (targetMarkerGO != null) targetMarkerGO.SetActive(false);
                 return;

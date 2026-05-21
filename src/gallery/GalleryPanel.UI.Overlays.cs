@@ -143,9 +143,11 @@ namespace VPB
 
         public void DisplayColorPicker(string title, Color initialColor, UnityAction<Color> onConfirm)
         {
-             // Use the singleton
-             if (UIColorPicker.Instance != null)
-                UIColorPicker.Instance.Show(initialColor, (c) => onConfirm?.Invoke(c));
+            // Full gallery card so dim covers rails + footer; UIColorPicker uses own Canvas sorting to stay above grid.
+            Transform host = backgroundBoxGO != null ? backgroundBoxGO.transform
+                : canvas != null ? canvas.transform : null;
+            if (UIColorPicker.Instance != null)
+                UIColorPicker.Instance.Show(initialColor, c => { if (onConfirm != null) onConfirm.Invoke(c); }, title, host);
         }
 
         public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)
@@ -235,6 +237,220 @@ namespace VPB
             input.ActivateInputField();
         }
 
+        /// <summary>
+        /// Modal rename dialog over the file preview viewport (Grid/List scroll area).
+        /// Category-specific side tabs can reuse the same UX later; trailing row actions use <see cref="UI.CreateSideTabSquareIconButton"/>.
+        /// </summary>
+        private void ShowPersonAtomRenameOverlay(global::Atom atom)
+        {
+            if (atom == null || backgroundBoxGO == null) return;
+            string oldUid = null;
+            try { oldUid = atom.uid; } catch { }
+            if (string.IsNullOrEmpty(oldUid)) return;
+
+            Transform overlayParent = null;
+            try
+            {
+                if (scrollRect != null && scrollRect.viewport != null)
+                    overlayParent = scrollRect.viewport.transform;
+            }
+            catch { }
+            if (overlayParent == null) overlayParent = backgroundBoxGO.transform;
+
+            GameObject overlayGO = new GameObject("PersonAtomRenameOverlay");
+            overlayGO.transform.SetParent(overlayParent, false);
+            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
+            overlayRT.anchorMin = Vector2.zero;
+            overlayRT.anchorMax = Vector2.one;
+            overlayRT.offsetMin = Vector2.zero;
+            overlayRT.offsetMax = Vector2.zero;
+
+            Image overlayImg = overlayGO.AddComponent<Image>();
+            overlayImg.color = new Color(0, 0, 0, 0.55f);
+
+            GameObject panelGO = new GameObject("Panel");
+            panelGO.transform.SetParent(overlayGO.transform, false);
+            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
+            panelRT.anchorMin = new Vector2(0.5f, 0.5f);
+            panelRT.anchorMax = new Vector2(0.5f, 0.5f);
+            panelRT.pivot = new Vector2(0.5f, 0.5f);
+            panelRT.sizeDelta = new Vector2(440f, 300f);
+
+            Image panelImg = panelGO.AddComponent<Image>();
+            panelImg.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+
+            Font arial = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+            GameObject titleGO = new GameObject("Title");
+            titleGO.transform.SetParent(panelGO.transform, false);
+            Text titleTxt = titleGO.AddComponent<Text>();
+            titleTxt.font = arial;
+            titleTxt.fontSize = 22;
+            titleTxt.color = Color.white;
+            titleTxt.alignment = TextAnchor.MiddleCenter;
+            titleTxt.text = VPBTranslation.T("gallery.rename.title", "Rename Person Atom");
+            RectTransform titleRt = titleGO.GetComponent<RectTransform>();
+            titleRt.anchorMin = new Vector2(0, 1);
+            titleRt.anchorMax = new Vector2(1, 1);
+            titleRt.pivot = new Vector2(0.5f, 1f);
+            titleRt.anchoredPosition = new Vector2(0, -12f);
+            titleRt.sizeDelta = new Vector2(-24f, 36f);
+
+            GameObject oldLabelGO = new GameObject("OldNameLabel");
+            oldLabelGO.transform.SetParent(panelGO.transform, false);
+            Text oldLabelTxt = oldLabelGO.AddComponent<Text>();
+            oldLabelTxt.font = arial;
+            oldLabelTxt.fontSize = 16;
+            oldLabelTxt.color = new Color(0.85f, 0.85f, 0.85f);
+            oldLabelTxt.alignment = TextAnchor.MiddleLeft;
+            oldLabelTxt.text = VPBTranslation.T("gallery.rename.old_name_label", "Old name");
+            RectTransform oldLabelRt = oldLabelGO.GetComponent<RectTransform>();
+            oldLabelRt.anchorMin = new Vector2(0, 1);
+            oldLabelRt.anchorMax = new Vector2(1, 1);
+            oldLabelRt.pivot = new Vector2(0.5f, 1f);
+            oldLabelRt.anchoredPosition = new Vector2(0, -54f);
+            oldLabelRt.sizeDelta = new Vector2(-28f, 22f);
+
+            GameObject oldValGO = new GameObject("OldNameValue");
+            oldValGO.transform.SetParent(panelGO.transform, false);
+            Image oldValBg = oldValGO.AddComponent<Image>();
+            oldValBg.color = new Color(0.18f, 0.18f, 0.2f, 1f);
+            GameObject oldValTextGO = new GameObject("Text");
+            oldValTextGO.transform.SetParent(oldValGO.transform, false);
+            Text oldValTxt = oldValTextGO.AddComponent<Text>();
+            oldValTxt.font = arial;
+            oldValTxt.fontSize = 17;
+            oldValTxt.color = Color.white;
+            oldValTxt.alignment = TextAnchor.MiddleLeft;
+            oldValTxt.text = oldUid;
+            RectTransform oldValTxtRt = oldValTextGO.GetComponent<RectTransform>();
+            oldValTxtRt.anchorMin = Vector2.zero;
+            oldValTxtRt.anchorMax = Vector2.one;
+            oldValTxtRt.offsetMin = new Vector2(10f, 4f);
+            oldValTxtRt.offsetMax = new Vector2(-10f, -4f);
+            RectTransform oldValRt = oldValGO.GetComponent<RectTransform>();
+            oldValRt.anchorMin = new Vector2(0, 1);
+            oldValRt.anchorMax = new Vector2(1, 1);
+            oldValRt.pivot = new Vector2(0.5f, 1f);
+            oldValRt.anchoredPosition = new Vector2(0, -82f);
+            oldValRt.sizeDelta = new Vector2(-28f, 38f);
+
+            GameObject renameLabelGO = new GameObject("RenameToLabel");
+            renameLabelGO.transform.SetParent(panelGO.transform, false);
+            Text renameLabelTxt = renameLabelGO.AddComponent<Text>();
+            renameLabelTxt.font = arial;
+            renameLabelTxt.fontSize = 16;
+            renameLabelTxt.color = new Color(0.85f, 0.85f, 0.85f);
+            renameLabelTxt.alignment = TextAnchor.MiddleLeft;
+            renameLabelTxt.text = VPBTranslation.T("gallery.rename.rename_to_label", "Rename to");
+            RectTransform renameLabelRt = renameLabelGO.GetComponent<RectTransform>();
+            renameLabelRt.anchorMin = new Vector2(0, 1);
+            renameLabelRt.anchorMax = new Vector2(1, 1);
+            renameLabelRt.pivot = new Vector2(0.5f, 1f);
+            renameLabelRt.anchoredPosition = new Vector2(0, -126f);
+            renameLabelRt.sizeDelta = new Vector2(-28f, 22f);
+
+            GameObject inputGO = new GameObject("InputField");
+            inputGO.transform.SetParent(panelGO.transform, false);
+            Image inputBg = inputGO.AddComponent<Image>();
+            inputBg.color = new Color(0.22f, 0.22f, 0.22f, 1f);
+            InputField input = inputGO.AddComponent<InputField>();
+            RectTransform inputRt = inputGO.GetComponent<RectTransform>();
+            inputRt.anchorMin = new Vector2(0, 1);
+            inputRt.anchorMax = new Vector2(1, 1);
+            inputRt.pivot = new Vector2(0.5f, 1f);
+            inputRt.anchoredPosition = new Vector2(0, -154f);
+            inputRt.sizeDelta = new Vector2(-28f, 40f);
+
+            GameObject textArea = new GameObject("TextArea");
+            textArea.transform.SetParent(inputGO.transform, false);
+            RectTransform textAreaRt = textArea.AddComponent<RectTransform>();
+            textAreaRt.anchorMin = Vector2.zero;
+            textAreaRt.anchorMax = Vector2.one;
+            textAreaRt.offsetMin = new Vector2(10f, 6f);
+            textAreaRt.offsetMax = new Vector2(-10f, -6f);
+
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(textArea.transform, false);
+            Text tComp = textGO.AddComponent<Text>();
+            tComp.font = arial;
+            tComp.fontSize = 18;
+            tComp.color = Color.white;
+            tComp.alignment = TextAnchor.MiddleLeft;
+            RectTransform tRt = textGO.GetComponent<RectTransform>();
+            tRt.anchorMin = Vector2.zero;
+            tRt.anchorMax = Vector2.one;
+            tRt.sizeDelta = Vector2.zero;
+
+            input.textComponent = tComp;
+            input.text = oldUid;
+            inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
+
+            UnityAction close = () => { try { Destroy(overlayGO); } catch { } };
+
+            GameObject renameBtn = UI.CreateUIButton(panelGO, 150f, 44f, VPBTranslation.T("gallery.rename.rename_btn", "Rename"), 18, 78f, -116f, AnchorPresets.middleCenter, () =>
+            {
+                string newName = input != null ? input.text : null;
+                if (newName != null) newName = newName.Trim();
+                if (string.IsNullOrEmpty(newName))
+                {
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.rename.empty", "Enter a name."), 2f);
+                    return;
+                }
+                if (string.Equals(newName, oldUid, StringComparison.Ordinal))
+                {
+                    close();
+                    return;
+                }
+                if (SuperController.singleton == null) return;
+                try
+                {
+                    global::Atom clash = SuperController.singleton.GetAtomByUid(newName);
+                    if (clash != null && clash != atom)
+                    {
+                        ShowTemporaryStatus(VPBTranslation.T("gallery.rename.in_use", "That name is already used."), 2.5f);
+                        return;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    SuperController.singleton.RenameAtom(atom, newName);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] RenameAtom failed: " + ex);
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.rename.failed", "Rename failed. See log."), 2f);
+                    return;
+                }
+
+                close();
+                RefreshTargetDropdown();
+                try
+                {
+                    for (int i = 0; i < personAtoms.Count; i++)
+                    {
+                        if (personAtoms[i] == atom)
+                        {
+                            targetDropdownValue = i;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+                try { UpdateTargetDropdownUI(); } catch { }
+                try { UpdateTabs(); } catch { }
+                try { NotifyAllPanelsSceneTargetsChanged(); } catch { }
+            });
+
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 150f, 44f, VPBTranslation.T("gallery.rename.cancel_btn", "Cancel"), 18, -78f, -116f, AnchorPresets.middleCenter, close);
+
+            SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+            input.ActivateInputField();
+            input.MoveTextEnd(false);
+        }
+
         public void DisplayConfirm(string title, string message, UnityAction onConfirm)
         {
             GameObject overlayGO = new GameObject("ConfirmOverlay");
@@ -251,7 +467,7 @@ namespace VPB
             GameObject panelGO = new GameObject("Panel");
             panelGO.transform.SetParent(overlayGO.transform, false);
             RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-            panelRT.sizeDelta = new Vector2(450, 250);
+            panelRT.sizeDelta = new Vector2(500, 420);
             
             Image panelImg = panelGO.AddComponent<Image>();
             panelImg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
@@ -288,8 +504,8 @@ namespace VPB
             msgRT.offsetMax = new Vector2(-20, -60);
 
             // Buttons
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, -80, AnchorPresets.middleCenter, () => Destroy(overlayGO));
-            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, -80, AnchorPresets.middleCenter, () => {
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, 40, AnchorPresets.bottomMiddle, () => Destroy(overlayGO));
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, 40, AnchorPresets.bottomMiddle, () => {
                 onConfirm?.Invoke();
                 Destroy(overlayGO);
             });

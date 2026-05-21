@@ -174,11 +174,13 @@ namespace VPB
                     return;
                 }
 
-                var paths = new List<string>(8);
-                TryCollectUniqueVarPackagePathsFromSelection(paths);
-                if (paths.Count == 0)
+                var packagePaths = new List<string>(8);
+                var scenePaths = new List<string>(8);
+                TryCollectUniqueVarPackagePathsFromSelection(packagePaths);
+                TryCollectUniqueLocalSceneJsonPathsFromSelection(scenePaths);
+                if (packagePaths.Count == 0 && scenePaths.Count == 0)
                 {
-                    ShowTemporaryStatus("No .var paths in selection.", 2f);
+                    ShowTemporaryStatus("No .var packages or local scene JSON in selection.", 2f);
                     return;
                 }
 
@@ -191,20 +193,80 @@ namespace VPB
                     return;
                 }
 
-                NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
-
-                if (paths.Count == 1)
+                bool purgeCache = IsCtrlShiftHeldForTextureCachePurge();
+                if (purgeCache)
                 {
-                    NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, paths[0]);
+                    // Purge supports:
+                    // - .var packages (purges package texture caches)
+                    // - local scenes (purges only local disk texture caches referenced by the scene)
+                    if (packagePaths.Count == 1 && scenePaths.Count == 0)
+                    {
+                        NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, packagePaths[0]);
+                        return;
+                    }
+                    if (scenePaths.Count == 1 && packagePaths.Count == 0)
+                    {
+                        NativeTextureOnDemandCache.TryPurgeSceneCacheOnDemand(this, scenePaths[0]);
+                        return;
+                    }
+
+                    StartCoroutine(TboxPurgeTexturesMultiBatchCoroutine(scenePaths, packagePaths));
                     return;
                 }
 
-                StartCoroutine(TboxCacheTexturesBatchCoroutine(paths));
+                bool rewriteExistingZstd = IsCtrlHeldForTextureCacheRewrite();
+                NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
+                NativeTextureOnDemandCache.SetNextJobRewriteExistingZstd(rewriteExistingZstd);
+                if (rewriteExistingZstd)
+                {
+                    ShowTemporaryStatus("Rewriting existing zstd texture cache...", 2f);
+                }
+
+                // Single target: keep single-mode so UI totals are correct.
+                if (scenePaths.Count == 1 && packagePaths.Count == 0)
+                {
+                    NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(this, scenePaths[0]);
+                    return;
+                }
+                if (packagePaths.Count == 1 && scenePaths.Count == 0)
+                {
+                    NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, packagePaths[0]);
+                    return;
+                }
+
+                // Multi / mixed selection: batch mode to process each item sequentially.
+                StartCoroutine(TboxCacheTexturesMultiBatchCoroutine(scenePaths, packagePaths));
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] TboxCacheTexturesSelected error: " + ex);
                 ShowTemporaryStatus("Cache textures failed. See log.", 2f);
+            }
+        }
+
+        private static bool IsCtrlHeldForTextureCacheRewrite()
+        {
+            try
+            {
+                return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsCtrlShiftHeldForTextureCachePurge()
+        {
+            try
+            {
+                bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+                bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                return ctrl && shift;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -231,6 +293,160 @@ namespace VPB
             {
                 NativeTextureOnDemandCache.EndBatchJob(
                     NativeTextureOnDemandCache.CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
+            }
+        }
+
+        private IEnumerator TboxCacheTexturesMultiBatchCoroutine(List<string> scenePaths, List<string> packagePaths)
+        {
+            int total = 0;
+            try { if (scenePaths != null) total += scenePaths.Count; } catch { }
+            try { if (packagePaths != null) total += packagePaths.Count; } catch { }
+            total = Mathf.Max(1, total);
+
+            NativeTextureOnDemandCache.BeginBatchJob("Caching Textures...", total);
+            try
+            {
+                // Scenes first
+                if (scenePaths != null)
+                {
+                    for (int i = 0; i < scenePaths.Count; i++)
+                    {
+                        if (NativeTextureOnDemandCache.CancelRequested) break;
+                        string p = scenePaths[i];
+                        if (string.IsNullOrEmpty(p)) continue;
+
+                        NativeTextureOnDemandCache.BatchItemStart(p);
+                        NativeTextureOnDemandCache.TryBuildSceneCacheOnDemand(this, p);
+                        while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                            yield return null;
+                        NativeTextureOnDemandCache.BatchItemDone();
+                        yield return null;
+                    }
+                }
+
+                // Packages second
+                if (packagePaths != null)
+                {
+                    for (int i = 0; i < packagePaths.Count; i++)
+                    {
+                        if (NativeTextureOnDemandCache.CancelRequested) break;
+                        string p = packagePaths[i];
+                        if (string.IsNullOrEmpty(p)) continue;
+
+                        NativeTextureOnDemandCache.BatchItemStart(p);
+                        NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, p);
+                        while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                            yield return null;
+                        NativeTextureOnDemandCache.BatchItemDone();
+                        yield return null;
+                    }
+                }
+            }
+            finally
+            {
+                NativeTextureOnDemandCache.EndBatchJob(
+                    NativeTextureOnDemandCache.CancelRequested ? "Texture caching cancelled" : "Texture caching complete");
+            }
+        }
+
+        private IEnumerator TboxPurgeTexturesBatchCoroutine(List<string> paths)
+        {
+            NativeTextureOnDemandCache.BeginBatchJob("Purging Texture Cache...", paths.Count);
+            try
+            {
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    if (NativeTextureOnDemandCache.CancelRequested) break;
+                    string p = paths[i];
+                    if (string.IsNullOrEmpty(p)) continue;
+
+                    NativeTextureOnDemandCache.BatchItemStart(p);
+                    NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, p);
+                    while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                        yield return null;
+                    NativeTextureOnDemandCache.BatchItemDone();
+                    yield return null;
+                }
+            }
+            finally
+            {
+                NativeTextureOnDemandCache.EndBatchJob(
+                    NativeTextureOnDemandCache.CancelRequested ? "Texture purge cancelled" : "Texture purge complete");
+            }
+        }
+
+        private IEnumerator TboxPurgeTexturesMultiBatchCoroutine(List<string> scenePaths, List<string> packagePaths)
+        {
+            int total = 0;
+            try { if (scenePaths != null) total += scenePaths.Count; } catch { }
+            try { if (packagePaths != null) total += packagePaths.Count; } catch { }
+            total = Mathf.Max(1, total);
+
+            NativeTextureOnDemandCache.BeginBatchJob("Purging Texture Cache...", total);
+            try
+            {
+                // Scenes first (local-only purge)
+                if (scenePaths != null)
+                {
+                    for (int i = 0; i < scenePaths.Count; i++)
+                    {
+                        if (NativeTextureOnDemandCache.CancelRequested) break;
+                        string p = scenePaths[i];
+                        if (string.IsNullOrEmpty(p)) continue;
+
+                        NativeTextureOnDemandCache.BatchItemStart(p);
+                        NativeTextureOnDemandCache.TryPurgeSceneCacheOnDemand(this, p);
+                        while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                            yield return null;
+                        NativeTextureOnDemandCache.BatchItemDone();
+                        yield return null;
+                    }
+                }
+
+                // Packages second
+                if (packagePaths != null)
+                {
+                    for (int i = 0; i < packagePaths.Count; i++)
+                    {
+                        if (NativeTextureOnDemandCache.CancelRequested) break;
+                        string p = packagePaths[i];
+                        if (string.IsNullOrEmpty(p)) continue;
+
+                        NativeTextureOnDemandCache.BatchItemStart(p);
+                        NativeTextureOnDemandCache.TryPurgePackageCacheOnDemand(this, p);
+                        while (NativeTextureOnDemandCache.IsOnDemandBusy)
+                            yield return null;
+                        NativeTextureOnDemandCache.BatchItemDone();
+                        yield return null;
+                    }
+                }
+            }
+            finally
+            {
+                NativeTextureOnDemandCache.EndBatchJob(
+                    NativeTextureOnDemandCache.CancelRequested ? "Texture purge cancelled" : "Texture purge complete");
+            }
+        }
+
+        private void TryCollectUniqueLocalSceneJsonPathsFromSelection(List<string> outPaths)
+        {
+            outPaths.Clear();
+            if (selectedFiles == null || selectedFiles.Count == 0) return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+
+                if (!LocalSceneGallerySupport.TryResolveSavesSceneJson(f, out _, out string rel, false))
+                    continue;
+                if (string.IsNullOrEmpty(rel)) continue;
+
+                // Use the gallery-relative path (Saves/scene/...) so FileManager.ReadAllText can open it.
+                string p = rel.Replace('\\', '/');
+                if (!seen.Add(p)) continue;
+                outPaths.Add(p);
             }
         }
 

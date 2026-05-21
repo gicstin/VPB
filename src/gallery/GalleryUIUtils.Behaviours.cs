@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -280,6 +279,10 @@ namespace VPB
         public bool deferred = false;
         public bool resizeX = false;
         public bool resizeY = true;
+        /// <summary>When true with <see cref="resizeX"/>, writes X to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
+        public bool resizeAnchorMaxX = false;
+        /// <summary>When true with <see cref="resizeY"/>, writes Y to <see cref="RectTransform.anchorMax"/> instead of anchorMin.</summary>
+        public bool resizeAnchorMaxY = false;
         public float minAnchorX = 0.05f;
         public float maxAnchorX = 0.95f;
         public float minAnchorY = 0.05f;
@@ -288,7 +291,8 @@ namespace VPB
         public UnityAction<Vector2> onResizedVec2;
         public UnityAction<bool> onResizeStatusChange;
         private Camera dragCam;
-        private Vector2 currentAnchors;
+        private Vector2 currentAnchorsMin;
+        private Vector2 currentAnchorsMax;
 
         public void OnBeginDrag(PointerEventData eventData)
         {
@@ -301,7 +305,11 @@ namespace VPB
             else
                 dragCam = eventData.pressEventCamera ?? Camera.main;
 
-            if (target != null) currentAnchors = target.anchorMin;
+            if (target != null)
+            {
+                currentAnchorsMin = target.anchorMin;
+                currentAnchorsMax = target.anchorMax;
+            }
             if (previewTarget != null) 
             {
                 previewTarget.gameObject.SetActive(true);
@@ -318,9 +326,18 @@ namespace VPB
         {
             if (deferred && target != null)
             {
-                target.anchorMin = currentAnchors;
-                if (onResized != null && resizeY) onResized(currentAnchors.y);
-                if (onResizedVec2 != null) onResizedVec2(currentAnchors);
+                if (resizeX || resizeY)
+                {
+                    if (resizeX && !resizeAnchorMaxX) target.anchorMin = new Vector2(currentAnchorsMin.x, target.anchorMin.y);
+                    if (resizeY && !resizeAnchorMaxY) target.anchorMin = new Vector2(target.anchorMin.x, currentAnchorsMin.y);
+                    if (resizeX && resizeAnchorMaxX) target.anchorMax = new Vector2(currentAnchorsMax.x, target.anchorMax.y);
+                    if (resizeY && resizeAnchorMaxY) target.anchorMax = new Vector2(target.anchorMax.x, currentAnchorsMax.y);
+                }
+
+                if (onResized != null && resizeY)
+                    onResized(resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y);
+                if (onResizedVec2 != null)
+                    onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? currentAnchorsMax : currentAnchorsMin);
             }
 
             if (previewTarget != null) previewTarget.gameObject.SetActive(false);
@@ -335,17 +352,29 @@ namespace VPB
 
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, eventData.position, dragCam, out Vector2 localMouse))
             {
-                Vector2 newAnchors = currentAnchors;
                 bool changed = false;
+                Vector2 newMin = currentAnchorsMin;
+                Vector2 newMax = currentAnchorsMax;
 
                 if (resizeX && parentRect.rect.width > 0)
                 {
                     float ratioX = (localMouse.x - parentRect.rect.xMin) / parentRect.rect.width;
                     ratioX = Mathf.Clamp(ratioX, minAnchorX, maxAnchorX);
-                    if (newAnchors.x != ratioX)
+                    if (resizeAnchorMaxX)
                     {
-                        newAnchors.x = ratioX;
-                        changed = true;
+                        if (newMax.x != ratioX)
+                        {
+                            newMax.x = ratioX;
+                            changed = true;
+                        }
+                    }
+                    else
+                    {
+                        if (newMin.x != ratioX)
+                        {
+                            newMin.x = ratioX;
+                            changed = true;
+                        }
                     }
                 }
 
@@ -353,27 +382,43 @@ namespace VPB
                 {
                     float ratioY = (localMouse.y - parentRect.rect.yMin) / parentRect.rect.height;
                     ratioY = Mathf.Clamp(ratioY, minAnchorY, maxAnchorY);
-                    if (newAnchors.y != ratioY)
+                    if (resizeAnchorMaxY)
                     {
-                        newAnchors.y = ratioY;
-                        changed = true;
+                        if (newMax.y != ratioY)
+                        {
+                            newMax.y = ratioY;
+                            changed = true;
+                        }
+                    }
+                    else
+                    {
+                        if (newMin.y != ratioY)
+                        {
+                            newMin.y = ratioY;
+                            changed = true;
+                        }
                     }
                 }
                 
                 if (changed)
                 {
-                    currentAnchors = newAnchors;
+                    currentAnchorsMin = newMin;
+                    currentAnchorsMax = newMax;
                     
                     if (previewTarget != null)
                     {
-                        previewTarget.anchorMin = newAnchors;
+                        previewTarget.anchorMin = newMin;
+                        previewTarget.anchorMax = newMax;
                     }
 
                     if (!deferred)
                     {
-                        target.anchorMin = newAnchors;
-                        if (onResized != null && resizeY) onResized(newAnchors.y);
-                        if (onResizedVec2 != null) onResizedVec2(newAnchors);
+                        target.anchorMin = newMin;
+                        target.anchorMax = newMax;
+                        if (onResized != null && resizeY)
+                            onResized(resizeAnchorMaxY ? newMax.y : newMin.y);
+                        if (onResizedVec2 != null)
+                            onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? newMax : newMin);
                     }
                 }
             }
@@ -385,51 +430,267 @@ namespace VPB
         public Graphic targetGraphic;
         public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
         public float borderSize = 2f;
+        /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
+        public bool inward = false;
         public bool isSelected = false;
-        // When set, show/hide this GO on hover instead of using the Outline component.
+        /// <summary>List layout: hover uses <see cref="hoverBorderGO"/> only; selection is a separate Graphic.
+        /// Exit always hides hover GO (pool reuse never gets PointerExit). Grid inward border keeps GO when selected.</summary>
+        public bool hoverIndicatorUsesSeparateSelectionVisual = false;
+        // When set, show/hide this GO on hover instead of using the rim / Outline.
         // Used in list mode to avoid the Outline filling the entire semi-transparent row.
         public GameObject hoverBorderGO;
 
-        private Outline outline;
+        private GameObject rimRoot;
+        private Image rimL;
+        private Image rimR;
+        private Image rimT;
+        private Image rimB;
+
+        /// <summary>True while pointer hovers so we combine with <see cref="isSelected"/> for rim visibility.</summary>
+        private bool hovering;
+
+        public void ApplyBorderSettings()
+        {
+            if (hoverBorderGO != null)
+            {
+                DestroyRimImmediate();
+                StripLegacyOutlineOffTargetGraphic();
+                return;
+            }
+
+            EnsureRim();
+            StripLegacyOutlineOffTargetGraphic();
+            RebuildRimLayout();
+            ApplyRimTint();
+            RefreshRimActive();
+        }
 
         void Awake()
         {
             if (targetGraphic == null) targetGraphic = GetComponent<Graphic>();
-            if (targetGraphic != null)
+
+            var sel = GetComponent<Selectable>();
+            if (sel != null)
             {
-                outline = targetGraphic.gameObject.GetComponent<Outline>();
-                if (outline == null)
-                {
-                    outline = targetGraphic.gameObject.AddComponent<Outline>();
-                }
-                outline.effectDistance = new Vector2(borderSize, -borderSize);
-                outline.effectColor = hoverColor;
-                outline.enabled = false;
+                sel.transition = Selectable.Transition.None;
+                sel.navigation = new Navigation { mode = Navigation.Mode.None };
             }
+
+            if (hoverBorderGO == null)
+            {
+                EnsureRim();
+                StripLegacyOutlineOffTargetGraphic();
+                RebuildRimLayout();
+                ApplyRimTint();
+                RefreshRimActive();
+            }
+            else DestroyRimImmediate();
+        }
+
+        void OnDestroy()
+        {
+            DestroyRimImmediate();
         }
 
         void OnEnable()
         {
-            if (hoverBorderGO != null) hoverBorderGO.SetActive(isSelected);
-            else if (outline != null) outline.enabled = isSelected;
+            if (hoverBorderGO != null)
+            {
+                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
+                else hoverBorderGO.SetActive(isSelected);
+                return;
+            }
+            RefreshRimActive();
         }
 
         void OnDisable()
         {
             if (hoverBorderGO != null) hoverBorderGO.SetActive(false);
-            else if (outline != null) outline.enabled = false;
+            else if (rimRoot != null) rimRoot.SetActive(false);
+            hovering = false;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (hoverBorderGO != null) hoverBorderGO.SetActive(true);
-            else if (outline != null) outline.enabled = true;
+            hovering = true;
+            if (hoverBorderGO != null)
+            {
+                hoverBorderGO.SetActive(true);
+                return;
+            }
+            RefreshRimActive();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (hoverBorderGO != null) { if (!isSelected) hoverBorderGO.SetActive(false); }
-            else if (outline != null && !isSelected) outline.enabled = false;
+            hovering = false;
+            if (hoverBorderGO != null)
+            {
+                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
+                else if (!isSelected) hoverBorderGO.SetActive(false);
+                return;
+            }
+            RefreshRimActive();
+        }
+
+        private void RefreshRimActive()
+        {
+            if (hoverBorderGO != null) return;
+            if (rimRoot == null) return;
+            bool show = hovering || isSelected;
+            if (rimRoot.activeSelf != show) rimRoot.SetActive(show);
+        }
+
+        private void StripLegacyOutlineOffTargetGraphic()
+        {
+            if (targetGraphic == null) return;
+            try
+            {
+                Outline o = targetGraphic.GetComponent<Outline>();
+                if (o != null) UnityEngine.Object.Destroy(o);
+                if (gameObject != targetGraphic.gameObject)
+                {
+                    Outline o2 = gameObject.GetComponent<Outline>();
+                    if (o2 != null) UnityEngine.Object.Destroy(o2);
+                }
+            }
+            catch { }
+        }
+
+        private void DestroyRimImmediate()
+        {
+            if (rimRoot == null) return;
+            try { UnityEngine.Object.Destroy(rimRoot); }
+            finally
+            {
+                rimRoot = null;
+                rimL = rimR = rimT = rimB = null;
+            }
+        }
+
+        private Image CreateRimPiece(string name)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(rimRoot.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.localScale = Vector3.one;
+            Image img = go.AddComponent<Image>();
+            img.color = hoverColor;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        /// <summary>Place <see cref="rimRoot"/> rendered after backdrop so rims sit behind Text/Icon when possible.</summary>
+        private void InsertRimAfterTargetGraphic()
+        {
+            if (targetGraphic == null || rimRoot == null) return;
+            Transform tgfx = targetGraphic.transform;
+            if (tgfx.parent != transform) return;
+            int idx = Mathf.Clamp(tgfx.GetSiblingIndex() + 1, 0, transform.childCount);
+            rimRoot.transform.SetSiblingIndex(idx);
+        }
+
+        private void EnsureRim()
+        {
+            if (hoverBorderGO != null) return;
+            if (targetGraphic == null) return;
+
+            if (rimRoot != null)
+            {
+                InsertRimAfterTargetGraphic();
+                return;
+            }
+
+            rimRoot = new GameObject("HoverRim");
+            rimRoot.transform.SetParent(transform, false);
+            RectTransform rr = rimRoot.AddComponent<RectTransform>();
+            rr.anchorMin = Vector2.zero;
+            rr.anchorMax = Vector2.one;
+            rr.offsetMin = Vector2.zero;
+            rr.offsetMax = Vector2.zero;
+            rr.localScale = Vector3.one;
+
+            // Parent may have HorizontalLayoutGroup/VerticalLayoutGroup with childControlWidth/Height
+            // that would squash the rim to ~0px (e.g. CategoryQuickSwitchChrome). Rim must always
+            // fill parent via its stretched anchors, so opt out of any layout group sizing.
+            var rimLe = rimRoot.AddComponent<LayoutElement>();
+            rimLe.ignoreLayout = true;
+
+            rimL = CreateRimPiece("L");
+            rimR = CreateRimPiece("R");
+            rimT = CreateRimPiece("T");
+            rimB = CreateRimPiece("B");
+
+            InsertRimAfterTargetGraphic();
+        }
+
+        private void RebuildRimLayout()
+        {
+            if (rimL == null || rimR == null || rimT == null || rimB == null) return;
+
+            float t = borderSize;
+            if (t < 1f) t = 1f;
+
+            // Match old Outline: outward = expand past rect, inward = shrink inside rect.
+            var prt = rimRoot.GetComponent<RectTransform>();
+            if (prt != null)
+            {
+                if (inward)
+                {
+                    prt.offsetMin = Vector2.one * t;
+                    prt.offsetMax = Vector2.one * (-t);
+                }
+                else
+                {
+                    prt.offsetMin = Vector2.one * (-t);
+                    prt.offsetMax = Vector2.one * t;
+                }
+            }
+
+            void layoutV(Image img, float anchorX, float pivotX, float posX)
+            {
+                RectTransform rt = img.rectTransform;
+                rt.anchorMin = new Vector2(anchorX, 0f);
+                rt.anchorMax = new Vector2(anchorX, 1f);
+                rt.pivot = new Vector2(pivotX, 0.5f);
+                rt.anchoredPosition = new Vector2(posX, 0f);
+                rt.sizeDelta = new Vector2(t, 0f);
+            }
+
+            void layoutH(Image img, float anchorY, float pivotY, float posY)
+            {
+                RectTransform rt = img.rectTransform;
+                rt.anchorMin = new Vector2(0f, anchorY);
+                rt.anchorMax = new Vector2(1f, anchorY);
+                rt.pivot = new Vector2(0.5f, pivotY);
+                rt.anchoredPosition = new Vector2(0f, posY);
+                rt.sizeDelta = new Vector2(0f, t);
+            }
+
+            layoutV(rimL, 0f, 0f, t * 0.5f);
+            layoutV(rimR, 1f, 1f, -t * 0.5f);
+            layoutH(rimB, 0f, 0f, t * 0.5f);
+            layoutH(rimT, 1f, 1f, -t * 0.5f);
+        }
+
+        private void ApplyRimTint()
+        {
+            if (rimL != null) rimL.color = hoverColor;
+            if (rimR != null) rimR.color = hoverColor;
+            if (rimT != null) rimT.color = hoverColor;
+            if (rimB != null) rimB.color = hoverColor;
+        }
+    }
+
+    /// <summary>
+    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> every frame so dynamic UI and Unity defaults
+    /// cannot bring back ColorTint hover fill.
+    /// </summary>
+    public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
+    {
+        private void LateUpdate()
+        {
+            UI.ApplyGalleryPaneHoverPolicy(gameObject);
         }
     }
 
@@ -490,7 +751,7 @@ namespace VPB
         public void OnPointerEnter(PointerEventData eventData)
         {
             // Card overlay only shows in grid mode when always-on labels are OFF
-            bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled
+            bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible()
                                 && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
             if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 card.SetActive(true);
@@ -513,14 +774,57 @@ namespace VPB
         public GalleryPanel panel;
         public FileEntry file;
 
+        private bool hovering;
+
+        public bool IsHovering => hovering;
+
+        void OnDisable()
+        {
+            if (!hovering) return;
+            hovering = false;
+            try { if (panel != null) panel.NotifyHoverPreviewTriggerExited(this); } catch { }
+        }
+
+        public bool ContainsScreenPoint(Vector2 screenPos)
+        {
+            var rt = transform as RectTransform;
+            if (rt == null || !isActiveAndEnabled) return false;
+
+            Camera cam = null;
+            try
+            {
+                if (panel != null && panel.canvas != null && panel.canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = panel.canvas.worldCamera != null ? panel.canvas.worldCamera : Camera.main;
+            }
+            catch { cam = null; }
+
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
+            catch { return false; }
+        }
+
+        /// <summary>After list row recycle rebind: refresh preview file or clear stale hover state.</summary>
+        public void SyncHoverPreviewAfterRebind()
+        {
+            if (!hovering) return;
+            if (panel == null || file == null)
+            {
+                hovering = false;
+                try { panel?.NotifyHoverPreviewTriggerExited(this); } catch { }
+                return;
+            }
+            try { panel.NotifyHoverPreviewTriggerEntered(this, file); } catch { }
+        }
+
         public void OnPointerEnter(PointerEventData eventData)
         {
-            try { if (panel != null && file != null) panel.ShowHoverPreview(file); } catch { }
+            hovering = true;
+            try { if (panel != null && file != null) panel.NotifyHoverPreviewTriggerEntered(this, file); } catch { }
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            try { if (panel != null) panel.HideHoverPreview(file); } catch { }
+            hovering = false;
+            try { if (panel != null) panel.NotifyHoverPreviewTriggerExited(this); } catch { }
         }
     }
 
@@ -607,8 +911,20 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Run after <see cref="ScrollbarSync.LateUpdate"/> (default order). Uses
+    /// <see cref="ScrollRect.verticalNormalizedPosition"/> for row window (same mapping as
+    /// <see cref="ScrollToCenterItem"/>). Do not call <see cref="Canvas.ForceUpdateCanvases"/> on scroll —
+    /// it re-enters layout and breaks ScrollRect + decoupled scrollbar after first drag.
+    /// One <see cref="Canvas.willRenderCanvases"/> flush per burst re-binds after layout. Cache busted on every
+    /// <see cref="ScrollRect.onValueChanged"/> so LateUpdate never skips a pass on stale (start,end).
+    /// </summary>
+    [DefaultExecutionOrder(50)]
     public class RecyclingGridView : MonoBehaviour
     {
+        public static float LastScrollRealtime { get; private set; }
+        public static float LastScrollNormY { get; private set; }
+
         private ScrollRect _scrollRect;
         public ScrollRect scrollRect
         {
@@ -632,8 +948,16 @@ namespace VPB
         
         public Action<GameObject, int> onBindItem;
         public Func<GameObject> onCreateItem;
+        public Action<GameObject> onRecycleItem;
+
+        /// <summary>
+        /// The item index whose row was closest to viewport center during the last UpdateVisibleItems call.
+        /// Cached so callers (e.g. thumbnail priority computation) don't recompute it per-item.
+        /// </summary>
+        public int CachedCenterItemIndex { get; private set; }
 
         private List<RecyclingGridItem> activeItems = new List<RecyclingGridItem>();
+        private HashSet<int> _activeIndexSet = new HashSet<int>();
         private Stack<RectTransform> pool = new Stack<RectTransform>();
         
         // Grid State
@@ -659,6 +983,49 @@ namespace VPB
         private bool _needsVisibleUpdate = false;
         private bool _needsLayoutUpdate = true; // Start with true to ensure initial layout
 
+        /// <summary>Last committed visible index range (for diagnostics only).</summary>
+        private int _lastVisibleStartIndex = -1;
+        private int _lastVisibleEndIndex = -1;
+
+        private bool _pendingScrollRenderFlush;
+
+        private void InvalidateVisibleRangeCache()
+        {
+            _lastVisibleStartIndex = -1;
+            _lastVisibleEndIndex = -1;
+        }
+
+        /// <summary>Top of visible band in content space — derived from norm (authoritative when <see cref="ScrollbarSync"/> drives ScrollRect).</summary>
+        private float GetContentScrollTopYForVisibility()
+        {
+            if (viewport == null || content == null) return 0f;
+            if (_scrollRect == null) return Mathf.Max(0f, content.anchoredPosition.y);
+
+            float vh = viewport.rect.height;
+            if (vh <= 0.01f) vh = 800f;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            if (maxScrollY <= 0.01f) return 0f;
+            float norm = Mathf.Clamp01(_scrollRect.verticalNormalizedPosition);
+            return Mathf.Clamp((1f - norm) * maxScrollY, 0f, maxScrollY);
+        }
+
+        private void ScrollFlushBeforeRender()
+        {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
+            _pendingScrollRenderFlush = false;
+            if (!isActiveAndEnabled || itemsCount == 0 || viewport == null || content == null) return;
+            InvalidateVisibleRangeCache();
+            UpdateVisibleItems('W');
+        }
+
+        private void QueueScrollFlushAfterLayout()
+        {
+            if (_pendingScrollRenderFlush) return;
+            _pendingScrollRenderFlush = true;
+            Canvas.willRenderCanvases += ScrollFlushBeforeRender;
+        }
+
         private void Awake()
         {
             if (_scrollRect == null) scrollRect = GetComponent<ScrollRect>();
@@ -667,13 +1034,37 @@ namespace VPB
 
         private void Update()
         {
-            // Robust check: catch initial width or config changes
+            // Adaptive relayout must not run on tiny viewport width noise: RecalculateLayout() ends in
+            // Refresh() -> RecycleAll(), which drops the visible-range cache and re-binds every cell
+            // — main cause of grid scroll jitter when rect.width fluctuates 1–2px per frame.
             RectTransform rt = GetComponent<RectTransform>();
             float usableWidth = viewport != null ? viewport.rect.width : (rt != null ? rt.rect.width : 0);
-            
-            if (isAdaptive && (Mathf.Abs(usableWidth - lastRectWidth) > 1.0f || fixedColumns != lastFixedColumns))
+
+            if (isAdaptive)
             {
-                _needsLayoutUpdate = true;
+                bool layoutDirty = false;
+                if (fixedColumns != lastFixedColumns)
+                    layoutDirty = true;
+                else if (fixedColumns > 0)
+                {
+                    int cols = Mathf.Max(1, fixedColumns);
+                    float inner = usableWidth - (cols - 1) * spacingX;
+                    if (inner > 0.01f)
+                    {
+                        float newCellW = inner / cols;
+                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f)
+                            layoutDirty = true;
+                    }
+                    else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
+                        layoutDirty = true;
+                }
+                else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
+                {
+                    layoutDirty = true;
+                }
+
+                if (layoutDirty)
+                    _needsLayoutUpdate = true;
             }
 
             if (_needsLayoutUpdate)
@@ -682,15 +1073,27 @@ namespace VPB
                 RecalculateLayout();
             }
 
-            if (_needsVisibleUpdate)
-            {
-                _needsVisibleUpdate = false;
-                UpdateVisibleItems();
-            }
+            // Visibility refresh is deferred to LateUpdate: ScrollRect + manual ScrollbarSync apply
+            // content.anchoredPosition after our Update runs; scrollbar jumps could leave stale scroll offset
+            // here so start/end indices match old viewport → no recycle/bind → thumbnails never enqueue.
+        }
+
+        private void LateUpdate()
+        {
+            if (!_needsVisibleUpdate) return;
+            _needsVisibleUpdate = false;
+            UpdateVisibleItems('L');
+        }
+
+        private void OnDisable()
+        {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
+            _pendingScrollRenderFlush = false;
         }
 
         private void OnDestroy()
         {
+            Canvas.willRenderCanvases -= ScrollFlushBeforeRender;
             if (_scrollRect != null) _scrollRect.onValueChanged.RemoveListener(OnScroll);
         }
 
@@ -699,7 +1102,8 @@ namespace VPB
             if (isAdaptive) _needsLayoutUpdate = true;
         }
 
-        private void RecalculateLayout()
+        /// <param name="deferFinalRefresh">When true, updates dimensions and content height only — caller must end with <see cref="Refresh"/> or <see cref="SetItemCountAtScroll"/> / <see cref="SetItemCount"/> without defer.</param>
+        private void RecalculateLayout(bool deferFinalRefresh = false)
         {
             if (content == null) return;
             
@@ -756,13 +1160,15 @@ namespace VPB
             preserveCenterItemIndex = -1;
 
             UpdateContentHeight();
+            if (deferFinalRefresh) return;
+
             Refresh();
 
             if (centerIdx >= 0)
                 ScrollToCenterItem(centerIdx);
         }
 
-        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight)
+        public void SetAdaptiveConfig(bool adaptive, float minSize, int fixedCols, bool fixedHeight, bool deferRefresh = false)
         {
             isAdaptive = adaptive;
             minCellSize = minSize;
@@ -771,10 +1177,10 @@ namespace VPB
             
             // Force immediate recalculation
             lastRectWidth = -1f; 
-            RecalculateLayout();
+            RecalculateLayout(deferFinalRefresh: deferRefresh);
         }
 
-        public void SetGridConfig(float width, float height, float spaceX, float spaceY, int columns)
+        public void SetGridConfig(float width, float height, float spaceX, float spaceY, int columns, bool deferRefresh = false)
         {
             itemWidth = width;
             itemHeight = height;
@@ -788,14 +1194,14 @@ namespace VPB
             
             lastRectWidth = -1f; // Force recalculation to sync width
             if (itemsCount > 0) UpdateContentHeight();
-            Refresh();
+            if (!deferRefresh) Refresh();
         }
 
-        public void SetItemCount(int count)
+        public void SetItemCount(int count, bool deferRefresh = false)
         {
             itemsCount = count;
             UpdateContentHeight();
-            Refresh();
+            if (!deferRefresh) Refresh();
         }
 
         /// <summary>
@@ -841,7 +1247,7 @@ namespace VPB
         public void Refresh()
         {
             RecycleAll();
-            UpdateVisibleItems();
+            UpdateVisibleItems('R');
         }
 
         /// <summary>Returns the index of the item whose row is closest to the viewport center.</summary>
@@ -850,7 +1256,8 @@ namespace VPB
             if (content == null || viewport == null || itemsCount == 0) return 0;
             float effectiveItemHeight = itemHeight + spacingY;
             if (effectiveItemHeight <= 0.1f) return 0;
-            float centerY = content.anchoredPosition.y + viewport.rect.height * 0.5f;
+            float scrollTop = GetContentScrollTopYForVisibility();
+            float centerY = scrollTop + viewport.rect.height * 0.5f;
             int centerRow = Mathf.FloorToInt(centerY / effectiveItemHeight);
             centerRow = Mathf.Clamp(centerRow, 0, Mathf.Max(0, rowCount - 1));
             return Mathf.Clamp(centerRow * colCount, 0, itemsCount - 1);
@@ -865,37 +1272,83 @@ namespace VPB
             int row = index / Mathf.Max(1, colCount);
             float rowCenterY = row * effectiveItemHeight + spacingY + itemHeight * 0.5f;
             float targetScrollY = rowCenterY - viewport.rect.height * 0.5f;
-            float maxScrollY = content.sizeDelta.y - viewport.rect.height;
-            targetScrollY = Mathf.Clamp(targetScrollY, 0f, Mathf.Max(0f, maxScrollY));
+            float vh = viewport.rect.height;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            targetScrollY = Mathf.Clamp(targetScrollY, 0f, maxScrollY);
             if (_scrollRect != null)
                 _scrollRect.verticalNormalizedPosition = maxScrollY > 0f
                     ? 1f - targetScrollY / maxScrollY
                     : 1f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('C');
+        }
+
+        /// <summary>Scrolls only as much as needed to keep the row containing <paramref name="index"/> visible.</summary>
+        public void EnsureItemVisible(int index)
+        {
+            if (content == null || viewport == null || itemsCount == 0 || index < 0) return;
+            index = Mathf.Min(index, itemsCount - 1);
+
+            float effectiveItemHeight = itemHeight + spacingY;
+            if (effectiveItemHeight <= 0.1f) return;
+
+            int row = index / Mathf.Max(1, colCount);
+            float rowTopY = row * effectiveItemHeight;
+            float rowBottomY = rowTopY + itemHeight + spacingY;
+
+            float vh = viewport.rect.height;
+            if (vh <= 0.01f) vh = 800f;
+            float ch = Mathf.Max(content.rect.height, content.sizeDelta.y);
+            float maxScrollY = Mathf.Max(0f, ch - vh);
+            if (maxScrollY <= 0.01f) return;
+
+            float scrollTopY = GetContentScrollTopYForVisibility();
+            float targetScrollY = scrollTopY;
+            if (rowTopY < scrollTopY)
+                targetScrollY = rowTopY;
+            else if (rowBottomY > scrollTopY + vh)
+                targetScrollY = rowBottomY - vh;
+            else
+                return;
+
+            targetScrollY = Mathf.Clamp(targetScrollY, 0f, maxScrollY);
+            if (_scrollRect != null)
+                _scrollRect.verticalNormalizedPosition = 1f - targetScrollY / maxScrollY;
+            UpdateVisibleItems('V');
         }
 
         /// <summary>Jump scroll to the first row (Unity: vertical normalized 1 = top).</summary>
         public void ScrollToTopImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 1f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('T');
         }
 
         /// <summary>Jump scroll to the last row (Unity: vertical normalized 0 = bottom).</summary>
         public void ScrollToBottomImmediate()
         {
             if (_scrollRect != null) _scrollRect.verticalNormalizedPosition = 0f;
-            UpdateVisibleItems();
+            UpdateVisibleItems('B');
         }
 
         private void OnScroll(Vector2 pos)
         {
+            // Bust cache on every ScrollRect delta so LateUpdate cannot no-op on stale (start,end) before willRender runs.
+            InvalidateVisibleRangeCache();
             _needsVisibleUpdate = true;
+            QueueScrollFlushAfterLayout();
+
+            try
+            {
+                LastScrollRealtime = Time.realtimeSinceStartup;
+                LastScrollNormY = _scrollRect != null ? _scrollRect.verticalNormalizedPosition : pos.y;
+            }
+            catch { }
         }
 
-        private void UpdateVisibleItems()
+        private void UpdateVisibleItems(char reason = '?')
         {
-            if (itemsCount == 0 || viewport == null || content == null) 
+            if (itemsCount == 0 || viewport == null || content == null)
             {
                 if (activeItems.Count > 0) RecycleAll();
                 return;
@@ -906,59 +1359,80 @@ namespace VPB
             if (effectiveItemHeight <= 0.1f) effectiveItemHeight = 200f;
 
             float viewHeight = viewport.rect.height;
-            if (viewHeight <= 0) viewHeight = 800f; 
+            if (viewHeight <= 0) viewHeight = 800f;
 
-            float startY = content.anchoredPosition.y;
+            float startY = GetContentScrollTopYForVisibility();
             float endY = startY + viewHeight;
-            
-            // Revert to simpler buffer logic that worked
-            startY -= effectiveItemHeight; 
-            endY += effectiveItemHeight;
+
+            // 2-row buffer above and below so thumbnails begin loading before items enter view.
+            startY -= effectiveItemHeight * 2f;
+            endY += effectiveItemHeight * 2f;
 
             int startRow = Mathf.FloorToInt(Mathf.Max(0, startY) / effectiveItemHeight);
             int endRow = Mathf.CeilToInt(endY / effectiveItemHeight);
-            
+
             startRow = Mathf.Max(0, startRow);
             endRow = Mathf.Min(rowCount - 1, endRow);
 
             int startIndex = startRow * colCount;
-            int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1); 
-            // Recycle items out of range
+            int endIndex = Mathf.Min(itemsCount - 1, (endRow * colCount) + colCount - 1);
+
+            // Cache center index once for the entire bind pass so onBindItem callbacks
+            // don't recompute it (and access viewport.rect) for every single item.
+            CachedCenterItemIndex = GetCenterItemIndex();
+
+            // Recycle items out of range, updating the index set in sync.
             for (int i = activeItems.Count - 1; i >= 0; i--)
             {
                 RecyclingGridItem item = activeItems[i];
                 if (item == null || item.index < startIndex || item.index > endIndex)
                 {
-                    if (item != null) Recycle(item.GetComponent<RectTransform>());
+                    if (item != null)
+                    {
+                        _activeIndexSet.Remove(item.index);
+                        Recycle(item.GetComponent<RectTransform>());
+                    }
                     activeItems.RemoveAt(i);
                 }
             }
 
-            // Create missing items
+            // Create missing items — O(1) lookup via HashSet instead of O(N) inner scan.
             for (int i = startIndex; i <= endIndex; i++)
             {
-                bool alreadyActive = false;
-                for (int j = 0; j < activeItems.Count; j++)
-                {
-                    if (activeItems[j] != null && activeItems[j].index == i)
-                    {
-                        alreadyActive = true;
-                        break;
-                    }
-                }
+                if (_activeIndexSet.Contains(i)) continue;
 
-                if (!alreadyActive)
+                RectTransform itemRT = GetItem();
+                if (itemRT != null)
                 {
-                    RectTransform itemRT = GetItem();
-                    if (itemRT != null)
-                    {
-                        RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
-                        item.index = i;
-                        PositionItem(itemRT, i);
-                        if (onBindItem != null) onBindItem(itemRT.gameObject, i);
-                        activeItems.Add(item);
-                    }
+                    RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
+                    item.index = i;
+                    _activeIndexSet.Add(i);
+                    PositionItem(itemRT, i);
+                    if (onBindItem != null) onBindItem(itemRT.gameObject, i);
+                    activeItems.Add(item);
                 }
+            }
+
+            int idxMin = int.MaxValue;
+            int idxMax = int.MinValue;
+            for (int ai = 0; ai < activeItems.Count; ai++)
+            {
+                RecyclingGridItem it = activeItems[ai];
+                if (it == null) continue;
+                if (it.index < idxMin) idxMin = it.index;
+                if (it.index > idxMax) idxMax = it.index;
+            }
+
+            bool setMismatch = _activeIndexSet.Count != activeItems.Count;
+            bool outOfBand = activeItems.Count > 0 && (idxMin < startIndex || idxMax > endIndex);
+
+            _lastVisibleStartIndex = startIndex;
+            _lastVisibleEndIndex = endIndex;
+
+            if (setMismatch || outOfBand)
+            {
+                string idxSpan = (activeItems.Count == 0 || idxMin == int.MaxValue) ? "na..na" : (idxMin + ".." + idxMax);
+                LogUtil.LogWarning("[VPB RGVScroll] UVI_INTEGRITY_FAIL reason=" + reason + " pred=" + startIndex + ".." + endIndex + " idxAct=" + idxSpan);
             }
         }
 
@@ -1006,6 +1480,7 @@ namespace VPB
         private void Recycle(RectTransform item)
         {
             if (item == null) return;
+            if (onRecycleItem != null) onRecycleItem(item.gameObject);
             item.gameObject.SetActive(false);
             pool.Push(item);
         }
@@ -1017,6 +1492,8 @@ namespace VPB
                 Recycle(activeItems[i].GetComponent<RectTransform>());
             }
             activeItems.Clear();
+            _activeIndexSet.Clear();
+            InvalidateVisibleRangeCache();
         }
     }
 
@@ -1027,6 +1504,9 @@ namespace VPB
 
     public class ScrollbarSync : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
+        public static float LastScrollbarDragRealtime { get; private set; }
+        public static float LastScrollbarDragValue { get; private set; }
+
         private ScrollRect _scrollRect;
         public ScrollRect scrollRect
         {
@@ -1069,6 +1549,8 @@ namespace VPB
         private bool _isSyncing = false;
         private BoxCollider _collider;
         private RectTransform _scrollbarRT;
+        private float _lastDragLogRealtime = -999f;
+        private float _lastDragLogValue = -999f;
 
         private void Awake()
         {
@@ -1106,19 +1588,27 @@ namespace VPB
             _isPointerDown = false;
         }
 
-        public void OnPointerDown(PointerEventData eventData) 
-        { 
-            _isPointerDown = true; 
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            _isPointerDown = true;
+            try
+            {
+                LastScrollbarDragRealtime = Time.realtimeSinceStartup;
+                LastScrollbarDragValue = scrollbar != null ? scrollbar.value : -1f;
+            }
+            catch { }
+
         }
 
-        public void OnPointerUp(PointerEventData eventData) 
-        { 
-            _isPointerDown = false; 
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            _isPointerDown = false;
             // Final sync on release to ensure alignment
             if (scrollRect != null && scrollbar != null)
             {
                 SyncToScrollRect(scrollbar.value);
             }
+
         }
 
         private void Update()
@@ -1127,8 +1617,7 @@ namespace VPB
 
             // Force interactable to prevent other scripts from disabling it
             if (!scrollbar.interactable) scrollbar.interactable = true;
-            
-            UpdateScrollbarSize();
+            // Scrollbar size + collider sync run in LateUpdate only — avoids duplicate rect reads every frame.
         }
 
         private void LateUpdate()
@@ -1165,6 +1654,22 @@ namespace VPB
             finally 
             { 
                 _isSyncing = false; 
+            }
+
+            if (_isPointerDown)
+            {
+                float now = Time.realtimeSinceStartup;
+                if ((now - _lastDragLogRealtime) >= 0.10f || Mathf.Abs(val - _lastDragLogValue) >= 0.02f)
+                {
+                    _lastDragLogRealtime = now;
+                    _lastDragLogValue = val;
+                    try
+                    {
+                        LastScrollbarDragRealtime = now;
+                        LastScrollbarDragValue = val;
+                    }
+                    catch { }
+                }
             }
         }
 

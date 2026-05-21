@@ -1,7 +1,6 @@
 using System.IO;
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using HarmonyLib;
 
@@ -210,12 +209,25 @@ namespace VPB
                 // Helper to add categories while tracking names
                 Action<string, string, string> addCat = (name, ext, path) => {
                     // Consolidate names
-                    if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair";
+                    // Keep hair presets as separate category (used to be separate "subcategory" in side list)
+                    if (name.Equals("Person Hair", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Hair", StringComparison.OrdinalIgnoreCase)) name = "Hair Presets";
                     if (name.Equals("Person Clothing", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Clothing", StringComparison.OrdinalIgnoreCase)) name = "Clothing";
                     if (name.Equals("Person Appearance", StringComparison.OrdinalIgnoreCase) || name.Equals("P.Appearance", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person AppearancePresets", StringComparison.OrdinalIgnoreCase) || name.Equals("Person Appearance Presets", StringComparison.OrdinalIgnoreCase)) name = "Appearance";
                     if (name.Equals("Person Pose", StringComparison.OrdinalIgnoreCase)) name = "Pose";
                     if (name.Equals("Person", StringComparison.OrdinalIgnoreCase)) name = "Pose"; // Merge Person into Pose as requested
+
+                    // Short-name aliases for remaining Person preset subfolders (matches BA's naming).
+                    if (name.Equals("Person AnimationPresets", StringComparison.OrdinalIgnoreCase)) name = "Animation";
+                    if (name.Equals("Person General", StringComparison.OrdinalIgnoreCase)) name = "General";
+                    if (name.Equals("Person Morphs", StringComparison.OrdinalIgnoreCase)) name = "Morphs";
+                    if (name.Equals("Person Skin", StringComparison.OrdinalIgnoreCase)) name = "Skin";
+                    // Distinguish from main "Plugins" (Custom/Scripts), which is for .cs/.cslist/.dll script files.
+                    if (name.Equals("Person Plugins", StringComparison.OrdinalIgnoreCase)) name = "Plugin Presets";
+
+                    // Consolidate physics categories
+                    if (name.Equals("Person GlutePhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
+                    if (name.Equals("Person BreastPhysics", StringComparison.OrdinalIgnoreCase)) name = "Body Physics";
 
                     if (!catDict.ContainsKey(name)) {
                         catDict[name] = new CategoryInfo { ext = ext, paths = new List<string>() };
@@ -249,10 +261,15 @@ namespace VPB
                 addCat("Clothing", "vap", "Custom/Atom/Person/Clothing");
                 addCat("Clothing", "vam|vap", "Saves/Person/Clothing");
                 addCat("Hair", "vam|vap", "Custom/Hair");
+                // Include hair presets saved under Person preset folders (Issue #101 hair parity).
+                addCat("Hair", "vap", "Custom/Atom/Person/Hair");
+                addCat("Hair", "vam|vap", "Saves/Person/Hair");
                 addCat("Pose", "json", "Saves/Person"); // Was Person
+                addCat("Pose", "vap", "Custom/Atom/Person/Pose");
                 addCat("Appearance", "json|vap", "Saves/Person/appearance");
+                addCat("Appearance", "vap", "Custom/Atom/Person/Appearance");
                 // Clothing/Hair presets are included in the unified Clothing/Hair categories.
-                // addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
+                addCat("CUA", "assetbundle|unity3d", "Custom/Assets");
 
                 // 2. Dynamic Discovery from Custom/Atom
                 string atomRoot = "Custom/Atom";
@@ -328,6 +345,12 @@ namespace VPB
                             foreach (string resourcePath in resEnum)
                             {
                                 string resourceName = Path.GetFileName(resourcePath);
+
+                                // Textures holds .png/.jpg image assets, not presets. Skip from preset discovery.
+                                if (atomType.Equals("Person", StringComparison.OrdinalIgnoreCase)
+                                    && resourceName.Equals("Textures", StringComparison.OrdinalIgnoreCase))
+                                    continue;
+
                                 string finalName = resourceName;
 
                                 // Handle name collisions (e.g. if "Clothing" exists in Atom/Person/Clothing, rename to "Person Clothing")
@@ -359,6 +382,24 @@ namespace VPB
                 }
 
                 addCat("All", "var", "");
+                // List all .var packages as rows (no internal scan). Uses PackageListEntry rows in gallery.
+                addCat("ALL VAR", "varpkg", "");
+                // Union of all VAR-internal paths (all types) + loose roots below.
+                addCat(Gallery.EverythingCategoryName, Gallery.EverythingExtensionToken, "");
+
+                if (catDict.TryGetValue(Gallery.EverythingCategoryName, out CategoryInfo everythingInfo))
+                {
+                    string[] evLoose = new[]
+                    {
+                        "Saves/scene", "Custom/SubScene", "Custom/Scripts", "Custom/Clothing", "Custom/Hair",
+                        "Saves/Person", "Custom/Assets", "Custom/Atom",
+                    };
+                    for (int ei = 0; ei < evLoose.Length; ei++)
+                    {
+                        if (!everythingInfo.paths.Contains(evLoose[ei]))
+                            everythingInfo.paths.Add(evLoose[ei]);
+                    }
+                }
 
                 // Build list
                 foreach(var kvp in catDict)
@@ -417,7 +458,17 @@ namespace VPB
 
         public void Refresh()
         {
-            FileManager.Refresh(true);
+            Refresh(null);
+        }
+
+        /// <summary>
+        /// Refresh with an explicit reason tag (e.g. "autoload", "autoinstall", "manual").
+        /// Reasons propagate to FileManager scan-stats logging so coalesced startup passes
+        /// can be diagnosed without a stack trace.
+        /// </summary>
+        public void Refresh(string reason)
+        {
+            FileManager.Refresh(reason, true);
             MVR.FileManagement.FileManager.Refresh();
             RemoveEmptyFolder("AllPackages");
         }
@@ -430,154 +481,6 @@ namespace VPB
         {
             FileManager.Refresh(true, true, true);
             MVR.FileManagement.FileManager.Refresh();
-        }
-        private static readonly Regex s_PackageUidRegex = new Regex(
-            @"([A-Za-z0-9][A-Za-z0-9_\-]*\.[A-Za-z0-9][A-Za-z0-9_\-]*\.[0-9]+):/",
-            RegexOptions.Compiled);
-
-        private void CollectSceneReferencedPackages(HashSet<string> protectedPackages)
-        {
-            SuperController sc = SuperController.singleton;
-            if (sc == null) { LogUtil.LogWarning("[UnloadAll] SuperController is null, skipping scene scan"); return; }
-            int atomCount = 0, storableCount = 0, matchCount = 0;
-            try
-            {
-                // GetStorableIDs / GetStorableByID are standard VAM Atom API, look them up once
-                System.Reflection.MethodInfo getIds = null;
-                System.Reflection.MethodInfo getStorable = null;
-
-                foreach (Atom atom in sc.GetAtoms())
-                {
-                    if (atom == null) continue;
-                    atomCount++;
-                    try
-                    {
-                        if (getIds == null)
-                        {
-                            getIds = atom.GetType().GetMethod("GetStorableIDs",
-                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-                            getStorable = atom.GetType().GetMethod("GetStorableByID",
-                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
-                                null, new Type[] { typeof(string) }, null);
-                            LogUtil.Log($"[UnloadAll] GetStorableIDs found={getIds != null}, GetStorableByID found={getStorable != null}");
-                        }
-                        if (getIds == null || getStorable == null) continue;
-
-                        var ids = getIds.Invoke(atom, null) as System.Collections.Generic.List<string>;
-                        if (ids == null) { LogUtil.LogWarning($"[UnloadAll] atom '{atom.uid}': GetStorableIDs returned null"); continue; }
-
-                        foreach (string sid in ids)
-                        {
-                            if (string.IsNullOrEmpty(sid)) continue;
-                            try
-                            {
-                                var storable = getStorable.Invoke(atom, new object[] { sid });
-                                if (storable == null) continue;
-
-                                // Try GetJSON() with no params, then (bool,bool), then (bool,bool,bool)
-                                string jsonStr = null;
-                                foreach (var sig in new[] {
-                                    new Type[0],
-                                    new Type[] { typeof(bool), typeof(bool) },
-                                    new Type[] { typeof(bool), typeof(bool), typeof(bool) }
-                                })
-                                {
-                                    var m2 = storable.GetType().GetMethod("GetJSON",
-                                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
-                                        null, sig, null);
-                                    if (m2 == null) continue;
-                                    object[] args = sig.Length == 0 ? null : sig.Length == 2
-                                        ? new object[] { true, true }
-                                        : new object[] { true, true, true };
-                                    var r = m2.Invoke(storable, args);
-                                    if (r != null) { jsonStr = r.ToString(); break; }
-                                }
-                                if (jsonStr == null) continue;
-
-                                storableCount++;
-                                int before = protectedPackages.Count;
-                                foreach (Match m in s_PackageUidRegex.Matches(jsonStr))
-                                    ProtectPackage(m.Groups[1].Value, protectedPackages);
-                                matchCount += (protectedPackages.Count - before);
-                            }
-                            catch { }
-                        }
-                    }
-                    catch (Exception ex) { LogUtil.LogWarning($"[UnloadAll] atom '{atom.uid}': {ex.Message}"); }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning("[UnloadAll] CollectSceneReferencedPackages: " + ex.Message);
-            }
-            LogUtil.Log($"[UnloadAll] Scene scan: {atomCount} atoms, {storableCount} storables scanned, {matchCount} packages protected");
-        }
-
-        public void UnloadAllPackages()
-        {
-            // Build protected set: AutoInstall packages + their recursive dependencies
-            var protectedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var uid in FileEntry.AutoInstallLookup)
-                ProtectPackage(uid, protectedPackages);
-            LogUtil.Log($"[UnloadAll] After AutoInstall: {protectedPackages.Count} protected");
-
-            // Also protect packages referenced by the currently active scene (hair, clothing, etc.)
-            CollectSceneReferencedPackages(protectedPackages);
-            LogUtil.Log($"[UnloadAll] After scene scan: {protectedPackages.Count} protected total");
-
-            // Uninstall all packages that are installed but not protected
-            bool dirty = false;
-            var packages = FileManager.PackagesByUid;
-            if (packages == null) { LogUtil.LogWarning("[UnloadAll] PackagesByUid is null, aborting"); return; }
-
-            int installedCount = 0, skippedCount = 0, movedCount = 0, deletedDupCount = 0, failedCount = 0;
-            foreach (var kvp in packages)
-            {
-                VarPackage pkg = kvp.Value;
-                if (!pkg.IsInstalled()) continue;
-                installedCount++;
-                if (protectedPackages.Contains(pkg.Uid)) { skippedCount++; continue; }
-
-                LogUtil.Log($"[UnloadAll] Unloading: {pkg.Uid}");
-                string addonPath = pkg.Path;
-                bool moved = pkg.UninstallSelf();
-                if (moved) { movedCount++; dirty = true; continue; }
-
-                // UninstallSelf failed — check if AllPackages already has this file (duplicate)
-                if (addonPath.StartsWith("AddonPackages/"))
-                {
-                    string allPkgPath = "AllPackages" + addonPath.Substring("AddonPackages".Length);
-                    if (File.Exists(allPkgPath))
-                    {
-                        // AllPackages already has it — remove the AddonPackages duplicate
-                        try
-                        {
-                            File.Delete(addonPath);
-                            // Update pkg.Path to reflect the actual file location (AllPackages)
-                            // so InstallSelf works correctly on next load instead of returning false
-                            pkg.CloseZipFile();
-                            pkg.Path = allPkgPath.Replace('\\', '/');
-                            pkg.RelativePath = allPkgPath.Substring("AllPackages/".Length);
-                            deletedDupCount++;
-                            dirty = true;
-                            LogUtil.Log($"[UnloadAll] Deleted AddonPackages duplicate: {pkg.Uid}");
-                        }
-                        catch (Exception ex) { failedCount++; LogUtil.LogWarning($"[UnloadAll] Delete duplicate failed {pkg.Uid}: {ex.Message}"); }
-                        continue;
-                    }
-                }
-                failedCount++;
-                LogUtil.LogWarning($"[UnloadAll] UninstallSelf failed for: {pkg.Uid}");
-            }
-            LogUtil.Log($"[UnloadAll] installed={installedCount} skipped={skippedCount} moved={movedCount} deletedDup={deletedDupCount} failed={failedCount}");
-
-            if (dirty)
-            {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh(true);
-                RemoveEmptyFolder("AddonPackages");
-            }
-            LogUtil.Log($"[UnloadAll] Complete. dirty={dirty}");
         }
         //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)
@@ -597,28 +500,6 @@ namespace VPB
                 }
             }
         }
-        private void ProtectPackage(string packageUid, HashSet<string> protectedPackages)
-        {
-            if (string.IsNullOrEmpty(packageUid)) return;
-            if (protectedPackages.Contains(packageUid)) return;
-
-            protectedPackages.Add(packageUid);
-
-            VarPackage currentPackage = FileManager.GetPackage(packageUid);
-            if (currentPackage != null && currentPackage.RecursivePackageDependencies != null)
-            {
-                foreach (var depUid in currentPackage.RecursivePackageDependencies)
-                {
-                    VarPackage depPackage = FileManager.ResolveDependency(depUid);
-                    if (depPackage != null)
-                    {
-                        protectedPackages.Add(depPackage.Uid);
-                    }
-                    protectedPackages.Add(depUid);
-                }
-            }
-        }
-
         private string GetPackageFromPath(string path)
         {
              if (string.IsNullOrEmpty(path)) return null;
@@ -635,6 +516,15 @@ namespace VPB
         public void OpenHubBrowse()
         {
             SuperController.singleton.ActivateWorldUI();
+            if (m_HubBrowse == null)
+            {
+                if (MVR.Hub.HubBrowse.singleton == null)
+                {
+                    LogUtil.LogWarning("[VPB] HubBrowse is not available yet");
+                    return;
+                }
+                CreateHubBrowse();
+            }
             m_HubBrowse.Show();
         }
         public void OpenCustomScene()
@@ -660,12 +550,14 @@ namespace VPB
         public void OpenCategoryClothing()
         {
             SetLastGalleryPage(GalleryPage.CategoryClothing);
-            ShowGallery("Category Clothing", "vam", "Custom/Clothing");
+            // Include .vap so Issue #101 subfilters can split base vs presets.
+            ShowGallery("Category Clothing", "vam|vap", "Custom/Clothing");
         }
         public void OpenCategoryHair()
         {
             SetLastGalleryPage(GalleryPage.CategoryHair);
-            ShowGallery("Category Hair", "vam", "Custom/Hair");
+            // Include .vap so Issue #101 subfilters can split base vs presets.
+            ShowGallery("Category Hair", "vam|vap", "Custom/Hair");
         }
         public void OpenCategoryPose()
         {

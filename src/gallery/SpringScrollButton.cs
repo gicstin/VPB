@@ -88,8 +88,8 @@ namespace VPB
             if (scrollRect == null) return;
 
             float dt = Time.unscaledDeltaTime;
-            float k = 1f - Mathf.Exp(-Mathf.Max(0.01f, speedSmoothing) * dt);
-            _currentSpeedPx = Mathf.Lerp(_currentSpeedPx, _targetSpeedPx, k);
+            // No smoothing/transition: snap speed immediately.
+            _currentSpeedPx = _targetSpeedPx;
 
             float scrollablePx = 0f;
             try
@@ -202,6 +202,8 @@ namespace VPB
             var bc = go.AddComponent<BoxCollider>();
             bc.size = new Vector3(widthPx, heightPx, 20f);
             bc.center = Vector3.zero;
+            // UI collider must not participate in physics collisions with scene atoms.
+            bc.isTrigger = true;
 
             var s = go.AddComponent<SpringScrollButton>();
             s.scrollRect = targetScrollRect;
@@ -221,7 +223,10 @@ namespace VPB
 
             var bc = GetComponent<BoxCollider>();
             if (bc != null)
+            {
                 bc.size = new Vector3(widthPx, heightPx, bc.size.z > 0.1f ? bc.size.z : 20f);
+                bc.isTrigger = true;
+            }
         }
     }
 }

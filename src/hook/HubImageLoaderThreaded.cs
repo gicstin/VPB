@@ -58,6 +58,7 @@ namespace VPB
                 webRequestDone = false;
                 webRequestHadError = false;
                 webRequestData = null;
+                webRequestStartRealtime = 0f;
                 callback = null;
                 priority = 1000;
                 insertionIndex = 0;
@@ -102,6 +103,7 @@ namespace VPB
             public bool webRequestDone;
             public bool webRequestHadError;
             public byte[] webRequestData;
+            public float webRequestStartRealtime;
             public ImageLoaderCallback callback;
 
             public string cacheSignature
@@ -322,13 +324,21 @@ namespace VPB
                         raw = ByteArrayPool.Rent(num8);
                         textureFormat = TextureFormat.RGBA32;
 
-                        for (int i = 0; i < pix.Length; i++)
+                        if (!HubPixelPackingJobs.TryPackColor32ToRgba32(pix, raw, out string jobPackError))
                         {
-                            int idx = i * 4;
-                            raw[idx] = pix[i].r;
-                            raw[idx + 1] = pix[i].g;
-                            raw[idx + 2] = pix[i].b;
-                            raw[idx + 3] = pix[i].a;
+                            if (!string.IsNullOrEmpty(jobPackError))
+                            {
+                                LogUtil.LogWarning("[VPB] Hub pixel packing job fallback: " + jobPackError);
+                            }
+
+                            for (int i = 0; i < pix.Length; i++)
+                            {
+                                int idx = i * 4;
+                                raw[idx] = pix[i].r;
+                                raw[idx + 1] = pix[i].g;
+                                raw[idx + 2] = pix[i].b;
+                                raw[idx + 3] = pix[i].a;
+                            }
                         }
 
                         ApplyTransformations(num8);
@@ -644,7 +654,9 @@ namespace VPB
                         }
                         catch (Exception ex) { LogUtil.LogError($"[VPB] Hub LoadRawTextureData failed for {imgPath}: {ex.Message}"); }
 
-                        if (MVR.FileManagement.CacheManager.CachingEnabled && !loadedFromCache)
+                        bool isDepThumb = groupId != null && groupId.StartsWith("depThumb:", StringComparison.Ordinal);
+                        bool allowWebCacheWrite = MVR.FileManagement.CacheManager.CachingEnabled || isDepThumb;
+                        if (allowWebCacheWrite && !loadedFromCache)
                         {
                             string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
                             if (text != null && !FileManager.FileExists(text))
@@ -659,7 +671,7 @@ namespace VPB
                                     byte[] rawTextureData2 = tex.GetRawTextureData();
                                     if (rawTextureData2 != null && rawTextureData2.Length > 0)
                                     {
-                                        File.WriteAllText(text + "meta", jSONClass.ToString(string.Empty));
+                                        File.WriteAllText(text + "meta", VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024));
                                         File.WriteAllBytes(text, rawTextureData2);
                                     }
                                 }
@@ -728,6 +740,66 @@ namespace VPB
         protected int progress;
         protected int progressMax;
         protected AsyncFlag loadFlag;
+        protected Dictionary<string, int> webRequestFailCounts;
+        private const int MaxWebRequestFailuresPerUrl = 5;
+
+        private int GetWebRequestFailureCount(string url)
+        {
+            if (webRequestFailCounts == null || string.IsNullOrEmpty(url)) return 0;
+            int count;
+            return webRequestFailCounts.TryGetValue(url, out count) ? count : 0;
+        }
+
+        private int MarkWebRequestFailure(string url)
+        {
+            if (webRequestFailCounts == null || string.IsNullOrEmpty(url)) return 0;
+            int count;
+            if (!webRequestFailCounts.TryGetValue(url, out count)) count = 0;
+            count++;
+            webRequestFailCounts[url] = count;
+            return count;
+        }
+
+        private void ClearWebRequestFailure(string url)
+        {
+            if (webRequestFailCounts == null || string.IsNullOrEmpty(url)) return;
+            if (webRequestFailCounts.ContainsKey(url)) webRequestFailCounts.Remove(url);
+        }
+
+        public string GetWebCachePathForUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return null;
+            string textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(textureCacheDir)) return null;
+            string text = url.Replace("https://", string.Empty);
+            text = text.Replace("http://", string.Empty);
+            text = text.Replace("/", "__");
+            text = text.Replace("?", "_");
+            return textureCacheDir + "/" + text + "__C.vamcache";
+        }
+
+        public void InvalidateWebCache(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            string textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
+            if (string.IsNullOrEmpty(textureCacheDir)) return;
+            string text = url.Replace("https://", string.Empty);
+            text = text.Replace("http://", string.Empty);
+            text = text.Replace("/", "__");
+            text = text.Replace("?", "_");
+            string prefix = text + "_";
+            try
+            {
+                string[] files = Directory.GetFiles(textureCacheDir, prefix + "*.vamcache");
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string path = files[i];
+                    try { if (File.Exists(path)) File.Delete(path); } catch { }
+                    try { if (File.Exists(path + "meta")) File.Delete(path + "meta"); } catch { }
+                }
+            }
+            catch { }
+        }
 
         protected void MTTask(object info)
         {
@@ -874,20 +946,56 @@ namespace VPB
             }
             if (!value.processed && value.imgPath != null && Regex.IsMatch(value.imgPath, "^http"))
             {
-                if (MVR.FileManagement.CacheManager.CachingEnabled && value.WebCachePathExists()) value.useWebCache = true;
+                int failCount = GetWebRequestFailureCount(value.imgPath);
+                if (failCount >= MaxWebRequestFailuresPerUrl)
+                {
+                    value.webRequestHadError = true;
+                    value.webRequestDone = true;
+                    value.hadError = true;
+                    value.errorText = "Skipped after " + failCount + " failed attempts";
+                    if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                    {
+                        LogUtil.LogWarning("[VPB] Hub thumbnail request skipped after repeated failures (" + failCount + "): " + value.imgPath);
+                    }
+                    return;
+                }
+
+                bool isDepThumb = value.groupId != null && value.groupId.StartsWith("depThumb:", StringComparison.Ordinal);
+                bool allowWebCacheRead = MVR.FileManagement.CacheManager.CachingEnabled || isDepThumb;
+                if (allowWebCacheRead && value.WebCachePathExists()) value.useWebCache = true;
                 else
                 {
                     if (value.webRequest == null)
                     {
                         value.webRequest = UnityWebRequest.Get(value.imgPath);
-                        value.webRequest.timeout = 30;
+                        value.webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
+                        // Fail fast for Hub thumbnails so a single bad URL does not block the queue for a long time.
+                        value.webRequest.timeout = 15;
+                        value.webRequestStartRealtime = Time.realtimeSinceStartup;
                         value.webRequest.SendWebRequest();
+                    }
+                    else if (!value.webRequest.isDone && value.webRequestStartRealtime > 0f)
+                    {
+                        float elapsed = Time.realtimeSinceStartup - value.webRequestStartRealtime;
+                        // Safety net in case UnityWebRequest state gets stuck and built-in timeout never surfaces.
+                        if (elapsed > 20f)
+                        {
+                            int failNo = MarkWebRequestFailure(value.imgPath);
+                            value.webRequestHadError = true;
+                            value.webRequestDone = true;
+                            value.hadError = true;
+                            value.errorText = "Timeout(stuck) after " + elapsed.ToString("F1") + "s (attempt " + failNo + "/" + MaxWebRequestFailuresPerUrl + ")";
+                            try { value.webRequest.Abort(); } catch { }
+                            if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
+                                LogUtil.LogWarning("[VPB] Hub thumbnail stuck request aborted after " + elapsed.ToString("F1") + "s url=" + value.imgPath);
+                        }
                     }
                     if (value.webRequest.isDone)
                     {
                         long code = value.webRequest.responseCode;
                         if (!value.webRequest.isNetworkError && code >= 200 && code < 300)
                         {
+                            ClearWebRequestFailure(value.imgPath);
                             value.webRequestData = value.webRequest.downloadHandler.data;
                             value.webRequestDone = true;
                         }
@@ -904,7 +1012,9 @@ namespace VPB
 
                                     value.webRequest.Dispose();
                                     value.webRequest = UnityWebRequest.Get(location);
-                                    value.webRequest.timeout = 30;
+                                    value.webRequest.SetRequestHeader("Accept-Encoding", "gzip, deflate");
+                                    value.webRequest.timeout = 15;
+                                    value.webRequestStartRealtime = Time.realtimeSinceStartup;
                                     value.webRequest.SendWebRequest();
                                     return;
                                 }
@@ -918,17 +1028,21 @@ namespace VPB
                             value.webRequestHadError = true;
                             value.webRequestDone = true;
                             value.hadError = true;
-                            value.errorText = "Redirect " + code;
+                            int failNo = MarkWebRequestFailure(value.imgPath);
+                            value.errorText = "Redirect " + code + " (attempt " + failNo + "/" + MaxWebRequestFailuresPerUrl + ")";
                         }
                         else
                         {
+                            int failNo = MarkWebRequestFailure(value.imgPath);
                             value.webRequestHadError = true;
                             value.webRequestDone = true;
                             value.hadError = true;
-                            value.errorText = "Error " + code;
+                            value.errorText = "Error " + code + " (attempt " + failNo + "/" + MaxWebRequestFailuresPerUrl + ")";
 
                             if (Settings.Instance != null && Settings.Instance.LogImageQueueEvents != null && Settings.Instance.LogImageQueueEvents.Value)
-                                LogUtil.LogWarning($"[VPB] Hub thumbnail HTTP error {code} url={value.imgPath} err={value.webRequest.error}");
+                            {
+                                LogUtil.LogWarning($"[VPB] Hub thumbnail HTTP error {code} url={value.imgPath} err={value.webRequest.error} attempt={failNo}/{MaxWebRequestFailuresPerUrl}");
+                            }
                         }
                     }
                 }
@@ -965,6 +1079,7 @@ namespace VPB
             textureTrackedCache = new Dictionary<Texture2D, bool>();
             thumbnailCache = new Dictionary<string, Texture2D>();
             textureUseCount = new Dictionary<Texture2D, int>();
+            webRequestFailCounts = new Dictionary<string, int>(StringComparer.Ordinal);
             queuedImages = new PriorityQueue<QueuedImage>((a, b) => {
                 int p = a.priority - b.priority;
                 if (p != 0) return p;

@@ -111,6 +111,53 @@ namespace VPB
 			return false;
 		}
 
+		public override bool IsHidden()
+		{
+			if (isVar) return false;
+			try
+			{
+				// VaM "system file" hide marker: adjacent "<file>.hide"
+				string full = FileManager.GetFullPath(Path);
+				string root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
+				if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root)) return false;
+				if (!full.StartsWith(root.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(full.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+					return false;
+				return File.Exists(full + ".hide");
+			}
+			catch { return false; }
+		}
+
+		public override void SetHidden(bool b)
+		{
+			if (isVar) return;
+			try
+			{
+				string full = FileManager.GetFullPath(Path);
+				string root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
+				if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root)) return;
+				string rootPrefix = root.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+				if (!full.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(full.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+					return;
+
+				string hidePath = full + ".hide";
+				if (b)
+				{
+					if (File.Exists(hidePath)) return;
+					string dir = System.IO.Path.GetDirectoryName(hidePath);
+					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+					File.WriteAllText(hidePath, string.Empty);
+				}
+				else
+				{
+					if (!File.Exists(hidePath)) return;
+					File.Delete(hidePath);
+				}
+			}
+			catch { }
+		}
+
         public bool Install()
         {
             if (isVar)

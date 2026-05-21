@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -13,10 +14,27 @@ namespace VPB
 {
 	public class CustomImageLoaderThreaded : MonoBehaviour
 	{
+        // VAR pkg:/ thumbnail reads: dedicated IO thread + queue (concurrent OpenStream on workers wedged).
+
+        private static readonly object _varThumbIoQueueLock = new object();
+        private static readonly Queue<QueuedImage> _varThumbIoQueue = new Queue<QueuedImage>();
+        private static Thread _varThumbIoThread;
+        private static volatile bool _varThumbIoStop;
 		public delegate void ImageLoaderCallback(QueuedImage qi);
 
 		public class QueuedImage
 		{
+            // Diagnostics only (timestamps from main thread)
+            public float debugEnqueueRealtime;
+            public float debugDispatchRealtime;
+            public float debugWorkStartRealtime;
+            public volatile bool debugAbortIssued;
+            public Thread debugWorkerThread;
+            public volatile int debugStage;
+            public volatile int debugStageAux;
+            public volatile float debugStageRealtime;
+            public volatile bool thumbVarIoPending;
+
             public void Reset()
             {
                 isThumbnail = false;
@@ -28,7 +46,9 @@ namespace VPB
                 linear = false;
                 processed = false;
                 preprocessed = false;
-                decodedFromFastPath = false;
+				decodedFromFastPath = false;
+                turboJpegScaleDenom = 1;
+                thumbnailUnityDecodeOnly = false;
                 loadedFromGalleryCache = false;
                 loadedFromCache = false;
                 cancel = false;
@@ -63,6 +83,15 @@ namespace VPB
                 priority = 1000;
                 insertionIndex = 0;
                 groupId = null;
+                debugEnqueueRealtime = 0f;
+                debugDispatchRealtime = 0f;
+                debugWorkStartRealtime = 0f;
+                debugAbortIssued = false;
+                debugWorkerThread = null;
+                debugStage = 0;
+                debugStageAux = 0;
+                debugStageRealtime = 0f;
+                thumbVarIoPending = false;
             }
 
             public int priority;
@@ -86,7 +115,11 @@ namespace VPB
 			public bool processed;
 
 			public bool preprocessed;
-			public volatile bool working;
+            public volatile bool working;
+			/// <summary>TurboJPEG decode denominator (1,2,4,8); grid-derived thumbs use up to 4; non-thumbs ignore.</summary>
+			public int turboJpegScaleDenom = 1;
+			/// <summary>When true (hover preview), skip TurboJPEG and gallery pixel cache; decode JPEG via Unity <see cref="Texture2D.LoadImage"/>; separate RAM cache tier.</summary>
+			public bool thumbnailUnityDecodeOnly;
 			public bool loadedFromGalleryCache;
 			public bool loadedFromCache;
 			public bool loadedFromDownscaledCache;
@@ -301,17 +334,27 @@ namespace VPB
 				}
 			}
 
-			protected void ProcessFromStream(Stream st)
+			internal void ProcessFromStream(Stream st)
 			{
 				try
 				{
+                    try { debugStage = 22; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 					byte[] buffer = new byte[16384];
 					using (MemoryStream ms = new MemoryStream())
 					{
 						int read;
+                        int loops = 0;
 						while ((read = st.Read(buffer, 0, buffer.Length)) > 0)
 						{
 							ms.Write(buffer, 0, read);
+                            if (isThumbnail)
+                            {
+                                loops++;
+                                if ((loops & 0x3F) == 0)
+                                {
+                                    try { debugStage = 23; debugStageAux = (int)Mathf.Min(ms.Length, int.MaxValue); debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+                                }
+                            }
 						}
 						byte[] bytes = ms.ToArray();
 						rawLength = bytes.Length;
@@ -319,6 +362,7 @@ namespace VPB
 						Buffer.BlockCopy(bytes, 0, raw, 0, rawLength);
 						needsDecoding = true;
 					}
+                    try { debugStage = 24; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 				}
 				catch (Exception ex)
 				{
@@ -335,6 +379,14 @@ namespace VPB
                     processed = true;
 					return;
 				}
+                // VAR thumb: IO thread already filled raw via OpenStream. FileExists(pkg:/...) can be false for same path
+                // → hadError "not found" and Finish() returns before Decode — red question mark grid.
+                if (isThumbnail && needsDecoding && raw != null && rawLength > 0 && !string.IsNullOrEmpty(imgPath)
+                    && IsVarPackageVfsPath(imgPath))
+                {
+                    processed = true;
+                    return;
+                }
                 if (imgPath != null && imgPath.StartsWith("http"))
                 {
                     LogUtil.Log("[VPB] [Loader] Thread processing: " + imgPath);
@@ -403,8 +455,9 @@ namespace VPB
 					}
 					else if (FileManager.FileExists(imgPath))
 					{
-						bool loadedFromGalleryCache = false;
-						if (isThumbnail)
+						// Assign the queued image's field, not a local — downstream skip logic reads it to avoid duplicate disk-cache jobs.
+						loadedFromGalleryCache = false;
+						if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
 						{
                             long lastWriteTime = 0;
                             bool foundTime = false;
@@ -429,7 +482,7 @@ namespace VPB
 								int w, h;
 								TextureFormat fmt;
 								byte[] data;
-								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt))
+								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
 								{
 									raw = data;
 									width = w;
@@ -511,11 +564,25 @@ namespace VPB
 								try
 								{
 									// Load image from a var package
-									using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
-									{
-										Stream stream = fileEntryStream.Stream;
-										ProcessFromStream(stream);
-									}
+                                    try { debugStage = 20; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+                                    bool isVarPath = false;
+                                    try { isVarPath = imgPath != null && imgPath.IndexOf(":/", StringComparison.Ordinal) > 0; } catch { isVarPath = false; }
+
+                                    if (isThumbnail && isVarPath)
+                                    {
+                                        // VAR thumbnails read on the dedicated IO thread; concurrent FileManager.OpenStream
+                                        // from worker threads deadlocks inside FileManager. Return now; IO thread re-enqueues for decode.
+                                        return;
+                                    }
+                                    else
+                                    {
+                                        using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
+                                        {
+                                            try { debugStage = 21; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+                                            Stream stream = fileEntryStream.Stream;
+                                            ProcessFromStream(stream);
+                                        }
+                                    }
 								}
 								catch (Exception ex4)
 								{
@@ -555,6 +622,41 @@ namespace VPB
 
 				try
 				{
+                    try { debugStage = 30; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+					bool isJpeg = TurboJpegNative.LooksLikeJpeg(raw, rawLength);
+					bool useTurboJpeg = false;
+					try
+					{
+						useTurboJpeg = TurboJpegNative.ShouldAttemptTurboDecode() && isJpeg;
+					}
+					catch { useTurboJpeg = false; }
+					if (isThumbnail && thumbnailUnityDecodeOnly) useTurboJpeg = false;
+
+					Texture2D turboTex = null;
+					string turboErr = null;
+					if (useTurboJpeg)
+					{
+						int turboDenom = (!isThumbnail || turboJpegScaleDenom <= 1) ? 1 : TurboJpegNative.NormalizeScaleDenom(turboJpegScaleDenom);
+                        try { debugStage = 31; debugStageAux = turboDenom; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+						bool turboOk = TurboJpegNative.TryDecodeJpegToTexture2D(raw, rawLength, turboDenom, out turboTex, out turboErr);
+                        try { debugStage = turboOk ? 32 : 33; debugStageAux = turboDenom; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+						if (turboOk)
+						{
+							TurboJpegStats.NoteFirstTurboSuccess();
+							ByteArrayPool.Return(raw);
+							raw = null;
+							rawLength = 0;
+							needsDecoding = false;
+							tex = turboTex;
+							width = turboTex.width;
+							height = turboTex.height;
+							textureFormat = turboTex.format;
+							decodedFromFastPath = true;
+							preprocessed = false;
+							return;
+						}
+					}
+
 					Texture2D tempTex = new Texture2D(2, 2);
 					byte[] dataToLoad = raw;
 					if (raw.Length != rawLength)
@@ -562,8 +664,12 @@ namespace VPB
 						dataToLoad = new byte[rawLength];
 						Buffer.BlockCopy(raw, 0, dataToLoad, 0, rawLength);
 					}
-					
-					if (tempTex.LoadImage(dataToLoad))
+
+                    try { debugStage = 34; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+					bool loadImageOk = tempTex.LoadImage(dataToLoad);
+                    try { debugStage = loadImageOk ? 35 : 36; debugStageAux = tempTex != null ? tempTex.width : 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+
+					if (loadImageOk)
 					{
 						int origWidth = tempTex.width;
 						int origHeight = tempTex.height;
@@ -632,22 +738,7 @@ namespace VPB
                         raw = ByteArrayPool.Rent(num8);
                         textureFormat = TextureFormat.RGBA32;
 
-                        // Copy Color32 to raw bytes (Unity's Color32 is RGBA)
-                        // We need to match the original loader's expected format if it was doing something special.
-                        // The original loader was doing some swaps:
-                        /*
-                        for (int i = 0; i < num8; i += num3)
-                        {
-                            byte b = raw[i];
-                            raw[i] = raw[i + 2];
-                            raw[i + 2] = b;
-                            ...
-                        }
-                        */
-                        // Unity Color32 is: r, g, b, a.
-                        // The original loader was copying from System.Drawing (BGRA usually) and swapping R and B.
-                        // So it ended up as RGBA.
-                        
+                        // Color32 is RGBA; copy channels directly into the raw byte buffer.
                         for (int i = 0; i < pix.Length; i++)
                         {
                             int idx = i * 4;
@@ -726,8 +817,7 @@ namespace VPB
 
                 if (createNormalFromBump)
                 {
-                    // This is the most complex one. 
-                    // I'll copy the logic from the original loader but adapted to RGBA
+                    // Sobel convolution on a grayscale heightmap; output is a tangent-space normal in RGBA layout.
                     byte[] array = new byte[num8]; // Not pooled because it's temporary here
                     float[][] hMap = new float[height][];
                     for (int l = 0; l < height; l++)
@@ -830,7 +920,10 @@ namespace VPB
                 else if (decodedFromFastPath)
                 {
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-                    tex.Apply(createMipMaps, !canCompress && !isSimTexture);
+					// Thumbnails (TurboJPEG RGB24): keep CPU copy readable — non-readable breaks Blit/ReadPixels
+					// in gallery disk-cache pipeline and some UI paths; full-size loads keep original policy.
+					bool makeNoLongerReadable = !isThumbnail && !canCompress && !isSimTexture;
+                    tex.Apply(createMipMaps, makeNoLongerReadable);
                     if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
                     {
                         try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -904,7 +997,7 @@ namespace VPB
                                      if (tex.width <= 512 && tex.height <= 512)
                                      {
                                          byte[] rawTextureData2 = tex.GetRawTextureData();
-                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime);
+                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime, turboJpegScaleDenom);
                                          savedToGalleryCache = true;
                                          loadedFromGalleryCache = true;
                                      }
@@ -929,7 +1022,7 @@ namespace VPB
 								jSONClass["width"] = tex.width.ToString();
 								jSONClass["height"] = tex.height.ToString();
 								jSONClass["format"] = tex.format.ToString();
-								string contents = jSONClass.ToString(string.Empty);
+								string contents = VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024);
 								byte[] rawTextureData2 = tex.GetRawTextureData();
 								File.WriteAllText(text + "meta", contents);
 								File.WriteAllBytes(text, rawTextureData2);
@@ -997,7 +1090,224 @@ namespace VPB
             return pool.Get();
         }
 
-		public static VPB.CustomImageLoaderThreaded singleton;
+        /// <summary>In-RAM thumbnail LRU key; matches disk <see cref="GalleryThumbnailCache.GetThumbnailCacheKey"/> tier suffix; <c>|uj</c> = Unity-only decode (hover preview).</summary>
+        public static string ThumbnailMemoryCacheKey(string path, int turboJpegScaleDenom, bool unityDecodeOnly = false)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            string k = turboJpegScaleDenom <= 1 ? path : path + "|tj" + turboJpegScaleDenom;
+            if (unityDecodeOnly) return k + "|uj";
+            return k;
+        }
+
+        private static int ClampInt(int v, int lo, int hi)
+        {
+            if (v < lo) return lo;
+            if (v > hi) return hi;
+            return v;
+        }
+
+        private static bool TurboJpegConcurrencyReduction()
+        {
+            try
+            {
+                return TurboJpegNative.ShouldAttemptTurboDecode();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Auto caps scale with <see cref="Environment.ProcessorCount"/>; TurboJPEG-on uses lower caps. BepInEx <c>MaxLoaderThreads</c>: use 0 for auto.</summary>
+        public static int GetEffectiveMaxLoaderThreads()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                if (st != null && st.MaxLoaderThreads != null && st.MaxLoaderThreads.Value > 0)
+                    return ClampInt(st.MaxLoaderThreads.Value, 1, 64);
+                int p = Environment.ProcessorCount;
+                if (p < 1) p = 1;
+                if (TurboJpegConcurrencyReduction())
+                    return ClampInt(p / 3, 3, 8);
+                return ClampInt(p / 2, 4, 12);
+            }
+            catch
+            {
+                return 12;
+            }
+        }
+
+        /// <summary>BepInEx <c>MaxThumbnailThreads</c>: use 0 for auto.</summary>
+        public static int GetEffectiveMaxThumbnailThreads()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                if (st != null && st.MaxThumbnailThreads != null && st.MaxThumbnailThreads.Value > 0)
+                    return ClampInt(st.MaxThumbnailThreads.Value, 1, 64);
+                int p = Environment.ProcessorCount;
+                if (p < 1) p = 1;
+                if (TurboJpegConcurrencyReduction())
+                    return ClampInt(p / 4, 2, 6);
+                return ClampInt(p / 3, 3, 8);
+            }
+            catch
+            {
+                return 8;
+            }
+        }
+
+        private static bool IsVarPackageVfsPath(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return false;
+            return imgPath.IndexOf(":/", StringComparison.Ordinal) > 0;
+        }
+
+        private static void EnsureVarThumbIoWorker()
+        {
+            if (_varThumbIoThread != null && _varThumbIoThread.IsAlive) return;
+            lock (typeof(CustomImageLoaderThreaded))
+            {
+                if (_varThumbIoThread != null && _varThumbIoThread.IsAlive) return;
+                _varThumbIoStop = false;
+                _varThumbIoThread = new Thread(VarThumbIoLoop)
+                {
+                    IsBackground = true,
+                    Name = "VPB-VarThumbIo"
+                };
+                _varThumbIoThread.Start();
+            }
+        }
+
+        private static void VarThumbIoLoop()
+        {
+            while (!_varThumbIoStop)
+            {
+                QueuedImage qi = null;
+                try
+                {
+                    lock (_varThumbIoQueueLock)
+                    {
+                        if (_varThumbIoQueue.Count > 0)
+                            qi = _varThumbIoQueue.Dequeue();
+                    }
+                    if (qi == null)
+                    {
+                        Thread.Sleep(1);
+                        continue;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (qi.cancel || qi.processed) continue;
+                    RunVarThumbIoRead(qi);
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        qi.hadError = true;
+                        qi.errorText = ex.Message;
+                    }
+                    catch { }
+                }
+                finally
+                {
+                    QueuedImage q = qi;
+                    try
+                    {
+                        if (q != null) q.thumbVarIoPending = false;
+                    }
+                    catch { }
+
+                    try
+                    {
+                        if (singleton != null && q != null) singleton.StartThumbnailDecodeThread(q);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private static void RunVarThumbIoRead(QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath)) return;
+            if (!qi.isThumbnail) return;
+            if (!IsVarPackageVfsPath(qi.imgPath)) return;
+            if (qi.cancel) return;
+
+			try { qi.debugStage = 11; qi.debugStageAux = 0; qi.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+
+            using (FileEntryStream fileEntryStream = FileManager.OpenStream(qi.imgPath))
+            {
+                try { qi.debugStage = 21; qi.debugStageAux = 0; qi.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+                Stream stream = fileEntryStream.Stream;
+                qi.ProcessFromStream(stream);
+            }
+        }
+
+        private void StartThumbnailDecodeThread(QueuedImage head)
+        {
+            if (head == null) return;
+            try
+            {
+                if (head.cancel || head.processed)
+                {
+                    return;
+                }
+
+                head.working = true;
+                try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
+                System.Threading.Interlocked.Increment(ref runningTasks);
+                System.Threading.Interlocked.Increment(ref runningThumbnailTasks);
+
+                Thread t = new Thread(() =>
+                {
+                    try
+                    {
+                        head.Process();
+                    }
+                    catch (Exception ex)
+                    {
+                        head.hadError = true;
+                        head.errorText = ex.Message;
+                    }
+                    finally
+                    {
+                        if (!head.debugAbortIssued)
+                        {
+                            head.processed = true;
+                            head.working = false;
+                            System.Threading.Interlocked.Decrement(ref runningTasks);
+                            System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                        }
+                        head.debugWorkerThread = null;
+                    }
+                });
+                t.IsBackground = true;
+                head.debugWorkerThread = t;
+                t.Start();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] [Loader] Thumbnail decode thread start failed: " + ex.Message);
+                try
+                {
+                    head.working = false;
+                    System.Threading.Interlocked.Decrement(ref runningTasks);
+                    System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                }
+                catch { }
+            }
+        }
+
+        public static VPB.CustomImageLoaderThreaded singleton;
 
 		public GameObject progressHUD;
 
@@ -1006,9 +1316,11 @@ namespace VPB
 		public Text progressText;
 
         protected int runningTasks;
-        protected const int MaxConcurrentTasks = 16;
         protected int runningThumbnailTasks;
-        protected const int MaxConcurrentThumbnailTasks = 4;
+        /// <summary>When queued image count exceeds this, drop stale thumbnail requests (see <see cref="PruneThumbnailQueueOverBudget"/>).</summary>
+        /// <remarks>Large grids (many cols × buffer rows) enqueue 150+ thumbs per scroll; cap must stay below that burst or prune never runs (imgQ stalls ~500+).</remarks>
+        private const int ThumbnailQueueSoftCap = 280;
+        private const int ThumbnailQueuePruneTarget = 220;
 
 		protected Dictionary<string, Texture2D> thumbnailCache;
 		private const int ThumbnailCacheMaxItems = 512;
@@ -1196,13 +1508,14 @@ namespace VPB
 			return thumbnailUseCount.TryGetValue(tex, out c) && c > 0;
 		}
 
-		public void ClearCacheThumbnail(string imgPath)
+		public void ClearCacheThumbnail(string imgPath, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
+			string key = ThumbnailMemoryCacheKey(imgPath, turboJpegScaleDenom, unityDecodeOnly);
 			Texture2D value;
-			if (thumbnailCache != null && thumbnailCache.TryGetValue(imgPath, out value))
+			if (thumbnailCache != null && thumbnailCache.TryGetValue(key, out value))
 			{
-				thumbnailCache.Remove(imgPath);
-				RemoveThumbnailCacheLru(imgPath);
+				thumbnailCache.Remove(key);
+				RemoveThumbnailCacheLru(key);
 				if (value != null)
 				{
 					if (IsThumbnailInUse(value))
@@ -1227,33 +1540,34 @@ namespace VPB
 			}
 		}
 
-		public Texture2D GetCachedThumbnail(string path)
+		public Texture2D GetCachedThumbnail(string path, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
+			string key = ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly);
 			Texture2D value;
-			if (thumbnailCache != null && thumbnailCache.TryGetValue(path, out value))
+			if (thumbnailCache != null && thumbnailCache.TryGetValue(key, out value))
 			{
 				if (value == null)
 				{
-					thumbnailCache.Remove(path);
-					RemoveThumbnailCacheLru(path);
+					thumbnailCache.Remove(key);
+					RemoveThumbnailCacheLru(key);
 					return null;
 				}
-				TouchThumbnailCacheLru(path);
+				TouchThumbnailCacheLru(key);
 				return value;
 			}
 			return null;
 		}
 
-		public void AddCachedThumbnail(string path, Texture2D tex)
+		public void AddCachedThumbnail(string path, Texture2D tex, int turboJpegScaleDenom = 1, bool unityDecodeOnly = false)
 		{
-			CacheThumbnail(path, tex);
+			CacheThumbnail(ThumbnailMemoryCacheKey(path, turboJpegScaleDenom, unityDecodeOnly), tex);
 		}
 
-		private void CacheThumbnail(string path, Texture2D tex)
+		private void CacheThumbnail(string cacheKey, Texture2D tex)
 		{
-			if (thumbnailCache == null || string.IsNullOrEmpty(path) || tex == null) return;
-			if (!thumbnailCache.ContainsKey(path)) thumbnailCache.Add(path, tex);
-			TouchThumbnailCacheLru(path);
+			if (thumbnailCache == null || string.IsNullOrEmpty(cacheKey) || tex == null) return;
+			if (!thumbnailCache.ContainsKey(cacheKey)) thumbnailCache.Add(cacheKey, tex);
+			TouchThumbnailCacheLru(cacheKey);
 			EnforceThumbnailCacheLimit();
 		}
 
@@ -1318,12 +1632,13 @@ namespace VPB
 		private void DispatchPendingThumbnailCallbacks(QueuedImage res)
 		{
 			if (res == null || string.IsNullOrEmpty(res.imgPath)) return;
+			string pendingKey = ThumbnailMemoryCacheKey(res.imgPath, res.turboJpegScaleDenom, res.thumbnailUnityDecodeOnly);
 			List<ImageLoaderCallback> callbacks = null;
 			lock (pendingThumbnailLock)
 			{
-				if (pendingThumbnailCallbacks != null && pendingThumbnailCallbacks.TryGetValue(res.imgPath, out callbacks))
+				if (pendingThumbnailCallbacks != null && pendingThumbnailCallbacks.TryGetValue(pendingKey, out callbacks))
 				{
-					pendingThumbnailCallbacks.Remove(res.imgPath);
+					pendingThumbnailCallbacks.Remove(pendingKey);
 				}
 			}
 			if (callbacks == null) return;
@@ -1341,7 +1656,52 @@ namespace VPB
 			}
 		}
 
+		/// <summary>
+		/// Fast scroll can enqueue thousands of unique VAR paths; only <see cref="GetEffectiveMaxThumbnailThreads"/> decode at once.
+		/// Remove lowest-urgency queued thumbnails (highest <see cref="QueuedImage.priority"/>), notify callbacks with cancel, return pooled QI.
+		/// Never prunes <c>priority &lt; 0</c> (force-reload / skipCache lane).
+		/// </summary>
+		private void PruneThumbnailQueueOverBudget()
+		{
+			if (queuedImages == null || queuedImages.data == null) return;
+			if (queuedImages.Count <= ThumbnailQueueSoftCap) return;
+			int[] floors = new[] { 56, 48, 40, 32, 24, 16, 8, 0 };
+			int guard = 0;
+			foreach (int floor in floors)
+			{
+				while (queuedImages.Count > ThumbnailQueuePruneTarget && guard++ < 500)
+				{
+					QueuedImage worst = null;
+					int worstP = int.MinValue;
+					List<QueuedImage> data = queuedImages.data;
+					int n = data.Count;
+					for (int i = 0; i < n; i++)
+					{
+						QueuedImage q = data[i];
+						if (q == null || !q.isThumbnail || q.working || q.processed || q.cancel) continue;
+						if (q.priority < 0) continue;
+						if (q.priority < floor) continue;
+						if (q.priority > worstP)
+						{
+							worstP = q.priority;
+							worst = q;
+						}
+					}
+					if (worst == null) break;
+					worst.cancel = true;
+					queuedImages.Remove(worst);
+					DispatchPendingThumbnailCallbacks(worst);
+					pool.Return(worst);
+				}
+				if (queuedImages.Count <= ThumbnailQueuePruneTarget) return;
+			}
+
+		}
+
 		protected List<QueuedImage> dispatchedImages = new List<QueuedImage>();
+        private const float ThumbnailSoftTimeoutSec = 9.0f;
+        private static readonly object _thumbHangLock = new object();
+        private static HashSet<string> _thumbHangBlacklist;
 
 		public void CancelGroup(string groupId)
 		{
@@ -1383,45 +1743,68 @@ namespace VPB
 			if (qi == null) return;
             // LogUtil.Log("[VPB-Debug] QueueThumbnail: " + qi.imgPath);
 			qi.isThumbnail = true;
+            try { qi.debugEnqueueRealtime = Time.realtimeSinceStartup; } catch { }
+			PruneThumbnailQueueOverBudget();
 			if (!string.IsNullOrEmpty(qi.imgPath))
 			{
+                // Session blacklist: if thumb path previously hung, fail fast to avoid repeated stalls.
+                try
+                {
+                    bool black = false;
+                    lock (_thumbHangLock)
+                    {
+                        if (_thumbHangBlacklist != null) black = _thumbHangBlacklist.Contains(qi.imgPath);
+                    }
+                    if (black)
+                    {
+                        qi.cancel = true;
+                        if (qi.callback != null) qi.callback(qi);
+                        pool.Return(qi);
+                        return;
+                    }
+                }
+                catch { }
+
 				lock (pendingThumbnailLock)
 				{
 					if (pendingThumbnailCallbacks == null) pendingThumbnailCallbacks = new Dictionary<string, List<ImageLoaderCallback>>();
 					List<ImageLoaderCallback> list;
-					if (pendingThumbnailCallbacks.TryGetValue(qi.imgPath, out list))
+					string pendingKey = ThumbnailMemoryCacheKey(qi.imgPath, qi.turboJpegScaleDenom, qi.thumbnailUnityDecodeOnly);
+					if (pendingThumbnailCallbacks.TryGetValue(pendingKey, out list))
 					{
 						if (qi.callback != null) list.Add(qi.callback);
-                        
-                        // Promote the existing request to top of queue
-                        // Find it in queuedImages
-                        if (queuedImages != null && queuedImages.data != null)
-                        {
-                            QueuedImage existing = null;
-                            for (int i = 0; i < queuedImages.data.Count; i++)
-                            {
-                                if (queuedImages.data[i].imgPath == qi.imgPath)
-                                {
-                                    existing = queuedImages.data[i];
-                                    break;
-                                }
-                            }
-
-                            if (existing != null)
-                            {
-                                queuedImages.Remove(existing);
-                                existing.insertionIndex = ++_insertionOrderCounter;
-                                queuedImages.Enqueue(existing);
-                            }
-                        }
-
-						pool.Return(qi);
-						return;
+						QueuedImage existing = null;
+						if (queuedImages != null && queuedImages.data != null)
+						{
+							for (int i = 0; i < queuedImages.data.Count; i++)
+							{
+								QueuedImage cand = queuedImages.data[i];
+								if (cand.imgPath == qi.imgPath && cand.turboJpegScaleDenom == qi.turboJpegScaleDenom)
+								{
+									existing = cand;
+									break;
+								}
+							}
+						}
+						if (existing != null)
+						{
+							queuedImages.Remove(existing);
+							existing.insertionIndex = ++_insertionOrderCounter;
+							queuedImages.Enqueue(existing);
+							pool.Return(qi);
+							return;
+						}
+						// Dict had pendingKey but no queue row (stale) — keep merged callbacks, own decode with this qi.
+						pendingThumbnailCallbacks[pendingKey] = list;
+						qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
 					}
-					list = new List<ImageLoaderCallback>(4);
-					if (qi.callback != null) list.Add(qi.callback);
-					pendingThumbnailCallbacks[qi.imgPath] = list;
-					qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
+					else
+					{
+						list = new List<ImageLoaderCallback>(4);
+						if (qi.callback != null) list.Add(qi.callback);
+						pendingThumbnailCallbacks[pendingKey] = list;
+						qi.callback = (res) => { DispatchPendingThumbnailCallbacks(res); };
+					}
 				}
 			}
 			if (queuedImages != null)
@@ -1479,12 +1862,9 @@ namespace VPB
                     if (value.cancel)
                     {
                         if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
-                        {
-                            lock (pendingThumbnailLock)
-                            {
-                                if (pendingThumbnailCallbacks != null) pendingThumbnailCallbacks.Remove(value.imgPath);
-                            }
-                        }
+						{
+                            DispatchPendingThumbnailCallbacks(value);
+						}
                         pool.Return(value);
                         continue;
                     }
@@ -1523,7 +1903,7 @@ namespace VPB
                     {
                         if (value.isThumbnail)
                         {
-                            if (value.tex != null) CacheThumbnail(value.imgPath, value.tex);
+                            if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
                         }
                         else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
                         {
@@ -1546,6 +1926,11 @@ namespace VPB
                 if (queuedImages.Peek().cancel)
                 {
                     QueuedImage qi = queuedImages.Dequeue();
+                    if (qi.isThumbnail && !string.IsNullOrEmpty(qi.imgPath))
+                    {
+                        qi.cancel = true;
+                        DispatchPendingThumbnailCallbacks(qi);
+                    }
                     pool.Return(qi);
                 }
                 else
@@ -1593,6 +1978,11 @@ namespace VPB
 				{
                     QueuedImage qi = queuedImages.Peek();
 					queuedImages.Dequeue();
+                    if (qi.isThumbnail && !string.IsNullOrEmpty(qi.imgPath))
+                    {
+                        qi.cancel = true;
+                        DispatchPendingThumbnailCallbacks(qi);
+                    }
                     pool.Return(qi);
 				}
 			}
@@ -1615,7 +2005,7 @@ namespace VPB
 				Texture2D value2;
 				if (value.isThumbnail)
 				{
-					Texture2D cached = GetCachedThumbnail(value.imgPath);
+					Texture2D cached = GetCachedThumbnail(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly);
 					if (cached != null) UseCachedTex(value, cached);
 				}
 				else if (textureCache != null && textureCache.TryGetValue(value.cacheSignature, out value2))
@@ -1685,35 +2075,130 @@ namespace VPB
 
 		protected void Update()
 		{
+			PruneThumbnailQueueOverBudget();
 			PostProcessImageQueue();
-            
+            int maxTasks = GetEffectiveMaxLoaderThreads();
+            int maxThumb = GetEffectiveMaxThumbnailThreads();
+
             // Dispatch pending dispatched items (web requests that just finished)
             for(int i=0; i<dispatchedImages.Count; i++)
             {
-                if (runningTasks >= MaxConcurrentTasks) break;
+                if (runningTasks >= maxTasks) break;
 
                 QueuedImage qi = dispatchedImages[i];
-                if (!qi.working && !qi.processed && !qi.cancel)
+                if (!qi.working && !qi.processed && !qi.cancel && !qi.thumbVarIoPending)
                 {
                     // Check conditions
                     if (qi.webRequest != null && !qi.webRequestDone) continue;
-                    if (qi.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) continue;
+                    if (qi.isThumbnail && runningThumbnailTasks >= maxThumb) continue;
 
                     // Execute
                     StartWorker(qi);
                 }
             }
 
+            // Thumbnails stuck in Process(): recover slots / blacklist toxic paths.
+            try
+            {
+                const float stuckSec = 2.0f;
+                float now = Time.realtimeSinceStartup;
+                if (dispatchedImages != null && dispatchedImages.Count > 0)
+                {
+                    for (int i = 0; i < dispatchedImages.Count; i++)
+                    {
+                        QueuedImage qi = dispatchedImages[i];
+                        if (qi == null || !qi.isThumbnail) continue;
+                        if (!qi.working || qi.processed || qi.cancel) continue;
+                        float ws = qi.debugWorkStartRealtime;
+                        if (ws <= 0f) continue;
+                        float age = now - ws;
+                        if (age < stuckSec) continue;
+
+                        // If worker never reaches Process() (stg<20) for a long time, treat as wedged start and reset slot.
+                        if (!qi.debugAbortIssued && qi.debugStage < 20 && age >= (ThumbnailSoftTimeoutSec + 6.0f))
+                        {
+                            qi.debugAbortIssued = true;
+                            try
+                            {
+                                qi.hadError = true;
+                                qi.errorText = "thumb worker never entered Process @" + age.ToString("0.000") + "s stg=" + qi.debugStage;
+                                qi.cancel = true;
+                                qi.processed = true;
+                                qi.working = false;
+                                System.Threading.Interlocked.Decrement(ref runningTasks);
+                                System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                            }
+                            catch { }
+
+                            try
+                            {
+                                if (qi.debugWorkerThread != null && qi.debugWorkerThread.IsAlive)
+                                {
+                                    // Last resort: background thread wedged before Process; abandon thread (orphan) but free loader slot.
+                                    try { qi.debugWorkerThread.Interrupt(); } catch { }
+                                }
+                            }
+                            catch { }
+
+                            try
+                            {
+                                lock (_thumbHangLock)
+                                {
+                                    if (_thumbHangBlacklist == null) _thumbHangBlacklist = new HashSet<string>(StringComparer.Ordinal);
+                                    if (!string.IsNullOrEmpty(qi.imgPath)) _thumbHangBlacklist.Add(qi.imgPath);
+                                }
+                            }
+                            catch { }
+                            break;
+                        }
+
+                        // Soft-timeout: mark hung thumb as canceled + blacklist path for session.
+                        // Do NOT use Thread.Abort (unsafe; can cascade failures).
+                        // Only soft-timeout once worker actually entered Process() (debugStage >= 20).
+                        // If still at stg<=1, thread likely wedged before Process (or never started) — do not fake-finish
+                        // or we leak background work + counters drift.
+                        if (!qi.debugAbortIssued && age >= ThumbnailSoftTimeoutSec && qi.debugStage >= 20)
+                        {
+                            qi.debugAbortIssued = true;
+                            try
+                            {
+                                qi.hadError = true;
+                                qi.errorText = "thumb soft-timeout @" + age.ToString("0.000") + "s";
+                                qi.cancel = true; // ensures callbacks see cancel and target will retry/blank safely
+                                qi.processed = true;
+                                qi.working = false;
+                                System.Threading.Interlocked.Decrement(ref runningTasks);
+                                System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
+                            }
+                            catch { }
+
+                            try
+                            {
+                                lock (_thumbHangLock)
+                                {
+                                    if (_thumbHangBlacklist == null) _thumbHangBlacklist = new HashSet<string>(StringComparer.Ordinal);
+                                    if (!string.IsNullOrEmpty(qi.imgPath)) _thumbHangBlacklist.Add(qi.imgPath);
+                                }
+                            }
+                            catch { }
+                            break;
+                        }
+                        break;
+                    }
+                }
+            }
+            catch { }
+
             // Dispatch new items from queue
             // Backpressure: if we have too many items pending decode (in dispatchedImages), stop dispatching to avoid memory exhaustion
             // and pipeline stalling.
 			if (queuedImages != null && queuedImages.Count > 0)
 			{
-                while (runningTasks < MaxConcurrentTasks && dispatchedImages.Count < 200 && queuedImages.Count > 0)
+                while (runningTasks < maxTasks && dispatchedImages.Count < 200 && queuedImages.Count > 0)
                 {
                     QueuedImage head = queuedImages.Peek();
                     if (head == null) break;
-                    if (head.isThumbnail && runningThumbnailTasks >= MaxConcurrentThumbnailTasks) break;
+                    if (head.isThumbnail && runningThumbnailTasks >= maxThumb) break;
 
                     // Perform pre-checks (cache, web)
                     PreprocessImageQueue();
@@ -1721,6 +2206,7 @@ namespace VPB
                     // Preprocess might have set processed=true or initialized web request
                     // We must dequeue it to move it to dispatched list
                     head = queuedImages.Dequeue();
+                    try { head.debugDispatchRealtime = Time.realtimeSinceStartup; } catch { }
                     dispatchedImages.Add(head);
 
                     if (head.processed || head.cancel) continue; // Will be handled by PostProcess
@@ -1731,6 +2217,8 @@ namespace VPB
                         continue;
                     }
 
+                    if (head.thumbVarIoPending) continue;
+
                     StartWorker(head);
                 }
 			}
@@ -1740,51 +2228,95 @@ namespace VPB
         private void StartWorker(QueuedImage head)
         {
             // if (head.isThumbnail) LogUtil.Log("[VPB-Debug] StartWorker: " + head.imgPath);
-            head.working = true;
-            System.Threading.Interlocked.Increment(ref runningTasks);
-            if (head.isThumbnail) System.Threading.Interlocked.Increment(ref runningThumbnailTasks);
             bool success = false;
-            try
+            if (!head.isThumbnail)
             {
-                success = ThreadPool.QueueUserWorkItem((state) => {
-                    try
-                    {
-                        head.Process();
-                    }
-                    catch(Exception ex)
-                    {
-                        head.hadError = true;
-                        head.errorText = ex.Message;
-                    }
-                    finally
-                    {
-                        head.processed = true;
-                        head.working = false;
-                        System.Threading.Interlocked.Decrement(ref runningTasks);
-                        if (head.isThumbnail) System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
-                    }
-                });
+                head.working = true;
+                try { head.debugWorkStartRealtime = Time.realtimeSinceStartup; } catch { }
+                System.Threading.Interlocked.Increment(ref runningTasks);
+                try
+                {
+                    success = ThreadPool.QueueUserWorkItem((state) => {
+                        try
+                        {
+                            head.Process();
+                        }
+                        catch(Exception ex)
+                        {
+                            head.hadError = true;
+                            head.errorText = ex.Message;
+                        }
+                        finally
+                        {
+                            head.processed = true;
+                            head.working = false;
+                            System.Threading.Interlocked.Decrement(ref runningTasks);
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] [Loader] ThreadPool.QueueUserWorkItem Exception: " + ex.Message);
+                    success = false;
+                }
             }
-            catch (Exception ex)
+            else
             {
-                LogUtil.LogError("[VPB] [Loader] ThreadPool.QueueUserWorkItem Exception: " + ex.Message);
-                success = false;
+                // Thumbnails:
+                // - VAR pkg:/ paths enqueue IO read on dedicated thread, then decode on per-thumb thread.
+                // - Other paths decode directly on per-thumb thread.
+                try
+                {
+                    try { head.debugStage = 1; head.debugStageAux = 0; head.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+
+                    bool isVar = false;
+                    try { isVar = IsVarPackageVfsPath(head.imgPath); } catch { isVar = false; }
+
+                    if (isVar && head.webRequest == null && !head.cancel && !head.processed)
+                    {
+                        head.thumbVarIoPending = true;
+                        try { head.debugStage = 10; head.debugStageAux = 0; head.debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+                        EnsureVarThumbIoWorker();
+                        lock (_varThumbIoQueueLock) { _varThumbIoQueue.Enqueue(head); }
+                        success = true;
+                    }
+                    else
+                    {
+                        StartThumbnailDecodeThread(head);
+                        success = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] [Loader] Thumbnail worker start failed: " + ex.Message);
+                    success = false;
+                }
             }
             
             if (!success)
             {
                 // Failed to queue worker (Thread pool exhausted?)
                 // Revert state so it can be picked up again
-                System.Threading.Interlocked.Decrement(ref runningTasks);
-                if (head.isThumbnail) System.Threading.Interlocked.Decrement(ref runningThumbnailTasks);
-                head.working = false;
+                if (!head.isThumbnail)
+                {
+                    System.Threading.Interlocked.Decrement(ref runningTasks);
+                    head.working = false;
+                }
                 // Note: It remains in dispatchedImages, so Update loop will try to start it again next frame.
-                // LogUtil.LogWarning("[VPB] [Loader] Failed to queue worker for " + head.imgPath); // Reduce log noise
             }
         }
 
 		public virtual void OnDestroy()
 		{
+            try
+            {
+                _varThumbIoStop = true;
+                if (_varThumbIoThread != null && _varThumbIoThread.IsAlive)
+                {
+                    try { _varThumbIoThread.Join(250); } catch { }
+                }
+            }
+            catch { }
             // StopThreads removed
 			if (loadFlag != null)
 			{
@@ -1797,13 +2329,35 @@ namespace VPB
 
 		protected void OnApplicationQuit()
 		{
+            try { _varThumbIoStop = true; } catch { }
             // StopThreads removed
+		}
+
+		// Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.
+		public void GetTelemetryCounts(
+			out int textureCacheCount,
+			out int immediateTextureCacheCount,
+			out int thumbnailCacheCount,
+			out int queuedImagesCount,
+			out int dispatchedImagesCount,
+			out int pendingThumbnailCallbacksCount)
+		{
+			textureCacheCount = textureCache != null ? textureCache.Count : 0;
+			immediateTextureCacheCount = immediateTextureCache != null ? immediateTextureCache.Count : 0;
+			thumbnailCacheCount = thumbnailCache != null ? thumbnailCache.Count : 0;
+			queuedImagesCount = queuedImages != null ? queuedImages.Count : 0;
+			dispatchedImagesCount = dispatchedImages != null ? dispatchedImages.Count : 0;
+			lock (pendingThumbnailLock)
+			{
+				pendingThumbnailCallbacksCount = pendingThumbnailCallbacks != null ? pendingThumbnailCallbacks.Count : 0;
+			}
 		}
 
 		protected virtual void Awake()
 		{
 			if (singleton == null) singleton = this;
             LogUtil.Log("CustomImageLoaderThreaded initialized. ByteArrayPool ready.");
+            EnsureVarThumbIoWorker();
 			immediateTextureCache = new Dictionary<string, Texture2D>();
 			textureCache = new Dictionary<string, Texture2D>();
 			textureTrackedCache = new Dictionary<Texture2D, bool>();

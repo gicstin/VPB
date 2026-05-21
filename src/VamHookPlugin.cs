@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -14,6 +15,10 @@ using UnityEngine.SceneManagement;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using ZstdNet;
+using Leap.Unity;
+using Leap.Unity.Infix;
+using System.Text;
+using VPB.src.util;
 namespace VPB
 {
     // Plugin metadata attribute: plugin ID, plugin name, plugin version (must be numeric)
@@ -32,6 +37,14 @@ namespace VPB
 
             public void LogException(Exception exception, UnityEngine.Object context)
             {
+                try
+                {
+                    if (exception != null && ThirdPartyFixHook.ShouldSuppressCheesyFxNullReferenceLog(exception.ToString()))
+                        return;
+                }
+                catch
+                {
+                }
                 m_Inner.LogException(exception, context);
             }
 
@@ -40,6 +53,13 @@ namespace VPB
                 try
                 {
                     if (logType == LogType.Error && !string.IsNullOrEmpty(format) && IsMissingAddonDependencyMessage(format, args))
+                    {
+                        return;
+                    }
+
+                    if ((logType == LogType.Error || logType == LogType.Exception || logType == LogType.Assert)
+                        && !string.IsNullOrEmpty(format)
+                        && ThirdPartyFixHook.ShouldSuppressCheesyFxUnityLog(FormatLogMessage(format, args), null, logType))
                     {
                         return;
                     }
@@ -53,6 +73,20 @@ namespace VPB
                 {
                 }
                 m_Inner.LogFormat(logType, context, format, args);
+            }
+
+            private static string FormatLogMessage(string format, object[] args)
+            {
+                if (string.IsNullOrEmpty(format)) return "";
+                if (args == null || args.Length == 0) return format;
+                try
+                {
+                    return string.Format(format, args);
+                }
+                catch
+                {
+                    return format;
+                }
             }
 
             private static bool IsUnloadPersonMessage(string format, object[] args)
@@ -116,7 +150,7 @@ namespace VPB
         private KeyUtil ToggleFixedGalleryKey;
         private Vector2 UIPosition;
         private bool MiniMode;
-        
+
 
 
         private const int STD_OUTPUT_HANDLE = -11;
@@ -190,12 +224,16 @@ namespace VPB
                 try { Console.Clear(); } catch { }
             }
         }
-        private bool m_ShowPluginsAlwaysEnabledInfo;
         private bool m_ShowGcRefreshInfo;
-        private bool m_UnloadAllConfirmPending = false;
-        private bool m_ShowUnloadAllInfo = false;
         private bool m_PendingGc;
         private bool m_ShowSpaceSaverWindow;
+        private bool m_ShowScanWhitelistWindow;
+        private Rect m_ScanWhitelistWindowRect = new Rect(120, 120, 520, 440);
+        private bool m_ShowScanWhitelistDisableConfirmWindow;
+        private Rect m_ScanWhitelistDisableConfirmWindowRect = new Rect(160, 160, 560, 260);
+        private Vector2 m_ScanWhitelistScroll;
+        private string m_ScanWhitelistNewFolderText = "";
+        private string m_ScanWhitelistNewUidText = "";
         private string m_AutoOptimizeReport;
         private float m_AutoOptimizeReportTimer;
         private bool m_PendingAutoLoadRefresh;
@@ -210,6 +248,8 @@ namespace VPB
         private float m_ExpandedHeight;
         float m_UIScale = 1;
         Rect m_Rect = new Rect(0, 0, 220, 50);
+        private bool m_IsPointerOverHookUI;
+        private bool m_BlockingUnderlyingUGUI;
 
         private const float MinUiScale = 0.6f;
         private const float MaxUiScale = 2.4f;
@@ -287,7 +327,6 @@ namespace VPB
 
         private void CloseAllInfoCards()
         {
-            m_ShowPluginsAlwaysEnabledInfo = false;
             m_ShowGcRefreshInfo = false;
         }
 
@@ -690,11 +729,12 @@ namespace VPB
             catch
             {
             }
-            
+
             // Explicitly initialize ZstdNet native library early
             try { ExternMethods.Initialize(); } catch { }
 
-            LogUtil.SetLogSource(Logger);
+            LogUtil.ResetPluginSession();
+            VPBLogger.Init();
 
             try
             {
@@ -769,6 +809,15 @@ namespace VPB
             Settings.Init(this.Config);
             try
             {
+                if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
+                    Settings.Instance.LoadDependenciesWithPackage.Value = true;
+                if (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null)
+                    Settings.Instance.ForceLatestDependencies.Value = true;
+            }
+            catch { }
+            try { QuickMenuMigrateAnchorBaselineOnce(); } catch { }
+            try
+            {
                 // Ensure dependency whitelist (Saves/PluginData/VPB/dependency_whitelist.json) is loaded early.
                 var _ = DependencyWhitelistManager.Instance;
             }
@@ -827,6 +876,8 @@ namespace VPB
             ThirdPartyFixHook.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
+
+            InitUpdater();
         }
 
         private void SetMiniMode(bool enabled)
@@ -881,9 +932,23 @@ namespace VPB
                 } catch {}
             });
 
+            VamOnDemandLoader.SetMainThread();
+            VamScanFilter.DiscoverVamInternals();
+            var _ = ScanWhitelistManager.Instance; // eager init
+
+            // Migrate legacy VPB hide markers to native VaM-compatible format
+            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+                try { PackageHidePrefs.MigrateAllLegacyHideMarkers(); } catch { }
+            });
+
             AutoLoadALPackages();
-            StartCoroutine(UI.PrewarmIconCacheCoroutine());
-            StartCoroutine(PrewarmGalleryPanelCoroutine());
+
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.ConfigChanged += RefreshQuickMenuAssignableTransparency;
+            }
+            catch { }
 
             // Auto-create gallery pane on startup if enabled
             if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
@@ -897,31 +962,15 @@ namespace VPB
                 }
             }
         }
-        
-        private IEnumerator PrewarmGalleryPanelCoroutine()
-        {
-            // Wait until the UI and file manager are both ready
-            while (!m_UIInited || !IsFileManagerInited)
-                yield return null;
-
-            // Skip if auto-fixed gallery already created a panel, or singleton is missing
-            if (Gallery.singleton == null || Gallery.singleton.PanelCount > 0) yield break;
-
-            if (!m_GalleryCatsInited) InitGalleryCategories();
-
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            Gallery.singleton.CreatePane(showAfterCreate: false);
-            sw.Stop();
-            LogUtil.Log("[VPB] Gallery panel pre-warmed in " + sw.ElapsedMilliseconds + "ms");
-        }
 
         void AutoLoadALPackages()
         {
-            System.Threading.ThreadPool.QueueUserWorkItem((state) => {
+            System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+            {
                 try
                 {
                     if (!Directory.Exists("AllPackages")) return;
-                    
+
                     var alPackages = AutoLoadPackagesManager.Instance.GetAutoLoadPackages();
                     if (alPackages.Count == 0) return;
 
@@ -937,21 +986,21 @@ namespace VPB
                         {
                             string relativePath = file.Replace('\\', '/');
                             string targetPath = "AddonPackages" + relativePath.Substring("AllPackages".Length);
-                            
+
                             string targetDir = Path.GetDirectoryName(targetPath);
                             if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-                            
+
                             if (!File.Exists(targetPath))
                             {
-                                try 
-                                { 
-                                    File.Move(file, targetPath); 
+                                try
+                                {
+                                    File.Move(file, targetPath);
                                     moved = true;
                                     LogUtil.Log("[VPB] Auto-Loaded package: " + name);
                                 }
-                                catch (Exception ex) 
-                                { 
-                                    LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message); 
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] Failed to auto-load " + name + ": " + ex.Message);
                                 }
                             }
                         }
@@ -970,12 +1019,18 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.ConfigChanged -= RefreshQuickMenuAssignableTransparency;
+            }
+            catch { }
             try { UnsubscribeLocaleChanged(); } catch { }
             Settings.Instance.UIPosition.Value = new Vector2((int)m_Rect.x, (int)m_Rect.y);
             Settings.Instance.MiniMode.Value = MiniMode;
 
             this.Config.Save();
-            
+
             // Cleanup QuickMenu Button
             if (SuperController.singleton.mainHUD != null)
             {
@@ -984,8 +1039,9 @@ namespace VPB
             }
             if (m_QuickMenuCanvas != null)
             {
-                 Destroy(m_QuickMenuCanvas.gameObject);
+                Destroy(m_QuickMenuCanvas.gameObject);
             }
+            VPBLogger.Destroy();
         }
         // Called on (hard) restart as well.
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -1004,6 +1060,7 @@ namespace VPB
         }
         void OnEnable()
         {
+            VPBLogger.Init(); // in case the plugin is ever partially reloaded for some reason
             MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
 
@@ -1034,8 +1091,56 @@ namespace VPB
             }
         }
         static bool m_Show = true; // Made static so it can be toggled via external message calls.
+
+        /// <summary>Bare-key bindings (no Ctrl/Shift/Alt) must not fire while a text field has focus.</summary>
+        private static bool ShouldSuppressBareKeyHotkey(KeyUtil ku)
+        {
+            if (ku == null) return false;
+            if (ku.supportKeys != null && ku.supportKeys.Count > 0) return false;
+            return IsTypingInTextInput();
+        }
+
+        private static bool IsTypingInTextInput()
+        {
+            try
+            {
+                var es = EventSystem.current;
+                if (es != null && es.currentSelectedGameObject != null
+                    && es.currentSelectedGameObject.GetComponent<InputField>() != null)
+                    return true;
+            }
+            catch { }
+
+            // IMGUI TextField focus: not in all Unity reference assemblies; probe at runtime.
+            try
+            {
+                var t = typeof(GUIUtility);
+                const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+                var p = t.GetProperty("editingTextField", bf);
+                if (p != null)
+                {
+                    if (p.GetValue(null, null) is bool pb && pb) return true;
+                }
+                else
+                {
+                    var f = t.GetField("editingTextField", bf);
+                    if (f != null && f.GetValue(null) is bool fb && fb) return true;
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
         void Update()
         {
+            VpbPerfDiag.RefreshCache();
+            VamOnDemandLoader.DrainMainThreadQueue();
+            LogUtil.DrainPostReadyQueue();
+            CacheCleanupManager.CheckAutoFlush();
+            UpdateUpdater();
+            VpbPerfTelemetry.EmitSnapshotIfDue();
+            VpbPerfDiag.EmitFrameSummaryIfDue();
             if (m_PendingGc)
             {
                 // Avoid forcing unload/GC during scene load; it can interfere with VaM's load lifecycle
@@ -1055,7 +1160,7 @@ namespace VPB
             if (m_PendingAutoLoadRefresh)
             {
                 m_PendingAutoLoadRefresh = false;
-                Refresh();
+                Refresh("autoload");
             }
 
             float unscaledDt = Time.unscaledDeltaTime;
@@ -1089,7 +1194,7 @@ namespace VPB
                     if (m_FpsSmoothedDelta <= 0f)
                         m_FpsSmoothedDelta = unscaledDt;
                     else
-                        m_FpsSmoothedDelta = Mathf.Lerp(m_FpsSmoothedDelta, unscaledDt, 0.08f);
+                        m_FpsSmoothedDelta = unscaledDt;
 
                     m_FpsUpdateTimer += unscaledDt;
                     if (m_FpsUpdateTimer >= 1.0f)
@@ -1111,19 +1216,21 @@ namespace VPB
                 }
             }
 
-            if (UIKey.TestKeyDown())
+            if (UIKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(UIKey))
             {
                 m_Show = !m_Show;
             }
-            if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown())
+
+            UpdateUnderlyingUGUIBlockState();
+            if (ClearConsoleKey != null && ClearConsoleKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(ClearConsoleKey))
             {
                 TryClearConsole();
             }
-            if (BoneViewKey != null && BoneViewKey.TestKeyDown())
+            if (BoneViewKey != null && BoneViewKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(BoneViewKey))
             {
                 BoneViewMode.Toggle();
             }
-            if (ToggleFixedGalleryKey != null && ToggleFixedGalleryKey.TestKeyDown())
+            if (ToggleFixedGalleryKey != null && ToggleFixedGalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(ToggleFixedGalleryKey))
             {
                 if (Gallery.singleton != null)
                 {
@@ -1146,11 +1253,11 @@ namespace VPB
             // Hotkeys
             if (m_Inited)
             {
-                if (CreateGalleryKey.TestKeyDown())
+                if (CreateGalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(CreateGalleryKey))
                 {
                     OpenCreateGallery();
                 }
-                if (GalleryKey.TestKeyDown())
+                if (GalleryKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(GalleryKey))
                 {
                     if (Gallery.singleton != null && Gallery.singleton.IsVisible)
                         Gallery.singleton.Hide();
@@ -1161,7 +1268,7 @@ namespace VPB
 
             if (m_Inited && IsFileManagerInited)
             {
-                if (HubKey.TestKeyDown())
+                if (HubKey.TestKeyDown() && !ShouldSuppressBareKeyHotkey(HubKey))
                 {
                     OpenHubBrowse();
                 }
@@ -1206,38 +1313,52 @@ namespace VPB
             }
             else if (m_ShowHideButtonGO != null && Gallery.singleton != null)
             {
-                if (!Settings.Instance.QuickMenuShowHideEnabled.Value)
-                {
-                    if (m_ShowHideButtonGO.activeSelf)
-                        m_ShowHideButtonGO.SetActive(false);
-                    if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf)
-                        m_CloseAllButtonGO.SetActive(false);
-                    if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf)
-                        m_BringFrontButtonGO.SetActive(false);
-                    return;
-                }
-
                 int count = Gallery.singleton.PanelCount;
                 bool shouldShow = count > 0;
-                if (m_ShowHideButtonGO.activeSelf != shouldShow)
-                {
-                    m_ShowHideButtonGO.SetActive(shouldShow);
-                }
-                if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf != shouldShow)
-                {
-                    m_CloseAllButtonGO.SetActive(shouldShow);
-                }
-                if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf != shouldShow)
-                {
-                    m_BringFrontButtonGO.SetActive(shouldShow);
-                }
-                
-                if (shouldShow && m_ShowHideButton != null && count != m_ShowHideButtonLastCount)
+                if (m_ShowHideButtonGO.activeSelf != shouldShow) m_ShowHideButtonGO.SetActive(shouldShow);
+                if (m_CloseAllButtonGO != null && m_CloseAllButtonGO.activeSelf != shouldShow) m_CloseAllButtonGO.SetActive(shouldShow);
+                if (m_BringFrontButtonGO != null && m_BringFrontButtonGO.activeSelf != shouldShow) m_BringFrontButtonGO.SetActive(shouldShow);
+
+                if (shouldShow && m_ShowHideButton != null)
                 {
                     m_ShowHideButtonLastCount = count;
                     m_ShowHideButton.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide") + " (" + count + ")";
                 }
+
+                // Keep icon visuals current (Show/Hide toggles eye icon based on visibility).
+                try
+                {
+                    if (m_QuickMenuGridButtons != null)
+                    {
+                        for (int i = 0; i < m_QuickMenuGridButtons.Length; i++)
+                        {
+                            var a = QuickMenuGetSlotAction(i);
+                            bool requiresGallery = a == QuickMenuAssignableAction.ShowHide ||
+                                                   a == QuickMenuAssignableAction.BringFront ||
+                                                   a == QuickMenuAssignableAction.CloseAll ;
+                            if (requiresGallery)
+                            {
+                                var go = m_QuickMenuGridButtons[i];
+                                if (go != null && go.activeSelf != shouldShow) go.SetActive(shouldShow);
+                            }
+
+                            if (a == QuickMenuAssignableAction.ShowHide ||
+                                a == QuickMenuAssignableAction.ReplaceAddToggle ||
+                                a == QuickMenuAssignableAction.AutoHideGallery ||
+                                a == QuickMenuAssignableAction.ShowHiddenPackages ||
+                                a == QuickMenuAssignableAction.FpsCounter ||
+                                i == m_QuickMenuEditSlotIdx ||
+                                i == m_QuickMenuPageToggleSlotIdx)
+                                QuickMenuRefreshSlotVisual(i);
+                        }
+                    }
+                }
+                catch { }
             }
+
+            // Live preview: reposition the quick-menu grid when the anchor setting changes.
+            // (Do this every frame; the helper is internally throttled.)
+            try { QuickMenuUpdateGridLayoutLive(); } catch { }
         }
 
 
@@ -1268,7 +1389,7 @@ namespace VPB
             if (flag)
             {
                 MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.Refresh();
+                VPB.FileManager.Refresh("autoinstall", true);
             }
         }
 
@@ -1290,7 +1411,11 @@ namespace VPB
                 {
                     IsFileManagerInited = true;
                     TryAutoInstall();
-                    VarPackageMgr.singleton.Refresh();
+                    // Cache write is non-critical for UI readiness; defer until after READY so
+                    // first-startup writes (which can be tens of MB on large libraries) do not
+                    // sit on the critical UI-ready path. Subsequent refreshes also queue here
+                    // (they're always dirty-gated via VarPackageMgr.dirtyExternal).
+                    LogUtil.RegisterPostReadyOnce(() => VarPackageMgr.singleton.Refresh());
                 });
             }
 
@@ -1303,7 +1428,7 @@ namespace VPB
             if (!s_FileManagerInitialRefreshCompleted)
             {
                 System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
-                FileManager.Refresh(true);
+                FileManager.Refresh("init", true);
                 refreshSw.Stop();
                 LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
                 s_FileManagerInitialRefreshCompleted = true;
@@ -1320,7 +1445,17 @@ namespace VPB
         {
             if (m_FileBrowser == null)
             {
+                if (SuperController.singleton == null || SuperController.singleton.fileBrowserWorldUI == null)
+                {
+                    return;
+                }
+
                 var go = SuperController.singleton.fileBrowserWorldUI.gameObject;
+                if (go == null)
+                {
+                    return;
+                }
+
                 GameObject newgo = Instantiate(go);
                 newgo.transform.SetParent(go.transform.parent, false);
                 newgo.SetActive(true);
@@ -1339,45 +1474,45 @@ namespace VPB
         HubBrowse m_HubBrowse;
         FileManager m_FileManager;
         FileBrowser m_FileBrowser;
-		Dictionary<GalleryPanel, bool> m_GalleryPanelsVisibleBeforeHub;
+        Dictionary<GalleryPanel, bool> m_GalleryPanelsVisibleBeforeHub;
 
-		void CaptureAndHideGalleryForHub()
-		{
-			if (m_GalleryPanelsVisibleBeforeHub != null) return;
-			if (Gallery.singleton == null) return;
-			if (Gallery.singleton.Panels == null) return;
-			m_GalleryPanelsVisibleBeforeHub = new Dictionary<GalleryPanel, bool>();
-			foreach (var p in Gallery.singleton.Panels)
-			{
-				if (p == null) continue;
-				bool wasVisible = false;
-				try { wasVisible = p.IsVisible; } catch { wasVisible = false; }
-				if (!m_GalleryPanelsVisibleBeforeHub.ContainsKey(p)) m_GalleryPanelsVisibleBeforeHub.Add(p, wasVisible);
-				if (wasVisible)
-				{
-					try { p.Hide(); } catch { }
-				}
-			}
-		}
+        void CaptureAndHideGalleryForHub()
+        {
+            if (m_GalleryPanelsVisibleBeforeHub != null) return;
+            if (Gallery.singleton == null) return;
+            if (Gallery.singleton.Panels == null) return;
+            m_GalleryPanelsVisibleBeforeHub = new Dictionary<GalleryPanel, bool>();
+            foreach (var p in Gallery.singleton.Panels)
+            {
+                if (p == null) continue;
+                bool wasVisible = false;
+                try { wasVisible = p.IsVisible; } catch { wasVisible = false; }
+                if (!m_GalleryPanelsVisibleBeforeHub.ContainsKey(p)) m_GalleryPanelsVisibleBeforeHub.Add(p, wasVisible);
+                if (wasVisible)
+                {
+                    try { p.Hide(); } catch { }
+                }
+            }
+        }
 
-		void RestoreGalleryAfterHub()
-		{
-			var restore = m_GalleryPanelsVisibleBeforeHub;
-			m_GalleryPanelsVisibleBeforeHub = null;
-			if (restore == null) return;
-			foreach (var kv in restore)
-			{
-				var p = kv.Key;
-				if (p == null) continue;
-				if (!kv.Value) continue;
-				try
-				{
-					p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
-				}
-				catch { }
-			}
-		}
-	
+        void RestoreGalleryAfterHub()
+        {
+            var restore = m_GalleryPanelsVisibleBeforeHub;
+            m_GalleryPanelsVisibleBeforeHub = null;
+            if (restore == null) return;
+            foreach (var kv in restore)
+            {
+                var p = kv.Key;
+                if (p == null) continue;
+                if (!kv.Value) continue;
+                try
+                {
+                    p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
+                }
+                catch { }
+            }
+        }
+
         void CreateHubBrowse()
         {
             LogUtil.LogVerboseUi("VPB CreateHubBrowse");
@@ -1440,31 +1575,31 @@ namespace VPB
             m_HubBrowse.InitUI();
             m_HubBrowse.HubEnabled = true;
             m_HubBrowse.WebBrowserEnabled = true;
-            
-			var prevPreShow = m_HubBrowse.preShowCallbacks;
-			m_HubBrowse.preShowCallbacks = () =>
-			{
-				try { prevPreShow?.Invoke(); } catch { }
-				CaptureAndHideGalleryForHub();
-			};
 
-			var prevOnHide = m_HubBrowse.onHideCallbacks;
-			m_HubBrowse.onHideCallbacks = () =>
-			{
-				RestoreGalleryAfterHub();
-				try { prevOnHide?.Invoke(); } catch { }
-				if (Gallery.singleton != null)
-				{
-					foreach (var panel in Gallery.singleton.Panels)
-					{
-						if (panel != null && panel.IsVisible)
-						{
-							try { panel.RefreshFiles(); } catch { }
-						}
-					}
-				}
-			};
-            
+            var prevPreShow = m_HubBrowse.preShowCallbacks;
+            m_HubBrowse.preShowCallbacks = () =>
+            {
+                try { prevPreShow?.Invoke(); } catch { }
+                CaptureAndHideGalleryForHub();
+            };
+
+            var prevOnHide = m_HubBrowse.onHideCallbacks;
+            m_HubBrowse.onHideCallbacks = () =>
+            {
+                RestoreGalleryAfterHub();
+                try { prevOnHide?.Invoke(); } catch { }
+                if (Gallery.singleton != null)
+                {
+                    foreach (var panel in Gallery.singleton.Panels)
+                    {
+                        if (panel != null && panel.IsVisible)
+                        {
+                            try { panel.RefreshFiles(); } catch { }
+                        }
+                    }
+                }
+            };
+
             // Close button
 
             var close = Tools.GetChild(newgo.transform, "CloseButton");
@@ -1502,16 +1637,14 @@ namespace VPB
         RectTransform m_CloseAllButtonRT;
         RectTransform m_BringFrontButtonRT;
         RectTransform m_ShowHideButtonRT;
-
-
         void CreateQuickMenuButton()
         {
             try
             {
                 if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
-                
+
                 var existing = SuperController.singleton.mainHUD.Find("VPB_QuickMenuButton_Canvas");
-                if (existing != null) 
+                if (existing != null)
                 {
                     // Destroy old version if found to ensure update
                     DestroyImmediate(existing.gameObject);
@@ -1524,21 +1657,21 @@ namespace VPB
                 }
 
                 if (m_MVRPluginManager == null) return;
-                
+
                 if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
                 if (m_MVRPluginManager.configurableButtonPrefab == null) return;
 
                 GameObject canvasObject = new GameObject("VPB_QuickMenuButton_Canvas");
                 m_QuickMenuCanvas = canvasObject.AddComponent<Canvas>();
                 if (m_QuickMenuCanvas == null) return;
-                
+
                 m_QuickMenuCanvas.renderMode = RenderMode.WorldSpace;
                 m_QuickMenuCanvas.pixelPerfect = false;
 
                 if (SuperController.singleton != null && SuperController.singleton.mainHUD != null && SuperController.singleton.mainHUD.gameObject != null)
                     canvasObject.layer = SuperController.singleton.mainHUD.gameObject.layer;
-                
-                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;    
+
+                if (SuperController.singleton == null || SuperController.singleton.mainHUD == null) return;
                 m_QuickMenuCanvas.transform.SetParent(SuperController.singleton.mainHUD, false);
                 SuperController.singleton.AddCanvas(m_QuickMenuCanvas);
 
@@ -1550,8 +1683,7 @@ namespace VPB
                 }
                 GraphicRaycaster gr = canvasObject.AddComponent<GraphicRaycaster>();
 
-                bool isVR = false;
-                try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+                bool isVR = XrUtils.IsVrActive();
 
                 float s = 0.001f;
                 m_QuickMenuCanvas.transform.localScale = new Vector3(s, s, s);
@@ -1568,178 +1700,258 @@ namespace VPB
                     m_QuickMenuCanvas.transform.localEulerAngles = new Vector3(0, 180, 0);
                 }
 
-                // Button 1: Create Gallery (Left)
-                if (Settings.Instance.QuickMenuCreateGalleryEnabled.Value)
+                EnsureQuickMenuGridArrays();
+
+                // Load quick menu icons
+                Color tint = Color.white;
+                m_QmIconCreate   = UI.LoadIconSprite("vpb_icons/gallery_clone.png", tint);
+                m_QmIconEyeOn    = UI.LoadIconSprite("vpb_icons/eye.png", tint);
+                m_QmIconEyeOff   = UI.LoadIconSprite("vpb_icons/eye_off.png", tint);
+                m_QmIconBringFront = UI.LoadIconSprite("vpb_icons/focus_centered.png", tint);
+                m_QmIconCloseAll = UI.LoadIconSprite("vpb_icons/close.png", tint);
+                m_QmIconEditPlus = UI.LoadIconSprite("vpb_icons/settings_plus.png", tint);
+                m_QmIconEditOff  = UI.LoadIconSprite("vpb_icons/settings_off.png", tint);
+                m_QmIconAssignEmpty = UI.LoadIconSprite("vpb_icons/button_placeholder.png", tint);
+                m_QmIconSave   = UI.LoadIconSprite("vpb_icons/gallery_save.png", tint);
+                // Random icon: dice (only action using dice icons).
+                m_QmIconRandom = UI.LoadIconSprite("vpb_icons/dice_1.png", tint) ?? UI.LoadIconSprite("vpb_icons/random.png", tint);
+                m_QmIconHexAppearance = UI.LoadIconSprite("vpb_icons/hexagon_a.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexPose = UI.LoadIconSprite("vpb_icons/hexagon_p.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexScene = UI.LoadIconSprite("vpb_icons/hexagon_s.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexSkin = UI.LoadIconSprite("vpb_icons/hexagon_k.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexSubScene = UI.LoadIconSprite("vpb_icons/hexagon_l.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexHair = UI.LoadIconSprite("vpb_icons/hexagon_h.png", tint) ?? m_QmIconRandom;
+                m_QmIconHexClothing = UI.LoadIconSprite("vpb_icons/hexagon_c.png", tint) ?? m_QmIconRandom;
+                m_QmIconUndo   = UI.LoadIconSprite("vpb_icons/undo.png", tint);
+                m_QmIconRedo   = UI.LoadIconSprite("vpb_icons/redo.png", tint);
+                m_QmIconHub    = UI.LoadIconSprite("vpb_icons/hub.png", tint);
+                m_QmIconCleanup = UI.LoadIconSprite("vpb_icons/cleanup.png", tint);
+                m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
+                m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
+                m_QmIconTargetAtom = UI.LoadIconSprite("vpb_icons/gallery_target.png", tint);
+                m_QmIconCompressCache = UI.LoadIconSprite("vpb_icons/cache_texture.png", tint);
+                m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
+                m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
+                m_QmIconShowHiddenOff = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", tint);
+                m_QmIconShowHiddenOn  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     tint);
+                m_QmIconOpenCategory = UI.LoadIconSprite("vpb_icons/gallery_category.png", tint);
+                m_QmIconCategoryScenes = UI.LoadIconSprite("vpb_icons/c_scene.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategorySubScenes = UI.LoadIconSprite("vpb_icons/c_subscene.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryClothing = UI.LoadIconSprite("vpb_icons/c_clothing.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryHair = UI.LoadIconSprite("vpb_icons/c_hair.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPose = UI.LoadIconSprite("vpb_icons/c_pose.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAppearance = UI.LoadIconSprite("vpb_icons/c_appearance.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryPlugins = UI.LoadIconSprite("vpb_icons/c_plugins.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconCategoryAll = UI.LoadIconSprite("vpb_icons/c_all.png", tint) ?? m_QmIconOpenCategory;
+                m_QmIconPages = new Sprite[]
                 {
-                    Transform btnTr = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTr != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_CreateGalleryButtonGO = btnTr.gameObject;
-                        btnTr.SetParent(m_QuickMenuCanvas.transform, false);
-                        
-                        RectTransform rt = btnTr.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_CreateGalleryButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
-                        }
+                    UI.LoadIconSprite("vpb_icons/page_0.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_1.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_2.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_3.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_4.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_5.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_6.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_7.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_8.png", tint),
+                    UI.LoadIconSprite("vpb_icons/page_9.png", tint),
+                };
 
-                        UIDynamicButton uiBtn = btnTr.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_CreateGalleryButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() => {
-                                     OpenCreateGallery();
-                                });
-                            }
-                            
-                            // Use HoverHandler for dynamic transparency
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                    }
-                }
+                // Anchor center used for layout; positions are kept live in Update().
+                Vector2 createCenter = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
+                Vector2 rootTopLeft = createCenter + new Vector2(-QuickMenuAnchorOldButtonW * 0.5f, QuickMenuAnchorOldButtonH * 0.5f);
 
-                Vector2 createPos = isVR ? Settings.Instance.QuickMenuCreateGalleryPosVR.Value : Settings.Instance.QuickMenuCreateGalleryPosDesktop.Value;
-                Vector2 step = new Vector2(0f, -50f);
+                // New grid: square buttons + uniform gaps.
+                float cell = QuickMenuGridCell;
+                Vector2 popupOffset = new Vector2(260f, -20f);
 
-                Vector2 showHidePos = createPos + step;
-                Vector2 bringFrontPos = createPos + step * 2f;
-                Vector2 closeAllPos = createPos + step * 3f;
+                // Top-left slot center (slot 0). Every other slot is offset from this.
+                Vector2 slot0Center = new Vector2(
+                    rootTopLeft.x + (QuickMenuGridButtonSize * 0.5f),
+                    rootTopLeft.y - (QuickMenuGridButtonSize * 0.5f)
+                );
+
+                // Load persisted page configs (or seed defaults on first run).
+                QuickMenuEnsureDefaultsAndLoadFromConfig();
+
+                // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
+                QuickMenuEnsureTooltipUI();
+                try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
+
+                // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().
 
                 bool initialShouldShow = Gallery.singleton != null && Gallery.singleton.PanelCount > 0;
 
-                // Button 1.5: Close All
+                for (int i = 0; i < QuickMenuGridSlotCount; i++)
                 {
-                    Transform btnTrMid = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTrMid != null && m_QuickMenuCanvas.transform != null)
+                    // Build a clean square button (do NOT use VaM's configurableButtonPrefab; it can enforce wide layouts).
+                    GameObject go = new GameObject("VPB_QM_Slot_" + i);
+                    go.transform.SetParent(m_QuickMenuCanvas.transform, false);
+                    m_QuickMenuGridButtons[i] = go;
+
+                    RectTransform rt = go.AddComponent<RectTransform>();
+                    m_QuickMenuGridButtonRTs[i] = rt;
+                    rt.anchorMin = new Vector2(0.5f, 0.5f);
+                    rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    rt.pivot = new Vector2(0.5f, 0.5f);
+                    rt.sizeDelta = new Vector2(QuickMenuGridButtonSize, QuickMenuGridButtonSize);
+                    int col = i % QuickMenuGridCols;
+                    int row = i / QuickMenuGridCols;
+                    rt.anchoredPosition = slot0Center + new Vector2(col * cell, -row * cell);
+
+                    Image img = go.AddComponent<Image>();
+                    Color normalBackdrop = new Color(0.35f, 0.35f, 0.35f, 0.5f);
+                    img.color = normalBackdrop;
+                    m_QuickMenuGridBackdropImages[i] = img;
+
+                    Button btn = go.AddComponent<Button>();
+                    btn.transition = Selectable.Transition.None;
+                    btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                    m_QuickMenuGridUnityButtons[i] = btn;
+
+                    int idxCopy = i;
+
+                    var hover = go.AddComponent<QuickMenuSquareHover>();
+                    hover.target = img;
+                    hover.normal = normalBackdrop;
+                    hover.hover = new Color(0.35f, 0.35f, 0.35f, 0.75f);
+
+                    var qmHb = go.AddComponent<UIHoverBorder>();
+                    Color qmBorderCol = new Color(1f, 1f, 0f, 1f);
+                    try { if (VPBConfig.Instance != null) qmBorderCol = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
+                    qmHb.hoverColor = qmBorderCol;
+                    qmHb.ApplyBorderSettings();
+
+                    var tip = go.AddComponent<QuickMenuTooltipHoverHandler>();
+                    tip.owner = this;
+                    tip.slotIdx = idxCopy;
+
+                    var drop = go.AddComponent<QuickMenuAssignDropTargetHandler>();
+                    drop.owner = this;
+                    drop.slotIdx = idxCopy;
+
+                    QuickMenuAttachTargetAtomDragSource(go, idxCopy);
+
+                    btn.onClick.AddListener(() =>
                     {
-                        m_CloseAllButtonGO = btnTrMid.gameObject;
-                        btnTrMid.SetParent(m_QuickMenuCanvas.transform, false);
-
-                        RectTransform rt = btnTrMid.GetComponent<RectTransform>();
-                        if (rt != null)
+                        if (idxCopy == m_QuickMenuEditSlotIdx)
                         {
-                            m_CloseAllButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = closeAllPos;
-                        }
-
-                        UIDynamicButton uiBtn = btnTrMid.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_CloseAllButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.close_all", "Close All");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
+                            m_QuickMenuEditMode = !m_QuickMenuEditMode;
+                            if (m_QuickMenuEditMode) QuickMenuShowAssignPaletteForEditMode();
+                            else
                             {
-                                uiBtn.button.onClick.AddListener(() => {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        Gallery.singleton.CloseAll();
-                                    }
-                                });
+                                QuickMenuHideAssignPopup();
+                                QuickMenuClearTooltip(null);
                             }
-
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
                         }
-                        m_CloseAllButtonGO.SetActive(initialShouldShow);
-                    }
+
+                        if (idxCopy == m_QuickMenuPageToggleSlotIdx)
+                        {
+                            QuickMenuChangePage(+1);
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
+                        }
+
+                        if (m_QuickMenuEditMode)
+                        {
+                            Vector2 pos = (m_QuickMenuGridButtonRTs != null && m_QuickMenuGridButtonRTs[idxCopy] != null)
+                                ? m_QuickMenuGridButtonRTs[idxCopy].anchoredPosition
+                                : createCenter;
+                            QuickMenuShowAssignPopup(idxCopy, pos + popupOffset);
+                            return;
+                        }
+
+                        var act = QuickMenuGetSlotAction(idxCopy);
+                        // Save opens a submenu; remember which slot invoked it.
+                        if (act == QuickMenuAssignableAction.Save) m_QuickMenuSavePopupTargetIdx = idxCopy;
+                        QuickMenuExecuteAssignment(act);
+                    });
+
+                    // Right-click on current Page button goes backwards (slot is dynamic, so check at click time).
+                    var rc = go.AddComponent<QuickMenuRightClickHandler>();
+                    rc.onRightClick = () =>
+                    {
+                        if (idxCopy == m_QuickMenuPageToggleSlotIdx)
+                        {
+                            QuickMenuChangePage(-1);
+                            for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                            return;
+                        }
+
+                        if (m_QuickMenuEditMode) return;
+
+                        var act = QuickMenuGetSlotAction(idxCopy);
+                        QuickMenuExecuteAssignmentRightClick(act);
+                    };
+
+                    var a0 = QuickMenuGetSlotAction(i);
+                    bool requiresGallery = (a0 == QuickMenuAssignableAction.ShowHide) ||
+                                           (a0 == QuickMenuAssignableAction.BringFront) ||
+                                           (a0 == QuickMenuAssignableAction.CloseAll) ;
+                    if (requiresGallery) go.SetActive(initialShouldShow);
                 }
 
-                // Button 1.75: Bring Front
+                // Bind legacy refs to assigned slots so existing update paths continue working.
+                m_CreateGalleryButtonGO = m_QuickMenuGridButtons[0];
+                m_ShowHideButtonGO = m_QuickMenuGridButtons[1];
+                m_BringFrontButtonGO = m_QuickMenuGridButtons[2];
+                m_CloseAllButtonGO = m_QuickMenuGridButtons[3];
+                m_CreateGalleryButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[0] : null;
+                m_ShowHideButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[1] : null;
+                m_BringFrontButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[2] : null;
+                m_CloseAllButtonRT = (m_QuickMenuGridButtonRTs != null) ? m_QuickMenuGridButtonRTs[3] : null;
+                // These were UIDynamicButton refs in the old implementation; grid is icon-only now.
+                m_CreateGalleryButton = null;
+                m_ShowHideButton = null;
+                m_BringFrontButton = null;
+                m_CloseAllButton = null;
+
+                // Assignment popup (simple list)
+                m_QuickMenuAssignPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignPopupRoot.name = "VPB_QM_AssignPopup";
+                m_QuickMenuAssignPopupRT = m_QuickMenuAssignPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignPopupRT != null)
                 {
-                    Transform btnTrMid2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTrMid2 != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_BringFrontButtonGO = btnTrMid2.gameObject;
-                        btnTrMid2.SetParent(m_QuickMenuCanvas.transform, false);
-
-                        RectTransform rt = btnTrMid2.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_BringFrontButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = bringFrontPos;
-                        }
-
-                        UIDynamicButton uiBtn = btnTrMid2.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_BringFrontButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 22;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() => {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        Gallery.singleton.BringAllToFront();
-                                    }
-                                });
-                            }
-
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                        m_BringFrontButtonGO.SetActive(initialShouldShow);
-                    }
+                    m_QuickMenuAssignPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    // Pivot at bottom-left so we can grow options upward from the click point.
+                    m_QuickMenuAssignPopupRT.pivot = new Vector2(0f, 0f);
                 }
+                m_QuickMenuAssignPopupRoot.SetActive(false);
 
-                // Button 2: Show/Hide (Right)
-                if (Settings.Instance.QuickMenuShowHideEnabled.Value)
+                m_QuickMenuAssignCategoryPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 250f, 220f, Vector2.zero);
+                m_QuickMenuAssignCategoryPopupRoot.name = "VPB_QM_AssignPopup_Category";
+                m_QuickMenuAssignCategoryPopupRT = m_QuickMenuAssignCategoryPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignCategoryPopupRT != null)
                 {
-                    Transform btnTr2 = Instantiate(m_MVRPluginManager.configurableButtonPrefab);
-                    if (btnTr2 != null && m_QuickMenuCanvas.transform != null)
-                    {
-                        m_ShowHideButtonGO = btnTr2.gameObject;
-                        btnTr2.SetParent(m_QuickMenuCanvas.transform, false);
-                        
-                        RectTransform rt = btnTr2.GetComponent<RectTransform>();
-                        if (rt != null)
-                        {
-                            m_ShowHideButtonRT = rt;
-                            rt.sizeDelta = new Vector2(100f, 40f);
-                            rt.anchoredPosition = showHidePos;
-                        }
-
-                        UIDynamicButton uiBtn = btnTr2.GetComponent<UIDynamicButton>();
-                        if (uiBtn != null)
-                        {
-                            m_ShowHideButton = uiBtn;
-                            uiBtn.label = VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide");
-                            if (uiBtn.buttonText != null) uiBtn.buttonText.fontSize = 24;
-                            if (uiBtn.button != null)
-                            {
-                                uiBtn.button.onClick.AddListener(() => {
-                                    if (Gallery.singleton != null)
-                                    {
-                                        if (Gallery.singleton.IsVisible)
-                                            Gallery.singleton.Hide();
-                                        else
-                                            OpenGallery();
-                                    }
-                                });
-                            }
-                            
-                            // Use HoverHandler for dynamic transparency
-                            var hover = uiBtn.gameObject.AddComponent<ButtonHoverHandler>();
-                            hover.targetButton = uiBtn;
-                            uiBtn.buttonColor = new Color(1f, 1f, 1f, 0.5f);
-                        }
-                        m_ShowHideButtonGO.SetActive(initialShouldShow);
-                    }
+                    m_QuickMenuAssignCategoryPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignCategoryPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignCategoryPopupRT.pivot = new Vector2(0f, 0f);
                 }
-                
+                var catHover = m_QuickMenuAssignCategoryPopupRoot.AddComponent<QuickMenuAssignCategoryPopupHoverHandler>();
+                if (catHover != null) catHover.owner = this;
+                m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
+
+                m_QuickMenuAssignRandomPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignRandomPopupRoot.name = "VPB_QM_AssignPopup_Random";
+                m_QuickMenuAssignRandomPopupRT = m_QuickMenuAssignRandomPopupRoot.GetComponent<RectTransform>();
+                if (m_QuickMenuAssignRandomPopupRT != null)
+                {
+                    m_QuickMenuAssignRandomPopupRT.anchorMin = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignRandomPopupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                    m_QuickMenuAssignRandomPopupRT.pivot = new Vector2(0f, 0f);
+                }
+                var rndHover = m_QuickMenuAssignRandomPopupRoot.AddComponent<QuickMenuAssignRandomPopupHoverHandler>();
+                if (rndHover != null) rndHover.owner = this;
+                m_QuickMenuAssignRandomPopupRoot.SetActive(false);
+
+                QuickMenuRebuildAssignPopupButtons();
+
+                // Initial visuals (icons / showhide state)
+                for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);
+
                 m_QuickMenuButtonInited = true;
                 LogUtil.LogVerboseUi("QuickMenuButton created. VR: " + isVR);
             }
@@ -1752,7 +1964,7 @@ namespace VPB
         void DragWnd(int windowsid)
         {
             EnsureStyles();
-            
+
             // Re-apply alpha for window content
             GUI.color = new Color(GUI.color.r, GUI.color.g, GUI.color.b, m_WindowAlphaState);
             GUI.contentColor = new Color(GUI.contentColor.r, GUI.contentColor.g, GUI.contentColor.b, m_WindowAlphaState);
@@ -1779,13 +1991,13 @@ namespace VPB
 
             // ========== HEADER & CONTROLS ==========
             GUILayout.BeginHorizontal();
-            
+
             // Generate alpha hex for the green color
             int alphaInt = Mathf.RoundToInt(m_WindowAlphaState * 255);
             string alphaHex = alphaInt.ToString("X2");
             // Use a less bright green (LimeGreen #32CD32 approx) instead of pure #00FF00
             GUILayout.Label(string.Format("<color=#32CD32{0}><b>{1}</b></color> {2}", alphaHex, FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
-            
+
             GUILayout.FlexibleSpace();
             const float buttonHeight = 22f;
             if (GUILayout.Button(GetImGuiLocaleShortCode(VPBTranslation.CurrentLocale), m_StyleButtonSmall, GUILayout.Width(40), GUILayout.Height(buttonHeight)))
@@ -1794,13 +2006,13 @@ namespace VPB
             }
             if (GUILayout.Button("+", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
-		        m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
+                m_UIScale = Mathf.Clamp(m_UIScale + 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrictUiRect();
             }
             if (GUILayout.Button("-", m_StyleButtonSmall, GUILayout.Width(28), GUILayout.Height(buttonHeight)))
             {
-		        m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
+                m_UIScale = Mathf.Clamp(m_UIScale - 0.2f, MinUiScale, MaxUiScale);
                 Settings.Instance.UIScale.Value = m_UIScale;
                 RestrictUiRect();
             }
@@ -1848,16 +2060,16 @@ namespace VPB
                     GUI.enabled = false;
 
                 // Removed original Developer Tools section
-                
+
                 {
                     // ========== ZSTD CACHE SETTINGS ==========
 
                     GUILayout.BeginVertical(m_StyleSection);
-                    
+
                     var stats = ImageLoadingMgr.singleton.CurrentZstdStats;
                     var btnLabel = m_PendingVamCacheCount > 0 ? string.Format(VPBTranslation.T("hook.compress_cache_count", "Compress Cache ({0})"), m_PendingVamCacheCount) : VPBTranslation.T("hook.compress_cache", "Compress Cache");
                     var btnRect = GUILayoutUtility.GetRect(new GUIContent(btnLabel), m_StyleButtonPrimary, GUILayout.Height(buttonHeight));
-                    
+
                     if (Event.current.type == EventType.Repaint && btnRect.Contains(Event.current.mousePosition))
                     {
                         if (!m_IsCountingCache && Time.unscaledTime - m_CacheCountUpdateTimer > 2.0f)
@@ -1867,7 +2079,8 @@ namespace VPB
                             string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
                             int threshold = Settings.Instance.ThumbnailThreshold.Value;
                             LogUtil.Log("Checking VAM cache count...");
-                            System.Threading.ThreadPool.QueueUserWorkItem((s) => {
+                            System.Threading.ThreadPool.QueueUserWorkItem((s) =>
+                            {
                                 m_PendingVamCacheCount = GetVamCacheFileCount(path, threshold);
                                 m_IsCountingCache = false;
                             });
@@ -1895,7 +2108,7 @@ namespace VPB
                         GUILayout.Space(2);
                         float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
                         var progressRect = GUILayoutUtility.GetRect(0f, 4f, GUILayout.ExpandWidth(true));
-                        
+
                         // Use solid color for progress bar to ensure visibility
                         var prevColorProgressBar = GUI.color;
                         GUI.color = new Color(0.2f, 1f, 0.2f, 0.8f); // Bright green
@@ -1960,24 +2173,24 @@ namespace VPB
                     float infoWidth = infoBtnWidth;
 
                     var infoRect = new Rect(fullRowRect.xMax - infoWidth, fullRowRect.y, infoWidth, fullRowRect.height);
-                        var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
+                    var buttonsRect = new Rect(fullRowRect.x, fullRowRect.y, Mathf.Max(0f, fullRowRect.width - infoWidth - rowGutter), fullRowRect.height);
 
-                        DrawPhiSplitButtonsInRect(
-                            buttonsRect,
-                            VPBTranslation.T("hook.gc", "GC"),
-                            m_StyleButton,
-                            () => { m_PendingGc = true; },
-                            VPBTranslation.T("hook.refresh", "Refresh"),
-                            m_StyleButton,
-                            Refresh,
-                            1.618f
-                        );
+                    DrawPhiSplitButtonsInRect(
+                        buttonsRect,
+                        "GC",
+                        m_StyleButton,
+                        () => { m_PendingGc = true; },
+                        "Refresh",
+                        m_StyleButton,
+                        Refresh,
+                        1.618f
+                    );
 
-                        if (GUI.Button(infoRect, "i", m_StyleButtonSmall ?? GUI.skin.button))
-                        {
-                            ToggleInfoCard(ref m_ShowGcRefreshInfo);
-                        }
-                    
+                    if (GUI.Button(infoRect, "i", m_StyleButtonSmall ?? GUI.skin.button))
+                    {
+                        ToggleInfoCard(ref m_ShowGcRefreshInfo);
+                    }
+
 
                     DrawInfoCard(ref m_ShowGcRefreshInfo, VPBTranslation.T("hook.gc_refresh.title", "GC & Refresh"), () =>
                     {
@@ -1987,44 +2200,7 @@ namespace VPB
                         GUILayout.Label(VPBTranslation.T("hook.gc_refresh.info2", "GC tries to free memory after heavy browsing by clearing caches and asking Unity/.NET to clean up."), m_StyleInfoCardTextWrapped);
                     });
 
-                    // ========== UNLOAD ALL PACKAGES ==========
-                    if (!m_UnloadAllConfirmPending)
-                    {
-                        GUILayout.BeginHorizontal();
-                        if (GUILayout.Button(VPBTranslation.T("hook.unload_all", "Unload All Packages"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
-                        {
-                            m_UnloadAllConfirmPending = true;
-                        }
-                        if (GUILayout.Button("i", m_StyleButton, GUILayout.Width(infoBtnWidth), GUILayout.Height(buttonHeight)))
-                        {
-                            ToggleInfoCard(ref m_ShowUnloadAllInfo);
-                        }
-                        GUILayout.EndHorizontal();
-                    }
-                    else
-                    {
-                        GUILayout.Label(VPBTranslation.T("hook.unload_all.confirm_q", "Move ALL non-AutoInstall packages back to AllPackages?"), m_StyleInfoCardTextWrapped);
-                        GUILayout.BeginHorizontal();
-                        if (GUILayout.Button(VPBTranslation.T("hook.unload_all.confirm_btn", "Confirm Unload All"), m_StyleButton, GUILayout.ExpandWidth(true), GUILayout.Height(buttonHeight)))
-                        {
-                            m_UnloadAllConfirmPending = false;
-                            UnloadAllPackages();
-                        }
-                        if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Width(60f), GUILayout.Height(buttonHeight)))
-                        {
-                            m_UnloadAllConfirmPending = false;
-                        }
-                        GUILayout.EndHorizontal();
-                    }
-                    DrawInfoCard(ref m_ShowUnloadAllInfo, VPBTranslation.T("hook.unload_all", "Unload All Packages"), () =>
-                    {
-                        GUILayout.Space(4);
-                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info1", "Moves all installed packages back to AllPackages/, making them uninstalled."), m_StyleInfoCardTextWrapped);
-                        GUILayout.Space(2);
-                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info2", "Kept installed: AutoInstall packages and their deps, plus anything referenced by the current scene (hair, clothing, etc.)."), m_StyleInfoCardTextWrapped);
-                        GUILayout.Space(2);
-                        GUILayout.Label(VPBTranslation.T("hook.unload_all.info3", "Use this to reset your AddonPackages to a minimal state."), m_StyleInfoCardTextWrapped);
-                    });
+                    GUILayout.Space(4);
 
                     // ========== HUB BROWSE ==========
                     DrawPhiSplitButtons(VPBTranslation.T("hook.hub", "Hub"), m_StyleButton, OpenHubBrowse, VPBTranslation.T("hook.create_gallery", "Create Gallery"), m_StyleButton, OpenCreateGallery, 1.618f, buttonHeight);
@@ -2148,14 +2324,14 @@ namespace VPB
                     RestrictUiRect();
 
                     EnsureStyles();
-                    
+
                     var windowRect = m_Rect;
                     windowRect.height = 0f;
 
                     // Draw the window itself (background + controls)
                     // We let GUILayout handle the layout, but the border is drawn manually below.
                     // IMPORTANT: We use a separate border rect to avoid double-drawing borders if the skin has them.
-                    
+
                     var prevAlphaColor = GUI.color;
                     var prevAlphaContentColor = GUI.contentColor;
                     var prevAlphaBackgroundColor = GUI.backgroundColor;
@@ -2172,7 +2348,7 @@ namespace VPB
                         (checkRect.width * m_UIScale) + (hoverMargin * 2),
                         (checkRect.height * m_UIScale) + (hoverMargin * 2)
                     );
-                    
+
                     Vector2 screenMousePos = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
                     bool isHovering = screenRect.Contains(screenMousePos);
 
@@ -2193,6 +2369,10 @@ namespace VPB
 
                     m_Rect = GUILayout.Window(0, windowRect, DragWnd, "", m_StyleWindow);
 
+                    Rect mainRect = (m_RealWindowRect.width > 10f) ? m_RealWindowRect : m_Rect;
+                    Rect mainScreenRect = new Rect(mainRect.x * m_UIScale, mainRect.y * m_UIScale, mainRect.width * m_UIScale, mainRect.height * m_UIScale);
+                    bool overAny = mainScreenRect.Contains(screenMousePos);
+
                     if (m_ShowSpaceSaverWindow)
                     {
                         // Block world interaction when mouse is over the Compress Cache window
@@ -2204,10 +2384,54 @@ namespace VPB
                                 Input.ResetInputAxes();
                             }
                         }
-                        
+
                         m_SpaceSaverWindowRect = GUI.Window(999, m_SpaceSaverWindowRect, DrawSpaceSaverWindow, "", m_StyleWindow);
+                        if (screenSpaceRect.Contains(screenMousePos)) overAny = true;
                     }
 
+                    if (m_ShowScanWhitelistWindow)
+                    {
+                        var swScreenRect = new Rect(m_ScanWhitelistWindowRect.x * m_UIScale, m_ScanWhitelistWindowRect.y * m_UIScale, m_ScanWhitelistWindowRect.width * m_UIScale, m_ScanWhitelistWindowRect.height * m_UIScale);
+                        if (swScreenRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+
+                        m_ScanWhitelistWindowRect = GUI.Window(1001, m_ScanWhitelistWindowRect, DrawScanWhitelistWindow, "", m_StyleWindow);
+                        if (swScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+
+                    if (m_ShowScanWhitelistDisableConfirmWindow)
+                    {
+                        var swcScreenRect = new Rect(m_ScanWhitelistDisableConfirmWindowRect.x * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.y * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.width * m_UIScale, m_ScanWhitelistDisableConfirmWindowRect.height * m_UIScale);
+                        if (swcScreenRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)))
+                        {
+                            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+                            {
+                                Input.ResetInputAxes();
+                            }
+                        }
+
+                        m_ScanWhitelistDisableConfirmWindowRect = GUI.Window(1002, m_ScanWhitelistDisableConfirmWindowRect, DrawScanWhitelistDisableConfirmWindow, "", m_StyleWindow);
+                        GUI.BringWindowToFront(1002);
+                        if (swcScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+
+                    if (m_ShowQuickMenuPosWindow)
+                    {
+                        var qmScreenRect = new Rect(m_QuickMenuPosWindowRect.x * m_UIScale, m_QuickMenuPosWindowRect.y * m_UIScale, m_QuickMenuPosWindowRect.width * m_UIScale, m_QuickMenuPosWindowRect.height * m_UIScale);
+                        if (qmScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+                    if (m_ShowLangWindow)
+                    {
+                        var langScreenRect = new Rect(m_LangWindowRect.x * m_UIScale, m_LangWindowRect.y * m_UIScale, m_LangWindowRect.width * m_UIScale, m_LangWindowRect.height * m_UIScale);
+                        if (langScreenRect.Contains(screenMousePos)) overAny = true;
+                    }
+
+                    m_IsPointerOverHookUI = overAny;
 
                     // Draw our custom border ON TOP or AROUND the window rect
                     var borderRect = new Rect(m_Rect.x, m_Rect.y, m_Rect.width, m_Rect.height);
@@ -2219,7 +2443,7 @@ namespace VPB
                     {
                         m_StyleWindowBorder.normal.background = m_WindowActive ? m_TexWindowBorderActive : m_TexWindowBorder;
                         var prevDepth = GUI.depth;
-                        GUI.depth = 1; 
+                        GUI.depth = 1;
                         // Draw just the frame/border using a style that renders only the border
                         GUI.Box(borderRect, GUIContent.none, m_StyleWindowBorder);
                         GUI.depth = prevDepth;
@@ -2316,10 +2540,10 @@ namespace VPB
 
                             GUI.Box(outerRect, GUIContent.none, m_StyleFpsBadgeOuter);
                             float fpsAlpha = Mathf.Max(m_WindowAlphaState, 0.5f); // Ensure FPS is at least 50% visible
-                            
+
                             // To ensure visibility, we might need to boost the alpha of the contentColor specifically
                             // since GUI.color affects both background and content.
-                            
+
                             var prevC = GUI.color;
                             var prevCC = GUI.contentColor;
                             var prevBC = GUI.backgroundColor;
@@ -2329,13 +2553,13 @@ namespace VPB
                             // If m_WindowAlphaState is 0.1, GUI.color is (1,1,1, 0.1).
                             // If we set GUI.color to (1,1,1, 0.5), the box background will be 0.5.
                             // The text color comes from style.normal.textColor (white) * GUI.contentColor * GUI.color.
-                            
+
                             GUI.color = new Color(1f, 1f, 1f, fpsAlpha);
-                            GUI.contentColor = Color.white; 
+                            GUI.contentColor = Color.white;
                             GUI.backgroundColor = Color.white;
-                            
+
                             GUI.Box(innerRect, fpsText, m_StyleFpsBadge);
-                            
+
                             GUI.color = prevC;
                             GUI.contentColor = prevCC;
                             GUI.backgroundColor = prevBC;
@@ -2397,6 +2621,30 @@ namespace VPB
             }
 
             GUI.matrix = pre;
+        }
+
+        private void UpdateUnderlyingUGUIBlockState()
+        {
+            bool shouldBlock = m_Show && m_IsPointerOverHookUI;
+            if (shouldBlock == m_BlockingUnderlyingUGUI)
+                return;
+
+            m_BlockingUnderlyingUGUI = shouldBlock;
+            try
+            {
+                if (Gallery.singleton == null || Gallery.singleton.Panels == null)
+                    return;
+                for (int i = 0; i < Gallery.singleton.Panels.Count; i++)
+                {
+                    var p = Gallery.singleton.Panels[i];
+                    if (p == null || p.canvas == null)
+                        continue;
+                    var gr = p.canvas.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+                    if (gr != null)
+                        gr.enabled = !shouldBlock;
+                }
+            }
+            catch { }
         }
 
         void RestrictUiRect()
@@ -2496,15 +2744,15 @@ namespace VPB
                 GUILayout.BeginVertical(m_StyleSection);
                 GUILayout.Label("Operation in Progress...", m_StyleHeader);
                 GUILayout.Space(5);
-                
+
                 float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
-                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label(string.Format("Progress: {0}/{1} files ({2:P1})", stats.ProcessedFiles, stats.TotalFiles, progress), m_StyleInfoCardText);
+
                 // Progress bar
                 var rect = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true));
                 GUI.Box(rect, "", m_StyleButton); // Background
                 var progressRect = new Rect(rect.x, rect.y, rect.width * progress, rect.height);
-                
+
                 // Use solid color for internal progress bar too
                 var barPrevColor = GUI.color;
                 GUI.color = new Color(0.2f, 0.6f, 1f, 0.8f); // Blue
@@ -2512,9 +2760,10 @@ namespace VPB
                 GUI.color = barPrevColor;
 
                 GUILayout.Space(5);
-                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardTextWrapped);
-                
-                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                GUILayout.Label("Current: " + stats.CurrentFile, m_StyleInfoCardText);
+
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize)
+                {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
                     string label = stats.IsDecompression ? "Space Lost: " : "Space Saved: ";
                     GUILayout.Label(label + FormatBytes(diff), m_StyleInfoCardTextWrapped);
@@ -2545,14 +2794,15 @@ namespace VPB
                 {
                     GUILayout.Label("Thumbnails Skipped: " + stats.SkippedCount, m_StyleInfoCardTextWrapped);
                 }
-                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardTextWrapped);
-                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardTextWrapped);
-                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardTextWrapped);
-                
-                if (stats.TotalOriginalSize > stats.TotalCompressedSize) {
+                GUILayout.Label("Total Uncompressed Size: " + FormatBytes(stats.TotalOriginalSize), m_StyleInfoCardText);
+                GUILayout.Label("Total Compressed Size: " + FormatBytes(stats.TotalCompressedSize), m_StyleInfoCardText);
+                GUILayout.Label(string.Format("Time Taken: {0:0.##} seconds", stats.Duration), m_StyleInfoCardText);
+
+                if (stats.TotalOriginalSize > stats.TotalCompressedSize)
+                {
                     long diff = stats.TotalOriginalSize - stats.TotalCompressedSize;
                     double percent = stats.TotalOriginalSize > 0 ? (double)diff / stats.TotalOriginalSize : 0;
-                    
+
                     var reportPrevContentColor = GUI.contentColor;
                     if (stats.IsDecompression)
                     {
@@ -2571,7 +2821,7 @@ namespace VPB
                 {
                     GUILayout.Label("Failed Files: " + stats.FailedCount, m_StyleInfoCardTextWrapped);
                 }
-                
+
                 if (GUILayout.Button("Close Report", m_StyleButton, GUILayout.Height(30)))
                 {
                     stats.Completed = false; // Reset to show start screen next time
@@ -2588,10 +2838,10 @@ namespace VPB
                 GUILayout.Label("• Current Cache Size: " + FormatBytes(m_CachedTexturesSize), m_StyleInfoCardTextWrapped);
                 long estimatedSavings = (long)(m_CachedTexturesSize * 0.7f);
                 long estimatedCompressed = m_CachedTexturesSize - estimatedSavings;
-                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label("• Estimated compressed cache = " + FormatBytes(estimatedCompressed) + " (space saved: ~" + FormatBytes(estimatedSavings) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• Compression is lossless; no texture quality will be lost.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes depending on cache size.", m_StyleInfoCardText);
+
                 GUILayout.Space(20);
 
                 GUILayout.BeginHorizontal();
@@ -2628,10 +2878,10 @@ namespace VPB
                 GUILayout.Label("• Current Compressed Size: " + FormatBytes(m_CachedVpbSize), m_StyleInfoCardTextWrapped);
                 long estimatedDecompressed = (long)(m_CachedVpbSize * 4.6f);
                 long extraSpaceNeeded = estimatedDecompressed - m_CachedVpbSize;
-                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardTextWrapped);
-                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardTextWrapped);
-                
+                GUILayout.Label("• Estimated native cache = " + FormatBytes(estimatedDecompressed) + " (extra space needed: ~" + FormatBytes(extraSpaceNeeded) + ")", m_StyleInfoCardText);
+                GUILayout.Label("• This should only be used if you plan to stop using the VPB plugin.", m_StyleInfoCardText);
+                GUILayout.Label("• The operation may take several minutes.", m_StyleInfoCardText);
+
                 GUILayout.Space(20);
 
                 GUILayout.BeginHorizontal();
@@ -2657,17 +2907,18 @@ namespace VPB
             else
             {
                 GUILayout.BeginVertical(m_StyleSection);
-                
+
                 // Buttons layout: Compress, Decompress, Close
                 GUILayout.BeginHorizontal();
-                
+
                 var prevBg = GUI.backgroundColor;
                 GUI.backgroundColor = new Color(0.4f, 0.8f, 0.4f, 1f); // More vibrant green
                 if (GUILayout.Button("Compress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
                     m_CachedTexturesSize = -1;
-                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                        try { m_CachedTexturesSize = GetTexturesFolderSize(); } catch {}
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try { m_CachedTexturesSize = GetTexturesFolderSize(); } catch { }
                     });
                     m_CompressConfirmRequested = true;
                 }
@@ -2678,14 +2929,15 @@ namespace VPB
                 if (GUILayout.Button("Decompress", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
                     m_CachedVpbSize = -1;
-                    System.Threading.ThreadPool.QueueUserWorkItem((state) => {
-                        try { m_CachedVpbSize = GetVpbCacheFolderSize(); } catch {}
+                    System.Threading.ThreadPool.QueueUserWorkItem((state) =>
+                    {
+                        try { m_CachedVpbSize = GetVpbCacheFolderSize(); } catch { }
                     });
                     m_DecompressConfirmRequested = true;
                 }
-                
+
                 GUILayout.Space(10);
-                
+
                 GUI.backgroundColor = prevBg;
                 if (GUILayout.Button("Close", m_StyleButton, GUILayout.Height(40), GUILayout.ExpandWidth(true)))
                 {
@@ -2693,7 +2945,7 @@ namespace VPB
                 }
 
                 GUILayout.EndHorizontal();
-                
+
                 GUILayout.EndVertical();
             }
 
@@ -2720,7 +2972,7 @@ namespace VPB
             {
                 string path = GetCacheDir();
                 if (!Directory.Exists(path)) return 0;
-                
+
                 long size = 0;
                 List<string> fileList = new List<string>();
                 FileManager.SafeGetFiles(path, "*.*", fileList);
@@ -2738,44 +2990,8 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
-                
-                string[] files;
-                try
-                {
-                    string sig = "0";
-                    try { sig = Directory.GetLastWriteTimeUtc(path).ToBinary().ToString(); } catch { sig = "0"; }
-                    string cacheKey = "cache:list|dir=" + (Path.GetFullPath(path).Replace('\\', '/').TrimEnd('/')) + "|pat=*.vamcache";
-                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
-                    if (VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached) && cached.Count > 0)
-                    {
-                        files = new string[cached.Count];
-                        for (int i = 0; i < cached.Count; i++) files[i] = cached[i].Path;
-                    }
-                    else
-                    {
-                        files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
-                        try
-                        {
-                            var rows = new List<VpbLocalDatabase.SystemFileRow>(files.Length);
-                            for (int i = 0; i < files.Length; i++)
-                            {
-                                string p = files[i];
-                                if (string.IsNullOrEmpty(p)) continue;
-                                var r = new VpbLocalDatabase.SystemFileRow();
-                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
-                                r.LastWriteBinaryOrInvalid = long.MinValue;
-                                r.SizeOrInvalid = long.MinValue;
-                                rows.Add(r);
-                            }
-                            if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
-                        }
-                        catch { }
-                    }
-                }
-                catch
-                {
-                    files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
-                }
+
+                string[] files = Directory.GetFiles(path, "*.vamcache", SearchOption.TopDirectoryOnly);
                 int count = 0;
                 foreach (var file in files)
                 {
@@ -2796,6 +3012,64 @@ namespace VPB
                         catch { }
                     }
 
+                    // Check if sim or LUT texture using original path (before parsing)
+                    string fName = Path.GetFileName(file);
+                    if (SuperControllerHook.IsLutTexturePath(fName)) continue;
+
+                    // Parse original filename from cache name for sim check
+                    string recon = Path.GetFileNameWithoutExtension(fName);
+                    if (recon.EndsWith("_1")) recon = recon.Substring(0, recon.Length - 2);
+                    // Strip ALL VPB flags if present (loop for multiple flags)
+                    bool stripped;
+                    do
+                    {
+                        stripped = false;
+                        var fm = Regex.Match(recon, @"_(_?[CLNAIR]|BN\d+)$");
+                        if (fm.Success) { recon = recon.Substring(0, fm.Index); stripped = true; }
+                    } while (stripped);
+                    var m = Regex.Match(recon, @"_\d{17,18}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_\d{1,12}$");
+                    if (m.Success) recon = recon.Substring(0, m.Index);
+                    m = Regex.Match(recon, @"_([a-zA-Z]{2,5})$");
+                    if (m.Success)
+                    {
+                        string ext = m.Groups[1].Value.ToLowerInvariant();
+                        if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "dds"
+                            || ext == "tga" || ext == "bmp" || ext == "exr" || ext == "tiff" || ext == "tif")
+                            recon = recon.Substring(0, m.Index) + "." + ext;
+                    }
+                    if (SuperControllerHook.IsSimulationTexturePath(recon)) continue;
+                    if (SuperControllerHook.IsLutTexturePath(recon)) continue;
+
+                    // Additional LUT detection: check metadata dimensions
+                    // LUT textures have characteristic dimensions: 32x1024, 1024x32, 2x2, etc.
+                    // Key signature: extreme aspect ratio (>32 or <1/32) or exact LUT dimensions
+                    if (File.Exists(metaPath))
+                    {
+                        try
+                        {
+                            var meta = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                            if (meta != null)
+                            {
+                                int w = meta["width"].AsInt;
+                                int h = meta["height"].AsInt;
+                                if (w > 0 && h > 0)
+                                {
+                                    float ratio = (float)w / h;
+                                    bool isLutDimensions = (w == 2 && h == 2) ||
+                                                           (w == 32 && h == 1024) ||
+                                                           (w == 1024 && h == 32) ||
+                                                           (ratio >= 32f) ||
+                                                           (ratio <= 0.03125f); // 1/32
+                                    if (isLutDimensions)
+                                        continue;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
                     count++;
                 }
                 return count;
@@ -2805,7 +3079,7 @@ namespace VPB
 
         private int GetVamCacheFileCount()
         {
-             return GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), Settings.Instance.ThumbnailThreshold.Value);
+            return GetVamCacheFileCount(MVR.FileManagement.CacheManager.GetTextureCacheDir(), Settings.Instance.ThumbnailThreshold.Value);
         }
 
 
@@ -2815,7 +3089,7 @@ namespace VPB
             {
                 string path = MVR.FileManagement.CacheManager.GetTextureCacheDir();
                 if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return 0;
-                
+
                 long size = 0;
                 string[] files;
                 try
@@ -2897,6 +3171,227 @@ namespace VPB
                 dblSByte = bytes / 1024.0;
             }
             return String.Format("{0:0.##} {1}", dblSByte, Suffix[i]);
+        }
+
+        void DrawScanWhitelistWindow(int windowID)
+        {
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+            {
+                Input.ResetInputAxes();
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            // Header
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("VaM Scan Whitelist", m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowScanWhitelistWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(6);
+
+            // Enable toggle
+            bool swEnabled = ScanWhitelistManager.Instance.IsEnabled;
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                if (swEnabled)
+                {
+                    m_ShowScanWhitelistDisableConfirmWindow = true;
+                }
+                else
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(true);
+                    ScanWhitelistManager.Instance.Save();
+                }
+            }
+            GUILayout.Label("Enable scan whitelist");
+            GUILayout.EndHorizontal();
+
+            if (ScanWhitelistManager.Instance.IsEnabledButEmpty())
+            {
+                GUILayout.Label("⚠ Whitelist enabled but empty — all packages excluded from VaM's scan!", m_StyleInfoCardTextWrapped);
+            }
+
+            GUILayout.Space(8);
+
+            // Scroll view for folders + uid overrides
+            m_ScanWhitelistScroll = GUILayout.BeginScrollView(m_ScanWhitelistScroll, false, true, GUIStyle.none, GUI.skin.verticalScrollbar, GUI.skin.box, GUILayout.Height(240));
+
+            // Whitelisted Folders
+            GUILayout.Label("Whitelisted Folders", m_StyleInfoCardTitle);
+            var folders = ScanWhitelistManager.Instance.GetWhitelistedFolders();
+            if (folders.Count == 0)
+            {
+                GUILayout.Label("  (none)", m_StyleInfoCardText);
+            }
+            else
+            {
+                for (int i = 0; i < folders.Count; i++)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(folders[i], m_StyleInfoCardText);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Remove", m_StyleButtonSmall, GUILayout.Width(65)))
+                    {
+                        ScanWhitelistManager.Instance.RemoveFolder(folders[i]);
+                        ScanWhitelistManager.Instance.Save();
+                    }
+                    GUILayout.EndHorizontal();
+                }
+            }
+
+            GUILayout.Space(8);
+
+            // Per-UID Overrides
+            GUILayout.Label("Per-Package UID Overrides", m_StyleInfoCardTitle);
+            var uids = ScanWhitelistManager.Instance.GetIncludedPackageUids();
+            if (uids.Count == 0)
+            {
+                GUILayout.Label("  (none)", m_StyleInfoCardText);
+            }
+            else
+            {
+                foreach (var uid in uids)
+                {
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(uid, m_StyleInfoCardText);
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("Remove", m_StyleButtonSmall, GUILayout.Width(65)))
+                    {
+                        ScanWhitelistManager.Instance.RemoveUidOverride(uid);
+                        ScanWhitelistManager.Instance.Save();
+                    }
+                    GUILayout.EndHorizontal();
+                }
+            }
+
+            GUILayout.EndScrollView();
+
+            GUILayout.Space(6);
+
+            // Add folder
+            GUILayout.Label("Add Folder (e.g. AddonPackages/CreatorName):", m_StyleInfoCardText);
+            GUILayout.BeginHorizontal();
+            GUI.SetNextControlName("SWNewFolder");
+            m_ScanWhitelistNewFolderText = GUILayout.TextField(m_ScanWhitelistNewFolderText, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("Add", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                string folder = m_ScanWhitelistNewFolderText.Trim();
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    if (ScanWhitelistManager.Instance.AddFolder(folder))
+                    {
+                        ScanWhitelistManager.Instance.Save();
+                        m_ScanWhitelistNewFolderText = "";
+                    }
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(4);
+
+            // Add UID override
+            GUILayout.Label("Add Package UID Override:", m_StyleInfoCardText);
+            GUILayout.BeginHorizontal();
+            GUI.SetNextControlName("SWNewUid");
+            m_ScanWhitelistNewUidText = GUILayout.TextField(m_ScanWhitelistNewUidText, GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("Add", m_StyleButtonSmall, GUILayout.Width(50)))
+            {
+                string uid = m_ScanWhitelistNewUidText.Trim();
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    if (ScanWhitelistManager.Instance.AddUidOverride(uid))
+                    {
+                        ScanWhitelistManager.Instance.Save();
+                        m_ScanWhitelistNewUidText = "";
+                    }
+                }
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+
+            if (GUILayout.Button("Close", m_StyleButton))
+            {
+                m_ShowScanWhitelistWindow = false;
+            }
+
+            GUILayout.EndVertical();
+
+            // Consume scroll events inside window
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUI.DragWindow();
+        }
+
+        void DrawScanWhitelistDisableConfirmWindow(int windowID)
+        {
+            if (Event.current.type == EventType.MouseDown || Event.current.type == EventType.MouseUp)
+            {
+                Input.ResetInputAxes();
+            }
+
+            GUILayout.BeginVertical(m_StylePanel);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.title", "Disable scan whitelist?"), m_StyleHeader);
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("X", m_StyleButtonSmall, GUILayout.Width(30)))
+            {
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(8);
+
+            GUILayout.Label(
+                VPBTranslation.T(
+                    "hook.settings.scan_whitelist.disable_confirm.body",
+                    "Enable VaM scan whitelist to improve startup time. This “hides” most packages from VaM so it won’t rescan them every start.\n\nDisabling will make VaM startup much slower (full rescan)."),
+                m_StyleInfoCardTextWrapped);
+
+            GUILayout.Space(12);
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(VPBTranslation.T("hook.cancel", "Cancel"), m_StyleButton, GUILayout.Height(34), GUILayout.ExpandWidth(true)))
+            {
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+
+            GUILayout.Space(10);
+
+            var prevBg = GUI.backgroundColor;
+            GUI.backgroundColor = new Color(0.8f, 0.4f, 0.4f, 1f);
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.disable", "Disable"), m_StyleButton, GUILayout.Height(34), GUILayout.ExpandWidth(true)))
+            {
+                try
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(false);
+                    ScanWhitelistManager.Instance.Save();
+                }
+                catch { }
+                m_ShowScanWhitelistDisableConfirmWindow = false;
+            }
+            GUI.backgroundColor = prevBg;
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.EndVertical();
+
+            if (Event.current.type == EventType.ScrollWheel)
+            {
+                Event.current.Use();
+            }
+
+            GUI.DragWindow();
         }
 
         public class ButtonHoverHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler

@@ -7,6 +7,16 @@ namespace VPB
     {
         private void OpenSettings()
         {
+            // Reset transient quick-menu hover/edit UI so stale tooltip/popup state
+            // cannot leak into or out of the Settings page.
+            try
+            {
+                m_QuickMenuEditMode = false;
+                QuickMenuHideAssignPopup();
+                QuickMenuClearTooltip(null);
+            }
+            catch { }
+
             if (MiniMode)
             {
                 SetMiniMode(false);
@@ -17,9 +27,6 @@ namespace VPB
             m_SettingsCreateGalleryKeyDraft = (Settings.Instance != null && Settings.Instance.CreateGalleryKey != null) ? Settings.Instance.CreateGalleryKey.Value : "";
             m_SettingsHubKeyDraft = (Settings.Instance != null && Settings.Instance.HubKey != null) ? Settings.Instance.HubKey.Value : "";
             m_SettingsClearConsoleKeyDraft = (Settings.Instance != null && Settings.Instance.ClearConsoleKey != null) ? Settings.Instance.ClearConsoleKey.Value : "";
-            m_SettingsPluginsAlwaysEnabledDraft = (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null) ? Settings.Instance.PluginsAlwaysEnabled.Value : false;
-            m_SettingsLoadDependenciesWithPackageDraft = (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null) ? Settings.Instance.LoadDependenciesWithPackage.Value : true;
-            m_SettingsForceLatestDependenciesDraft = (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null) ? Settings.Instance.ForceLatestDependencies.Value : false;
             m_SettingsEnableUiTransparencyDraft = (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null) ? Settings.Instance.EnableUiTransparency.Value : true;
             m_SettingsUiTransparencyValueDraft = (Settings.Instance != null && Settings.Instance.UiTransparencyValue != null) ? Settings.Instance.UiTransparencyValue.Value : 0.5f;
             m_SettingsIsDevModeDraft = (VPBConfig.Instance != null) ? VPBConfig.Instance.IsDevMode : false;
@@ -65,26 +72,13 @@ namespace VPB
                 {
                     Settings.Instance.ClearConsoleKey.Value = parsedClearConsoleKey.keyPattern;
                 }
-                if (Settings.Instance != null && Settings.Instance.PluginsAlwaysEnabled != null)
-                {
-                    if (Settings.Instance.PluginsAlwaysEnabled.Value != m_SettingsPluginsAlwaysEnabledDraft)
-                    {
-                        Settings.Instance.PluginsAlwaysEnabled.Value = m_SettingsPluginsAlwaysEnabledDraft;
-                    }
-                }
                 if (Settings.Instance != null && Settings.Instance.LoadDependenciesWithPackage != null)
                 {
-                    if (Settings.Instance.LoadDependenciesWithPackage.Value != m_SettingsLoadDependenciesWithPackageDraft)
-                    {
-                        Settings.Instance.LoadDependenciesWithPackage.Value = m_SettingsLoadDependenciesWithPackageDraft;
-                    }
+                    Settings.Instance.LoadDependenciesWithPackage.Value = true;
                 }
                 if (Settings.Instance != null && Settings.Instance.ForceLatestDependencies != null)
                 {
-                    if (Settings.Instance.ForceLatestDependencies.Value != m_SettingsForceLatestDependenciesDraft)
-                    {
-                        Settings.Instance.ForceLatestDependencies.Value = m_SettingsForceLatestDependenciesDraft;
-                    }
+                    Settings.Instance.ForceLatestDependencies.Value = true;
                 }
                 if (Settings.Instance != null && Settings.Instance.EnableUiTransparency != null)
                 {
@@ -111,7 +105,7 @@ namespace VPB
 
                     if (changed)
                     {
-                        VPBConfig.Instance.Save();
+                        VPBConfig.Instance.Save(false, true);
                     }
                 }
                 UIKey = parsed;
@@ -132,6 +126,15 @@ namespace VPB
         {
             m_ShowSettings = false;
             m_SettingsError = null;
+
+            // Clear any lingering hover tooltip/status from quick-menu state.
+            try
+            {
+                m_QuickMenuEditMode = false;
+                QuickMenuHideAssignPopup();
+                QuickMenuClearTooltip(null);
+            }
+            catch { }
         }
 
         private string DrawHotkeyField(string label, string fieldName, string currentValue, float height)
@@ -218,49 +221,40 @@ namespace VPB
             GUILayout.EndHorizontal();
             GUILayout.Label(VPBTranslation.T("hook.settings.visibility_hint", "Adjust visibility when idle (100% = Opaque, 0% = Invisible)."));
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsPluginsAlwaysEnabledDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsPluginsAlwaysEnabledDraft = !m_SettingsPluginsAlwaysEnabledDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"));
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("i", m_StyleButtonSmall, GUILayout.Width(28f), GUILayout.Height(buttonHeight)))
-            {
-                ToggleInfoCard(ref m_ShowPluginsAlwaysEnabledInfo);
-            }
-            GUILayout.EndHorizontal();
-
-            DrawInfoCard(ref m_ShowPluginsAlwaysEnabledInfo, VPBTranslation.T("hook.settings.plugins_always_enabled", "Plugins always enabled"), () =>
-            {
-                GUILayout.Space(4);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_1", "When this is ON, plugins are treated as always enabled."), m_StyleInfoCardTextWrapped);
-                GUILayout.Space(2);
-                GUILayout.Label(VPBTranslation.T("hook.settings.info.plugins_on_2", "Tip: Leave this OFF if you want VaM to respect per-package/per-scene plugin enable state."), m_StyleInfoCardTextWrapped);
-            });
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsLoadDependenciesWithPackageDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsLoadDependenciesWithPackageDraft = !m_SettingsLoadDependenciesWithPackageDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.load_deps", "Load dependencies when loading a package"));
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(m_SettingsForceLatestDependenciesDraft ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
-            {
-                m_SettingsForceLatestDependenciesDraft = !m_SettingsForceLatestDependenciesDraft;
-            }
-            GUILayout.Label(VPBTranslation.T("hook.settings.force_latest", "Force latest dependency versions"));
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button(VPBTranslation.T("hook.settings.whitelist", "Whitelist"), m_StyleButtonSmall, GUILayout.Width(110f), GUILayout.Height(buttonHeight)))
-            {
-                OpenDependencyWhitelistUGUI();
-            }
-            GUILayout.EndHorizontal();
-
             GUILayout.Space(6);
+
+            GUILayout.Space(10);
+
+            GUILayout.Label(VPBTranslation.T("hook.settings.header.scan_whitelist", "VaM Scan Whitelist"), m_StyleHeader);
+            GUILayout.Space(4);
+
+            GUILayout.BeginHorizontal();
+            bool swEnabled = ScanWhitelistManager.Instance.IsEnabled;
+            if (GUILayout.Button(swEnabled ? "✓" : " ", m_StyleButtonCheckbox, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                if (swEnabled)
+                {
+                    m_ShowScanWhitelistDisableConfirmWindow = true;
+                }
+                else
+                {
+                    ScanWhitelistManager.Instance.SetEnabled(true);
+                    ScanWhitelistManager.Instance.Save();
+                }
+            }
+            GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.enable", "Enable VaM scan whitelist (restrict VaM startup scan to whitelisted folders)"));
+            GUILayout.EndHorizontal();
+
+            if (ScanWhitelistManager.Instance.IsEnabledButEmpty())
+            {
+                GUILayout.Label(VPBTranslation.T("hook.settings.scan_whitelist.empty_warning", "⚠ Warning: whitelist is enabled but empty — all packages will be excluded from VaM's scan!"), m_StyleInfoCardTextWrapped);
+            }
+
+            GUILayout.Space(4);
+            if (GUILayout.Button(VPBTranslation.T("hook.settings.scan_whitelist.manage", "Manage Scan Whitelist..."), m_StyleButton, GUILayout.Height(buttonHeight)))
+            {
+                m_ShowScanWhitelistWindow = true;
+            }
 
             GUILayout.Space(10);
 

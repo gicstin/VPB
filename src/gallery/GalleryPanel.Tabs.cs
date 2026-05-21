@@ -13,399 +13,6 @@ namespace VPB
     public partial class GalleryPanel
     {
 
-        /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on.</summary>
-        private static string GetGalleryListRowDisplayName(FileEntry file)
-        {
-            if (file == null) return "[UNNAMED]";
-            bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
-            if (legacy)
-                return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
-            try
-            {
-                if (file is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
-                    return vfe.Package.Uid;
-                if (file is PackageListEntry ple && ple.Package != null && !string.IsNullOrEmpty(ple.Package.Uid))
-                    return ple.Package.Uid;
-                if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
-                    return mple.RequestedUid;
-            }
-            catch { }
-            return string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
-        }
-
-        private void SetGalleryListRowNameTooltip(GameObject nameGO, FileEntry file)
-        {
-            if (nameGO == null || file == null) return;
-            try
-            {
-                bool legacy = VPBConfig.Instance != null && VPBConfig.Instance.GalleryListNamesLegacyFileName;
-                if (file is VarFileEntry vfe && vfe.Package != null)
-                {
-                    if (legacy)
-                        AddTooltipPlain(nameGO, $"Package: {vfe.Package.Uid}.var");
-                    else
-                    {
-                        string hint = string.IsNullOrEmpty(vfe.InternalPath) ? vfe.Name : vfe.InternalPath.Replace('\\', '/');
-                        AddTooltipPlain(nameGO, hint);
-                    }
-                }
-                else if (file is PackageListEntry ple && ple.Package != null)
-                {
-                    if (legacy)
-                        AddTooltipPlain(nameGO, $"Package: {ple.Package.Uid}.var");
-                    else if (!string.IsNullOrEmpty(ple.Path))
-                        AddTooltipPlain(nameGO, ple.Path);
-                }
-            }
-            catch { }
-        }
-
-        private static string FormatBytesForList(long bytes)
-        {
-            if (bytes < 0) bytes = 0;
-            string[] suffix = { "B", "KB", "MB", "GB", "TB" };
-            double d = bytes;
-            int i = 0;
-            while (d >= 1024.0 && i < suffix.Length - 1)
-            {
-                d /= 1024.0;
-                i++;
-            }
-            if (i == 0) return bytes.ToString() + " " + suffix[i];
-            return d.ToString("0.0") + " " + suffix[i];
-        }
-
-        private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
-        private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
-        // Top inset for main tab scroll: clears the sort button + search row (anchored at y=-55, height=35*scale)
-        private float TabScrollTopOffset()
-        {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
-            return -(55f + 35f * s + 5f);
-        }
-
-        /// <summary>Header/footer/side chrome without recreating category/creator/tag tab buttons when <see cref="VPBConfig.Save(bool,bool)"/> used <c>preferLightGalleryTabChromeOnly: true</c>.</summary>
-        private void UpdateTabsLightChromeOnlyStandardGallery()
-        {
-            if (titleText != null)
-            {
-                bool showTitle = !IsFilterActive;
-                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
-                if (showTitle)
-                    titleText.text = currentCategoryTitle;
-            }
-            UpdateFooterContextActions();
-            UpdateSideContextActions();
-            UpdateSideButtonsVisibility();
-        }
-
-        /// <summary>
-        /// Rebuilds every side-tab button list (categories / creators / tags / hub). Can take seconds with large libraries.
-        /// </summary>
-        /// <remarks>
-        /// INVARIANT: Do not subscribe this method to <see cref="VPBConfig.ConfigChanged"/>. Use
-        /// <see cref="RefreshSideTabAreasForConfigChange"/> for that channel. A runtime guard downgrades mistaken calls during dispatch.
-        /// </remarks>
-        internal void UpdateTabs()
-        {
-            UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true);
-        }
-
-        /// <summary>
-        /// <see cref="VPBConfig.ConfigChanged"/> handler: title/footer/side chrome, sort labels, and tab scroll rect layout
-        /// without destroying and recreating hundreds of side-tab buttons (avoids multi-second stalls on resize/scale).
-        /// </summary>
-        private void RefreshSideTabAreasForConfigChange()
-        {
-            UpdateTabsImpl(rebuildSideTabLists: false, rebuildSubPaneSideTabLists: true);
-        }
-
-        /// <param name="rebuildSubPaneSideTabLists">When false, skips tag/hub-sub/scene-source side lists (split bottom). Main category/creator strips still rebuild when <paramref name="rebuildSideTabLists"/> is true.</param>
-        private void UpdateTabsImpl(bool rebuildSideTabLists, bool rebuildSubPaneSideTabLists = true)
-        {
-            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
-                && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot())
-            {
-                if (VPBConfig.IsLogConfigPerfEnabled())
-                {
-                    try
-                    {
-                        LogUtil.Log("[VPBConfig.Perf] UpdateTabs: lightweight path (side tab buttons not rebuilt)");
-                    }
-                    catch { }
-                }
-                UpdateTabsLightChromeOnlyStandardGallery();
-                return;
-            }
-
-            if (rebuildSideTabLists && VPBConfig.ConfigChangedInvocationDepth > 0)
-            {
-                LogUtil.LogError("[VPB] GalleryPanel: full UpdateTabs (side-tab list rebuild) was invoked during ConfigChanged. Downgrading to chrome/layout only. Fix: remove UpdateTabs from ConfigChanged; keep RefreshSideTabAreasForConfigChange.");
-                rebuildSideTabLists = false;
-            }
-
-            if (titleText != null)
-            {
-                // When filtering by deps/dependents, the active category title is not meaningful.
-                // Hide it to reduce visual noise; the footer shows the filter mode instead.
-                bool showTitle = !IsFilterActive;
-                if (titleText.gameObject.activeSelf != showTitle) titleText.gameObject.SetActive(showTitle);
-
-                if (showTitle)
-                {
-                    if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
-                    else titleText.text = currentCategoryTitle;
-                }
-            }
-
-            UpdateFooterContextActions();
-            UpdateSideContextActions();
-
-            if (IsHubMode)
-            {
-                TeardownCategoryCreatorDualBufferForHub();
-                UpdateHubLayout(rebuildSideTabLists);
-                UpdateSideButtonsVisibility();
-                return;
-            }
-
-            if (leftActiveContent.HasValue) 
-            {
-                // Split View Logic
-                bool splitView = false;
-                if (leftActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        splitView = true;
-                    }
-                }
-                else if (leftActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
-
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) && leftSubTabScrollGO != null)
-                {
-                    // Split Layout
-                    leftSubTabScrollGO.SetActive(true);
-
-                    ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.Category)
-                    {
-                        string titleSub = titleText != null ? titleText.text : "";
-                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.SceneSource;
-                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.AppearanceSource;
-                    }
-
-                    bool sceneSourceLeft = leftActiveContent == ContentType.Category && subType == ContentType.SceneSource;
-                    leftSubSceneSortBarActive = sceneSourceLeft;
-                    if (leftSubSortBtn != null)
-                        leftSubSortBtn.SetActive(!sceneSourceLeft);
-                    if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(sceneSourceLeft);
-                    if (leftSubSearchInput != null)
-                    {
-                        leftSubSearchInput.gameObject.SetActive(true);
-                        if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
-                    }
-                    ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
-                    if (sceneSourceLeft) SyncSceneSourceSortButtonHighlights();
-
-                    RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                    leftRT.anchorMin = new Vector2(0, 0.5f);
-                    leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
-                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
-
-                    RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
-                    subRT.anchorMin = new Vector2(0, 0);
-                    subRT.anchorMax = new Vector2(0, 0.5f);
-                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                    // Populate Top (Category / Hub Category / Status)
-                    if (rebuildSideTabLists)
-                    {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(true);
-                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
-                        }
-                    }
-
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
-                    {
-                        foreach (var b in leftSubActiveTabButtons) ReturnTabButton(b);
-                        leftSubActiveTabButtons.Clear();
-                    }
-                    if (rebuildSideTabLists && rebuildSubPaneSideTabLists)
-                        UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-                else
-                {
-                    // Full Layout
-                    if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
-                    leftSubSceneSortBarActive = false;
-                    if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
-                    if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
-                    if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
-                    if (leftSubClearBtn != null) leftSubClearBtn.SetActive(false);
-
-                    RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                    leftRT.anchorMin = new Vector2(0, 0);
-                    leftRT.anchorMax = new Vector2(0, 1);
-                    leftRT.offsetMin = new Vector2(10, SideTabDefaultBottomOffset); // Restore default
-                    leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
-
-                    if (rebuildSideTabLists)
-                    {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(leftActiveContent.Value, leftTabContainerGO, true))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(true);
-                            UpdateTabs(leftActiveContent.Value, leftTabContainerGO, leftActiveTabButtons, true);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                leftSubSceneSortBarActive = false;
-                if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
-            }
-            if (rightActiveContent.HasValue) 
-            {
-                // Right Split View Logic
-                bool splitView = false;
-                if (rightActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 || 
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        splitView = true;
-                    }
-                }
-                else if (rightActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
-
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) && rightSubTabScrollGO != null)
-                {
-                    // Split Layout
-                    rightSubTabScrollGO.SetActive(true);
-
-                    ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.Category)
-                    {
-                        string titleSub = titleText != null ? titleText.text : "";
-                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.SceneSource;
-                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.AppearanceSource;
-                    }
-
-                    bool sceneSourceRight = rightActiveContent == ContentType.Category && subType == ContentType.SceneSource;
-                    rightSubSceneSortBarActive = sceneSourceRight;
-                    if (rightSubSortBtn != null)
-                    {
-                        rightSubSortBtn.SetActive(!sceneSourceRight);
-                        RectTransform srt = rightSubSortBtn.GetComponent<RectTransform>();
-                        srt.anchorMin = new Vector2(1, 0.5f);
-                        srt.anchorMax = new Vector2(1, 0.5f);
-                    }
-                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
-                    if (rightSubSearchInput != null)
-                    {
-                        rightSubSearchInput.gameObject.SetActive(true);
-                        if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
-                        RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                        rt.anchorMin = new Vector2(1, 0.5f);
-                        rt.anchorMax = new Vector2(1, 0.5f);
-                    }
-                    ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
-                    if (sceneSourceRight) SyncSceneSourceSortButtonHighlights();
-
-                    RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                    rightRT.anchorMin = new Vector2(1, 0.5f);
-                    rightRT.anchorMax = new Vector2(1, 1);
-                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
-                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
-
-                    RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
-                    subRT.anchorMin = new Vector2(1, 0);
-                    subRT.anchorMax = new Vector2(1, 0.5f);
-                    subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                    subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                    // Populate Top (Category / Hub Category / Status)
-                    if (rebuildSideTabLists)
-                    {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(false);
-                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
-                        }
-                    }
-
-                    // Populate Bottom (Tags / Hub Tags / Ratings / Size / SceneSource)
-                    if (rebuildSideTabLists && !rebuildSubPaneSideTabLists)
-                    {
-                        foreach (var b in rightSubActiveTabButtons) ReturnTabButton(b);
-                        rightSubActiveTabButtons.Clear();
-                    }
-                    if (rebuildSideTabLists && rebuildSubPaneSideTabLists)
-                        UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
-                else
-                {
-                    // Full Layout
-                    if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
-                    rightSubSceneSortBarActive = false;
-                    if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
-                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
-                    if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
-                    if (rightSubClearBtn != null) rightSubClearBtn.SetActive(false);
-
-                    RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                    rightRT.anchorMin = new Vector2(1, 0);
-                    rightRT.anchorMax = new Vector2(1, 1);
-                    rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabDefaultBottomOffset); // Restore default
-                    rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
-
-                    if (rebuildSideTabLists)
-                    {
-                        if (!TryUpdateCategoryCreatorDualBufferMainPane(rightActiveContent.Value, rightTabContainerGO, false))
-                        {
-                            TeardownCategoryCreatorDualBufferOneSide(false);
-                            UpdateTabs(rightActiveContent.Value, rightTabContainerGO, rightActiveTabButtons, false);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                rightSubSceneSortBarActive = false;
-                if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
-            }
-
-            SyncSidePaneTopSortButtonVisuals();
-            UpdateSideButtonsVisibility();
-        }
-
         /// <summary>
         /// Rebuilds only split-view bottom panes (tags, hub tags, scene/appearance source rows). Used after
         /// <see cref="UpdateTabsImpl(bool,bool)"/> with <c>rebuildSubPaneSideTabLists: false</c> so heavy tag UI
@@ -480,6 +87,7 @@ namespace VPB
                     UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
                 }
             }
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
 
         private void TeardownCategoryCreatorDualBufferForHub()
@@ -565,6 +173,10 @@ namespace VPB
             VerticalLayoutGroup v = go.AddComponent<VerticalLayoutGroup>();
             v.spacing = 2f;
             v.padding = new RectOffset(5, 5, 0, 0);
+            {
+                var vlg = v;
+                innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+            }
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
             v.childControlHeight = true;
@@ -632,6 +244,7 @@ namespace VPB
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (creatorFilter ?? "")
                 + "|" + (nameFilterLower ?? "")
+                + "|" + (VPBConfig.Instance != null ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope) : "PathAndName")
                 + "|" + (currentExtension ?? "")
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
@@ -669,9 +282,9 @@ namespace VPB
 
         private float CreatorVirtRowHeight()
         {
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
-            // Match CreateTabButton size (35*s) plus the old VerticalLayoutGroup spacing (2).
-            return (35f * s) + 2f;
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            // Match CreateTabButton size (35*s) plus the scaled VerticalLayoutGroup spacing (2*s).
+            return (35f * s) + (2f * s);
         }
 
         private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)
@@ -724,8 +337,8 @@ namespace VPB
         {
             if (btnGO == null) return;
             string cName = creator.Name ?? "";
-            bool isActive = (currentCreator == cName);
-            Color btnColor = isActive ? ColorCreator : new Color(0.25f, 0.25f, 0.25f, 1f);
+            bool isActive = CreatorFilterContains(cName);
+            Color btnColor = isActive ? ColorCreator : ColorInactiveRow;
             string label = cName + " (" + creator.Count + ")";
 
             Button btnComp = btnGO.GetComponent<Button>();
@@ -734,12 +347,8 @@ namespace VPB
                 btnComp.onClick.RemoveAllListeners();
                 btnComp.onClick.AddListener(() =>
                 {
-                    if (currentCreator == cName) currentCreator = "";
-                    else currentCreator = cName;
-                    categoriesCached = false;
-                    tagsCached = false;
-                    RefreshFiles();
-                    UpdateTabs();
+                    ToggleCreatorFilter(cName);
+                    OnCreatorFilterChanged(refreshFilesAndTabs: true);
                 });
             }
             UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
@@ -747,11 +356,8 @@ namespace VPB
             rightClickDelegate.OnRightClick = () =>
             {
                 SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
-                currentCreator = "";
-                categoriesCached = false;
-                tagsCached = false;
-                RefreshFiles();
-                UpdateTabs();
+                ClearCreatorFilters();
+                OnCreatorFilterChanged(refreshFilesAndTabs: true);
             };
 
             Image img = btnGO.GetComponent<Image>();
@@ -762,8 +368,14 @@ namespace VPB
             if (txt != null)
             {
                 txt.text = label;
-                txt.fontSize = Mathf.RoundToInt(18 * s);
-                txt.color = Color.white;
+                // Unity UI Text.fontSize is int and clamps visually at tiny sizes; keep readable floor,
+                // then use localScale to continue shrinking below that floor.
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
             }
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -848,6 +460,459 @@ namespace VPB
             }
         }
 
+        private string ComputeUserTagVirtDataSignature()
+        {
+            SortState st = GetSortState("UserTags");
+            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            string cat = currentCategoryTitle ?? "";
+            if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
+            return "v1|" + userTagSideTabDataRevision
+                + "|" + (userTagFilter ?? "")
+                + "|" + cat
+                + "|" + (int)(st != null ? st.Type : 0)
+                + "|" + (int)(st != null ? st.Direction : 0)
+                + "|" + scale.ToString("R")
+                + "|" + _userTagPinRevision;
+        }
+
+        private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
+        {
+            float offsetPx = 0f;
+            if (!resetScrollToTop)
+                offsetPx = TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f;
+
+            _userTagStickyRows.Clear();
+            _userTagVirtView.Clear();
+            var sortUt = GetSortState("UserTags");
+            var rowsUt = new List<UserTagSideTabEntry>(cachedUserTagSideTab.Count);
+            for (int i = 0; i < cachedUserTagSideTab.Count; i++)
+                rowsUt.Add(cachedUserTagSideTab[i]);
+            if (sortUt.Type == SortType.Count)
+            {
+                if (sortUt.Direction == SortDirection.Ascending)
+                    rowsUt.Sort((a, b) => a.Count.CompareTo(b.Count));
+                else
+                    rowsUt.Sort((a, b) => b.Count.CompareTo(a.Count));
+            }
+            else
+            {
+                if (sortUt.Direction == SortDirection.Ascending)
+                    rowsUt.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                else
+                    rowsUt.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+            }
+            string filterUt = userTagFilter ?? "";
+
+            const int CreateRowCountSentinel = int.MinValue;
+
+            // "Create Tag" synthetic top row when user typed text in search box.
+            // Uses Count sentinel so BindUserTagVirtButton can render different UI/behavior.
+            if (!string.IsNullOrEmpty(filterUt))
+            {
+                string normCandidate = VpbLocalDatabase.NormalizeGalleryUserTagName(filterUt);
+                if (!string.IsNullOrEmpty(normCandidate))
+                {
+                    bool alreadyExists = false;
+                    for (int i = 0; i < rowsUt.Count; i++)
+                    {
+                        if (string.Equals(rowsUt[i].Name, normCandidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            alreadyExists = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyExists)
+                        _userTagStickyRows.Add(new UserTagSideTabEntry { Name = normCandidate, Count = CreateRowCountSentinel });
+                }
+            }
+
+            var filteredUt = new List<UserTagSideTabEntry>(rowsUt.Count);
+            for (int ui = 0; ui < rowsUt.Count; ui++)
+            {
+                UserTagSideTabEntry ut = rowsUt[ui];
+                if (string.IsNullOrEmpty(ut.Name)) continue;
+                if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                filteredUt.Add(ut);
+            }
+            var pinnedUt = new List<UserTagSideTabEntry>(8);
+            var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
+            PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
+            for (int pi = 0; pi < pinnedUt.Count; pi++) _userTagStickyRows.Add(pinnedUt[pi]);
+            for (int ni = 0; ni < normalUt.Count; ni++) _userTagVirtView.Add(normalUt[ni]);
+
+            if (resetScrollToTop)
+            {
+                try
+                {
+                    ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
+                    if (sr != null) sr.verticalNormalizedPosition = 1f;
+                }
+                catch { }
+            }
+            else
+                RequestRestoreUserTagAvailScrollPx(isLeft, offsetPx);
+        }
+
+        private GameObject EnsureUserTagPickVirtualHolder(Transform parent)
+        {
+            if (parent == null) return null;
+            Transform t = parent.Find("_VPB_UserTagPick_Virt");
+            if (t != null) return t.gameObject;
+            return CreateCreatorVirtualHolder("_VPB_UserTagPick_Virt", parent);
+        }
+
+        private void EnsureUserTagVirtScrollHook(bool isLeft, GameObject holder)
+        {
+            if (holder == null) return;
+            ScrollRect sr = holder.GetComponentInParent<ScrollRect>();
+            if (sr == null) return;
+            if (isLeft)
+            {
+                _leftUserTagVirtScroll = sr;
+                EnsureUserTagScrollStepButtons(true, sr);
+                if (_leftUserTagVirtHooked) return;
+                _leftUserTagVirtHooked = true;
+                sr.onValueChanged.AddListener(OnUserTagVirtScrollLeft);
+            }
+            else
+            {
+                _rightUserTagVirtScroll = sr;
+                EnsureUserTagScrollStepButtons(false, sr);
+                if (_rightUserTagVirtHooked) return;
+                _rightUserTagVirtHooked = true;
+                sr.onValueChanged.AddListener(OnUserTagVirtScrollRight);
+            }
+        }
+
+        private void EnsureUserTagScrollStepButtons(bool isLeft, ScrollRect sr)
+        {
+            if (sr == null || sr.gameObject == null) return;
+            if (!ShouldShowGalleryScrollStepButtons())
+            {
+                SetUserTagScrollStepButtonsActive(isLeft, false);
+                return;
+            }
+            Transform sb = null;
+            try { sb = sr.gameObject.transform.Find("Scrollbar"); } catch { sb = null; }
+            if (sb == null) return;
+
+            GameObject up = isLeft ? leftUserTagScrollStepUpBtn : rightUserTagScrollStepUpBtn;
+            GameObject down = isLeft ? leftUserTagScrollStepDownBtn : rightUserTagScrollStepDownBtn;
+            if (up == null)
+            {
+                up = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, 1f));
+                up.name = isLeft ? "LeftUserTagScrollStepUp" : "RightUserTagScrollStepUp";
+                AddHoverDelegate(up);
+                AddTooltip(up, "gallery.tooltip.usertags_scroll_up", "Scroll tags up");
+                if (isLeft) leftUserTagScrollStepUpBtn = up; else rightUserTagScrollStepUpBtn = up;
+            }
+            if (down == null)
+            {
+                down = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, -1f));
+                down.name = isLeft ? "LeftUserTagScrollStepDown" : "RightUserTagScrollStepDown";
+                AddHoverDelegate(down);
+                AddTooltip(down, "gallery.tooltip.usertags_scroll_down", "Scroll tags down");
+                if (isLeft) leftUserTagScrollStepDownBtn = down; else rightUserTagScrollStepDownBtn = down;
+            }
+
+            LayoutUserTagScrollStepButtons(up, down);
+            SetUserTagScrollStepButtonsActive(isLeft, true);
+        }
+
+        private void SetUserTagScrollStepButtonsActive(bool isLeft, bool active)
+        {
+            GameObject up = isLeft ? leftUserTagScrollStepUpBtn : rightUserTagScrollStepUpBtn;
+            GameObject down = isLeft ? leftUserTagScrollStepDownBtn : rightUserTagScrollStepDownBtn;
+            if (up != null) up.SetActive(active);
+            if (down != null) down.SetActive(active);
+        }
+
+        private void LayoutUserTagScrollStepButtons(GameObject up, GameObject down)
+        {
+            float paneS = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float btnSz = Mathf.Round(Mathf.Clamp(40f * paneS, 28f, 56f));
+            const float gap = 6f;
+            GameObject[] gos = { up, down };
+            for (int i = 0; i < gos.Length; i++)
+            {
+                GameObject go = gos[i];
+                if (go == null) continue;
+                RectTransform rt = go.GetComponent<RectTransform>();
+                if (rt == null) continue;
+                bool isUp = i == 0;
+                rt.anchorMin = rt.anchorMax = new Vector2(0.5f, isUp ? 1f : 0f);
+                rt.pivot = new Vector2(0.5f, isUp ? 1f : 0f);
+                rt.sizeDelta = new Vector2(btnSz, btnSz);
+                rt.anchoredPosition = new Vector2(0f, isUp ? -gap : gap);
+                SyncScrollbarJumpButtonCollider(go);
+            }
+        }
+
+        private void ScrollUserTagPanelStep(bool isLeft, float direction)
+        {
+            ScrollRect sr = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
+            ScrollRectByConfiguredStep(sr, direction);
+            try
+            {
+                if (isLeft) OnUserTagVirtScrollLeft(Vector2.zero);
+                else OnUserTagVirtScrollRight(Vector2.zero);
+            }
+            catch { }
+        }
+
+        private void OnUserTagVirtScrollLeft(UnityEngine.Vector2 _)
+        {
+            try
+            {
+                if (leftTabContainerGO == null || leftActiveContent != ContentType.UserTags) return;
+                UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
+            }
+            catch { }
+        }
+
+        private void OnUserTagVirtScrollRight(UnityEngine.Vector2 _)
+        {
+            try
+            {
+                if (rightTabContainerGO == null || rightActiveContent != ContentType.UserTags) return;
+                UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
+            }
+            catch { }
+        }
+
+        private void EnsureUserTagVirtPool(bool isLeft, Transform parent, int desired)
+        {
+            if (parent == null) return;
+            if (desired < 8) desired = 8;
+            List<GameObject> pool = isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (pool[i] == null || pool[i].transform.parent != parent)
+                {
+                    pool.Clear();
+                    break;
+                }
+            }
+            while (pool.Count < desired)
+            {
+                GameObject btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                AddHoverDelegate(btnGO);
+                btnGO.SetActive(true);
+                RectTransform rt = btnGO.GetComponent<RectTransform>();
+                if (rt != null)
+                {
+                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    rt.anchorMin = new Vector2(0, 1);
+                    rt.anchorMax = new Vector2(1, 1);
+                    rt.pivot = new Vector2(0.5f, 1f);
+                    rt.anchoredPosition = Vector2.zero;
+                    rt.sizeDelta = new Vector2(-10f, 35f * s);
+                    rt.offsetMin = new Vector2(5f, rt.offsetMin.y);
+                    rt.offsetMax = new Vector2(-5f, rt.offsetMax.y);
+                }
+                pool.Add(btnGO);
+            }
+        }
+
+        private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)
+        {
+            if (btnGO == null) return;
+            const int CreateRowCountSentinel = int.MinValue;
+            const string CreateLabelKey = "gallery.usertags.create_from_search";
+            const string CreateTipKey = "gallery.usertags.create_from_search_tip";
+
+            string tagSnap = ut.Name ?? "";
+            bool isCreateRow = ut.Count == CreateRowCountSentinel;
+            UserTagSelectionState state = isCreateRow ? UserTagSelectionState.Off : GetUserTagSelectionState(tagSnap);
+            bool isFilterActive = !isCreateRow
+                && _userTagAvailFilterMode
+                && activeUserTags != null
+                && activeUserTags.Contains(tagSnap);
+            bool isPulsing = !isCreateRow
+                && !string.IsNullOrEmpty(_userTagPulseTag)
+                && string.Equals(_userTagPulseTag, tagSnap, StringComparison.OrdinalIgnoreCase)
+                && Time.unscaledTime < _userTagPulseUntil;
+            Color btnColor = isCreateRow ? new Color(0.25f, 0.45f, 0.28f, 1f)
+                : (isFilterActive ? UserTagFilterActiveColor
+                : (isPulsing ? UserTagStatePulseColor
+                : (state == UserTagSelectionState.On ? UserTagStateOnColor
+                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : ColorInactiveRow))));
+            string labelUt = isCreateRow
+                ? (VPBTranslation.T(CreateLabelKey, "Create Tag") + ": " + tagSnap)
+                : (tagSnap + " (" + ut.Count + ")");
+
+            Button btnComp = btnGO.GetComponent<Button>();
+            if (btnComp != null)
+            {
+                btnComp.onClick.RemoveAllListeners();
+                bool sideLeft = isLeft;
+                btnComp.onClick.AddListener(() =>
+                {
+                    try
+                    {
+                        if (isCreateRow)
+                        {
+                            if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(tagSnap, out string norm) && !string.IsNullOrEmpty(norm))
+                            {
+                                userTagsCached = false;
+                                _userTagVirtViewSig = null;
+                            }
+                        }
+                        else if (_userTagAvailFilterMode)
+                        {
+                            if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
+                            else activeUserTags.Add(tagSnap);
+                            RefreshFiles(true, false, false, "user_tag_filter_toggle");
+                        }
+                        else
+                        {
+                            toggleTagForSelectedItems(tagSnap);
+                        }
+
+                        RefreshUserTagsAvailPaneInPlace(sideLeft);
+                    }
+                    catch { }
+                });
+            }
+            UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
+            if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
+            rightClickDelegate.OnRightClick = null;
+
+            Image img = btnGO.GetComponent<Image>();
+            if (img != null) img.color = btnColor;
+
+            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            Text txt = btnGO.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
+                txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+                txt.verticalOverflow = VerticalWrapMode.Truncate;
+                txt.resizeTextForBestFit = false;
+                RectTransform txtRt = txt.GetComponent<RectTransform>();
+                float pinReserve = isCreateRow ? 0f : 34f * s;
+                float filterReserve = isFilterActive ? 34f * s : 0f;
+                if (txtRt != null)
+                {
+                    txtRt.offsetMin = new Vector2(pinReserve, txtRt.offsetMin.y);
+                    txtRt.offsetMax = new Vector2(-filterReserve, txtRt.offsetMax.y);
+                }
+                RectTransform btnRtUt = btnGO.GetComponent<RectTransform>();
+                float padUt = 10f * s;
+                float iconReserve = pinReserve + filterReserve;
+                float innerUt = (btnRtUt != null ? btnRtUt.rect.width : 0f) - padUt - iconReserve;
+                if (innerUt <= 2f) innerUt = 125f * s;
+                string shownUt = EllipsizeTextPreferredWidth(txt, labelUt, innerUt);
+                txt.text = shownUt;
+            }
+            SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
+            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s, isLeft);
+
+            LayoutElement le = btnGO.GetComponent<LayoutElement>();
+            if (le == null) le = btnGO.AddComponent<LayoutElement>();
+            le.minWidth = 140f * s;
+            le.preferredWidth = 170f * s;
+            le.minHeight = 35f * s;
+            le.preferredHeight = 35f * s;
+            le.flexibleWidth = 1;
+
+            if (txt != null)
+            {
+                bool tr = !string.Equals(txt.text, labelUt, StringComparison.Ordinal);
+                string tip = isCreateRow
+                    ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
+                    : pickTooltip;
+                if (tr && !string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, labelUt + "\n\n" + tip);
+                else if (tr)
+                    AddTooltipPlain(btnGO, labelUt);
+                else if (!string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, tip);
+            }
+            else
+            {
+                string tip = isCreateRow
+                    ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
+                    : pickTooltip;
+                if (!string.IsNullOrEmpty(tip))
+                    AddTooltipPlain(btnGO, tip);
+            }
+
+            UserTagPickDragSource dr = btnGO.GetComponent<UserTagPickDragSource>();
+            if (dr == null) dr = btnGO.AddComponent<UserTagPickDragSource>();
+            dr.Panel = this;
+            dr.PrimaryTag = isCreateRow ? "" : tagSnap;
+        }
+
+        private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer)
+        {
+            if (tabContainer == null) return;
+            GameObject holderGo = EnsureUserTagPickVirtualHolder(tabContainer);
+            if (holderGo == null) return;
+
+            ScrollRect sr = isLeft ? _leftUserTagVirtScroll : _rightUserTagVirtScroll;
+            if (sr == null) sr = holderGo.GetComponentInParent<ScrollRect>();
+            if (sr == null) return;
+
+            string pickTip = _userTagAvailFilterMode
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
+            float rowH = UserTagPinnedRowHeightPx();
+            if (rowH <= 1f) rowH = 37f;
+
+            RectTransform viewport = sr.viewport != null ? sr.viewport : (sr.transform as RectTransform);
+            float viewportH = MeasureUserTagVirtViewportHeight(viewport, rowH);
+
+            int total = _userTagVirtView != null ? _userTagVirtView.Count : 0;
+            LayoutElement holderLe = holderGo.GetComponent<LayoutElement>();
+            if (total == 0)
+            {
+                if (isLeft) foreach (var b in _leftUserTagVirtButtons) { if (b != null) b.SetActive(false); }
+                else foreach (var b in _rightUserTagVirtButtons) { if (b != null) b.SetActive(false); }
+                if (holderLe != null) holderLe.preferredHeight = 0f;
+                return;
+            }
+            float contentH = total * rowH;
+            if (holderLe != null) holderLe.preferredHeight = contentH;
+
+            float scrollRange = Mathf.Max(0f, contentH - viewportH);
+            float scrollY = (1f - Mathf.Clamp01(sr.verticalNormalizedPosition)) * scrollRange;
+            int firstIdx = (rowH > 0f) ? Mathf.FloorToInt(scrollY / rowH) : 0;
+            if (firstIdx < 0) firstIdx = 0;
+            if (firstIdx > total - 1) firstIdx = Mathf.Max(0, total - 1);
+
+            int visible = Mathf.CeilToInt(viewportH / rowH) + 6;
+            EnsureUserTagVirtPool(isLeft, holderGo.transform, visible);
+
+            List<GameObject> pool = isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                int idx = firstIdx + i;
+                GameObject btnGO = pool[i];
+                if (btnGO == null) continue;
+                if (idx >= 0 && idx < total)
+                {
+                    btnGO.SetActive(true);
+                    BindUserTagVirtButton(btnGO, _userTagVirtView[idx], utAccent, pickTip, isLeft);
+                    RectTransform rt = btnGO.GetComponent<RectTransform>();
+                    if (rt != null)
+                    {
+                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        rt.sizeDelta = new Vector2(-10f, 35f * s);
+                        float y = -idx * rowH;
+                        rt.anchoredPosition = new Vector2(0f, y);
+                    }
+                }
+                else
+                    btnGO.SetActive(false);
+            }
+        }
+
         private string CurrentPathsSignatureFragment()
         {
             if (currentPaths == null || currentPaths.Count == 0)
@@ -868,156 +933,11 @@ namespace VPB
         {
             SortState st = GetSortState("Creator");
             float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
-            return creatorSideTabDataRevision + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
+            return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
         }
 
-        /// <summary>
-        /// Keeps Category and Creator side-tab UIs in sibling holders and toggles visibility when switching,
-        /// rebuilding only when cache/sort/filter/scale data changes.
-        /// </summary>
-        private bool TryUpdateCategoryCreatorDualBufferMainPane(ContentType activeContent, GameObject tabContainer, bool isLeft)
-        {
-            if (tabContainer == null) return false;
-            if (activeContent != ContentType.Category && activeContent != ContentType.Creator) return false;
 
-            EnsureCategoryCreatorHolders(tabContainer, isLeft);
-
-            GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
-            GameObject crH = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
-            List<GameObject> catList = isLeft ? leftCategoryTabButtons : rightCategoryTabButtons;
-            List<GameObject> crList = isLeft ? leftCreatorTabButtons : rightCreatorTabButtons;
-
-            string catSig = ComputeCategorySideTabSignature();
-            string crSig = ComputeCreatorSideTabSignature();
-
-            string lastCat = isLeft ? leftCategoryTabsLastSig : rightCategoryTabsLastSig;
-            string lastCr = isLeft ? leftCreatorTabsLastSig : rightCreatorTabsLastSig;
-
-            // Avoid building the hidden pane on first open; build it once the user switches or after it existed and data changed.
-            bool categoryPaneEverBuilt = lastCat != null;
-            if (!categoriesCached || lastCat != catSig)
-            {
-                if (activeContent == ContentType.Category || categoryPaneEverBuilt)
-                {
-                    UpdateTabs(ContentType.Category, catH, catList, isLeft);
-                    lastCat = catSig;
-                    if (isLeft) leftCategoryTabsLastSig = lastCat;
-                    else rightCategoryTabsLastSig = lastCat;
-                }
-            }
-            bool creatorPaneEverBuilt = lastCr != null;
-            if (!creatorsCached || lastCr != crSig)
-            {
-                if (activeContent == ContentType.Creator || creatorPaneEverBuilt)
-                {
-                    UpdateTabs(ContentType.Creator, crH, crList, isLeft);
-                    lastCr = crSig;
-                    if (isLeft) leftCreatorTabsLastSig = lastCr;
-                    else rightCreatorTabsLastSig = lastCr;
-                }
-            }
-
-            if (catH != null) catH.SetActive(activeContent == ContentType.Category);
-            if (crH != null) crH.SetActive(activeContent == ContentType.Creator);
-
-            return true;
-        }
-
-        private void UpdateHubLayout(bool populateSideTabLists = true)
-        {
-            // Left Side: Category (Top) / Tags (Bottom)
-            if (leftTabScrollGO != null && leftSubTabScrollGO != null)
-            {
-                leftTabScrollGO.SetActive(true);
-                leftSubTabScrollGO.SetActive(true);
-                
-                // Left Search Top (Category)
-                if (leftSearchInput != null) 
-                {
-                    leftSearchInput.gameObject.SetActive(true);
-                    // For now, no separate search for categories on left, but let's clear it
-                    if (leftSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.categories", "Categories...");
-                }
-
-                // Left Search Bottom (Tags)
-                if (leftSubSearchInput != null)
-                {
-                    leftSubSearchInput.gameObject.SetActive(true);
-                    if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
-                    if (leftSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.tags", "Search Tags...");
-                }
-
-                RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                leftRT.anchorMin = new Vector2(0, 0.5f);
-                leftRT.anchorMax = new Vector2(0, 1);
-                leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
-                leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(0, 0);
-                subRT.anchorMax = new Vector2(0, 0.5f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
-                    UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-            }
-
-            // Right Side: Pay Type (Top 20%) / Creator (Bottom 80%)
-            if (rightTabScrollGO != null && rightSubTabScrollGO != null)
-            {
-                rightTabScrollGO.SetActive(true);
-                rightSubTabScrollGO.SetActive(true);
-
-                // Right Search Top (Pay Type) - Hide search
-                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
-
-                // Right Search Bottom (Creators)
-                if (rightSubSearchInput != null)
-                {
-                    rightSubSearchInput.gameObject.SetActive(true);
-                    if (rightSubSearchInput.text != creatorFilter) rightSubSearchInput.text = creatorFilter;
-                    if (rightSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.creators", "Search Creators...");
-                    
-                    // Adjust anchor for 70/30 split
-                    RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                if (rightSubSortBtn != null)
-                {
-                    RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                rightRT.anchorMin = new Vector2(1, 0.7f);
-                rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
-                rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(1, 0);
-                subRT.anchorMax = new Vector2(1, 0.7f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
-                    UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
-            }
-
-            SyncSidePaneTopSortButtonVisuals();
-        }
-
-        /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle).</summary>
+        /// <summary>All/Addon/Custom row order from persisted <c>SceneSource</c> sort (same 4 modes as icon cycle). Unreferenced: Task 8 replaced BuildSceneSourceTabs with a single toggle.</summary>
         private List<string> GetOrderedSceneSourceFilterLabels()
         {
             SortState st = GetSortState("SceneSource");
@@ -1046,348 +966,60 @@ namespace VPB
             }
             trackedButtons.Clear();
 
+            CleanupSideTabLabeledRows(container.transform);
+            DestroyEphemeralSideTabBlocksForContentType(container.transform, contentType);
+
             if (contentType == ContentType.Category)
             {
-                if (categories == null || categories.Count == 0) return;
-                if (!categoriesCached) CacheCategoryCounts();
-
-                // Sort
-                var displayCategories = new List<Gallery.Category>(categories);
-                var sortState = GetSortState("Category");
-                GallerySortManager.Instance.SortCategories(displayCategories, sortState, categoryCounts);
-
-                foreach (var cat in displayCategories)
-                {
-                    if (!string.IsNullOrEmpty(categoryFilter) && cat.name.IndexOf(categoryFilter, StringComparison.OrdinalIgnoreCase) < 0) continue;
-
-                    var c = cat;
-                    bool isActive = (c.path == currentPath && c.extension == currentExtension);
-                    Color btnColor = isActive ? ColorCategory : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    int count = 0;
-                    if (categoryCounts.ContainsKey(c.name)) count = categoryCounts[c.name];
-                    
-                    // Plugins are mostly local Custom/Scripts files; keep the tab visible even when count is 0 (fresh install).
-                    if (count == 0 && !isActive && !string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
-
-                    string label = c.name + " (" + count + ")";
-
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                        if (LogGalleryCategoryTypeSwitchTiming)
-                            BeginGalleryCategoryTypeNavigationTiming(c.name);
-                        Show(c.name, c.extension, c.path);
-                        if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
-                        {
-                            Settings.Instance.LastGalleryPage.Value = c.name;
-                        }
-                        if (VPBConfig.Instance != null)
-                        {
-                            VPBConfig.Instance.LastGalleryCategory = c.name;
-                            // Write disk only: Save(true) runs ConfigChanged -> UpdateLayout (~seconds). Show/UpdateTabs already refreshed UI.
-                            try { VPBConfig.Instance.Save(false); } catch { }
-                        }
-                        // Show() already ran UpdateTabs or UpdateTabsImpl(false) while refresh runs; a second
-                        // full UpdateTabs() here blocked the UI for seconds. Side strips refresh when
-                        // RefreshFilesRoutine finishes (DeferredGallerySideTabsAfterGridReady).
-                    }, trackedButtons, () => {
-                        SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
-                        currentPath = "";
-                        currentPaths = null;
-                        currentExtension = "";
-                        if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
-                        ClearFiltersForNewCategory();
-                        RefreshFiles();
-                        UpdateTabs();
-                    });
-                }
+                BuildCategoryTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.Creator)
             {
-                if (!creatorsCached) CacheCreators();
-                if (cachedCreators == null || cachedCreators.Count == 0)
-                {
-                    _creatorVirtView.Clear();
-                    _creatorVirtViewSig = null;
-                    UpdateCreatorVirtualVisible(isLeft);
-                    return;
-                }
-                
-                // Sort once (in-place) then virtualize visible rows only.
-                var sortState = GetSortState("Creator");
-                GallerySortManager.Instance.SortCreators(cachedCreators, sortState);
-
-                string sig = ComputeCreatorVirtViewSignature();
-                if (!string.Equals(_creatorVirtViewSig, sig, StringComparison.Ordinal))
-                {
-                    _creatorVirtViewSig = sig;
-                    _creatorVirtView.Clear();
-                    string filterNow = creatorFilter ?? "";
-
-                    // Build a set of creators present in the current filtered file list when a name search is active.
-                    HashSet<string> creatorsInResults = null;
-                    bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
-                    if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
-                    {
-                        creatorsInResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        for (int i = 0; i < currentFilteredFiles.Count; i++)
-                        {
-                            var fe = currentFilteredFiles[i];
-                            if (fe == null) continue;
-                            string creator = null;
-                            try { creator = fe.Uid; } catch { }
-                            if (string.IsNullOrEmpty(creator)) continue;
-                            int dot1 = creator.IndexOf('.');
-                            if (dot1 > 0) creator = creator.Substring(0, dot1);
-                            if (!string.IsNullOrEmpty(creator))
-                                creatorsInResults.Add(creator);
-                        }
-                    }
-
-                    for (int i = 0; i < cachedCreators.Count; i++)
-                    {
-                        var c = cachedCreators[i];
-                        if (string.IsNullOrEmpty(c.Name)) continue;
-                        if (!string.IsNullOrEmpty(filterNow) && c.Name.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
-                        if (creatorsInResults != null && !creatorsInResults.Contains(c.Name)) continue;
-                        _creatorVirtView.Add(c);
-                    }
-
-                    // New view list: reset scroll to top for stability.
-                    ScrollRect sr = container.GetComponentInParent<ScrollRect>();
-                    if (sr != null) sr.verticalNormalizedPosition = 1f;
-                    if (isLeft) _leftCreatorVirtLastFirstIdx = -1;
-                    else _rightCreatorVirtLastFirstIdx = -1;
-                }
-
-                EnsureCreatorVirtScrollHook(isLeft, container);
-
-                // UpdateCreatorVirtualVisible handles its own pooling and tracking.
-                // We do NOT add them to trackedButtons because that would return them to the shared pool
-                // every time UpdateTabs is called, causing massive churn.
-                UpdateCreatorVirtualVisible(isLeft);
+                BuildCreatorTabs(container, isLeft);
+            }
+            else if (contentType == ContentType.Path)
+            {
+                BuildPathTabs(container, trackedButtons);
+            }
+            else if (contentType == ContentType.UserTags)
+            {
+                BuildUserTagsTabs(container, trackedButtons, isLeft);
+            }
+            else if (contentType == ContentType.UserTagsApplied)
+            {
+                BuildUserTagsAppliedTabs(container, trackedButtons, isLeft);
+            }
+            else if (contentType == ContentType.History)
+            {
+                BuildHistoryTabs(container, trackedButtons);
+            }
+            else if (contentType == ContentType.Settings)
+            {
+                BuildSettingsTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.Ratings)
             {
-                var ratingsList = new List<string> { "All Ratings", "5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star", "No Ratings" };
-                
-                Color ratingColor = new Color(0.7f, 0.6f, 0.2f, 1f); // Gold-ish
-
-                foreach (var rating in ratingsList)
-                {
-                    bool isActive = (currentRatingFilter == rating);
-                    Color btnColor = isActive ? ratingColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, rating, btnColor, isActive, () => {
-                        if (currentRatingFilter == rating) currentRatingFilter = "";
-                        else currentRatingFilter = rating;
-                        
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
+                BuildRatingsTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.AppearanceSource)
             {
-                Color appearanceColor = new Color(0.2f, 0.4f, 0.7f, 1f);
-
-                if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
-
-                int allCount = appearanceSourceCountAll;
-                int presetsCount = appearanceSourceCountPresets;
-                int customCount = appearanceSourceCountCustom;
-
-                string[] appearanceKeys = new string[] { "", "presets", "custom" };
-                string[] appearanceLabels = new string[]
-                {
-                    "All (" + allCount + ")",
-                    "Presets (" + presetsCount + ")",
-                    "Custom (" + customCount + ")",
-                };
-
-                for (int i = 0; i < appearanceKeys.Length; i++)
-                {
-                    string key = appearanceKeys[i];
-                    string label = appearanceLabels[i];
-                    bool isActive = string.Equals(currentAppearanceSourceFilter, key, StringComparison.OrdinalIgnoreCase);
-                    Color btnColor = isActive ? appearanceColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                        currentAppearanceSourceFilter = key;
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
-
-                {
-                    Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
-                    Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
-
-                    string[] options = new string[] { "Female", "Male", "Futa" };
-                    for (int gi = 0; gi < options.Length; gi++)
-                    {
-                        string opt = options[gi];
-                        AppearanceSubfilter flag = 0;
-                        if (opt == "Male") flag = AppearanceSubfilter.Male;
-                        else if (opt == "Female") flag = AppearanceSubfilter.Female;
-                        else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
-
-                        bool isGenderActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
-                        Color btnColor2 = isGenderActive ? active : inactive;
-
-                        int cnt = 0;
-                        if (opt == "Male") cnt = isGenderActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
-                        else if (opt == "Female") cnt = isGenderActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                        else if (opt == "Futa") cnt = isGenderActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
-
-                        string label2 = opt + " (" + cnt + ")";
-
-                        CreateTabButton(container.transform, label2, btnColor2, isGenderActive, () => {
-                            if (flag != 0)
-                            {
-                                if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
-                                else appearanceSubfilter |= flag;
-                            }
-                            tagsCached = false;
-                                RefreshFiles();
-                            UpdateTabs();
-                        }, trackedButtons);
-                    }
-                }
-            }
-            else if (contentType == ContentType.Target)
-            {
-                Color targetColor = new Color(0.4f, 0.4f, 0.5f, 1f);
-                Color cancelColor = new Color(0.6f, 0.3f, 0.3f, 1f);
-                if (personAtoms == null || personAtoms.Count == 0) RefreshTargetDropdown();
-
-                UnityAction cancelAction = () => {
-                    if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                    UpdateTabs();
-                };
-
-                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-
-                bool hasRealPersons = personAtoms.Count > 0 && personAtoms[0] != null;
-                int startIndex = trackedButtons.Count;
-
-                for (int i = 0; i < personAtoms.Count; i++)
-                {
-                    Atom atom = personAtoms[i];
-                    string label = targetDropdownOptions.Count > i ? targetDropdownOptions[i] : "Unknown";
-                    bool isActive = (targetDropdownValue == i);
-                    Color btnColor = isActive ? targetColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    if (atom == null)
-                    {
-                        if (hasRealPersons) continue;
-                    }
-
-                    string tooltip = atom != null ? atom.uid : "No target";
-
-                    int capturedIndex = i;
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                        targetDropdownValue = capturedIndex;
-                        UpdateTargetDropdownUI();
-                        for (int j = startIndex; j < trackedButtons.Count; j++)
-                        {
-                            Image img = trackedButtons[j].GetComponent<Image>();
-                            if (img != null)
-                            {
-                                img.color = (j - startIndex == capturedIndex) ? targetColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-                            }
-                        }
-                        Image cancelImg = trackedButtons[0].GetComponent<Image>();
-                        if (cancelImg != null) cancelImg.color = cancelColor;
-                        if (hasRealPersons && trackedButtons.Count > startIndex + personAtoms.Count)
-                        {
-                            Image bottomCancelImg = trackedButtons[trackedButtons.Count - 1].GetComponent<Image>();
-                            if (bottomCancelImg != null) bottomCancelImg.color = cancelColor;
-                        }
-                    }, trackedButtons, null, tooltip);
-                }
-
-                if (hasRealPersons)
-                {
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-                }
+                BuildAppearanceSourceTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.Size)
             {
-                var sizeFilters = new List<string> { "All Sizes", "Tiny (< 10MB)", "Small (10-100MB)", "Medium (100-500MB)", "Large (500MB-1GB)", "Very Large (> 1GB)" };
-                
-                Color sizeColor = new Color(0.2f, 0.7f, 0.4f, 1f); // Green-ish
-
-                foreach (var size in sizeFilters)
-                {
-                    bool isActive = (currentSizeFilter == size);
-                    Color btnColor = isActive ? sizeColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, size, btnColor, isActive, () => {
-                        if (currentSizeFilter == size) currentSizeFilter = "";
-                        else currentSizeFilter = size;
-                        
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
+                BuildSizeTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.CleanupCategories)
             {
-                int mode = GetCleanupFilterMode();
-                Color cleanupColor = new Color(0.62f, 0.40f, 0.20f, 1f);
-                Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                string labelAll = VPBTranslation.T("gallery.cleanup.tab.all", "All") + " (" + GetCleanupTabCount(0) + ")";
-                string labelDup = VPBTranslation.T("gallery.cleanup.tab.dup", "Duplicates") + " (" + GetCleanupTabCount(1) + ")";
-                string labelOld = VPBTranslation.T("gallery.cleanup.tab.old", "Old Versions") + " (" + GetCleanupTabCount(2) + ")";
-                string labelDamaged = VPBTranslation.T("gallery.cleanup.tab.damaged", "Damaged") + " (" + GetCleanupTabCount(3) + ")";
-                string labelExcluded = VPBTranslation.T("gallery.cleanup.tab.excluded", "Excluded") + " (" + GetCleanupTabCount(4) + ")";
-
-                CreateTabButton(container.transform, labelAll, mode == 0 ? cleanupColor : inactive, mode == 0, () =>
-                {
-                    SetCleanupFilterMode(0);
-                    UpdateTabs();
-                }, trackedButtons);
-                CreateTabButton(container.transform, labelDup, mode == 1 ? cleanupColor : inactive, mode == 1, () =>
-                {
-                    SetCleanupFilterMode(1);
-                    UpdateTabs();
-                }, trackedButtons);
-                CreateTabButton(container.transform, labelOld, mode == 2 ? cleanupColor : inactive, mode == 2, () =>
-                {
-                    SetCleanupFilterMode(2);
-                    UpdateTabs();
-                }, trackedButtons);
-                CreateTabButton(container.transform, labelDamaged, mode == 3 ? cleanupColor : inactive, mode == 3, () =>
-                {
-                    SetCleanupFilterMode(3);
-                    UpdateTabs();
-                }, trackedButtons);
-                CreateTabButton(container.transform, labelExcluded, mode == 4 ? cleanupColor : inactive, mode == 4, () =>
-                {
-                    SetCleanupFilterMode(4);
-                    UpdateTabs();
-                }, trackedButtons);
+                BuildCleanupCategoriesTabs(container, trackedButtons);
+            }
+            else if (contentType == ContentType.CleanupStaleBuckets)
+            {
+                BuildCleanupStaleBucketsTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.SceneSource)
             {
-                var sceneFilters = GetOrderedSceneSourceFilterLabels();
-                Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f); // Blue-ish
-
-                foreach (var filter in sceneFilters)
-                {
-                    bool isActive = (currentSceneSourceFilter == filter) || (string.IsNullOrEmpty(currentSceneSourceFilter) && filter == "All Scenes");
-                    Color btnColor = isActive ? sceneColor : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, filter, btnColor, isActive, () => {
-                        if (filter == "All Scenes") currentSceneSourceFilter = "";
-                        else currentSceneSourceFilter = filter;
-                        
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
+                BuildSceneSourceTabs(container, trackedButtons);
             }
             else if (contentType == ContentType.Hub)
             {
@@ -1407,525 +1039,165 @@ namespace VPB
             }
             else if (contentType == ContentType.Tags)
             {
-                if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
-
-                // Determine which tags to show
-                List<string> tagsToShow = new List<string>();
-                string title = titleText != null ? titleText.text : "";
-
-                if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    // Clothing subfilters (shown only for Clothing)
-                    {
-                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
-                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
-
-                        string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Items", "Male", "Female", "Decals" };
-                        for (int gi = 0; gi < options.Length; gi++)
-                        {
-                            string opt = options[gi];
-                            ClothingSubfilter flag = 0;
-                            if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
-                            else if (opt == "Presets") flag = ClothingSubfilter.Presets;
-                            else if (opt == "Custom") flag = ClothingSubfilter.Custom;
-                            else if (opt == "Items") flag = ClothingSubfilter.Items;
-                            else if (opt == "Male") flag = ClothingSubfilter.Male;
-                            else if (opt == "Female") flag = ClothingSubfilter.Female;
-                            else if (opt == "Decals") flag = ClothingSubfilter.Decals;
-
-                            bool isActive = (flag != 0) && ((clothingSubfilter & flag) != 0);
-                            Color btnColor = isActive ? active : inactive;
-
-                            int cnt = 0;
-                            if (opt == "Real Clothing") cnt = clothingSubfilterCountReal;
-                            else if (opt == "Presets") cnt = clothingSubfilterCountPresets;
-                            else if (opt == "Custom") cnt = clothingSubfilterCountCustom;
-                            else if (opt == "Items") cnt = clothingSubfilterCountItems;
-                            else if (opt == "Male") cnt = clothingSubfilterCountMale;
-                            else if (opt == "Female") cnt = clothingSubfilterCountFemale;
-                            else if (opt == "Decals") cnt = clothingSubfilterCountDecals;
-
-                            string label = opt + " (" + cnt + ")";
-
-                            CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                                if (flag != 0)
-                                {
-                                    if ((clothingSubfilter & flag) != 0) clothingSubfilter &= ~flag;
-                                    else clothingSubfilter |= flag;
-                                }
-                                tagsCached = false;
-                                        RefreshFiles();
-                                UpdateTabs();
-                            }, trackedButtons);
-                        }
-                    }
-
-                    tagsToShow.AddRange(TagFilter.ClothingTypeTags);
-                    tagsToShow.AddRange(TagFilter.ClothingRegionTags);
-                    tagsToShow.AddRange(TagFilter.ClothingOtherTags);
-                }
-                else if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    {
-                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
-                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
-
-                        string[] options = new string[] { "Female", "Male", "Futa" };
-                        for (int gi = 0; gi < options.Length; gi++)
-                        {
-                            string opt = options[gi];
-                            AppearanceSubfilter flag = 0;
-                            if (opt == "Male") flag = AppearanceSubfilter.Male;
-                            else if (opt == "Female") flag = AppearanceSubfilter.Female;
-                            else if (opt == "Futa") flag = AppearanceSubfilter.Futa;
-
-                            bool isActive = (flag != 0) && ((appearanceSubfilter & flag) != 0);
-                            Color btnColor = isActive ? active : inactive;
-
-                            int cnt = 0;
-                            if (opt == "Male") cnt = isActive ? appearanceSubfilterCurrentCountMale : appearanceSubfilterFacetCountMale;
-                            else if (opt == "Female") cnt = isActive ? appearanceSubfilterCurrentCountFemale : appearanceSubfilterFacetCountFemale;
-                            else if (opt == "Futa") cnt = isActive ? appearanceSubfilterCurrentCountFuta : appearanceSubfilterFacetCountFuta;
-
-                            string label = opt + " (" + cnt + ")";
-
-                            CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                                if (flag != 0)
-                                {
-                                    if ((appearanceSubfilter & flag) != 0) appearanceSubfilter &= ~flag;
-                                    else appearanceSubfilter |= flag;
-                                }
-                                tagsCached = false;
-                                        RefreshFiles();
-                                UpdateTabs();
-                            }, trackedButtons);
-                        }
-                    }
-                }
-                else if (title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    {
-                        Color inactive = new Color(0.25f, 0.25f, 0.25f, 1f);
-                        Color active = new Color(0.35f, 0.35f, 0.6f, 1f);
-
-                        // Pose people-count filter (Single vs Dual)
-                        {
-                            bool isSingleActive = (posePeopleFilter == PosePeopleFilter.Single);
-                            bool isDualActive = (posePeopleFilter == PosePeopleFilter.Dual);
-
-                            CreateTabButton(container.transform, string.Format(VPBTranslation.T("gallery.pose.single_count", "Single ({0})"), posePeopleFacetCountSingle), isSingleActive ? active : inactive, isSingleActive, () => {
-                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Single) ? PosePeopleFilter.All : PosePeopleFilter.Single;
-                                        RefreshFiles();
-                                UpdateTabs();
-                            }, trackedButtons);
-
-                            CreateTabButton(container.transform, string.Format(VPBTranslation.T("gallery.pose.dual_count", "Dual ({0})"), posePeopleFacetCountDual), isDualActive ? active : inactive, isDualActive, () => {
-                                posePeopleFilter = (posePeopleFilter == PosePeopleFilter.Dual) ? PosePeopleFilter.All : PosePeopleFilter.Dual;
-                                        RefreshFiles();
-                                UpdateTabs();
-                            }, trackedButtons);
-                        }
-                    }
-                }
-                else if (title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    tagsToShow.AddRange(TagFilter.HairTypeTags);
-                    tagsToShow.AddRange(TagFilter.HairRegionTags);
-                    tagsToShow.AddRange(TagFilter.HairOtherTags);
-                }
-                
-                // Filter
-                if (!string.IsNullOrEmpty(tagFilter))
-                {
-                    tagsToShow.RemoveAll(t => t.IndexOf(tagFilter, StringComparison.OrdinalIgnoreCase) < 0);
-                }
-
-                // Sort
-                var sortState = GetSortState("Tags");
-                if (sortState.Type == SortType.Name)
-                {
-                    if (sortState.Direction == SortDirection.Ascending) tagsToShow.Sort();
-                    else tagsToShow.Sort((a, b) => b.CompareTo(a));
-                }
-                else if (sortState.Type == SortType.Count)
-                {
-                    tagsToShow.Sort((a, b) => {
-                        int cA = tagCounts.ContainsKey(a) ? tagCounts[a] : 0;
-                        int cB = tagCounts.ContainsKey(b) ? tagCounts[b] : 0;
-                        int cmp = cA.CompareTo(cB);
-                        if (cmp == 0) return a.CompareTo(b);
-                        return sortState.Direction == SortDirection.Ascending ? cmp : -cmp;
-                    });
-                }
-                
-                foreach (var tag in tagsToShow)
-                {
-                    int count = 0;
-                    if (tagCounts.ContainsKey(tag)) count = tagCounts[tag];
-                    
-                    bool isActive = activeTags.Contains(tag);
-                    
-                    if (count == 0 && !isActive) continue;
-
-                    string label = tag + " (" + count + ")";
-                    Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : new Color(0.25f, 0.25f, 0.25f, 1f);
-
-                    CreateTabButton(container.transform, label, btnColor, isActive, () => {
-                        if (activeTags.Contains(tag)) activeTags.Remove(tag);
-                        else activeTags.Add(tag);
-                        
-                        RefreshFiles();
-                        UpdateTabs();
-                    }, trackedButtons);
-                }
-
-                // Update Clear Button
-                GameObject clearBtn = isLeft ? leftSubClearBtn : rightSubClearBtn;
-                Text clearBtnText = isLeft ? leftSubClearBtnText : rightSubClearBtnText;
-                
-                if (clearBtn != null)
-                {
-                    if (activeTags.Count > 0)
-                    {
-                        clearBtn.SetActive(true);
-                        if (clearBtnText != null) clearBtnText.text = string.Format(VPBTranslation.T("gallery.tags.clear_selected_count", "Clear Selected ({0})"), activeTags.Count);
-                    }
-                    else
-                    {
-                        clearBtn.SetActive(false);
-                    }
-                }
+                BuildTagsTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.RemoveClothing)
             {
-                List<Atom> personAtoms = SuperController.singleton != null
-                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
-                    : new List<Atom>();
-
-                if (personAtoms.Count > 0)
-                {
-                    Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
-                    Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-                    Color allColor = new Color(0.8f, 0.2f, 0.2f, 1f);
-                    Color groupColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-
-                    UnityAction cancelAction = () => {
-                        if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                        UpdateTabs();
-                    };
-
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-
-                    foreach (Atom target in personAtoms)
-                    {
-                        var items = new List<KeyValuePair<string, string>>();
-                        JSONStorable geometry = target.GetStorableByID("geometry");
-                        if (geometry != null)
-                        {
-                            foreach (var name in geometry.GetBoolParamNames())
-                            {
-                                if (string.IsNullOrEmpty(name) || !name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
-                                string clothingUid = name.Substring(9);
-                                JSONStorableBool jsb = geometry.GetBoolJSONParam(name);
-                                if (jsb != null && jsb.val)
-                                {
-                                    string p = clothingUid.Replace("\\", "/");
-                                    string[] parts = p.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                                    
-                                    string typeFolder = null;
-                                    int clothingIdx = -1;
-                                    for (int i = 0; i < parts.Length; i++)
-                                    {
-                                        if (string.Equals(parts[i], "clothing", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            clothingIdx = i;
-                                            break;
-                                        }
-                                    }
-                                    if (clothingIdx >= 0 && clothingIdx + 1 < parts.Length) typeFolder = parts[clothingIdx + 1];
-
-                                    string fileName = parts.Length > 0 ? Path.GetFileNameWithoutExtension(parts[parts.Length - 1]) : "";
-                                    string label = !string.IsNullOrEmpty(typeFolder)
-                                        ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
-                                        : fileName;
-                                    if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(clothingUid, label));
-                                }
-                            }
-                        }
-                        var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
-                        
-                        // Apply filter
-                        if (!string.IsNullOrEmpty(removeClothingFilter))
-                        {
-                            string filterLower = removeClothingFilter.ToLowerInvariant();
-                            options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
-                        }
-
-                        if (options.Count > 0)
-                        {
-                            if (personAtoms.Count > 1)
-                            {
-                                // Person label
-                                CreateTabButton(container.transform, " PERSON: " + target.uid + " ", groupColor, true, null, trackedButtons);
-                            }
-
-                            CreateTabButton(container.transform, "REMOVE ALL (" + target.uid + ")", allColor, false, () => {
-                                UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                                if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
-                                if (dragger != null) { dragger.Panel = this; dragger.RemoveAllClothing(target); }
-                                UpdateTabs();
-                            }, trackedButtons, null, "Remove ALL clothing from " + target.uid);
-                            
-                            // Add hover preview for REMOVE ALL
-                            GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                            if (btnGO != null)
-                            {
-                                UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
-                                if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
-                                del.OnHoverChange += (enter) => {
-                                    if (enter) ApplyClothingAllPreview(target);
-                                    else ClearClothingAllPreview(target);
-                                };
-                            }
-
-                            foreach (var opt in options)
-                            {
-                                string uid = opt.Key;
-                                string label = opt.Value;
-                                string tooltip = "Remove: " + label + " from " + target.uid;
-                                CreateTabButton(container.transform, label, removeColor, false, () => {
-                                    ClearClothingPreview();
-                                    UIDraggableItem dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.GetComponent<UIDraggableItem>();
-                                    if (dragger == null) dragger = (isLeft ? leftRemoveAllClothingBtn : rightRemoveAllClothingBtn)?.AddComponent<UIDraggableItem>();
-                                    if (dragger != null) { dragger.Panel = this; dragger.RemoveClothingItemByUid(target, uid); }
-                                    UpdateTabs();
-                                }, trackedButtons, null, tooltip);
-                                // Add hover preview for removal tabs
-                                GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                                if (itemBtnGO != null)
-                                {
-                                    UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
-                                    if (del == null) del = itemBtnGO.AddComponent<UIHoverDelegate>();
-                                    del.OnHoverChange += (enter) => {
-                                        if (enter) ApplyClothingPreview(target, uid);
-                                        else ClearClothingPreview(target, uid);
-                                    };
-                                }
-                            }
-                        }
-                    }
-
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-                }
+                BuildRemoveClothingTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.RemoveHair)
             {
-                List<Atom> personAtoms = SuperController.singleton != null
-                    ? SuperController.singleton.GetAtoms().Where(a => a != null && a.type == "Person").ToList()
-                    : new List<Atom>();
-
-                if (personAtoms.Count > 0)
-                {
-                    Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
-                    Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-                    Color allColor = new Color(0.8f, 0.2f, 0.2f, 1f);
-                    Color groupColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-
-                    UnityAction cancelAction = () => {
-                        if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                        UpdateTabs();
-                    };
-
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-
-                    foreach (Atom target in personAtoms)
-                    {
-                        var items = new List<KeyValuePair<string, string>>();
-                        DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
-                        if (dcs != null && dcs.hairItems != null)
-                        {
-                            foreach (var item in dcs.hairItems)
-                            {
-                                if (item == null || !item.active) continue;
-                                string path = item.uid;
-                                if (string.IsNullOrEmpty(path)) continue;
-                                string p = path.Replace("\\", "/");
-                                int idx = p.ToLowerInvariant().IndexOf("/hair/");
-                                string label;
-                                if (idx >= 0)
-                                {
-                                    string[] parts = p.Substring(idx).Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-                                    string typeFolder = (parts.Length >= 2) ? parts[1] : null;
-                                    string fileName = Path.GetFileNameWithoutExtension(p);
-                                    label = !string.IsNullOrEmpty(typeFolder)
-                                        ? (CultureInfo.InvariantCulture.TextInfo.ToTitleCase(typeFolder.ToLowerInvariant()) + ": " + fileName)
-                                        : fileName;
-                                }
-                                else
-                                {
-                                    label = Path.GetFileNameWithoutExtension(p);
-                                }
-                                if (!string.IsNullOrEmpty(label)) items.Add(new KeyValuePair<string, string>(item.uid, label));
-                            }
-                        }
-                        var options = items.GroupBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
-                        
-                        // Apply filter
-                        if (!string.IsNullOrEmpty(removeHairFilter))
-                        {
-                            string filterLower = removeHairFilter.ToLowerInvariant();
-                            options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
-                        }
-
-                        if (options.Count > 0)
-                        {
-                            if (personAtoms.Count > 1)
-                            {
-                                // Person label
-                                CreateTabButton(container.transform, " PERSON: " + target.uid + " ", groupColor, true, null, trackedButtons);
-                            }
-
-                            CreateTabButton(container.transform, "REMOVE ALL (" + target.uid + ")", allColor, false, () => {
-                                UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
-                                if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
-                                if (dragger != null) { dragger.Panel = this; dragger.RemoveAllHair(target); }
-                                UpdateTabs();
-                            }, trackedButtons, null, "Remove ALL hair from " + target.uid);
-
-                            // Add hover preview for REMOVE ALL
-                            GameObject btnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                            if (btnGO != null)
-                            {
-                                UIHoverDelegate del = btnGO.GetComponent<UIHoverDelegate>();
-                                if (del == null) del = btnGO.AddComponent<UIHoverDelegate>();
-                                del.OnHoverChange += (enter) => {
-                                    if (enter) ApplyHairAllPreview(target);
-                                    else ClearHairAllPreview(target);
-                                };
-                            }
-
-                            foreach (var opt in options)
-                            {
-                                string uid = opt.Key;
-                                string label = opt.Value;
-                                string tooltip = "Remove: " + label + " from " + target.uid;
-                                CreateTabButton(container.transform, label, removeColor, false, () => {
-                                    ClearHairPreview();
-                                    UIDraggableItem dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.GetComponent<UIDraggableItem>();
-                                    if (dragger == null) dragger = (isLeft ? leftRemoveAllHairBtn : rightRemoveAllHairBtn)?.AddComponent<UIDraggableItem>();
-                                    if (dragger != null) { dragger.Panel = this; dragger.RemoveHairItemByUid(target, uid); }
-                                    UpdateTabs();
-                                }, trackedButtons, null, tooltip);
-                                GameObject itemBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
-                                if (itemBtnGO != null)
-                                {
-                                    UIHoverDelegate del = itemBtnGO.GetComponent<UIHoverDelegate>();
-                                    if (del == null) del = itemBtnGO.AddComponent<UIHoverDelegate>();
-                                    del.OnHoverChange += (enter) => {
-                                        if (enter) ApplyHairPreview(target, uid);
-                                        else ClearHairPreview(target, uid);
-                                    };
-                                }
-                            }
-                        }
-                    }
-
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-                }
+                BuildRemoveHairTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.RemoveAtom)
             {
-                if (SuperController.singleton != null)
-                {
-                    var options = SuperController.singleton.GetAtoms()
-                        .Where(a => a != null && !string.IsNullOrEmpty(a.uid) && !a.uid.StartsWith("CoreControl") && !a.uid.Equals("CameraRig"))
-                        .Select(a => new KeyValuePair<string, string>(a.uid, (!string.IsNullOrEmpty(a.type) ? a.type + ": " : "") + a.uid))
-                        .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase).ToList();
-                    
-                    // Apply filter
-                    if (!string.IsNullOrEmpty(removeAtomFilter))
-                    {
-                        string filterLower = removeAtomFilter.ToLowerInvariant();
-                        options = options.Where(kvp => kvp.Value.ToLowerInvariant().Contains(filterLower)).ToList();
-                    }
-                    Color removeColor = new Color(0.6f, 0.2f, 0.2f, 1f);
-                    Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
-
-                    UnityAction cancelAction = () => {
-                        if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                        UpdateTabs();
-                    };
-
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-
-                    foreach (var opt in options)
-                    {
-                        string uid = opt.Key;
-                        string label = opt.Value;
-                        string tooltip = "Remove: " + uid;
-                        CreateTabButton(container.transform, label, removeColor, false, () => {
-                            Atom a = SuperController.singleton.GetAtomByUid(uid);
-                            if (a != null) { PushUndoSnapshotForAtomRemoval(a); SuperController.singleton.RemoveAtom(a); }
-                            UpdateTabs();
-                        }, trackedButtons, null, tooltip);
-                    }
-
-                    if (options.Count > 0)
-                    {
-                        CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
-                    }
-                }
+                BuildRemoveAtomTabs(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.SavePresets)
             {
                 var options = BuildSaveMenuOptions();
                 Color saveColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-                Color cancelColor = new Color(0.35f, 0.35f, 0.35f, 1f);
+                Color cancelColor = ColorCancelRow;
 
-                UnityAction cancelAction = () => {
-                    if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent;
-                    UpdateTabs();
-                };
-
-                CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
+                AddCloseSidePaneRow(container.transform, trackedButtons, isLeft, cancelColor);
 
                 foreach (var opt in options)
                 {
                     var o = opt;
                     CreateTabButton(container.transform, o.Label, saveColor, false, () => {
                         o.Action?.Invoke();
-                        if (o.AutoClose) { if (isLeft) leftActiveContent = leftPrevActiveContent; else rightActiveContent = rightPrevActiveContent; UpdateTabs(); }
+                        if (o.AutoClose) CloseSidePane(isLeft);
                     }, trackedButtons, null, o.Tooltip);
                 }
 
                 if (options.Count > 0)
                 {
-                    CreateTabButton(container.transform, VPBTranslation.T("gallery.side.close", "Close"), cancelColor, false, cancelAction, trackedButtons);
+                    AddCloseSidePaneRow(container.transform, trackedButtons, isLeft, cancelColor);
                 }
             }
             
             SetLayerRecursive(container, 5);
         }
 
-        private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+
+        /// <summary>Strip ephemeral User Tags UI blocks when rebuilding a different tab in the same scroll content.</summary>
+        private void DestroyEphemeralSideTabBlocksForContentType(Transform container, ContentType contentType)
         {
-            AddBorderEdge(parent, anchorMin, anchorMax, pivot, sizeDelta, Color.white);
+            if (container == null) return;
+            bool mainLeft = leftTabContainerGO != null && container == leftTabContainerGO.transform;
+            bool mainRight = rightTabContainerGO != null && container == rightTabContainerGO.transform;
+            bool subLeft = leftSubTabContainerGO != null && container == leftSubTabContainerGO.transform;
+            bool subRight = rightSubTabContainerGO != null && container == rightSubTabContainerGO.transform;
+
+            if (contentType != ContentType.UserTags)
+            {
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock");
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock_v2");
+                DestroyChildIfPresent(container, "VPB_UserTagBulkBlock_v3");
+                DestroyChildIfPresent(container, "_VPB_UserTagPick_Virt");
+                TeardownUserTagPickVirtForContainer(container);
+                if (mainLeft && leftUserTagsAvailStickyGO != null)
+                {
+                    DestroyChildIfPresent(leftUserTagsAvailStickyGO.transform, "VPB_UserTagBulkBlock_v3");
+                    leftUserTagAvailTitleText = null;
+                    leftUserTagApplyBtnText = null;
+                }
+                if (mainRight && rightUserTagsAvailStickyGO != null)
+                {
+                    DestroyChildIfPresent(rightUserTagsAvailStickyGO.transform, "VPB_UserTagBulkBlock_v3");
+                    rightUserTagAvailTitleText = null;
+                    rightUserTagApplyBtnText = null;
+                }
+            }
+            if (contentType != ContentType.UserTagsApplied)
+            {
+                DestroyChildIfPresent(container, "VPB_UserTagsAppliedToolbar_v1");
+                DestroyChildIfPresent(container, "VPB_UserTagsAppliedToolbar_v2");
+                DestroyChildIfPresent(container, "VPB_UserTagsAppliedToolbar_v3");
+                if (subLeft && leftUserTagsAppliedStickyGO != null)
+                {
+                    DestroyChildIfPresent(leftUserTagsAppliedStickyGO.transform, "VPB_UserTagsAppliedToolbar_v2");
+                    DestroyChildIfPresent(leftUserTagsAppliedStickyGO.transform, "VPB_UserTagsAppliedToolbar_v3");
+                    leftUserTagAppliedTitleText = null;
+                }
+                if (subRight && rightUserTagsAppliedStickyGO != null)
+                {
+                    DestroyChildIfPresent(rightUserTagsAppliedStickyGO.transform, "VPB_UserTagsAppliedToolbar_v2");
+                    DestroyChildIfPresent(rightUserTagsAppliedStickyGO.transform, "VPB_UserTagsAppliedToolbar_v3");
+                    rightUserTagAppliedTitleText = null;
+                }
+            }
         }
 
-        private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta, Color color)
+        private void TeardownUserTagPickVirtForContainer(Transform container)
         {
-            GameObject go = new GameObject("E");
-            go.transform.SetParent(parent.transform, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.pivot = pivot;
-            rt.sizeDelta = sizeDelta;
-            rt.anchoredPosition = Vector2.zero;
-            go.AddComponent<Image>().color = color;
+            if (container == null) return;
+            if (leftTabContainerGO != null && container == leftTabContainerGO.transform)
+                TeardownUserTagPickVirt(true);
+            else if (rightTabContainerGO != null && container == rightTabContainerGO.transform)
+                TeardownUserTagPickVirt(false);
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null)
+        private void TeardownUserTagPickVirt(bool isLeft)
+        {
+            if (isLeft)
+            {
+                if (_leftUserTagVirtScroll != null && _leftUserTagVirtHooked)
+                {
+                    try { _leftUserTagVirtScroll.onValueChanged.RemoveListener(OnUserTagVirtScrollLeft); } catch { }
+                }
+                _leftUserTagVirtButtons.Clear();
+                _leftUserTagVirtScroll = null;
+                _leftUserTagVirtHooked = false;
+            }
+            else
+            {
+                if (_rightUserTagVirtScroll != null && _rightUserTagVirtHooked)
+                {
+                    try { _rightUserTagVirtScroll.onValueChanged.RemoveListener(OnUserTagVirtScrollRight); } catch { }
+                }
+                _rightUserTagVirtButtons.Clear();
+                _rightUserTagVirtScroll = null;
+                _rightUserTagVirtHooked = false;
+            }
+            _userTagVirtView.Clear();
+            _userTagVirtViewSig = null;
+        }
+
+        private static void DestroyChildIfPresent(Transform container, string childName)
+        {
+            Transform ch = container.Find(childName);
+            if (ch != null)
+                UnityEngine.Object.Destroy(ch.gameObject);
+        }
+
+        /// <summary>Legacy UI Text: shrink with "..." when wider than <paramref name="maxInnerWidth"/> (uses <see cref="Text.preferredWidth"/>).</summary>
+        private static string EllipsizeTextPreferredWidth(Text txt, string fullLabel, float maxInnerWidth)
+        {
+            if (txt == null || string.IsNullOrEmpty(fullLabel)) return fullLabel ?? "";
+            if (maxInnerWidth <= 4f) return fullLabel;
+            txt.text = fullLabel;
+            try
+            {
+                if (txt.preferredWidth <= maxInnerWidth) return fullLabel;
+            }
+            catch { return fullLabel; }
+
+            const string ell = "...";
+            for (int n = fullLabel.Length; n >= 0; n--)
+            {
+                string trial = n <= 0 ? ell : fullLabel.Substring(0, n) + ell;
+                txt.text = trial;
+                try
+                {
+                    if (txt.preferredWidth <= maxInnerWidth) return trial;
+                }
+                catch { }
+            }
+            return ell;
+        }
+
+        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f)
         {
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
@@ -1956,24 +1228,34 @@ namespace VPB
             rightClickDelegate.OnRightClick = (onRightClick != null) ? (Action)(() => onRightClick.Invoke()) : null;
             
             Image img = btnGO.GetComponent<Image>();
-            img.color = color;
+            if (img != null) img.color = color;
 
-            if (!string.IsNullOrEmpty(tooltip))
-            {
-                AddTooltipPlain(btnGO, tooltip);
-            }
-            else
-            {
-                // Clear existing tooltip if any
-                var del = btnGO.GetComponent<UIHoverDelegate>();
-            }
-            
             float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float insetL = Mathf.Max(0f, labelInsetLeft);
+            float insetR = Mathf.Max(0f, labelInsetRight);
 
             Text txt = btnGO.GetComponentInChildren<Text>();
-            txt.text = label;
-            txt.fontSize = Mathf.RoundToInt(18 * s);
-            txt.color = Color.white;
+            {
+                const int baseFont = 18;
+                const int minFont = 10;
+                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
+                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
+                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
+                txt.transform.localScale = new Vector3(extra, extra, 1f);
+            }
+            txt.alignment = labelAnchor;
+            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            txt.verticalOverflow = VerticalWrapMode.Truncate;
+            txt.resizeTextForBestFit = false;
+
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            if (txtRT != null)
+            {
+                txtRT.anchorMin = Vector2.zero;
+                txtRT.anchorMax = Vector2.one;
+                txtRT.offsetMin = new Vector2(insetL, 0f);
+                txtRT.offsetMax = new Vector2(-insetR, 0f);
+            }
 
             // Ensure LayoutElement
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -1984,6 +1266,38 @@ namespace VPB
             le.preferredHeight = 35f * s;
             le.flexibleWidth = 1;
 
+            RectTransform btnRt = btnGO.GetComponent<RectTransform>();
+            float pad = 10f * s;
+            float inner = (btnRt != null ? btnRt.rect.width : 0f) - pad - insetL - insetR;
+            if (inner <= 2f) inner = 125f * s;
+            string shown = EllipsizeTextPreferredWidth(txt, label, inner);
+            txt.text = shown;
+            bool truncated = !string.Equals(shown, label, StringComparison.Ordinal);
+            string tipFinal = null;
+            if (!string.IsNullOrEmpty(tooltip))
+                tipFinal = truncated ? label + "\n\n" + tooltip : tooltip;
+            else if (truncated)
+                tipFinal = label;
+            if (!string.IsNullOrEmpty(tipFinal))
+                AddTooltipPlain(btnGO, tipFinal);
+
+            if (!string.IsNullOrEmpty(userTagAppliedDragPrimary))
+            {
+                UserTagPickDragSource pickSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                if (pickSrc == null) pickSrc = btnGO.AddComponent<UserTagPickDragSource>();
+                pickSrc.Panel = this;
+                pickSrc.PrimaryTag = userTagAppliedDragPrimary;
+                pickSrc.IsAppliedRowDrag = true;
+            }
+            else
+            {
+                UserTagPickDragSource pickSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                if (pickSrc != null && pickSrc.IsAppliedRowDrag)
+                    UnityEngine.Object.Destroy(pickSrc);
+                else if (pickSrc != null)
+                    pickSrc.IsAppliedRowDrag = false;
+            }
+
             if (targetList != null) targetList.Add(btnGO);
         }
 
@@ -1993,7 +1307,7 @@ namespace VPB
             inputGO.transform.SetParent(parent.transform, false);
             
             Image bg = inputGO.AddComponent<Image>();
-            bg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+            bg.color = UI.InputFieldBg;
             
             // Add Hover Border
             inputGO.AddComponent<UIHoverBorder>();
@@ -2038,7 +1352,7 @@ namespace VPB
             placeholderText.text = VPBTranslation.T("gallery.search.main", "Search...");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             placeholderText.fontSize = 18; // Increased from 14
-            placeholderText.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+            placeholderText.color = UI.InputFieldPlaceholderColor;
             placeholderText.fontStyle = FontStyle.Italic;
             placeholderText.alignment = TextAnchor.MiddleLeft; // Vertically centered
             RectTransform placeholderRT = placeholder.GetComponent<RectTransform>();
@@ -2052,7 +1366,7 @@ namespace VPB
             Text textComponent = text.AddComponent<Text>();
             textComponent.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             textComponent.fontSize = 18; // Increased from 14
-            textComponent.color = Color.white;
+            textComponent.color = UI.InputFieldTextColor;
             textComponent.supportRichText = false;
             textComponent.alignment = TextAnchor.MiddleLeft; // Vertically centered
             RectTransform textRT = text.GetComponent<RectTransform>();
@@ -2081,10 +1395,10 @@ namespace VPB
             Text clearText = clearBtn.GetComponentInChildren<Text>();
             clearText.color = new Color(0.6f, 0.6f, 0.6f);
 
-            UIHoverColor hover = clearBtn.AddComponent<UIHoverColor>();
-            hover.targetText = clearText;
-            hover.normalColor = clearText.color;
-            hover.hoverColor = Color.red;
+            // Border-only hover (avoid text color fill)
+            var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
+            clearHoverBorder.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
+            clearHoverBorder.borderSize = 2f;
 
             // ESC key handling to clear and refocus
             Button clearBtnComponent = clearBtn.GetComponent<Button>();
@@ -2118,6 +1432,9 @@ namespace VPB
                 hoverDel.OnHoverChange = null;
                 hoverDel.OnPointerEnterEvent = null;
             }
+            var pickDrag = btn.GetComponent<UserTagPickDragSource>();
+            if (pickDrag != null)
+                UnityEngine.Object.Destroy(pickDrag);
             // Keep parented to ensure cleanup on destroy
             if (backgroundBoxGO != null) btn.transform.SetParent(backgroundBoxGO.transform, false);
             tabButtonPool.Push(btn);
@@ -2201,28 +1518,48 @@ namespace VPB
 
         private static float GetGridLabelFraction()
         {
-            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsEnabled) return 0f;
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridLabelsStripVisible()) return 0f;
             float L = GetGridLabelUnits();
-            return L / (100f + L);
+            return L / 100f;
         }
 
-        internal float GetGridCellConfigHeight()
-        {
-            if (layoutMode == GalleryLayoutMode.Grid
-                && VPBConfig.Instance != null
-                && VPBConfig.Instance.GalleryGridLabelsEnabled)
-                return 100f + GetGridLabelUnits();
-            return 100f;
-        }
+        internal float GetGridCellConfigHeight() => 100f;
 
         private static string GetGridItemLabelText(FileEntry file)
         {
             if (file == null) return "";
+
+            // Pretty mode strips creator/version/prefix for every entry kind, matching BA across all tabs.
+            bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+            if (pretty)
+            {
+                string r = GetPrettyEntryDisplayName(file);
+                LogPrettyNameSample(file, r, "GridLabel");
+                return r;
+            }
+
             VarPackage pkg = null;
             if (file is VarFileEntry vfe)         pkg = vfe.Package;
             else if (file is PackageListEntry ple) pkg = ple.Package;
             if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) return pkg.Uid;
             return System.IO.Path.GetFileNameWithoutExtension(file.Name ?? "");
+        }
+
+        /// <summary>True when filename matches BA's preset prefix rule (Preset_*.vap or Plugins_*.json). Drives the override-uid-with-pretty-name decision in <see cref="GetGridItemLabelText"/>.</summary>
+        internal static bool IsPresetLikeFileName(FileEntry file)
+        {
+            if (file == null) return false;
+            string raw = file.Name;
+            if (string.IsNullOrEmpty(raw)) return false;
+            int dot = raw.LastIndexOf('.');
+            if (dot <= 0) return false;
+            string stem = raw.Substring(0, dot);
+            string ext = raw.Substring(dot + 1);
+            if (string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase) && stem.StartsWith("Preset_", StringComparison.Ordinal))
+                return true;
+            if (string.Equals(ext, "json", StringComparison.OrdinalIgnoreCase) && stem.StartsWith("Plugins_", StringComparison.Ordinal))
+                return true;
+            return false;
         }
 
         private static string TruncateGridLabelTextByWidth(Text textComponent, string text, float maxWidth)
@@ -2294,12 +1631,30 @@ namespace VPB
             thumbGO.transform.SetParent(btnGO.transform, false);
             RawImage thumbImg = thumbGO.AddComponent<RawImage>();
             thumbImg.color = new Color(0, 0, 0, 0.5f);
+            thumbImg.raycastTarget = false;
             RectTransform thumbRT = thumbGO.GetComponent<RectTransform>();
             thumbRT.anchorMin = Vector2.zero;
             thumbRT.anchorMax = Vector2.one;
             thumbRT.sizeDelta = Vector2.zero;
-            thumbRT.offsetMin = new Vector2(3, 3);
-            thumbRT.offsetMax = new Vector2(-3, -3);
+            float pad = 3f;
+            try { if (VPBConfig.Instance != null) pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f); } catch { pad = 3f; }
+            thumbRT.offsetMin = new Vector2(pad, pad);
+            thumbRT.offsetMax = new Vector2(-pad, -pad);
+
+            // Grid-mode inward border (4 edge Images inside cell). Used when padding = 0.
+            GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
+            gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
+            RectTransform gibRT = gridInnerBorderGO.AddComponent<RectTransform>();
+            gibRT.anchorMin = Vector2.zero;
+            gibRT.anchorMax = Vector2.one;
+            gibRT.offsetMin = Vector2.zero;
+            gibRT.offsetMax = Vector2.zero;
+            // child edge names are stable: Top/Bottom/Left/Right
+            AddBorderEdgeNamed(gridInnerBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 2));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(2, 0));
+            AddBorderEdgeNamed(gridInnerBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(2, 0));
+            gridInnerBorderGO.SetActive(false);
 
             GameObject gridLabelGO = new GameObject("GridLabel");
             gridLabelGO.transform.SetParent(btnGO.transform, false);
@@ -2404,7 +1759,7 @@ namespace VPB
             listVLG.childControlWidth = true;
             listVLG.childForceExpandHeight = false;
             listVLG.childForceExpandWidth = true;
-            listVLG.spacing = 2f;
+            listVLG.spacing = 0f;
             listVLG.padding = new RectOffset(5, 5, 5, 5);
 
             // Name
@@ -2421,7 +1776,7 @@ namespace VPB
             listNameText.raycastTarget = false;
             LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
             listNameLE.flexibleWidth = 1;
-            listNameLE.minHeight = 36;
+            listNameLE.minHeight = 32;
 
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
@@ -2436,7 +1791,7 @@ namespace VPB
             detailsHLG.padding = new RectOffset(0, 0, 0, 0);
             LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
             detailsLE.flexibleWidth = 1;
-            detailsLE.minHeight = 28;
+            detailsLE.minHeight = 24;
 
             // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
@@ -2464,6 +1819,29 @@ namespace VPB
             CreateDetailText("Deps", "D:", 80);
             CreateDetailText("Missing", "M:", 80);
             CreateDetailText("Dependents", "Dn:", 80);
+
+            // List mode: badge strip below Size/Date row (horizontal layout; not over thumbnail)
+            GameObject listBadgesGO = new GameObject("ListBadges");
+            listBadgesGO.transform.SetParent(listRowGO.transform, false);
+            RectTransform listBadgesRT = listBadgesGO.AddComponent<RectTransform>();
+            listBadgesRT.anchorMin = new Vector2(0f, 0f);
+            listBadgesRT.anchorMax = new Vector2(1f, 0f);
+            listBadgesRT.pivot = new Vector2(0.5f, 0f);
+            listBadgesRT.anchoredPosition = Vector2.zero;
+            listBadgesRT.sizeDelta = new Vector2(0f, 32f);
+            HorizontalLayoutGroup listBadgesHLG = listBadgesGO.AddComponent<HorizontalLayoutGroup>();
+            listBadgesHLG.childAlignment = TextAnchor.MiddleLeft;
+            listBadgesHLG.spacing = 4f;
+            listBadgesHLG.childControlWidth = true;
+            listBadgesHLG.childControlHeight = true;
+            listBadgesHLG.childForceExpandWidth = false;
+            listBadgesHLG.childForceExpandHeight = false;
+            listBadgesHLG.padding = new RectOffset(0, 0, 0, 0);
+            LayoutElement listBadgesLE = listBadgesGO.AddComponent<LayoutElement>();
+            listBadgesLE.flexibleWidth = 1f;
+            listBadgesLE.minHeight = 32f;
+            listBadgesLE.preferredHeight = 32f;
+            listBadgesLE.flexibleHeight = 0f;
 
             // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
@@ -2574,6 +1952,11 @@ namespace VPB
             aiBadgeTextRT.anchorMax = Vector2.one;
             aiBadgeTextRT.sizeDelta = Vector2.zero;
             aiBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement aiBadgeLE = aiBadgeGO.AddComponent<LayoutElement>();
+            aiBadgeLE.preferredWidth = 32f;
+            aiBadgeLE.preferredHeight = 32f;
+            aiBadgeLE.minWidth = 32f;
+            aiBadgeLE.minHeight = 32f;
             aiBadgeGO.SetActive(false);
 
             // Hidden package badge (top-left, to the right of AutoInstall "A")
@@ -2603,7 +1986,81 @@ namespace VPB
             hideBadgeTextRT.anchorMax = Vector2.one;
             hideBadgeTextRT.sizeDelta = Vector2.zero;
             hideBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement hideBadgeLE = hideBadgeGO.AddComponent<LayoutElement>();
+            hideBadgeLE.preferredWidth = 32f;
+            hideBadgeLE.preferredHeight = 32f;
+            hideBadgeLE.minWidth = 32f;
+            hideBadgeLE.minHeight = 32f;
             hideBadgeGO.SetActive(false);
+
+            // Scan-whitelist excluded badge (top-left, to the right of Hide "H")
+            // Shows "W" when the package is in AddonPackages/ but excluded from VaM's scan whitelist.
+            GameObject scanExBadgeGO = new GameObject("ScanExcludedBadge");
+            scanExBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform scanExBadgeRT = scanExBadgeGO.AddComponent<RectTransform>();
+            scanExBadgeRT.anchorMin = new Vector2(0, 1);
+            scanExBadgeRT.anchorMax = new Vector2(0, 1);
+            scanExBadgeRT.pivot = new Vector2(0, 1);
+            scanExBadgeRT.sizeDelta = new Vector2(32, 32);
+            scanExBadgeRT.anchoredPosition = new Vector2(80, -6);
+            Image scanExBadgeBg = scanExBadgeGO.AddComponent<Image>();
+            scanExBadgeBg.color = new Color(0.25f, 0.4f, 0.55f, 0.9f);
+            scanExBadgeBg.raycastTarget = false;
+            GameObject scanExBadgeTextGO = new GameObject("Text");
+            scanExBadgeTextGO.transform.SetParent(scanExBadgeGO.transform, false);
+            Text scanExBadgeText = scanExBadgeTextGO.AddComponent<Text>();
+            scanExBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            scanExBadgeText.fontSize = 22;
+            scanExBadgeText.fontStyle = FontStyle.Bold;
+            scanExBadgeText.color = Color.white;
+            scanExBadgeText.alignment = TextAnchor.MiddleCenter;
+            scanExBadgeText.text = "W";
+            scanExBadgeText.raycastTarget = false;
+            RectTransform scanExBadgeTextRT = scanExBadgeTextGO.GetComponent<RectTransform>();
+            scanExBadgeTextRT.anchorMin = Vector2.zero;
+            scanExBadgeTextRT.anchorMax = Vector2.one;
+            scanExBadgeTextRT.sizeDelta = Vector2.zero;
+            scanExBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement scanExBadgeLE = scanExBadgeGO.AddComponent<LayoutElement>();
+            scanExBadgeLE.preferredWidth = 32f;
+            scanExBadgeLE.preferredHeight = 32f;
+            scanExBadgeLE.minWidth = 32f;
+            scanExBadgeLE.minHeight = 32f;
+            scanExBadgeGO.SetActive(false);
+
+            // User tags badge (top-left; slot order via ApplyDynamicTopLeftBadgeLayout)
+            GameObject userTagsBadgeGO = new GameObject("UserTagsBadge");
+            userTagsBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform userTagsBadgeRT = userTagsBadgeGO.AddComponent<RectTransform>();
+            userTagsBadgeRT.anchorMin = new Vector2(0, 1);
+            userTagsBadgeRT.anchorMax = new Vector2(0, 1);
+            userTagsBadgeRT.pivot = new Vector2(0, 1);
+            userTagsBadgeRT.sizeDelta = new Vector2(32, 32);
+            userTagsBadgeRT.anchoredPosition = new Vector2(118, -6);
+            Image userTagsBadgeBg = userTagsBadgeGO.AddComponent<Image>();
+            userTagsBadgeBg.color = new Color(0.14f, 0.42f, 0.48f, 0.9f);
+            userTagsBadgeBg.raycastTarget = false;
+            GameObject userTagsBadgeTextGO = new GameObject("Text");
+            userTagsBadgeTextGO.transform.SetParent(userTagsBadgeGO.transform, false);
+            Text userTagsBadgeText = userTagsBadgeTextGO.AddComponent<Text>();
+            userTagsBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            userTagsBadgeText.fontSize = 22;
+            userTagsBadgeText.fontStyle = FontStyle.Bold;
+            userTagsBadgeText.color = Color.white;
+            userTagsBadgeText.alignment = TextAnchor.MiddleCenter;
+            userTagsBadgeText.text = "T";
+            userTagsBadgeText.raycastTarget = false;
+            RectTransform userTagsBadgeTextRT = userTagsBadgeTextGO.GetComponent<RectTransform>();
+            userTagsBadgeTextRT.anchorMin = Vector2.zero;
+            userTagsBadgeTextRT.anchorMax = Vector2.one;
+            userTagsBadgeTextRT.sizeDelta = Vector2.zero;
+            userTagsBadgeTextRT.anchoredPosition = Vector2.zero;
+            LayoutElement userTagsBadgeLE = userTagsBadgeGO.AddComponent<LayoutElement>();
+            userTagsBadgeLE.preferredWidth = 32f;
+            userTagsBadgeLE.preferredHeight = 32f;
+            userTagsBadgeLE.minWidth = 32f;
+            userTagsBadgeLE.minHeight = 32f;
+            userTagsBadgeGO.SetActive(false);
 
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
@@ -2641,6 +2098,129 @@ namespace VPB
             return btnGO;
         }
 
+        private static void AddBorderEdgeNamed(GameObject parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+        {
+            if (parent == null) return;
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent.transform, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.pivot = pivot;
+            rt.sizeDelta = sizeDelta;
+            rt.anchoredPosition = Vector2.zero;
+            var img = go.AddComponent<UnityEngine.UI.Image>();
+            img.color = Color.yellow;
+            img.raycastTarget = false;
+        }
+
+        private static void SetBorderThickness(GameObject borderGO, float thickness)
+        {
+            if (borderGO == null) return;
+            float t = Mathf.Max(0f, thickness);
+            var top = borderGO.transform.Find("Top") as RectTransform;
+            var bottom = borderGO.transform.Find("Bottom") as RectTransform;
+            var left = borderGO.transform.Find("Left") as RectTransform;
+            var right = borderGO.transform.Find("Right") as RectTransform;
+            if (top != null) top.sizeDelta = new Vector2(0, t);
+            if (bottom != null) bottom.sizeDelta = new Vector2(0, t);
+            if (left != null) left.sizeDelta = new Vector2(t, 0);
+            if (right != null) right.sizeDelta = new Vector2(t, 0);
+        }
+
+        /// <summary>Recolors GridInnerBorder edge strips (built with yellow defaults).</summary>
+        private static void SetGalleryInnerBorderEdgeTint(GameObject borderGO, Color tint)
+        {
+            if (borderGO == null) return;
+            for (int i = 0; i < borderGO.transform.childCount; i++)
+            {
+                Transform ch = borderGO.transform.GetChild(i);
+                if (ch == null) continue;
+                var im = ch.GetComponent<Image>();
+                if (im != null) im.color = tint;
+            }
+        }
+
+        private const float GalleryBadgeSlotStartX = 6f;
+        private const float GalleryBadgeSlotStartY = -6f;
+        private const float GalleryBadgeSlotStepX = 36f;
+
+        private void ApplyTopLeftBadgeSlot(RectTransform badgeRT, int slotIndex)
+        {
+            if (badgeRT == null) return;
+            badgeRT.anchorMin = new Vector2(0f, 1f);
+            badgeRT.anchorMax = new Vector2(0f, 1f);
+            badgeRT.pivot = new Vector2(0f, 1f);
+            badgeRT.anchoredPosition = new Vector2(
+                GalleryBadgeSlotStartX + (GalleryBadgeSlotStepX * Mathf.Max(0, slotIndex)),
+                GalleryBadgeSlotStartY
+            );
+        }
+
+        private static Transform FindGalleryBadgeTransform(Transform btnRoot, string badgeName)
+        {
+            if (btnRoot == null || string.IsNullOrEmpty(badgeName)) return null;
+            Transform t = btnRoot.Find(badgeName);
+            if (t != null) return t;
+            return btnRoot.Find("ListRow/ListBadges/" + badgeName);
+        }
+
+        private static void ApplyListRowBadgeSlot(RectTransform badgeRT)
+        {
+            if (badgeRT == null) return;
+            badgeRT.anchorMin = new Vector2(0f, 0.5f);
+            badgeRT.anchorMax = new Vector2(0f, 0.5f);
+            badgeRT.pivot = new Vector2(0f, 0.5f);
+            badgeRT.sizeDelta = new Vector2(32f, 32f);
+            badgeRT.anchoredPosition = Vector2.zero;
+        }
+
+        private void EnsureGalleryBadgeParentForLayoutMode(GameObject btnGO, bool listMode)
+        {
+            if (btnGO == null) return;
+            Transform listBadges = btnGO.transform.Find("ListRow/ListBadges");
+            if (listBadges == null) return;
+
+            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
+            Transform targetParent = listMode ? listBadges : btnGO.transform;
+
+            foreach (string n in names)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                if (tr != null) tr.SetParent(targetParent, false);
+            }
+
+            if (listMode)
+            {
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Transform tr = listBadges.Find(names[i]);
+                    if (tr != null) tr.SetSiblingIndex(i);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Transform tr = btnGO.transform.Find(names[i]);
+                    if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, i);
+                }
+            }
+        }
+
+        /// <summary>List mode: badges live in ListRow/ListBadges (below Details). Params kept for call-site stability.</summary>
+        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded, bool showUserTags)
+        {
+            if (btnGO == null) return;
+
+            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
+            foreach (string n in names)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                if (tr != null) ApplyListRowBadgeSlot(tr as RectTransform);
+            }
+        }
+
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
             if (btnGO == null)
@@ -2656,48 +2236,70 @@ namespace VPB
             
             // Image
             Image img = btnGO.GetComponent<Image>();
-            bool isSelected = (!string.IsNullOrEmpty(file.Path) && selectedFilePaths.Contains(file.Path));
-            
-            Outline outline = btnGO.GetComponent<Outline>();
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+            string selKey = GetSelectionIdentityKey(file, false);
+            bool isSelected = (!string.IsNullOrEmpty(selKey) && selectedFilePaths.Contains(selKey));
 
-            if (layoutMode == GalleryLayoutMode.List)
+            bool isListRow = layoutMode == GalleryLayoutMode.List || settingsListViewActive;
+            if (isListRow)
             {
-                // List mode: always dark background. Use ListSelectionBorder (4 edge Images)
-                // for selection highlight — avoids Outline which fills the whole row yellow.
                 bool isMaster = false;
                 try { isMaster = IsFilterActive && IsFilterMasterEntry(file); } catch { isMaster = false; }
                 img.color = isMaster ? new Color(0.1f, 0.25f, 0.45f, 0.55f) : new Color(0f, 0f, 0f, 0.4f);
-                if (outline != null) { outline.effectColor = new Color(0f, 0f, 0f, 0f); outline.enabled = false; }
-                if (hoverBorder != null) hoverBorder.isSelected = isSelected;
-                // selection bar (left accent) is independent of hover bar
-                Transform selBar = btnGO.transform.Find("ListSelectionBar");
-                if (selBar != null) selBar.gameObject.SetActive(isSelected);
+            }
+            else if (isSelected)
+                img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
+            else
+                img.color = Color.gray;
+
+            Transform listHoverNt = btnGO.transform.Find("ListHoverBar");
+            if (listHoverNt != null) listHoverNt.gameObject.SetActive(false);
+            Transform listSelNt = btnGO.transform.Find("ListSelectionBar");
+            if (listSelNt != null) listSelNt.gameObject.SetActive(false);
+
+            float hoverW = EffectiveGridHoverBorderWidth();
+            float selW = EffectiveGridSelectedBorderWidth();
+            float w = isSelected ? selW : hoverW;
+            bool inwardCell = EffectiveGridBorderInwardForGalleryCell();
+            Color borderTint = EffectiveGalleryGridBorderColor();
+
+            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+            if (hoverBorder != null)
+            {
+                hoverBorder.enabled = true;
+                hoverBorder.hoverColor = borderTint;
+            }
+            Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+            GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
+            bool useInner = inwardCell && innerBorderGO != null;
+
+            if (useInner)
+            {
+                try { var oldO = btnGO.GetComponent<Outline>(); if (oldO != null) Destroy(oldO); } catch { }
+                if (hoverBorder != null)
+                {
+                    hoverBorder.hoverBorderGO = innerBorderGO;
+                    hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
+                    hoverBorder.isSelected = isSelected;
+                }
+                SetBorderThickness(innerBorderGO, w);
+                SetGalleryInnerBorderEdgeTint(innerBorderGO, borderTint);
+                innerBorderGO.SetActive(isSelected);
             }
             else
             {
-                if (isSelected) img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
-                else img.color = Color.gray;
-
-                // Hide list indicators in grid mode
-                Transform selBar2 = btnGO.transform.Find("ListSelectionBar");
-                if (selBar2 != null) selBar2.gameObject.SetActive(false);
-                Transform hoverBar2 = btnGO.transform.Find("ListHoverBar");
-                if (hoverBar2 != null) hoverBar2.gameObject.SetActive(false);
-
-                if (outline != null)
+                bool listOutlineInwardFallback = isListRow;
+                if (hoverBorder != null)
                 {
-                    outline.effectColor = Color.yellow;
-                    if (outline.enabled != isSelected) outline.enabled = isSelected;
-                    outline.effectDistance = isSelected ? new Vector2(4f, -4f) : new Vector2(2f, -2f);
-
-                    if (hoverBorder != null)
-                    {
-                        hoverBorder.isSelected = isSelected;
-                        hoverBorder.borderSize = isSelected ? 4f : 2f;
-                    }
+                    hoverBorder.hoverBorderGO = null;
+                    hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
+                    hoverBorder.isSelected = isSelected;
+                    hoverBorder.borderSize = w;
+                    hoverBorder.inward = listOutlineInwardFallback;
+                    hoverBorder.ApplyBorderSettings();
                 }
+                if (innerBorderGO != null) innerBorderGO.SetActive(false);
             }
+            ApplyUserTagDropVisual(btnGO, file);
         }
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
@@ -2709,24 +2311,61 @@ namespace VPB
                 return;
             }
 
-            // Validate file properties
-            if (string.IsNullOrEmpty(file.Name) || string.IsNullOrEmpty(file.Path))
+            // File rows pooled/reused across modes (including Settings).
+            // Clear prior hover handlers (e.g. settings tooltips) so they don't leak into other categories.
+            var hoverDelReset = btnGO.GetComponent<UIHoverDelegate>();
+            if (hoverDelReset != null)
             {
-                LogUtil.LogError($"[VPB] BindFileButton: Invalid entry - Name={file.Name}, Path={file.Path}");
+                hoverDelReset.OnHoverChange = null;
+                hoverDelReset.OnPointerEnterEvent = null;
+            }
+            // Restore baseline hover tracking for this row.
+            AddHoverDelegate(btnGO);
+
+            // Identity key (Path preferred; fall back to Uid). Needed because some rows (e.g. ALL VAR package list)
+            // can arrive from SQLite without a resolved/installed var path hint.
+            string idKey = GetSelectionIdentityKey(file, false);
+            if (string.IsNullOrEmpty(file.Name) && string.IsNullOrEmpty(idKey))
+            {
+                LogUtil.LogError($"[VPB] BindFileButton: Invalid entry - Name={file.Name}, Path={file.Path}, Uid={file.Uid}");
+                // Still clear thumbnail so pooled rows don't show stale previews
+                try
+                {
+                    Transform thumbTrBad = btnGO.transform.Find("Thumbnail");
+                    if (thumbTrBad == null) thumbTrBad = btnGO.transform.Find("ThumbContainer/Thumbnail");
+                    if (thumbTrBad != null)
+                    {
+                        RawImage ri = thumbTrBad.GetComponent<RawImage>();
+                        if (ri != null) LoadThumbnail(file, ri);
+                    }
+                }
+                catch { }
                 return;
             }
 
-            btnGO.name = "FileButton_" + file.Name;
+            btnGO.name = "FileButton_" + (file.Name ?? idKey ?? "Unknown");
+
+            // Recycled row defaults (TextArea settings rows disable root raycast — restore before rebind)
+            {
+                Button rb0 = btnGO.GetComponent<Button>();
+                if (rb0 != null) rb0.interactable = true;
+                Image ri0 = btnGO.GetComponent<Image>();
+                if (ri0 != null) ri0.raycastTarget = true;
+                var lu0 = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                if (lu0 != null) lu0.enabled = true;
+            }
 
             // Update mapping
             Image img = btnGO.GetComponent<Image>();
             if (img != null)
             {
-                fileButtonImages[file.Path] = img;
+                // Map by identity key so empty Path rows don't collide
+                if (!string.IsNullOrEmpty(idKey))
+                    fileButtonImages[idKey] = img;
             }
 
             // Color missing entries red
-            if (file is VirtualFileEntry)
+            if (file is VirtualFileEntry && !(file is InternalSettingRowEntry))
             {
                 if (img != null) img.color = new Color(0.4f, 0.15f, 0.15f, 0.8f); // Red shade
             }
@@ -2738,15 +2377,13 @@ namespace VPB
             Button btn = btnGO.GetComponent<Button>();
             if (btn != null)
             {
-                // Optimization: Avoid RemoveAllListeners if we can simply swap the target
-                // But Unity Events are tricky. Ideally we'd have a single listener that checks a field on the button.
-                // For now, keep it safe but cleaner.
                 btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() => {
-                    var dragItem = btnGO.GetComponent<UIDraggableItem>();
-                    if (dragItem != null && dragItem.IsLongPress) return;
-                    OnFileClick(file);
-                });
+                // Left: IPointerUp + slop (see UIFileEntryLeftReleaseSelect) — ScrollRect eats Button.onClick when
+                // pointer moved enough to count as scroll drag; right-click path unaffected.
+                var leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
+                leftUp.Panel = this;
+                leftUp.File = file;
             }
 
             // Right Click
@@ -2756,6 +2393,99 @@ namespace VPB
             rightClick.OnRightClick = () => OnFileRightClick(file);
 
             bool isListMode = (layoutMode == GalleryLayoutMode.List);
+            bool isSettingsRow = file is InternalSettingRowEntry;
+
+            if (isSettingsRow)
+            {
+                // Special settings list-row mode: no package affordances (thumb/rating/badges/meta columns).
+                Transform listRowTrSpecial = btnGO.transform.Find("ListRow");
+                if (listRowTrSpecial != null)
+                {
+                    listRowTrSpecial.gameObject.SetActive(true);
+                    RectTransform listRowRT = listRowTrSpecial as RectTransform;
+                    if (listRowRT != null)
+                    {
+                        listRowRT.offsetMin = new Vector2(8, 0);
+                        listRowRT.offsetMax = new Vector2(-8, 0);
+                    }
+
+                    Transform nameTr = listRowTrSpecial.Find("Name");
+                    if (nameTr != null)
+                    {
+                        Text t = nameTr.GetComponent<Text>();
+                        if (t != null)
+                        {
+                            t.text = file.Name ?? "";
+                            t.fontSize = 24;
+                            t.alignment = TextAnchor.MiddleLeft;
+                        }
+                    }
+
+                    Transform detailsTr = listRowTrSpecial.Find("Details");
+                    if (detailsTr != null) detailsTr.gameObject.SetActive(false);
+                }
+
+                ConfigureInternalSettingsRowUI(btnGO, file);
+
+                {
+                    Button rootBt = btnGO.GetComponent<Button>();
+                    if (rootBt != null)
+                    {
+                        rootBt.onClick.RemoveAllListeners();
+                        rootBt.interactable = false;
+                    }
+                    if (img != null) img.raycastTarget = false;
+                    var leftUpSettings = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                    if (leftUpSettings != null) leftUpSettings.enabled = false;
+                }
+
+                void HideChild(string p)
+                {
+                    Transform tr = FindGalleryBadgeTransform(btnGO.transform, p);
+                    if (tr == null) tr = btnGO.transform.Find(p);
+                    if (tr != null) tr.gameObject.SetActive(false);
+                }
+
+                HideChild("GridLabel");
+                HideChild("Thumbnail");
+                HideChild("Rating");
+                HideChild("RatingSelector");
+                HideChild("AutoInstallBadge");
+                HideChild("HidePackageBadge");
+                HideChild("ScanExcludedBadge");
+                HideChild("UserTagsBadge");
+                HideChild("ListHoverBar");
+                HideChild("ListSelectionBar");
+
+                UIHoverReveal hoverSpecial = btnGO.GetComponent<UIHoverReveal>();
+                if (hoverSpecial != null) hoverSpecial.file = null;
+                var holdSpecial = btnGO.GetComponent<HoldToApplyOnHover>();
+                if (holdSpecial != null) holdSpecial.enabled = false;
+                return;
+            }
+
+            // Reset any settings-only controls on recycled rows when binding normal files.
+            Transform listRowTrReset = btnGO.transform.Find("ListRow");
+            if (listRowTrReset != null)
+            {
+                Transform detailsTrReset = listRowTrReset.Find("Details");
+                if (detailsTrReset != null)
+                {
+                    for (int i = 0; i < detailsTrReset.childCount; i++)
+                    {
+                        Transform ch = detailsTrReset.GetChild(i);
+                        if (ch == null) continue;
+                        if (string.Equals(ch.name, "SettingsControlContainer", StringComparison.Ordinal))
+                        {
+                            UnityEngine.Object.Destroy(ch.gameObject);
+                            continue;
+                        }
+                        ch.gameObject.SetActive(true);
+                    }
+                }
+            }
+
+            EnsureGalleryBadgeParentForLayoutMode(btnGO, isListMode);
 
             // List Row + Rating selector visibility (List/Table mode)
             Transform listRowTr = btnGO.transform.Find("ListRow");
@@ -2784,9 +2514,18 @@ namespace VPB
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
-                selectorTr.gameObject.SetActive(true);
-                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
-                if (rh != null) rh.CloseSelector();
+                if (isListMode)
+                {
+                    selectorTr.gameObject.SetActive(true);
+                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+                    if (rhSel != null) rhSel.CloseSelector();
+                }
+                else
+                {
+                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+                    if (rhSel != null) rhSel.CloseSelector();
+                    selectorTr.gameObject.SetActive(false);
+                }
             }
 
             // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
@@ -2828,15 +2567,17 @@ namespace VPB
                 }
                 else
                 {
-                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled;
+                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
                     float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
 
-                    thumbRT.anchorMin = new Vector2(0f, labelFrac);
+                    thumbRT.anchorMin = Vector2.zero;
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
                     thumbRT.anchoredPosition = Vector2.zero;
-                    thumbRT.offsetMin = new Vector2(3f, 3f);
-                    thumbRT.offsetMax = new Vector2(-3f, -3f);
+                    float pad = 3f;
+                    try { if (VPBConfig.Instance != null) pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f); } catch { pad = 3f; }
+                    thumbRT.offsetMin = new Vector2(pad, pad);
+                    thumbRT.offsetMax = new Vector2(-pad, -pad);
                     Transform gridLabelTr = btnGO.transform.Find("GridLabel");
                     if (gridLabelTr != null)
                     {
@@ -2876,6 +2617,15 @@ namespace VPB
                     // Let LoadThumbnail decide whether this is a true rebind or the same
                     // thumbnail; unconditional clearing causes a visible flash on reopen.
                     LoadThumbnail(file, thumbImg);
+                    if (thumbImg.texture == null)
+                    {
+                        thumbImg.color = new Color(0f, 0f, 0f, 0.55f);
+                    }
+                    else
+                    {
+                        // Reset color on every rebind so recycled rows never keep a stale tint.
+                        thumbImg.color = Color.white;
+                    }
 
                     // List-layout hover preview: bind hover handler to the thumbnail only.
                     // (Use the thumbnail rect so the full row doesn't trigger the popup.)
@@ -2883,7 +2633,22 @@ namespace VPB
                     if (hp == null) hp = thumbTr.gameObject.AddComponent<UIHoverPreviewTrigger>();
                     hp.panel = this;
                     hp.file = file;
+                    hp.SyncHoverPreviewAfterRebind();
                     thumbImg.raycastTarget = true;
+                    // RawImage steals raycasts; forward to row root handler (UIDraggableItem + slop live on btnGO).
+                    try
+                    {
+                        var staleThumbLu = thumbTr.gameObject.GetComponent<UIFileEntryLeftReleaseSelect>();
+                        if (staleThumbLu != null) UnityEngine.Object.Destroy(staleThumbLu);
+                        var rootLu = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                        if (rootLu != null)
+                        {
+                            var fwd = thumbTr.gameObject.GetComponent<GalleryThumbPointerForwarder>();
+                            if (fwd == null) fwd = thumbTr.gameObject.AddComponent<GalleryThumbPointerForwarder>();
+                            fwd.Target = rootLu;
+                        }
+                    }
+                    catch { }
                 }
             }
 
@@ -2895,7 +2660,7 @@ namespace VPB
             UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
             if (hover != null) hover.file = file;
 
-            // Hold-to-launch/apply (VR): hover-hold timer overlay.
+            // Hold-to-launch/apply: pointer must stay pressed; duration from VPBConfig.HoldToLaunchHoldSeconds.
             // Kept always attached for pooling; enabled/disabled by panel toggle at runtime.
             try
             {
@@ -2903,7 +2668,6 @@ namespace VPB
                 if (h == null) h = btnGO.AddComponent<HoldToApplyOnHover>();
                 h.panel = this;
                 h.file = file;
-                h.holdSeconds = 1.0f;
             }
             catch { }
 
@@ -2914,38 +2678,65 @@ namespace VPB
                 Text labelText = labelTr.GetComponent<Text>();
                 if (labelText != null)
                 {
-                    string displayName = string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name;
+                    bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
+                    string displayName = pretty
+                        ? GetPrettyEntryDisplayName(file)
+                        : (string.IsNullOrEmpty(file.Name) ? file.Path ?? "[UNNAMED]" : file.Name);
                     labelText.text = displayName;
-                    // Add tooltip showing full package path if available
+                    // Tooltip now surfaces internal path so users can see where the preset lives; falls back to package uid if path missing.
                     try
                     {
                         if (file is VarFileEntry vfe && vfe.Package != null)
                         {
-                            AddTooltipPlain(labelTr.gameObject, $"Package: {vfe.Package.Uid}.var");
+                            string hint = string.IsNullOrEmpty(vfe.InternalPath)
+                                ? string.Format(VPBTranslation.T("gallery.tooltip.package_uid", "Package: {0}.var"), vfe.Package.Uid)
+                                : vfe.InternalPath.Replace('\\', '/');
+                            AddTooltipPlain(labelTr.gameObject, hint);
                         }
                     }
                     catch { }
                 }
             }
 
-            // Rating always visible — grid uses it as a compact favorite toggle
+            // List: star + full badge strip. Grid: thumbnail + GridLabel only; all badges hidden.
             Transform ratingTr = btnGO.transform.Find("Rating");
-            if (ratingTr != null)
+            if (isListMode)
             {
-                ratingTr.gameObject.SetActive(true);
-            }
+                if (ratingTr != null)
+                    ratingTr.gameObject.SetActive(true);
 
-            // AutoInstall Badge — show blue "A" for packages flagged as AutoInstall
-            Transform aiBadgeTr = btnGO.transform.Find("AutoInstallBadge");
-            if (aiBadgeTr != null)
-            {
-                aiBadgeTr.gameObject.SetActive(file.IsAutoInstall());
-            }
+                bool showAutoInstallBadge = file.IsAutoInstall();
+                Transform aiBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
+                if (aiBadgeTr != null)
+                    aiBadgeTr.gameObject.SetActive(showAutoInstallBadge);
 
-            Transform hideBadgeTr = btnGO.transform.Find("HidePackageBadge");
-            if (hideBadgeTr != null)
+                bool showHideBadge = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
+                Transform hideBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
+                if (hideBadgeTr != null)
+                    hideBadgeTr.gameObject.SetActive(showHideBadge);
+
+                bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
+                Transform scanExBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                if (scanExBadgeTr != null)
+                    scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
+
+                bool showUserTagsBadge = IsGalleryUserTagBadgeVisible(file);
+                Transform userTagsBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
+                if (userTagsBadgeTr != null)
+                    userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
+
+                ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge, showUserTagsBadge);
+            }
+            else
             {
-                hideBadgeTr.gameObject.SetActive(PackageHidePrefs.IsGalleryHideBadgeVisible(file));
+                if (ratingTr != null)
+                    ratingTr.gameObject.SetActive(false);
+
+                foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" })
+                {
+                    Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeName);
+                    if (t != null) t.gameObject.SetActive(false);
+                }
             }
 
             // List Row Bind
@@ -3163,8 +2954,14 @@ namespace VPB
                     Text t = dateTr.GetComponent<Text>();
                     if (t != null)
                     {
-                        // Use 2-digit year (e.g. 25-09-15 instead of 2025-09-15).
-                        try { t.text = file.LastWriteTime.ToString("yy-MM-dd"); }
+                        // Prefer when we first indexed this uid (= when user actually got it / got the update)
+                        // over file mtime which is often the creator's original build date carried by the .var.
+                        try
+                        {
+                            DateTime dt = GallerySortManager.ResolveDisplayDateForRow(file);
+                            if (dt.Year < 1980) t.text = "Unknown";
+                            else t.text = dt.ToString("yy-MM-dd");
+                        }
                         catch { t.text = ""; }
                     }
                 }
@@ -3314,6 +3111,13 @@ namespace VPB
             // Special / meta
             if (sl == "unknown") return new Color(0.65f, 0.65f, 0.65f, 1f);
             if (sl == "mixed") return new Color(0.85f, 0.65f, 0.15f, 1f);
+
+            // Cleanup types
+            if (sl.Contains("stale cache")) return new Color(0.62f, 0.40f, 0.20f, 1f); // brown (matches tab)
+            if (sl.Contains("duplicate")) return new Color(0.80f, 0.35f, 0.15f, 1f);   // reddish-orange
+            if (sl.Contains("damaged")) return new Color(0.85f, 0.20f, 0.20f, 1f);     // red
+            if (sl.Contains("old version")) return new Color(0.55f, 0.55f, 0.55f, 1f); // gray
+            if (sl.Contains("excluded")) return new Color(0.40f, 0.40f, 0.40f, 1f);    // dark gray
 
             // Common VPB/VaM gallery types (heuristic)
             if (sl.Contains("scene")) return new Color(0.95f, 0.55f, 0.10f, 1f);     // orange

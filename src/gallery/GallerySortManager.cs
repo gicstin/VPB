@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 using SimpleJSON;
 
@@ -30,7 +31,15 @@ namespace VPB
         /// <summary>Show only loaded packages (AddonPackages/ + Custom/ + Saves/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
         LoadedOnly = 14,
         /// <summary>Show only unloaded packages (e.g. AllPackages/); fast-path uses SQLite <c>pkg.loaded</c>.</summary>
-        UnloadedOnly = 15
+        UnloadedOnly = 15,
+        /// <summary>Local "used" counter (scene launches + clothing applies).</summary>
+        UsageCount = 16,
+        /// <summary>Show only items with zero local usage.</summary>
+        UnusedOnly = 17,
+        /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
+        DateAdded = 18,
+        /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
+        DateUpdated = 19
     }
 
     public enum SortDirection
@@ -75,6 +84,70 @@ namespace VPB
         // Cache for scene dependencies to avoid re-parsing on every access
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
 
+        // Background warmer: at-most-one running task that pre-populates the SQLite loose-deps cache.
+        // Writes DB only — never touches _sceneDependencyCache — so it cannot race with main-thread binds.
+        private static int _looseDepsWarmRunning;
+        private static readonly string[] LooseDepsWarmRoots = { "Saves", "Custom" };
+
+        /// <summary>
+        /// Kick off (or skip-if-running) a background pass that fills <c>loose_deps</c> for every loose <c>.json</c>
+        /// under <c>Saves/</c> and <c>Custom/</c>. Bind reads stay O(1) after this finishes, even for Timeline-heavy
+        /// scene files. Safe to call from any thread; no-op when an extraction pass is already in flight.
+        /// </summary>
+        public static void StartBackgroundWarmLooseDepsCache()
+        {
+            if (Interlocked.CompareExchange(ref _looseDepsWarmRunning, 1, 0) != 0) return;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { WarmLooseDepsCacheCore(); }
+                catch (Exception ex) { LogUtil.LogError("[VPB] Loose-deps warm failed: " + ex); }
+                finally { Interlocked.Exchange(ref _looseDepsWarmRunning, 0); }
+            });
+        }
+
+        private static void WarmLooseDepsCacheCore()
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int seen = 0, hit = 0, written = 0;
+            var probe = new HashSet<string>();
+            for (int r = 0; r < LooseDepsWarmRoots.Length; r++)
+            {
+                string root = LooseDepsWarmRoots[r];
+                if (!Directory.Exists(root)) continue;
+                var files = new List<string>();
+                try { FileManager.SafeGetFiles(root, "*.json", files); } catch { continue; }
+                for (int i = 0; i < files.Count; i++)
+                {
+                    string path = files[i];
+                    if (string.IsNullOrEmpty(path)) continue;
+                    seen++;
+                    try
+                    {
+                        var fi = new FileInfo(path);
+                        if (!fi.Exists) continue;
+                        long wt = fi.LastWriteTimeUtc.ToBinary();
+                        long sz = fi.Length;
+
+                        probe.Clear();
+                        if (VpbLocalDatabase.TryReadLooseSceneDeps(path, wt, sz, probe))
+                        {
+                            hit++;
+                            continue;
+                        }
+
+                        var deps = DependencyExtractor.ExtractDependenciesFromFile(path, 150, 1500);
+                        VpbLocalDatabase.WriteLooseSceneDeps(path, wt, sz, deps ?? new HashSet<string>());
+                        written++;
+
+                        // Throttle so a Timeline-laden library doesn't burn a CPU core for minutes straight.
+                        if ((written & 7) == 0) Thread.Sleep(10);
+                    }
+                    catch { }
+                }
+            }
+            LogUtil.Log("[VPB] Loose-deps warm DONE | seen=" + seen + " | hit=" + hit + " | written=" + written + " | ms=" + sw.ElapsedMilliseconds);
+        }
+
         public GallerySortManager()
         {
             cache = new GallerySortCache();
@@ -83,6 +156,8 @@ namespace VPB
         public void SortFiles(List<FileEntry> files, SortState state)
         {
             if (files == null || state == null) return;
+
+            ApplyHideOldVersionsFilter(files);
 
             switch (state.Type)
             {
@@ -102,15 +177,7 @@ namespace VPB
                     });
                     break;
                 case SortType.DateCreated:
-                    files.Sort((a, b) => {
-                        DateTime ca = GetSortCreationTime(a);
-                        DateTime cb = GetSortCreationTime(b);
-                        int res = (state.Direction == SortDirection.Ascending)
-                            ? ca.CompareTo(cb)
-                            : cb.CompareTo(ca);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedDateTime(files, GetSortCreationTime, state.Direction);
                     break;
                 case SortType.Size:
                     files.Sort((a, b) => {
@@ -122,71 +189,217 @@ namespace VPB
                     });
                     break;
                 case SortType.Rating:
-                    files.Sort((a, b) => {
-                        int rA = RatingsManager.Instance.GetRating(a);
-                        int rB = RatingsManager.Instance.GetRating(b);
-                        int res = (state.Direction == SortDirection.Ascending)
-                            ? rA.CompareTo(rB)
-                            : rB.CompareTo(rA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => RatingsManager.Instance.GetRating(f), state.Direction);
                     break;
                 case SortType.Deps:
-                    files.Sort((a, b) => {
-                        int dA = GetDepsCount(a);
-                        int dB = GetDepsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    // IMPORTANT: GetDepsCount for scene JSON may stream-scan the file. Never call it from the comparer.
+                    SortByPrecomputedInt(files, GetDepsCount, state.Direction);
                     break;
                 case SortType.Dependents:
-                    files.Sort((a, b) => {
-                        int dA = GetDependentsCount(a);
-                        int dB = GetDependentsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? dA.CompareTo(dB) : dB.CompareTo(dA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, GetDependentsCount, state.Direction);
                     break;
                 case SortType.Missing:
-                    files.Sort((a, b) => {
-                        int mA = GetMissingDepsCount(a);
-                        int mB = GetMissingDepsCount(b);
-                        int res = (state.Direction == SortDirection.Ascending) ? mA.CompareTo(mB) : mB.CompareTo(mA);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    // IMPORTANT: GetMissingDepsCount may scan dependencies. Never call it from the comparer.
+                    SortByPrecomputedInt(files, GetMissingDepsCount, state.Direction);
                     break;
                 case SortType.Hidden:
-                    files.Sort((a, b) => {
-                        int ha = PackageHidePrefs.IsGalleryHideBadgeVisible(a) ? 1 : 0;
-                        int hb = PackageHidePrefs.IsGalleryHideBadgeVisible(b) ? 1 : 0;
-                        int res = (state.Direction == SortDirection.Ascending) ? ha.CompareTo(hb) : hb.CompareTo(ha);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => PackageHidePrefs.IsGalleryHideBadgeVisible(f) ? 1 : 0, state.Direction);
                     break;
                 case SortType.HiddenOnly:
                 case SortType.AutoInstallOnly:
                 case SortType.LoadedOnly:
                 case SortType.UnloadedOnly:
+                case SortType.UnusedOnly:
                     if (state.Direction == SortDirection.Ascending)
                         files.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
                     else
                         files.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
                     break;
                 case SortType.AutoInstall:
-                    files.Sort((a, b) => {
-                        int ia = a.IsAutoInstall() ? 1 : 0;
-                        int ib = b.IsAutoInstall() ? 1 : 0;
-                        int res = (state.Direction == SortDirection.Ascending) ? ia.CompareTo(ib) : ib.CompareTo(ia);
-                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
-                        return res;
-                    });
+                    SortByPrecomputedInt(files, f => f != null && f.IsAutoInstall() ? 1 : 0, state.Direction);
                     break;
+                case SortType.UsageCount:
+                    SortByUsageCount(files, state.Direction);
+                    break;
+                case SortType.DateAdded:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    LogFamilyScanTimesSummary("DateAdded", state.Direction, files, fam);
+                    SortByPrecomputedDateTime(files, f => GetFamilyMinScanned(f, fam), state.Direction);
+                    LogSortedHeadSample("DateAdded", state.Direction, files, f => GetFamilyMinScanned(f, fam));
+                    break;
+                }
+                case SortType.DateUpdated:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    LogFamilyScanTimesSummary("DateUpdated", state.Direction, files, fam);
+                    SortByPrecomputedDateTime(files, f => GetFamilyHighestVersionScanned(f, fam), state.Direction);
+                    LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
+                    break;
+                }
             }
+        }
+
+        /// <summary>Triple-check logging for the new family-aware sorts. Flip to false to silence.</summary>
+        private static bool LogFamilySortDiagnostics = false;
+
+        private static void LogFamilyScanTimesSummary(string label, SortDirection dir, List<FileEntry> files, Dictionary<string, FamilyScanTimes> fam)
+        {
+            if (!LogFamilySortDiagnostics) return;
+            try
+            {
+                int rowCount = files != null ? files.Count : 0;
+                int famCount = fam != null ? fam.Count : 0;
+                LogUtil.LogWarning("[VPB] SORT_" + label + " dir=" + dir + " rows=" + rowCount + " families=" + famCount);
+
+                if (fam == null || famCount == 0) return;
+                bool descending = dir == SortDirection.Descending;
+                IEnumerable<KeyValuePair<string, FamilyScanTimes>> ordered = descending
+                    ? fam.OrderByDescending(kv => label == "DateAdded" ? kv.Value.MinScanned : kv.Value.HighestVersionScanned)
+                    : fam.OrderBy(kv => label == "DateAdded" ? kv.Value.MinScanned : kv.Value.HighestVersionScanned);
+
+                int shown = 0;
+                foreach (var kv in ordered)
+                {
+                    if (shown++ >= 15) break;
+                    var v = kv.Value;
+                    LogUtil.LogWarning("[VPB] SORT_" + label + " family=" + kv.Key
+                        + " min=" + (v.MinScanned == DateTime.MinValue ? "n/a" : v.MinScanned.ToString("yyyy-MM-dd HH:mm:ss"))
+                        + " highestV=" + v.HighestVersion
+                        + " highestVScanned=" + (v.HighestVersionScanned == DateTime.MinValue ? "n/a" : v.HighestVersionScanned.ToString("yyyy-MM-dd HH:mm:ss")));
+                }
+                if (famCount > shown) LogUtil.LogWarning("[VPB] SORT_" + label + " ... (" + (famCount - shown) + " more families)");
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] SORT_" + label + " summary log failed: " + ex.Message); }
+        }
+
+        private static void LogSortedHeadSample(string label, SortDirection dir, List<FileEntry> files, Func<FileEntry, DateTime> getKey)
+        {
+            if (!LogFamilySortDiagnostics) return;
+            try
+            {
+                if (files == null || files.Count == 0) return;
+                int take = Math.Min(10, files.Count);
+                LogUtil.LogWarning("[VPB] SORT_" + label + " head dir=" + dir + " sample(top " + take + "):");
+                for (int i = 0; i < take; i++)
+                {
+                    var f = files[i];
+                    string uid = f is VarFileEntry vfe ? vfe.GetRowPackageUid() : (f != null ? f.Name : "(null)");
+                    DateTime k = DateTime.MinValue;
+                    try { k = getKey(f); } catch { }
+                    LogUtil.LogWarning("[VPB] SORT_" + label + "   [" + i + "] " + uid + " key=" + (k == DateTime.MinValue ? "n/a" : k.ToString("yyyy-MM-dd HH:mm:ss")));
+                }
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] SORT_" + label + " head sample log failed: " + ex.Message); }
+        }
+
+        private static void SortByUsageCount(List<FileEntry> files, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+
+            var keys = new List<string>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                keys.Add(VpbLocalDatabase.BuildUsageKey(files[i]));
+            }
+
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            try { VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts); } catch { counts.Clear(); }
+
+            SortByPrecomputedInt(files, f =>
+            {
+                string k = VpbLocalDatabase.BuildUsageKey(f);
+                if (string.IsNullOrEmpty(k)) return 0;
+                return counts.TryGetValue(k, out int c) ? c : 0;
+            }, dir);
+        }
+
+        private struct SortKeyInt
+        {
+            public FileEntry File;
+            public int Key;
+            public string Name;
+        }
+
+        private struct SortKeyDateTime
+        {
+            public FileEntry File;
+            public DateTime Key;
+            public string Name;
+        }
+
+        private static void SortByPrecomputedInt(List<FileEntry> files, Func<FileEntry, int> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            var list = new List<SortKeyInt>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                int k = 0;
+                try { k = getKey(f); } catch { k = 0; }
+                list.Add(new SortKeyInt { File = f, Key = k, Name = f != null ? (f.Name ?? "") : "" });
+            }
+
+            if (dir == SortDirection.Ascending)
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = a.Key.CompareTo(b.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            else
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = b.Key.CompareTo(a.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+
+            for (int i = 0; i < files.Count; i++)
+                files[i] = list[i].File;
+        }
+
+        private static void SortByPrecomputedDateTime(List<FileEntry> files, Func<FileEntry, DateTime> getKey, SortDirection dir)
+        {
+            if (files == null || files.Count < 2) return;
+            if (getKey == null) return;
+
+            var list = new List<SortKeyDateTime>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                DateTime k = DateTime.MinValue;
+                try { k = getKey(f); } catch { k = DateTime.MinValue; }
+                list.Add(new SortKeyDateTime { File = f, Key = k, Name = f != null ? (f.Name ?? "") : "" });
+            }
+
+            if (dir == SortDirection.Ascending)
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = a.Key.CompareTo(b.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            else
+            {
+                list.Sort((a, b) =>
+                {
+                    int res = b.Key.CompareTo(a.Key);
+                    if (res != 0) return res;
+                    return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+
+            for (int i = 0; i < files.Count; i++)
+                files[i] = list[i].File;
         }
 
         /// <summary>
@@ -197,6 +410,9 @@ namespace VPB
         public static bool TrySortFilesEntryFieldsOnly(List<FileEntry> files, SortState state)
         {
             if (files == null || state == null) return false;
+            if (files.Count < 2) return true;
+
+            ApplyHideOldVersionsFilter(files);
             if (files.Count < 2) return true;
 
             switch (state.Type)
@@ -244,6 +460,22 @@ namespace VPB
                         return res;
                     });
                     return true;
+                case SortType.DateAdded:
+                case SortType.DateUpdated:
+                {
+                    var fam = BuildFamilyScanTimes(files);
+                    bool asc = state.Direction == SortDirection.Ascending;
+                    bool useMin = state.Type == SortType.DateAdded;
+                    files.Sort((a, b) =>
+                    {
+                        DateTime ka = useMin ? GetFamilyMinScanned(a, fam) : GetFamilyHighestVersionScanned(a, fam);
+                        DateTime kb = useMin ? GetFamilyMinScanned(b, fam) : GetFamilyHighestVersionScanned(b, fam);
+                        int res = asc ? ka.CompareTo(kb) : kb.CompareTo(ka);
+                        if (res == 0) return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                        return res;
+                    });
+                    return true;
+                }
                 default:
                     return false;
             }
@@ -258,10 +490,239 @@ namespace VPB
             try
             {
                 if (vfe.Package != null)
+                {
+                    try
+                    {
+                        long ib = vfe.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return vfe.Package.CreationTime;
+                }
             }
             catch { }
             return DateTime.MinValue;
+        }
+
+        private struct FamilyScanTimes
+        {
+            public DateTime MinScanned;
+            public int HighestVersion;
+            public DateTime HighestVersionScanned;
+        }
+
+        /// <summary>Family key "creator.packageName" derived from uid prefix (uid format: "Creator.Package.N").</summary>
+        private static string ComputeFamilyKey(FileEntry file)
+        {
+            if (file == null) return null;
+            string uid = null;
+            if (file is VarFileEntry vfe)
+            {
+                uid = vfe.GetRowPackageUid();
+            }
+            else if (file is PackageListEntry ple)
+            {
+                uid = ple.GetPackageUidForGalleryUserTags();
+                if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
+            }
+            else if (file is SystemFileEntry sfe)
+            {
+                // Loose files have no version family. Treat each path as its own singleton family so
+                // DateAdded/DateUpdated key off the file's own date instead of collapsing to DateTime.MinValue.
+                string p = sfe.Path ?? "";
+                return p.Length == 0 ? null : "sys:" + p;
+            }
+            if (string.IsNullOrEmpty(uid)) return null;
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot <= 0) return uid;
+            return uid.Substring(0, lastDot);
+        }
+
+        /// <summary>Per-row indexed first_scanned, with VarPackage fallback. Returns DateTime.MinValue when unknown.</summary>
+        private static DateTime GetIndexedFirstScannedForFile(FileEntry file)
+        {
+            if (file == null) return DateTime.MinValue;
+            DateTime dt;
+            if (file is VarFileEntry vfe)
+            {
+                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                try
+                {
+                    if (vfe.Package != null && vfe.Package.FirstScannedBinary != long.MinValue && vfe.Package.FirstScannedBinary != 0L)
+                        return DateTime.FromBinary(vfe.Package.FirstScannedBinary);
+                }
+                catch { }
+                return DateTime.MinValue;
+            }
+            if (file is PackageListEntry ple)
+            {
+                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                try
+                {
+                    if (ple.Package != null && ple.Package.FirstScannedBinary != long.MinValue && ple.Package.FirstScannedBinary != 0L)
+                        return DateTime.FromBinary(ple.Package.FirstScannedBinary);
+                }
+                catch { }
+            }
+            if (file is SystemFileEntry sfe)
+            {
+                // No first_scanned persistence for loose files. Mirror BA's LocalRVGE: prefer ctime
+                // (when did this file land on disk), fall back to mtime. Gives loose .vap meaningful
+                // per-file dates instead of all collapsing to MinValue.
+                try
+                {
+                    DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
+                    if (ct != DateTime.MinValue) return ct;
+                }
+                catch { }
+                return sfe.LastWriteTime;
+            }
+            return DateTime.MinValue;
+        }
+
+        /// <summary>Highest VAR version (N from "Creator.Package.N") for this row's uid; 0 when unknown.</summary>
+        private static int GetUidVersionNumber(FileEntry file)
+        {
+            if (file == null) return 0;
+            string uid = null;
+            if (file is VarFileEntry vfe) uid = vfe.GetRowPackageUid();
+            else if (file is PackageListEntry ple)
+            {
+                uid = ple.GetPackageUidForGalleryUserTags();
+                if (string.IsNullOrEmpty(uid) && ple.Package != null) uid = ple.Package.Uid;
+            }
+            if (string.IsNullOrEmpty(uid)) return 0;
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot < 0 || lastDot >= uid.Length - 1) return 0;
+            int v;
+            return int.TryParse(uid.Substring(lastDot + 1), out v) ? v : 0;
+        }
+
+        /// <summary>Build per-family (creator.package) scan-time lookup over the current file list. One pass, no I/O.</summary>
+        private static Dictionary<string, FamilyScanTimes> BuildFamilyScanTimes(List<FileEntry> files)
+        {
+            var map = new Dictionary<string, FamilyScanTimes>(StringComparer.OrdinalIgnoreCase);
+            if (files == null) return map;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+
+                // Loose files are singleton families: ctime = DateAdded, mtime = DateUpdated.
+                // Without this split, re-saved scenes/presets wouldn't float to the top under DateUpdated.
+                if (f is SystemFileEntry sfe)
+                {
+                    DateTime added = DateTime.MinValue;
+                    try { added = FileStat.GetCreationTimeOrMin(sfe.Path); } catch { }
+                    DateTime updated = sfe.LastWriteTime;
+                    if (added == DateTime.MinValue) added = updated;
+                    map[famKey] = new FamilyScanTimes { MinScanned = added, HighestVersion = 0, HighestVersionScanned = updated };
+                    continue;
+                }
+
+                DateTime scanned = GetIndexedFirstScannedForFile(f);
+                int version = GetUidVersionNumber(f);
+
+                FamilyScanTimes fst;
+                if (!map.TryGetValue(famKey, out fst))
+                {
+                    fst = new FamilyScanTimes { MinScanned = scanned, HighestVersion = version, HighestVersionScanned = scanned };
+                    map[famKey] = fst;
+                }
+                else
+                {
+                    if (scanned < fst.MinScanned || fst.MinScanned == DateTime.MinValue) fst.MinScanned = scanned;
+                    if (version > fst.HighestVersion)
+                    {
+                        fst.HighestVersion = version;
+                        fst.HighestVersionScanned = scanned;
+                    }
+                    map[famKey] = fst;
+                }
+            }
+            return map;
+        }
+
+        private static DateTime GetFamilyMinScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
+        {
+            string k = ComputeFamilyKey(file);
+            if (k == null || fam == null) return DateTime.MinValue;
+            return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.MinScanned : DateTime.MinValue;
+        }
+
+        /// <summary>
+        /// Date to render on the gallery row's Date subtitle. Prefers first_scanned (when VPB first indexed this uid,
+        /// i.e. when the user got this version of the package) over file mtime, because .var mtimes are commonly
+        /// preserved from the creator's original build date and don't reflect when the user actually obtained it.
+        /// Falls back to <see cref="FileEntry.LastWriteTime"/> when first_scanned is unknown.
+        /// </summary>
+        public static DateTime ResolveDisplayDateForRow(FileEntry file)
+        {
+            if (file == null) return DateTime.MinValue;
+            DateTime dt;
+            if (file is VarFileEntry vfe && vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+            if (file is PackageListEntry ple && ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+            // Loose files: show mtime (DateUpdated key). Reflects the user's most recent edit/resave,
+            // which is the date that's actually informative for a file the user iterates on.
+            return file.LastWriteTime;
+        }
+
+        /// <summary>
+        /// Drop VAR rows whose uid version is less than the family's highest version.
+        /// No-op when <c>Settings.HideOldVersions</c> is off. Mutates the list in place.
+        /// Non-VAR entries (scenes, JSONs) are left untouched.
+        /// </summary>
+        public static void ApplyHideOldVersionsFilter(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            bool enabled = false;
+            try { enabled = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { enabled = false; }
+            if (!enabled) return;
+
+            // First pass: per family, track the highest version number seen in this list.
+            var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int existing;
+                if (!highest.TryGetValue(famKey, out existing) || v > existing) highest[famKey] = v;
+            }
+            if (highest.Count == 0) return;
+
+            int removed = 0;
+            int kept = 0;
+            for (int i = files.Count - 1; i >= 0; i--)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int top;
+                if (!highest.TryGetValue(famKey, out top)) continue;
+                if (v < top)
+                {
+                    files.RemoveAt(i);
+                    removed++;
+                }
+                else kept++;
+            }
+            if (LogFamilySortDiagnostics)
+            {
+                try { LogUtil.LogWarning("[VPB] HIDE_OLD_VERSIONS removed=" + removed + " kept=" + kept + " families=" + highest.Count); } catch { }
+            }
+        }
+
+        private static DateTime GetFamilyHighestVersionScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
+        {
+            string k = ComputeFamilyKey(file);
+            if (k == null || fam == null) return DateTime.MinValue;
+            return fam.TryGetValue(k, out FamilyScanTimes fst) ? fst.HighestVersionScanned : DateTime.MinValue;
         }
 
         /// <summary>Creation time for sorting: .var package time, on-disk file creation, or <see cref="DateTime.MinValue"/> if unknown.</summary>
@@ -271,9 +732,25 @@ namespace VPB
             try
             {
                 if (file is VarFileEntry vfe && vfe.Package != null)
+                {
+                    try
+                    {
+                        long ib = vfe.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return vfe.Package.CreationTime;
+                }
                 if (file is PackageListEntry ple && ple.Package != null)
+                {
+                    try
+                    {
+                        long ib = ple.Package.InternalCreationTimeBinary;
+                        if (ib != long.MinValue) return DateTime.FromBinary(ib);
+                    }
+                    catch { }
                     return ple.Package.CreationTime;
+                }
                 string p = file.Path;
                 if (string.IsNullOrEmpty(p) || p.StartsWith("[MISSING]", StringComparison.OrdinalIgnoreCase))
                     return DateTime.MinValue;
@@ -425,18 +902,47 @@ namespace VPB
                     return null;
                 }
 
-                // Check cache first
+                // L1: process-memory cache
                 if (_sceneDependencyCache.TryGetValue(filePath, out var cached))
                 {
                     return cached;
                 }
 
-                // Use streaming/line-by-line extraction to avoid loading entire large files into memory
+                // L2: SQLite cache (survives VaM restart; keyed by mtime+size so Timeline writeback invalidates).
+                long wtBin = 0, sz = 0;
+                bool haveStat = false;
+                try
+                {
+                    var fi = new FileInfo(filePath);
+                    if (fi.Exists)
+                    {
+                        wtBin = fi.LastWriteTimeUtc.ToBinary();
+                        sz = fi.Length;
+                        haveStat = true;
+                    }
+                }
+                catch { haveStat = false; }
+
+                if (haveStat)
+                {
+                    var dbDeps = new HashSet<string>();
+                    if (VpbLocalDatabase.TryReadLooseSceneDeps(filePath, wtBin, sz, dbDeps))
+                    {
+                        _sceneDependencyCache[filePath] = dbDeps;
+                        return dbDeps;
+                    }
+                }
+
+                // Miss: pay the stream scan once, then persist for future binds.
                 var deps = ExtractDependenciesStreaming(file);
 
-                // Cache the result
                 if (deps != null && deps.Count > 0)
                     _sceneDependencyCache[filePath] = deps;
+
+                if (haveStat && deps != null)
+                {
+                    try { VpbLocalDatabase.WriteLooseSceneDeps(filePath, wtBin, sz, deps); } catch { }
+                }
 
                 return deps;
             }

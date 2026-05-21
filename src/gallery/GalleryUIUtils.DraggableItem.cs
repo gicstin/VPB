@@ -10,11 +10,19 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using SimpleJSON;
+using VPB.src.util;
 
 namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
+        private static string GetDragActionVerb(ItemType itemType, bool replaceMode)
+        {
+            if (replaceMode) return "Replacing";
+            if (itemType == ItemType.Pose) return "Applying";
+            return "Adding";
+        }
+
         public FileEntry FileEntry;
         public Hub.GalleryHubItem HubItem;
         public RawImage ThumbnailImage;
@@ -25,6 +33,8 @@ namespace VPB
         
         private bool isDraggingItem = false;
         private float _pointerDownTime = -1f;
+        /// <summary>Time from <see cref="OnPointerDown"/> (unscaled); for tap vs hold heuristics on same row.</summary>
+        public float LastPointerDownUnscaledTime => _pointerDownTime;
         private GameObject ghostObject;
         private Image ghostBorder;
         private Text ghostText; // Added text component
@@ -40,6 +50,47 @@ namespace VPB
         // 8c — drag overlay: blocks pointer events on side panels while dragging
         private GameObject _dragOverlay;
         public static bool IsDragging = false;
+
+        private ScrollRect _galleryScrollRectPassthrough;
+
+        /// <summary>True after we forwarded begin-drag to ScrollRect — item drag may still start once hold time + movement qualify.</summary>
+        private bool _galleryPassthroughScrollUntilItemDrag;
+
+        /// <summary>
+        /// Screen pixels from press before a gallery row counts as intentional drag-drop (not a slow tap / micro-jitter).
+        /// Unity fires <see cref="OnBeginDrag"/> near ~5–10px; below this we keep forwarding scroll until movement grows.
+        /// VR: <see cref="PointerEventData.position"/> vs <see cref="PointerEventData.pressPosition"/> often barely changes for laser + world canvas; gate skipped when XR active.
+        /// </summary>
+        private const float GalleryMinScreenPixelsForItemDrag = 22f;
+
+        private static bool IsXrPresentationActive()
+        {
+            return XrUtils.IsVrActive();
+        }
+
+        /// <summary>Non-VR: require screen-pixel slack past press. VR: rely on Unity begin-drag + optional hold only.</summary>
+        private static bool PressDeltaQualifiesForGalleryItemDrag(PointerEventData eventData)
+        {
+            if (eventData == null) return false;
+            if (IsXrPresentationActive()) return true;
+            Vector2 deltaPress = (Vector2)eventData.position - eventData.pressPosition;
+            float minSq = GalleryMinScreenPixelsForItemDrag * GalleryMinScreenPixelsForItemDrag;
+            return deltaPress.sqrMagnitude >= minSq;
+        }
+
+        private ScrollRect ResolveGalleryScrollRectForPassthrough()
+        {
+            if (_galleryScrollRectPassthrough == null)
+                _galleryScrollRectPassthrough = GetComponentInParent<ScrollRect>();
+            return _galleryScrollRectPassthrough;
+        }
+
+        private static void ForwardPointerEventToScrollRect<T>(ScrollRect sr, PointerEventData d, ExecuteEvents.EventFunction<T> fn)
+            where T : IEventSystemHandler
+        {
+            if (sr == null || d == null) return;
+            ExecuteEvents.Execute(sr.gameObject, d, fn);
+        }
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private static string _lastAppearanceClothingMode = "keep";
@@ -120,25 +171,27 @@ namespace VPB
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (isVR || eventData.button == PointerEventData.InputButton.Left)
+            {
+                _galleryPassthroughScrollUntilItemDrag = false;
                 _pointerDownTime = Time.unscaledTime;
+            }
         }
 
-        /// <summary>Hold delay in seconds; 0 when drag is off, hold requirement is off, or threshold is 0.</summary>
+        /// <summary>Hold delay in seconds; 0 when drag-and-drop is off at runtime (<see cref="VPBConfig.EffectiveEnableDragDrop"/>).</summary>
         private static float EffectiveDragHoldSeconds()
         {
             var c = VPBConfig.Instance;
-            if (c == null || !c.EnableDragDrop || !c.RequireDragHoldBeforeMove) return 0f;
-            return Mathf.Max(0f, c.DragHoldThreshold);
+            if (c == null || !c.EffectiveEnableDragDrop) return 0f;
+            return c.DragHoldThreshold;
         }
 
         public bool IsLongPress
         {
             get
             {
-                if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return false;
+                if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop) return false;
                 float threshold = EffectiveDragHoldSeconds();
                 if (threshold <= 0f) return false;
                 return _pointerDownTime >= 0f && (Time.unscaledTime - _pointerDownTime >= threshold);
@@ -147,13 +200,35 @@ namespace VPB
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
-            if (VPBConfig.Instance != null && !VPBConfig.Instance.EnableDragDrop) return;
+            if (VPBConfig.Instance != null && !VPBConfig.Instance.EffectiveEnableDragDrop)
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                return;
+            }
             float threshold = EffectiveDragHoldSeconds();
-            if (Time.unscaledTime - _pointerDownTime < threshold) return;
+            float held = Time.unscaledTime - _pointerDownTime;
 
+            if (held < threshold)
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = true;
+                return;
+            }
+            // Hold time satisfied but movement still small — do not arm item drag yet (slow click / jitter).
+            if (!PressDeltaQualifiesForGalleryItemDrag(eventData))
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = true;
+                return;
+            }
+
+            StartGalleryItemDragFromPointer(eventData);
+        }
+
+        private void StartGalleryItemDragFromPointer(PointerEventData eventData)
+        {
             _isDualPose = null;
             _dualPoseNode = null;
             dragCam = eventData.pressEventCamera;
@@ -172,6 +247,7 @@ namespace VPB
             if (Panel != null) Panel.SetStatus(msg);
             
             UpdateGhost(eventData, atom, dist);
+            _galleryPassthroughScrollUntilItemDrag = false;
         }
 
         // 8c — full-screen transparent overlay that absorbs pointer events to side panels during drag
@@ -219,6 +295,19 @@ namespace VPB
                      Panel.SetStatus(msg);
                 }
             }
+            else if (VPBConfig.Instance != null && VPBConfig.Instance.EffectiveEnableDragDrop && _galleryPassthroughScrollUntilItemDrag)
+            {
+                float threshold = EffectiveDragHoldSeconds();
+                float held = Time.unscaledTime - _pointerDownTime;
+                if (held >= threshold && PressDeltaQualifiesForGalleryItemDrag(eventData))
+                    StartGalleryItemDragFromPointer(eventData);
+                else
+                    ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.dragHandler);
+            }
+            else
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.dragHandler);
+            }
         }
 
         private void Update()
@@ -230,6 +319,7 @@ namespace VPB
         private void CancelDrag()
         {
             isDraggingItem = false;
+            _galleryPassthroughScrollUntilItemDrag = false;
             DestroyGhost();
             DestroyGroundIndicator();
             dragCam = null;
@@ -262,27 +352,9 @@ namespace VPB
                 // Handle subscenes differently - load directly without requiring atom
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
-                    if (Panel != null && Panel.DragDropReplaceMode)
-                    {
-                        List<Atom> toRemove = new List<Atom>();
-                        foreach (var a in SuperController.singleton.GetAtoms())
-                        {
-                            if (a.type == "SubScene")
-                            {
-                                toRemove.Add(a);
-                            }
-                        }
-                        
-                        if (toRemove.Count > 0)
-                        {
-                            LogUtil.Log($"[VPB] Replace mode: Removing {toRemove.Count} existing SubScenes");
-                            foreach (var a in toRemove)
-                            {
-                                SuperController.singleton.RemoveAtom(a);
-                            }
-                        }
-                    }
-                    
+                    if (Panel != null && Panel.DragDropReplaceMode && TryGetSelectedSubSceneTarget() == null)
+                        RemoveAllSubSceneAtoms();
+
                     LoadSubScene(FileEntry.Uid);
                 }
                 else if (itemType == ItemType.Scene && FileEntry != null)
@@ -347,6 +419,7 @@ namespace VPB
                         // apply to that person (instead of spawning a new person).
                         if (itemType == ItemType.Appearance && atom.type == "Person")
                         {
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
                             ApplyClothingToAtom(atom, FileEntry.Uid, null);
                         }
                         else if (IsAmbiguousDrop(atom, FileEntry))
@@ -355,16 +428,40 @@ namespace VPB
                         }
                         else
                         {
+                            string kind = "item";
+                            try
+                            {
+                                switch (itemType)
+                                {
+                                    case ItemType.Clothing: kind = "clothing"; break;
+                                    case ItemType.Hair: kind = "hair"; break;
+                                    case ItemType.Skin: kind = "skin"; break;
+                                    case ItemType.Morphs: kind = "morphs"; break;
+                                    case ItemType.Appearance: kind = "appearance"; break;
+                                    case ItemType.Pose: kind = "pose"; break;
+                                    case ItemType.Plugins: kind = "plugins"; break;
+                                    default: kind = "item"; break;
+                                }
+                            }
+                            catch { kind = "item"; }
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), kind); } catch { }
                             ApplyClothingToAtom(atom, FileEntry.Uid);
                         }
                     }
                 }
                 dragCam = null;
             }
+            else
+            {
+                ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.endDragHandler);
+                _galleryPassthroughScrollUntilItemDrag = false;
+            }
         }
 
         public void OnDisable()
         {
+            _galleryScrollRectPassthrough = null;
+            _galleryPassthroughScrollUntilItemDrag = false;
             if (isDraggingItem)
             {
                 DestroyGhost();
@@ -429,7 +526,8 @@ namespace VPB
             }
             else if (atom != null && atom.type == "Person")
             {
-                 string action = (Panel != null && Panel.DragDropReplaceMode) ? "Replacing" : "Adding";
+                 bool replaceMode = (Panel != null && Panel.DragDropReplaceMode);
+                 string action = GetDragActionVerb(itemType, replaceMode);
                  if (itemType == ItemType.ClothingPreset || itemType == ItemType.HairPreset)
                  {
                      statusMsg = $"{action} Preset {FileEntry.Name} to {atom.name}";
@@ -450,6 +548,7 @@ namespace VPB
 
         public void LoadCUA(string path)
         {
+            // Usage recorded in LoadCUAIntoAtom when the asset is actually applied (avoid double-count).
             string normalizedPath = UI.NormalizePath(path);
             LogUtil.Log($"[DragDropDebug] Loading CUA: {normalizedPath}");
             if (Panel != null) Panel.StartCoroutine(LoadCUACoroutine(normalizedPath));
@@ -469,6 +568,7 @@ namespace VPB
 
         public void LoadCUAIntoAtom(Atom atom, string path)
         {
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "cua"); } catch { }
             if (Panel != null) Panel.StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
             else StartCoroutine(LoadCUAIntoAtomCoroutine(atom, path));
         }
@@ -565,6 +665,7 @@ namespace VPB
 
         public void LoadSubScene(string path)
         {
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "subscene"); } catch { }
             bool installed = EnsureInstalled();
 
             if (installed)
@@ -576,28 +677,6 @@ namespace VPB
             string normalizedPath = UI.NormalizePath(path);
 
             LogUtil.Log($"[VPB] LoadSubScene: {normalizedPath}");
-            
-            // Handle Replace mode for clicks too
-            if (Panel != null && Panel.DragDropReplaceMode)
-            {
-                List<Atom> toRemove = new List<Atom>();
-                foreach (var a in SuperController.singleton.GetAtoms())
-                {
-                    if (a.type == "SubScene")
-                    {
-                        toRemove.Add(a);
-                    }
-                }
-                
-                if (toRemove.Count > 0)
-                {
-                    LogUtil.Log($"[VPB] Replace mode (click): Removing {toRemove.Count} existing SubScenes");
-                    foreach (var a in toRemove)
-                    {
-                        SuperController.singleton.RemoveAtom(a);
-                    }
-                }
-            }
 
             try
             {
@@ -648,6 +727,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadClothing: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "clothing"); } catch { }
             LogUtil.Log($"[VPB] LoadClothing: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -659,6 +739,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadHair: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "hair"); } catch { }
             LogUtil.Log($"[VPB] LoadHair: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -670,6 +751,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadSkin: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "skin"); } catch { }
             LogUtil.Log($"[VPB] LoadSkin: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -681,7 +763,20 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadMorphs: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "morphs"); } catch { }
             LogUtil.Log($"[VPB] LoadMorphs: Applying {FileEntry.Name} to {target.uid}");
+            ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        public void LoadPlugins(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: No target atom provided.");
+                return;
+            }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
+            LogUtil.Log($"[VPB] LoadPlugins: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
 
@@ -692,6 +787,7 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadAppearance: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
             string cfgAppearanceClothing = VPBConfig.Instance != null ? VPBConfig.Instance.AppearanceClothingApplyMode : "replace";
             LogUtil.Log($"[VPB] LoadAppearance: Applying {FileEntry.Name} to {target.uid} (explicitMode: {mode ?? "<resolve>"}, AppearanceClothingCfg={cfgAppearanceClothing})");
             ApplyClothingToAtom(target, FileEntry.Uid, mode);
@@ -704,9 +800,16 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadPose: No target atom provided.");
                 return;
             }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "pose"); } catch { }
 
             string normalizedPath = UI.NormalizePath(FileEntry.Path);
             LogUtil.Log($"[VPB] LoadPose: Applying {FileEntry.Name} to {target.uid} (SuppressRoot: {suppressRoot})");
+
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try { SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, normalizedPath); }
+                catch { }
+            }
 
             // Use LoadJSONWithFallback instead of SuperController.LoadJSON directly:
             // some .var packages have spaces in their name (e.g. "infiniteya.Pose Pack.1")
@@ -715,12 +818,6 @@ namespace VPB
             JSONNode node = UI.LoadJSONWithFallback(normalizedPath, FileEntry);
             if (node == null) return;
             JSONClass presetJSON = node.AsObject;
-
-            if (FileButton.EnsureInstalledByText(presetJSON.ToString()))
-            {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
-            }
 
             // Duo pose: has PeopleCount >= 2 with Person1/Person2/atoms fields
             if (presetJSON["PeopleCount"] != null && presetJSON["PeopleCount"].AsInt >= 2)
@@ -759,36 +856,10 @@ namespace VPB
                 }
             }
 
-            if (suppressRoot)
-            {
-                if (storablesArr != null)
-                {
-                    for (int i = 0; i < storablesArr.Count; i++)
-                    {
-                        JSONClass s = storablesArr[i] as JSONClass;
-                        if (s == null) continue;
-
-                        if (s["id"].Value == "control")
-                        {
-                            if (s.HasKey("position")) s.Remove("position");
-                            if (s.HasKey("rotation")) s.Remove("rotation");
-                        }
-
-                        if (s["id"].Value == "PosePresets" || s["id"].Value == "control")
-                        {
-                            if (s["presets"] != null) CleanPresets(s["presets"] as JSONArray);
-                        }
-                    }
-                }
-                else if (presetJSON["presets"] != null)
-                {
-                    CleanPresets(presetJSON["presets"] as JSONArray);
-                }
-            }
 
             if (!hasPosePresetsStorable && storablesArr != null)
             {
-                // Raw bone storables format — apply via the native atom restore pipeline
+                // VPB-refactor: native atom restore, deferred from import-unification
                 LogUtil.Log($"[VPB] LoadPose: No PosePresets storable found; using atom.Restore() for raw storables.");
                 target.PreRestore(true, false);
                 if (!suppressRoot) target.RestoreTransform(presetJSON);
@@ -798,23 +869,14 @@ namespace VPB
                 return;
             }
 
-            JSONStorable presetStorable = target.GetStorableByID("PosePresets");
-            if (presetStorable != null)
+            FileEntry entry = FileEntry ?? VPB.FileManager.GetFileEntry(normalizedPath);
+            if (entry == null)
             {
-                 var pm = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
-                 if (pm != null)
-                 {
-                    try
-                    {
-                        MVR.FileManagement.FileManager.PushLoadDirFromFilePath(normalizedPath);
-                        pm.LoadPresetFromJSON(presetJSON, false);
-                    }
-                    finally
-                    {
-                        MVR.FileManagement.FileManager.PopLoadDir();
-                    }
-                 }
+                LogUtil.LogWarning($"[VPB] LoadPose: could not resolve FileEntry for {normalizedPath}");
+                return;
             }
+            VpbImport.LoadPreset(entry, target, VpbResourceType.Pose, ClothingApplyMode.Replace,
+                                 presetJC: presetJSON, suppressRoot: suppressRoot);
         }
         
         private void CleanPresets(JSONArray presets)
@@ -1724,8 +1786,6 @@ namespace VPB
                 {
                     LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
                 }
-                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
-                
                 SuperController sc = SuperController.singleton;
                 if (sc != null)
                 {

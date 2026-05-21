@@ -21,12 +21,20 @@ namespace VPB
         public int ClothingSubfilterCountFemale;
         public int ClothingSubfilterCountDecals;
 
+        public int HairSubfilterCountAll;
+        public int HairSubfilterCountPresets;
+        public int HairSubfilterCountCustom;
+        public int HairSubfilterCountItems;
+        public int HairSubfilterCountMale;
+        public int HairSubfilterCountFemale;
+
         public int AppearanceSubfilterCountAll;
         public int AppearanceSubfilterCountPresets;
         public int AppearanceSubfilterCountCustom;
         public int AppearanceSubfilterCountMale;
         public int AppearanceSubfilterCountFemale;
         public int AppearanceSubfilterCountFuta;
+        public int AppearanceSubfilterCountUnknown;
 
         public int ClothingSubfilterFacetCountReal;
         public int ClothingSubfilterFacetCountPresets;
@@ -36,16 +44,24 @@ namespace VPB
         public int ClothingSubfilterFacetCountFemale;
         public int ClothingSubfilterFacetCountDecals;
 
+        public int HairSubfilterFacetCountPresets;
+        public int HairSubfilterFacetCountCustom;
+        public int HairSubfilterFacetCountItems;
+        public int HairSubfilterFacetCountMale;
+        public int HairSubfilterFacetCountFemale;
+
         public int AppearanceSubfilterFacetCountPresets;
         public int AppearanceSubfilterFacetCountCustom;
         public int AppearanceSubfilterFacetCountMale;
         public int AppearanceSubfilterFacetCountFemale;
         public int AppearanceSubfilterFacetCountFuta;
+        public int AppearanceSubfilterFacetCountUnknown;
 
         public int AppearanceSubfilterCurrentCountAll;
         public int AppearanceSubfilterCurrentCountMale;
         public int AppearanceSubfilterCurrentCountFemale;
         public int AppearanceSubfilterCurrentCountFuta;
+        public int AppearanceSubfilterCurrentCountUnknown;
     }
 
     /// <summary>
@@ -121,12 +137,19 @@ namespace VPB
                 ClothingSubfilterCountMale = s.ClothingSubfilterCountMale,
                 ClothingSubfilterCountFemale = s.ClothingSubfilterCountFemale,
                 ClothingSubfilterCountDecals = s.ClothingSubfilterCountDecals,
+                HairSubfilterCountAll = s.HairSubfilterCountAll,
+                HairSubfilterCountPresets = s.HairSubfilterCountPresets,
+                HairSubfilterCountCustom = s.HairSubfilterCountCustom,
+                HairSubfilterCountItems = s.HairSubfilterCountItems,
+                HairSubfilterCountMale = s.HairSubfilterCountMale,
+                HairSubfilterCountFemale = s.HairSubfilterCountFemale,
                 AppearanceSubfilterCountAll = s.AppearanceSubfilterCountAll,
                 AppearanceSubfilterCountPresets = s.AppearanceSubfilterCountPresets,
                 AppearanceSubfilterCountCustom = s.AppearanceSubfilterCountCustom,
                 AppearanceSubfilterCountMale = s.AppearanceSubfilterCountMale,
                 AppearanceSubfilterCountFemale = s.AppearanceSubfilterCountFemale,
                 AppearanceSubfilterCountFuta = s.AppearanceSubfilterCountFuta,
+                AppearanceSubfilterCountUnknown = s.AppearanceSubfilterCountUnknown,
                 ClothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal,
                 ClothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets,
                 ClothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom,
@@ -134,15 +157,22 @@ namespace VPB
                 ClothingSubfilterFacetCountMale = s.ClothingSubfilterFacetCountMale,
                 ClothingSubfilterFacetCountFemale = s.ClothingSubfilterFacetCountFemale,
                 ClothingSubfilterFacetCountDecals = s.ClothingSubfilterFacetCountDecals,
+                HairSubfilterFacetCountPresets = s.HairSubfilterFacetCountPresets,
+                HairSubfilterFacetCountCustom = s.HairSubfilterFacetCountCustom,
+                HairSubfilterFacetCountItems = s.HairSubfilterFacetCountItems,
+                HairSubfilterFacetCountMale = s.HairSubfilterFacetCountMale,
+                HairSubfilterFacetCountFemale = s.HairSubfilterFacetCountFemale,
                 AppearanceSubfilterFacetCountPresets = s.AppearanceSubfilterFacetCountPresets,
                 AppearanceSubfilterFacetCountCustom = s.AppearanceSubfilterFacetCountCustom,
                 AppearanceSubfilterFacetCountMale = s.AppearanceSubfilterFacetCountMale,
                 AppearanceSubfilterFacetCountFemale = s.AppearanceSubfilterFacetCountFemale,
                 AppearanceSubfilterFacetCountFuta = s.AppearanceSubfilterFacetCountFuta,
+                AppearanceSubfilterFacetCountUnknown = s.AppearanceSubfilterFacetCountUnknown,
                 AppearanceSubfilterCurrentCountAll = s.AppearanceSubfilterCurrentCountAll,
                 AppearanceSubfilterCurrentCountMale = s.AppearanceSubfilterCurrentCountMale,
                 AppearanceSubfilterCurrentCountFemale = s.AppearanceSubfilterCurrentCountFemale,
                 AppearanceSubfilterCurrentCountFuta = s.AppearanceSubfilterCurrentCountFuta,
+                AppearanceSubfilterCurrentCountUnknown = s.AppearanceSubfilterCurrentCountUnknown,
             };
         }
     }

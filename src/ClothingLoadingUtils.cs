@@ -337,6 +337,100 @@ namespace VPB
             return null;
         }
 
+        private static string NormalizeMatchToken(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            char[] buf = new char[value.Length];
+            int n = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (char.IsLetterOrDigit(c))
+                    buf[n++] = char.ToLowerInvariant(c);
+            }
+            return n > 0 ? new string(buf, 0, n) : "";
+        }
+
+        private static JSONStorable FindItemPresetStorableFuzzy(Atom atom, string itemUid, string itemName, string creator, string inferredBaseId, bool isClothing, out string storableId)
+        {
+            storableId = null;
+            if (atom == null) return null;
+
+            List<string> needles = new List<string>();
+            void add(string s)
+            {
+                string n = NormalizeMatchToken(s);
+                if (!string.IsNullOrEmpty(n) && !needles.Contains(n))
+                    needles.Add(n);
+            }
+
+            add(itemName);
+            add(GetItemKeyForMatching(itemUid));
+            add(ExtractKeyFromInferredBaseId(inferredBaseId));
+            add(inferredBaseId);
+            add(creator);
+
+            if (needles.Count == 0) return null;
+
+            JSONStorable best = null;
+            string bestId = null;
+            int bestScore = -1;
+            int bestTokenHits = 0;
+
+            List<string> storableIds = atom.GetStorableIDs();
+            for (int i = 0; i < storableIds.Count; i++)
+            {
+                string sid = storableIds[i];
+                if (string.IsNullOrEmpty(sid)) continue;
+                if (string.Equals(sid, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(sid, "HairPresets", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JSONStorable s = atom.GetStorableByID(sid);
+                if (s == null) continue;
+                MeshVR.PresetManager pm = s.GetComponentInChildren<MeshVR.PresetManager>();
+                if (pm == null) continue;
+
+                string sidNorm = NormalizeMatchToken(sid);
+                if (string.IsNullOrEmpty(sidNorm)) continue;
+
+                int tokenHits = 0;
+                for (int k = 0; k < needles.Count; k++)
+                {
+                    if (sidNorm.Contains(needles[k])) tokenHits++;
+                }
+
+                // Hard requirement: must match at least one semantic token from item/path.
+                if (tokenHits == 0) continue;
+
+                // Basic type sanity to avoid applying clothing presets into unrelated hair storables (and vice versa).
+                string sidLower = sid.ToLowerInvariant();
+                if (isClothing && sidLower.Contains("hair") && !sidLower.Contains("cloth"))
+                    continue;
+                if (!isClothing && sidLower.Contains("cloth") && !sidLower.Contains("hair"))
+                    continue;
+
+                int score = tokenHits * 3;
+                if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) score += 2;
+                if (sid.IndexOf("material", StringComparison.OrdinalIgnoreCase) >= 0) score += 1;
+
+                if (score > bestScore || (score == bestScore && tokenHits > bestTokenHits))
+                {
+                    bestScore = score;
+                    bestTokenHits = tokenHits;
+                    best = s;
+                    bestId = sid;
+                }
+            }
+
+            if (best != null && bestScore > 0 && bestTokenHits > 0)
+            {
+                storableId = bestId;
+                return best;
+            }
+
+            return null;
+        }
+
         private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName)
         {
             if (node == null || string.IsNullOrEmpty(presetPackageName)) return;
@@ -390,7 +484,7 @@ namespace VPB
                 string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedPresetPath);
                 folderFullPath = FileManagerSecure.NormalizeLoadPath(folderFullPath);
 
-                string presetJSONString = presetJSON.ToString();
+                string presetJSONString = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 16_384);
                 bool modified = false;
 
                 if (presetJSONString.Contains("SELF:"))
@@ -556,7 +650,7 @@ namespace VPB
             yield return new WaitForEndOfFrame();
 
             DateTime startDelayTime = DateTime.Now;
-            while ((DateTime.Now - startDelayTime).TotalSeconds < 10)
+            while ((DateTime.Now - startDelayTime).TotalSeconds < 20)
             {
                 string storableId;
                 JSONStorable presetStorable = FindItemPresetStorable(atom, itemUid, itemName, creator, out storableId);
@@ -577,6 +671,12 @@ namespace VPB
                     {
                         storableId = directId;
                     }
+                }
+
+                if (pm == null)
+                {
+                    presetStorable = FindItemPresetStorableFuzzy(atom, itemUid, itemName, creator, inferredBaseId, isClothing, out storableId);
+                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
                 }
 
                 if (pm != null)
@@ -606,24 +706,8 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    try
-                    {
-                        FileManager.PushLoadDirFromFilePath(normalizedPath);
-                    }
-                    catch { }
-
-                    try
-                    {
-                        pm.LoadPresetFromJSON(presetJSON, false);
-                    }
-                    finally
-                    {
-                        try
-                        {
-                            FileManager.PopLoadDir();
-                        }
-                        catch { }
-                    }
+                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
+                        ClothingApplyMode.Replace, presetJC: presetJSON);
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                     SchedulePostApplyFixup(atom, inferredBaseId);
@@ -793,7 +877,7 @@ namespace VPB
                                     if (UI.IsLikelyVarPackageReference(normalizedVam))
                                     {
                                         string pkg = normalizedVam.Substring(0, normalizedVam.IndexOf(':'));
-                                        string jsonStr = vamJSON.ToString();
+                                        string jsonStr = VPB.src.util.JsonSerializationUtil.Serialize(vamJSON, 16_384);
                                         if (jsonStr.Contains("SELF:"))
                                         {
                                             JSONNode parsed = SimpleJSON.JSON.Parse(jsonStr.Replace("SELF:", pkg + ":"));
@@ -814,24 +898,8 @@ namespace VPB
                                         }
                                     }
 
-                                    try
-                                    {
-                                        FileManager.PushLoadDirFromFilePath(normalizedVam);
-                                    }
-                                    catch { }
-
-                                    try
-                                    {
-                                        pm.LoadPresetFromJSON(vamJSON, false);
-                                    }
-                                    finally
-                                    {
-                                        try
-                                        {
-                                            FileManager.PopLoadDir();
-                                        }
-                                        catch { }
-                                    }
+                                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
+                                        ClothingApplyMode.Replace, presetJC: vamJSON);
 
                                     itemUid = UI.NormalizePath(vamPath);
                                 }

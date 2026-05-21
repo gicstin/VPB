@@ -6,6 +6,7 @@ using System.Linq;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -36,6 +37,12 @@ namespace VPB
             raycaster.enabled = true;
         }
 
+        private IEnumerator RefreshRaycasterAfterDelay(float delaySecs)
+        {
+            yield return new WaitForSecondsRealtime(delaySecs);
+            yield return StartCoroutine(RefreshRaycasterNextFrame());
+        }
+
         private Atom GetBestTargetAtom()
         {
             if (SuperController.singleton == null) return null;
@@ -52,7 +59,7 @@ namespace VPB
             try
             {
                 Atom selected = SuperController.singleton.GetSelectedAtom();
-                if (selected != null && selected.type == "Person") return selected;
+                if (selected != null && SceneUtils.IsPersonLikeAtom(selected)) return selected;
             }
             catch { }
 
@@ -65,7 +72,7 @@ namespace VPB
                     foreach (Atom a in allAtoms)
                     {
                         if (a == null) continue;
-                        try { if (a.type == "Person") return a; } catch { }
+                        try { if (SceneUtils.IsPersonLikeAtom(a)) return a; } catch { }
                     }
                 }
             }
@@ -93,12 +100,14 @@ namespace VPB
 
                     string pathLower = (file.Path ?? "").ToLowerInvariant();
                     string category = CurrentCategoryTitle ?? "";
+                    string categoryLower = category.ToLowerInvariant();
 
                     // Match the primary tab's first action behavior (auto action = first button).
                     if (pathLower.EndsWith(".var"))
                     {
                         try
                         {
+                            // Not a user "open" — cache warm only; do not write History / item_usage.
                             NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
                             return true;
                         }
@@ -155,6 +164,18 @@ namespace VPB
                         Atom target = GetBestTargetAtom();
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadAppearance(target);
+                        return true;
+                    }
+
+                    bool isPluginPreset =
+                        pathLower.Contains("/custom/atom/person/plugins/") ||
+                        pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
+                        (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset")));
+                    if (isPluginPreset)
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadPlugins(target);
                         return true;
                     }
 
@@ -223,7 +244,8 @@ namespace VPB
                 selectedPath = file.Path;
                 selectedHubItem = null;
 
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path. Hover-only content comes from pointer enter.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
 
@@ -268,13 +290,17 @@ namespace VPB
 
                 try { MVR.FileManagement.FileManager.Refresh(); } catch { }
                 FileManager.Refresh(true, false, false);
+                GalleryFileListSnapshotCache.Clear();
+                GalleryTagCountSnapshotCache.Clear();
                 creatorsCached = false;
                 categoriesCached = false;
                 tagsCached = false;
+                pathsCached = false;
                 refreshOnNextShow = true;
                 RefreshFiles(true);
                 refreshOnNextShow = false;
                 try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+                try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
             }
             catch (Exception ex)
             {
@@ -291,6 +317,11 @@ namespace VPB
             _userHidden = false;
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
+
+            // Switching middle content (category/page) must leave internal settings mode.
+            // Default behavior: auto-save on exit; only explicit Discard uses cancel path.
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+                ExitInternalSettingsMode(true);
 
             bool registeredBefore = _registeredWithSuperController;
             EnsureCanvasRegisteredWithSuperController();
@@ -323,15 +354,23 @@ namespace VPB
                 if (hasLoadedContent)
                     SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
 
+                if (leftActiveContent == ContentType.History) leftActiveContent = null;
+                if (rightActiveContent == ContentType.History) rightActiveContent = null;
+                SyncActiveContentTypeFromSidePanels();
+
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
+                userTagsCached = false;
             }
             else if (packagesChanged)
             {
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
+                userTagsCached = false;
             }
 
             currentCategoryTitle = title;
@@ -384,6 +423,9 @@ namespace VPB
             if (paramsChanged)
                 RestoreCategoryFilterState(title, path);
 
+            // Auto gender subfilter must apply on category change too (before RefreshFiles builds grid).
+            ReconcileAutoGenderForCurrentTarget();
+
             if (Application.isPlaying && canvas.renderMode == RenderMode.WorldSpace)
             {
                 // In VR on startup, Camera.main can be null briefly. Rebind whenever it becomes available.
@@ -394,6 +436,13 @@ namespace VPB
             // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
             // (CacheCreators / CacheCategoryCounts) when RefreshFilesRoutine will rebuild them on a worker thread.
             bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged;
+            bool startupDeferredInitialRefresh = false;
+            if (shouldRefresh && !hasLoadedContent && !LogUtil.IsStartupReadyLogged())
+            {
+                startupDeferredInitialRefresh = true;
+                shouldRefresh = false;
+                ScheduleInitialRefreshAfterStartupReady();
+            }
 
             try
             {
@@ -411,7 +460,7 @@ namespace VPB
 
             // Fast reopen path: same already-loaded view should just become visible again.
             // Do not run layout/tabs/refresh logic here; it causes the redraw/flicker you reported.
-            if (sameViewReopen && hasLoadedContent)
+            if (sameViewReopen && hasLoadedContent && !shouldRefresh)
             {
                 SetCanvasVisible(true);
                 if (refreshOnNextShow)
@@ -432,10 +481,18 @@ namespace VPB
 
             SetCanvasVisible(true);
 
-            // If we had to register late (startup ordering), refresh raycast state deterministically.
-            if (!registeredBefore && _registeredWithSuperController)
+            // Refresh raycast on first show (cold-launch VR fix) and on late registration.
+            // On cold launch, VaM's VR pointer system may not have connected to the canvas yet
+            // even when registration succeeded in Init().
+            bool isFirstShow = !hasLoadedContent;
+            if (isFirstShow || (!registeredBefore && _registeredWithSuperController))
             {
                 try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+            }
+            // Second delayed refresh: VaM's VR pointer system may take ~1 second to fully connect.
+            if (isFirstShow)
+            {
+                try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
             }
 
             if (shouldRefresh)
@@ -446,7 +503,11 @@ namespace VPB
                 LogGalleryCategoryTypeNavPhase("Show_after_RefreshFiles_invoke");
             }
             else
+            {
+                if (startupDeferredInitialRefresh)
+                    LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
+            }
 
             // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
             // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
@@ -488,23 +549,189 @@ namespace VPB
             LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
         }
 
+        private Coroutine deferredStartupRefreshCoroutine;
+        public bool HasDeferredStartupRefreshPending => deferredStartupRefreshCoroutine != null;
+
+        private void ScheduleInitialRefreshAfterStartupReady()
+        {
+            if (deferredStartupRefreshCoroutine != null) return;
+            deferredStartupRefreshCoroutine = StartCoroutine(DeferredInitialRefreshAfterStartupReady());
+        }
+
+        private IEnumerator DeferredInitialRefreshAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            deferredStartupRefreshCoroutine = null;
+            if (hasLoadedContent) yield break;
+            if (canvas == null || !canvas.enabled) yield break;
+
+            try
+            {
+                RefreshFiles(false);
+            }
+            catch { }
+        }
+
         public void Hide()
         {
             _userHidden = true;
             _hiddenByMenuGate = false;
+            VpbPerfDiag.LogTransition("GalleryPanel.Hide", "userHidden=true");
             SetCanvasVisible(false);
 
             hoverCount = 0;
+            try { HideHoverPreview(null); } catch { }
         }
 
         private void SetCanvasVisible(bool visible)
         {
             if (canvas == null) return;
 
-            canvas.enabled = visible;
+            bool isVR = XrUtils.IsVrActive();
 
+            bool wasEnabled = canvas.enabled;
+            if (VpbPerfDiag.CachedEnabled && wasEnabled != visible)
+            {
+                if (visible) VpbPerfDiag.SetCanvasVisibleOn++;
+                else VpbPerfDiag.SetCanvasVisibleOff++;
+                VpbPerfDiag.LogTransition("SetCanvasVisible",
+                    "from=" + (wasEnabled ? "on" : "off") + " to=" + (visible ? "on" : "off")
+                    + " userHidden=" + _userHidden + " menuGate=" + _hiddenByMenuGate + " isVR=" + isVR);
+            }
+
+            if (!visible)
+            {
+                _pendingVisibleAfterStartupReady = false;
+                if (_deferredSetVisibleCoroutine != null)
+                {
+                    try { StopCoroutine(_deferredSetVisibleCoroutine); } catch { }
+                    _deferredSetVisibleCoroutine = null;
+                }
+                ApplyImmediateVisibility(false);
+                _queuedRaycastRefreshOnVisible = false;
+                return;
+            }
+
+            // VR cold boot: enabling world-space canvas too early can produce “visible but dead” pointer state.
+            // Defer actual enable until World UI ready and menu visible; then do full refresh + raycaster rebuild.
+            if (isVR && Application.isPlaying && !LogUtil.IsStartupReadyLogged())
+            {
+                _pendingVisibleAfterStartupReady = true;
+                if (_deferredSetVisibleCoroutine == null)
+                    _deferredSetVisibleCoroutine = StartCoroutine(DeferredSetVisibleAfterStartupReady());
+                // Keep disabled until ready to avoid stuck non-interactible canvas.
+                ApplyImmediateVisibility(false);
+                return;
+            }
+
+            ApplyImmediateVisibility(true);
+
+            // Robust cold-boot fix: if first refresh got deferred while menu-gated hidden,
+            // ensure we run (or schedule) initial refresh on any transition to visible.
+            if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null)
+            {
+                // If no category ever selected (should not happen, but can if created without Show()),
+                // force a first Show() using configured initial category.
+                if (string.IsNullOrEmpty(currentPath) && categories != null && categories.Count > 0)
+                {
+                    try
+                    {
+                        var initial = categories[0];
+                        string categoryToOpen = null;
+                        if (VPBConfig.Instance != null) categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                        if (!string.IsNullOrEmpty(categoryToOpen))
+                        {
+                            for (int i = 0; i < categories.Count; i++)
+                            {
+                                if (string.Equals(categories[i].name, categoryToOpen, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    initial = categories[i];
+                                    break;
+                                }
+                            }
+                        }
+                        Show(initial.name, initial.extension, initial.path);
+                        return;
+                    }
+                    catch { }
+                }
+
+                // If startup not ready yet, schedule deferred refresh (idempotent).
+                if (!LogUtil.IsStartupReadyLogged())
+                {
+                    try { ScheduleInitialRefreshAfterStartupReady(); } catch { }
+                }
+                else
+                {
+                    try { RefreshFiles(false); } catch { }
+                }
+            }
+
+            // Cold-boot VR fix when gallery is shown via menu gate (no Show() call).
+            // VaM VR pointer wiring can lag behind canvas enable; force rebuild next frame + after short delay.
+            if (visible)
+            {
+                if (isVR && Application.isPlaying && !_queuedRaycastRefreshOnVisible)
+                {
+                    _queuedRaycastRefreshOnVisible = true;
+                    try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+                    try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
+                }
+            }
+            else
+            {
+                _queuedRaycastRefreshOnVisible = false;
+            }
+        }
+
+        private void ApplyImmediateVisibility(bool v)
+        {
+            if (canvas == null) return;
+            canvas.enabled = v;
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
-            if (raycaster != null) raycaster.enabled = visible;
+            if (raycaster != null) raycaster.enabled = v;
+            // canvas.enabled=false halts rendering but every child MonoBehaviour keeps ticking; deactivate the subtree too.
+            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != v)
+                backgroundBoxGO.SetActive(v);
+        }
+
+        private IEnumerator DeferredSetVisibleAfterStartupReady()
+        {
+            while (!LogUtil.IsStartupReadyLogged())
+                yield return null;
+
+            _deferredSetVisibleCoroutine = null;
+            if (!_pendingVisibleAfterStartupReady) yield break;
+            _pendingVisibleAfterStartupReady = false;
+            if (canvas == null) yield break;
+
+            // Wait until menu visible too (anchor gate path).
+            while (!IsVamMenuVisible())
+                yield return null;
+
+            ApplyImmediateVisibility(true);
+
+            try { EnsureCanvasRegisteredWithSuperController(); } catch { }
+
+            // Force VaM/Unity to rebuild pointer interaction now that UI is ready.
+            try { StartCoroutine(RefreshRaycasterNextFrame()); } catch { }
+            try { StartCoroutine(RefreshRaycasterAfterDelay(1f)); } catch { }
+
+            // Ensure initial content refresh runs once we become visible.
+            if (!hasLoadedContent && refreshCoroutine == null)
+            {
+                if (!LogUtil.IsStartupReadyLogged())
+                {
+                    try { ScheduleInitialRefreshAfterStartupReady(); } catch { }
+                }
+                else
+                {
+                    try { RefreshFiles(false); } catch { }
+                }
+            }
+
         }
 
         private static bool IsVamMenuVisible()
@@ -522,12 +749,11 @@ namespace VPB
         private void ApplyVamMenuGateVisibility()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
-            
+            bool isVR = XrUtils.IsVrActive();
+
             // The anchor-based gate only applies to the specific panel that is anchored.
             bool isAnchoredInstance = (GetAnchoredInstance() == this);
-            
+
             bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
             bool menuVisible = IsVamMenuVisible();
 
@@ -535,6 +761,7 @@ namespace VPB
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(true);
                     _hiddenByMenuGate = false;
                 }
@@ -545,6 +772,7 @@ namespace VPB
             {
                 if (canvas.enabled)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(false);
                     _hiddenByMenuGate = true;
                 }
@@ -553,6 +781,7 @@ namespace VPB
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.MenuGateFlip++;
                     SetCanvasVisible(true);
                     _hiddenByMenuGate = false;
                 }
@@ -563,8 +792,7 @@ namespace VPB
         {
             if (VPBConfig.Instance == null || canvas == null) return;
             
-            bool isVR = false;
-            try { isVR = UnityEngine.XR.XRSettings.enabled; } catch { }
+            bool isVR = XrUtils.IsVrActive();
             
             if (!isVR) return;
             if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;
@@ -588,10 +816,13 @@ namespace VPB
             Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
             Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
 
-            canvas.transform.position = targetPos;
-            
-            // Follow the VaM menu rotation with a 180-degree flip to face the user
-            canvas.transform.rotation = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+            // WorldSpace canvas transform writes force a full canvas rebuild; skip when menu hasn't moved.
+            if (canvas.transform.position != targetPos)
+                canvas.transform.position = targetPos;
+
+            Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
+            if (canvas.transform.rotation != targetRot)
+                canvas.transform.rotation = targetRot;
 
             // Keep offsets reset so follow mode captures the anchored position when anchoring ends
             offsetsInitialized = false;
@@ -636,7 +867,7 @@ namespace VPB
                 JSONClass root = new JSONClass();
                 foreach (var kvp in categoryScrollPositions)
                     root[kvp.Key].AsFloat = kvp.Value;
-                File.WriteAllText(p, root.ToString());
+                File.WriteAllText(p, JsonSerializationUtil.Serialize(root, 4096));
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] ScrollCache save: " + ex.Message); }
         }
@@ -661,48 +892,72 @@ namespace VPB
             SetHoverPath(file.Path);
         }
 
+        private string GetFilteredVisibleItemsCountText()
+        {
+            int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
+            int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
+            if (sel > 0)
+            {
+                // Prefer the selection phrasing used by the tbox label for consistency.
+                string selStr = sel == 1
+                    ? VPBTranslation.T("gallery.tbox.selected_one", "1 Selected")
+                    : string.Format(VPBTranslation.T("gallery.tbox.selected_many", "{0} Selected"), sel);
+                string countStr = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+                return string.Format("{0}  ·  {1}", selStr, countStr);
+            }
+            return string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
+        }
+
+        private void RefreshHoverPathCountTextIfNeeded()
+        {
+            if (!hoverPathIsCountMode) return;
+            if (hoverPathText == null) return;
+            if (IsHubMode) return;
+            hoverPathText.text = GetFilteredVisibleItemsCountText();
+        }
+
         public void SetHoverPath(string path)
         {
             bool hasPath = !string.IsNullOrEmpty(path);
-            float targetAlpha = hasPath ? 1f : 0f;
+            hoverPathIsCountMode = !hasPath;
+            float targetAlpha = 1f; // pure on/off: always visible (path or count fallback)
 
-            if (hoverFadeCoroutine != null) StopCoroutine(hoverFadeCoroutine);
-            hoverFadeCoroutine = StartCoroutine(FadeHoverPath(targetAlpha));
-
-            if (hoverPathText != null && hasPath)
+            // No fade/transition: snap alpha immediately.
+            if (hoverFadeCoroutine != null)
             {
-                string displayPath = path;
+                StopCoroutine(hoverFadeCoroutine);
+                hoverFadeCoroutine = null;
+            }
+            if (hoverPathCanvasGroup != null) hoverPathCanvasGroup.alpha = targetAlpha;
 
-                // Ensure we show full internal paths for .var files without manual line breaks
-                // Text wrapping is now handled by the UI Text component
-                
-                hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
+            if (hoverPathText != null)
+            {
+                if (hasPath)
+                {
+                    string displayPath = path;
+                    // Ensure we show full internal paths for .var files without manual line breaks.
+                    // Text wrapping is handled by the UI Text component.
+                    hoverPathText.text = displayPath.Replace("/", "/\u200B").Replace(":", ":\u200B");
+                }
+                else
+                {
+                    // Hover-out fallback: show current filtered visible count.
+                    RefreshHoverPathCountTextIfNeeded();
+                }
             }
         }
 
         private IEnumerator FadeHoverPath(float targetAlpha)
         {
-            if (hoverPathCanvasGroup == null) yield break;
-            
-            float duration = 0.15f; // Fast but smooth
-            float startAlpha = hoverPathCanvasGroup.alpha;
-            float elapsed = 0f;
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                hoverPathCanvasGroup.alpha = Mathf.Lerp(startAlpha, targetAlpha, elapsed / duration);
-                yield return null;
-            }
-
-            hoverPathCanvasGroup.alpha = targetAlpha;
+            if (hoverPathCanvasGroup != null) hoverPathCanvasGroup.alpha = targetAlpha;
             hoverFadeCoroutine = null;
+            yield break;
         }
 
         public void RestoreSelectedHoverPath()
         {
-            if (selectedFile != null) SetHoverPath(selectedFile);
-            else SetHoverPath("");
+            // When not hovering an item, always show filtered totals (+ selected count).
+            SetHoverPath("");
         }
 
         private void SetNameFilter(string val)
@@ -810,7 +1065,7 @@ namespace VPB
                             {
                                 try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
                             }
-                            currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid));
+                            currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
                         }
                     }
                     else
@@ -821,11 +1076,7 @@ namespace VPB
                         {
                             var e = topSearchBaseFiles[i];
                             if (e == null) continue;
-                            string p = null;
-                            string n = null;
-                            try { p = e.Path; } catch { p = null; }
-                            try { n = e.Name; } catch { n = null; }
-                            if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                            if (MatchesFileEntryByScope(e, nameFilterTerms))
                                 filtered.Add(e);
                         }
                         currentFilteredFiles.Clear();
@@ -840,11 +1091,7 @@ namespace VPB
                     {
                         var e = topSearchBaseFiles[i];
                         if (e == null) continue;
-                        string p = null;
-                        string n = null;
-                        try { p = e.Path; } catch { p = null; }
-                        try { n = e.Name; } catch { n = null; }
-                        if (MatchesAllTermsInEither(p, n, nameFilterTerms))
+                        if (MatchesFileEntryByScope(e, nameFilterTerms))
                             filtered.Add(e);
                     }
                     currentFilteredFiles.Clear();
@@ -886,7 +1133,8 @@ namespace VPB
                 selectedHubItem = null;
                 selectionAnchorPath = file.Path;
                 
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
@@ -899,9 +1147,14 @@ namespace VPB
             }
         }
 
-        private void OnFileClick(FileEntry file)
+        internal void OnFileClick(FileEntry file)
         {
             if (file == null) return;
+            if (file is InternalSettingRowEntry)
+            {
+                HandleInternalSettingsRowClick(file, secondary: false);
+                return;
+            }
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
@@ -1007,7 +1260,8 @@ namespace VPB
             {
                 selectedPath = fileKey;
                 selectedHubItem = null;
-                SetHoverPath(file);
+                // Selection should not "stick" the hover path.
+                SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
@@ -1111,6 +1365,69 @@ namespace VPB
             return best;
         }
 
+        private string GetSelectionIdentityKey(FileEntry file, bool historyBrowse)
+        {
+            if (file == null) return "";
+            if (historyBrowse)
+            {
+                if (!string.IsNullOrEmpty(file.Path)) return file.Path;
+                return file.Uid ?? "";
+            }
+            return !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
+        }
+
+        private string GetCurrentSelectionAnchorIdentityKey(bool historyBrowse)
+        {
+            if (!string.IsNullOrEmpty(selectionAnchorIdentityKey)) return selectionAnchorIdentityKey;
+            if (!string.IsNullOrEmpty(selectionAnchorPath)) return selectionAnchorPath;
+            if (selectedFiles != null && selectedFiles.Count > 0)
+                return GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
+            if (!string.IsNullOrEmpty(selectedPath)) return selectedPath;
+            return "";
+        }
+
+        private int FindIndexBySelectionIdentity(List<FileEntry> files, string key, bool historyBrowse)
+        {
+            if (files == null || string.IsNullOrEmpty(key)) return -1;
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (f == null) continue;
+                string k = GetSelectionIdentityKey(f, historyBrowse);
+                if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+            return -1;
+        }
+
+        private void AddFileToSelection(FileEntry file, bool historyBrowse, HashSet<string> historySelectionKeys = null)
+        {
+            if (file == null) return;
+            if (!historyBrowse)
+            {
+                string p = file.Path;
+                if (string.IsNullOrEmpty(p)) p = file.Uid;
+                if (string.IsNullOrEmpty(p)) return;
+                if (selectedFilePaths.Add(p)) selectedFiles.Add(file);
+                return;
+            }
+            string idKey = GetSelectionIdentityKey(file, true);
+            if (historySelectionKeys != null)
+            {
+                if (string.IsNullOrEmpty(idKey) || historySelectionKeys.Contains(idKey)) return;
+                historySelectionKeys.Add(idKey);
+            }
+            string addKey = !string.IsNullOrEmpty(file.Path) ? file.Path : (file.Uid ?? "");
+            if (string.IsNullOrEmpty(addKey)) return;
+            if (selectedFilePaths.Add(addKey)) selectedFiles.Add(file);
+        }
+
+        private void SetSelectionAnchor(FileEntry file, bool historyBrowse)
+        {
+            if (file == null) return;
+            selectionAnchorPath = file.Path;
+            selectionAnchorIdentityKey = GetSelectionIdentityKey(file, historyBrowse);
+        }
+
         private void RefreshSelectionVisuals()
         {
             // Iterate over active buttons in the recycling grid content
@@ -1124,10 +1441,18 @@ namespace VPB
                     if (btn.name.StartsWith("FileButton_"))
                     {
                         var diag = btn.GetComponent<UIDraggableItem>();
-                        if (diag != null && diag.FileEntry != null)
+                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        FileEntry feForVisuals = null;
+                        try
                         {
-                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                                && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                                feForVisuals = currentFilteredFiles[rgvItem.index];
+                            else if (diag != null) feForVisuals = diag.FileEntry;
                         }
+                        catch { feForVisuals = diag != null ? diag.FileEntry : null; }
+                        if (feForVisuals != null)
+                            UpdateFileButtonVisuals(btn, feForVisuals);
                     }
                     
                     var ratingHandler = btn.GetComponent<RatingHandler>();
@@ -1144,21 +1469,29 @@ namespace VPB
                     if (btn.name.StartsWith("FileButton_"))
                     {
                         var diag = btn.GetComponent<UIDraggableItem>();
-                        if (diag != null && diag.FileEntry != null)
+                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        FileEntry feForVisuals = null;
+                        try
                         {
-                            UpdateFileButtonVisuals(btn, diag.FileEntry);
+                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                                && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                                feForVisuals = currentFilteredFiles[rgvItem.index];
+                            else if (diag != null) feForVisuals = diag.FileEntry;
                         }
+                        catch { feForVisuals = diag != null ? diag.FileEntry : null; }
+                        if (feForVisuals != null)
+                            UpdateFileButtonVisuals(btn, feForVisuals);
                     }
                     
                     var ratingHandler = btn.GetComponent<RatingHandler>();
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
-        }
-
-        public void ToggleSettings(bool onRight)
-        {
-            if (settingsPanel != null) settingsPanel.Toggle(onRight);
+            // Keep toolbox grid-rate selector open during selection visual refresh.
+            // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
+            // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
+            // some modes where RefreshSelectionVisuals is triggered frequently.
+            try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)
@@ -1175,6 +1508,7 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
+                pathsCached = false;
 			    try { if (IsVisible) UpdateTabs(); } catch { }
             }
             return true;

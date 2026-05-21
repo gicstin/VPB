@@ -8,26 +8,41 @@ namespace VPB
 {
     /// <summary>
     /// Hold-to-apply timer that triggers the panel's apply/launch logic after a delay.
-    /// Requires the user to actively hold the pointer button/trigger down (similar to starting a drag).
+    /// Requires pointer button/trigger held down (same as drag); duration from <see cref="VPBConfig.HoldToLaunchHoldSeconds"/>.
     /// </summary>
     public class HoldToApplyOnHover : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public GalleryPanel panel;
         public FileEntry file;
 
-        public float holdSeconds = 2.0f;
+        private static float ResolveHoldSeconds()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return Mathf.Clamp(VPBConfig.Instance.HoldToLaunchHoldSeconds, 0.2f, 1f);
+            }
+            catch { }
+            return 1f;
+        }
 
         private Coroutine _co;
         private GameObject _overlay;
         private Image _fill;
         private Text _text;
 
-        public void OnPointerDown(PointerEventData eventData)
+        private void TryStartHold()
         {
             if (panel == null || file == null) return;
             if (!panel.HoldToLaunchEnabled) return;
             if (_co != null) return;
             _co = StartCoroutine(HoldRoutine());
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            TryStartHold();
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -65,6 +80,7 @@ namespace VPB
         {
             EnsureOverlay();
 
+            float holdSeconds = ResolveHoldSeconds();
             float start = Time.unscaledTime;
             float end = start + Mathf.Max(0.05f, holdSeconds);
             while (Time.unscaledTime < end)
@@ -140,7 +156,7 @@ namespace VPB
             _text.alignment = TextAnchor.MiddleCenter;
             _text.color = Color.white;
             _text.raycastTarget = false;
-            _text.text = holdSeconds.ToString("0.0");
+            _text.text = ResolveHoldSeconds().ToString("0.0");
         }
     }
 }

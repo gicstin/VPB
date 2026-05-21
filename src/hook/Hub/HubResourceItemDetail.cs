@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 
 namespace VPB
@@ -70,6 +71,8 @@ namespace VPB
         protected JSONStorableAction downloadAllAction;
 
         protected JSONStorableBool downloadAvailableJSON;
+        protected bool showCategoryInLicenseColumn = true;
+        protected Text licenseCategoryHeaderText;
 
         public bool IsDownloading
         {
@@ -164,6 +167,9 @@ namespace VPB
                     downloadPackage.Refresh();
                 }
             }
+            // Keep dependency thumbnails progressing across refresh ticks in case some
+            // requests were dropped/stale during initial page construction.
+            KickDependencyThumbnailLoadsOnDetailOpen();
             SyncDownloadAvailable();
         }
 
@@ -223,7 +229,7 @@ namespace VPB
             }
         }
 
-        public void DownloadAll()
+        public override void DownloadAll()
         {
             foreach (HubResourcePackage downloadPackage in downloadPackages)
             {
@@ -245,6 +251,62 @@ namespace VPB
                 }
             }
             downloadAvailableJSON.val = val;
+        }
+
+        protected void ToggleLicenseCategoryColumn()
+        {
+            showCategoryInLicenseColumn = !showCategoryInLicenseColumn;
+            SyncLicenseCategoryColumnMode();
+        }
+
+        protected void SyncLicenseCategoryColumnMode()
+        {
+            if (licenseCategoryHeaderText != null)
+            {
+                licenseCategoryHeaderText.text = "(Toggle) Cat/Lic";
+            }
+            if (downloadPackages == null) return;
+            for (int i = 0; i < downloadPackages.Count; i++)
+            {
+                if (downloadPackages[i] != null)
+                {
+                    downloadPackages[i].SetLicenseColumnShowsCategory(showCategoryInLicenseColumn);
+                }
+            }
+        }
+
+        protected void ConfigureLicenseCategoryHeader(HubResourceItemDetailUI ui)
+        {
+            if (ui == null) return;
+            Text[] texts = ui.GetComponentsInChildren<Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                Text text = texts[i];
+                if (text == null || string.IsNullOrEmpty(text.text)) continue;
+                if (!string.Equals(text.text.Trim(), "License", StringComparison.OrdinalIgnoreCase)) continue;
+
+                licenseCategoryHeaderText = text;
+                licenseCategoryHeaderText.text = "Category/License";
+                licenseCategoryHeaderText.raycastTarget = true;
+
+                Button button = licenseCategoryHeaderText.GetComponent<Button>();
+                if (button == null) button = licenseCategoryHeaderText.gameObject.AddComponent<Button>();
+                button.targetGraphic = licenseCategoryHeaderText;
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(ToggleLicenseCategoryColumn);
+                break;
+            }
+        }
+
+        private void KickDependencyThumbnailLoadsOnDetailOpen()
+        {
+            if (downloadPackages == null) return;
+            for (int i = 0; i < downloadPackages.Count; i++)
+            {
+                HubResourcePackage pkg = downloadPackages[i];
+                if (pkg == null || !pkg.IsDependency) continue;
+                pkg.EnsureThumbnailQueued(true);
+            }
         }
 
         public void RegisterUI(HubResourceItemDetailUI ui)
@@ -289,6 +351,7 @@ namespace VPB
                 }
                 packageContent = ui.packageContent;
                 creatorSupportContent = ui.creatorSupportContent;
+                ConfigureLicenseCategoryHeader(ui);
                 if (packageContent != null)
                 {
                     IEnumerator enumerator = varFilesJSONArray.GetEnumerator();
@@ -301,6 +364,8 @@ namespace VPB
                             if (asObject != null)
                             {
                                 HubResourcePackage hubResourcePackage = new HubResourcePackage(asObject, browser, false);
+                                hubResourcePackage.CategoryChanged = SortDependencyRowsByCategory;
+                                hubResourcePackage.SetCategory(base.Category);
                                 hubResourcePackage.promotionalUrl = promotionalUrl;
                                 downloadPackages.Add(hubResourcePackage);
                                 RectTransform rectTransform = browser.CreateDownloadPrefabInstance();
@@ -309,6 +374,7 @@ namespace VPB
                                 if (component != null)
                                 {
                                     hubResourcePackage.RegisterUI(component);
+                                    hubResourcePackage.SetLicenseColumnShowsCategory(showCategoryInLicenseColumn);
                                 }
                                 if (dependencies != null)
                                 {
@@ -317,6 +383,7 @@ namespace VPB
                                     JSONArray asArray = dependencies[hubResourcePackage.GroupName].AsArray;
                                     if (asArray != null)
                                     {
+                                        List<HubResourcePackage> dependencyPackages = new List<HubResourcePackage>();
                                         IEnumerator enumerator2 = asArray.GetEnumerator();
                                         try
                                         {
@@ -327,53 +394,9 @@ namespace VPB
                                                 if (asObject2 != null)
                                                 {
                                                     HubResourcePackage dhrp = new HubResourcePackage(asObject2, browser, true);
-                                                    downloadPackages.Add(dhrp);
-                                                    RectTransform rectTransform2 = browser.CreateDownloadPrefabInstance();
-                                                    if (rectTransform2 != null)
-                                                    {
-                                                        rectTransform2.SetParent(packageContent, false);
-                                                        HubResourcePackageUI component2 = rectTransform2.GetComponent<HubResourcePackageUI>();
-                                                        if (component2 != null)
-                                                        {
-                                                            dhrp.RegisterUI(component2);
-                                                        }
-                                                    }
-                                                    if (creatorSupportContent != null && dhrp.promotionalUrl != null && dhrp.promotionalUrl != string.Empty && dhrp.promotionalUrl != "null" && !hashSet.Contains(dhrp.Creator))
-                                                    {
-                                                        hasOtherCreatorsJSON.val = true;
-                                                        hashSet.Add(dhrp.Creator);
-                                                        RectTransform rectTransform3 = browser.CreateCreatorSupportButtonPrefabInstance();
-                                                        if (rectTransform3 != null)
-                                                        {
-                                                            rectTransform3.SetParent(creatorSupportContent, false);
-                                                            HubResourceCreatorSupportUI component3 = rectTransform3.GetComponent<HubResourceCreatorSupportUI>();
-                                                            if (component3 != null)
-                                                            {
-                                                                if (component3.linkButton != null)
-                                                                {
-                                                                    component3.linkButton.onClick.AddListener(delegate
-                                                                    {
-                                                                        browser.NavigateWebPanel(dhrp.promotionalUrl);
-                                                                    });
-                                                                }
-                                                                if (component3.creatorNameText != null)
-                                                                {
-                                                                    component3.creatorNameText.text = dhrp.Creator;
-                                                                }
-                                                                if (component3.pointerEnterExitAction != null)
-                                                                {
-                                                                    component3.pointerEnterExitAction.onEnterActions = delegate
-                                                                    {
-                                                                        browser.ShowHoverUrl(dhrp.promotionalUrl);
-                                                                    };
-                                                                    component3.pointerEnterExitAction.onExitActions = delegate
-                                                                    {
-                                                                        browser.ShowHoverUrl(string.Empty);
-                                                                    };
-                                                                }
-                                                            }
-                                                        }
-                                                    }
+                                                    dhrp.CategoryChanged = SortDependencyRowsByCategory;
+                                                    dhrp.SetMainThumbnail(thumbnailImage);
+                                                    dependencyPackages.Add(dhrp);
                                                 }
                                             }
                                         }
@@ -383,6 +406,61 @@ namespace VPB
                                             if ((disposable = (enumerator2 as IDisposable)) != null)
                                             {
                                                 disposable.Dispose();
+                                            }
+                                        }
+                                        dependencyPackages.Sort(CompareDependencyPackagesForDisplay);
+                                        for (int i = 0; i < dependencyPackages.Count; i++)
+                                        {
+                                            HubResourcePackage dhrp = dependencyPackages[i];
+                                            downloadPackages.Add(dhrp);
+                                            RectTransform rectTransform2 = browser.CreateDownloadPrefabInstance();
+                                            if (rectTransform2 != null)
+                                            {
+                                                rectTransform2.SetParent(packageContent, false);
+                                                HubResourcePackageUI component2 = rectTransform2.GetComponent<HubResourcePackageUI>();
+                                                if (component2 != null)
+                                                {
+                                                    dhrp.RegisterUI(component2);
+                                                    dhrp.SetLicenseColumnShowsCategory(showCategoryInLicenseColumn);
+                                                }
+                                            }
+                                            if (creatorSupportContent != null && dhrp.promotionalUrl != null && dhrp.promotionalUrl != string.Empty && dhrp.promotionalUrl != "null" && !hashSet.Contains(dhrp.Creator))
+                                            {
+                                                hasOtherCreatorsJSON.val = true;
+                                                hashSet.Add(dhrp.Creator);
+                                                RectTransform rectTransform3 = browser.CreateCreatorSupportButtonPrefabInstance();
+                                                if (rectTransform3 != null)
+                                                {
+                                                    rectTransform3.SetParent(creatorSupportContent, false);
+                                                    HubResourceCreatorSupportUI component3 = rectTransform3.GetComponent<HubResourceCreatorSupportUI>();
+                                                    if (component3 != null)
+                                                    {
+                                                        if (component3.linkButton != null)
+                                                        {
+                                                            HubResourcePackage supportPackage = dhrp;
+                                                            component3.linkButton.onClick.AddListener(delegate
+                                                            {
+                                                                browser.NavigateWebPanel(supportPackage.promotionalUrl);
+                                                            });
+                                                        }
+                                                        if (component3.creatorNameText != null)
+                                                        {
+                                                            component3.creatorNameText.text = dhrp.Creator;
+                                                        }
+                                                        if (component3.pointerEnterExitAction != null)
+                                                        {
+                                                            HubResourcePackage supportPackage = dhrp;
+                                                            component3.pointerEnterExitAction.onEnterActions = delegate
+                                                            {
+                                                                browser.ShowHoverUrl(supportPackage.promotionalUrl);
+                                                            };
+                                                            component3.pointerEnterExitAction.onExitActions = delegate
+                                                            {
+                                                                browser.ShowHoverUrl(string.Empty);
+                                                            };
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -399,6 +477,60 @@ namespace VPB
                         }
                     }
                     SyncDownloadAvailable();
+                    SyncLicenseCategoryColumnMode();
+                    // Force dependency preview loads when detail page opens, so they do not
+                    // depend solely on later UI visibility/scroll lifecycle events.
+                    KickDependencyThumbnailLoadsOnDetailOpen();
+                }
+            }
+        }
+
+        private static int CompareDependencyPackagesForDisplay(HubResourcePackage left, HubResourcePackage right)
+        {
+            if (left == null && right == null) return 0;
+            if (left == null) return 1;
+            if (right == null) return -1;
+
+            string leftCategory = left.Category ?? string.Empty;
+            string rightCategory = right.Category ?? string.Empty;
+            bool leftEmpty = string.IsNullOrEmpty(leftCategory);
+            bool rightEmpty = string.IsNullOrEmpty(rightCategory);
+            if (leftEmpty && !rightEmpty) return 1;
+            if (!leftEmpty && rightEmpty) return -1;
+
+            int categoryCompare = string.Compare(leftCategory, rightCategory, StringComparison.OrdinalIgnoreCase);
+            if (categoryCompare != 0) return categoryCompare;
+
+            return string.Compare(left.Name ?? string.Empty, right.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void SortDependencyRowsByCategory()
+        {
+            if (downloadPackages == null) return;
+
+            List<HubResourcePackage> dependencies = new List<HubResourcePackage>();
+            int insertIndex = 0;
+            for (int i = 0; i < downloadPackages.Count; i++)
+            {
+                HubResourcePackage package = downloadPackages[i];
+                if (package == null) continue;
+                if (package.IsDependency)
+                {
+                    dependencies.Add(package);
+                }
+                else if (package.RowTransform != null)
+                {
+                    int nextIndex = package.RowTransform.GetSiblingIndex() + 1;
+                    if (nextIndex > insertIndex) insertIndex = nextIndex;
+                }
+            }
+
+            dependencies.Sort(CompareDependencyPackagesForDisplay);
+            for (int i = 0; i < dependencies.Count; i++)
+            {
+                if (dependencies[i] != null && dependencies[i].RowTransform != null)
+                {
+                    dependencies[i].RowTransform.SetSiblingIndex(insertIndex + i);
                 }
             }
         }

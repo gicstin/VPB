@@ -9,12 +9,31 @@ namespace VPB
         public string NameFilter = "";
         public string Creator = "";
         public List<string> Tags = new List<string>();
+        public List<string> UserTags = new List<string>();
+        /// <summary>1 when Available pane Filter Mode is on (grid narrows by picked tags).</summary>
+        public int UserTagAvailFilterMode = 0;
+        /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
+        public int UserTagInheritVarToChildren = 0;
         public string SceneSourceFilter = "";
         public string AppearanceSourceFilter = "";
+        public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
+        public int HairSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
         public SortState FileSortState = null;
+
+        // Maps legacy source-filter string values to the binary toggle the global-filter
+        // design now uses: "" means toggle OFF (global filter applies), "local" means toggle ON
+        // (override to local-only on this category).
+        private static string MigrateLegacySourceFilter(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            if (string.Equals(raw, "local", StringComparison.OrdinalIgnoreCase)) return "local";
+            if (string.Equals(raw, "Custom Scenes", StringComparison.OrdinalIgnoreCase)) return "local";
+            if (string.Equals(raw, "custom", StringComparison.OrdinalIgnoreCase)) return "local";
+            return "";
+        }
 
         public string ToJson()
         {
@@ -23,7 +42,9 @@ namespace VPB
             node["c"] = Creator ?? "";
             node["ss"] = SceneSourceFilter ?? "";
             node["as"] = AppearanceSourceFilter ?? "";
+            node["pp"] = PackagePathFilter ?? "";
             node["csf"].AsInt = ClothingSubfilter;
+            node["hsf"].AsInt = HairSubfilter;
             node["asf"].AsInt = AppearanceSubfilter;
             node["ppf"].AsInt = PosePeopleFilter;
 
@@ -31,6 +52,13 @@ namespace VPB
             if (Tags != null)
                 foreach (var t in Tags) tagsArr.Add(t);
             node["tags"] = tagsArr;
+
+            var utArr = new JSONArray();
+            if (UserTags != null)
+                foreach (var t in UserTags) utArr.Add(t);
+            node["utags"] = utArr;
+            node["utfm"].AsInt = UserTagAvailFilterMode;
+            node["utin"].AsInt = UserTagInheritVarToChildren;
 
             if (FileSortState != null)
             {
@@ -40,7 +68,7 @@ namespace VPB
                 node["sort"] = sortNode;
             }
 
-            return node.ToString();
+            return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
 
         public static CategoryFilterState FromJson(string json)
@@ -54,9 +82,11 @@ namespace VPB
                 var s = new CategoryFilterState();
                 s.NameFilter = node["n"] ?? "";
                 s.Creator = node["c"] ?? "";
-                s.SceneSourceFilter = node["ss"] ?? "";
-                s.AppearanceSourceFilter = node["as"] ?? "";
+                s.SceneSourceFilter = MigrateLegacySourceFilter(node["ss"] ?? "");
+                s.AppearanceSourceFilter = MigrateLegacySourceFilter(node["as"] ?? "");
+                s.PackagePathFilter = node["pp"] ?? "";
                 s.ClothingSubfilter = node["csf"].AsInt;
+                s.HairSubfilter = node["hsf"] != null ? node["hsf"].AsInt : 0;
                 s.AppearanceSubfilter = node["asf"].AsInt;
                 s.PosePeopleFilter = node["ppf"].AsInt;
 
@@ -64,6 +94,14 @@ namespace VPB
                 if (tagsArr != null)
                     foreach (JSONNode t in tagsArr)
                         if (!string.IsNullOrEmpty(t)) s.Tags.Add(t);
+
+                var utArr = node["utags"].AsArray;
+                if (utArr != null)
+                    foreach (JSONNode t in utArr)
+                        if (!string.IsNullOrEmpty(t)) s.UserTags.Add(t);
+
+                s.UserTagAvailFilterMode = node["utfm"] != null ? node["utfm"].AsInt : 0;
+                s.UserTagInheritVarToChildren = node["utin"] != null ? node["utin"].AsInt : 0;
 
                 var sortNode = node["sort"];
                 if (sortNode != null && sortNode.Count > 0)
