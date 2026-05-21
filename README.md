@@ -9,7 +9,7 @@ VPB is a **fork** of the venerable **`var_browser`** project by **sFisherE**.
 
 VPB is a **BepInEx plugin for Virt-A-Mate (VaM)** that provides an in-game package/browser experience and related tooling.
 
-This repo builds a `var_browser.dll` plugin (historical naming preserved for compatibility).
+This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/`.
 
 ## Screenshots
 
@@ -23,20 +23,47 @@ This repo builds a `var_browser.dll` plugin (historical naming preserved for com
 
 ## Features (high-level)
 
-- **In-game package browsing**
-- **Hub browsing integration**
-- **0-5 Star Rating System**
-- **Performance features** (configurable)
-  - Texture downscaling + persistent cache
-  - AssetBundle cache
-  - In-flight request de-duplication (optional)
-  - Prioritization heuristics for face/hair textures (optional)
-  - Scene texture pre-warming (optional)
-- **Automation / advanced launch support** via **VDS mode** (see below)
+**Gallery and browsing**
+- In-game gallery for VAR packages and loose-file presets (scenes, appearances, poses)
+- Loose `.vap` appearance presets are classified by gender (M / F / Futa) instead of being uncategorized
+- Multi-source filter (All / Local / Var) with per-category overrides
+- Sort by name, description, date added, date updated, or usage count; collapse package families to their latest version with one toggle
+- Pretty entry names hide internal `Preset_` / `Plugins_` prefixes
+- History tab tracking recently-used items
+- Dependencies filter to browse by what a package depends on
+
+**Tagging and organization**
+- 0-5 star ratings per package
+- User-tag system: rename in place, tag inheritance through package versions (tag once, applies to all versions of that package family)
+- Per-package hide preferences with session-only unhide (right-click on the item)
+
+**Performance**
+- Native TurboJPEG decoder for thumbnails, decoding off the main thread
+- SQLite-backed gallery state (package index, tags, history, hide prefs) with indexed reads, instead of thousands of flat JSON files
+- Zstd-compressed texture cache with on-demand load/unload and stale-entry cleanup
+- Hub thumbnail pixel-packing on Unity Jobs (off main thread)
+- Configurable texture downscaling with persistent cache
+- AssetBundle cache, in-flight request de-duplication (optional), scene texture pre-warming (optional), face / hair texture priority heuristics (optional)
+- Opt-in perf diagnostic flags (`VPB_PERF_TELEMETRY`, `LogSavePerf`, `LogPerfDiagnostics`) for users helping investigate regressions
+
+**VaM integration**
+- VaM Hub browser enhancements: pagination, hide-downloaded toggle, download-all, persistent Hub config, open-Hub-page action
+- VaM Quick Menu integration: 4×4 grid of assignable shortcut slots across 10 pages, wire each slot to a VPB action (open category, random preset, gallery show/hide, target atom switcher, cleanup, FPS counter)
+- Panel docking modes: left, top, or right anchors
+- VR support including thumbstick scroll
+
+**Quality of life**
+- In-plugin auto-updater (version check + download from inside VaM)
+- BrowserAssist migration tool: one-time import of user tags and hide preferences from a BA install
+- Color picker for UI customization, configurable padding and border, hover border color
+- Configurable hotkeys (default `Ctrl+V` to show / hide)
+
+**Automation**
+- VDS mode: command-line driven scene loading with cache control and runtime config overrides (see below)
 
 ## Installation
 
-### Option A: VPM (recommended)
+### Option A: VPM (recommended for first install)
 
 This fork is intended to work best in combination with **VPM**.
 
@@ -44,10 +71,18 @@ https://github.com/gicstin/VPM
 
 ### Option B: Manual install
 
-1. Build or obtain `var_browser.dll`.
+1. Build or obtain `VPB.dll`.
 2. Copy it to:
-   - `VaM\BepInEx\plugins\var_browser.dll`
+   - `VaM\BepInEx\plugins\VPB.dll`
 3. Start VaM.
+
+### Updating
+
+Once VPB is installed (either method above), you don't need VPM or a manual download for future updates. The in-plugin auto-updater checks for new versions and lets you download them directly from inside VaM.
+
+![Auto-updater UI](https://gist.github.com/user-attachments/assets/58e865d6-5e2d-4172-8ea8-ca5a76957df8)
+
+You can disable the auto-check in Settings if you'd rather update manually.
 
 ## Usage
 
@@ -63,7 +98,7 @@ You can change this in the BepInEx config for the plugin.
 
 This repo also contains a **VaM session plugin script** you can use to trigger common VPB actions from a UI panel:
 
-- `Custom/Scripts/var_browser/VarBrowserSessionPlugin.cs`
+- `Custom/Scripts/VPB/VPB-SessionPlugin.cs`
 
 It exposes actions such as:
 
@@ -253,17 +288,17 @@ Clear caches, reduce textures, and load a scene:
 
 The project uses an MSBuild property called `VaMPath`.
 
-- Default: `C:\\vam`
-- You can set it by editing `var_browser.csproj` or overriding the MSBuild property when building.
+- Default: `C:\vam`
+- You can set it by editing `VPB.local.props` (preferred, keeps your path out of source) or passing on the command line: `msbuild VPB.sln /p:Configuration=Release /p:VaMPath="C:\path\to\VaM"`
 
 ### Build
 
-Open `var_browser.sln` and build `Release`.
+Open `VPB.sln` and build `Release`.
 
 Post-build, the project copies the resulting DLL to:
 
-- `$(VaMPath)\BepInEx\plugins\var_browser.dll`
-- `vam_patch\BepInEx\plugins\var_browser.dll`
+- `$(VaMPath)\BepInEx\plugins\VPB.dll`
+- `vam_patch\BepInEx\plugins\VPB.dll`
 
 Plugin version is sourced from `plugin_version.txt`.
 
