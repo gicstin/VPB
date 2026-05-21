@@ -17,18 +17,20 @@ This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/`.
 
 A visual tour so you can find where the new stuff lives.
 
+
 **Gallery layout**
 
 Panel docking mode:
 
-<img width="771" height="193" alt="image" src="https://gist.github.com/user-attachments/assets/23e0bcb0-9b68-4308-b10d-43f49f62ca85" />
+<img width="771" height="193" alt="image" src="https://github.com/user-attachments/assets/6f8f0206-1fda-478f-9d7e-1713eebcb9a0" />
+
 *Three docking modes: left, top, right.*
 
 ---
 
 Column count via ctrl+scroll
 
-<img width="620" height="98" alt="image" src="https://gist.github.com/user-attachments/assets/34a9f58f-f5a1-4705-a972-1206011ead38" />
+<img width="620" height="98" alt="image" src="https://github.com/user-attachments/assets/32d20668-6e16-4a96-bc2d-33d24cd5f776" />
 
 *Ctrl+scroll inside the gallery to change column count on the fly.*
 
@@ -37,58 +39,70 @@ Column count via ctrl+scroll
 
 Date sorting, Hide old version, New vs Updated.
 
-<img width="343" height="876" alt="image" src="https://gist.github.com/user-attachments/assets/2c5b78f6-af12-446e-89b1-214bd3fc1c8e" />
-<img width="219" height="318" alt="image" src="https://gist.github.com/user-attachments/assets/0634d5c2-e1f5-4336-a9dc-091b04708b69" />
+<img width="343" height="876" alt="image" src="https://github.com/user-attachments/assets/8c985324-57bb-472b-9706-b6cf083d8b48" />
+<img width="219" height="318" alt="image" src="https://github.com/user-attachments/assets/e9855a2d-e564-4c4d-887a-775a0abbf5dc" />
+
 
 Pretty names
-<img width="1193" height="685" alt="image" src="https://gist.github.com/user-attachments/assets/cf9dfae4-880b-486e-a83d-acdb81343fc4" />
+
+<img width="1193" height="685" alt="image" src="https://github.com/user-attachments/assets/2d7ad5bc-1ec4-4d4f-b0d8-28c352047aa2" />
+
 
 History tab
 
-<img width="784" height="892" alt="image" src="https://gist.github.com/user-attachments/assets/a2333077-05c5-416b-9b7c-d98c84dab050" />
+<img width="784" height="892" alt="image" src="https://github.com/user-attachments/assets/2a6a622f-ad95-4ab8-ba53-62bf39041c94" />
+
 
 ---
 
+
 **Tags**
 
+<img width="783" height="557" alt="image" src="https://github.com/user-attachments/assets/04938e3c-687b-431e-a781-db53bba6f49e" />
+<img width="216" height="287" alt="image" src="https://github.com/user-attachments/assets/9877f62d-1e05-4ce1-b831-144ae54b0070" />
+<img width="494" height="617" alt="image" src="https://github.com/user-attachments/assets/efbf41c5-2bf6-44cd-8beb-436e06f270db" />
+<img width="253" height="423" alt="image" src="https://github.com/user-attachments/assets/3cb4ab6c-9396-4fbe-8e50-c38ef171f8d6" />
 
-<img width="783" height="557" alt="image" src="https://gist.github.com/user-attachments/assets/5bcd3892-2c9c-418b-8bbe-2c4e90046ad7" />
-<img width="216" height="287" alt="image" src="https://gist.github.com/user-attachments/assets/bf46bb67-1272-4b65-98f6-d0a4b85bb03d" />
-<img width="494" height="617" alt="image" src="https://gist.github.com/user-attachments/assets/387f512c-413d-4111-b53e-4ecad6c70be5" />
-<img width="253" height="423" alt="image" src="https://gist.github.com/user-attachments/assets/53873186-8a51-4dce-892e-dd9b83a10957" />
+
 
 **Toolbox**
 
 **Suppress-scale toggle**
 
-<img width="565" height="103" alt="image" src="https://gist.github.com/user-attachments/assets/594b5629-c66a-4dfb-88a6-92a30458987b" />
+<img width="565" height="103" alt="image" src="https://github.com/user-attachments/assets/87baf3e3-a096-4ef1-92b6-8b1965df0681" />
+
 
 
 **load/unload texture cache button**
 
-<img width="1171" height="1281" alt="image" src="https://gist.github.com/user-attachments/assets/32dce820-019f-4ce1-80e6-af7677138fb2" />
-<img width="1014" height="427" alt="image" src="https://gist.github.com/user-attachments/assets/18c63c5c-ce5f-4e3a-95a9-4b2002f6ac7a" />
+<img width="1171" height="1281" alt="image" src="https://github.com/user-attachments/assets/621d3593-9905-4d02-b3e1-d4aecdd9b3a3" />
+
+<img width="1014" height="427" alt="image" src="https://github.com/user-attachments/assets/208563f0-e859-41c6-9d05-5b81ebff95f7" />
+
 
 **texture caching**
 
-<img width="1493" height="465" alt="image" src="https://gist.github.com/user-attachments/assets/17bdcf8d-2fa8-4e44-af05-99d9c6dadb17" />
+<img width="1493" height="465" alt="image" src="https://github.com/user-attachments/assets/41a1a95e-36c6-4f07-ab1f-7fe1bed9559e" />
+
 
 
 **Scan whitelist**
 
 **Scan whitelist settings**
 
-<img width="949" height="814" alt="image" src="https://gist.github.com/user-attachments/assets/cab664e2-391e-4f15-b518-4b4b5826c0c2" />
+<img width="949" height="814" alt="image" src="https://github.com/user-attachments/assets/1cc666b4-279d-4311-8e01-8a0a95a3b0be" />
 
 *Pick which folders or packages VaM is allowed to scan at startup; everything else stays on disk, hidden, and gets loaded on demand.*
+
 
 
 **VaM integration**
 
 **VaM Quick Menu assignable grid**
 
-<img width="590" height="871" alt="image" src="https://gist.github.com/user-attachments/assets/f9c60f85-35ba-4a0a-ba07-b6818c34f6f2" />
-<img width="207" height="187" alt="image" src="https://gist.github.com/user-attachments/assets/8058e229-04cf-459b-9e59-5168e3e56d56" />
+<img width="590" height="871" alt="image" src="https://github.com/user-attachments/assets/7c247080-7c1a-4c50-9415-0ae5c731ea9e" />
+
+<img width="207" height="187" alt="image" src="https://github.com/user-attachments/assets/06124e3f-fff5-44db-9408-8e925254bade" />
 
 *4×4 grid across 10 pages of VPB actions wired into VaM's Quick Menu.*
 
@@ -97,23 +111,25 @@ History tab
 
 Hub pagination and hide-downloaded
 
-<img width="1166" height="430" alt="image" src="https://gist.github.com/user-attachments/assets/2adec068-7f1d-4374-9912-12acb48f84d8" />
+<img width="1166" height="430" alt="image" src="https://github.com/user-attachments/assets/fde3aba7-055f-4b61-8fdf-1fbfd38e2b7e" />
 
-<img width="1096" height="1254" alt="image" src="https://gist.github.com/user-attachments/assets/9b154e7b-35cb-4a2d-8c97-0a5e50d10e6d" />
+<img width="1096" height="1254" alt="image" src="https://github.com/user-attachments/assets/d088ad77-c360-436a-b4ac-4eedc75e4e10" />
 
 *Pagination, hide-downloaded toggle, download-all, persistent Hub config.*
+
 
 **Settings**
 
 **Reorganized settings panel, color picker for outlines**
-<img width="1241" height="513" alt="image" src="https://gist.github.com/user-attachments/assets/56629f2c-ddfd-4b15-90d5-cf876fef8253" />
+<img width="1241" height="513" alt="image" src="https://github.com/user-attachments/assets/8221d526-0ea7-4fb5-8355-311933db6708" />
 
-<img width="797" height="283" alt="image" src="https://gist.github.com/user-attachments/assets/08a76601-811e-45e1-a584-289508e05984" />
+<img width="797" height="283" alt="image" src="https://github.com/user-attachments/assets/0563a3c1-c3be-437d-8be6-dc4e249242d1" />
 
 
 **Auto-updater**
 
-<img width="1218" height="462" alt="image" src="https://gist.github.com/user-attachments/assets/58e865d6-5e2d-4172-8ea8-ca5a76957df8" />
+<img width="1218" height="462" alt="image" src="https://github.com/user-attachments/assets/e765e42a-38e2-4831-8fc2-ce6fd3fa451c" />
+
 
 ## Features (high-level)
 
