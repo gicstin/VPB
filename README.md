@@ -13,13 +13,9 @@ This repo builds a `VPB.dll` plugin, deployed to `BepInEx/plugins/`.
 
 ## Screenshots
 
-<img width="484" height="648" alt="image" src="https://github.com/user-attachments/assets/27cd37f7-ee1f-4e53-b9ad-69e433e17d84" />
+<img width="1327" height="1476" alt="image" src="https://github.com/user-attachments/assets/d1568790-1314-4bbf-aebe-ae29e2d295e2" />
 
-<img width="477" height="852" alt="image" src="https://github.com/user-attachments/assets/3c6943e2-a07a-48e2-a781-3d0f803ab674" />
-
-<img width="499" height="935" alt="image" src="https://github.com/user-attachments/assets/27937d2d-ae84-4b83-8d0a-99750364a80a" />
-
-<img width="520" height="225" alt="image" src="https://github.com/user-attachments/assets/262f1af7-f6f8-4553-94a2-d6d3e53308f8" />
+<img width="1362" height="907" alt="image" src="https://github.com/user-attachments/assets/1ab375c0-ffe6-4d42-b25a-50fca051c750" />
 
 ## Features (high-level)
 
