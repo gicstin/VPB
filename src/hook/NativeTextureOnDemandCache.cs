@@ -3079,7 +3079,7 @@ namespace VPB
                     {
                         try
                         {
-                            zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                            zstdPathOnDisk = TextureUtil.FindZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                             zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
                                 ? zstdPathOnDisk
                                 : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
@@ -3107,7 +3107,7 @@ namespace VPB
 
                             try
                             {
-                                zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                                zstdPathOnDisk = TextureUtil.FindZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                                 zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
                                     ? zstdPathOnDisk
                                     : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);

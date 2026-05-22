@@ -179,6 +179,24 @@ namespace VPB
             return true;
         }
 
+        /// <summary>True when on-disk meta predates mipStorage fields (pre-refactor zstd caches).</summary>
+        public static bool DiskCacheMetaLacksMipFields(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            try
+            {
+                string metaPath = cachePath + "meta";
+                if (!File.Exists(metaPath)) return true;
+                var metaJson = SimpleJSON.JSON.Parse(File.ReadAllText(metaPath));
+                if (metaJson == null) return true;
+                return metaJson["mipStorage"] == null || string.IsNullOrEmpty(metaJson["mipStorage"].Value);
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         /// <summary>Write createMipMaps, mipCount, mipStorage into cache meta JSON.</summary>
         public static void WriteMipFieldsToMeta(JSONNode meta, int w, int h, TextureFormat fmt, int rawLength, bool queueCreateMipMaps)
         {
@@ -506,26 +524,26 @@ namespace VPB
                 + "|" + isReadableVariant;
         }
 
-        /// <summary>Runtime zstd serve: exact FileEntry token + sig only (no fuzzy sig/size aliasing).</summary>
+        /// <summary>Runtime zstd serve: exact FileEntry match first, then sig variant + size-agnostic fallback for legacy caches.</summary>
         public static string ResolveServeZstdCachePath(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth, int targetHeight, float bumpStrength, bool isReadable)
         {
-            string path = FindExactZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, isReadable);
+            string path = FindZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, isReadable);
             if (path != null) return path;
 
             if (targetWidth > 0 && targetHeight > 0)
             {
-                path = FindExactZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, 0, 0, bumpStrength, isReadable);
+                path = FindZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, 0, 0, bumpStrength, isReadable);
                 if (path != null) return path;
             }
 
             bool isSimPath = isReadable || SuperControllerHook.IsSimulationTexturePath(imgPath);
             if (isSimPath && isReadable)
             {
-                path = FindExactZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, false);
+                path = FindZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, targetWidth, targetHeight, bumpStrength, false);
                 if (path != null) return path;
                 if (targetWidth > 0 && targetHeight > 0)
                 {
-                    path = FindExactZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, 0, 0, bumpStrength, false);
+                    path = FindZstdCacheFileOnDisk(imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, 0, 0, bumpStrength, false);
                 }
             }
 
@@ -1002,6 +1020,23 @@ namespace VPB
             return null;
         }
 
+        private static string TryResolveZstdCacheOnDisk(string cacheDir, string fileName, string sizeStr, string timeStr, string sig, bool isSimReq, bool isReadable)
+        {
+            string finalPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sig);
+            finalPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sig, finalPath);
+            if (File.Exists(finalPath) && File.Exists(finalPath + "meta")) return finalPath;
+
+            if (isSimReq && isReadable)
+            {
+                string sigNoR = sig.Replace("_R", string.Empty);
+                string altPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sigNoR);
+                altPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sigNoR, altPath);
+                if (File.Exists(altPath) && File.Exists(altPath + "meta")) return altPath;
+            }
+
+            return null;
+        }
+
         /// <summary>Locate an on-disk .zvamcache without applying serve-time sim/readable blocking rules.</summary>
         public static string FindZstdCacheFileOnDisk(string imgPath, bool compress, bool linear, bool isNormalMap, bool createAlphaFromGrayscale, bool createNormalFromBump, bool invert, int targetWidth = 0, int targetHeight = 0, float bumpStrength = 1f, bool isReadable = false)
         {
@@ -1015,21 +1050,26 @@ namespace VPB
                 return null;
             }
 
-            string finalPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sig);
-            finalPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sig, finalPath);
+            string found = TryResolveZstdCacheOnDisk(cacheDir, fileName, sizeStr, timeStr, sig, isSimReq, isReadable);
+            if (!string.IsNullOrEmpty(found)) return found;
 
-            if (!File.Exists(finalPath) || !File.Exists(finalPath + "meta"))
+            // Pre-refactor caches (and bulk-from-native) often used MVR FileEntry.Size, not per-entry VarFileEntry.EntrySize.
+            try
             {
-                if (isSimReq && isReadable)
+                var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+                if (fileEntry != null)
                 {
-                    string sigNoR = sig.Replace("_R", string.Empty);
-                    string altPath = CombineZstdCachePath(cacheDir, fileName, sizeStr, timeStr, sigNoR);
-                    altPath = TryResolveExistingZstdVariant(cacheDir, fileName, sizeStr, timeStr, sigNoR, altPath);
-                    if (File.Exists(altPath) && File.Exists(altPath + "meta")) return altPath;
+                    string legacySizeStr = fileEntry.Size.ToString();
+                    if (!string.Equals(legacySizeStr, sizeStr, StringComparison.Ordinal))
+                    {
+                        found = TryResolveZstdCacheOnDisk(cacheDir, fileName, legacySizeStr, timeStr, sig, isSimReq, isReadable);
+                        if (!string.IsNullOrEmpty(found)) return found;
+                    }
                 }
-                return null;
             }
-            return finalPath;
+            catch { }
+
+            return null;
         }
 
         /// <summary>Exact zstd path for runtime serve or canonical write target on miss (no fuzzy sig aliasing).</summary>

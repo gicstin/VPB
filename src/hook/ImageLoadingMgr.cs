@@ -204,11 +204,19 @@ namespace VPB
                 queueCreateMipMaps, meta.CreateMipMaps, meta.MipStorage, data.Length, meta.Width, meta.Height, meta.Format);
         }
 
-        private static bool IsRawDataValidForMeta(MetadataEntry meta, byte[] data, bool queueCreateMipMaps = false)
+        private static bool IsRawDataValidForMeta(MetadataEntry meta, byte[] data, bool queueCreateMipMaps = false, string diskCachePath = null)
         {
             if (meta == null || data == null || data.Length == 0) return false;
 
+            bool legacyMipMeta = TextureUtil.DiskCacheMetaLacksMipFields(diskCachePath);
+
             FinalizeMetaFromRaw(meta, data, queueCreateMipMaps);
+
+            if (legacyMipMeta)
+            {
+                int baseSize = TextureUtil.GetExpectedRawDataSize(meta.Width, meta.Height, meta.Format);
+                return baseSize <= 0 || data.Length >= baseSize;
+            }
 
             if (!TextureUtil.ValidateRawLengthForTextureMeta(meta.Width, meta.Height, meta.Format, data.Length, meta.MipStorage))
             {
@@ -305,7 +313,7 @@ namespace VPB
                 if (meta == null) return;
                 byte[] data = FastGetDecompressed(zstdPath);
                 if (data == null || data.Length == 0) return;
-                if (!IsRawDataValidForMeta(meta, data, queueCreateMipMaps)) return;
+                if (!IsRawDataValidForMeta(meta, data, queueCreateMipMaps, zstdPath)) return;
                 TryUpgradeDiskCacheMetaIfStale(zstdPath, meta, data.Length, queueCreateMipMaps);
                 lock (metadataCacheLock)
                 {
@@ -370,7 +378,7 @@ namespace VPB
                     memData = cached.Data;
             }
 
-            if (memData == null || !IsRawDataValidForMeta(meta, memData, queueCreateMipMaps)) return false;
+            if (memData == null || !IsRawDataValidForMeta(meta, memData, queueCreateMipMaps, zstdPath)) return false;
 
             payload = new DiskCachePayload { Data = memData, Meta = meta, CachePath = zstdPath, FromZstd = true };
             return true;
@@ -398,7 +406,7 @@ namespace VPB
                         if (meta != null && IsPayloadSmallEnoughForSyncServe(meta))
                         {
                             byte[] data = FastGetDecompressed(zstdPath);
-                            if (IsRawDataValidForMeta(meta, data, queueCreateMipMaps))
+                            if (IsRawDataValidForMeta(meta, data, queueCreateMipMaps, zstdPath))
                             {
                                 TryUpgradeDiskCacheMetaIfStale(zstdPath, meta, data.Length, queueCreateMipMaps);
                                 payload = new DiskCachePayload { Data = data, Meta = meta, CachePath = zstdPath, FromZstd = true };
@@ -422,7 +430,7 @@ namespace VPB
                         byte[] data;
                         try { data = File.ReadAllBytes(nativePath); }
                         catch { data = null; }
-                        if (IsRawDataValidForMeta(meta, data, queueCreateMipMaps))
+                        if (IsRawDataValidForMeta(meta, data, queueCreateMipMaps, nativePath))
                         {
                             payload = new DiskCachePayload { Data = data, Meta = meta, CachePath = nativePath, FromZstd = false };
                             return true;
@@ -481,7 +489,7 @@ namespace VPB
                     }
                 }
 
-                if (meta != null && memData != null && IsRawDataValidForMeta(meta, memData, queueCreateMipMaps))
+                if (meta != null && memData != null && IsRawDataValidForMeta(meta, memData, queueCreateMipMaps, zstdPath))
                 {
                     TryUpgradeDiskCacheMetaIfStale(zstdPath, meta, memData.Length, queueCreateMipMaps);
                     rawLength = memData.Length;
@@ -907,7 +915,7 @@ namespace VPB
                 }
 
                 bool queueMip = ResolveQueueCreateMipMaps(qi);
-                if (!IsRawDataValidForMeta(meta, data, queueMip))
+                if (!IsRawDataValidForMeta(meta, data, queueMip, nativePath))
                 {
                     lock (inflightLock) { inflightKeys.Remove(cacheKey); }
                     return;
@@ -965,7 +973,7 @@ namespace VPB
                 }
 
                 bool queueMip = ResolveQueueCreateMipMaps(qi);
-                if (!IsRawDataValidForMeta(meta, decompressedData, queueMip))
+                if (!IsRawDataValidForMeta(meta, decompressedData, queueMip, cachePath))
                 {
                     LogUtil.LogError($"LoadAndDecompress: Decompressed data size mismatch for {cachePath}");
                     lock (inflightLock)
@@ -1794,7 +1802,8 @@ namespace VPB
 
             if (qi.createAlphaFromGrayscale)
             {
-                ThreadPool.QueueUserWorkItem(_ => WriteAlphaTextureToZstdCache(qi));
+                // Unity RenderTexture/Graphics APIs must run on main thread (ThreadPool caused scene-load crashes).
+                WriteAlphaTextureToZstdCache(qi);
                 return true;
             }
 
@@ -1818,14 +1827,11 @@ namespace VPB
 
             bool queueCreateMipMaps = ResolveQueueCreateMipMaps(qi);
 
-            ThreadPool.QueueUserWorkItem(_ =>
+            try { WriteQueuedImageToZstdCache(qi, zstdPath, isSimPath, queueCreateMipMaps); }
+            finally
             {
-                try { WriteQueuedImageToZstdCache(qi, zstdPath, isSimPath, queueCreateMipMaps); }
-                finally
-                {
-                    lock (pendingZstdWriteLock) { pendingZstdWrites.Remove(zstdPath); }
-                }
-            });
+                lock (pendingZstdWriteLock) { pendingZstdWrites.Remove(zstdPath); }
+            }
             return true;
         }
 
