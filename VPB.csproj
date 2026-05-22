@@ -295,6 +295,7 @@
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
+    <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />
@@ -304,6 +305,9 @@
     <Compile Include="src\hook\CustomAssetLoader.cs" />
     <Compile Include="src\hook\GenericTextureHook.cs" />
     <Compile Include="src\hook\TextureUtil.cs" />
+    <Compile Include="src\hook\VaMCompatibleImageDecode.cs" />
+    <Compile Include="src\hook\VaMTextureLoadFlags.cs" />
+    <Compile Include="src\hook\VaMDazImportMaterialExtractor.cs" />
     <Compile Include="src\hook\ZstdCompressor.cs" />
     <Compile Include="src\ZstdNet\Compressor.cs" />
     <Compile Include="src\ZstdNet\Decompressor.cs" />

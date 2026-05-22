@@ -428,6 +428,11 @@ namespace VPB
             return false;
         }
 
+        internal static bool IsTiffTexturePath(string path)
+        {
+            return TextureUtil.IsTiffTexturePath(path);
+        }
+
         static int CalculateImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
@@ -1153,13 +1158,16 @@ namespace VPB
             string nativeCachePath = null;
             bool nativeExists = false;
             bool metaExists = false;
+            bool zstdExists = false;
             FileEntry fe = null;
 
             try { fe = FileManager.GetFileEntry(imgPath); } catch { fe = null; }
 
             try
             {
-                nativeCachePath = TextureUtil.GetNativeCachePath(imgPath);
+                nativeCachePath = TextureUtil.FindVaMNativeDiskCachePath(
+                    imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                    qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
                 if (!string.IsNullOrEmpty(nativeCachePath))
                 {
                     nativeExists = File.Exists(nativeCachePath);
@@ -1168,8 +1176,19 @@ namespace VPB
             }
             catch { }
 
+            try
+            {
+                string zstdPath = TextureUtil.ResolveServeZstdCachePath(
+                    imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                    qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, IsSimulationTexturePath(imgPath));
+                zstdExists = !string.IsNullOrEmpty(zstdPath);
+            }
+            catch { }
+
             string feInfo = fe != null ? ("fe=1 size=" + fe.Size + " ts=" + fe.LastWriteTime.ToFileTime()) : "fe=0";
-            string cacheInfo = !string.IsNullOrEmpty(nativeCachePath) ? ("cache=1 exists=" + (nativeExists ? "1" : "0") + " meta=" + (metaExists ? "1" : "0")) : "cache=0";
+            string cacheInfo = "cache=1 native=" + (nativeExists ? "1" : "0")
+                + " zstd=" + (zstdExists ? "1" : "0")
+                + " meta=" + (metaExists ? "1" : "0");
             LogUtil.Log("[VPB] [VaMLoad] " + kind + " | " + imgPath + " | " + feInfo + " | " + cacheInfo);
         }
 
@@ -1299,6 +1318,11 @@ namespace VPB
                 LogImageQueueEvent("enqueue.img", qi, qCount, realQ, moved);
             }
             catch { }
+
+            if (ImageLoadingMgr.singleton != null)
+            {
+                ImageLoadingMgr.singleton.TrackCandidate(qi);
+            }
             return true;
         }
 
@@ -1368,6 +1392,7 @@ namespace VPB
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
+                    ImageLoadingMgr.singleton.TryEnqueueResizeCache(__instance);
                 }
             }
 
@@ -1452,12 +1477,13 @@ namespace VPB
         {
             try
             {
-                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
                 if (VamOnDemandLoader.s_AllowRegistration) return true;
                 if (string.IsNullOrEmpty(__0)) return true;
 
                 string norm = __0.Replace('\\', '/');
                 if (!norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return true;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
 
                 string uid = System.IO.Path.GetFileNameWithoutExtension(norm);
                 if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))

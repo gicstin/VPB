@@ -473,9 +473,10 @@ namespace VPB
             if (!File.Exists(varPath)) return null;
 
             string normPath = NormalizePath(varPath);
-            if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase))
+            if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
+                && ScanWhitelistManager.Instance.IsEnabled)
             {
-                // Ensure prefix whitelist patch allows this package registration.
+                // Legacy block-at-register: temporarily allow so RegisterPackage can run.
                 if (!ScanWhitelistManager.Instance.IsPathWhitelisted(normPath)
                     && !ScanWhitelistManager.Instance.IsUidOverrideIncluded(resolvedUid))
                 {
@@ -505,13 +506,11 @@ namespace VPB
                 + " resolved=" + resolvedUid + " path=" + normPath);
             SafeRecordStartupOnDemandActivity();
 
-            // If VaM already has this UID registered, treat as success and avoid duplicate registration errors.
+            // If VaM already has this UID registered, skip duplicate register.
             if (!string.IsNullOrEmpty(resolvedUid) && IsUidAlreadyRegisteredInVam(resolvedUid))
             {
                 lock (s_RegisteredLock)
                     s_RegisteredOnDemand.Add(resolvedUid);
-                // IMPORTANT: callers use non-null as "newly registered"; returning null here
-                // prevents unnecessary catalog refreshes when VaM already had this package.
                 return null;
             }
 
@@ -920,6 +919,27 @@ namespace VPB
             if (string.IsNullOrEmpty(resolvedUid)) resolvedUid = candidateUid;
             varPath = NormalizePath(candidatePath);
             return !string.IsNullOrEmpty(varPath);
+        }
+
+        /// <summary>Newest installed UID for package group (e.g. MacGruber.PostMagic.3 -> .4 when .4 is installed).</summary>
+        internal static string TryGetNewestInstalledUid(string requestUid)
+        {
+            if (string.IsNullOrEmpty(requestUid)) return null;
+
+            string uid = requestUid.Trim();
+            if (uid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                return ResolveLatestUid(uid);
+
+            if (TryParseUidGroupAndVersion(uid, out string group, out _))
+            {
+                string latest = ResolveLatestUid(group + ".latest");
+                if (!string.IsNullOrEmpty(latest)) return latest;
+            }
+
+            string latestFromBase = ResolveLatestUid(uid + ".latest");
+            if (!string.IsNullOrEmpty(latestFromBase)) return latestFromBase;
+
+            return uid;
         }
 
         private static string ResolveLatestUid(string requestUid)

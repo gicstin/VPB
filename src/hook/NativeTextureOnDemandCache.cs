@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using ICSharpCode.SharpZipLib.Zip;
 using SimpleJSON;
 using ZstdNet;
@@ -21,7 +22,15 @@ namespace VPB
 
         private const int DefaultSizedCacheWidth = 512;
         private const int DefaultSizedCacheHeight = 512;
+        private const int JsonWalkMaxDepth = 6;
         private const float OnDemandLogThrottleSeconds = 0.5f;
+        /// <summary>Max main-thread work per on-demand frame slice before yielding (higher = faster warm, slightly longer frames).</summary>
+        private const float OnDemandFrameBudgetSec = 0.020f;
+        private const int DownscaleDimensionProbeMaxBytes = 512 * 1024;
+        /// <summary>Skip 8k downscale probe when VAR entry smaller than this (unlikely 8k source).</summary>
+        private const long DownscaleProbeMinEntryBytes = 3L * 1024L * 1024L;
+        private const int UiStatusUpdateEveryNTex = 8;
+        private const float UiStatusUpdateMinIntervalSec = 0.25f;
 
         internal struct UiSnapshot
         {
@@ -95,6 +104,9 @@ namespace VPB
 
         private static StringBuilder s_DebugTrace;
 
+        private static readonly List<string> s_OnDemandIssueLog = new List<string>();
+        private const int OnDemandIssueLogMax = 80;
+
         private static bool s_CompletionSoundPlayed;
         private static float s_LastCompletionSoundTime;
         private static GameObject s_CompletionAudioGO;
@@ -103,7 +115,13 @@ namespace VPB
 
         private static bool s_BatchMode;
 
+        private static int s_UiStatusTexturesSinceUpdate;
+        private static float s_LastUiStatusUpdateTime;
+
         public static bool IsOnDemandBusy => s_OnDemandBusy;
+
+        /// <summary>While true, GetZstdCachePath must not log per-texture MISS lines during on-demand builds.</summary>
+        internal static bool SuppressZstdMissLookupLog { get; private set; }
 
         internal static UiSnapshot GetUiSnapshot()
         {
@@ -260,6 +278,8 @@ namespace VPB
             s_UiVisible = true;
             s_UiTitle = title;
             s_UiSubtitle = string.Empty;
+            s_UiStatusTexturesSinceUpdate = 0;
+            s_LastUiStatusUpdateTime = Time.unscaledTime;
 
             try
             {
@@ -273,6 +293,7 @@ namespace VPB
                 s_DebugTrace.AppendLine();
             }
             catch { }
+            try { s_OnDemandIssueLog.Clear(); } catch { }
         }
 
         private static void Trace(string msg)
@@ -283,6 +304,69 @@ namespace VPB
                 s_DebugTrace.AppendLine(DateTime.UtcNow.ToString("HH:mm:ss.fff") + " | " + (msg ?? string.Empty));
             }
             catch { }
+        }
+
+        private static int OnDemandLogLevel()
+        {
+            try { return Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0; }
+            catch { return 0; }
+        }
+
+        private static void OnDemandLog(string msg, bool always = false)
+        {
+            Trace(msg);
+            if (!always && OnDemandLogLevel() < 1) return;
+            try { LogUtil.Log("[VPB OnDemand] " + msg); } catch { }
+        }
+
+        private static void RecordOnDemandIssue(string category, string imgUidPath, string internalPath, TextureFlags flags, string detail)
+        {
+            string flagsSig = GetFlagsSignature(flags);
+            string line = category + " | " + (internalPath ?? imgUidPath ?? string.Empty)
+                + " | uid=" + (imgUidPath ?? string.Empty)
+                + " | sig=" + flagsSig
+                + (string.IsNullOrEmpty(detail) ? string.Empty : " | " + detail);
+            try
+            {
+                if (s_OnDemandIssueLog.Count < OnDemandIssueLogMax)
+                {
+                    s_OnDemandIssueLog.Add(line);
+                }
+            }
+            catch { }
+            Trace("Issue: " + line);
+        }
+
+        private static string FormatOnDemandSkipDetail(bool nativeExists, bool zstdExists, bool needNative, bool needZstd, TextureFlags flags)
+        {
+            if (nativeExists || zstdExists)
+            {
+                return "cache hit native=" + nativeExists + " zstd=" + zstdExists;
+            }
+
+            if (!needNative && !needZstd)
+            {
+                return "no work for mode=" + s_JobWriteMode + " sig=" + GetFlagsSignature(flags);
+            }
+
+            return "cache hit native=" + nativeExists + " zstd=" + zstdExists;
+        }
+
+        /// <summary>True only for assets VaM reads as native .vamcache outside VPB zstd serve path (e.g. Spectral LUT).</summary>
+        private static bool NeedsNativeCacheAtRuntime(string internalPath)
+        {
+            if (string.IsNullOrEmpty(internalPath)) return false;
+            return internalPath.IndexOf("spectrallut", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>On-demand prewarm: ZstdOnly writes .zvamcache only; native is for NativeOnly/NativeAndZstd or runtime-only LUT tables.</summary>
+        private static void ResolveOnDemandWriteTargets(string internalPath, TextureFlags flags, out bool wantNative, out bool wantZstd)
+        {
+            wantNative = s_JobWriteMode == CacheWriteMode.NativeOnly
+                || s_JobWriteMode == CacheWriteMode.NativeAndZstd
+                || (s_JobWriteMode != CacheWriteMode.ZstdOnly && NeedsNativeCacheAtRuntime(internalPath));
+
+            wantZstd = s_JobWriteMode == CacheWriteMode.ZstdOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd;
         }
 
         private static void EndUiJob(string resultTitle)
@@ -382,7 +466,58 @@ namespace VPB
             {
                 s_UiSummary += "\nResize 8k→4k: " + s_ZstdDownscaleWrites + "    Saved: " + resizeSaved + " (" + resizePct + "%)";
             }
+
+            s_UiSummary += "\n\n<b>Native</b> Wrote: " + s_CacheWrites + "    Skipped: " + s_CacheSkips + "    Failed: " + s_CacheFails;
+
+            FlushOnDemandIssueLogToDebug();
+
+            OnDemandLog(
+                "Job done packages=" + s_PackagesProcessed + "/" + s_PackagesPlanned
+                + " textures=" + s_TexturesProcessed + "/" + s_TexturesPlanned
+                + " nativeW=" + s_CacheWrites + " nativeSkip=" + s_CacheSkips + " nativeFail=" + s_CacheFails
+                + " zstdW=" + s_ZstdWrites + " zstdSkip=" + s_ZstdSkips + " zstdFail=" + s_ZstdFails,
+                always: s_CacheFails > 0 || s_ZstdFails > 0);
+
+            if (OnDemandLogLevel() >= 2 && s_DebugTrace != null && s_DebugTrace.Length > 0)
+            {
+                try { LogUtil.Log("[VPB OnDemand] Trace dump:\n" + s_DebugTrace.ToString()); } catch { }
+            }
+
             s_OnDemandBusy = false;
+        }
+
+        private static void FlushOnDemandIssueLogToDebug()
+        {
+            if (s_OnDemandIssueLog.Count == 0) return;
+
+            try
+            {
+                if (s_DebugTrace != null)
+                {
+                    s_DebugTrace.AppendLine();
+                    s_DebugTrace.AppendLine("Issues (" + s_OnDemandIssueLog.Count + (s_OnDemandIssueLog.Count >= OnDemandIssueLogMax ? "+" : "") + "):");
+                    for (int i = 0; i < s_OnDemandIssueLog.Count; i++)
+                    {
+                        s_DebugTrace.AppendLine(s_OnDemandIssueLog[i]);
+                    }
+                }
+            }
+            catch { }
+
+            if (OnDemandLogLevel() < 1) return;
+
+            try
+            {
+                var sb = new StringBuilder(4096);
+                sb.Append("[VPB OnDemand] Issues (").Append(s_OnDemandIssueLog.Count).Append("):\n");
+                for (int i = 0; i < s_OnDemandIssueLog.Count; i++)
+                {
+                    if (i > 0) sb.Append('\n');
+                    sb.Append(s_OnDemandIssueLog[i]);
+                }
+                LogUtil.Log(sb.ToString());
+            }
+            catch { }
         }
 
         private static void TryDeleteFileAndMeta(string path, ref int deletedMainCount)
@@ -583,6 +718,28 @@ namespace VPB
                 + " | " + FormatDuration(elapsed)
                 + etaStr
                 + pkgStr;
+        }
+
+        private static void UpdateUiStatusThrottled(bool force = false)
+        {
+            if (!force)
+            {
+                s_UiStatusTexturesSinceUpdate++;
+                float now = Time.unscaledTime;
+                if (s_UiStatusTexturesSinceUpdate < UiStatusUpdateEveryNTex
+                    && (now - s_LastUiStatusUpdateTime) < UiStatusUpdateMinIntervalSec)
+                {
+                    return;
+                }
+                s_UiStatusTexturesSinceUpdate = 0;
+                s_LastUiStatusUpdateTime = now;
+            }
+            else
+            {
+                s_UiStatusTexturesSinceUpdate = 0;
+            }
+
+            UpdateUiStatus();
         }
 
         private static string FormatDuration(float seconds)
@@ -864,14 +1021,13 @@ namespace VPB
                 catch { work = null; }
 
                 if (work != null) yield return work;
-                yield return null;
 
                 s_TexturesProcessed++;
                 if (!s_BatchMode)
                 {
                     s_ProcessedWork++;
                 }
-                UpdateUiStatus();
+                UpdateUiStatusThrottled();
             }
         }
 
@@ -1185,15 +1341,12 @@ namespace VPB
 
                     string imgUidPath = "SELF:/" + (internalPath ?? string.Empty);
 
-                    bool buildSized = false;
-                    int[] sizedWidths = buildSized ? new[] { 0, DefaultSizedCacheWidth } : new[] { 0 };
-                    int[] sizedHeights = buildSized ? new[] { 0, DefaultSizedCacheHeight } : new[] { 0 };
-
                     for (int v = 0; v < variants.Count; v++)
                     {
                         TextureFlags flags = variants[v];
-                        ApplyPathHeuristics(internalPath, ref flags);
-
+                        int[] sizedWidths;
+                        int[] sizedHeights;
+                        GetSizedCacheDimensionArrays(flags, internalPath, out sizedWidths, out sizedHeights);
                         for (int si = 0; si < sizedWidths.Length; si++)
                         {
                             int targetWidth = sizedWidths[si];
@@ -1201,7 +1354,7 @@ namespace VPB
                             int beforeDeletes = s_NativeDeletes + s_ZstdDeletes;
 
                             string nativePath = null;
-                            try { nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight); }
+                            try { nativePath = ResolveVaMNativeCachePath(imgUidPath, flags, targetWidth, targetHeight); }
                             catch { nativePath = null; }
 
                             if (!string.IsNullOrEmpty(nativePath))
@@ -1301,8 +1454,9 @@ namespace VPB
             var required = new List<RequiredTexture>();
             var jsonRefs = new List<RequiredJsonFile>();
             ExtractSceneUrlsRecursive(sceneNode, selfUid, required, jsonRefs);
+            try { ExtractEmbeddedVamImageRefs(sceneText, required); } catch { }
+            try { MergeSceneDependencyPresetTextures(sceneText, required); } catch { }
 
-            int maxJsonDepth = 2;
             var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
             if (jsonRefs != null)
@@ -1318,7 +1472,7 @@ namespace VPB
                 var kv = queue.Dequeue();
                 RequiredJsonFile rj = kv.Key;
                 int depth = kv.Value;
-                if (depth > maxJsonDepth) continue;
+                if (depth > JsonWalkMaxDepth) continue;
                 if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
 
                 string depPkgId = NormalizePackageId(rj.PackageId);
@@ -1407,6 +1561,8 @@ namespace VPB
                 }
             }
 
+            ExpandCachedPackagesToNewestInstalled(byPkgFlags, byPkgOrig);
+
             int totalWork = 0;
             foreach (var kv in byPkgOrig)
             {
@@ -1475,7 +1631,7 @@ namespace VPB
                 if (!s_BatchMode)
                 {
                     s_PackagesProcessed = pkgIndex;
-                    UpdateUiStatus();
+                    UpdateUiStatusThrottled(force: true);
                 }
             }
 
@@ -1485,7 +1641,7 @@ namespace VPB
             }
         }
 
-        private struct TextureFlags
+        internal struct TextureFlags
         {
             public bool compress;
             public bool linear;
@@ -1606,6 +1762,20 @@ namespace VPB
             return true;
         }
 
+        private static void GetSizedCacheDimensionArrays(TextureFlags flags, string internalPath, out int[] sizedWidths, out int[] sizedHeights)
+        {
+            if (ShouldBuildSizedCache(flags, internalPath))
+            {
+                sizedWidths = new[] { 0, DefaultSizedCacheWidth };
+                sizedHeights = new[] { 0, DefaultSizedCacheHeight };
+            }
+            else
+            {
+                sizedWidths = new[] { 0 };
+                sizedHeights = new[] { 0 };
+            }
+        }
+
         private static string NormalizePackageId(string pkgId)
         {
             if (string.IsNullOrEmpty(pkgId)) return pkgId;
@@ -1649,6 +1819,102 @@ namespace VPB
             }
 
             return n + ".latest";
+        }
+
+        private static readonly Regex s_EmbeddedVamImageRef = new Regex(
+            @"([A-Za-z0-9][A-Za-z0-9_\-\.]*\.[A-Za-z0-9][A-Za-z0-9_\-\.]*\.\d+):/(Custom/[^\s""\\]+\.(?:png|jpg|jpeg|tif|tiff))",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>Scene saves embed exact package versions (e.g. MacGruber.PostMagic.4) outside preset JSON trees.</summary>
+        private static void ExtractEmbeddedVamImageRefs(string text, List<RequiredTexture> outTextures)
+        {
+            if (string.IsNullOrEmpty(text) || outTextures == null) return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            MatchCollection matches = s_EmbeddedVamImageRef.Matches(text);
+            for (int i = 0; i < matches.Count; i++)
+            {
+                Match m = matches[i];
+                if (!m.Success || m.Groups.Count < 3) continue;
+
+                string pkgId = NormalizePackageId(m.Groups[1].Value);
+                string internalPath = NormalizeInternalPath(m.Groups[2].Value);
+                if (string.IsNullOrEmpty(pkgId) || string.IsNullOrEmpty(internalPath)) continue;
+
+                string dedupe = pkgId + "|" + internalPath.ToLowerInvariant();
+                if (!seen.Add(dedupe)) continue;
+
+                TextureFlags flags = ResolveTextureFlags(null, null, internalPath);
+
+                outTextures.Add(new RequiredTexture
+                {
+                    PackageId = pkgId,
+                    InternalPath = internalPath,
+                    Flags = flags
+                });
+
+                Trace("FoundTexture: key='embedded' pkg='" + pkgId + "' path='" + internalPath + "' flags=" + GetFlagsSignature(flags));
+            }
+        }
+
+        /// <summary>Mirror preset-resolved packages to newest installed UID so runtime version bumps still get pre-cached.</summary>
+        private static void ExpandCachedPackagesToNewestInstalled(
+            Dictionary<string, Dictionary<string, List<TextureFlags>>> byPkgFlags,
+            Dictionary<string, Dictionary<string, string>> byPkgOrig)
+        {
+            if (byPkgFlags == null || byPkgOrig == null || byPkgFlags.Count == 0) return;
+
+            var mirrorFrom = new List<string>(byPkgFlags.Keys);
+            for (int i = 0; i < mirrorFrom.Count; i++)
+            {
+                string sourceUid = mirrorFrom[i];
+                string newestUid = VamOnDemandLoader.TryGetNewestInstalledUid(sourceUid);
+                if (string.IsNullOrEmpty(newestUid)
+                    || newestUid.Equals(sourceUid, StringComparison.OrdinalIgnoreCase)
+                    || ResolvePackageWithFallback(newestUid) == null)
+                {
+                    continue;
+                }
+
+                Dictionary<string, List<TextureFlags>> srcFlags;
+                Dictionary<string, string> srcOrig;
+                if (!byPkgFlags.TryGetValue(sourceUid, out srcFlags) || srcFlags == null) continue;
+                byPkgOrig.TryGetValue(sourceUid, out srcOrig);
+
+                Dictionary<string, List<TextureFlags>> dstFlags;
+                if (!byPkgFlags.TryGetValue(newestUid, out dstFlags))
+                {
+                    dstFlags = new Dictionary<string, List<TextureFlags>>(StringComparer.OrdinalIgnoreCase);
+                    byPkgFlags[newestUid] = dstFlags;
+                }
+
+                Dictionary<string, string> dstOrig;
+                if (!byPkgOrig.TryGetValue(newestUid, out dstOrig))
+                {
+                    dstOrig = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    byPkgOrig[newestUid] = dstOrig;
+                }
+
+                foreach (KeyValuePair<string, List<TextureFlags>> kv in srcFlags)
+                {
+                    if (kv.Value == null) continue;
+                    for (int f = 0; f < kv.Value.Count; f++)
+                    {
+                        AddFlagVariant(dstFlags, kv.Key, kv.Value[f]);
+                    }
+                    string origPath;
+                    if (srcOrig != null && srcOrig.TryGetValue(kv.Key, out origPath) && !dstOrig.ContainsKey(kv.Key))
+                    {
+                        dstOrig[kv.Key] = origPath;
+                    }
+                }
+
+                Trace("ExpandPkg: source='" + sourceUid + "' newest='" + newestUid + "' textures=" + srcFlags.Count);
+
+                // Drop stale package bucket so we only build under newest UID (avoids PostMagic.3 fail then .4 retry).
+                byPkgFlags.Remove(sourceUid);
+                byPkgOrig.Remove(sourceUid);
+            }
         }
 
         private static VarPackage ResolvePackageWithFallback(string pkgId)
@@ -1717,7 +1983,22 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(value)) return false;
             string v = value.Trim().ToLowerInvariant();
-            return v.EndsWith(".png") || v.EndsWith(".jpg") || v.EndsWith(".jpeg");
+            return v.EndsWith(".png") || v.EndsWith(".jpg") || v.EndsWith(".jpeg") || v.EndsWith(".tif") || v.EndsWith(".tiff");
+        }
+
+        private static bool IsTextureJsonKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return false;
+            if (key.IndexOf("Url", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (key.StartsWith("customTexture_", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.StartsWith("simTexture", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        private static bool IsPackageSceneJsonPath(string internalPath)
+        {
+            if (string.IsNullOrEmpty(internalPath)) return false;
+            return internalPath.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string NormalizeInternalPath(string internalPath)
@@ -1896,188 +2177,119 @@ namespace VPB
             return !string.IsNullOrEmpty(pkgId) && !string.IsNullOrEmpty(internalPath);
         }
 
-        private static void ApplyPathHeuristics(string internalPath, ref TextureFlags flags)
+        private static TextureFlags ResolveTextureFlags(string jsonKey, JSONClass parentObject, string internalPath = null)
         {
-            if (string.IsNullOrEmpty(internalPath)) return;
-            string file = Path.GetFileName(internalPath) ?? internalPath;
-            string l = file.ToLowerInvariant();
-
-            bool isLut = l.Contains("lut");
-            bool isLensDirt = l.Contains("lensdirt") || (internalPath.IndexOf("lens dirt", StringComparison.OrdinalIgnoreCase) >= 0);
-
-            if (!flags.isNormalMap)
-            {
-                if (l.Contains("normal") || l.Contains("norm") || l.Contains("normalmap") || l.Contains("nrm") || l.Contains("_nm") || l.Contains("-nm") || l.Contains(" nm")
-                    || l.EndsWith("_n.png") || l.EndsWith("_n.jpg") || l.EndsWith("_n.jpeg")
-                    || l.EndsWith("-n.png") || l.EndsWith("-n.jpg") || l.EndsWith("-n.jpeg")
-                    || l.EndsWith(" n.png") || l.EndsWith(" n.jpg") || l.EndsWith(" n.jpeg"))
-                {
-                    flags.isNormalMap = true;
-                    flags.linear = true;
-                    flags.compress = false;
-                }
-            }
-
-            if (isLut)
-            {
-                flags.linear = true;
-                flags.compress = false;
-            }
-
-            if (isLensDirt)
-            {
-                flags.linear = true;
-                flags.compress = false;
-            }
-
-            if (SuperControllerHook.IsSimulationTexturePath(internalPath))
-            {
-                flags.linear = true;
-                flags.compress = false;
-                flags.isReadable = true;
-            }
-
-            if (!flags.linear)
-            {
-                bool looksLikeSpecSuffix = l.EndsWith("_s.jpg") || l.EndsWith("-s.jpg") || l.EndsWith(" s.jpg")
-                    || l.EndsWith("_s.jpeg") || l.EndsWith("-s.jpeg") || l.EndsWith(" s.jpeg");
-                bool looksLikeGlossSuffix = l.EndsWith("_g.jpg") || l.EndsWith("-g.jpg") || l.EndsWith(" g.jpg")
-                    || l.EndsWith("_g.jpeg") || l.EndsWith("-g.jpeg") || l.EndsWith(" g.jpeg");
-
-                if (flags.isNormalMap || l.Contains("spec") || l.Contains("gloss") || l.Contains("rough") || l.Contains("metal") || isLut || looksLikeSpecSuffix || looksLikeGlossSuffix)
-                {
-                    flags.linear = true;
-                }
-            }
+            TextureFlags flags;
+            if (VaMTextureLoadFlags.TryResolve(jsonKey, parentObject, out flags))
+                return flags;
+            if (TryResolveOnDemandFlagsFallback(jsonKey, parentObject, internalPath, out flags))
+                return flags;
+            return VaMTextureLoadFlags.DefaultImageLoaderFlags();
         }
 
-        private static bool TryGetFlagsFromVapKey(string key, out TextureFlags flags)
+        /// <summary>Fallback when <see cref="VaMTextureLoadFlags.TryResolveHeuristic"/> is unavailable (older VaMTextureLoadFlags.cs).</summary>
+        private static bool TryResolveOnDemandFlagsFallback(string jsonKey, JSONClass parentObject, string internalPath, out TextureFlags flags)
         {
-            flags = new TextureFlags
+            flags = VaMTextureLoadFlags.DefaultImageLoaderFlags();
+            if (!string.IsNullOrEmpty(jsonKey))
             {
-                compress = true,
-                linear = false,
-                isNormalMap = false,
-                createAlphaFromGrayscale = false,
-                createNormalFromBump = false,
-                invert = false,
-                isReadable = false,
-                bumpStrength = 1f
-            };
-
-            if (string.IsNullOrEmpty(key)) return false;
-
-            string k = key;
-
-            if (SuperControllerHook.IsSimulationTextureKey(k))
-            {
-                flags.compress = false;
-                flags.linear = true;
-                flags.isReadable = true;
-                return true;
+                if (TryResolveOnDemandKeyHeuristic(jsonKey, out flags))
+                    return true;
+                if (TryResolveOnDemandParentUrlSiblingFlags(jsonKey, parentObject, out flags))
+                    return true;
             }
 
-            // Common VaM "textures" atom keys are consistent enough to map directly.
-            // This helps avoid filename-based false positives (e.g. *gen*.jpg).
-            if (k.EndsWith("DiffuseUrl", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(internalPath))
             {
-                flags.compress = true;
-                flags.linear = false;
-                return true;
-            }
-            if (k.EndsWith("SpecularUrl", StringComparison.OrdinalIgnoreCase))
-            {
-                flags.compress = true;
-                flags.linear = true;
-                return true;
-            }
-            if (k.EndsWith("GlossUrl", StringComparison.OrdinalIgnoreCase))
-            {
-                flags.compress = true;
-                flags.linear = true;
-                return true;
-            }
-            if (k.EndsWith("NormalUrl", StringComparison.OrdinalIgnoreCase))
-            {
-                flags.compress = false;
-                flags.linear = true;
-                flags.isNormalMap = true;
-                return true;
+                string name;
+                try { name = Path.GetFileNameWithoutExtension(internalPath); }
+                catch { name = null; }
+                if (!string.IsNullOrEmpty(name) && TryResolveOnDemandKeyHeuristic(name, out flags))
+                    return true;
             }
 
-            if (k.IndexOf("customTexture_", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                bool isMain = k.IndexOf("MainTex", StringComparison.OrdinalIgnoreCase) >= 0;
-                bool isSpec = k.IndexOf("SpecTex", StringComparison.OrdinalIgnoreCase) >= 0;
-                bool isVajGloss = k.IndexOf("GlossTex", StringComparison.OrdinalIgnoreCase) >= 0;
-                bool isBump = k.IndexOf("BumpMap", StringComparison.OrdinalIgnoreCase) >= 0;
-                bool isAlpha = k.IndexOf("AlphaTex", StringComparison.OrdinalIgnoreCase) >= 0;
+            return false;
+        }
 
-                if (isBump)
+        private static bool TryResolveOnDemandParentUrlSiblingFlags(string jsonKey, JSONClass parent, out TextureFlags flags)
+        {
+            flags = VaMTextureLoadFlags.DefaultImageLoaderFlags();
+            if (parent == null || string.IsNullOrEmpty(jsonKey) || !jsonKey.EndsWith("Url", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string stem = jsonKey.Substring(0, jsonKey.Length - 3);
+            if (parent[stem + "IsLinear"] == null && parent[stem + "IsNormal"] == null && parent[stem + "IsTransparency"] == null)
+                return false;
+
+            bool isLinear = ReadOnDemandParentBool(parent, stem + "IsLinear", false);
+            bool isNormal = ReadOnDemandParentBool(parent, stem + "IsNormal", false);
+            bool isTransparency = ReadOnDemandParentBool(parent, stem + "IsTransparency", false);
+            flags = VaMTextureLoadFlags.MaterialOptionsCustomFlags(isLinear, isNormal, isTransparency);
+            return true;
+        }
+
+        private static bool TryResolveOnDemandKeyHeuristic(string jsonKey, out TextureFlags flags)
+        {
+            flags = VaMTextureLoadFlags.DefaultImageLoaderFlags();
+            if (string.IsNullOrEmpty(jsonKey)) return false;
+
+            string k = jsonKey.ToLowerInvariant();
+            if (!k.Contains("url") && !k.Contains("texture") && !k.Contains("tex")
+                && k.IndexOf("map", StringComparison.Ordinal) < 0 && !k.Contains("image"))
+            {
+                return false;
+            }
+
+            if (k.Contains("normal") || (k.Contains("bump") && !k.Contains("specular")))
+            {
+                if (k.Contains("bump") && !k.Contains("normal"))
                 {
-                    flags.isNormalMap = true;
+                    flags = VaMTextureLoadFlags.DefaultImageLoaderFlags();
                     flags.linear = true;
+                    flags.createNormalFromBump = true;
                     flags.compress = false;
                     return true;
                 }
 
-                if (isSpec || isVajGloss)
-                {
-                    flags.linear = true;
-                    return true;
-                }
-
-                if (isAlpha)
-                {
-                    flags.createAlphaFromGrayscale = true;
-                    return true;
-                }
-
-                if (isMain) return true;
-            }
-
-            bool isNormal = k.IndexOf("Normal", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSpecular = k.IndexOf("Specular", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isGloss = k.IndexOf("Gloss", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isBumpUrl = k.IndexOf("BumpUrl", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isBumpLike = isBumpUrl || k.IndexOf("Bump", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isDetailMap = k.IndexOf("Detail Map", StringComparison.OrdinalIgnoreCase) >= 0
-                || k.IndexOf("DetailMap", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isRough = k.IndexOf("Rough", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isMetal = k.IndexOf("Metal", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isAO = k.IndexOf("Occlusion", StringComparison.OrdinalIgnoreCase) >= 0 || k.IndexOf("AoUrl", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            // VaM frequently uses BumpUrl for what ultimately behaves like a normal map input.
-            // For cache parity with VaM, treat BumpUrl as normal-map-like (linear, not compressed).
-            bool treatAsNormal = isNormal || isBumpLike || isDetailMap;
-            flags.isNormalMap = treatAsNormal;
-
-            if (flags.isNormalMap)
-            {
-                flags.compress = false;
-            }
-
-            // If we're treating it as a normal-map-like input, we don't want the bump->normal transform variant.
-            if (isBumpUrl && !treatAsNormal)
-            {
-                flags.createNormalFromBump = true;
-            }
-
-            if (treatAsNormal || isSpecular || isGloss || isBumpUrl || isRough || isMetal || isAO)
-            {
-                flags.linear = true;
-            }
-
-            if (k.IndexOf("DiffuseUrl", StringComparison.OrdinalIgnoreCase) >= 0
-                || k.IndexOf("DecalUrl", StringComparison.OrdinalIgnoreCase) >= 0
-                || k.IndexOf("DetailUrl", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
+                flags = VaMTextureLoadFlags.NormalMapFlags();
                 return true;
             }
 
-            if (isNormal || isSpecular || isGloss || isBumpUrl || isDetailMap || isRough || isMetal || isAO) return true;
+            if (k.Contains("specular") || k.Contains("gloss") || k.Contains("roughness")
+                || k.Contains("metallic") || k.Contains("metalness") || k.Contains("reflection"))
+            {
+                flags = VaMTextureLoadFlags.SpecularOrGlossFlags();
+                return true;
+            }
+
+            if (k.Contains("alpha") || k.Contains("opacity") || k.Contains("transparency") || k.Contains("mask"))
+            {
+                flags = VaMTextureLoadFlags.MaterialOptionsCustomFlags(isLinear: false, isNormalMap: false, isTransparency: true);
+                return true;
+            }
+
+            if (k.Contains("decal") || k.Contains("diffuse") || k.Contains("albedo") || k.Contains("color"))
+            {
+                flags = VaMTextureLoadFlags.DiffuseFlags();
+                return true;
+            }
+
+            if (k.EndsWith("url", StringComparison.OrdinalIgnoreCase))
+            {
+                flags = VaMTextureLoadFlags.DiffuseFlags();
+                return true;
+            }
 
             return false;
+        }
+
+        private static bool ReadOnDemandParentBool(JSONClass parent, string fieldName, bool defaultValue)
+        {
+            if (parent == null || string.IsNullOrEmpty(fieldName)) return defaultValue;
+            JSONNode node = parent[fieldName];
+            if (node == null) return defaultValue;
+            try { return node.AsBool; }
+            catch { return defaultValue; }
         }
 
         private static void ExtractSceneUrlsRecursive(JSONNode node, string selfPackageUid, List<RequiredTexture> outTextures, List<RequiredJsonFile> outJsonFiles)
@@ -2092,28 +2304,71 @@ namespace VPB
             var obj = node.AsObject;
             if (obj != null)
             {
+                if (outTextures != null)
+                {
+                    var dazEntries = new List<VaMDazImportMaterialExtractor.DazTextureEntry>();
+                    if (VaMDazImportMaterialExtractor.TryCollectFromShaderMaterialNode(node, dazEntries))
+                    {
+                        for (int di = 0; di < dazEntries.Count; di++)
+                        {
+                            VaMDazImportMaterialExtractor.DazTextureEntry de = dazEntries[di];
+                            if (string.IsNullOrEmpty(de.ImagePath)) continue;
+
+                            string pkgId;
+                            string internalPath;
+                            if (!TryResolveTextureRef(de.ImagePath, selfPackageUid, referencingInternalPath, out pkgId, out internalPath))
+                                continue;
+
+                            string il = (internalPath ?? string.Empty).ToLowerInvariant();
+                            if (!il.EndsWith(".png") && !il.EndsWith(".jpg") && !il.EndsWith(".jpeg") && !il.EndsWith(".tif") && !il.EndsWith(".tiff"))
+                                continue;
+
+                            outTextures.Add(new RequiredTexture
+                            {
+                                PackageId = pkgId,
+                                InternalPath = internalPath,
+                                Flags = de.Flags
+                            });
+
+                            Trace("FoundTexture: key='daz_import' pkg='" + (pkgId ?? string.Empty) + "' path='" + internalPath + "' flags=" + GetFlagsSignature(de.Flags));
+                        }
+                    }
+                }
+
                 foreach (KeyValuePair<string, JSONNode> kv in obj)
                 {
                     string key = kv.Key;
                     JSONNode valueNode = kv.Value;
 
-                    bool isStringLike = valueNode != null && valueNode.AsObject == null && valueNode.AsArray == null && !string.IsNullOrEmpty(valueNode.Value);
-                    if (isStringLike && (!string.IsNullOrEmpty(key) && key.IndexOf("Url", StringComparison.OrdinalIgnoreCase) >= 0 || LooksLikeVamFileRef(valueNode.Value) || LooksLikeImagePath(valueNode.Value)))
+                    if (key.Equals("image_file", StringComparison.OrdinalIgnoreCase)
+                        || key.Equals("current_value", StringComparison.OrdinalIgnoreCase))
                     {
-                        string rawUrl = valueNode.Value;
+                        ExtractSceneUrlsRecursive(valueNode, selfPackageUid, referencingInternalPath, outTextures, outJsonFiles);
+                        continue;
+                    }
+
+                    string rawUrl;
+                    bool hasUrl = VaMTextureLoadFlags.TryUnwrapUrlValue(valueNode, out rawUrl);
+                    bool deepSceneScan = IsPackageSceneJsonPath(referencingInternalPath);
+                    bool isTextureCandidate = hasUrl && (
+                        IsTextureJsonKey(key)
+                        || LooksLikeVamFileRef(rawUrl)
+                        || LooksLikeImagePath(rawUrl)
+                        || (deepSceneScan && LooksLikeImagePath(rawUrl) && rawUrl.IndexOf(":/", StringComparison.Ordinal) > 0));
+                    if (isTextureCandidate)
+                    {
                         string pkgId;
                         string internalPath;
                         if (TryResolveTextureRef(rawUrl, selfPackageUid, referencingInternalPath, out pkgId, out internalPath))
                         {
                             string il = (internalPath ?? string.Empty).ToLowerInvariant();
-                            if ((il.EndsWith(".png") || il.EndsWith(".jpg") || il.EndsWith(".jpeg")) && outTextures != null)
+                            if ((il.EndsWith(".png") || il.EndsWith(".jpg") || il.EndsWith(".jpeg") || il.EndsWith(".tif") || il.EndsWith(".tiff")) && outTextures != null)
                             {
-                                TextureFlags flags;
-                                if (!TryGetFlagsFromVapKey(key, out flags))
+                                TextureFlags flags = ResolveTextureFlags(key, obj, internalPath);
+                                if (flags.isReadable && !string.IsNullOrEmpty(pkgId))
                                 {
-                                    flags = new TextureFlags { compress = true, linear = false, isNormalMap = false, createAlphaFromGrayscale = false, createNormalFromBump = false, invert = false, isReadable = false, bumpStrength = 1f };
+                                    try { SuperControllerHook.RegisterSimTexture(pkgId + ":/" + internalPath); } catch { }
                                 }
-                                ApplyPathHeuristics(internalPath, ref flags);
 
                                 outTextures.Add(new RequiredTexture
                                 {
@@ -2168,6 +2423,377 @@ namespace VPB
             }
         }
 
+        private static void ConfigureQueuedImageFlags(CustomImageLoaderThreaded.QueuedImage qi, string imgUidPath, TextureFlags flags, int targetWidth, int targetHeight)
+        {
+            if (qi == null) return;
+            qi.imgPath = imgUidPath;
+            qi.compress = flags.compress;
+            qi.linear = flags.linear;
+            qi.isNormalMap = flags.isNormalMap;
+            qi.createAlphaFromGrayscale = flags.createAlphaFromGrayscale;
+            qi.createNormalFromBump = flags.createNormalFromBump;
+            qi.invert = flags.invert;
+            qi.bumpStrength = flags.bumpStrength;
+            qi.createMipMaps = true;
+            qi.isThumbnail = false;
+            qi.setSize = targetWidth > 0 && targetHeight > 0;
+            if (qi.setSize)
+            {
+                qi.width = targetWidth;
+                qi.height = targetHeight;
+            }
+        }
+
+        /// <summary>VaM-native cache filename (same rules as <see cref="CustomImageLoaderThreaded.QueuedImage.GetDiskCachePath"/>).</summary>
+        private static string ResolveVaMNativeCachePath(string imgUidPath, TextureFlags flags, int targetWidth, int targetHeight)
+        {
+            CustomImageLoaderThreaded loader = CustomImageLoaderThreaded.singleton;
+            if (loader == null || string.IsNullOrEmpty(imgUidPath)) return null;
+            CustomImageLoaderThreaded.QueuedImage qi = loader.GetQI();
+            try
+            {
+                ConfigureQueuedImageFlags(qi, imgUidPath, flags, targetWidth, targetHeight);
+                return qi.ResolveDiskCachePath();
+            }
+            finally
+            {
+                loader.ReturnQueuedImage(qi);
+            }
+        }
+
+        private static bool IsOnDemandSeedPath(string internalPath)
+        {
+            if (string.IsNullOrEmpty(internalPath)) return false;
+            string p = internalPath.Replace('\\', '/');
+            if (p.IndexOf("__MACOSX", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (p.Equals("meta.json", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith("/meta.json", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith("/package.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith(".vam", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase)
+                || p.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryParseImageDimensionsFromBuffer(byte[] buf, int len, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (buf == null || len < 24) return false;
+
+            if (len >= 24 && buf[0] == 0x89 && buf[1] == 0x50 && buf[2] == 0x4E && buf[3] == 0x47)
+            {
+                width = (buf[16] << 24) | (buf[17] << 16) | (buf[18] << 8) | buf[19];
+                height = (buf[20] << 24) | (buf[21] << 16) | (buf[22] << 8) | buf[23];
+                return width > 0 && height > 0;
+            }
+
+            if (len >= 4 && buf[0] == 0xFF && buf[1] == 0xD8)
+            {
+                int i = 2;
+                while (i + 9 < len)
+                {
+                    if (buf[i] != 0xFF)
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    int marker = buf[i + 1];
+                    if (marker == 0xD8)
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    if (marker == 0xD9) break;
+
+                    int segLen = (buf[i + 2] << 8) | buf[i + 3];
+                    if (segLen < 2 || i + 2 + segLen > len) break;
+
+                    if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2 || marker == 0xC3
+                        || marker == 0xC5 || marker == 0xC6 || marker == 0xC7
+                        || marker == 0xC9 || marker == 0xCA || marker == 0xCB)
+                    {
+                        if (i + 7 < len)
+                        {
+                            height = (buf[i + 5] << 8) | buf[i + 6];
+                            width = (buf[i + 7] << 8) | buf[i + 8];
+                            return width > 0 && height > 0;
+                        }
+                        break;
+                    }
+
+                    i += 2 + segLen;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryReadImageDimensionsPartial(string imgUidPath, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (string.IsNullOrEmpty(imgUidPath)) return false;
+
+            try
+            {
+                using (FileEntryStream fes = FileManager.OpenStream(imgUidPath))
+                {
+                    Stream stream = fes != null ? fes.Stream : null;
+                    if (stream == null) return false;
+
+                    long length = 0;
+                    try { length = stream.Length; } catch { length = 0; }
+                    int toRead = DownscaleDimensionProbeMaxBytes;
+                    if (length > 0 && length < toRead) toRead = (int)length;
+                    if (toRead < 16) return false;
+
+                    byte[] buf = new byte[toRead];
+                    int off = 0;
+                    while (off < toRead)
+                    {
+                        int n = stream.Read(buf, off, toRead - off);
+                        if (n <= 0) break;
+                        off += n;
+                    }
+
+                    if (off < 16) return false;
+                    return TryParseImageDimensionsFromBuffer(buf, off, out width, out height);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static long TryGetOnDemandFileEntrySize(string imgUidPath)
+        {
+            if (string.IsNullOrEmpty(imgUidPath)) return 0;
+            try
+            {
+                FileEntry fileEntry = FileManager.GetFileEntry(imgUidPath);
+                if (fileEntry == null) return 0;
+                long size = fileEntry.Size;
+                try
+                {
+                    VarFileEntry vfe = fileEntry as VarFileEntry;
+                    if (vfe != null) size = vfe.EntrySize;
+                }
+                catch { }
+                return size > 0 ? size : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static string MakeRequiredTextureDedupeKey(RequiredTexture rt)
+        {
+            if (rt.InternalPath == null) return string.Empty;
+            return (rt.PackageId ?? string.Empty) + "|" + rt.InternalPath + "|" + GetFlagsSignature(rt.Flags);
+        }
+
+        /// <summary>Add textures referenced from dependency VAR presets (scene.dependencies), deduped against scene graph.</summary>
+        private static void MergeSceneDependencyPresetTextures(string sceneText, List<RequiredTexture> required)
+        {
+            if (string.IsNullOrEmpty(sceneText) || required == null) return;
+
+            HashSet<string> depIds = null;
+            try { depIds = DependencyExtractor.ExtractDependenciesFromJson(sceneText, fastModeOnly: true); }
+            catch { depIds = null; }
+            if (depIds == null || depIds.Count == 0) return;
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < required.Count; i++)
+            {
+                string key = MakeRequiredTextureDedupeKey(required[i]);
+                if (!string.IsNullOrEmpty(key)) seen.Add(key);
+            }
+
+            foreach (string dep in depIds)
+            {
+                if (string.IsNullOrEmpty(dep)) continue;
+                VarPackage dp = ResolvePackageWithFallback(dep);
+                if (dp == null) continue;
+
+                List<RequiredTexture> depRequired = BuildRequiredTexturesFromPackagePresetsFollowDeps(dp);
+                if (depRequired == null || depRequired.Count == 0) continue;
+
+                Trace("SceneDepPresetWalk: dep='" + dp.Uid + "' textures=" + depRequired.Count);
+
+                for (int i = 0; i < depRequired.Count; i++)
+                {
+                    RequiredTexture rt = depRequired[i];
+                    if (string.IsNullOrEmpty(rt.InternalPath)) continue;
+                    string dedupeKey = MakeRequiredTextureDedupeKey(rt);
+                    if (string.IsNullOrEmpty(dedupeKey) || !seen.Add(dedupeKey)) continue;
+                    required.Add(rt);
+                }
+            }
+        }
+
+        private static bool TryComputeZstdDownscaleDimensions(string imgUidPath, int targetWidth, int targetHeight, out int outW, out int outH, out int sourceW, out int sourceH)
+        {
+            outW = 0;
+            outH = 0;
+            sourceW = 0;
+            sourceH = 0;
+            if (string.IsNullOrEmpty(imgUidPath)) return false;
+
+            long entryBytes = TryGetOnDemandFileEntrySize(imgUidPath);
+            if (entryBytes > 0 && entryBytes < DownscaleProbeMinEntryBytes)
+            {
+                return false;
+            }
+
+            int sw = 0;
+            int sh = 0;
+            if (!TryReadImageDimensionsPartial(imgUidPath, out sw, out sh))
+            {
+                Texture2D probe = null;
+                try
+                {
+                    byte[] src = FileManager.ReadAllBytes(imgUidPath);
+                    if (src == null || src.Length == 0) return false;
+                    probe = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (!probe.LoadImage(src)) return false;
+                    sw = probe.width;
+                    sh = probe.height;
+                }
+                catch
+                {
+                    return false;
+                }
+                finally
+                {
+                    if (probe != null) UnityEngine.Object.Destroy(probe);
+                }
+            }
+
+            if (targetWidth > 0) sw = targetWidth;
+            if (targetHeight > 0) sh = targetHeight;
+
+            sourceW = sw;
+            sourceH = sh;
+
+            if (sw <= 0 || sh <= 0) return false;
+            if (sw <= 4096 && sh <= 4096) return false;
+            if (!Mathf.IsPowerOfTwo(sw) || !Mathf.IsPowerOfTwo(sh)) return false;
+
+            int div = 1;
+            while ((sw / div) > 4096 || (sh / div) > 4096)
+            {
+                div *= 2;
+                if (div <= 0) return false;
+            }
+
+            outW = sw / div;
+            outH = sh / div;
+            return outW > 0 && outH > 0;
+        }
+
+        private sealed class OnDemandLoaderResultSlot
+        {
+            public CustomImageLoaderThreaded.OnDemandCacheBuildResult Value;
+        }
+
+        /// <summary>Decode on thread pool when possible; compress + zstd/native write on main thread.</summary>
+        private static IEnumerator CoBuildViaLoader(
+            string imgUidPath,
+            TextureFlags flags,
+            int targetWidth,
+            int targetHeight,
+            bool decodeFromSource,
+            bool suppressNativeDiskWrite,
+            OnDemandLoaderResultSlot slot)
+        {
+            slot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+
+            if (!decodeFromSource)
+            {
+                slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, false, suppressNativeDiskWrite);
+                yield break;
+            }
+
+            OnDemandBackgroundDecode.Job job = OnDemandBackgroundDecode.Start(
+                imgUidPath,
+                targetWidth > 0 && targetHeight > 0,
+                targetWidth,
+                targetHeight,
+                flags.compress,
+                flags.linear,
+                flags.isNormalMap,
+                flags.createAlphaFromGrayscale,
+                flags.createNormalFromBump,
+                flags.bumpStrength,
+                flags.invert);
+
+            while (job != null && !job.IsDone)
+            {
+                if (s_CancelRequested)
+                {
+                    slot.Value = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+                    slot.Value.error = "Cancelled";
+                    yield break;
+                }
+                yield return null;
+            }
+
+            if (job != null && job.Success)
+            {
+                slot.Value = CustomImageLoaderThreaded.BuildOnDemandFinishFromDecoded(
+                    imgUidPath,
+                    job.Raw,
+                    job.RawLength,
+                    job.Width,
+                    job.Height,
+                    job.Format,
+                    flags.compress,
+                    flags.linear,
+                    flags.isNormalMap,
+                    flags.createAlphaFromGrayscale,
+                    flags.createNormalFromBump,
+                    flags.invert,
+                    flags.bumpStrength,
+                    suppressNativeDiskWrite);
+                yield break;
+            }
+
+            slot.Value = BuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, suppressNativeDiskWrite);
+        }
+
+        private static CustomImageLoaderThreaded.OnDemandCacheBuildResult BuildViaLoader(
+            string imgUidPath,
+            TextureFlags flags,
+            int targetWidth,
+            int targetHeight,
+            bool decodeFromSourceOnly,
+            bool suppressNativeDiskWrite)
+        {
+            return CustomImageLoaderThreaded.BuildOnDemandViaLoader(
+                imgUidPath,
+                flags.compress,
+                flags.linear,
+                flags.isNormalMap,
+                flags.createAlphaFromGrayscale,
+                flags.createNormalFromBump,
+                flags.invert,
+                flags.bumpStrength,
+                targetWidth,
+                targetHeight,
+                decodeFromSourceOnly,
+                suppressNativeDiskWrite);
+        }
+
         private static string GetNativeCachePathDynamic(string imgPath, TextureFlags flags, long explicitSize, DateTime explicitLastWriteTime, int targetWidth = 0, int targetHeight = 0)
         {
             FileEntry fileEntry = null;
@@ -2201,15 +2827,8 @@ namespace VPB
             try { fileName = TextureUtil.SanitizeFileName(fileName).Replace('.', '_'); }
             catch { fileName = fileName.Replace('.', '_'); }
 
-            string sig = string.Empty;
-            if (targetWidth > 0 && targetHeight > 0) sig += targetWidth + "_" + targetHeight;
-            if (flags.isReadable) sig += "_R";
-            if (flags.compress) sig += "_C";
-            if (flags.linear) sig += "_L";
-            if (flags.isNormalMap) sig += "_N";
-            if (flags.createAlphaFromGrayscale) sig += "_A";
-            if (flags.createNormalFromBump) sig = sig + "_BN" + flags.bumpStrength;
-            if (flags.invert) sig += "_I";
+            string sig = GetFlagsSignature(flags);
+            if (targetWidth > 0 && targetHeight > 0) sig = targetWidth + "_" + targetHeight + sig;
 
             return textureCacheDir + "/" + fileName + "_" + sizeStr + "_" + timeStr + "_" + sig + ".vamcache";
         }
@@ -2217,6 +2836,13 @@ namespace VPB
         private static void TryDeleteNativeCacheWildcard(string imgUidPath, TextureFlags flags, int targetWidth, int targetHeight)
         {
             if (string.IsNullOrEmpty(imgUidPath)) return;
+
+            string exact = ResolveVaMNativeCachePath(imgUidPath, flags, targetWidth, targetHeight);
+            if (!string.IsNullOrEmpty(exact))
+            {
+                TryDeleteFileAndMeta(exact, ref s_NativeDeletes);
+                return;
+            }
 
             string textureCacheDir = null;
             try { textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir(); } catch { textureCacheDir = null; }
@@ -2227,15 +2853,8 @@ namespace VPB
             try { fileName = TextureUtil.SanitizeFileName(fileName).Replace('.', '_'); }
             catch { fileName = (fileName ?? string.Empty).Replace('.', '_'); }
 
-            string sig = string.Empty;
-            if (targetWidth > 0 && targetHeight > 0) sig += targetWidth + "_" + targetHeight;
-            if (flags.isReadable) sig += "_R";
-            if (flags.compress) sig += "_C";
-            if (flags.linear) sig += "_L";
-            if (flags.isNormalMap) sig += "_N";
-            if (flags.createAlphaFromGrayscale) sig += "_A";
-            if (flags.createNormalFromBump) sig = sig + "_BN" + flags.bumpStrength;
-            if (flags.invert) sig += "_I";
+            string sig = GetFlagsSignature(flags);
+            if (targetWidth > 0 && targetHeight > 0) sig = targetWidth + "_" + targetHeight + sig;
 
             string pattern = fileName + "_*_*_" + sig + ".vamcache";
             string[] matches = null;
@@ -2293,14 +2912,13 @@ namespace VPB
                 catch { work = null; }
 
                 if (work != null) yield return work;
-                yield return null;
 
                 s_TexturesProcessed++;
                 if (!s_BatchMode)
                 {
                     s_ProcessedWork++;
                 }
-                UpdateUiStatus();
+                UpdateUiStatusThrottled();
             }
         }
 
@@ -2338,14 +2956,12 @@ namespace VPB
 
                     string imgUidPath = pkg.Uid + ":/" + internalPath;
 
-                    bool buildSized = false;
-                    int[] sizedWidths = buildSized ? new[] { 0, DefaultSizedCacheWidth } : new[] { 0 };
-                    int[] sizedHeights = buildSized ? new[] { 0, DefaultSizedCacheHeight } : new[] { 0 };
-
                     for (int v = 0; v < variants.Count; v++)
                     {
                         TextureFlags flags = variants[v];
-                        ApplyPathHeuristics(internalPath, ref flags);
+                        int[] sizedWidths;
+                        int[] sizedHeights;
+                        GetSizedCacheDimensionArrays(flags, internalPath, out sizedWidths, out sizedHeights);
 
                         for (int si = 0; si < sizedWidths.Length; si++)
                         {
@@ -2354,7 +2970,7 @@ namespace VPB
                             int beforeDeletes = s_NativeDeletes + s_ZstdDeletes;
 
                             string nativePath = null;
-                            try { nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight); }
+                            try { nativePath = ResolveVaMNativeCachePath(imgUidPath, flags, targetWidth, targetHeight); }
                             catch { nativePath = null; }
 
                             if (!string.IsNullOrEmpty(nativePath))
@@ -2410,6 +3026,10 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(imgUidPath) || string.IsNullOrEmpty(internalPath) || variants == null || variants.Count == 0) yield break;
 
+            SuppressZstdMissLookupLog = true;
+            try
+            {
+
             Trace("CacheImageStart: uidPath='" + imgUidPath + "' internal='" + internalPath + "' variants=" + variants.Count);
 
             float frameStart = Time.realtimeSinceStartup;
@@ -2418,12 +3038,10 @@ namespace VPB
             {
                 if (s_CancelRequested) yield break;
                 TextureFlags flags = variants[v];
-                ApplyPathHeuristics(internalPath, ref flags);
-                variants[v] = flags;
 
-                bool buildSized = false;
-                int[] sizedWidths = buildSized ? new[] { 0, DefaultSizedCacheWidth } : new[] { 0 };
-                int[] sizedHeights = buildSized ? new[] { 0, DefaultSizedCacheHeight } : new[] { 0 };
+                int[] sizedWidths;
+                int[] sizedHeights;
+                GetSizedCacheDimensionArrays(flags, internalPath, out sizedWidths, out sizedHeights);
 
                 for (int si = 0; si < sizedWidths.Length; si++)
                 {
@@ -2431,43 +3049,51 @@ namespace VPB
                     int targetWidth = sizedWidths[si];
                     int targetHeight = sizedHeights[si];
 
-                    string cachePath = GetNativeCachePathDynamic(imgUidPath, flags, entrySize, entryTime, targetWidth, targetHeight);
-                    if (string.IsNullOrEmpty(cachePath)) continue;
-
-                    bool wantNative = (s_JobWriteMode == CacheWriteMode.NativeOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd);
-                    bool wantZstd = (s_JobWriteMode == CacheWriteMode.ZstdOnly || s_JobWriteMode == CacheWriteMode.NativeAndZstd) && !flags.createAlphaFromGrayscale;
-
-                    // SIM (simulation) textures should never be cached (created), but they should still be eligible for purge/deletion elsewhere.
-                    if (SuperControllerHook.IsSimulationTexturePath(internalPath))
+                    string cachePath = ResolveVaMNativeCachePath(imgUidPath, flags, targetWidth, targetHeight);
+                    if (string.IsNullOrEmpty(cachePath))
                     {
-                        if (wantNative) s_CacheSkips++;
-                        if (wantZstd) s_ZstdSkips++;
-                        Trace("CacheSkipSimulation: internal='" + internalPath + "' target=" + targetWidth + "x" + targetHeight + " sig=" + GetFlagsSignature(flags));
+                        s_CacheFails++;
+                        RecordOnDemandIssue("FAIL", imgUidPath, internalPath, flags, "ResolveVaMNativeCachePath returned null (no FileEntry?)");
                         continue;
                     }
 
-                    // LUT textures should never be cached - they are handled by VaM natively
-                    if (SuperControllerHook.IsLutTexturePath(internalPath))
+                    bool wantNative;
+                    bool wantZstd;
+                    ResolveOnDemandWriteTargets(internalPath, flags, out wantNative, out wantZstd);
+
+                    if (!TryFileEntryExists(imgUidPath))
                     {
-                        if (wantNative) s_CacheSkips++;
-                        if (wantZstd) s_ZstdSkips++;
-                        Trace("CacheSkipLut: internal='" + internalPath + "' target=" + targetWidth + "x" + targetHeight + " sig=" + GetFlagsSignature(flags));
+                        s_CacheFails++;
+                        RecordOnDemandIssue("FAIL", imgUidPath, internalPath, flags, "FileEntry missing before loader build");
                         continue;
                     }
 
-                    string zstdPath = null;
+                    if (wantNative && !MVR.FileManagement.CacheManager.CachingEnabled)
+                    {
+                        RecordOnDemandIssue("SKIP", imgUidPath, internalPath, flags, "CacheManager.CachingEnabled=false (native only)");
+                    }
+
+                    string zstdPathOnDisk = null;
+                    string zstdWritePath = null;
                     if (wantZstd)
                     {
                         try
                         {
-                            zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                            zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                            zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
+                                ? zstdPathOnDisk
+                                : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                         }
-                        catch { zstdPath = null; }
+                        catch
+                        {
+                            zstdPathOnDisk = null;
+                            zstdWritePath = null;
+                        }
                     }
 
-                    if (wantZstd && string.IsNullOrEmpty(zstdPath))
+                    if (wantZstd && string.IsNullOrEmpty(zstdWritePath))
                     {
-                        for (int ztry = 0; ztry < 3 && string.IsNullOrEmpty(zstdPath); ztry++)
+                        for (int ztry = 0; ztry < 3 && string.IsNullOrEmpty(zstdWritePath); ztry++)
                         {
                             if (ztry == 1)
                             {
@@ -2481,12 +3107,19 @@ namespace VPB
 
                             try
                             {
-                                zstdPath = TextureUtil.GetZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                                zstdPathOnDisk = TextureUtil.FindExactZstdCacheFileOnDisk(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
+                                zstdWritePath = !string.IsNullOrEmpty(zstdPathOnDisk)
+                                    ? zstdPathOnDisk
+                                    : TextureUtil.BuildExactZstdCachePath(imgUidPath, flags.compress, flags.linear, flags.isNormalMap, flags.createAlphaFromGrayscale, flags.createNormalFromBump, flags.invert, targetWidth, targetHeight, flags.bumpStrength, flags.isReadable);
                             }
-                            catch { zstdPath = null; }
+                            catch
+                            {
+                                zstdPathOnDisk = null;
+                                zstdWritePath = null;
+                            }
                         }
 
-                        if (string.IsNullOrEmpty(zstdPath))
+                        if (string.IsNullOrEmpty(zstdWritePath))
                         {
                             s_ZstdSkips++;
                             Trace("ZstdSkipNoPath: uidPath='" + imgUidPath + "' internal='" + internalPath + "' target=" + targetWidth + "x" + targetHeight + " sig=" + GetFlagsSignature(flags));
@@ -2504,7 +3137,23 @@ namespace VPB
                         }
                     }
 
-                    bool zstdExists = (!string.IsNullOrEmpty(zstdPath) && File.Exists(zstdPath) && File.Exists(zstdPath + "meta"));
+                    bool zstdExists = !string.IsNullOrEmpty(zstdPathOnDisk);
+                    if (zstdExists && SuperControllerHook.IsTiffTexturePath(internalPath)
+                        && !TextureUtil.IsZstdCachePayloadSane(zstdPathOnDisk, 64 * 64))
+                    {
+                        TextureUtil.TryDeleteZstdCacheFile(zstdPathOnDisk);
+                        zstdExists = false;
+                        zstdPathOnDisk = null;
+                        zstdWritePath = null;
+                    }
+                    if (zstdExists && flags.createAlphaFromGrayscale
+                        && !TextureUtil.IsZstdCachePayloadSane(zstdPathOnDisk, 32 * 32))
+                    {
+                        TextureUtil.TryDeleteZstdCacheFile(zstdPathOnDisk);
+                        zstdExists = false;
+                        zstdPathOnDisk = null;
+                        zstdWritePath = null;
+                    }
                     bool needNative = wantNative && !nativeExists;
                     bool rewriteZstd = wantZstd && zstdExists && s_JobRewriteExistingZstd;
                     bool needZstd = wantZstd && (!zstdExists || rewriteZstd);
@@ -2513,7 +3162,14 @@ namespace VPB
                     {
                         if (wantNative) s_CacheSkips++;
                         if (wantZstd) s_ZstdSkips++;
-                        Trace("CacheSkip: internal='" + internalPath + "' target=" + targetWidth + "x" + targetHeight + " sig=" + GetFlagsSignature(flags));
+                        RecordOnDemandIssue("SKIP", imgUidPath, internalPath, flags,
+                            FormatOnDemandSkipDetail(nativeExists, zstdExists, needNative, needZstd, flags));
+
+                        if (s_JobWriteMode == CacheWriteMode.ZstdOnly && nativeExists && !NeedsNativeCacheAtRuntime(internalPath))
+                        {
+                            TryDeleteFileAndMeta(cachePath, ref s_NativeDeletes);
+                            nativeExists = false;
+                        }
 
                         if (nativeExists)
                         {
@@ -2539,17 +3195,17 @@ namespace VPB
 
                         if (zstdExists)
                         {
-                            try { s_ZstdCompressedBytes += new FileInfo(zstdPath).Length; } catch { }
+                            try { s_ZstdCompressedBytes += new FileInfo(zstdPathOnDisk).Length; } catch { }
                             try
                             {
-                                long zb = new FileInfo(zstdPath).Length;
+                                long zb = new FileInfo(zstdPathOnDisk).Length;
                                 s_ZstdDiskBytes += zb;
                                 s_ZstdDiskBytesExisting += zb;
                             }
                             catch { }
                             try
                             {
-                                string zmetaDisk = zstdPath + "meta";
+                                string zmetaDisk = zstdPathOnDisk + "meta";
                                 if (File.Exists(zmetaDisk))
                                 {
                                     long mb = new FileInfo(zmetaDisk).Length;
@@ -2560,7 +3216,7 @@ namespace VPB
                             catch { }
                             try
                             {
-                                string zmetaPath = zstdPath + "meta";
+                                string zmetaPath = zstdPathOnDisk + "meta";
                                 if (File.Exists(zmetaPath))
                                 {
                                     var mz = SimpleJSON.JSON.Parse(File.ReadAllText(zmetaPath));
@@ -2619,22 +3275,13 @@ namespace VPB
 
                     if (s_CancelRequested) yield break;
 
-                    byte[] payload;
-                    int w;
-                    int h;
-                    TextureFormat tf;
-                    bool hasAlpha;
-                    string err;
                     byte[] payloadZstd = null;
                     int wz = 0;
                     int hz = 0;
                     TextureFormat tfz = TextureFormat.RGBA32;
-                    bool hasAlphaz = false;
-                    string errz = null;
                     bool didZstdDownscale = false;
                     int zstdSourceW = 0;
                     int zstdSourceH = 0;
-                    bool allowNativePayloadRead = !rewriteZstd;
 
                     bool allowZstdDownscale = false;
                     try
@@ -2646,77 +3293,78 @@ namespace VPB
                     }
                     catch { allowZstdDownscale = false; }
 
-                    if (needNative && needZstd && allowZstdDownscale)
+                    int zstdTargetW = 0;
+                    int zstdTargetH = 0;
+                    int probeSourceW = 0;
+                    int probeSourceH = 0;
+                    bool wantsZstdDownscale = needZstd && allowZstdDownscale
+                        && TryComputeZstdDownscaleDimensions(imgUidPath, targetWidth, targetHeight, out zstdTargetW, out zstdTargetH, out probeSourceW, out probeSourceH);
+
+                    bool decodeFromSource = needNative || (needZstd && (rewriteZstd || !nativeExists));
+                    bool suppressNativeDiskWrite = !needNative;
+
+                    if (OnDemandLogLevel() >= 2)
                     {
-                        bool okNative = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, false, allowNativePayloadRead, out payload, out w, out h, out tf, out hasAlpha, out err, out _, out _, out _);
-                        if (!okNative || payload == null)
+                        OnDemandLog(
+                            "Build internal='" + internalPath + "' native=" + needNative + " zstd=" + needZstd
+                            + " decodeSrc=" + decodeFromSource + " noNativeWrite=" + suppressNativeDiskWrite
+                            + " cachePath=" + System.IO.Path.GetFileName(cachePath ?? string.Empty));
+                    }
+
+                    CustomImageLoaderThreaded.OnDemandCacheBuildResult loaderNative = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+                    CustomImageLoaderThreaded.OnDemandCacheBuildResult loaderZstd = default(CustomImageLoaderThreaded.OnDemandCacheBuildResult);
+                    var loaderSlot = new OnDemandLoaderResultSlot();
+
+                    if (needNative && needZstd && wantsZstdDownscale)
+                    {
+                        yield return CoBuildViaLoader(imgUidPath, flags, targetWidth, targetHeight, true, false, loaderSlot);
+                        loaderNative = loaderSlot.Value;
+                        if (!loaderNative.success)
                         {
                             s_CacheFails++;
-                            Trace("CacheFail: internal='" + internalPath + "' err='" + (err ?? string.Empty) + "'");
+                            RecordOnDemandIssue("FAIL", imgUidPath, internalPath, flags, "loader native (downscale path): " + (loaderNative.error ?? string.Empty));
                             continue;
                         }
 
-                        bool okZ = TryBuildCachePayloadUnity(imgUidPath, internalPath, flags, targetWidth, targetHeight, true, allowNativePayloadRead, out payloadZstd, out wz, out hz, out tfz, out hasAlphaz, out errz, out didZstdDownscale, out zstdSourceW, out zstdSourceH);
-                        if (!okZ || payloadZstd == null)
+                        if (zstdTargetW == targetWidth && zstdTargetH == targetHeight)
                         {
-                            payloadZstd = null;
+                            loaderZstd = loaderNative;
+                        }
+                        else
+                        {
+                            yield return CoBuildViaLoader(imgUidPath, flags, zstdTargetW, zstdTargetH, true, true, loaderSlot);
+                            loaderZstd = loaderSlot.Value;
+                            if (!loaderZstd.success)
+                            {
+                                RecordOnDemandIssue("WARN", imgUidPath, internalPath, flags, "loader zstd downscale failed, using native payload: " + (loaderZstd.error ?? string.Empty));
+                                loaderZstd = loaderNative;
+                            }
                         }
                     }
                     else
                     {
-                        bool ok = TryBuildCachePayloadUnity(
-                            imgUidPath,
-                            internalPath,
-                            flags,
-                            targetWidth,
-                            targetHeight,
-                            (needZstd && !needNative && allowZstdDownscale),
-                            allowNativePayloadRead,
-                            out payload,
-                            out w,
-                            out h,
-                            out tf,
-                            out hasAlpha,
-                            out err,
-                            out didZstdDownscale,
-                            out zstdSourceW,
-                            out zstdSourceH);
-
-                        if (!ok || payload == null)
+                        int buildW = (needZstd && wantsZstdDownscale && !needNative) ? zstdTargetW : targetWidth;
+                        int buildH = (needZstd && wantsZstdDownscale && !needNative) ? zstdTargetH : targetHeight;
+                        yield return CoBuildViaLoader(imgUidPath, flags, buildW, buildH, decodeFromSource, suppressNativeDiskWrite, loaderSlot);
+                        var built = loaderSlot.Value;
+                        if (!built.success)
                         {
                             s_CacheFails++;
-                            Trace("CacheFail: internal='" + internalPath + "' err='" + (err ?? string.Empty) + "'");
+                            RecordOnDemandIssue("FAIL", imgUidPath, internalPath, flags,
+                                "loader: " + (built.error ?? string.Empty)
+                                + " decodeSrc=" + decodeFromSource + " noNativeWrite=" + suppressNativeDiskWrite
+                                + " w=" + buildW + " h=" + buildH);
                             continue;
                         }
 
-                        payloadZstd = payload;
-                        wz = w;
-                        hz = h;
-                        tfz = tf;
-                        hasAlphaz = hasAlpha;
-                        errz = err;
+                        if (needNative) loaderNative = built;
+                        if (needZstd) loaderZstd = built;
                     }
 
                     if (needNative)
                     {
-                        try
+                        if (loaderNative.wroteNativeCache || (!nativeExists && !string.IsNullOrEmpty(cachePath) && File.Exists(cachePath) && File.Exists(cachePath + "meta")))
                         {
-                            string dir = Path.GetDirectoryName(cachePath);
-                            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                        }
-                        catch { }
-
-                        try
-                        {
-                            JSONClass meta = new JSONClass();
-                            meta["type"] = "image";
-                            meta["width"] = w.ToString();
-                            meta["height"] = h.ToString();
-                            meta["format"] = tf.ToString();
-                            if (flags.isReadable) meta["isReadable"] = "true";
-
-                            AtomicWriteAllText(cachePath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(meta, 1024));
-                            AtomicWriteAllBytes(cachePath, payload);
                             s_CacheWrites++;
                             try
                             {
@@ -2736,12 +3384,15 @@ namespace VPB
                                 }
                             }
                             catch { }
-                            Trace("CacheWrite: path='" + cachePath + "' fmt=" + tf + " bytes=" + (payload != null ? payload.Length : 0));
+                            Trace("CacheWrite: path='" + cachePath + "' fmt=" + loaderNative.format + " bytes=" + (loaderNative.payload != null ? loaderNative.payload.Length : 0));
                         }
-                        catch (Exception ex)
+                        else if (!nativeExists)
                         {
                             s_CacheFails++;
-                            Trace("CacheWriteFail: path='" + cachePath + "' err='" + ex.Message + "'");
+                            RecordOnDemandIssue("FAIL", imgUidPath, internalPath, flags,
+                                "native cache not created after loader ok path=" + System.IO.Path.GetFileName(cachePath)
+                                + " loaderFmt=" + loaderNative.format + " " + loaderNative.width + "x" + loaderNative.height
+                                + " cachingEnabled=" + MVR.FileManagement.CacheManager.CachingEnabled);
                         }
                     }
                     else if (wantNative)
@@ -2751,6 +3402,27 @@ namespace VPB
 
                     if (needZstd)
                     {
+                        payloadZstd = loaderZstd.payload;
+                        wz = loaderZstd.width;
+                        hz = loaderZstd.height;
+                        tfz = loaderZstd.format;
+                        didZstdDownscale = loaderZstd.didDownscale || wantsZstdDownscale;
+                        if (wantsZstdDownscale && loaderNative.success && loaderNative.width > 0)
+                        {
+                            zstdSourceW = loaderNative.width;
+                            zstdSourceH = loaderNative.height;
+                        }
+                        else if (probeSourceW > 0)
+                        {
+                            zstdSourceW = probeSourceW;
+                            zstdSourceH = probeSourceH;
+                        }
+                        else
+                        {
+                            zstdSourceW = loaderZstd.sourceWidth > 0 ? loaderZstd.sourceWidth : loaderNative.sourceWidth;
+                            zstdSourceH = loaderZstd.sourceHeight > 0 ? loaderZstd.sourceHeight : loaderNative.sourceHeight;
+                        }
+
                         try
                         {
                             if (payloadZstd == null || payloadZstd.Length == 0)
@@ -2764,7 +3436,7 @@ namespace VPB
 
                             try
                             {
-                                string zdir = Path.GetDirectoryName(zstdPath);
+                                string zdir = Path.GetDirectoryName(zstdWritePath);
                                 if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
                             }
                             catch { }
@@ -2784,7 +3456,7 @@ namespace VPB
                                 goto AfterZstd;
                             }
 
-                            AtomicWriteAllBytes(zstdPath, compressed);
+                            AtomicWriteAllBytes(zstdWritePath, compressed);
 
                             JSONClass zmeta = new JSONClass();
                             zmeta["type"] = "compressed";
@@ -2799,7 +3471,8 @@ namespace VPB
                                 zmeta["sourceHeight"] = zstdSourceH.ToString();
                             }
                             zmeta["zstdLevel"].AsInt = level;
-                            AtomicWriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
+                            TextureUtil.WriteMipFieldsToMeta(zmeta, wz, hz, tfz, payloadZstd.Length, true);
+                            AtomicWriteAllText(zstdWritePath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
 
                             s_ZstdWrites++;
                             if (rewriteZstd) s_ZstdRewrites++;
@@ -2807,14 +3480,14 @@ namespace VPB
                             if (compressed != null) s_ZstdCompressedBytes += compressed.Length;
                             try
                             {
-                                long zb = new FileInfo(zstdPath).Length;
+                                long zb = new FileInfo(zstdWritePath).Length;
                                 s_ZstdDiskBytes += zb;
                                 s_ZstdDiskBytesWritten += zb;
                             }
                             catch { }
                             try
                             {
-                                string zmetaDisk = zstdPath + "meta";
+                                string zmetaDisk = zstdWritePath + "meta";
                                 if (File.Exists(zmetaDisk))
                                 {
                                     long mb = new FileInfo(zmetaDisk).Length;
@@ -2823,7 +3496,24 @@ namespace VPB
                                 }
                             }
                             catch { }
-                            Trace((rewriteZstd ? "ZstdRewrite: path='" : "ZstdWrite: path='") + zstdPath + "' orig=" + payloadZstd.Length + " comp=" + (compressed != null ? compressed.Length : 0));
+                            Trace((rewriteZstd ? "ZstdRewrite: path='" : "ZstdWrite: path='") + zstdWritePath + "' orig=" + payloadZstd.Length + " comp=" + (compressed != null ? compressed.Length : 0));
+
+                            if (s_JobWriteMode == CacheWriteMode.ZstdOnly && !NeedsNativeCacheAtRuntime(internalPath))
+                            {
+                                bool deleteNative = false;
+                                try
+                                {
+                                    deleteNative = Settings.Instance == null
+                                        || Settings.Instance.DeleteOriginalCacheAfterCompression == null
+                                        || Settings.Instance.DeleteOriginalCacheAfterCompression.Value;
+                                }
+                                catch { deleteNative = true; }
+
+                                if (deleteNative && !string.IsNullOrEmpty(cachePath) && File.Exists(cachePath))
+                                {
+                                    TryDeleteFileAndMeta(cachePath, ref s_NativeDeletes);
+                                }
+                            }
 
                             if (didZstdDownscale) s_ZstdDownscaleWrites++;
                             if (didZstdDownscale)
@@ -2845,7 +3535,7 @@ namespace VPB
                         catch
                         {
                             s_ZstdFails++;
-                            Trace("ZstdFail: path='" + (zstdPath ?? string.Empty) + "'");
+                            Trace("ZstdFail: path='" + (zstdWritePath ?? string.Empty) + "'");
                         }
                     }
                     else if (wantZstd)
@@ -2855,18 +3545,23 @@ namespace VPB
 
                 AfterZstd:
 
-                    if (Time.realtimeSinceStartup - frameStart >= 0.008f)
+                    if (Time.realtimeSinceStartup - frameStart >= OnDemandFrameBudgetSec)
                     {
                         frameStart = Time.realtimeSinceStartup;
                         yield return null;
                     }
                 }
 
-                if (Time.realtimeSinceStartup - frameStart >= 0.008f)
+                if (Time.realtimeSinceStartup - frameStart >= OnDemandFrameBudgetSec)
                 {
                     frameStart = Time.realtimeSinceStartup;
                     yield return null;
                 }
+            }
+            }
+            finally
+            {
+                SuppressZstdMissLookupLog = false;
             }
         }
 
@@ -2891,12 +3586,7 @@ namespace VPB
                     if (fe == null) continue;
                     if (string.IsNullOrEmpty(fe.InternalPath)) continue;
 
-                    bool isPreset = fe.InternalPath.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vam", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase);
-                    if (!isPreset) continue;
+                    if (!IsOnDemandSeedPath(fe.InternalPath)) continue;
 
                     try
                     {
@@ -2913,7 +3603,6 @@ namespace VPB
                     catch { }
                 }
 
-                int maxJsonDepth = 2;
                 var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
                 for (int i = 0; i < seedJson.Count; i++)
@@ -2926,7 +3615,7 @@ namespace VPB
                     var kv = queue.Dequeue();
                     RequiredJsonFile rj = kv.Key;
                     int depth = kv.Value;
-                    if (depth > maxJsonDepth) continue;
+                    if (depth > JsonWalkMaxDepth) continue;
                     if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
 
                     if (!NormalizePackageId(rj.PackageId).Equals(NormalizePackageId(pkg.Uid), StringComparison.OrdinalIgnoreCase)) continue;
@@ -2988,12 +3677,7 @@ namespace VPB
                     if (fe == null) continue;
                     if (string.IsNullOrEmpty(fe.InternalPath)) continue;
 
-                    bool isPreset = fe.InternalPath.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vam", StringComparison.OrdinalIgnoreCase)
-                        || fe.InternalPath.EndsWith(".vmi", StringComparison.OrdinalIgnoreCase);
-                    if (!isPreset) continue;
+                    if (!IsOnDemandSeedPath(fe.InternalPath)) continue;
 
                     try
                     {
@@ -3010,7 +3694,6 @@ namespace VPB
                     catch { }
                 }
 
-                int maxJsonDepth = 2;
                 var visitedJson = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var queue = new Queue<KeyValuePair<RequiredJsonFile, int>>();
                 for (int i = 0; i < seedJson.Count; i++)
@@ -3023,7 +3706,7 @@ namespace VPB
                     var kv = queue.Dequeue();
                     RequiredJsonFile rj = kv.Key;
                     int depth = kv.Value;
-                    if (depth > maxJsonDepth) continue;
+                    if (depth > JsonWalkMaxDepth) continue;
                     if (string.IsNullOrEmpty(rj.PackageId) || string.IsNullOrEmpty(rj.InternalPath)) continue;
 
                     VarPackage jp = ResolvePackageWithFallback(rj.PackageId);
@@ -3055,10 +3738,13 @@ namespace VPB
                     }
                 }
 
+                var seenTex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 for (int i = 0; i < seedTex.Count; i++)
                 {
                     var rt = seedTex[i];
                     if (string.IsNullOrEmpty(rt.PackageId) || string.IsNullOrEmpty(rt.InternalPath)) continue;
+                    string dedupeKey = rt.PackageId + "|" + rt.InternalPath + "|" + GetFlagsSignature(rt.Flags);
+                    if (!seenTex.Add(dedupeKey)) continue;
                     required.Add(rt);
                 }
             }
@@ -3081,7 +3767,13 @@ namespace VPB
             catch { }
 
             var required = BuildRequiredTexturesFromPackagePresetsFollowDeps(pkg);
-            if (required == null || required.Count == 0) yield break;
+            if (required == null || required.Count == 0)
+            {
+                OnDemandLog("Package cache: no texture refs in presets for " + packagePath, always: true);
+                yield break;
+            }
+
+            OnDemandLog("Package cache: " + required.Count + " texture ref(s) from presets for " + packagePath);
 
             var byPkgFlags = new Dictionary<string, Dictionary<string, List<TextureFlags>>>(StringComparer.OrdinalIgnoreCase);
             var byPkgOrig = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
@@ -3117,6 +3809,8 @@ namespace VPB
                     origMap[internalLower] = rt.InternalPath;
                 }
             }
+
+            ExpandCachedPackagesToNewestInstalled(byPkgFlags, byPkgOrig);
 
             int totalWork = 0;
             foreach (var kv in byPkgOrig)
@@ -3185,7 +3879,7 @@ namespace VPB
                 if (!s_BatchMode)
                 {
                     s_PackagesProcessed = pkgIndex;
-                    UpdateUiStatus();
+                    UpdateUiStatusThrottled(force: true);
                 }
             }
         }
@@ -3369,320 +4063,6 @@ namespace VPB
                 UpdateUiStatus();
 
                 yield return WorkerPurgeSelectiveUnityCoroutine(tp, kv.Value, origMap);
-            }
-        }
-
-        private static bool TryBuildCachePayloadUnity(string imgUidPath, string internalPath, TextureFlags flags, int targetWidth, int targetHeight, bool allowZstdDownscale, bool allowNativeCacheRead, out byte[] payload, out int width, out int height, out TextureFormat format, out bool hasAlpha, out string error, out bool didDownscale, out int sourceWidth, out int sourceHeight)
-        {
-            payload = null;
-            width = 0;
-            height = 0;
-            format = TextureFormat.RGBA32;
-            hasAlpha = false;
-            error = null;
-            didDownscale = false;
-            sourceWidth = 0;
-            sourceHeight = 0;
-
-            try
-            {
-                string nativePath = GetNativeCachePathDynamic(imgUidPath, flags, 0, default(DateTime), targetWidth, targetHeight);
-                string nativeMetaPath = nativePath != null ? nativePath + "meta" : null;
-                if (allowNativeCacheRead && !string.IsNullOrEmpty(nativePath) && File.Exists(nativePath) && File.Exists(nativeMetaPath))
-                {
-                    try
-                    {
-                        var nmeta = SimpleJSON.JSON.Parse(File.ReadAllText(nativeMetaPath));
-                        int nw = nmeta["width"].AsInt;
-                        int nh = nmeta["height"].AsInt;
-                        string nfmtStr = nmeta["format"].Value;
-                        TextureFormat nfmt = TextureFormat.RGBA32;
-                        if (!string.IsNullOrEmpty(nfmtStr)) try { nfmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), nfmtStr, true); } catch { }
-                        if (nw > 0 && nh > 0)
-                        {
-                            byte[] ndata = File.ReadAllBytes(nativePath);
-                            int expectedNative = TextureUtil.GetExpectedRawDataSize(nw, nh, nfmt);
-                            if (expectedNative > 0 && ndata.Length >= expectedNative)
-                            {
-                                payload = ndata.Length == expectedNative ? ndata : ndata;
-                                width = nw;
-                                height = nh;
-                                format = nfmt;
-                                hasAlpha = (nfmt == TextureFormat.DXT5 || nfmt == TextureFormat.RGBA32);
-                                try { int lvl2 = Settings.Instance != null ? Settings.Instance.TextureLogLevel.Value : 0; if (lvl2 >= 1) LogUtil.Log("[VPB ALPHA] NativeHit: fmt=" + nfmt + " " + nw + "x" + nh + " path=" + System.IO.Path.GetFileName(nativePath)); } catch { }
-                                return true;
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-
-            byte[] src = null;
-            try { src = FileManager.ReadAllBytes(imgUidPath); }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-                return false;
-            }
-
-            if (src == null || src.Length == 0) return false;
-
-            Texture2D tex = null;
-            Texture2D working = null;
-            RenderTexture rt = null;
-
-            try
-            {
-                tex = new Texture2D(2, 2, TextureFormat.RGBA32, false, flags.linear);
-                if (!tex.LoadImage(src))
-                {
-                    error = "LoadImage failed";
-                    return false;
-                }
-
-                sourceWidth = tex.width;
-                sourceHeight = tex.height;
-
-                if (tex.format != TextureFormat.RGBA32)
-                {
-                    RenderTexture blit = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32, flags.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
-                    Graphics.Blit(tex, blit);
-                    RenderTexture prevBlit = RenderTexture.active;
-                    try
-                    {
-                        RenderTexture.active = blit;
-                        Texture2D rgba = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, flags.linear);
-                        rgba.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0, false);
-                        rgba.Apply(false, false);
-                        UnityEngine.Object.Destroy(tex);
-                        tex = rgba;
-                    }
-                    finally
-                    {
-                        RenderTexture.active = prevBlit;
-                        RenderTexture.ReleaseTemporary(blit);
-                    }
-                }
-
-                int effTargetW = targetWidth;
-                int effTargetH = targetHeight;
-                if (allowZstdDownscale && effTargetW <= 0 && effTargetH <= 0)
-                {
-                    int sw = tex.width;
-                    int sh = tex.height;
-                    if (Mathf.IsPowerOfTwo(sw) && Mathf.IsPowerOfTwo(sh) && (sw > 4096 || sh > 4096))
-                    {
-                        int div = 1;
-                        while ((sw / div) > 4096 || (sh / div) > 4096)
-                        {
-                            div *= 2;
-                            if (div <= 0) break;
-                        }
-
-                        if (div > 1)
-                        {
-                            effTargetW = sw / div;
-                            effTargetH = sh / div;
-                        }
-                    }
-                }
-
-                if (effTargetW > 0 && effTargetH > 0 && (tex.width != effTargetW || tex.height != effTargetH))
-                {
-                    didDownscale = true;
-                }
-
-                if (effTargetW > 0 && effTargetH > 0 && (tex.width != effTargetW || tex.height != effTargetH))
-                {
-                    rt = RenderTexture.GetTemporary(effTargetW, effTargetH, 0, RenderTextureFormat.ARGB32, flags.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
-                    Graphics.Blit(tex, rt);
-                    RenderTexture prev = RenderTexture.active;
-                    try
-                    {
-                        RenderTexture.active = rt;
-                        working = new Texture2D(effTargetW, effTargetH, TextureFormat.RGBA32, false, flags.linear);
-                        working.ReadPixels(new Rect(0, 0, effTargetW, effTargetH), 0, 0, false);
-                        working.Apply(false, false);
-                    }
-                    finally
-                    {
-                        RenderTexture.active = prev;
-                    }
-                }
-                else
-                {
-                    working = tex;
-                }
-
-                if (flags.isNormalMap || flags.invert || flags.createAlphaFromGrayscale || flags.createNormalFromBump)
-                {
-                    Color32[] colors = working.GetPixels32();
-                    if (colors != null && colors.Length > 0)
-                    {
-
-                        if (flags.isNormalMap)
-                        {
-                            for (int i = 0; i < colors.Length; i++)
-                            {
-                                var c = colors[i];
-                                c.a = 255;
-                                colors[i] = c;
-                            }
-                        }
-
-                        if (flags.invert)
-                        {
-                            for (int i = 0; i < colors.Length; i++)
-                            {
-                                var c = colors[i];
-                                c.r = (byte)(255 - c.r);
-                                c.g = (byte)(255 - c.g);
-                                c.b = (byte)(255 - c.b);
-                                c.a = (byte)(255 - c.a);
-                                colors[i] = c;
-                            }
-                        }
-
-
-                        if (flags.createNormalFromBump)
-                        {
-                            int w = working.width;
-                            int h = working.height;
-                            float[][] hMap = new float[h][];
-                            for (int yy = 0; yy < h; yy++)
-                            {
-                                hMap[yy] = new float[w];
-                                for (int xx = 0; xx < w; xx++)
-                                {
-                                    int idx = yy * w + xx;
-                                    var c = colors[idx];
-                                    hMap[yy][xx] = (c.r + c.g + c.b) / 768f;
-                                }
-                            }
-
-                            Vector3 v = default(Vector3);
-                            for (int yy = 0; yy < h; yy++)
-                            {
-                                for (int xx = 0; xx < w; xx++)
-                                {
-                                    float h21 = 0.5f, h22 = 0.5f, h23 = 0.5f, h24 = 0.5f, h25 = 0.5f, h26 = 0.5f, h27 = 0.5f, h28 = 0.5f;
-                                    int xm1 = xx - 1, xp1 = xx + 1, yp1 = yy + 1, ym1 = yy - 1;
-
-                                    if (yp1 < h && xm1 >= 0) h21 = hMap[yp1][xm1];
-                                    if (xm1 >= 0) h22 = hMap[yy][xm1];
-                                    if (ym1 >= 0 && xm1 >= 0) h23 = hMap[ym1][xm1];
-                                    if (yp1 < h) h24 = hMap[yp1][xx];
-                                    if (ym1 >= 0) h25 = hMap[ym1][xx];
-                                    if (yp1 < h && xp1 < w) h26 = hMap[yp1][xp1];
-                                    if (xp1 < w) h27 = hMap[yy][xp1];
-                                    if (ym1 >= 0 && xp1 < w) h28 = hMap[ym1][xp1];
-
-                                    float nx = h26 + 2f * h27 + h28 - h21 - 2f * h22 - h23;
-                                    float ny = h23 + 2f * h25 + h28 - h21 - 2f * h24 - h26;
-                                    v.x = nx * flags.bumpStrength;
-                                    v.y = ny * flags.bumpStrength;
-                                    v.z = 1f;
-                                    v.Normalize();
-
-                                    int idx = yy * w + xx;
-                                    colors[idx] = new Color32(
-                                        (byte)((v.x * 0.5f + 0.5f) * 255f),
-                                        (byte)((v.y * 0.5f + 0.5f) * 255f),
-                                        (byte)((v.z * 0.5f + 0.5f) * 255f),
-                                        255);
-                                }
-                            }
-                        }
-
-                        working.SetPixels32(colors);
-                        working.Apply(false, false);
-                    }
-                }
-
-                if (flags.compress)
-                {
-                    working.Compress(true);
-                    working.Apply(false, false);
-                }
-                else
-                {
-                    string nameLower = null;
-                    try { nameLower = (internalPath ?? string.Empty).ToLowerInvariant(); } catch { nameLower = string.Empty; }
-                    bool forceRGBA = flags.isNormalMap;
-                    bool forceRGB = flags.linear && !string.IsNullOrEmpty(nameLower) && nameLower.Contains("lut");
-
-                    if (forceRGBA && working.format != TextureFormat.RGBA32)
-                    {
-                        Texture2D conv = new Texture2D(working.width, working.height, TextureFormat.RGBA32, false, flags.linear);
-                        try
-                        {
-                            Color32[] cols = working.GetPixels32();
-                            conv.SetPixels32(cols);
-                            conv.Apply(false, false);
-                            if (working != null && working != tex) UnityEngine.Object.Destroy(working);
-                            working = conv;
-                        }
-                        catch
-                        {
-                            try { UnityEngine.Object.Destroy(conv); } catch { }
-                        }
-                    }
-                    else if (forceRGB && working.format != TextureFormat.RGB24)
-                    {
-                        Texture2D conv = new Texture2D(working.width, working.height, TextureFormat.RGB24, false, flags.linear);
-                        try
-                        {
-                            Color32[] cols = working.GetPixels32();
-                            conv.SetPixels32(cols);
-                            conv.Apply(false, false);
-                            if (working != null && working != tex) UnityEngine.Object.Destroy(working);
-                            working = conv;
-                        }
-                        catch
-                        {
-                            try { UnityEngine.Object.Destroy(conv); } catch { }
-                        }
-                    }
-                }
-
-                width = working.width;
-                height = working.height;
-                format = working.format;
-
-                payload = working.GetRawTextureData();
-                if (payload == null || payload.Length == 0)
-                {
-                    error = "GetRawTextureData failed";
-                    return false;
-                }
-
-                if (format == TextureFormat.DXT5 || format == TextureFormat.RGBA32)
-                {
-                    hasAlpha = true;
-                }
-                else if (format == TextureFormat.DXT1 || format == TextureFormat.RGB24)
-                {
-                    hasAlpha = false;
-                }
-                else
-                {
-                    hasAlpha = true;
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                error = ex.Message;
-                return false;
-            }
-            finally
-            {
-                if (rt != null) RenderTexture.ReleaseTemporary(rt);
-                if (working != null && working != tex) UnityEngine.Object.Destroy(working);
-                if (tex != null) UnityEngine.Object.Destroy(tex);
             }
         }
 

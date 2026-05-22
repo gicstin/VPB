@@ -108,6 +108,7 @@ namespace VPB
                         try
                         {
                             // Not a user "open" — cache warm only; do not write History / item_usage.
+                            NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
                             NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
                             return true;
                         }
