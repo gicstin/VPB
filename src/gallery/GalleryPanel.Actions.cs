@@ -469,6 +469,8 @@ namespace VPB
                     refreshOnNextShow = false;
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                 }
+                try { EnsureSideTabsFreshForPackageScan(); } catch { }
+                try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
                 LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
                 return;
@@ -506,13 +508,16 @@ namespace VPB
             else
             {
                 if (startupDeferredInitialRefresh)
+                {
+                    _sideTabsNeedFullRebuildAfterFirstRefresh = true;
                     LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
+                }
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
+                try { TryApplyPendingPackageDeltaOnShow(); } catch { }
             }
 
-            // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
-            // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
-            if (sameViewReopen || refreshCoroutine != null)
+            // Same-view reopen / first load before grid refresh: avoid synchronous category count scans on stale inventory.
+            if (sameViewReopen || refreshCoroutine != null || startupDeferredInitialRefresh || !hasLoadedContent || _sideTabsNeedFullRebuildAfterFirstRefresh)
                 UpdateTabsImpl(rebuildSideTabLists: false);
             else
                 UpdateTabs();
@@ -1513,6 +1518,101 @@ namespace VPB
 			    try { if (IsVisible) UpdateTabs(); } catch { }
             }
             return true;
+        }
+
+        /// <summary>When manual-refresh-only blocked FileManager observer, apply hub/download delta on next Show.</summary>
+        private void TryApplyPendingPackageDeltaOnShow()
+        {
+            if (IsHubMode || IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (!hasLoadedContent || recyclingGrid == null) return;
+            bool hasPending = false;
+            try { hasPending = FileManager.HasPendingGalleryPackageDelta(); } catch { }
+            if (!hasPending) return;
+
+            List<VarPackage> added = null;
+            List<VarPackage> removed = null;
+            try
+            {
+                added = new List<VarPackage>(FileManager.lastAddedPackages);
+                removed = new List<VarPackage>(FileManager.lastRemovedPackages);
+            }
+            catch { return; }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
+                    + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
+            }
+            catch { }
+
+            bool applied = false;
+            try { applied = ApplyPackageDelta(added, removed); } catch { }
+            if (applied)
+            {
+                try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+            }
+        }
+
+        internal void OnGallerySqlIndexUpdated()
+        {
+            if (IsHubMode || IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (!IsVisible && !hasLoadedContent) return;
+            if (activeContentType != ContentType.Category && activeContentType != ContentType.History) return;
+
+            DateTime refreshTime = DateTime.MinValue;
+            try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
+
+            if (lastPackageDeltaChangedGrid && refreshTime > DateTime.MinValue
+                && refreshTime <= lastAppliedPackageRefreshTime)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
+                return;
+            }
+
+            try { GalleryFileListSnapshotCache.Clear(); } catch { }
+            try { GalleryTagCountSnapshotCache.Clear(); } catch { }
+
+            List<VarPackage> added = null;
+            List<VarPackage> removed = null;
+            bool hasPackageDelta = false;
+            try
+            {
+                added = new List<VarPackage>(FileManager.lastAddedPackages);
+                removed = new List<VarPackage>(FileManager.lastRemovedPackages);
+                hasPackageDelta = added.Count > 0 || removed.Count > 0;
+            }
+            catch { }
+
+            if (hasPackageDelta)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
+                        + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
+                }
+                catch { }
+                bool applied = false;
+                try { applied = ApplyPackageDelta(added, removed); } catch { }
+                if (applied)
+                {
+                    try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+                    return;
+                }
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
+                    + (currentCategoryTitle ?? "") + "' deltaApplied=" + (lastPackageDeltaChangedGrid ? "1" : "0")
+                    + " pendingAdded=" + (added != null ? added.Count : 0));
+            }
+            catch { }
+            try { RefreshFiles(true, refreshDebugSource: "sql_index_updated"); } catch { }
         }
     }
 }

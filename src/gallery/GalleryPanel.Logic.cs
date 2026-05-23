@@ -516,8 +516,82 @@ namespace VPB
             AddLocalCustomScriptsCountToCategory(categoryCounts, currentPackagePathFilter);
             AddLocalCustomAppearanceCountToCategory(categoryCounts, currentPackagePathFilter);
 
+            if (CategoryCountsLookStaleAfterBuild())
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery] CacheCategoryCounts deferred (stale/zero while inventory loaded)");
+                }
+                catch { }
+                categoriesCached = false;
+                return;
+            }
+
             categoriesCached = true;
             unchecked { categorySideTabDataRevision++; }
+            StampSideTabCountsForCurrentScan();
+        }
+
+        private bool CategoryCountsLookStaleAfterBuild()
+        {
+            if (categoryCounts == null || categoryCounts.Count == 0) return true;
+            int sum = 0;
+            foreach (var kv in categoryCounts)
+            {
+                if (kv.Value > 0) sum += kv.Value;
+            }
+            if (sum > 0) return false;
+
+            try
+            {
+                int pkgCount = 0;
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid != null)
+                        pkgCount = FileManager.PackagesByUid.Count;
+                }
+                return pkgCount > 64;
+            }
+            catch { return false; }
+        }
+
+        private void StampSideTabCountsForCurrentScan()
+        {
+            try { _lastCategoryCountsScanTime = FileManager.lastPackageRefreshTime; } catch { }
+        }
+
+        /// <summary>Rebuild category/creator tabs when package scan advanced since last side-tab count build.</summary>
+        private void EnsureSideTabsFreshForPackageScan()
+        {
+            EnsureSideTabCountsFreshAfterGridReady(force: false);
+            if (!IsVisible && !hasLoadedContent) return;
+            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+        }
+
+        /// <summary>Rebuild side-tab counts once SQL/index + package scan are ready.</summary>
+        private void EnsureSideTabCountsFreshAfterGridReady(bool force)
+        {
+            DateTime scanNow = DateTime.MinValue;
+            try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
+            bool stale = force
+                || !categoriesCached
+                || !creatorsCached
+                || (scanNow > DateTime.MinValue && scanNow > _lastCategoryCountsScanTime);
+            if (!stale) return;
+
+            categoriesCached = false;
+            creatorsCached = false;
+            try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+            try { CacheCategoryCounts(); } catch { }
+            try { CacheCreators(); } catch { }
+            try
+            {
+                int sc = 0;
+                if (categoryCounts != null) categoryCounts.TryGetValue("Scenes", out sc);
+                LogUtil.Log("[VPB.Gallery] EnsureSideTabCountsFreshAfterGridReady scenes=" + sc
+                    + " cached=" + (categoriesCached ? "1" : "0"));
+            }
+            catch { }
         }
 
         /// <summary>

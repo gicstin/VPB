@@ -320,7 +320,7 @@ namespace VPB
             s_MainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
 
-        private static bool IsMainThread()
+        public static bool IsMainThread()
         {
             return s_MainThreadId < 0 || Thread.CurrentThread.ManagedThreadId == s_MainThreadId;
         }

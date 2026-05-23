@@ -501,11 +501,16 @@ namespace VPB
                 isDownloadedJSON.val = false;
                 SyncDeleteButton();
 
-                if (browser != null)
+                try
                 {
-                    // Defer heavy refresh work until the download queue drains.
-                    browser.DeferRefreshUntilQueueDrains();
+                    LogUtil.Log("[VPB.HubDownload] DownloadComplete saved='" + localPackagePath
+                        + "' uidGroup='" + (FileManager.PackageIDToPackageGroupID(nameJSON != null ? nameJSON.val : "") ?? "") + "'");
                 }
+                catch { }
+
+                // Register the new .var immediately so gallery + SQLite index can update without restart.
+                try { FileManager.Refresh("hub_download"); } catch { }
+                // Do not call Refresh() here — package is not registered until scan finishes and would reset alreadyHaveJSON.
             }
             catch (Exception)
             {

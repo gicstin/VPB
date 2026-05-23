@@ -123,6 +123,106 @@ namespace VPB
         public static readonly List<VarPackage> lastAddedPackages = new List<VarPackage>();
         public static readonly List<VarPackage> lastRemovedPackages = new List<VarPackage>();
 
+        /// <summary>Gallery consumed the pending add/remove delta for the current scan.</summary>
+        public static void AckPackageGalleryDeltaConsumed()
+        {
+            int a = lastAddedPackages.Count;
+            int r = lastRemovedPackages.Count;
+            lastAddedPackages.Clear();
+            lastRemovedPackages.Clear();
+            if (a > 0 || r > 0)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] AckPackageGalleryDeltaConsumed cleared added=" + a + " removed=" + r);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>True when the latest package scan produced adds/removes not yet consumed by the gallery.</summary>
+        public static bool HasPendingGalleryPackageDelta()
+        {
+            try { return lastAddedPackages.Count > 0 || lastRemovedPackages.Count > 0; }
+            catch { return false; }
+        }
+
+        static void MergePackageRefreshDelta(HashSet<VarPackage> removeSet, HashSet<string> addSet)
+        {
+            int pendingBefore = lastAddedPackages.Count;
+            lastRemovedPackages.Clear();
+            if (removeSet != null && removeSet.Count > 0)
+                lastRemovedPackages.AddRange(removeSet);
+
+            if (removeSet != null && removeSet.Count > 0 && lastAddedPackages.Count > 0)
+            {
+                var removedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var rp in removeSet)
+                {
+                    if (rp != null && !string.IsNullOrEmpty(rp.Uid))
+                        removedUids.Add(rp.Uid);
+                }
+                if (removedUids.Count > 0)
+                {
+                    for (int i = lastAddedPackages.Count - 1; i >= 0; i--)
+                    {
+                        VarPackage pending = lastAddedPackages[i];
+                        if (pending != null && removedUids.Contains(pending.Uid))
+                            lastAddedPackages.RemoveAt(i);
+                    }
+                }
+            }
+
+            int addSetCount = addSet != null ? addSet.Count : 0;
+            if (addSet == null || addSet.Count == 0)
+            {
+                if (addSetCount == 0 && (pendingBefore > 0 || lastRemovedPackages.Count > 0))
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.Delta] MergePackageRefreshDelta preserve pending added="
+                            + lastAddedPackages.Count + " (addSet empty pendingBefore=" + pendingBefore + ")");
+                    }
+                    catch { }
+                }
+                return;
+            }
+
+            int merged = 0;
+            lock (packagesLock)
+            {
+                foreach (string addedPath in addSet)
+                {
+                    VarPackage pkg;
+                    if (!packagesByPath.TryGetValue(addedPath, out pkg) || pkg == null)
+                        continue;
+
+                    bool alreadyPending = false;
+                    for (int i = 0; i < lastAddedPackages.Count; i++)
+                    {
+                        VarPackage existing = lastAddedPackages[i];
+                        if (existing != null && string.Equals(existing.Uid, pkg.Uid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            alreadyPending = true;
+                            break;
+                        }
+                    }
+                    if (!alreadyPending)
+                    {
+                        lastAddedPackages.Add(pkg);
+                        merged++;
+                    }
+                }
+            }
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] MergePackageRefreshDelta addSet=" + addSetCount
+                    + " merged=" + merged + " pendingAdded=" + lastAddedPackages.Count
+                    + " pendingRemoved=" + lastRemovedPackages.Count);
+            }
+            catch { }
+        }
+
         public static string CurrentLoadDir
         {
             get
@@ -813,19 +913,8 @@ namespace VPB
                     }
 
                     // Capture delta so the gallery can do an incremental update instead of a full rebuild.
-                    lastRemovedPackages.Clear();
-                    lastRemovedPackages.AddRange(removeSet);
-
-                    lastAddedPackages.Clear();
-                    lock (packagesLock)
-                    {
-                        foreach (string addedPath in addSet)
-                        {
-                            VarPackage pkg;
-                            if (packagesByPath.TryGetValue(addedPath, out pkg) && pkg != null)
-                                lastAddedPackages.Add(pkg);
-                        }
-                    }
+                    // Preserve pending adds across coalesced refreshes (e.g. hub download + follow-up refresh).
+                    MergePackageRefreshDelta(removeSet, addSet);
 
                     // Aggregate duplicate-UID diagnostics into a single summary line.
                     // Per-package error spam during large-library startup is replaced by counts and a sample.
@@ -1110,7 +1199,10 @@ namespace VPB
 
 			// Update time BEFORE calling handlers so handlers (and any UI code they trigger) see the latest time
 			lastPackageRefreshTime = DateTime.Now;
-			try { VpbLocalDatabase.BumpReadyScanStampAfterPackageRefresh(); } catch { }
+			int addedCount = 0;
+			int removedCount = 0;
+			try { addedCount = lastAddedPackages.Count; removedCount = lastRemovedPackages.Count; } catch { }
+			try { VpbLocalDatabase.NotifyPackageScanCompleted(addedCount, removedCount); } catch { }
 
 			if (init)
 			{

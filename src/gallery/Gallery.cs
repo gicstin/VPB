@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Prime31.MessageKit;
 using UnityEngine;
 using VPB.src.util;
@@ -12,6 +13,8 @@ namespace VPB
     public class Gallery : MonoBehaviour
     {
         public static Gallery singleton;
+
+        private static int _pendingGallerySqlIndexUpdate;
 
         private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
         private bool _hasHadInitialRefresh = false;
@@ -144,6 +147,11 @@ namespace VPB
             // OnFileManagerRefresh / SetCategories instead.
         }
 
+        void Update()
+        {
+            DrainPendingSqlIndexUpdate();
+        }
+
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
@@ -189,20 +197,28 @@ namespace VPB
         private void OnFileManagerRefresh()
         {
             VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_enter");
+            bool pendingPackageDelta = false;
+            try { pendingPackageDelta = FileManager.HasPendingGalleryPackageDelta(); } catch { }
+
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryManualRefreshOnly)
             {
                 if (_hasHadInitialRefresh)
                 {
-                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                    if (!pendingPackageDelta)
+                    {
+                        LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                        return;
+                    }
                     try
                     {
-                        if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
-                            VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+                        LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh manualRefreshOnly -> pending delta apply");
                     }
-                    catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
-                    return;
+                    catch { }
                 }
-                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
+                else
+                {
+                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
+                }
             }
 
             if (IsSuppressed())
@@ -215,22 +231,31 @@ namespace VPB
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             // Ignore broadcasts that did not advance the package scan clock (e.g. legacy global pings).
+            // Still run when a pending add/remove delta exists (hub download under manual-refresh-only).
             if (lastObservedPackageRefreshTime != DateTime.MinValue &&
-                refreshTime <= lastObservedPackageRefreshTime)
+                refreshTime <= lastObservedPackageRefreshTime &&
+                !pendingPackageDelta)
             {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh SKIPPED stale clock scanTime="
+                        + refreshTime.ToString("o") + " lastObserved=" + lastObservedPackageRefreshTime.ToString("o"));
+                }
+                catch { }
                 VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_skipped_stale_clock");
                 return;
             }
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
-            GalleryFileListSnapshotCache.Clear();
-            GalleryTagCountSnapshotCache.Clear();
-            try
+            if (pendingPackageDelta)
             {
-                if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
-                    VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+                try { GalleryFileListSnapshotCache.Clear(); } catch { }
             }
-            catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
+            else
+            {
+                GalleryFileListSnapshotCache.Clear();
+                GalleryTagCountSnapshotCache.Clear();
+            }
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
@@ -310,22 +335,57 @@ namespace VPB
                     }
                     catch { }
 
+                    bool hasPackageDelta = (added != null && added.Count > 0) || (removed != null && removed.Count > 0);
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh scanTime=" + refreshTime.ToString("o")
+                            + " added=" + (added != null ? added.Count : 0)
+                            + " removed=" + (removed != null ? removed.Count : 0)
+                            + " hasDelta=" + (hasPackageDelta ? "1" : "0")
+                            + " pending=" + (autoRefreshPending ? "1" : "0"));
+                    }
+                    catch { }
+
+                    bool ackDelta = false;
                     foreach (var p in panels)
                     {
                         if (p == null) continue;
                         if (p.IsHubMode) continue;
 
+                        if (hasPackageDelta)
+                        {
+                            try
+                            {
+                                if (p.ApplyPackageDelta(added, removed))
+                                    ackDelta = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                try { LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta error: " + ex.Message); } catch { }
+                            }
+                            continue;
+                        }
+
                         bool changed = false;
                         try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
-
                         if (changed && (p.IsVisible || p.HasLoadedContent))
                         {
-                            // Keep hidden panels warm too. Otherwise hidden panels only set
-                            // refreshOnNextShow=true and pay a full RefreshFiles() stall on the
-                            // next open (~1-2s with large libraries) instead of applying the
-                            // incremental delta while the panel is out of view.
-                            p.ApplyPackageDelta(added, removed);
+                            try
+                            {
+                                if (p.ApplyPackageDelta(added, removed))
+                                    ackDelta = true;
+                            }
+                            catch { }
                         }
+                    }
+
+                    if (hasPackageDelta && ackDelta)
+                    {
+                        try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+                    }
+                    else if (hasPackageDelta && !ackDelta)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh kept pending delta (no panel applied changes)"); } catch { }
                     }
 
                     if (!autoRefreshPending) break;
@@ -373,7 +433,7 @@ namespace VPB
             if (!hydrated)
             {
                 try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
-                try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { }
+                try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
             }
             foreach (var p in panels)
             {
@@ -838,11 +898,31 @@ namespace VPB
             }
             try
             {
-                LogUtil.Log(VamStartupOptimizations.LogTag + " running deferred gallery SQLite rebuild");
+                LogUtil.Log(VamStartupOptimizations.LogTag + " running deferred gallery SQLite index update");
                 VamStartupProfiler.Milestone("sql_rebuild_deferred_run_begin");
             }
             catch { }
-            try { VpbLocalDatabase.QueueGalleryIndexRebuildWorker(); } catch { }
+            try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(); } catch { }
+        }
+
+        /// <summary>After SQLite index patch completes, refresh visible gallery grids that use SQL.</summary>
+        internal static void NotifyGalleryIndexUpdateCompleted()
+        {
+            Interlocked.Exchange(ref _pendingGallerySqlIndexUpdate, 1);
+        }
+
+        /// <summary>Drain pending SQL-index gallery refresh (main thread only).</summary>
+        internal static void DrainPendingSqlIndexUpdate()
+        {
+            if (Interlocked.CompareExchange(ref _pendingGallerySqlIndexUpdate, 0, 1) != 1) return;
+            var ps = singleton != null ? singleton.panels : null;
+            if (ps == null) return;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                var p = ps[i];
+                if (p == null || p.IsHubMode) continue;
+                try { p.OnGallerySqlIndexUpdated(); } catch { }
+            }
         }
     }
 }

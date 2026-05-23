@@ -116,6 +116,35 @@ namespace VPB
             }
         }
 
+        public static bool PreferIncrementalGallerySqlIndex
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst == null || inst.StartupPreferIncrementalGallerySqlIndex == null) return true;
+                    return inst.StartupPreferIncrementalGallerySqlIndex.Value;
+                }
+                catch { return true; }
+            }
+        }
+
+        public static int IncrementalGallerySqlMaxDelta
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst != null && inst.StartupIncrementalGallerySqlMaxDelta != null)
+                        return Math.Max(0, inst.StartupIncrementalGallerySqlMaxDelta.Value);
+                }
+                catch { }
+                return 0;
+            }
+        }
+
         public static bool SqlBatchCatMemInserts
         {
             get

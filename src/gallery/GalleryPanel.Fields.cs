@@ -194,6 +194,10 @@ namespace VPB
         private float _pendingScrollRestore = 1f;
         private bool _scrollCacheLoaded = false;
         private DateTime lastAppliedPackageRefreshTime = DateTime.MinValue;
+        /// <summary>True when <see cref="ApplyPackageDelta"/> modified the active grid this scan.</summary>
+        private bool lastPackageDeltaChangedGrid;
+        /// <summary>Package scan time used when category/creator side-tab counts were last built.</summary>
+        private DateTime _lastCategoryCountsScanTime = DateTime.MinValue;
         
         // Configuration
         public bool DragDropReplaceMode
@@ -560,6 +564,8 @@ namespace VPB
 
         /// <summary>True when SetCategories skipped a full side-tab rebuild; first RefreshFilesRoutine completes it after caches exist.</summary>
         private bool _sideTabsNeedFullRebuildAfterFirstRefresh;
+        private bool _deferSideTabCountsForceRefresh;
+        private Coroutine _packageDeltaSideTabsCoroutine;
         
         private string nameFilter = "";
         private string nameFilterLower = "";

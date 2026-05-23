@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using MVR.FileManagement;
+using Prime31.MessageKit;
 using SimpleJSON;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -121,6 +122,8 @@ namespace VPB
         public OnHideCallback onHideCallbacks;
 
         protected bool _hasBeenRefreshed;
+
+        private bool _fileManagerRefreshObserverRegistered;
 
         protected Coroutine refreshResourcesRoutine;
         protected int _lastApiPerPage = -1;
@@ -2432,6 +2435,21 @@ namespace VPB
             }
         }
 
+        private void OnFileManagerRefreshForHubUi()
+        {
+            if (!_hubEnabled) return;
+            try
+            {
+                int nItems = items != null ? items.Count : 0;
+                LogUtil.Log("[VPB.HubDownload] HubBrowse refresh hub rows after package scan items=" + nItems);
+                OnPackageRefresh();
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.Log("[VPB.HubDownload] HubBrowse refresh failed: " + ex.Message); } catch { }
+            }
+        }
+
         public DownloadRequest QueueDownload(string url, string promotionalUrl, BinaryRequestStartedCallback startedCallback, RequestProgressCallback progressCallback, BinaryRequestSuccessCallback successCallback, RequestErrorCallback errorCallback)
         {
             DownloadRequest downloadRequest = new DownloadRequest();
@@ -2876,6 +2894,12 @@ namespace VPB
             RegisterAction(refreshResourcesAction);
             clearFiltersAction = new JSONStorableAction("ResetFilters", ResetFiltersAndRefresh);
             RegisterAction(clearFiltersAction);
+
+            if (!_fileManagerRefreshObserverRegistered)
+            {
+                MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefreshForHubUi);
+                _fileManagerRefreshObserverRegistered = true;
+            }
 
             numPerPageJSON = new JSONStorableFloat("numPerPage", _numPerPageInt, SyncNumPerPage, 1f, 500f, true, false);
             numPerPageJSON.isStorable = false;
@@ -3341,6 +3365,11 @@ namespace VPB
         }
         void OnDestroy()
         {
+            if (_fileManagerRefreshObserverRegistered)
+            {
+                try { MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefreshForHubUi); } catch { }
+                _fileManagerRefreshObserverRegistered = false;
+            }
             singleton = null;
         }
         public void Prepare()

@@ -1802,18 +1802,43 @@ namespace VPB
         /// Falls back to a full <see cref="RefreshFiles"/> when the gallery hasn't loaded yet
         /// or the delta lists are null/empty (which shouldn't normally happen, but is safe).
         /// </summary>
-        public void ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
+        /// <returns>True when the grid or side metadata was updated.</returns>
+        public bool ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
         {
-            if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
-            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            lastPackageDeltaChangedGrid = false;
+            if (!VamOnDemandLoader.IsMainThread())
+            {
+                LogPackageDeltaSkip("background_thread");
+                return false;
+            }
+            if (Gallery.IsSuppressed())
+            {
+                LogPackageDeltaSkip("suppressed");
+                return false;
+            }
+            if (IsHubMode)
+            {
+                LogPackageDeltaSkip("hub_mode");
+                return false;
+            }
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                LogPackageDeltaSkip("settings_open");
+                return false;
+            }
 
             // If we have never loaded, the scan just completed and we have a full PackagesByUid
             // for the first time – do a clean initial load now.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
                 RefreshFiles(false);
-                return;
+                return true;
             }
 
             // If neither list has entries the package set didn't change at all.
@@ -1826,8 +1851,19 @@ namespace VPB
             {
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
                 refreshOnNextShow = false;
-                return;
+                LogPackageDeltaSkip("empty_delta");
+                return false;
             }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
+                    + "' ext='" + (currentExtension ?? "") + "' path='" + (currentPath ?? "")
+                    + "' added=" + (added != null ? added.Count : 0)
+                    + " removed=" + (removed != null ? removed.Count : 0)
+                    + " gridBefore=" + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0));
+            }
+            catch { }
 
             // If the refresh coroutine is still running (shouldn't normally happen after the
             // !init||flag gate, but be defensive) cancel it so we work on a stable list.
@@ -1852,6 +1888,7 @@ namespace VPB
                 anchorUid = currentFilteredFiles[centerIdx]?.Uid;
 
             bool changed = false;
+            bool skippedForNoCache = false;
 
             // ── Remove ────────────────────────────────────────────────────────────────────
             if (removed != null && removed.Count > 0)
@@ -1887,6 +1924,14 @@ namespace VPB
                 bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
 
                 var newEntries = new List<FileEntry>();
+                var existingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int fi = 0; fi < currentFilteredFiles.Count; fi++)
+                {
+                    FileEntry fe = currentFilteredFiles[fi];
+                    if (fe != null && !string.IsNullOrEmpty(fe.Uid))
+                        existingUids.Add(fe.Uid);
+                }
+
                 foreach (var pkg in added)
                 {
                     if (pkg == null) continue;
@@ -1895,7 +1940,15 @@ namespace VPB
                     if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                     List<string> names; List<long> ticks; List<long> sizes;
-                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                    {
+                        try { pkg.Scan(); } catch { }
+                        if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                        {
+                            skippedForNoCache = true;
+                            continue;
+                        }
+                    }
 
                     for (int i = 0; i < names.Count; i++)
                     {
@@ -1958,17 +2011,58 @@ namespace VPB
                         // Name filter
                         if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
 
-                        var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
+                        DateTime entryTime = pkg.LastWriteTime;
+                        if (ticks != null && i < ticks.Count && ticks[i] != 0L)
+                        {
+                            try { entryTime = new DateTime(ticks[i], DateTimeKind.Utc).ToLocalTime(); }
+                            catch { entryTime = pkg.LastWriteTime; }
+                        }
+                        long entrySize = pkg.Size;
+                        if (sizes != null && i < sizes.Count)
+                            entrySize = sizes[i];
+
+                        var entry = new VarFileEntry(pkg, ip, entryTime, entrySize);
 
                         // Full filter check (clothing/appearance subfilters, tags, rating, size, scene source …)
                         if (!PassesFilters(entry, true)) continue;
+                        if (!existingUids.Add(entry.Uid)) continue;
 
                         newEntries.Add(entry);
                     }
                 }
 
+                if (newEntries.Count == 0 && added != null && added.Count > 0
+                    && string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+                {
+                    var addedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int ai = 0; ai < added.Count; ai++)
+                    {
+                        VarPackage ap = added[ai];
+                        if (ap != null && !string.IsNullOrEmpty(ap.Uid))
+                            addedUids.Add(ap.Uid);
+                    }
+                    if (addedUids.Count > 0)
+                    {
+                        List<FileEntry> pkgRows = BuildPackageListEntriesForUids(addedUids);
+                        for (int pi = 0; pi < pkgRows.Count; pi++)
+                        {
+                            FileEntry row = pkgRows[pi];
+                            if (row == null || string.IsNullOrEmpty(row.Uid)) continue;
+                            if (!PassesFilters(row, true)) continue;
+                            if (!existingUids.Add(row.Uid)) continue;
+                            newEntries.Add(row);
+                        }
+                    }
+                }
+
                 if (newEntries.Count > 0)
                 {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
+                            + " title='" + (currentCategoryTitle ?? "") + "'");
+                    }
+                    catch { }
                     currentFilteredFiles.AddRange(newEntries);
                     lastFilteredFiles.AddRange(newEntries);
 
@@ -1977,10 +2071,19 @@ namespace VPB
                     {
                         GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
                         GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+                        try { GallerySortManager.ApplyHideOldVersionsFilter(currentFilteredFiles); } catch { }
+                        try { GallerySortManager.ApplyHideOldVersionsFilter(lastFilteredFiles); } catch { }
                     }
 
                     changed = true;
+                    lastPackageDeltaChangedGrid = true;
                 }
+            }
+
+            if (skippedForNoCache && !changed && !Gallery.IsSuppressed() && !_cacheRetryPending)
+            {
+                _cacheRetryPending = true;
+                try { StartCoroutine(RetryRefreshAfterNoCacheDelay()); } catch { }
             }
 
             if (!changed)
@@ -1988,13 +2091,20 @@ namespace VPB
                 // Nothing actually changed – keep gallery exactly as-is.
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
                 refreshOnNextShow = false;
-                return;
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
+                        + "' skippedNoCache=" + (skippedForNoCache ? "1" : "0"));
+                }
+                catch { }
+                return false;
             }
 
             InvalidateGalleryPreHideFileListSnapshot();
 
             // ── Update grid ───────────────────────────────────────────────────────────────
             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+            try { recyclingGrid.Refresh(); } catch { }
 
             // ── Restore scroll via UID anchor ─────────────────────────────────────────────
             if (anchorUid != null)
@@ -2010,8 +2120,8 @@ namespace VPB
 
             UpdatePaginationText();
             lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+            lastPackageDeltaChangedGrid = true;
             refreshOnNextShow = false;
-            creatorsCached = false;
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 if (!TryRecomputeAppearanceGenderFacetCountsScoped())
@@ -2024,8 +2134,52 @@ namespace VPB
             else
                 tagsCached = false;
             userTagsCached = false;
-            categoriesCached = false;
             pathsCached = false;
+            try { RefreshSideTabsAfterPackageDelta(); } catch { }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
+                    + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0)
+                    + " title='" + (currentCategoryTitle ?? "") + "'");
+            }
+            catch { }
+            return true;
+        }
+
+        private void LogPackageDeltaSkip(string reason)
+        {
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
+                    + " title='" + (currentCategoryTitle ?? "") + "'");
+            }
+            catch { }
+        }
+
+        /// <summary>Rebuild category/creator side-tab counts after an in-memory package delta.</summary>
+        private void RefreshSideTabsAfterPackageDelta()
+        {
+            if (IsHubMode) return;
+            if (!VamOnDemandLoader.IsMainThread()) return;
+            try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+            categoriesCached = false;
+            creatorsCached = false;
+            _deferSideTabCountsForceRefresh = true;
+            if (!IsVisible && !hasLoadedContent) return;
+            if (_packageDeltaSideTabsCoroutine != null) return;
+            try { _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta()); } catch { }
+        }
+
+        private IEnumerator CoRefreshSideTabsAfterPackageDelta()
+        {
+            yield return null;
+            _packageDeltaSideTabsCoroutine = null;
+            if (IsHubMode) yield break;
+            try { CacheCategoryCounts(); } catch { }
+            try { CacheCreators(); } catch { }
+            if (!IsVisible && !hasLoadedContent) yield break;
+            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
@@ -2527,6 +2681,7 @@ namespace VPB
                     }
                     categoriesCached = true;
                     unchecked { categorySideTabDataRevision++; }
+                    StampSideTabCountsForCurrentScan();
                 }
                 if (allowStoreSharedSideMeta && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
                     && earlyNewCreators != null && earlyNewCatCounts != null)
@@ -2704,10 +2859,11 @@ namespace VPB
 
             string fileListSnapKey;
             bool canFileListCache = TryBuildFileListSnapshotCacheKey(out fileListSnapKey);
+            bool bypassFileListCache = string.Equals(_refreshFilesDebugSource, "sql_index_updated", StringComparison.Ordinal);
             List<FileEntry> snapList = null;
             bool fileListFromCache = false;
             bool fileListFromSibling = false;
-            if (canFileListCache && Gallery.singleton != null)
+            if (!bypassFileListCache && canFileListCache && Gallery.singleton != null)
             {
                 var panels = Gallery.singleton.Panels;
                 for (int pi = 0; pi < panels.Count; pi++)
@@ -2723,7 +2879,7 @@ namespace VPB
                     break;
                 }
             }
-            if (!fileListFromCache && canFileListCache)
+            if (!bypassFileListCache && !fileListFromCache && canFileListCache)
                 fileListFromCache = GalleryFileListSnapshotCache.TryGet(fileListSnapKey, out snapList);
             List<FileEntry> files = (fileListFromCache && snapList != null) ? snapList : new List<FileEntry>();
             if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
@@ -3938,6 +4094,10 @@ namespace VPB
                 {
                     ApplyEarlyMetaRefreshResults(metaBuildGroupId, earlyBuildCreators, earlyBuildCats, sideMetaCacheKey, false,
                         earlyNewCreators, earlyNewCatCounts);
+                    if (metaBuildGroupId == currentLoadingGroupId)
+                    {
+                        try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+                    }
                 }
                 else
                 {
@@ -4005,8 +4165,15 @@ namespace VPB
 
             // Hide overlay and stop pane timing before full UpdateTabs(): side-tab rebuild (hundreds of buttons) is not the file grid
             // and was inflating "until grid ready" by 1–2+ s. Thumbnails for visible rows use memory cache + threaded queue (BindFileButton/LoadThumbnail), not a full-grid decode here.
+            bool rebuildSideTabsAfterFirstLoad = _sideTabsNeedFullRebuildAfterFirstRefresh;
+            _deferSideTabCountsForceRefresh = rebuildSideTabsAfterFirstLoad;
             if (_sideTabsNeedFullRebuildAfterFirstRefresh)
+            {
+                categoriesCached = false;
+                creatorsCached = false;
+                try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
                 _sideTabsNeedFullRebuildAfterFirstRefresh = false;
+            }
 
             HideLoadingOverlay();
             hasLoadedContent = true;
@@ -4111,6 +4278,9 @@ namespace VPB
             yield return null;
             // Phase 1: main side strips (category/creator). Sub-pane is cleared here; tag UI fills in phase 2 after "interactive DONE".
             LogGalleryCategoryTypeNavPhase("deferred_sideTabs_phase1_main_before");
+            bool forceCounts = _deferSideTabCountsForceRefresh;
+            _deferSideTabCountsForceRefresh = false;
+            try { EnsureSideTabCountsFreshAfterGridReady(force: forceCounts); } catch { }
             try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
             if (DeferredSubPaneNeedsTagCountCachePass())
             {

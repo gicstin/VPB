@@ -1152,6 +1152,7 @@ namespace VPB
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
+            Gallery.DrainPendingSqlIndexUpdate();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
             UpdateUpdater();

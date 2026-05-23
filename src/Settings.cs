@@ -70,6 +70,8 @@ namespace VPB
         public ConfigEntry<float> StartupDeferGallerySqlRebuildDelaySec;
         public ConfigEntry<bool> StartupSkipRedundantSyncVamX;
         public ConfigEntry<bool> StartupSkipGallerySqlRebuildIfValid;
+        public ConfigEntry<bool> StartupPreferIncrementalGallerySqlIndex;
+        public ConfigEntry<int> StartupIncrementalGallerySqlMaxDelta;
         public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
         public ConfigEntry<bool> StartupSqlBatchCatMem;
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
@@ -167,6 +169,8 @@ namespace VPB
             StartupDeferGallerySqlRebuildDelaySec = config.Bind<float>("Startup", "DeferGallerySqlRebuildDelaySec", 2f, "Seconds after READY before deferred gallery SQLite rebuild starts (0 = immediate). Gives UI/gallery a short window on restored index.");
             StartupSkipRedundantSyncVamX = config.Bind<bool>("Startup", "SkipRedundantSyncVamXWhenAbsent", true, "When vamX is absent, skip expensive vamX bootstrap FileExists/on-demand work during startup. SyncVamX always runs so main-menu Create tiles stay correct.");
             StartupSkipGallerySqlRebuildIfValid = config.Bind<bool>("Startup", "SkipGallerySqlRebuildIfValid", true, "Skip full gallery SQLite rebuild when on-disk index meta matches current categories and package inventory (e.g. after sqlRestore).");
+            StartupPreferIncrementalGallerySqlIndex = config.Bind<bool>("Startup", "PreferIncrementalGallerySqlIndex", true, "When package inventory changes by a small delta (Hub download, few adds/removes), patch the gallery SQLite index instead of DELETE+rebuild of all rows.");
+            StartupIncrementalGallerySqlMaxDelta = config.Bind<int>("Startup", "IncrementalGallerySqlMaxDelta", 0, "Max package add+remove count for incremental SQL index (0 = auto: min(32, 20% of indexed packages)). Larger changes use full rebuild.");
             StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
