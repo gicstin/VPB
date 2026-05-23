@@ -1267,6 +1267,7 @@ namespace VPB
                 }
             }
             OnDemandTextureCacheHook.Update();
+            try { ImageLoadingMgr.singleton?.DrainPendingRuntimeZstdWrites(); } catch { }
             // Hotkeys
             if (m_Inited)
             {

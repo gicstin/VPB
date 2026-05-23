@@ -1687,61 +1687,8 @@ namespace VPB
 
         public static void WriteAlphaTextureToZstdCache(ImageLoaderThreaded.QueuedImage qi)
         {
-            if (qi == null || qi.tex == null || string.IsNullOrEmpty(qi.imgPath)) return;
-            try
-            {
-                string zstdPath = TextureUtil.BuildExactZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, false);
-                if (string.IsNullOrEmpty(zstdPath)) return;
-                if (File.Exists(zstdPath) && File.Exists(zstdPath + "meta")) return;
-
-                var src = qi.tex;
-                RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
-                Graphics.Blit(src, rt);
-                RenderTexture prev = RenderTexture.active;
-                Texture2D rgba = null;
-                try
-                {
-                    RenderTexture.active = rt;
-                    rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, qi.linear);
-                    rgba.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0, false);
-                    rgba.Apply(false, false);
-                }
-                finally
-                {
-                    RenderTexture.active = prev;
-                    RenderTexture.ReleaseTemporary(rt);
-                }
-
-                byte[] raw = rgba.GetRawTextureData();
-                UnityEngine.Object.Destroy(rgba);
-                if (raw == null || raw.Length == 0) return;
-
-                int level = 3;
-                try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
-
-                byte[] compressed;
-                NativeTextureOnDemandCache.EnsureZstdInitialized();
-                using (var compressor = new Compressor(new CompressionOptions(level)))
-                    compressed = compressor.Wrap(raw, 0, raw.Length);
-
-                string zdir = Path.GetDirectoryName(zstdPath);
-                if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
-
-                File.WriteAllBytes(zstdPath, compressed);
-
-                var zmeta = new SimpleJSON.JSONClass();
-                zmeta["type"] = "compressed";
-                zmeta["width"] = src.width.ToString();
-                zmeta["height"] = src.height.ToString();
-                zmeta["format"] = TextureFormat.RGBA32.ToString();
-                zmeta["vpbVer"].AsInt = AlphaCacheVersion;
-                TextureUtil.WriteMipFieldsToMeta(zmeta, src.width, src.height, TextureFormat.RGBA32, raw.Length, false);
-                File.WriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB ALPHA WRITE] Failed for " + qi.imgPath + ": " + ex.Message);
-            }
+            if (ImageLoadingMgr.singleton == null) return;
+            ImageLoadingMgr.singleton.TryEnqueueResizeCache(qi);
         }
 
         // --- Runtime zstd write-after-load (lazy cache) ---
@@ -1752,6 +1699,216 @@ namespace VPB
         private readonly HashSet<string> pendingZstdWrites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly object candidateLock = new object();
         private readonly object pendingZstdWriteLock = new object();
+
+        private sealed class PendingRuntimeZstdWrite
+        {
+            internal ImageLoaderThreaded.QueuedImage Qi;
+            internal string ZstdPath;
+            internal bool IsSimPath;
+            internal bool IsAlphaFromGrayscale;
+            internal bool QueueCreateMipMaps;
+        }
+
+        private readonly Queue<PendingRuntimeZstdWrite> runtimeZstdWriteQueue = new Queue<PendingRuntimeZstdWrite>();
+        private readonly object runtimeZstdWriteQueueLock = new object();
+        private const float RuntimeZstdWriteFrameBudgetSec = 0.006f;
+        private const int MaxRuntimeZstdWriteQueue = 96;
+
+        /// <summary>
+        /// Spread runtime zstd cache writes across frames. Full pipeline in PostFinish caused periodic hitches
+        /// (glute/soft-body physics jitter when frame time spikes).
+        /// </summary>
+        public void DrainPendingRuntimeZstdWrites()
+        {
+            if (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive()) return;
+
+            float deadline = Time.realtimeSinceStartup + RuntimeZstdWriteFrameBudgetSec;
+            while (Time.realtimeSinceStartup < deadline)
+            {
+                PendingRuntimeZstdWrite item;
+                lock (runtimeZstdWriteQueueLock)
+                {
+                    if (runtimeZstdWriteQueue.Count == 0) return;
+                    item = runtimeZstdWriteQueue.Dequeue();
+                }
+
+                ProcessPendingRuntimeZstdWrite(item);
+            }
+        }
+
+        private void EnqueueRuntimeZstdWrite(
+            ImageLoaderThreaded.QueuedImage qi,
+            string zstdPath,
+            bool isSimPath,
+            bool isAlphaFromGrayscale,
+            bool queueCreateMipMaps)
+        {
+            if (qi == null) return;
+
+            lock (runtimeZstdWriteQueueLock)
+            {
+                while (runtimeZstdWriteQueue.Count >= MaxRuntimeZstdWriteQueue)
+                {
+                    var dropped = runtimeZstdWriteQueue.Dequeue();
+                    ReleasePendingZstdWriteSlot(dropped != null ? dropped.ZstdPath : null);
+                }
+
+                runtimeZstdWriteQueue.Enqueue(new PendingRuntimeZstdWrite
+                {
+                    Qi = qi,
+                    ZstdPath = zstdPath,
+                    IsSimPath = isSimPath,
+                    IsAlphaFromGrayscale = isAlphaFromGrayscale,
+                    QueueCreateMipMaps = queueCreateMipMaps
+                });
+            }
+        }
+
+        private static void ReleasePendingZstdWriteSlot(string zstdPath)
+        {
+            if (string.IsNullOrEmpty(zstdPath) || ImageLoadingMgr.singleton == null) return;
+            lock (ImageLoadingMgr.singleton.pendingZstdWriteLock)
+            {
+                ImageLoadingMgr.singleton.pendingZstdWrites.Remove(zstdPath);
+            }
+        }
+
+        private void ProcessPendingRuntimeZstdWrite(PendingRuntimeZstdWrite item)
+        {
+            if (item == null) return;
+
+            var qi = item.Qi;
+            string zstdPath = item.ZstdPath;
+            try
+            {
+                if (qi == null || qi.tex == null) return;
+
+                if (item.IsAlphaFromGrayscale)
+                {
+                    if (string.IsNullOrEmpty(zstdPath))
+                    {
+                        zstdPath = TextureUtil.BuildExactZstdCachePath(
+                            qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                            0, 0, qi.bumpStrength, false);
+                    }
+                    if (string.IsNullOrEmpty(zstdPath)) return;
+                    if (File.Exists(zstdPath) && File.Exists(zstdPath + "meta")) return;
+
+                    byte[] raw;
+                    TextureFormat format;
+                    int w, h;
+                    if (!TryCaptureAlphaTextureBytesForZstdWrite(qi, out raw, out format, out w, out h)) return;
+                    if (raw == null || raw.Length == 0) return;
+
+                    int level = 3;
+                    try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
+                    string pathCopy = zstdPath;
+                    ThreadPool.QueueUserWorkItem(_ => WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, false, level, AlphaCacheVersion));
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(zstdPath)) return;
+                if (File.Exists(zstdPath) && File.Exists(zstdPath + "meta")) return;
+
+                byte[] rawBytes;
+                TextureFormat fmt;
+                int width, height;
+                if (!TryGetTextureBytesForZstdWrite(qi.tex as Texture2D, qi.linear, item.IsSimPath, out rawBytes, out fmt, out width, out height))
+                    return;
+                if (rawBytes == null || rawBytes.Length == 0) return;
+
+                int zlevel = 3;
+                try { if (Settings.Instance != null) zlevel = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
+                bool isSim = item.IsSimPath;
+                bool queueMip = item.QueueCreateMipMaps;
+                string pathForWorker = zstdPath;
+                ThreadPool.QueueUserWorkItem(_ => WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel, 0));
+            }
+            finally
+            {
+                ReleasePendingZstdWriteSlot(zstdPath);
+            }
+        }
+
+        private static bool TryCaptureAlphaTextureBytesForZstdWrite(
+            ImageLoaderThreaded.QueuedImage qi,
+            out byte[] raw,
+            out TextureFormat format,
+            out int w,
+            out int h)
+        {
+            raw = null;
+            format = TextureFormat.RGBA32;
+            w = 0;
+            h = 0;
+            if (qi == null || qi.tex == null) return false;
+
+            var src = qi.tex;
+            RenderTexture rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32, qi.linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default);
+            Texture2D rgba = null;
+            try
+            {
+                Graphics.Blit(src, rt);
+                RenderTexture prev = RenderTexture.active;
+                RenderTexture.active = rt;
+                rgba = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, qi.linear);
+                rgba.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0, false);
+                rgba.Apply(false, false);
+                RenderTexture.active = prev;
+                w = src.width;
+                h = src.height;
+                raw = rgba.GetRawTextureData();
+                return raw != null && raw.Length > 0;
+            }
+            finally
+            {
+                RenderTexture.ReleaseTemporary(rt);
+                if (rgba != null) UnityEngine.Object.Destroy(rgba);
+            }
+        }
+
+        private static void WriteCapturedBytesToZstdCache(
+            string zstdPath,
+            byte[] raw,
+            int w,
+            int h,
+            TextureFormat format,
+            bool isSimPath,
+            bool queueCreateMipMaps,
+            int zstdLevel,
+            int alphaCacheVersion)
+        {
+            if (string.IsNullOrEmpty(zstdPath) || raw == null || raw.Length == 0 || w <= 0 || h <= 0) return;
+
+            try
+            {
+                byte[] compressed = ZstdCompressor.Compress(raw, zstdLevel);
+                if (compressed == null || compressed.Length == 0) return;
+
+                string zdir = Path.GetDirectoryName(zstdPath);
+                if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
+
+                string temp = zstdPath + ".tmp";
+                File.WriteAllBytes(temp, compressed);
+                if (File.Exists(zstdPath)) try { File.Delete(zstdPath); } catch { }
+                File.Move(temp, zstdPath);
+
+                var zmeta = new SimpleJSON.JSONClass();
+                zmeta["type"] = "compressed";
+                zmeta["width"] = w.ToString();
+                zmeta["height"] = h.ToString();
+                zmeta["format"] = format.ToString();
+                if (isSimPath) zmeta["isReadable"] = "true";
+                if (alphaCacheVersion > 0) zmeta["vpbVer"].AsInt = alphaCacheVersion;
+                zmeta["zstdLevel"].AsInt = zstdLevel;
+                TextureUtil.WriteMipFieldsToMeta(zmeta, w, h, format, raw.Length, queueCreateMipMaps);
+                File.WriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB ZSTD WRITE] Failed for " + zstdPath + ": " + ex.Message);
+            }
+        }
 
         public void ClearCandidates()
         {
@@ -1802,8 +1959,18 @@ namespace VPB
 
             if (qi.createAlphaFromGrayscale)
             {
-                // Unity RenderTexture/Graphics APIs must run on main thread (ThreadPool caused scene-load crashes).
-                WriteAlphaTextureToZstdCache(qi);
+                string alphaPath = TextureUtil.BuildExactZstdCachePath(
+                    qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                    0, 0, qi.bumpStrength, false);
+                if (!string.IsNullOrEmpty(alphaPath))
+                {
+                    lock (pendingZstdWriteLock)
+                    {
+                        if (pendingZstdWrites.Contains(alphaPath)) return true;
+                        pendingZstdWrites.Add(alphaPath);
+                    }
+                }
+                EnqueueRuntimeZstdWrite(qi, alphaPath, false, true, false);
                 return true;
             }
 
@@ -1825,13 +1992,7 @@ namespace VPB
                 pendingZstdWrites.Add(zstdPath);
             }
 
-            bool queueCreateMipMaps = ResolveQueueCreateMipMaps(qi);
-
-            try { WriteQueuedImageToZstdCache(qi, zstdPath, isSimPath, queueCreateMipMaps); }
-            finally
-            {
-                lock (pendingZstdWriteLock) { pendingZstdWrites.Remove(zstdPath); }
-            }
+            EnqueueRuntimeZstdWrite(qi, zstdPath, isSimPath, false, ResolveQueueCreateMipMaps(qi));
             return true;
         }
 
@@ -1849,53 +2010,6 @@ namespace VPB
             catch { }
 
             return true;
-        }
-
-        private static void WriteQueuedImageToZstdCache(ImageLoaderThreaded.QueuedImage qi, string zstdPath, bool isSimPath, bool queueCreateMipMaps)
-        {
-            if (qi == null || qi.tex == null || string.IsNullOrEmpty(zstdPath)) return;
-            if (File.Exists(zstdPath) && File.Exists(zstdPath + "meta")) return;
-
-            try
-            {
-                var src = qi.tex as Texture2D;
-                if (src == null) return;
-
-                byte[] raw;
-                TextureFormat format;
-                int w, h;
-                if (!TryGetTextureBytesForZstdWrite(src, qi.linear, isSimPath, out raw, out format, out w, out h))
-                    return;
-                if (raw == null || raw.Length == 0) return;
-
-                int level = 3;
-                try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
-
-                byte[] compressed = ZstdCompressor.Compress(raw, level);
-                if (compressed == null || compressed.Length == 0) return;
-
-                string zdir = Path.GetDirectoryName(zstdPath);
-                if (!string.IsNullOrEmpty(zdir) && !Directory.Exists(zdir)) Directory.CreateDirectory(zdir);
-
-                string temp = zstdPath + ".tmp";
-                File.WriteAllBytes(temp, compressed);
-                if (File.Exists(zstdPath)) try { File.Delete(zstdPath); } catch { }
-                File.Move(temp, zstdPath);
-
-                var zmeta = new SimpleJSON.JSONClass();
-                zmeta["type"] = "compressed";
-                zmeta["width"] = w.ToString();
-                zmeta["height"] = h.ToString();
-                zmeta["format"] = format.ToString();
-                if (isSimPath) zmeta["isReadable"] = "true";
-                zmeta["zstdLevel"].AsInt = level;
-                TextureUtil.WriteMipFieldsToMeta(zmeta, w, h, format, raw.Length, queueCreateMipMaps);
-                File.WriteAllText(zstdPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(zmeta, 1024));
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB ZSTD WRITE] Failed for " + (qi != null ? qi.imgPath : "?") + ": " + ex.Message);
-            }
         }
 
         private static bool IsTextureReadableForCacheWrite(Texture2D tex)

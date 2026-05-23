@@ -1275,7 +1275,14 @@ namespace VPB
                         mName.IndexOf("OnSimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
                         || mName.IndexOf("SimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
                         || tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0;
+                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("DAZSoftBody", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("FemaleGlutePhysics", StringComparison.OrdinalIgnoreCase) >= 0
+                        || tName.IndexOf("FemaleBreastPhysics", StringComparison.OrdinalIgnoreCase) >= 0
+                        || (tName.IndexOf("Glute", StringComparison.OrdinalIgnoreCase) >= 0
+                            && tName.IndexOf("Phys", StringComparison.OrdinalIgnoreCase) >= 0)
+                        || (tName.IndexOf("Breast", StringComparison.OrdinalIgnoreCase) >= 0
+                            && tName.IndexOf("Phys", StringComparison.OrdinalIgnoreCase) >= 0);
 
                     if (looksLikeSimCallback)
                     {
