@@ -706,8 +706,9 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
-                        ClothingApplyMode.Replace, presetJC: presetJSON);
+                    VpbImport.LoadPreset(entry, atom, VpbResourceType.General,
+                        ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
+                        skipDependencyPrewarm: true, updateLastRestoredData: false);
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
                     SchedulePostApplyFixup(atom, inferredBaseId);
@@ -1002,6 +1003,304 @@ namespace VPB
                     LogUtil.LogError("[VPB] RemoveAllClothing: geometry fallback exception: " + ex);
                 }
             }
+        }
+
+        internal sealed class ClothingHairUndoState
+        {
+            public Dictionary<string, bool> GeometryToggles;
+            public List<JSONClass> StorableSnapshots;
+        }
+
+        private static readonly HashSet<string> s_ClothingHairAggregateStorables =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Clothing",
+                "Hair",
+                "ClothingPresets",
+                "HairPresets",
+            };
+
+        private static readonly string[] s_ClothingHairItemStorableSuffixes =
+        {
+            "Preset",
+            "Presets",
+            "Material",
+            "Sim",
+            "Physics",
+            "Colliders",
+            "Collider",
+        };
+
+        private static string NormalizeUndoMatchToken(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            char[] buf = new char[value.Length];
+            int n = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (char.IsLetterOrDigit(c))
+                    buf[n++] = char.ToLowerInvariant(c);
+            }
+            return n > 0 ? new string(buf, 0, n) : "";
+        }
+
+        private static void CollectClothingHairItemMatchTokens(string itemUid, HashSet<string> tokens)
+        {
+            if (tokens == null || string.IsNullOrEmpty(itemUid)) return;
+
+            void add(string s)
+            {
+                string n = NormalizeUndoMatchToken(s);
+                if (!string.IsNullOrEmpty(n)) tokens.Add(n);
+            }
+
+            add(itemUid);
+
+            string path = itemUid.Replace('\\', '/');
+            int slash = path.LastIndexOf('/');
+            if (slash >= 0 && slash < path.Length - 1)
+                path = path.Substring(slash + 1);
+            int dot = path.LastIndexOf('.');
+            if (dot > 0)
+                path = path.Substring(0, dot);
+            add(path);
+
+            string creator = "";
+            int colon = itemUid.IndexOf(':');
+            if (colon > 0)
+                creator = itemUid.Substring(0, colon);
+            if (!string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(path))
+                add(creator + ":" + path);
+        }
+
+        private static bool IsClothingHairItemStorableId(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            return storableId.IndexOf("clothingItem#", StringComparison.OrdinalIgnoreCase) >= 0
+                || storableId.StartsWith("clothingItem", StringComparison.OrdinalIgnoreCase)
+                || storableId.IndexOf("hairItem#", StringComparison.OrdinalIgnoreCase) >= 0
+                || storableId.StartsWith("hairItem", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExcludedPersonPresetStorable(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            return string.Equals(storableId, "AppearancePresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "PosePresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "MorphPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "SkinPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "PluginPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "AnimationPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "FemaleBreastPhysicsPresets", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool StorableMatchesClothingHairItemTokens(string storableId, HashSet<string> itemTokens)
+        {
+            if (string.IsNullOrEmpty(storableId) || itemTokens == null || itemTokens.Count == 0)
+                return false;
+
+            string sidNorm = NormalizeUndoMatchToken(storableId);
+            if (string.IsNullOrEmpty(sidNorm)) return false;
+
+            foreach (string token in itemTokens)
+            {
+                if (string.IsNullOrEmpty(token)) continue;
+                if (sidNorm.Contains(token)) return true;
+            }
+
+            return false;
+        }
+
+        private static bool ShouldCaptureClothingHairStorable(string storableId, HashSet<string> itemTokens)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            if (s_ClothingHairAggregateStorables.Contains(storableId)) return true;
+            if (IsClothingHairItemStorableId(storableId)) return true;
+            if (StorableMatchesClothingHairItemTokens(storableId, itemTokens)) return true;
+
+            if (IsExcludedPersonPresetStorable(storableId)) return false;
+
+            for (int i = 0; i < s_ClothingHairItemStorableSuffixes.Length; i++)
+            {
+                if (storableId.EndsWith(s_ClothingHairItemStorableSuffixes[i], StringComparison.OrdinalIgnoreCase)
+                    && storableId.IndexOf(':') >= 0)
+                {
+                    return StorableMatchesClothingHairItemTokens(storableId, itemTokens)
+                        || storableId.IndexOf("cloth", StringComparison.OrdinalIgnoreCase) >= 0
+                        || storableId.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+
+            return false;
+        }
+
+        internal static ClothingHairUndoState CaptureClothingHairUndoState(Atom atom)
+        {
+            var state = new ClothingHairUndoState
+            {
+                GeometryToggles = new Dictionary<string, bool>(),
+                StorableSnapshots = new List<JSONClass>(),
+            };
+            if (atom == null) return state;
+
+            HashSet<string> itemTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            JSONStorable geometry = null;
+            try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+            if (geometry != null)
+            {
+                List<string> names = null;
+                try { names = geometry.GetBoolParamNames(); } catch { }
+                if (names != null)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string key = names[i];
+                        if (string.IsNullOrEmpty(key)) continue;
+                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                            && !key.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(key); } catch { }
+                        if (b != null) state.GeometryToggles[key] = b.val;
+
+                        string prefix = key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                            ? "clothing:"
+                            : "hair:";
+                        CollectClothingHairItemMatchTokens(key.Substring(prefix.Length), itemTokens);
+                    }
+                }
+            }
+
+            HashSet<string> capturedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> storableIds = null;
+            try { storableIds = atom.GetStorableIDs(); } catch { }
+
+            if (storableIds != null)
+            {
+                for (int i = 0; i < storableIds.Count; i++)
+                {
+                    string sid = storableIds[i];
+                    if (string.IsNullOrEmpty(sid)) continue;
+                    if (!ShouldCaptureClothingHairStorable(sid, itemTokens)) continue;
+                    if (!capturedIds.Add(sid)) continue;
+
+                    JSONStorable s = null;
+                    try { s = atom.GetStorableByID(sid); } catch { }
+                    if (s == null) continue;
+
+                    JSONClass snap = null;
+                    try { snap = s.GetJSON(); } catch { }
+                    if (snap != null) state.StorableSnapshots.Add(snap);
+                }
+            }
+
+            return state;
+        }
+
+        internal static void RestoreClothingHairUndoState(Atom atom, ClothingHairUndoState state)
+        {
+            if (atom == null || state == null) return;
+
+            if (state.GeometryToggles != null)
+            {
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+                if (geometry != null)
+                {
+                    foreach (KeyValuePair<string, bool> kvp in state.GeometryToggles)
+                    {
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(kvp.Key); } catch { }
+                        if (b != null) b.val = kvp.Value;
+                    }
+
+                    List<string> currentNames = null;
+                    try { currentNames = geometry.GetBoolParamNames(); } catch { }
+                    if (currentNames != null)
+                    {
+                        for (int i = 0; i < currentNames.Count; i++)
+                        {
+                            string key = currentNames[i];
+                            if (string.IsNullOrEmpty(key)) continue;
+                            if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                                && !key.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                            if (state.GeometryToggles.ContainsKey(key)) continue;
+
+                            JSONStorableBool b = null;
+                            try { b = geometry.GetBoolJSONParam(key); } catch { }
+                            if (b != null) b.val = false;
+                        }
+                    }
+                }
+            }
+
+            RestoreClothingHairStorableSnapshots(atom, state.StorableSnapshots);
+
+            try
+            {
+                if (SuperController.singleton != null)
+                {
+                    SuperController.singleton.StartCoroutine(
+                        DeferredRestoreClothingHairUndoStateCoroutine(atom, state));
+                }
+            }
+            catch { }
+        }
+
+        private static void RestoreClothingHairStorableSnapshots(Atom atom, List<JSONClass> storableSnapshots)
+        {
+            if (atom == null || storableSnapshots == null) return;
+
+            for (int i = 0; i < storableSnapshots.Count; i++)
+            {
+                JSONClass snap = storableSnapshots[i];
+                if (snap == null || snap["id"] == null) continue;
+
+                string sid = snap["id"].Value;
+                if (string.IsNullOrEmpty(sid)) continue;
+
+                JSONStorable s = null;
+                try { s = atom.GetStorableByID(sid); } catch { }
+                if (s == null) continue;
+
+                try { s.RestoreFromJSON(snap); } catch { }
+            }
+        }
+
+        private static IEnumerator DeferredRestoreClothingHairUndoStateCoroutine(
+            Atom atom,
+            ClothingHairUndoState state)
+        {
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            if (atom == null || state == null) yield break;
+            RestoreClothingHairStorableSnapshots(atom, state.StorableSnapshots);
+        }
+
+        internal static bool ClothingHairUndoStateContainsStorable(ClothingHairUndoState state, string storableId)
+        {
+            if (state == null || state.StorableSnapshots == null || string.IsNullOrEmpty(storableId))
+                return false;
+
+            for (int i = 0; i < state.StorableSnapshots.Count; i++)
+            {
+                JSONClass snap = state.StorableSnapshots[i];
+                if (snap == null || snap["id"] == null) continue;
+                if (string.Equals(snap["id"].Value, storableId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

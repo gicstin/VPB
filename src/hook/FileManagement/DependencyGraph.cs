@@ -16,7 +16,6 @@ namespace VPB
 			public VarPackage Package;
 			public List<string> DirectDeps;
 			public HashSet<VarPackage> TransitiveDeps;
-			public HashSet<VarPackage> TransitiveDependents;
 			public HashSet<string> MissingIds;
 			public HashSet<string> MissingExactIds;
 			public HashSet<string> MissingGroupIds;
@@ -113,22 +112,7 @@ namespace VPB
 			if (TryGetDependentsFromBulkEdges(packageUid, targetShort, out dependentUids) && dependentUids != null && dependentUids.Count > 0)
 				return true;
 
-			lock (_lock)
-			{
-				EnsureCacheGeneration();
-				Node n = GetOrCreateNodeLocked(packageUid);
-				if (n == null) return false;
-				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-				BuildNodeLocked(n, visiting);
-				if (n.TransitiveDependents == null || n.TransitiveDependents.Count == 0) return false;
-				dependentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-				foreach (VarPackage p in n.TransitiveDependents)
-				{
-					if (p != null && !string.IsNullOrEmpty(p.Uid))
-						dependentUids.Add(p.Uid);
-				}
-				return dependentUids.Count > 0;
-			}
+			return false;
 		}
 
 		public static int GetMissingCount(string packageUid)

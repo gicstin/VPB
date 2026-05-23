@@ -38,7 +38,9 @@ namespace VPB
             ClothingApplyMode clothingMode,
             JSONClass presetJC = null,
             bool suppressRoot = false,
-            string storableNameOverride = null)
+            string storableNameOverride = null,
+            bool skipDependencyPrewarm = false,
+            bool updateLastRestoredData = true)
         {
             if (targetAtom == null)
             {
@@ -77,7 +79,7 @@ namespace VPB
                 return;
             }
 
-            if (sourceEntry != null)
+            if (sourceEntry != null && !skipDependencyPrewarm)
             {
                 try
                 {
@@ -106,14 +108,17 @@ namespace VPB
 
             // Must run after prewarm and before LoadPresetFromJSON. VaM batches the package-index
             // refresh; if it lands after the apply, dependent storables silently drop.
-            try
+            if (!skipDependencyPrewarm)
             {
-                VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_prewarm_flush");
-                LogUtil.Log("[VpbImport] Coalesced refresh flushed.");
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogWarning($"VpbImport.LoadPreset: ForceRunPendingCoalescedVamRefresh failed: {ex.Message}");
+                try
+                {
+                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_prewarm_flush");
+                    LogUtil.Log("[VpbImport] Coalesced refresh flushed.");
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning($"VpbImport.LoadPreset: ForceRunPendingCoalescedVamRefresh failed: {ex.Message}");
+                }
             }
 
             // REFACTOR-IN-PROGRESS: regions below tag which slice owns each resource type's body.
@@ -270,7 +275,7 @@ namespace VPB
 
                         string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
 
-                        targetAtom.SetLastRestoredData(preset, true, true);
+                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
                         try
                         {
@@ -552,7 +557,7 @@ namespace VPB
                         // user's lock state and dropdown name survive the apply.
                         PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
-                        targetAtom.SetLastRestoredData(preset, true, true);
+                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
                         try
                         {
@@ -664,7 +669,7 @@ namespace VPB
                         // child plus loadPresetOnSelect/presetName. Snapshot before, re-apply after.
                         PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
-                        targetAtom.SetLastRestoredData(preset, true, true);
+                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
                         try
                         {
@@ -756,7 +761,7 @@ namespace VPB
                         // child plus loadPresetOnSelect/presetName. Snapshot before, re-apply after.
                         PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
-                        targetAtom.SetLastRestoredData(preset, true, true);
+                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
                         try
                         {
@@ -878,7 +883,7 @@ namespace VPB
 
                         PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
 
-                        targetAtom.SetLastRestoredData(preset, true, true);
+                        MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
                         try
                         {
@@ -1549,9 +1554,6 @@ namespace VPB
         }
         #endregion
 
-        #region Slice E helpers
-        #endregion
-
         #region Scene-atom helpers
         /// <summary>
         /// Wraps a single scene-atom JSON node (shape: {id, type, storables, ...}) as a preset JSON
@@ -1573,6 +1575,12 @@ namespace VPB
             return preset;
         }
         #endregion
+
+        static void MaybeSetLastRestoredData(Atom atom, JSONClass preset, bool updateLastRestoredData)
+        {
+            if (!updateLastRestoredData || atom == null || preset == null) return;
+            try { atom.SetLastRestoredData(preset, true, true); } catch { }
+        }
 
         #region Slice G helpers — preset-params snapshot for non-Appearance branches
         /// <summary>

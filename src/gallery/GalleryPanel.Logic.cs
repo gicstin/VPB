@@ -2567,45 +2567,22 @@ namespace VPB
             try { atomUid = atom.uid; } catch { atomUid = null; }
             if (string.IsNullOrEmpty(atomUid)) return null;
 
-            Dictionary<string, bool> geometryToggleSnapshot = null;
-            List<JSONClass> storableSnapshots = new List<JSONClass>();
+            ClothingLoadingUtils.ClothingHairUndoState clothingHairSnapshot =
+                ClothingLoadingUtils.CaptureClothingHairUndoState(atom);
+            List<JSONClass> additionalStorableSnapshots = new List<JSONClass>();
 
-            bool ShouldSnapshotStorableId(string sid)
+            bool ShouldSnapshotAdditionalStorableId(string sid)
             {
                 if (string.IsNullOrEmpty(sid)) return false;
-                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+                if (ClothingLoadingUtils.ClothingHairUndoStateContainsStorable(clothingHairSnapshot, sid)) return false;
+                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return false;
                 if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) return true;
                 if (sid.EndsWith("Presets", StringComparison.OrdinalIgnoreCase)) return true;
                 if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) return true;
-                if (sid.IndexOf("clothing", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 if (sid.IndexOf("appearance", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (sid.IndexOf("morph", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 return false;
             }
-
-            try
-            {
-                JSONStorable geometry = null;
-                try { geometry = atom.GetStorableByID("geometry"); } catch { geometry = null; }
-                if (geometry != null)
-                {
-                    geometryToggleSnapshot = new Dictionary<string, bool>();
-                    List<string> names = null;
-                    try { names = geometry.GetBoolParamNames(); } catch { names = null; }
-                    if (names != null)
-                    {
-                        foreach (string key in names)
-                        {
-                            if (key == null) continue;
-                            if (!(key.StartsWith("clothing:") || key.StartsWith("hair:"))) continue;
-                            JSONStorableBool b = null;
-                            try { b = geometry.GetBoolJSONParam(key); } catch { b = null; }
-                            if (b != null) geometryToggleSnapshot[key] = b.val;
-                        }
-                    }
-                }
-            }
-            catch { geometryToggleSnapshot = null; }
 
             try
             {
@@ -2617,13 +2594,13 @@ namespace VPB
                     {
                         string sid = ids[i];
                         if (string.IsNullOrEmpty(sid)) continue;
-                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        if (!ShouldSnapshotAdditionalStorableId(sid)) continue;
                         JSONStorable s = null;
                         try { s = atom.GetStorableByID(sid); } catch { s = null; }
                         if (s == null) continue;
                         JSONClass snap = null;
                         try { snap = s.GetJSON(); } catch { snap = null; }
-                        if (snap != null) storableSnapshots.Add(snap);
+                        if (snap != null) additionalStorableSnapshots.Add(snap);
                     }
                 }
             }
@@ -2635,51 +2612,18 @@ namespace VPB
                 try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { targetAtom = null; }
                 if (targetAtom == null) return;
 
-                try
-                {
-                    if (geometryToggleSnapshot != null)
-                    {
-                        JSONStorable geo = null;
-                        try { geo = targetAtom.GetStorableByID("geometry"); } catch { geo = null; }
-                        if (geo != null)
-                        {
-                            foreach (var kvp in geometryToggleSnapshot)
-                            {
-                                JSONStorableBool b = null;
-                                try { b = geo.GetBoolJSONParam(kvp.Key); } catch { b = null; }
-                                if (b != null) b.val = kvp.Value;
-                            }
-
-                            List<string> currentNames = null;
-                            try { currentNames = geo.GetBoolParamNames(); } catch { currentNames = null; }
-                            if (currentNames != null)
-                            {
-                                foreach (string key2 in currentNames)
-                                {
-                                    if (string.IsNullOrEmpty(key2)) continue;
-                                    if ((key2.StartsWith("clothing:") || key2.StartsWith("hair:")) && !geometryToggleSnapshot.ContainsKey(key2))
-                                    {
-                                        JSONStorableBool b2 = null;
-                                        try { b2 = geo.GetBoolJSONParam(key2); } catch { b2 = null; }
-                                        if (b2 != null) b2.val = false;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { }
+                try { ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot); } catch { }
 
                 try
                 {
-                    for (int i = 0; i < storableSnapshots.Count; i++)
+                    for (int i = 0; i < additionalStorableSnapshots.Count; i++)
                     {
-                        JSONClass snap = storableSnapshots[i];
+                        JSONClass snap = additionalStorableSnapshots[i];
                         if (snap == null) continue;
                         string sid = null;
                         try { sid = snap["id"].Value; } catch { sid = null; }
                         if (string.IsNullOrEmpty(sid)) continue;
-                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        if (!ShouldSnapshotAdditionalStorableId(sid)) continue;
                         JSONStorable s = null;
                         try { s = targetAtom.GetStorableByID(sid); } catch { s = null; }
                         if (s == null) continue;

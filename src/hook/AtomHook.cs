@@ -18,6 +18,29 @@ namespace VPB
         private static readonly HashSet<string> s_PresetCatalogRefreshedUids =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Person-level preset storables need a synchronous FileManager.Refresh before VaM binds
+        // morph/clothing/hair from on-demand packages. Per-item clothing/hair preset storables
+        // (e.g. Creator:ItemNamePreset) must not trigger sync refresh mid-apply — it runs
+        // "Person refresh clothing and hair" and reverts active items to defaults.
+        private static readonly HashSet<string> s_SyncRefreshPresetStorables =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "ClothingPresets",
+                "HairPresets",
+                "PosePresets",
+                "AppearancePresets",
+                "Skin",
+                "PluginsPresets",
+                "AnimationPresets",
+                "BreastPhysicsPresets",
+            };
+
+        static bool ShouldSyncRefreshForPresetStorable(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return true;
+            return s_SyncRefreshPresetStorables.Contains(storableId);
+        }
+
         // Load-look feature
         //prefab:TabControlAtom
         [HarmonyPrefix]
@@ -190,7 +213,7 @@ namespace VPB
                     try { sceneLoad = VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene; } catch { }
                     bool syncRefreshEnabled = true;
                     try { syncRefreshEnabled = Settings.Instance != null && Settings.Instance.SyncRefreshOnPresetLoad != null ? Settings.Instance.SyncRefreshOnPresetLoad.Value : true; } catch { }
-                    if (!sceneLoad && syncRefreshEnabled)
+                    if (!sceneLoad && syncRefreshEnabled && ShouldSyncRefreshForPresetStorable(storableId))
                     {
                         try { VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("preset_json_catalog_interactive"); } catch { }
                     }

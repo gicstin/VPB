@@ -958,7 +958,6 @@ namespace VPB
         // True when hoverPathText is showing the filtered item count fallback (not an item path).
         private bool hoverPathIsCountMode = false;
         private RectTransform hoverPathRT;
-        private Image hoverPathBarImage;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
         // Hover preview overlay (bottom-left above tbox)
