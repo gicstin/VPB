@@ -45,6 +45,7 @@ namespace VPB
             List<string> toDelete)
         {
             if (uids == null || uids.Count == 0) return;
+            try { DependencyGraph.EnsureForUids(uids); } catch { }
 
             foreach (var uid in uids)
             {
@@ -339,18 +340,17 @@ namespace VPB
 
         private static int GetDependentCount(string uid)
         {
-            // Prefer explicit dependent count (rebuilt by scans)
             try
             {
                 var pkg = FileManager.GetPackageForDependency(uid, false);
-                if (pkg != null) return Math.Max(0, pkg.DependentCount);
+                if (pkg != null)
+                    return FileManager.ResolveDependentCount(pkg);
             }
             catch (Exception ex)
             {
                 LogSuppressed("DeletePackages.GetDependentCount(FileManager)", ex);
             }
 
-            // Fallback to dependency graph query
             try
             {
                 if (DependencyGraph.TryGetTransitiveDependents(uid, out HashSet<string> deps) && deps != null)

@@ -6,8 +6,8 @@ using System.Text.RegularExpressions;
 namespace VPB
 {
 	/// <summary>
-	/// Builds a dependency graph for installed packages and exposes cached queries
-	/// for transitive dependencies, transitive dependents, and missing dependency counts.
+	/// Lazy dependency graph: nodes built on demand from SQLite/bulk pkg_dep edges.
+	/// No full-library rebuild at startup.
 	/// </summary>
 	public static class DependencyGraph
 	{
@@ -15,93 +15,60 @@ namespace VPB
 		{
 			public VarPackage Package;
 			public List<string> DirectDeps;
-
 			public HashSet<VarPackage> TransitiveDeps;
 			public HashSet<VarPackage> TransitiveDependents;
-
 			public HashSet<string> MissingIds;
 			public HashSet<string> MissingExactIds;
 			public HashSet<string> MissingGroupIds;
-
 			public bool Built;
 		}
 
 		private static readonly object _lock = new object();
 		private static Dictionary<string, Node> _byUid = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
-		private static bool _ready = false;
+		private static long _cacheScanBinary = long.MinValue;
 
 		private static readonly Regex DepExact = new Regex("^([^\\.]+\\.[^\\.]+)\\.([0-9]+)$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 		private static readonly Regex DepLatest = new Regex("^([^\\.]+\\.[^\\.]+)\\.latest$", RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.IgnoreCase);
 		private static readonly Regex DepMin = new Regex("^([^\\.]+\\.[^\\.]+)\\.min([0-9]+)$", RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+		public static void OnPackageInventoryRefreshed()
+		{
+			lock (_lock)
+			{
+				long scanBin = GetCurrentScanBinary();
+				if (scanBin == _cacheScanBinary && _byUid != null && _byUid.Count > 0)
+					return;
+				_cacheScanBinary = scanBin;
+				_byUid = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
+			}
+		}
+
 		public static void Rebuild()
 		{
-			try
+			OnPackageInventoryRefreshed();
+		}
+
+		public static void EnsureForUids(IEnumerable<string> packageUids)
+		{
+			if (packageUids == null) return;
+			lock (_lock)
 			{
-				var list = FileManager.GetPackages();
-				var snapshot = (list != null) ? list.ToArray() : new VarPackage[0];
-
-				var next = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
-				for (int i = 0; i < snapshot.Length; i++)
+				EnsureCacheGeneration();
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				foreach (string uid in packageUids)
 				{
-					var pkg = snapshot[i];
-					if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
-					var direct = GetDirectDependencyIds(pkg);
-					next[pkg.Uid] = new Node
-					{
-						Package = pkg,
-						DirectDeps = direct,
-						Built = false,
-					};
-				}
-
-				foreach (var kvp in next)
-				{
-					BuildNode(kvp.Value, next);
-				}
-
-				// Build transitive dependents by inverting the transitive dependency sets.
-				foreach (var kvp in next)
-				{
-					var n = kvp.Value;
-					if (n.TransitiveDependents == null)
-						n.TransitiveDependents = new HashSet<VarPackage>();
-				}
-
-				foreach (var kvp in next)
-				{
-					var src = kvp.Value;
-					if (src.TransitiveDeps == null) continue;
-					foreach (var dep in src.TransitiveDeps)
-					{
-						if (dep == null || string.IsNullOrEmpty(dep.Uid)) continue;
-						Node target;
-						if (next.TryGetValue(dep.Uid, out target))
-						{
-							target.TransitiveDependents.Add(src.Package);
-						}
-					}
-				}
-
-				// Publish counts on VarPackage for existing UI/logic.
-				foreach (var kvp in next)
-				{
-					var n = kvp.Value;
-					try { n.Package.DependentCount = n.TransitiveDependents != null ? n.TransitiveDependents.Count : 0; } catch { }
-					try { n.Package.MissingDepsCount = n.MissingIds != null ? n.MissingIds.Count : 0; } catch { }
-				}
-
-				lock (_lock)
-				{
-					_byUid = next;
-					_ready = true;
+					if (string.IsNullOrEmpty(uid)) continue;
+					Node n = GetOrCreateNodeLocked(uid);
+					if (n != null)
+						BuildNodeLocked(n, visiting);
 				}
 			}
-			catch (Exception ex)
-			{
-				LogUtil.LogWarning("[VPB] Dependency graph rebuild failed: " + ex.Message);
-				lock (_lock) { _ready = true; }
-			}
+		}
+
+		public static void EnsureForPackage(string packageUid)
+		{
+			if (string.IsNullOrEmpty(packageUid)) return;
+			EnsureForUids(new[] { packageUid });
 		}
 
 		public static bool TryGetTransitiveDependencies(string packageUid, out HashSet<string> dependencyUids)
@@ -110,11 +77,19 @@ namespace VPB
 			if (string.IsNullOrEmpty(packageUid)) return false;
 			lock (_lock)
 			{
-				if (!_ready) return false;
-				Node n;
-				if (!_byUid.TryGetValue(packageUid, out n) || n == null || n.TransitiveDeps == null) return false;
-				dependencyUids = new HashSet<string>(n.TransitiveDeps.Where(p => p != null && !string.IsNullOrEmpty(p.Uid)).Select(p => p.Uid), StringComparer.OrdinalIgnoreCase);
-				return true;
+				EnsureCacheGeneration();
+				Node n = GetOrCreateNodeLocked(packageUid);
+				if (n == null) return false;
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				BuildNodeLocked(n, visiting);
+				if (n.TransitiveDeps == null || n.TransitiveDeps.Count == 0) return false;
+				dependencyUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				foreach (VarPackage p in n.TransitiveDeps)
+				{
+					if (p != null && !string.IsNullOrEmpty(p.Uid))
+						dependencyUids.Add(p.Uid);
+				}
+				return dependencyUids.Count > 0;
 			}
 		}
 
@@ -122,13 +97,37 @@ namespace VPB
 		{
 			dependentUids = null;
 			if (string.IsNullOrEmpty(packageUid)) return false;
+
+			string targetShort = GetPackageGroupShortUid(packageUid);
+			try
+			{
+				var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				if (VpbLocalDatabase.TryReadDependentUids(packageUid, targetShort, fromSql) && fromSql.Count > 0)
+				{
+					dependentUids = fromSql;
+					return true;
+				}
+			}
+			catch { }
+
+			if (TryGetDependentsFromBulkEdges(packageUid, targetShort, out dependentUids) && dependentUids != null && dependentUids.Count > 0)
+				return true;
+
 			lock (_lock)
 			{
-				if (!_ready) return false;
-				Node n;
-				if (!_byUid.TryGetValue(packageUid, out n) || n == null || n.TransitiveDependents == null) return false;
-				dependentUids = new HashSet<string>(n.TransitiveDependents.Where(p => p != null && !string.IsNullOrEmpty(p.Uid)).Select(p => p.Uid), StringComparer.OrdinalIgnoreCase);
-				return true;
+				EnsureCacheGeneration();
+				Node n = GetOrCreateNodeLocked(packageUid);
+				if (n == null) return false;
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				BuildNodeLocked(n, visiting);
+				if (n.TransitiveDependents == null || n.TransitiveDependents.Count == 0) return false;
+				dependentUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				foreach (VarPackage p in n.TransitiveDependents)
+				{
+					if (p != null && !string.IsNullOrEmpty(p.Uid))
+						dependentUids.Add(p.Uid);
+				}
+				return dependentUids.Count > 0;
 			}
 		}
 
@@ -136,10 +135,19 @@ namespace VPB
 		{
 			lock (_lock)
 			{
-				if (!_ready) return 0;
-				Node n;
-				if (!_byUid.TryGetValue(packageUid, out n) || n == null) return 0;
-				return n.MissingIds != null ? n.MissingIds.Count : 0;
+				EnsureCacheGeneration();
+				Node n = GetOrCreateNodeLocked(packageUid);
+				if (n == null) return 0;
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				BuildNodeLocked(n, visiting);
+				int count = n.MissingIds != null ? n.MissingIds.Count : 0;
+				try
+				{
+					if (n.Package != null)
+						n.Package.MissingDepsCount = count;
+				}
+				catch { }
+				return count;
 			}
 		}
 
@@ -147,9 +155,11 @@ namespace VPB
 		{
 			lock (_lock)
 			{
-				if (!_ready) return 0;
-				Node n;
-				if (!_byUid.TryGetValue(packageUid, out n) || n == null) return 0;
+				EnsureCacheGeneration();
+				Node n = GetOrCreateNodeLocked(packageUid);
+				if (n == null) return 0;
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				BuildNodeLocked(n, visiting);
 				return n.MissingExactIds != null ? n.MissingExactIds.Count : 0;
 			}
 		}
@@ -158,21 +168,197 @@ namespace VPB
 		{
 			lock (_lock)
 			{
-				if (!_ready) return 0;
-				Node n;
-				if (!_byUid.TryGetValue(packageUid, out n) || n == null) return 0;
+				EnsureCacheGeneration();
+				Node n = GetOrCreateNodeLocked(packageUid);
+				if (n == null) return 0;
+				var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				BuildNodeLocked(n, visiting);
 				return n.MissingGroupIds != null ? n.MissingGroupIds.Count : 0;
 			}
 		}
 
+		static void EnsureCacheGeneration()
+		{
+			long scanBin = GetCurrentScanBinary();
+			if (scanBin != _cacheScanBinary)
+				OnPackageInventoryRefreshed();
+		}
+
+		static long GetCurrentScanBinary()
+		{
+			try { return FileManager.lastPackageRefreshTime.ToBinary(); }
+			catch { return 0; }
+		}
+
+		static Node GetOrCreateNodeLocked(string uid)
+		{
+			if (string.IsNullOrEmpty(uid)) return null;
+			Node n;
+			if (_byUid.TryGetValue(uid, out n) && n != null)
+				return n;
+
+			VarPackage pkg = null;
+			try { pkg = FileManager.GetPackage(uid, false); } catch { }
+			if (pkg == null)
+			{
+				try { pkg = FileManager.GetPackageForDependency(uid, false); } catch { }
+			}
+			if (pkg == null || string.IsNullOrEmpty(pkg.Uid))
+				return null;
+
+			n = new Node
+			{
+				Package = pkg,
+				DirectDeps = GetDirectDependencyIds(pkg),
+				Built = false,
+			};
+			_byUid[pkg.Uid] = n;
+			return n;
+		}
+
+		static void BuildNodeLocked(Node n, HashSet<string> visiting)
+		{
+			if (n == null || n.Built) return;
+			BuildNodeInternal(n, visiting);
+		}
+
+		static void BuildNodeInternal(Node n, HashSet<string> visiting)
+		{
+			if (n == null || n.Package == null || string.IsNullOrEmpty(n.Package.Uid)) return;
+			if (n.Built) return;
+
+			string uid = n.Package.Uid;
+			if (!visiting.Add(uid))
+			{
+				n.TransitiveDeps = n.TransitiveDeps ?? new HashSet<VarPackage>();
+				n.Built = true;
+				return;
+			}
+
+			var depsSet = new HashSet<VarPackage>();
+			var missingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var missingExactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			var missingGroupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			List<string> direct = n.DirectDeps ?? new List<string>();
+			for (int i = 0; i < direct.Count; i++)
+			{
+				string depId = direct[i];
+				if (string.IsNullOrEmpty(depId)) continue;
+
+				VarPackage resolved = FileManager.GetPackageForDependency(depId, false);
+				if (resolved != null)
+				{
+					depsSet.Add(resolved);
+					Node child = GetOrCreateNodeLocked(resolved.Uid);
+					if (child != null)
+					{
+						BuildNodeInternal(child, visiting);
+						if (child.TransitiveDeps != null)
+						{
+							foreach (VarPackage t in child.TransitiveDeps)
+								if (t != null) depsSet.Add(t);
+						}
+						if (child.MissingIds != null) missingIds.UnionWith(child.MissingIds);
+						if (child.MissingExactIds != null) missingExactIds.UnionWith(child.MissingExactIds);
+						if (child.MissingGroupIds != null) missingGroupIds.UnionWith(child.MissingGroupIds);
+					}
+				}
+				else
+				{
+					bool isExactMissing;
+					bool isGroupMissing;
+					CategorizeMissing(depId, out isExactMissing, out isGroupMissing);
+					missingIds.Add(depId);
+					if (isExactMissing) missingExactIds.Add(depId);
+					if (isGroupMissing) missingGroupIds.Add(depId);
+				}
+			}
+
+			n.TransitiveDeps = depsSet;
+			n.MissingIds = missingIds;
+			n.MissingExactIds = missingExactIds;
+			n.MissingGroupIds = missingGroupIds;
+			n.Built = true;
+			visiting.Remove(uid);
+
+			try { n.Package.MissingDepsCount = missingIds.Count; } catch { }
+		}
+
+		static bool TryGetDependentsFromBulkEdges(string targetUid, string targetShort, out HashSet<string> dependentUids)
+		{
+			dependentUids = null;
+			if (string.IsNullOrEmpty(targetUid)) return false;
+			if (!VpbLocalDatabase.TryEnsurePackageDependencyBulkCache())
+				return false;
+
+			var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			bool any = false;
+			try
+			{
+				VpbLocalDatabase.TryIterateBulkPackageDependencies((srcUid, depUid) =>
+				{
+					if (string.IsNullOrEmpty(srcUid) || string.IsNullOrEmpty(depUid)) return;
+					if (!DepRefersToTarget(depUid, targetUid, targetShort)) return;
+					if (result.Add(srcUid))
+						any = true;
+				});
+			}
+			catch { return false; }
+
+			if (!any) return false;
+			dependentUids = result;
+			return true;
+		}
+
+		static string GetPackageGroupShortUid(string uid)
+		{
+			if (string.IsNullOrEmpty(uid)) return null;
+			try
+			{
+				int firstDot = uid.IndexOf('.');
+				if (firstDot < 0) return null;
+				int secondDot = uid.IndexOf('.', firstDot + 1);
+				if (secondDot < 0) return null;
+				return uid.Substring(0, secondDot);
+			}
+			catch { return null; }
+		}
+
+		static bool DepRefersToTarget(string depUidOrPath, string targetUid, string targetShort)
+		{
+			if (string.IsNullOrEmpty(depUidOrPath) || string.IsNullOrEmpty(targetUid)) return false;
+			try
+			{
+				string d = depUidOrPath.Replace('\\', '/');
+				int lastSlash = d.LastIndexOf('/');
+				if (lastSlash >= 0 && lastSlash + 1 < d.Length) d = d.Substring(lastSlash + 1);
+				if (d.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+					d = d.Substring(0, d.Length - 4);
+
+				if (string.Equals(d, targetUid, StringComparison.OrdinalIgnoreCase)) return true;
+				if (string.IsNullOrEmpty(targetShort)) return false;
+
+				if (d.Length > targetShort.Length + 1 &&
+					d.StartsWith(targetShort, StringComparison.OrdinalIgnoreCase) &&
+					d[targetShort.Length] == '.')
+				{
+					return true;
+				}
+			}
+			catch { }
+			return false;
+		}
+
 		private static List<string> GetDirectDependencyIds(VarPackage pkg)
 		{
-			// Prefer the persisted SQLite dependency edges when available. This avoids requiring
-			// per-package meta parsing just to answer dependency queries on startup.
 			try
 			{
 				if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
 				{
+					List<string> fromBulk;
+					if (VpbLocalDatabase.TryGetBulkDirectDependencyUids(pkg.Uid, out fromBulk))
+						return fromBulk;
 					var depsFromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 					if (VpbLocalDatabase.TryReadRecursiveDependencyUids(pkg.Uid, depsFromSql))
 						return depsFromSql.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -182,7 +368,6 @@ namespace VPB
 
 			try
 			{
-				// Prefer a direct list if one exists; otherwise fall back to recursive list.
 				var direct = pkg.PackageDependencies;
 				if (direct != null && direct.Count > 0)
 					return direct.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -198,77 +383,6 @@ namespace VPB
 			catch { }
 
 			return new List<string>();
-		}
-
-		private static void BuildNode(Node n, Dictionary<string, Node> byUid)
-		{
-			if (n == null) return;
-			if (n.Built) return;
-
-			// Use recursion with memoization; handle cycles via stack-local visited.
-			var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			BuildNodeInternal(n, byUid, visiting);
-		}
-
-		private static void BuildNodeInternal(Node n, Dictionary<string, Node> byUid, HashSet<string> visiting)
-		{
-			if (n == null || n.Package == null || string.IsNullOrEmpty(n.Package.Uid)) return;
-			if (n.Built) return;
-
-			string uid = n.Package.Uid;
-			if (!visiting.Add(uid))
-			{
-				// Cycle detected; stop expanding.
-				n.TransitiveDeps = n.TransitiveDeps ?? new HashSet<VarPackage>();
-				n.Built = true;
-				return;
-			}
-
-			var depsSet = new HashSet<VarPackage>();
-			var missingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			var missingExactIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			var missingGroupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-			var direct = n.DirectDeps ?? new List<string>();
-			for (int i = 0; i < direct.Count; i++)
-			{
-				string depId = direct[i];
-				if (string.IsNullOrEmpty(depId)) continue;
-
-				VarPackage resolved = FileManager.GetPackageForDependency(depId, false);
-				if (resolved != null)
-				{
-					depsSet.Add(resolved);
-					Node child;
-					if (byUid.TryGetValue(resolved.Uid, out child) && child != null)
-					{
-						BuildNodeInternal(child, byUid, visiting);
-						if (child.TransitiveDeps != null)
-						{
-							foreach (var t in child.TransitiveDeps)
-								if (t != null) depsSet.Add(t);
-						}
-						// Merge transitive missing sets.
-						if (child.MissingIds != null) missingIds.UnionWith(child.MissingIds);
-						if (child.MissingExactIds != null) missingExactIds.UnionWith(child.MissingExactIds);
-						if (child.MissingGroupIds != null) missingGroupIds.UnionWith(child.MissingGroupIds);
-					}
-				}
-				else
-				{
-					CategorizeMissing(depId, out bool isExactMissing, out bool isGroupMissing);
-					missingIds.Add(depId);
-					if (isExactMissing) missingExactIds.Add(depId);
-					if (isGroupMissing) missingGroupIds.Add(depId);
-				}
-			}
-
-			n.TransitiveDeps = depsSet;
-			n.MissingIds = missingIds;
-			n.MissingExactIds = missingExactIds;
-			n.MissingGroupIds = missingGroupIds;
-			n.Built = true;
-			visiting.Remove(uid);
 		}
 
 		private static void CategorizeMissing(string depId, out bool isExactMissing, out bool isGroupMissing)
@@ -295,7 +409,6 @@ namespace VPB
 				}
 				if (DepLatest.IsMatch(depId) || DepMin.IsMatch(depId))
 				{
-					// Group constraint; if none installed it is group-missing.
 					string group = null;
 					if ((m = DepLatest.Match(depId)).Success) group = m.Groups[1].Value;
 					else if ((m = DepMin.Match(depId)).Success) group = m.Groups[1].Value;
@@ -315,4 +428,3 @@ namespace VPB
 		}
 	}
 }
-

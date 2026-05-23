@@ -382,6 +382,7 @@ namespace VPB
 
             startupReadyLogged = true;
             LogWarning("STARTUP_MILESTONE " + context + " | since process start: " + GetSecondsSinceProcessStart().ToString("0.000") + "s");
+            try { VamStartupProfiler.TryFlushSummary(context); } catch { }
         }
 
         public static bool IsStartupReadyLogged()
@@ -1696,6 +1697,7 @@ namespace VPB
             var sincePluginSessionStart = DateTime.Now - pluginSessionStartTime;
             var sincePluginStart = sincePluginAwake.IsRunning ? sincePluginAwake.Elapsed : TimeSpan.Zero;
             LogWarning(string.Format("READY {0} | since plugin session start: {1:0.000}s | since process start: {2:0.000}s | since plugin awake: {3:0.000}s", context, sincePluginSessionStart.TotalSeconds, sinceProcessStart.TotalSeconds, sincePluginStart.TotalSeconds));
+            try { VamStartupProfiler.TryFlushSummary(context, true); } catch { }
         }
 
         public static double GetSecondsSinceProcessStart()

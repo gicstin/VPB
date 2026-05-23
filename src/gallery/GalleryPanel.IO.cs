@@ -3410,6 +3410,10 @@ namespace VPB
                                 refreshDrainUtSqlFilterApplied[0] = 1;
                         }
                         catch { }
+                        if (useSqliteIndex)
+                        {
+                            try { FileManager.NotifyFirstGallerySqlRefreshComplete(); } catch { }
+                        }
                         if (LogGalleryRefreshDeepTiming)
                         {
                             try
@@ -4538,17 +4542,20 @@ namespace VPB
             // Try to handle as VarPackage first
             if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
             {
+                try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
                 List<FileEntry> filtered;
 
                 if (PackageFilterUsesPackageListRows())
                 {
                     HashSet<string> uids = BuildUidSetForDependenciesFilter(pkg);
+                    try { DependencyGraph.EnsureForUids(uids); } catch { }
                     filtered = BuildPackageListEntriesForUids(uids);
                     currentPackageFilterCount = Math.Max(0, uids.Count - 1);
                 }
                 else
                 {
                     HashSet<string> depUids = BuildUidSetForDependenciesFilter(pkg);
+                    try { DependencyGraph.EnsureForUids(depUids); } catch { }
                     if (!string.IsNullOrEmpty(pkg.Uid)) depUids.Remove(pkg.Uid);
                     filtered = new List<FileEntry> { file };
                     AddVarFileEntriesWithPackageInUidSet(filtered, file, currentFilteredFiles, depUids);
@@ -4567,6 +4574,7 @@ namespace VPB
                 {
                     // Deduplicate: keep only latest version of each Author.Name
                     deps = GallerySortManager.DeduplicateDependenciesByLatestVersion(deps);
+                    try { DependencyGraph.EnsureForUids(deps); } catch { }
 
                     List<FileEntry> filtered;
                     if (PackageFilterUsesPackageListRows())
@@ -4649,6 +4657,7 @@ namespace VPB
             if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
 
             EnsureFilterBaseCaptured();
+            try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
 
             string targetUid = pkg.Uid;
             string targetShort = GetPackageGroupShortUid(targetUid);
@@ -4684,6 +4693,7 @@ namespace VPB
                 // Try to handle as VarPackage first
                 if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
                 {
+                    try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
                     var deps = pkg.RecursivePackageDependencies;
                     if (deps == null || deps.Count == 0)
                     {

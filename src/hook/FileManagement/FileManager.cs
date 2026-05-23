@@ -592,6 +592,10 @@ namespace VPB
 
         private IEnumerator RefreshCo(bool init, bool clean, bool removeOldVersion)
         {
+            string refreshReason = GetCurrentReasonsForLog();
+            VamStartupProfiler.BeginVpbRefresh(refreshReason);
+            try
+            {
 #if DEBUG
             string stackTrace = new System.Diagnostics.StackTrace().ToString();
             if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
@@ -644,6 +648,7 @@ namespace VPB
                 List<string> allVarFiles = new List<string>();
                 string[] scanRoots = new string[] { "AddonPackages", "AllPackages" };
 
+                VamStartupProfiler.BeginScope("vpb_RefreshCo_var_disk_enum");
                 ManualResetEvent doneEvent = new ManualResetEvent(false);
                 ThreadPool.QueueUserWorkItem((state) => {
                     try {
@@ -664,6 +669,7 @@ namespace VPB
                     yield return null;
                 }
                 doneEvent.Close();
+                VamStartupProfiler.EndScope("vpb_RefreshCo_var_disk_enum");
 
                 // VPB package indexing intentionally bypasses scan-whitelist filtering.
                 // The whitelist applies only to VaM's native startup registration path.
@@ -857,6 +863,7 @@ namespace VPB
             {
                 if (init || flag || clean || removeOldVersion)
                 {
+                    VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_scheduled init=" + (init ? "1" : "0"));
                     StartScan(init, flag, clean, true);
                 }
 
@@ -897,6 +904,11 @@ namespace VPB
             {
                 LogUtil.LogError("Exception during package refresh finalization " + arg);
             }
+            }
+            finally
+            {
+                VamStartupProfiler.EndVpbRefresh();
+            }
         }
 
 		public void StartScan(bool init, bool flag, bool clean, bool runCo)
@@ -909,9 +921,150 @@ namespace VPB
 			m_StartScanCo = StartCoroutine(StartScanCo(init, flag, clean, runCo));
 		}
 
+		static int s_BulkDepPrewarmScheduled;
+		static int s_BulkDepPrewarmDone;
+		static int s_FirstGallerySqlRefreshNotified;
+
+		/// <summary>First gallery SQLite category query finished — safe to prewarm pkg_dep bulk cache off the hot path.</summary>
+		public static void NotifyFirstGallerySqlRefreshComplete()
+		{
+			if (System.Threading.Interlocked.CompareExchange(ref s_FirstGallerySqlRefreshNotified, 1, 0) != 0)
+				return;
+			try { VamStartupProfiler.Milestone("vpb_pkg_dep_prewarm_scheduled_after_gallery_sql"); } catch { }
+			ScheduleBulkDependencyCachePrewarm();
+		}
+
+		static void ScheduleBulkDependencyCachePrewarm()
+		{
+			if (System.Threading.Interlocked.CompareExchange(ref s_BulkDepPrewarmScheduled, 1, 0) != 0)
+				return;
+			System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try
+				{
+					var sw = System.Diagnostics.Stopwatch.StartNew();
+					if (VpbLocalDatabase.TryEnsurePackageDependencyBulkCache())
+					{
+						sw.Stop();
+						System.Threading.Interlocked.Exchange(ref s_BulkDepPrewarmDone, 1);
+						try
+						{
+							VamStartupProfiler.Milestone("vpb_pkg_dep_bulk_prewarm_done ms=" + sw.ElapsedMilliseconds);
+						}
+						catch { }
+					}
+				}
+				catch { }
+				finally
+				{
+					if (System.Threading.Interlocked.CompareExchange(ref s_BulkDepPrewarmDone, 0, 0) == 0)
+						System.Threading.Interlocked.Exchange(ref s_BulkDepPrewarmScheduled, 0);
+				}
+			});
+		}
+
+		static void RunDeferredStaggeredBulkDepPrewarmFallback()
+		{
+			System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try
+				{
+					// Let first gallery SQL drain finish before loading full pkg_dep into memory.
+					System.Threading.Thread.Sleep(12000);
+					if (System.Threading.Interlocked.CompareExchange(ref s_BulkDepPrewarmDone, 0, 0) != 0)
+						return;
+					try
+					{
+						LogUtil.Log(VamStartupOptimizations.LogTag + " pkg_dep bulk prewarm fallback (no gallery SQL yet)");
+					}
+					catch { }
+					ScheduleBulkDependencyCachePrewarm();
+				}
+				catch { }
+			});
+		}
+
+		static void ResetDependentCountSchedulingFlagsForNewInventory()
+		{
+			System.Threading.Interlocked.Exchange(ref s_BulkDepPrewarmScheduled, 0);
+			System.Threading.Interlocked.Exchange(ref s_BulkDepPrewarmDone, 0);
+			System.Threading.Interlocked.Exchange(ref s_FirstGallerySqlRefreshNotified, 0);
+		}
+
+		public static void InvalidateDependentCounts()
+		{
+			try
+			{
+				VarPackage[] snapshot;
+				lock (packagesLock)
+				{
+					if (packagesByUid == null) return;
+					snapshot = packagesByUid.Values.ToArray();
+				}
+				for (int i = 0; i < snapshot.Length; i++)
+				{
+					if (snapshot[i] != null)
+						snapshot[i].DependentCount = -1;
+				}
+			}
+			catch { }
+		}
+
+		public static int ResolveDependentCount(VarPackage pkg)
+		{
+			if (pkg == null) return 0;
+			if (pkg.DependentCount >= 0)
+				return pkg.DependentCount;
+
+			string uid = pkg.Uid;
+			if (string.IsNullOrEmpty(uid))
+			{
+				pkg.DependentCount = 0;
+				return 0;
+			}
+
+			string targetShort = GetPackageGroupShortUid(uid);
+			int count = 0;
+			try
+			{
+				if (VpbLocalDatabase.TryCountDependentUids(uid, targetShort, out count))
+				{
+					pkg.DependentCount = count;
+					return count;
+				}
+			}
+			catch { }
+
+			try
+			{
+				HashSet<string> deps;
+				if (DependencyGraph.TryGetTransitiveDependents(uid, out deps) && deps != null)
+					count = deps.Count;
+			}
+			catch { }
+
+			pkg.DependentCount = count;
+			return count;
+		}
+
+		static string GetPackageGroupShortUid(string uid)
+		{
+			if (string.IsNullOrEmpty(uid)) return null;
+			try
+			{
+				int firstDot = uid.IndexOf('.');
+				if (firstDot < 0) return null;
+				int secondDot = uid.IndexOf('.', firstDot + 1);
+				if (secondDot < 0) return null;
+				return uid.Substring(0, secondDot);
+			}
+			catch { return null; }
+		}
+
 		IEnumerator StartScanCo(bool init, bool flag, bool clean, bool runCo)
 		{
 			List<VarPackage> invalid = new List<VarPackage>();
+			VamStartupProfiler.BeginScope("vpb_StartScanCo_scan");
 			if (runCo)
 			{
 				if (m_Co != null)
@@ -953,8 +1106,11 @@ namespace VPB
 				}
 			}
 
+			VamStartupProfiler.EndScope("vpb_StartScanCo_scan");
+
 			// Update time BEFORE calling handlers so handlers (and any UI code they trigger) see the latest time
 			lastPackageRefreshTime = DateTime.Now;
+			try { VpbLocalDatabase.BumpReadyScanStampAfterPackageRefresh(); } catch { }
 
 			if (init)
 			{
@@ -964,8 +1120,23 @@ namespace VPB
 			{
 				if (flag && onRefreshHandlers != null) onRefreshHandlers();
 			}
-			RebuildDependentCounts();
-			DependencyGraph.Rebuild();
+
+			ResetDependentCountSchedulingFlagsForNewInventory();
+			try { DependencyGraph.OnPackageInventoryRefreshed(); } catch { }
+			InvalidateDependentCounts();
+
+			if (init)
+			{
+				try
+				{
+					VamStartupProfiler.Milestone("vpb_dependent_counts_lazy");
+					LogUtil.Log(VamStartupOptimizations.LogTag + " dependent counts lazy (on demand; pkg_dep prewarm after gallery SQL)");
+				}
+				catch { }
+				LogUtil.RegisterPostReadyOnce(RunDeferredStaggeredBulkDepPrewarmFallback);
+			}
+
+			VamStartupProfiler.MarkVpbPackageScanComplete();
 			MessageKit.post(MessageDef.FileManagerRefresh);
 			m_StartScanCo = null;
 		}
@@ -1043,6 +1214,7 @@ namespace VPB
 			}
 			indexAllSw.Stop();
 			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;
+			VamStartupProfiler.AddPhaseMs("vpb_scan_index", indexAllSw.Elapsed.TotalMilliseconds);
 			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms) reason=" + reasonsTag);
 			long total;
 			long cacheValidatedHit;
@@ -1231,6 +1403,43 @@ namespace VPB
 			return GetPackage(resolvedId, ensureInstalled);
 		}
 
+		static bool TryRebuildDependentCountsFromBulkEdges(VarPackage[] snapshot)
+		{
+			try
+			{
+				if (snapshot == null || snapshot.Length == 0) return false;
+				if (!VpbLocalDatabase.TryEnsurePackageDependencyBulkCache())
+					return false;
+
+				var uidToPkg = new Dictionary<string, VarPackage>(snapshot.Length, StringComparer.OrdinalIgnoreCase);
+				for (int i = 0; i < snapshot.Length; i++)
+				{
+					VarPackage p = snapshot[i];
+					if (p == null || string.IsNullOrEmpty(p.Uid)) continue;
+					uidToPkg[p.Uid] = p;
+				}
+
+				bool ok = VpbLocalDatabase.TryIterateBulkPackageDependencies((srcUid, depUid) =>
+				{
+					if (string.IsNullOrEmpty(depUid)) return;
+					VarPackage dep;
+					if (!uidToPkg.TryGetValue(depUid, out dep) || dep == null)
+						dep = GetPackageForDependency(depUid, false);
+					if (dep != null)
+						dep.DependentCount++;
+				});
+				if (ok)
+				{
+					try { VamStartupProfiler.Milestone("vpb_RebuildDependentCounts_bulk_edges"); } catch { }
+				}
+				return ok;
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
 		// Builds a reverse-dependency index: for every installed package D, counts how many
 		// other packages list D as a (transitive) dependency and stores it in D.DependentCount.
 		// Called once at the end of each scan, before the FileManagerRefresh message is posted.
@@ -1248,6 +1457,10 @@ namespace VPB
 				// Reset
 				for (int i = 0; i < snapshot.Length; i++)
 					snapshot[i].DependentCount = 0;
+
+				// Fast path: one pkg_dep table scan + invert edges (O(edges), not O(pkgs * query)).
+				if (TryRebuildDependentCountsFromBulkEdges(snapshot))
+					return;
 
 				// Prefer the persisted SQLite dependency edges when available to avoid forcing
 				// package meta parsing/scans just to compute dependent counts.
@@ -2103,8 +2316,17 @@ namespace VPB
 		{
 			try
 			{
-				yield return new WaitForSeconds(0.5f);
+				bool startupNotReady = !LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged();
+				if (startupNotReady)
+					VamStartupProfiler.Milestone("mvr_native_refresh_delay_skipped (startup)");
+				else
+					yield return new WaitForSeconds(0.5f);
+				var sw = Stopwatch.StartNew();
+				VamStartupProfiler.Milestone("mvr_native_FileManager.Refresh_invoke_begin");
 				MVR.FileManagement.FileManager.Refresh();
+				sw.Stop();
+				VamStartupProfiler.AddPhaseMs("mvr_delayed_native_refresh", sw.Elapsed.TotalMilliseconds);
+				VamStartupProfiler.Milestone("mvr_delayed_native_refresh_done ms=" + sw.ElapsedMilliseconds);
 			}
 			finally
 			{

@@ -805,8 +805,10 @@ namespace VPB
         {
             try
             {
-                if (file is VarFileEntry vfe && vfe.Package != null) return vfe.Package.DependentCount;
-                if (file is PackageListEntry ple && ple.Package != null) return ple.Package.DependentCount;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    return FileManager.ResolveDependentCount(vfe.Package);
+                if (file is PackageListEntry ple && ple.Package != null)
+                    return FileManager.ResolveDependentCount(ple.Package);
             }
             catch { }
             return 0;

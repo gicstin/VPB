@@ -283,6 +283,10 @@
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
+    <Compile Include="src\util\VamStartupProfiler.cs" />
+    <Compile Include="src\util\VamStartupOptimizations.cs" />
+    <Compile Include="src\hook\VamStartupProfilerPatches.cs" />
+    <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />

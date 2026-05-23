@@ -607,11 +607,15 @@ namespace VPB
 
         public static void PreFileExists(ref string __0)
         {
+            bool skipVamXRewrite = VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0);
+
             string rewritten = RewriteVdsPathIfNeeded(__0);
             if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
             {
                 __0 = rewritten;
             }
+
+            if (skipVamXRewrite) return;
 
             string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
             if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))

@@ -205,6 +205,7 @@ namespace VPB.src.util
         {
             if (_hasInitCharacterGenderMap) yield break;
             _characterGenderMapLoadRequested = true;
+            VamStartupProfiler.Milestone("gender_map_async_begin");
             var timer = new Stopwatch();
             timer.Start();
             object load = null;
@@ -345,6 +346,8 @@ namespace VPB.src.util
             }
             _characterGenderMapInitCompleted = true;
             timer.Stop();
+            try { VamStartupProfiler.AddPhaseMs("gender_map_load", timer.Elapsed.TotalMilliseconds); } catch { }
+            try { VamStartupProfiler.Milestone("gender_map_async_done ms=" + timer.ElapsedMilliseconds); } catch { }
             LogUtil.Log("Initialized character gender map in " + timer.ElapsedMilliseconds + "ms");
         }
 

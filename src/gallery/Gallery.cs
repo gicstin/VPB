@@ -167,7 +167,9 @@ namespace VPB
         {
             // Start immediately so this heavy task can overlap with startup work.
             // READY still waits on completion via StartupSettleUpdate pending checks.
+            VamStartupProfiler.BeginScope("gender_map_load");
             yield return JSONExtensions.LoadCharacterGenderMap();
+            VamStartupProfiler.EndScope("gender_map_load");
             genderMapInitCoroutine = null;
         }
 
@@ -186,6 +188,7 @@ namespace VPB
 
         private void OnFileManagerRefresh()
         {
+            VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_enter");
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryManualRefreshOnly)
             {
                 if (_hasHadInitialRefresh)
@@ -214,7 +217,10 @@ namespace VPB
             // Ignore broadcasts that did not advance the package scan clock (e.g. legacy global pings).
             if (lastObservedPackageRefreshTime != DateTime.MinValue &&
                 refreshTime <= lastObservedPackageRefreshTime)
+            {
+                VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_skipped_stale_clock");
                 return;
+            }
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
             GalleryFileListSnapshotCache.Clear();
@@ -815,6 +821,28 @@ namespace VPB
             singleton._baMigrationPromptPending = false;
             LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
             return true;
+        }
+
+        internal IEnumerator DeferredGalleryIndexRebuildCoroutine(float delaySec)
+        {
+            try { VpbLocalDatabase.SetGalleryIndexBuildIndicatorPending(true); } catch { }
+            if (delaySec > 0f)
+            {
+                try { VamStartupProfiler.Milestone("sql_rebuild_delay sec=" + delaySec.ToString("0.##")); } catch { }
+                yield return new WaitForSeconds(delaySec);
+            }
+            if (VpbLocalDatabase.TrySkipGalleryIndexRebuild())
+            {
+                try { VpbLocalDatabase.SetGalleryIndexBuildIndicatorPending(false); } catch { }
+                yield break;
+            }
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag + " running deferred gallery SQLite rebuild");
+                VamStartupProfiler.Milestone("sql_rebuild_deferred_run_begin");
+            }
+            catch { }
+            try { VpbLocalDatabase.QueueGalleryIndexRebuildWorker(); } catch { }
         }
     }
 }

@@ -912,8 +912,8 @@ namespace VPB
 		public bool Scaned = false;
 		public List<string> RecursivePackageDependencies;
 		// Number of installed packages that list this package as a (transitive) dependency.
-		// Rebuilt by FileManager.RebuildDependentCounts() after each scan.
-		public int DependentCount;
+		// -1 = not computed; >=0 cached (FileManager.ResolveDependentCount / RebuildDependentCounts).
+		public int DependentCount = -1;
 		// Cached count of missing dependencies from the recursive dependency list
 		public int MissingDepsCount = -1;
 

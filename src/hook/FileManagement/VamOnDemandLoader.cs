@@ -463,6 +463,18 @@ namespace VPB
                 return null;
             if (string.IsNullOrEmpty(varPath)) return null;
 
+            string deferUidCheck = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
+            string deferPathCheck = deferUidCheck + ":/";
+            if (ShouldDeferStartupOnDemandForPath(deferPathCheck, deferUidCheck))
+            {
+                lock (s_VamNotReadyLock)
+                {
+                    if (s_VamNotReadyDeferredUids.Add(deferUidCheck))
+                        s_VamNotReadyDeferredPaths.Enqueue(varPath);
+                }
+                return null;
+            }
+
             lock (s_RegisteredLock)
             {
                 if (!string.IsNullOrEmpty(resolvedUid) && s_RegisteredOnDemand.Contains(resolvedUid)) return null;
@@ -501,10 +513,6 @@ namespace VPB
                     }
                 }
             }
-
-            LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
-                + " resolved=" + resolvedUid + " path=" + normPath);
-            SafeRecordStartupOnDemandActivity();
 
             // If VaM already has this UID registered, skip duplicate register.
             if (!string.IsNullOrEmpty(resolvedUid) && IsUidAlreadyRegisteredInVam(resolvedUid))
@@ -546,6 +554,12 @@ namespace VPB
                 }
                 return null;
             }
+
+            try { VamStartupOptimizations.InvalidateVamXAbsentCacheIfVamXPackageTouched(resolvedUid ?? uid); } catch { }
+
+            LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
+                + " resolved=" + resolvedUid + " path=" + normPath);
+            SafeRecordStartupOnDemandActivity();
 
             if (IsMainThread())
             {
@@ -772,6 +786,7 @@ namespace VPB
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted + " deferred registrations");
+                try { VamStartupProfiler.Milestone("VamOnDemand.FileManager_ready promoted=" + promoted); } catch { }
         }
 
         /// <summary>
@@ -844,6 +859,7 @@ namespace VPB
                     s_RegisteredOnDemand.Add(uid);
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
+                try { DependencyGraph.EnsureForPackage(uid); } catch { }
             }
             else
             {

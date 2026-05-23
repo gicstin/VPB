@@ -317,6 +317,8 @@ namespace VPB
 
         private Harmony m_Harmony;
 
+        internal Harmony StartupHarmony { get { return m_Harmony; } }
+
         private static Texture2D MakeTex(Color color)
         {
             var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
@@ -766,6 +768,7 @@ namespace VPB
             catch { }
 
             LogUtil.MarkPluginAwake();
+            VamStartupProfiler.Milestone("plugin_awake");
 
             try { VPBTranslation.InitializeFromConfig(); } catch { }
             try { SubscribeLocaleChanged(); } catch { }
@@ -864,6 +867,8 @@ namespace VPB
             m_Harmony.PatchAll(typeof(AtomHook));
             m_Harmony.PatchAll(typeof(HubResourcePackageHook));
             m_Harmony.PatchAll(typeof(SuperControllerHook));
+            VamStartupProfilerPatches.ApplySafe(m_Harmony);
+            VamStartupOptimizationPatches.Apply(m_Harmony);
             m_Harmony.PatchAll(typeof(PatchAssetLoader));
 
             if (VPBConfig.Instance.IsDevMode)
@@ -942,6 +947,7 @@ namespace VPB
             });
 
             AutoLoadALPackages();
+            try { StartCoroutine(ApplyLateStartupProfilerPatchesCo()); } catch { }
 
             try
             {
@@ -1044,12 +1050,21 @@ namespace VPB
             VPBLogger.Destroy();
         }
         // Called on (hard) restart as well.
+        IEnumerator ApplyLateStartupProfilerPatchesCo()
+        {
+            yield return null;
+            yield return null;
+            try { VamStartupProfilerPatches.TryApplyLateOptionalPatches(m_Harmony); } catch { }
+        }
+
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            try { VamStartupProfiler.Milestone("Unity.sceneLoaded name=" + (scene != null ? scene.name : "") + " mode=" + mode); } catch { }
             LogUtil.LogWarning("OnSceneLoaded " + scene.name + " " + mode.ToString());
             if (m_Harmony != null)
             {
                 ThirdPartyFixHook.PatchAll(m_Harmony);
+                try { VamStartupProfilerPatches.TryApplyLateOptionalPatches(m_Harmony); } catch { }
             }
             if (mode == LoadSceneMode.Single)
             {
@@ -1135,6 +1150,7 @@ namespace VPB
         void Update()
         {
             VpbPerfDiag.RefreshCache();
+            VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();
@@ -1420,16 +1436,19 @@ namespace VPB
             }
 
             System.Diagnostics.Stopwatch initSw = System.Diagnostics.Stopwatch.StartNew();
+            VamStartupProfiler.Milestone("vpb_init_begin");
             LogUtil.Log("VPB Init start");
             System.Diagnostics.Stopwatch cacheInitSw = System.Diagnostics.Stopwatch.StartNew();
             VarPackageMgr.singleton.Init();
             cacheInitSw.Stop();
+            VamStartupProfiler.AddPhaseMs("vpb_varpackagemgr_init", cacheInitSw.Elapsed.TotalMilliseconds);
             LogUtil.Log("VarPackageMgr.Init took " + cacheInitSw.ElapsedMilliseconds + "ms");
             if (!s_FileManagerInitialRefreshCompleted)
             {
                 System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
                 FileManager.Refresh("init", true);
                 refreshSw.Stop();
+                VamStartupProfiler.AddPhaseMs("vpb_refresh_init_call", refreshSw.Elapsed.TotalMilliseconds);
                 LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");
                 s_FileManagerInitialRefreshCompleted = true;
             }
@@ -1438,6 +1457,8 @@ namespace VPB
                 IsFileManagerInited = true;
             }
             initSw.Stop();
+            VamStartupProfiler.AddPhaseMs("vpb_init_total", initSw.Elapsed.TotalMilliseconds);
+            VamStartupProfiler.Milestone("vpb_init_end");
             LogUtil.Log("VPB Init end in " + initSw.ElapsedMilliseconds + "ms");
             m_Inited = true;
         }
@@ -2309,6 +2330,35 @@ namespace VPB
 
                 GUI.color = prevColor;
                 GUI.depth = prevDepth;
+            }
+            else if (m_Inited
+                && Settings.Instance != null
+                && Settings.Instance.ShowGalleryIndexBuildOverlay != null
+                && Settings.Instance.ShowGalleryIndexBuildOverlay.Value)
+            {
+                string indexOverlayText;
+                if (VpbLocalDatabase.TryGetGalleryIndexBuildOverlayText(out indexOverlayText))
+                {
+                    EnsureStyles();
+                    var prevDepth = GUI.depth;
+                    var prevColor = GUI.color;
+                    GUI.depth = -10000;
+                    GUI.color = Color.white;
+                    var overlayRect = new Rect(0f, 0f, Screen.width / m_UIScale, Screen.height / m_UIScale);
+                    GUI.DrawTexture(overlayRect, m_TexLoadingOverlay);
+
+                    var labelStyle = (m_StyleHeader != null) ? m_StyleHeader : GUI.skin.label;
+                    var prevAlign = labelStyle.alignment;
+                    var prevWrap = labelStyle.wordWrap;
+                    labelStyle.alignment = TextAnchor.MiddleCenter;
+                    labelStyle.wordWrap = true;
+                    GUI.Label(overlayRect, indexOverlayText, labelStyle);
+                    labelStyle.alignment = prevAlign;
+                    labelStyle.wordWrap = prevWrap;
+
+                    GUI.color = prevColor;
+                    GUI.depth = prevDepth;
+                }
             }
 
             if (m_Inited)

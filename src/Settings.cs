@@ -65,6 +65,14 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<bool> LogStartupTiming;
+        public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
+        public ConfigEntry<float> StartupDeferGallerySqlRebuildDelaySec;
+        public ConfigEntry<bool> StartupSkipRedundantSyncVamX;
+        public ConfigEntry<bool> StartupSkipGallerySqlRebuildIfValid;
+        public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
+        public ConfigEntry<bool> StartupSqlBatchCatMem;
+        public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
         public ConfigEntry<bool> LogPerfTelemetry;
         public ConfigEntry<bool> LogPerfDiagnostics;
@@ -90,6 +98,7 @@ namespace VPB
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> ShowSceneLoadingOverlay;
+        public ConfigEntry<bool> ShowGalleryIndexBuildOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
         public ConfigEntry<bool> HideOldVersions;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
@@ -138,6 +147,7 @@ namespace VPB
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
+            ShowGalleryIndexBuildOverlay = config.Bind<bool>("UI", "ShowGalleryIndexBuildOverlay", true, "Show full-screen overlay while the gallery SQLite index is being built at startup. Warns not to close VaM during first-time or full rebuild indexing.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", false, "Hide older versions of VAR packages in the gallery; show only the newest version per Creator.Package family.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
@@ -152,6 +162,14 @@ namespace VPB
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
+            LogStartupTiming = config.Bind<bool>("Logging", "LogStartupTiming", false, "Emit [VPB.Startup.Timing] milestones and a cold-start summary (native/VPB package refresh, SyncVamX, bootstrap). Also enabled when LogStartupDetails is true.");
+            StartupDeferGallerySqlRebuild = config.Bind<bool>("Startup", "DeferGallerySqlRebuildUntilReady", true, "Defer full gallery SQLite index rebuild until World UI / startup-ready milestone. Speeds cold start; gallery SQL queries wait until rebuild runs.");
+            StartupDeferGallerySqlRebuildDelaySec = config.Bind<float>("Startup", "DeferGallerySqlRebuildDelaySec", 2f, "Seconds after READY before deferred gallery SQLite rebuild starts (0 = immediate). Gives UI/gallery a short window on restored index.");
+            StartupSkipRedundantSyncVamX = config.Bind<bool>("Startup", "SkipRedundantSyncVamXWhenAbsent", true, "When vamX is absent, skip expensive vamX bootstrap FileExists/on-demand work during startup. SyncVamX always runs so main-menu Create tiles stay correct.");
+            StartupSkipGallerySqlRebuildIfValid = config.Bind<bool>("Startup", "SkipGallerySqlRebuildIfValid", true, "Skip full gallery SQLite rebuild when on-disk index meta matches current categories and package inventory (e.g. after sqlRestore).");
+            StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
+            StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
+            StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
             LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line (30s interval) with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
             LogPerfDiagnostics = config.Bind<bool>("Logging", "LogPerfDiagnostics", false, "Emit a 1Hz VPB.Diag line with per-frame call counters (quick-menu refresh, icon GO churn, gallery Update gating, pointer sibling reorders) plus one-shot transition logs for show/hide/menu-gate. Enable temporarily to pinpoint frame-cost hotspots; disable for normal use.");

@@ -257,6 +257,8 @@ namespace VPB
             {
                 leftSubSceneSortBarActive = false;
                 if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
+                if (leftCategoryTabHolder != null) leftCategoryTabHolder.SetActive(false);
+                if (leftCreatorTabHolder != null) leftCreatorTabHolder.SetActive(false);
             }
 
             if (rightActiveContent.HasValue)
@@ -382,6 +384,8 @@ namespace VPB
             {
                 rightSubSceneSortBarActive = false;
                 if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
+                if (rightCategoryTabHolder != null) rightCategoryTabHolder.SetActive(false);
+                if (rightCreatorTabHolder != null) rightCreatorTabHolder.SetActive(false);
             }
 
             SyncSidePaneTopSortButtonVisuals();

@@ -104,6 +104,7 @@ namespace VPB
             int prev = System.Threading.Interlocked.Exchange(ref s_HasVamRefreshedAtLeastOnce, 1);
             if (prev == 0)
             {
+                try { VamStartupProfiler.Milestone("native_FileManager.first_refresh_complete"); } catch { }
                 VamOnDemandLoader.NotifyVamFileManagerRefreshed();
             }
         }
@@ -118,6 +119,8 @@ namespace VPB
         public static void ResetScanCounters() { s_ScanAllowed = 0; s_ScanBlocked = 0; }
         public static void RecordScanAllowed() { System.Threading.Interlocked.Increment(ref s_ScanAllowed); }
         public static void RecordScanBlocked() { System.Threading.Interlocked.Increment(ref s_ScanBlocked); }
+        public static int ScanAllowedCount => System.Threading.Interlocked.CompareExchange(ref s_ScanAllowed, 0, 0);
+        public static int ScanBlockedCount => System.Threading.Interlocked.CompareExchange(ref s_ScanBlocked, 0, 0);
         public static void LogScanResult()
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return;

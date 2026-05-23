@@ -285,6 +285,11 @@ namespace VPB
         {
             try
             {
+                VamStartupProfiler.OnUnityStartupLog(message);
+            }
+            catch { }
+            try
+            {
                 if (ShouldSuppressCheesyFxUnityLog(message, stackTrace, type))
                 {
                     NoteCheesyFxErrorActivity();
