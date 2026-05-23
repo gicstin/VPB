@@ -648,6 +648,26 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hairSwapKeepVisible", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_hair_swap_keep_visible", "Keep hair visible during swap"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_hair_swap_keep_visible", "While a hair preset loads, keep the previous hair visible (and its colors) until the new hair is ready. Outgoing hair collisions turn off first; old hair hides only after incoming hair finishes loading."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.HairSwapKeepVisibleUntilLoaded != null
+                            && Settings.Instance.HairSwapKeepVisibleUntilLoaded.Value;
+                    } catch { return true; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.HairSwapKeepVisibleUntilLoaded != null)
+                            Settings.Instance.HairSwapKeepVisibleUntilLoaded.Value = v;
+                        Settings.SaveConfig();
+                    } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginThumbs", GroupKey = "lists", Label = VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"),
                 Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "Use sister-image thumbnails for plugin files in grid."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.PluginGalleryGridThumbnails,

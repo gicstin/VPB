@@ -296,6 +296,7 @@
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />
     <Compile Include="src\hook\DAZMorphMgr.cs" />
     <Compile Include="src\hook\DAZClothingHook.cs" />
+    <Compile Include="src\hook\DAZHairSwapHook.cs" />
     <Compile Include="src\hook\FileManagement\VarPackageMgr.cs" />
     <Compile Include="src\hook\HubResourcePackageHook.cs" />
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
