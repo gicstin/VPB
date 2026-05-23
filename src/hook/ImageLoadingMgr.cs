@@ -1713,17 +1713,20 @@ namespace VPB
         private readonly object runtimeZstdWriteQueueLock = new object();
         private const float RuntimeZstdWriteFrameBudgetSec = 0.006f;
         private const int MaxRuntimeZstdWriteQueue = 96;
+        private const int MaxRuntimeZstdWritesPerFrame = 1;
 
         /// <summary>
-        /// Spread runtime zstd cache writes across frames. Full pipeline in PostFinish caused periodic hitches
-        /// (glute/soft-body physics jitter when frame time spikes).
+        /// Spread runtime zstd cache writes across frames. VaM native Finish already writes .vamcache
+        /// synchronously; VPB zstd writes were duplicated in PostFinish and caused periodic hitches
+        /// (soft-body physics jitter when frame time spikes).
         /// </summary>
         public void DrainPendingRuntimeZstdWrites()
         {
             if (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive()) return;
 
             float deadline = Time.realtimeSinceStartup + RuntimeZstdWriteFrameBudgetSec;
-            while (Time.realtimeSinceStartup < deadline)
+            int processed = 0;
+            while (processed < MaxRuntimeZstdWritesPerFrame && Time.realtimeSinceStartup < deadline)
             {
                 PendingRuntimeZstdWrite item;
                 lock (runtimeZstdWriteQueueLock)
@@ -1733,6 +1736,7 @@ namespace VPB
                 }
 
                 ProcessPendingRuntimeZstdWrite(item);
+                processed++;
             }
         }
 
@@ -1779,6 +1783,7 @@ namespace VPB
 
             var qi = item.Qi;
             string zstdPath = item.ZstdPath;
+            bool queuedToWorker = false;
             try
             {
                 if (qi == null || qi.tex == null) return;
@@ -1803,6 +1808,7 @@ namespace VPB
                     int level = 3;
                     try { if (Settings.Instance != null) level = Settings.Instance.ZstdCompressionLevel.Value; } catch { }
                     string pathCopy = zstdPath;
+                    queuedToWorker = true;
                     ThreadPool.QueueUserWorkItem(_ => WriteCapturedBytesToZstdCache(pathCopy, raw, w, h, format, false, false, level, AlphaCacheVersion));
                     return;
                 }
@@ -1822,11 +1828,13 @@ namespace VPB
                 bool isSim = item.IsSimPath;
                 bool queueMip = item.QueueCreateMipMaps;
                 string pathForWorker = zstdPath;
+                queuedToWorker = true;
                 ThreadPool.QueueUserWorkItem(_ => WriteCapturedBytesToZstdCache(pathForWorker, rawBytes, width, height, fmt, isSim, queueMip, zlevel, 0));
             }
             finally
             {
-                ReleasePendingZstdWriteSlot(zstdPath);
+                if (!queuedToWorker)
+                    ReleasePendingZstdWriteSlot(zstdPath);
             }
         }
 
@@ -1907,6 +1915,10 @@ namespace VPB
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB ZSTD WRITE] Failed for " + zstdPath + ": " + ex.Message);
+            }
+            finally
+            {
+                ReleasePendingZstdWriteSlot(zstdPath);
             }
         }
 

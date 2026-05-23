@@ -1272,17 +1272,10 @@ namespace VPB
                     string tName = (m != null && m.DeclaringType != null) ? (m.DeclaringType.FullName ?? m.DeclaringType.Name ?? "") : "";
 
                     bool looksLikeSimCallback =
-                        mName.IndexOf("OnSimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
-                        || mName.IndexOf("SimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZSoftBody", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("FemaleGlutePhysics", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("FemaleBreastPhysics", StringComparison.OrdinalIgnoreCase) >= 0
-                        || (tName.IndexOf("Glute", StringComparison.OrdinalIgnoreCase) >= 0
-                            && tName.IndexOf("Phys", StringComparison.OrdinalIgnoreCase) >= 0)
-                        || (tName.IndexOf("Breast", StringComparison.OrdinalIgnoreCase) >= 0
-                            && tName.IndexOf("Phys", StringComparison.OrdinalIgnoreCase) >= 0);
+                        mName.Equals("OnSimTextureLoaded", StringComparison.Ordinal)
+                        || mName.Equals("LoadSimTextureCallback", StringComparison.Ordinal)
+                        || (tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.Ordinal) >= 0
+                            && mName.IndexOf("SimTexture", StringComparison.OrdinalIgnoreCase) >= 0);
 
                     if (looksLikeSimCallback)
                     {
