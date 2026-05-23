@@ -47,6 +47,18 @@ namespace VPB
                 Has(p, "lipstick") || Has(p, "foundation") || Has(p, "concealer") || Has(p, "highlight") || Has(p, "highlighter") || Has(p, "contour") || Has(p, "powder"))
                 return true;
 
+            if (Has(p, "/textures/skin/") || Has(p, "/skinfx/") || Has(p, "/skin_fx/") || Has(p, "/bodyfx/") || Has(p, "/body_fx/") ||
+                Has(p, "/skineffects/") || Has(p, "/bodyeffects/") || Has(p, "/wetness/") || Has(p, "/nonclothing/") || Has(p, "/non-clothing/"))
+                return true;
+
+            if (Has(p, "wetskin") || Has(p, "wet_skin") || Has(p, "wet-skin") || Has(p, "wetbody") || Has(p, "wet_body") || Has(p, "wet-body") ||
+                Has(p, "bodywet") || Has(p, "body_wet") || Has(p, "skinwet") || Has(p, "skin_wet") || Has(p, "wetlook") || Has(p, "wet_look") ||
+                Has(p, "oilyskin") || Has(p, "oily_skin") || Has(p, "bodyoil") || Has(p, "body_oil") || Has(p, "skinoil") ||
+                Has(p, "bodygloss") || Has(p, "body_gloss") || Has(p, "skingloss") || Has(p, "skin_gloss") || Has(p, "bodyshine") || Has(p, "skinshine") ||
+                Has(p, "bodysheen") || Has(p, "skinsheen") || Has(p, "wetness") || Has(p, "sweaty") || Has(p, "sweat") || Has(p, "moisture") ||
+                Has(p, "skinfx") || Has(p, "bodyfx") || Has(p, "skin_fx") || Has(p, "body_fx"))
+                return true;
+
             if (Has(p, "facemask") || Has(p, "face_mask") || Has(p, "mask") || Has(p, "opacity") || Has(p, "alpha"))
             {
                 if (Has(p, "face") || Has(p, "makeup") || Has(p, "makeups") || Has(p, "freckle") || Has(p, "blush")) return true;
@@ -56,6 +68,483 @@ namespace VPB
             if (Has(p, "eye") && (Has(p, "enhance") || Has(p, "enhancement") || Has(p, "overlay") || Has(p, "decal") || Has(p, "makeup"))) return true;
 
             return false;
+        }
+
+        public enum ClothingWearClass
+        {
+            Unknown = 0,
+            RealGarment = 1,
+            Cosmetic = 2,
+        }
+
+        private static readonly Dictionary<string, ClothingWearClass> s_wearClassCache =
+            new Dictionary<string, ClothingWearClass>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly HashSet<string> GarmentClothingRegionTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "torso", "hip", "arms", "hands", "legs", "feet", "neck", "full body"
+        };
+
+        private static readonly string[] CosmeticClothingKeywords =
+        {
+            "lash", "lashes", "makeup", "shadow", "liner", "eyeliner", "eyeshadow", "eyesdw", "brow",
+            "gloss", "lipstick", "lip_", "lips", "nail", "toenail", "piercing", "earring",
+            "reflection", "eye_reflection", "eyes_reflection", "tears", "tear",
+            "teeth", "head flower", "glasses", "tattoo", "decal", "lash_female", "lash_male",
+            "wetline", "wet_line", "eyelid", "cornea", "sclera", "contact", "overlay",
+            "iris_tex", "eyeball", "pupil",
+            "wetskin", "wet_skin", "wet-skin", "wetbody", "wet_body", "bodywet", "body_wet",
+            "skinwet", "skin_wet", "wetlook", "wet_look", "oilyskin", "oily_skin", "bodyoil", "skinoil",
+            "bodygloss", "body_gloss", "skingloss", "skin_gloss", "bodyshine", "skinshine", "bodysheen", "skinsheen",
+            "wetness", "sweaty", "sweat", "moisture", "skinfx", "bodyfx", "skin_fx", "body_fx",
+            "nonclothing", "non_clothing", "non-clothing", "notclothing", "bodywetness", "skinmoisture"
+        };
+
+        private static readonly HashSet<string> GarmentClothingTypeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static ClothingLoadingUtils()
+        {
+            for (int i = 0; i < TagFilter.ClothingTypeTags.Count; i++)
+                GarmentClothingTypeTags.Add(TagFilter.ClothingTypeTags[i]);
+        }
+
+        private static bool ParseIsRealClothingItemJsonValue(JSONNode node)
+        {
+            if (node == null) return false;
+            if (node.AsBool) return true;
+            string s = node.Value;
+            return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1";
+        }
+
+        private static bool HasGarmentTypeOrRegionTag(IEnumerable<string> tags)
+        {
+            if (tags == null) return false;
+            foreach (string tag in tags)
+            {
+                if (string.IsNullOrEmpty(tag)) continue;
+                if (GarmentClothingRegionTags.Contains(tag)) return true;
+                if (GarmentClothingTypeTags.Contains(tag)) return true;
+            }
+            return false;
+        }
+
+        private static FileEntry ResolveClothingVamEntry(string uidOrPath, FileEntry entry)
+        {
+            if (entry != null)
+            {
+                string ext = Path.GetExtension(entry.Path);
+                if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return entry;
+            }
+
+            if (string.IsNullOrEmpty(uidOrPath)) return entry;
+
+            try
+            {
+                FileEntry resolved = entry ?? FileManager.GetVarFileEntry(uidOrPath);
+                if (resolved != null)
+                {
+                    string ext = Path.GetExtension(resolved.Path);
+                    if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return resolved;
+                }
+            }
+            catch { }
+
+            string pathPart = uidOrPath;
+            int colon = uidOrPath.IndexOf(':');
+            if (colon >= 0) pathPart = uidOrPath.Substring(colon + 1);
+            pathPart = pathPart.Replace('\\', '/');
+            if (pathPart.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+            {
+                string vamPath = pathPart.Substring(0, pathPart.Length - 4) + ".vam";
+                try
+                {
+                    if (colon >= 0)
+                    {
+                        string vamUid = uidOrPath.Substring(0, colon + 1) + vamPath;
+                        FileEntry vamEntry = FileManager.GetVarFileEntry(vamUid);
+                        if (vamEntry != null) return vamEntry;
+                    }
+                    FileEntry loose = FileManager.GetFileEntry(vamPath);
+                    if (loose != null) return loose;
+                }
+                catch { }
+            }
+
+            return entry;
+        }
+
+        public static bool? TryGetIsRealClothingItemFromAtom(Atom atom, string clothingGeometryUid)
+        {
+            if (atom == null || string.IsNullOrEmpty(clothingGeometryUid)) return null;
+
+            try
+            {
+                foreach (string sid in atom.GetStorableIDs())
+                {
+                    if (string.IsNullOrEmpty(sid)) continue;
+                    if (sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    JSONStorable st = null;
+                    try { st = atom.GetStorableByID(sid); } catch { }
+                    if (st == null) continue;
+
+                    bool matches = false;
+                    try
+                    {
+                        JSONStorableString urlParam = st.GetStringJSONParam("url");
+                        if (urlParam != null && !string.IsNullOrEmpty(urlParam.val))
+                        {
+                            string url = urlParam.val;
+                            if (string.Equals(url, clothingGeometryUid, StringComparison.OrdinalIgnoreCase)) matches = true;
+                            else if (url.IndexOf(clothingGeometryUid, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                            else if (clothingGeometryUid.IndexOf(url, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                        }
+                    }
+                    catch { }
+
+                    if (!matches)
+                    {
+                        try
+                        {
+                            JSONClass jc = st.GetJSON();
+                            string url = jc != null && jc["url"] != null ? jc["url"].Value : null;
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                if (string.Equals(url, clothingGeometryUid, StringComparison.OrdinalIgnoreCase)) matches = true;
+                                else if (url.IndexOf(clothingGeometryUid, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                                else if (clothingGeometryUid.IndexOf(url, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (!matches) continue;
+
+                    JSONStorableBool realParam = null;
+                    try { realParam = st.GetBoolJSONParam("isRealClothingItem"); } catch { }
+                    if (realParam != null) return realParam.val;
+
+                    try
+                    {
+                        JSONClass jc = st.GetJSON();
+                        if (jc != null && jc["isRealClothingItem"] != null)
+                            return ParseIsRealClothingItemJsonValue(jc["isRealClothingItem"]);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static readonly string[] GarmentClothingKeywords =
+        {
+            "pant", "skirt", "short", "shirt", "top", "bra", "dress", "suit", "jacket", "coat",
+            "sock", "shoe", "boot", "heel", "glove", "underwear", "thong", "brief", "jean",
+            "bodysuit", "sweater", "stocking", "lingerie", "bikini", "bottom", "corset", "panty",
+            "winter_clothes", "costume_o", "jean_short", "sandals", "uggs", "baggy",
+            "outfit", "apron", "vest", "legging", "hoodie", "costume", "uniform", "robe", "cloak",
+            "tunic", "kimono", "yukata", "leotard", "catsuit", "jumpsuit", "overalls", "sarong",
+            "tights", "cardigan", "blazer", "necker", "scarf", "belt", "harness", "swimwear",
+            "swimsuit", "idol", "nighty", "nightie", "pajama", "pyjama"
+        };
+
+        public static bool IsCosmeticClothingUidHeuristic(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < CosmeticClothingKeywords.Length; i++)
+            {
+                if (s.Contains(CosmeticClothingKeywords[i])) return true;
+            }
+            int colonIdx = s.IndexOf(':');
+            string packagePart = colonIdx >= 0 ? s.Substring(0, colonIdx) : s;
+            string[] segs = packagePart.Split(new char[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < segs.Length; i++)
+            {
+                string seg = segs[i];
+                if (seg == "eye" || seg == "eyes") return true;
+                if (seg.StartsWith("eye") && seg != "eyelet") return true;
+            }
+            return false;
+        }
+
+        public static bool IsGarmentClothingUidHeuristicPositive(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < GarmentClothingKeywords.Length; i++)
+            {
+                if (s.Contains(GarmentClothingKeywords[i])) return true;
+            }
+            return false;
+        }
+
+        public static bool IsClothingAssetPathInUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            int colon = uid.IndexOf(':');
+            string pathPart = colon >= 0 ? uid.Substring(colon + 1) : uid;
+            if (pathPart.IndexOf("/custom/clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (pathPart.IndexOf("\\custom\\clothing\\", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        public static HashSet<string> GetClothingMetadataRegionsFromEntry(FileEntry entry)
+        {
+            if (entry == null) return null;
+
+            if (entry is VarFileEntry vfe && vfe.ClothingTags != null && vfe.ClothingTags.Count > 0)
+            {
+                var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string tag in vfe.ClothingTags)
+                {
+                    if (!string.IsNullOrEmpty(tag)) regions.Add(tag);
+                }
+                if (regions.Count > 0) return regions;
+            }
+
+            string ext = Path.GetExtension(entry.Path);
+            if (!string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ext, ".vap", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            try
+            {
+                using (var sr = entry.OpenStreamReader())
+                {
+                    if (sr == null) return null;
+                    var jc = JSON.Parse(sr.ReadToEnd()) as JSONClass;
+                    if (jc == null) return null;
+
+                    if (jc["metadata"] != null)
+                    {
+                        var meta = jc["metadata"].AsObject;
+                        if (meta != null && meta["tags"] != null)
+                        {
+                            var arr = meta["tags"].AsArray;
+                            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            if (arr != null)
+                            {
+                                foreach (JSONNode node in arr)
+                                {
+                                    var tag = node.Value;
+                                    if (!string.IsNullOrEmpty(tag)) regions.Add(tag);
+                                }
+                            }
+                            if (regions.Count > 0) return regions;
+                        }
+                    }
+
+                    if (jc["tags"] != null)
+                    {
+                        string tagStr = jc["tags"].Value;
+                        if (!string.IsNullOrEmpty(tagStr))
+                        {
+                            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (string t in tagStr.Split(','))
+                            {
+                                string trimmed = t.Trim();
+                                if (!string.IsNullOrEmpty(trimmed)) regions.Add(trimmed);
+                            }
+                            if (regions.Count > 0) return regions;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static bool? TryGetIsRealClothingItemFromEntry(FileEntry entry)
+        {
+            FileEntry vamEntry = ResolveClothingVamEntry(null, entry);
+            if (vamEntry == null) return null;
+
+            string ext = Path.GetExtension(vamEntry.Path);
+            if (!string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return null;
+
+            try
+            {
+                using (var sr = vamEntry.OpenStreamReader())
+                {
+                    if (sr == null) return null;
+                    var jc = JSON.Parse(sr.ReadToEnd()) as JSONClass;
+                    if (jc == null) return null;
+
+                    JSONArray storables = jc["storables"] as JSONArray;
+                    if (storables != null)
+                    {
+                        for (int i = 0; i < storables.Count; i++)
+                        {
+                            JSONClass st = storables[i] as JSONClass;
+                            if (st == null || st["isRealClothingItem"] == null) continue;
+                            return ParseIsRealClothingItemJsonValue(st["isRealClothingItem"]);
+                        }
+                    }
+
+                    if (jc["isRealClothingItem"] != null)
+                        return ParseIsRealClothingItemJsonValue(jc["isRealClothingItem"]);
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        public static bool IsGarmentClothingUid(string itemUid, FileEntry entry = null)
+        {
+            if (string.IsNullOrEmpty(itemUid)) return false;
+            if (IsDecalLikePath(itemUid) || IsCosmeticClothingUidHeuristic(itemUid)) return false;
+
+            if (entry == null)
+            {
+                try { entry = FileManager.GetVarFileEntry(itemUid); } catch { entry = null; }
+            }
+
+            FileEntry vamEntry = ResolveClothingVamEntry(itemUid, entry);
+            bool? realFlag = TryGetIsRealClothingItemFromEntry(vamEntry);
+            if (realFlag == true) return true;
+            if (realFlag == false) return false;
+
+            if (vamEntry != null)
+            {
+                HashSet<string> regions = GetClothingMetadataRegionsFromEntry(vamEntry);
+                if (regions != null && regions.Count > 0)
+                    return HasGarmentTypeOrRegionTag(regions);
+            }
+
+            return IsGarmentClothingUidHeuristicPositive(itemUid);
+        }
+
+        public static ClothingWearClass ClassifyClothingWearClass(string uidOrPath, FileEntry entry = null, Atom atom = null)
+        {
+            if (string.IsNullOrEmpty(uidOrPath)) return ClothingWearClass.Unknown;
+
+            string cacheKey = uidOrPath;
+            if (entry != null && !string.IsNullOrEmpty(entry.Uid)) cacheKey = entry.Uid;
+            if (atom != null)
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(atom.uid))
+                        cacheKey = atom.uid + "|" + cacheKey;
+                }
+                catch { }
+            }
+
+            ClothingWearClass cached;
+            if (s_wearClassCache.TryGetValue(cacheKey, out cached)) return cached;
+
+            if (atom != null)
+            {
+                bool? runtimeReal = TryGetIsRealClothingItemFromAtom(atom, uidOrPath);
+                if (runtimeReal == true)
+                {
+                    s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                    return ClothingWearClass.RealGarment;
+                }
+                if (runtimeReal == false)
+                {
+                    s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                    return ClothingWearClass.Cosmetic;
+                }
+            }
+
+            if (IsDecalLikePath(uidOrPath) || IsCosmeticClothingUidHeuristic(uidOrPath))
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                return ClothingWearClass.Cosmetic;
+            }
+
+            if (entry == null)
+            {
+                try { entry = FileManager.GetVarFileEntry(uidOrPath); } catch { entry = null; }
+            }
+
+            FileEntry vamEntry = ResolveClothingVamEntry(uidOrPath, entry);
+            bool? realFlag = TryGetIsRealClothingItemFromEntry(vamEntry);
+            if (realFlag == true)
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                return ClothingWearClass.RealGarment;
+            }
+            if (realFlag == false)
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                return ClothingWearClass.Cosmetic;
+            }
+
+            if (IsGarmentClothingUid(uidOrPath, vamEntry ?? entry))
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                return ClothingWearClass.RealGarment;
+            }
+
+            s_wearClassCache[cacheKey] = ClothingWearClass.Unknown;
+            return ClothingWearClass.Unknown;
+        }
+
+        public static bool ShouldClearClothingOnReplace(ClothingWearClass dropped, ClothingWearClass existing)
+        {
+            if (existing == ClothingWearClass.Unknown || dropped == ClothingWearClass.Unknown) return false;
+            if (dropped == ClothingWearClass.RealGarment && existing == ClothingWearClass.Cosmetic) return false;
+            if (dropped == ClothingWearClass.Cosmetic && existing == ClothingWearClass.RealGarment) return false;
+            return dropped == existing;
+        }
+
+        public static void RemoveRealGarmentClothing(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveRealGarmentClothing: target is null");
+                return;
+            }
+
+            LogUtil.Log($"[VPB] RemoveRealGarmentClothing: target={target.uid} ({target.type})");
+
+            try
+            {
+                JSONStorable geometry = target.GetStorableByID("geometry");
+                if (geometry == null)
+                {
+                    LogUtil.LogWarning("[VPB] RemoveRealGarmentClothing: geometry storable NOT found");
+                    return;
+                }
+
+                int disabledCount = 0;
+                int skippedCosmetic = 0;
+                int skippedUnknown = 0;
+                foreach (var name in geometry.GetBoolParamNames())
+                {
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (!name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    string itemUid = name.Substring("clothing:".Length);
+                    ClothingWearClass wearClass = ClassifyClothingWearClass(itemUid, null, target);
+                    if (wearClass != ClothingWearClass.RealGarment)
+                    {
+                        if (wearClass == ClothingWearClass.Cosmetic) skippedCosmetic++;
+                        else skippedUnknown++;
+                        continue;
+                    }
+
+                    JSONStorableBool active = null;
+                    try { active = geometry.GetBoolJSONParam(name); } catch { }
+                    if (active == null || !active.val) continue;
+
+                    active.val = false;
+                    disabledCount++;
+                }
+
+                LogUtil.Log($"[VPB] RemoveRealGarmentClothing: disabled {disabledCount} garments (skipped cosmetic={skippedCosmetic}, unknown={skippedUnknown})");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RemoveRealGarmentClothing: exception: " + ex);
+            }
         }
 
         public static void ClassifyClothingHairPath(string pathOrUid, out ResourceKind kind, out ResourceGender gender)
@@ -728,7 +1217,7 @@ namespace VPB
 
             if (isClothing && VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode)
             {
-                RemoveAllClothing(atom);
+                RemoveRealGarmentClothing(atom);
             }
 
             string normalizedPath = UI.NormalizePath(path);

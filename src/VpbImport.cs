@@ -250,7 +250,7 @@ namespace VPB
                                             if (boolName.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase))
                                             {
                                                 string uid = boolName.Substring("clothing:".Length);
-                                                if (!IsCosmeticClothingUidHeuristicStatic(uid))
+                                                if (!ClothingLoadingUtils.IsCosmeticClothingUidHeuristic(uid))
                                                 {
                                                     JSONStorableBool b = geometry.GetBoolJSONParam(boolName);
                                                     if (b != null) b.val = false;
@@ -271,6 +271,11 @@ namespace VPB
                         {
                             preset["setUnlistedParamsToDefault"].AsBool =
                                 clothingMode != ClothingApplyMode.ClothingOnly;
+                        }
+
+                        if (clothingMode == ClothingApplyMode.Keep && keepGarmentSnapshot != null)
+                        {
+                            PatchAppearancePresetForKeepGarments(preset, keepGarmentSnapshot);
                         }
 
                         string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
@@ -994,7 +999,7 @@ namespace VPB
                     {
                         if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
                         string uid = key.Substring("clothing:".Length);
-                        if (!IsGarmentClothingUidStatic(uid)) continue;
+                        if (!ClothingLoadingUtils.IsGarmentClothingUid(uid)) continue;
                         JSONStorableBool b = geometry.GetBoolJSONParam(key);
                         if (b != null) state.GarmentGeometryBools[key] = b.val;
                     }
@@ -1005,13 +1010,15 @@ namespace VPB
             {
                 foreach (string sid in atom.GetStorableIDs())
                 {
-                    if (!IsClothingItemStorableIdStatic(sid)) continue;
+                    if (!IsClothingItemStorableIdStatic(sid) && !IsClothingAssetPathInUidStatic(sid)) continue;
                     JSONStorable st = atom.GetStorableByID(sid);
                     if (st == null) continue;
                     JSONClass jc = null;
                     try { jc = st.GetJSON(); } catch { continue; }
                     string url = ExtractClothingUrlFromStorableJsonStatic(jc);
-                    if (string.IsNullOrEmpty(url) || !IsGarmentClothingUidStatic(url)) continue;
+                    if (string.IsNullOrEmpty(url) && IsClothingAssetPathInUidStatic(sid))
+                        url = sid;
+                    if (string.IsNullOrEmpty(url) || !ClothingLoadingUtils.IsGarmentClothingUid(url)) continue;
                     bool on = false;
                     if (geometry != null)
                     {
@@ -1192,7 +1199,7 @@ namespace VPB
                         {
                             if (!kv.Value) continue;
                             string uid = kv.Key.Length > 9 ? kv.Key.Substring(9) : kv.Key;
-                            if (IsCosmeticClothingUidHeuristicStatic(uid)) { skippedCosmetic++; continue; }
+                            if (ClothingLoadingUtils.IsCosmeticClothingUidHeuristic(uid)) { skippedCosmetic++; continue; }
                             try
                             {
                                 JSONStorableBool jsb = geom.GetBoolJSONParam(kv.Key);
@@ -1292,68 +1299,14 @@ namespace VPB
             return null;
         }
 
+        #endregion
+
         private static bool ClothingGeometryUrlsLikelyMatchStatic(string storableUrl, string geometryUid)
         {
             if (string.IsNullOrEmpty(storableUrl) || string.IsNullOrEmpty(geometryUid)) return false;
             if (string.Equals(storableUrl, geometryUid, StringComparison.OrdinalIgnoreCase)) return true;
             if (storableUrl.IndexOf(geometryUid, StringComparison.OrdinalIgnoreCase) >= 0) return true;
             if (geometryUid.IndexOf(storableUrl, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return false;
-        }
-
-        private static bool IsGarmentClothingUidStatic(string itemUid)
-        {
-            if (string.IsNullOrEmpty(itemUid)) return false;
-            if (IsCosmeticClothingUidHeuristicStatic(itemUid)) return false;
-            try
-            {
-                VarFileEntry e = FileManager.GetVarFileEntry(itemUid);
-                if (e != null)
-                {
-                    HashSet<string> regions = GetClothingRegionsStatic(e);
-                    if (regions != null && regions.Count > 0)
-                    {
-                        foreach (string r in regions)
-                        {
-                            if (GarmentClothingRegionTagsStatic.Contains(r)) return true;
-                        }
-                        return false;
-                    }
-                }
-            }
-            catch { }
-            if (IsClothingAssetPathInUidStatic(itemUid)) return true;
-            return IsGarmentClothingUidHeuristicPositiveStatic(itemUid);
-        }
-
-        private static bool IsCosmeticClothingUidHeuristicStatic(string uid)
-        {
-            if (string.IsNullOrEmpty(uid)) return false;
-            string s = uid.ToLowerInvariant();
-            for (int i = 0; i < S_cosmeticKeywordsStatic.Length; i++)
-            {
-                if (s.Contains(S_cosmeticKeywordsStatic[i])) return true;
-            }
-            int colonIdx = s.IndexOf(':');
-            string packagePart = colonIdx >= 0 ? s.Substring(0, colonIdx) : s;
-            string[] segs = packagePart.Split(new char[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < segs.Length; i++)
-            {
-                string seg = segs[i];
-                if (seg == "eye" || seg == "eyes") return true;
-                if (seg.StartsWith("eye") && seg != "eyelet") return true;
-            }
-            return false;
-        }
-
-        private static bool IsGarmentClothingUidHeuristicPositiveStatic(string uid)
-        {
-            if (string.IsNullOrEmpty(uid)) return false;
-            string s = uid.ToLowerInvariant();
-            for (int i = 0; i < S_garmentKeywordsStatic.Length; i++)
-            {
-                if (s.Contains(S_garmentKeywordsStatic[i])) return true;
-            }
             return false;
         }
 
@@ -1367,37 +1320,118 @@ namespace VPB
             return false;
         }
 
-        private static HashSet<string> GetClothingRegionsStatic(VarFileEntry e)
+        private static bool IsHairOrHairPresetStorableIdStatic(string sid)
         {
-            if (e == null) return null;
-            try
+            if (string.IsNullOrEmpty(sid)) return false;
+            if (string.Equals(sid, "HairPresets", StringComparison.OrdinalIgnoreCase)) return true;
+            if (sid.IndexOf("hairItem#", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return sid.StartsWith("hairItem", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldDropStorableFromKeepGarmentPresetStatic(JSONClass storable)
+        {
+            if (storable == null) return false;
+            string id = storable["id"]?.Value ?? "";
+            if (IsHairOrHairPresetStorableIdStatic(id)) return false;
+            if (string.Equals(id, "ClothingPresets", StringComparison.OrdinalIgnoreCase)) return true;
+            if (id.IndexOf("clothingItem#", StringComparison.OrdinalIgnoreCase) >= 0
+                || id.StartsWith("clothingItem", StringComparison.OrdinalIgnoreCase))
             {
-                using (var sr = e.OpenStreamReader())
-                {
-                    if (sr == null) return null;
-                    var json = sr.ReadToEnd();
-                    var jc = JSON.Parse(json) as JSONClass;
-                    if (jc != null && jc["metadata"] != null)
-                    {
-                        var meta = jc["metadata"].AsObject;
-                        if (meta != null && meta["tags"] != null)
-                        {
-                            var arr = meta["tags"].AsArray;
-                            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                            if (arr != null)
-                            {
-                                foreach (JSONNode node in arr)
-                                {
-                                    var tag = node.Value;
-                                    if (!string.IsNullOrEmpty(tag)) regions.Add(tag);
-                                }
-                            }
-                            return regions;
-                        }
-                    }
-                }
+                string url = ExtractClothingUrlFromStorableJsonStatic(storable);
+                if (string.IsNullOrEmpty(url)) return true;
+                return ClothingLoadingUtils.IsGarmentClothingUid(url);
             }
-            catch { }
+            if (id.StartsWith("wearable", StringComparison.OrdinalIgnoreCase))
+            {
+                string url = ExtractClothingUrlFromStorableJsonStatic(storable);
+                if (string.IsNullOrEmpty(url)) return true;
+                return ClothingLoadingUtils.IsGarmentClothingUid(url);
+            }
+            if (id.StartsWith("clothing", StringComparison.OrdinalIgnoreCase)
+                && id.IndexOf("Item", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                return true;
+            }
+            // Modern .vap: full clothing UID as storable id (subpreset / color / texture).
+            if (IsClothingAssetPathInUidStatic(id))
+                return ClothingLoadingUtils.IsGarmentClothingUid(id);
+            return false;
+        }
+
+        private static void PatchAppearancePresetForKeepGarments(JSONClass presetJSON, KeepGarmentAppearanceState state)
+        {
+            if (presetJSON == null || state == null || presetJSON["storables"] == null) return;
+            JSONArray storables = presetJSON["storables"].AsArray;
+            if (storables == null) return;
+
+            JSONArray filteredStorables = new JSONArray();
+            foreach (JSONNode node in storables)
+            {
+                JSONClass sn = node as JSONClass;
+                if (sn == null) continue;
+                if (ShouldDropStorableFromKeepGarmentPresetStatic(sn)) continue;
+                filteredStorables.Add(node);
+            }
+            presetJSON["storables"] = filteredStorables;
+
+            InjectKeepGarmentGeometryIntoPresetGeometryStatic(presetJSON, state);
+            AppendKeepGarmentStorablesToPresetStatic(presetJSON, state);
+            LogUtil.Log($"[DragDropDebug][KeepGarment] Appearance preset patched: garment storables filtered and current outfit injected.");
+        }
+
+        private static void InjectKeepGarmentGeometryIntoPresetGeometryStatic(JSONClass presetJSON, KeepGarmentAppearanceState state)
+        {
+            if (presetJSON == null || state?.GarmentGeometryBools == null || state.GarmentGeometryBools.Count == 0) return;
+            JSONArray arr = presetJSON["storables"] != null ? presetJSON["storables"].AsArray : null;
+            if (arr == null) return;
+            for (int i = 0; i < arr.Count; i++)
+            {
+                JSONClass s = arr[i] as JSONClass;
+                if (s == null) continue;
+                if (!string.Equals(s["id"]?.Value, "geometry", StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var kv in state.GarmentGeometryBools)
+                {
+                    try { s[kv.Key] = new JSONData(kv.Value); } catch { }
+                }
+                return;
+            }
+        }
+
+        private static void AppendKeepGarmentStorablesToPresetStatic(JSONClass presetJSON, KeepGarmentAppearanceState state)
+        {
+            if (presetJSON == null || state == null) return;
+            JSONArray arr = presetJSON["storables"] != null ? presetJSON["storables"].AsArray : null;
+            if (arr == null) return;
+            if (state.ClothingPresetsJson != null)
+            {
+                JSONClass c = CloneJsonClassStatic(state.ClothingPresetsJson);
+                if (c != null) arr.Add(c);
+            }
+            if (state.GarmentClothingItemJsons == null) return;
+            for (int i = 0; i < state.GarmentClothingItemJsons.Count; i++)
+            {
+                JSONClass c = CloneJsonClassStatic(state.GarmentClothingItemJsons[i].Value);
+                if (c != null) arr.Add(c);
+            }
+        }
+
+        private static JSONStorable FindClothingItemStorableByUrlStatic(Atom atom, string url)
+        {
+            if (atom == null || string.IsNullOrEmpty(url)) return null;
+            foreach (string sid in atom.GetStorableIDs())
+            {
+                if (!IsClothingItemStorableIdStatic(sid) && !IsClothingAssetPathInUidStatic(sid)) continue;
+                JSONStorable st = null;
+                try { st = atom.GetStorableByID(sid); } catch { continue; }
+                if (st == null) continue;
+                JSONClass jc = null;
+                try { jc = st.GetJSON(); } catch { continue; }
+                string stUrl = ExtractClothingUrlFromStorableJsonStatic(jc);
+                if (!string.IsNullOrEmpty(stUrl) && ClothingGeometryUrlsLikelyMatchStatic(url, stUrl))
+                    return st;
+                if (ClothingGeometryUrlsLikelyMatchStatic(url, sid))
+                    return st;
+            }
             return null;
         }
 
@@ -1423,15 +1457,27 @@ namespace VPB
             }
             if (state.GarmentClothingItemJsons != null && state.GarmentClothingItemJsons.Count > 0)
             {
-                int ok = 0, missingStorable = 0, fail = 0;
+                int ok = 0, missingStorable = 0, fail = 0, urlMatched = 0;
                 foreach (var kv in state.GarmentClothingItemJsons)
                 {
                     JSONStorable cs = null;
                     try { cs = atom.GetStorableByID(kv.Key); } catch { }
-                    if (cs != null) { try { cs.RestoreFromJSON(kv.Value); ok++; } catch { fail++; } }
+                    if (cs == null)
+                    {
+                        string url = ExtractClothingUrlFromStorableJsonStatic(kv.Value);
+                        cs = FindClothingItemStorableByUrlStatic(atom, url);
+                        if (cs == null && !string.IsNullOrEmpty(url))
+                            cs = FindClothingItemStorableByUrlStatic(atom, kv.Key);
+                        if (cs != null) urlMatched++;
+                    }
+                    if (cs != null)
+                    {
+                        try { cs.RestoreFromJSON(CloneJsonClassStatic(kv.Value)); ok++; }
+                        catch { fail++; }
+                    }
                     else { missingStorable++; }
                 }
-                LogUtil.Log($"[DragDropDebug][KeepGarment] {phase}: clothingItems restored={ok} missingStorableId={missingStorable} failed={fail} atom={atomLabel}");
+                LogUtil.Log($"[DragDropDebug][KeepGarment] {phase}: clothingItems restored={ok} urlMatched={urlMatched} missingStorableId={missingStorable} failed={fail} atom={atomLabel}");
             }
 
             LogUtil.LogVerboseUi($"[DragDropDebug][KeepGarment] {phase}: atom clothingItem ids now: " + CollectClothingItemStorableIdsStatic(atom));
@@ -1453,34 +1499,6 @@ namespace VPB
             catch { }
             return sb.Length == 0 ? "<none>" : sb.ToString();
         }
-
-        private static readonly HashSet<string> GarmentClothingRegionTagsStatic = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "torso", "hip", "arms", "hands", "legs", "feet", "neck", "full body"
-        };
-
-        private static readonly string[] S_cosmeticKeywordsStatic =
-        {
-            "lash", "lashes", "makeup", "shadow", "liner", "eyeliner", "eyeshadow", "eyesdw", "brow",
-            "gloss", "lipstick", "lip_", "lips", "nail", "toenail", "piercing", "earring",
-            "reflection", "eye_reflection", "eyes_reflection", "tears", "tear",
-            "teeth", "head flower", "glasses", "tattoo", "decal", "lash_female", "lash_male",
-            "wetline", "wet_line", "eyelid", "cornea", "sclera", "contact", "overlay",
-            "iris_tex", "eyeball", "pupil"
-        };
-
-        private static readonly string[] S_garmentKeywordsStatic =
-        {
-            "pant", "skirt", "short", "shirt", "top", "bra", "dress", "suit", "jacket", "coat",
-            "sock", "shoe", "boot", "heel", "glove", "underwear", "thong", "brief", "jean",
-            "bodysuit", "sweater", "stocking", "lingerie", "bikini", "bottom", "corset", "panty",
-            "winter_clothes", "costume_o", "jean_short", "sandals", "uggs", "baggy",
-            "outfit", "apron", "vest", "legging", "hoodie", "costume", "uniform", "robe", "cloak",
-            "tunic", "kimono", "yukata", "leotard", "catsuit", "jumpsuit", "overalls", "sarong",
-            "tights", "cardigan", "blazer", "necker", "scarf", "belt", "harness", "swimwear",
-            "swimsuit", "idol", "nighty", "nightie", "pajama", "pyjama"
-        };
-        #endregion
 
         #region Slice D helpers
         private static JSONClass ExtractAtomFromSceneHelper(JSONClass sceneJSON, string atomType)

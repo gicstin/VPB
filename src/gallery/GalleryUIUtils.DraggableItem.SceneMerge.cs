@@ -674,7 +674,11 @@ namespace VPB
                      LogUtil.Log($"[DragDropDebug] Replace mode check: Checking types...");
                      
                      HashSet<string> droppedRegions = isHair ? GetHairRegions(FileEntry) : GetClothingRegions(FileEntry);
-                     LogUtil.Log($"[DragDropDebug] Dropped regions: {string.Join(",", droppedRegions.ToArray())}");
+                     ClothingLoadingUtils.ClothingWearClass droppedWearClass = ClothingLoadingUtils.ClothingWearClass.Unknown;
+                     if (isClothing)
+                         droppedWearClass = ClothingLoadingUtils.ClassifyClothingWearClass(
+                             FileEntry != null ? FileEntry.Uid : normalizedPath, FileEntry, atom);
+                     LogUtil.Log($"[DragDropDebug] Dropped regions: {string.Join(",", droppedRegions.ToArray())}, wearClass={droppedWearClass}");
 
                      List<string> all = geometry.GetBoolParamNames();
                      if (all != null)
@@ -709,6 +713,18 @@ namespace VPB
                                      // Try heuristics on the param name
                                      existingRegions = isHair ? GetRegionsFromHeuristics(itemName) : GetClothingRegionsFromHeuristics(itemName);
                                      // No default fallback for existing items - safer to NOT clear if unknown
+                                 }
+
+                                 if (isClothing)
+                                 {
+                                     ClothingLoadingUtils.ClothingWearClass existingWearClass =
+                                         ClothingLoadingUtils.ClassifyClothingWearClass(itemName, existingEntry, atom);
+                                     if (!ClothingLoadingUtils.ShouldClearClothingOnReplace(droppedWearClass, existingWearClass))
+                                     {
+                                         if (VPBConfig.Instance.IsDevMode)
+                                             LogUtil.Log($"[DragDropDebug] Preserving {paramType} {n} (wearClass={existingWearClass}, dropped={droppedWearClass}) — different clothing class.");
+                                         continue;
+                                     }
                                  }
 
                                  if (droppedRegions.Overlaps(existingRegions))
@@ -1055,7 +1071,7 @@ namespace VPB
                                             if (itemType == ItemType.Pose) mode = ClothingApplyMode.Replace;
                                             if (ddReplaceMode && isPersonClothingPreset)
                                             {
-                                                ClothingLoadingUtils.RemoveAllClothing(atom);
+                                                ClothingLoadingUtils.RemoveRealGarmentClothing(atom);
                                                 mode = ClothingApplyMode.Replace;
                                             }
 
@@ -1560,7 +1576,17 @@ namespace VPB
                      bool replace = (Panel != null && Panel.DragDropReplaceMode && (isClothing || isHair));
                      if (replace)
                      {
-                         ghostText.text = $"Replacing {typeStr} on\n" + atom.name;
+                         string replaceScope = "";
+                         if (isClothing)
+                         {
+                             ClothingLoadingUtils.ClothingWearClass wearClass =
+                                 ClothingLoadingUtils.ClassifyClothingWearClass(FileEntry != null ? FileEntry.Uid : "", FileEntry);
+                             if (wearClass == ClothingLoadingUtils.ClothingWearClass.RealGarment)
+                                 replaceScope = " (garments only)";
+                             else if (wearClass == ClothingLoadingUtils.ClothingWearClass.Cosmetic)
+                                 replaceScope = " (cosmetics only)";
+                         }
+                         ghostText.text = $"Replacing {typeStr}{replaceScope} on\n" + atom.name;
                          ghostText.color = new Color(1f, 0.5f, 0.5f); // Reddish
                      }
                      else
