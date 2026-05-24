@@ -560,6 +560,52 @@ namespace VPB
             return Regex.Replace(input, ".*/", string.Empty);
         }
 
+        static bool RefreshReasonNeedsFreshVarDiskEnum(string refreshReason)
+        {
+            if (string.IsNullOrEmpty(refreshReason)) return false;
+            return refreshReason.IndexOf("hub_download", StringComparison.OrdinalIgnoreCase) >= 0
+                || refreshReason.IndexOf("hub_delete", StringComparison.OrdinalIgnoreCase) >= 0
+                || refreshReason.IndexOf("hub_deferred", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool RefreshReasonNeedsHubPackageScan(string refreshReason)
+        {
+            return RefreshReasonNeedsFreshVarDiskEnum(refreshReason);
+        }
+
+        /// <summary>
+        /// Register a hub direct-download .var immediately so hub UI Refresh() does not clear alreadyHave
+        /// before the coalesced FileManager refresh finishes. Also appends path inventory for later cache hits.
+        /// </summary>
+        public static VarPackage RegisterHubDownloadedPackage(string varPath)
+        {
+            if (string.IsNullOrEmpty(varPath)) return null;
+            string cleanPath = CleanFilePath(varPath);
+            if (string.IsNullOrEmpty(cleanPath) || !File.Exists(cleanPath)) return null;
+
+            VarPackage existing = null;
+            lock (packagesLock)
+            {
+                if (packagesByPath != null)
+                    packagesByPath.TryGetValue(cleanPath, out existing);
+            }
+            if (existing != null)
+            {
+                try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
+                return existing;
+            }
+
+            VarPackage registered = RegisterPackage(cleanPath);
+            try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
+            try
+            {
+                LogUtil.Log("[VPB.HubDownload] RegisterHubDownloadedPackage path='" + cleanPath
+                    + "' uid='" + (registered != null ? registered.Uid : "") + "'");
+            }
+            catch { }
+            return registered;
+        }
+
         protected static VarPackage RegisterPackage(string vpath, bool clean = false)
         {
             if (debug)
@@ -950,6 +996,224 @@ namespace VPB
             }
         }
 
+        static string NormalizeBrowseInternalPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return string.Empty;
+            return path.Replace('\\', '/').Trim('/');
+        }
+
+        static bool TryGetBrowseRelativeSegment(string internalPath, string dirPrefix, out string relativeSegment, out bool isFile)
+        {
+            relativeSegment = null;
+            isFile = false;
+            string normalizedPath = NormalizeBrowseInternalPath(internalPath);
+            string normalizedDir = NormalizeBrowseInternalPath(dirPrefix);
+            if (string.IsNullOrEmpty(normalizedPath)) return false;
+
+            string relative;
+            if (string.IsNullOrEmpty(normalizedDir))
+            {
+                relative = normalizedPath;
+            }
+            else if (normalizedPath.Equals(normalizedDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            else if (normalizedPath.StartsWith(normalizedDir + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                relative = normalizedPath.Substring(normalizedDir.Length + 1);
+            }
+            else
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(relative)) return false;
+
+            int slashIdx = relative.IndexOf('/');
+            if (slashIdx < 0)
+            {
+                relativeSegment = relative;
+                isFile = true;
+                return true;
+            }
+
+            relativeSegment = relative.Substring(0, slashIdx);
+            isFile = false;
+            return !string.IsNullOrEmpty(relativeSegment);
+        }
+
+        static void AppendVarBrowseImmediateChildForPackage(VarPackage pkg, string dirPrefix, Regex regex, List<FileEntry> foundFiles, HashSet<string> foundSubdirs)
+        {
+            List<string> names;
+            List<long> ticks;
+            List<long> sizes;
+            if (pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) && names != null)
+            {
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string internalPath = names[i];
+                    if (string.IsNullOrEmpty(internalPath)) continue;
+                    if (!InternalPathMatchesBrowseDir(internalPath, dirPrefix)) continue;
+
+                    string segment;
+                    bool isFile;
+                    if (!TryGetBrowseRelativeSegment(internalPath, dirPrefix, out segment, out isFile)) continue;
+
+                    if (isFile)
+                    {
+                        if (string.IsNullOrEmpty(segment) || !regex.IsMatch(segment)) continue;
+                        VarFileEntry entry;
+                        if (!pkg.TryCreateVarFileEntryFromCache(internalPath, out entry) || entry == null)
+                            continue;
+                        TryRegisterVarFileEntryLookup(entry);
+                        foundFiles.Add(entry);
+                    }
+                    else if (foundSubdirs != null)
+                    {
+                        string normalizedDir = NormalizeBrowseInternalPath(dirPrefix);
+                        string subPath = string.IsNullOrEmpty(normalizedDir) ? segment : normalizedDir + "/" + segment;
+                        foundSubdirs.Add(subPath);
+                    }
+                }
+                return;
+            }
+
+            List<VarFileEntry> entries = null;
+            try { entries = pkg.FileEntries; } catch { }
+            if (entries == null) return;
+            foreach (VarFileEntry entry in entries)
+            {
+                if (entry == null) continue;
+                if (!InternalPathMatchesBrowseDir(entry.InternalPath, dirPrefix)) continue;
+
+                string segment;
+                bool isFile;
+                if (!TryGetBrowseRelativeSegment(entry.InternalPath, dirPrefix, out segment, out isFile)) continue;
+
+                if (isFile)
+                {
+                    if (string.IsNullOrEmpty(segment) || !regex.IsMatch(segment)) continue;
+                    TryRegisterVarFileEntryLookup(entry);
+                    foundFiles.Add(entry);
+                }
+                else if (foundSubdirs != null)
+                {
+                    string normalizedDir = NormalizeBrowseInternalPath(dirPrefix);
+                    string subPath = string.IsNullOrEmpty(normalizedDir) ? segment : normalizedDir + "/" + segment;
+                    foundSubdirs.Add(subPath);
+                }
+            }
+        }
+
+        /// <summary>Immediate child files and virtual subdirectories under a VAR internal browse path.</summary>
+        public static void FindVarBrowseImmediateChildren(string dir, string pattern, List<FileEntry> foundFiles, List<string> foundSubdirs)
+        {
+            if (foundFiles == null || string.IsNullOrEmpty(pattern)) return;
+            dir = CleanDirectoryPath(dir) ?? string.Empty;
+            string regex = "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+            Regex rx;
+            try
+            {
+                rx = new Regex(regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            }
+            catch
+            {
+                return;
+            }
+
+            HashSet<string> subdirSet = foundSubdirs != null ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
+            VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
+            if (snapshot == null) return;
+
+            for (int i = 0; i < snapshot.Length; i++)
+            {
+                VarPackage pkg = snapshot[i];
+                if (pkg == null || !pkg.Enabled || pkg.invalid) continue;
+                AppendVarBrowseImmediateChildForPackage(pkg, dir, rx, foundFiles, subdirSet);
+            }
+
+            if (foundSubdirs != null && subdirSet != null)
+            {
+                foundSubdirs.AddRange(subdirSet);
+                foundSubdirs.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public static void SafeGetImmediateFilesInDirectory(string path, string pattern, List<string> results)
+        {
+            if (results == null || string.IsNullOrEmpty(path)) return;
+            try
+            {
+                string[] files = Directory.GetFiles(path, pattern ?? "*");
+                if (files != null && files.Length > 0)
+                    results.AddRange(files);
+            }
+            catch { }
+        }
+
+        public static void SafeGetImmediateSubdirectories(string path, List<string> results)
+        {
+            if (results == null || string.IsNullOrEmpty(path)) return;
+            try
+            {
+                string[] dirs = Directory.GetDirectories(path);
+                if (dirs == null) return;
+                for (int i = 0; i < dirs.Length; i++)
+                {
+                    string dir = dirs[i];
+                    if (Path.GetFileName(dir).Equals("InvalidPackages", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    results.Add(dir);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Path-scoped .var listing for filesystem browse (never scans whole library when <paramref name="dirPath"/> is set).</summary>
+        public static void CollectFilesystemVarEntries(string dirPath, bool recursive, List<FileEntry> foundFiles, List<string> foundSubdirs)
+        {
+            if (foundFiles == null) return;
+            dirPath = CleanDirectoryPath(dirPath) ?? string.Empty;
+            if (string.IsNullOrEmpty(dirPath) || !Directory.Exists(dirPath))
+                return;
+
+            if (recursive)
+            {
+                List<string> paths = new List<string>();
+                SafeGetFiles(dirPath, "*.var", paths);
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    string path = paths[i];
+                    if (!string.IsNullOrEmpty(path))
+                        foundFiles.Add(new SystemFileEntry(path));
+                }
+                return;
+            }
+
+            List<string> immediateFiles = new List<string>();
+            SafeGetImmediateFilesInDirectory(dirPath, "*.var", immediateFiles);
+            for (int i = 0; i < immediateFiles.Count; i++)
+            {
+                string path = immediateFiles[i];
+                if (!string.IsNullOrEmpty(path))
+                    foundFiles.Add(new SystemFileEntry(path));
+            }
+
+            if (foundSubdirs != null)
+            {
+                List<string> subdirs = new List<string>();
+                SafeGetImmediateSubdirectories(dirPath, subdirs);
+                for (int i = 0; i < subdirs.Count; i++)
+                {
+                    string subdir = subdirs[i];
+                    if (!string.IsNullOrEmpty(subdir))
+                        foundSubdirs.Add(CleanDirectoryPath(subdir) ?? subdir);
+                }
+                foundSubdirs.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         public static bool TryResolveCustomInternalPathToUidPath(string customPath, out string uidPath)
         {
             uidPath = null;
@@ -1125,12 +1389,14 @@ namespace VPB
                 VamStartupProfiler.BeginScope("vpb_RefreshCo_var_disk_enum");
                 ManualResetEvent inventoryDone = new ManualResetEvent(false);
                 bool usedPathCache = false;
+                bool skipPathInventoryCache = RefreshReasonNeedsFreshVarDiskEnum(refreshReason);
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
                     try
                     {
                         List<string> cachedPaths;
-                        if (VamStartupOptimizations.UseCachedVarPathInventory
+                        if (!skipPathInventoryCache
+                            && VamStartupOptimizations.UseCachedVarPathInventory
                             && VpbLocalDatabase.TryRestoreVarPathInventory(out cachedPaths)
                             && cachedPaths != null && cachedPaths.Count > 0)
                         {
@@ -1199,10 +1465,12 @@ namespace VPB
             
             try
             {
-                if (init || flag || clean || removeOldVersion)
+                bool forceHubScan = RefreshReasonNeedsHubPackageScan(refreshReason);
+                if (init || flag || clean || removeOldVersion || forceHubScan)
                 {
-                    VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_scheduled init=" + (init ? "1" : "0"));
-                    StartScan(init, flag, clean, true);
+                    VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_scheduled init=" + (init ? "1" : "0")
+                        + " hub=" + (forceHubScan ? "1" : "0"));
+                    StartScan(init, flag || forceHubScan, clean, true);
                 }
 
                 s_InstalledCount = 0;

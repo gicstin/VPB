@@ -223,5 +223,71 @@ namespace VPB
                 return false;
             }
         }
+
+        internal static bool TryAppendVarPathInventory(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                if (!File.Exists(path)) return false;
+                var fi = new FileInfo(path);
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureVarPathInventorySchema(conn);
+                    using (var st = conn.Prepare(
+                        "INSERT OR REPLACE INTO pkg_var_path(path,file_size,mtime_ticks) VALUES(?,?,?)"))
+                    {
+                        st.BindText(1, path);
+                        st.BindInt64(2, fi.Length);
+                        st.BindInt64(3, fi.LastWriteTimeUtc.Ticks);
+                        st.Step();
+                    }
+                    using (var st = conn.Prepare("SELECT COUNT(*) FROM pkg_var_path"))
+                    {
+                        if (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            int count = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
+                            using (var upd = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                            {
+                                upd.BindText(1, MetaVarPathInventoryCountKey);
+                                upd.BindText(2, count.ToString());
+                                upd.Step();
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] TryAppendVarPathInventory failed: " + ex.Message); } catch { }
+                return false;
+            }
+        }
+
+        internal static bool TryRemoveVarPathInventory(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureVarPathInventorySchema(conn);
+                    using (var st = conn.Prepare("DELETE FROM pkg_var_path WHERE path = ?"))
+                    {
+                        st.BindText(1, path);
+                        st.Step();
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] TryRemoveVarPathInventory failed: " + ex.Message); } catch { }
+                return false;
+            }
+        }
     }
 }

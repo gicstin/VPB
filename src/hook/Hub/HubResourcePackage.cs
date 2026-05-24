@@ -508,9 +508,10 @@ namespace VPB
                 }
                 catch { }
 
-                // Register the new .var immediately so gallery + SQLite index can update without restart.
+                try { FileManager.RegisterHubDownloadedPackage(localPackagePath); } catch { }
+
+                // Register package before refresh so hub Refresh() does not reset alreadyHaveJSON.
                 try { FileManagerBridge.Refresh("hub_download", RefreshScope.Both); } catch { }
-                // Do not call Refresh() here — package is not registered until scan finishes and would reset alreadyHaveJSON.
             }
             catch (Exception)
             {
@@ -985,6 +986,7 @@ namespace VPB
                 if (package != null) package.CloseZipFile();
                 File.Delete(sourcePath);
                 if (package != null) try { FileManager.UnregisterPackage(package); } catch { }
+                try { VpbLocalDatabase.TryRemoveVarPathInventory(sourcePath); } catch { }
                 localPackagePath = null;
                 LogUtil.Log("[VPB] Hub delete: permanently deleted " + uid);
 
@@ -1019,6 +1021,7 @@ namespace VPB
                 if (package != null) package.CloseZipFile();
                 File.Move(sourcePath, destinationPath);
                 if (package != null) try { FileManager.UnregisterPackage(package); } catch { }
+                try { VpbLocalDatabase.TryRemoveVarPathInventory(sourcePath); } catch { }
                 localPackagePath = null;
                 LogUtil.Log("[VPB] Hub delete: moved " + uid + " to DeletedPackages");
 
