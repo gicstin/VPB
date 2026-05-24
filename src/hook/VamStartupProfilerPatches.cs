@@ -305,15 +305,22 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "SyncToKeyFile", new Type[] { typeof(bool) })]
         public static void PreSyncToKeyFile(bool userInvoked)
         {
+            VamStartupOptimizations.ArmBootstrapNativeRefreshSkipIfEligible(userInvoked);
             VamStartupProfiler.Milestone("SyncToKeyFile_begin userInvoked=" + (userInvoked ? "1" : "0"));
         }
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
-        public static void PreNativeRefresh()
+        public static bool PreNativeRefresh()
         {
+            if (VamStartupOptimizations.TryConsumeBootstrapNativeRefreshSkip())
+            {
+                VamStartupProfiler.Milestone("native_FileManager.Refresh_skipped bootstrap");
+                return false;
+            }
             VamStartupProfiler.Milestone("native_FileManager.Refresh_begin");
             VamStartupProfiler.BeginNativeRefresh();
+            return true;
         }
 
         [HarmonyFinalizer]
@@ -368,12 +375,20 @@ namespace VPB
             VamStartupProfiler.Milestone("SyncToKeyFile_done");
         }
 
+        static int s_SyncVamXCalls;
+
         [HarmonyPrefix]
         [HarmonyPatch(typeof(SuperController), "SyncVamX")]
         public static bool PreSyncVamX(SuperController __instance)
         {
-            // Always run VaM SyncVamX for main-menu vamX/Create tiles. Skipping it (fast-absent / redundant-skip)
-            // left duplicate "Create" entries: ApplyVamXUiAbsent enabled every vamXDisabled* array at once.
+            if (VamStartupOptimizations.TrySkipSyncVamX(__instance))
+                return false;
+            int n = System.Threading.Interlocked.Increment(ref s_SyncVamXCalls);
+            if (n == 1 && VamStartupOptimizations.TryApplyFastSyncVamXAbsent(__instance))
+            {
+                VamStartupOptimizations.NoteSyncVamXCompleted(false);
+                return false;
+            }
             VamStartupProfiler.BeginSyncVamX();
             return true;
         }

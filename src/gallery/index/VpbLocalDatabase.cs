@@ -2842,6 +2842,28 @@ namespace VPB
 
         const string MetaGalleryReadyKey = "gallery_index_ready";
 
+        /// <summary>True when on-disk gallery SQLite index is populated (sqlRestore path).</summary>
+        internal static bool HasGalleryIndexReadyOnDisk()
+        {
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    string ready = MetaGet(conn, MetaGalleryReadyKey);
+                    if (!string.Equals(ready ?? "", "1", StringComparison.Ordinal))
+                        return false;
+                    long catMem = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
+                    return catMem > 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         static long ResolveFirstScannedForInsert(long existing, long ict, long wt)
         {
             if (existing != 0 && existing != long.MinValue) return existing;
@@ -2958,13 +2980,14 @@ namespace VPB
             if (!manifestReady)
                 forceFullRebuild = true;
 
+            if (TrySkipGalleryIndexRebuild())
+                return;
+
             if (forceFullRebuild)
             {
                 Interlocked.Exchange(ref s_WorkerBypassGallerySkipCheck, 1);
                 lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
             }
-
-            if (!forceFullRebuild && TrySkipGalleryIndexRebuild()) return;
 
             if (!VpbSqlite3.IsAvailable) return;
 
@@ -3008,6 +3031,14 @@ namespace VPB
             {
                 Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
                 return;
+            }
+
+            if (forceFullRebuild
+                && VamStartupOptimizations.DeferGallerySqlRebuildUntilReady
+                && !LogUtil.IsStartupReadyLogged()
+                && !LogUtil.IsReadyLogged())
+            {
+                forceFullRebuild = false;
             }
 
             bool manifestReady = false;

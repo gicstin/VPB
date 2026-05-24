@@ -397,6 +397,38 @@ namespace VPB
             }
         }
 
+        /// <summary>Fast root-mtime check — true when cached inventory likely still valid (no recursive walk).</summary>
+        internal static bool IsVarPathInventoryUnchangedFast()
+        {
+            if (!VpbSqlite3.IsAvailable || !VamStartupOptimizations.UseCachedVarPathInventory)
+                return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureVarPathInventorySchema(conn);
+                    int rowCount = 0;
+                    using (var st = conn.Prepare("SELECT COUNT(*) FROM pkg_var_path"))
+                    {
+                        if (st.Step() == VpbSqlite3.SqliteRow)
+                            rowCount = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
+                    }
+                    if (rowCount <= 0) return false;
+                    long addonCached;
+                    long allCached;
+                    int cachedCount;
+                    if (!TryLoadVarPathInventoryRootMeta(conn, out addonCached, out allCached, out cachedCount))
+                        return false;
+                    return TryFastRejectVarPathInventory(rowCount, addonCached, allCached, cachedCount);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         internal static bool TryRemoveVarPathInventory(string path)
         {
             if (string.IsNullOrEmpty(path) || !VpbSqlite3.IsAvailable) return false;

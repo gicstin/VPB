@@ -605,9 +605,13 @@ namespace VPB
             }
         }
 
-        public static void PreFileExists(ref string __0)
+        public static bool PreFileExists(string __0, ref bool __result)
         {
-            bool skipVamXRewrite = VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0);
+            if (VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0))
+            {
+                __result = false;
+                return false;
+            }
 
             string rewritten = RewriteVdsPathIfNeeded(__0);
             if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
@@ -615,13 +619,12 @@ namespace VPB
                 __0 = rewritten;
             }
 
-            if (skipVamXRewrite) return;
-
             string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
             if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
             {
                 __0 = best;
             }
+            return true;
         }
 
         public static void PostFileExists3(string __0, bool __1, ref bool __result)
@@ -1532,6 +1535,7 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefreshResetScanCounters()
         {
+            if (VamStartupOptimizations.IsBootstrapNativeRefreshSkipArmed()) return;
             VamScanFilter.MarkVamRefreshBegin();
             VamScanFilter.ResetScanCounters();
         }
@@ -1540,6 +1544,17 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PostRefreshLogScanResult()
         {
+            if (VamStartupOptimizations.IsNativeRefreshInvocationSkipped())
+            {
+                VamStartupOptimizations.ClearNativeRefreshInvocationSkipped();
+                return;
+            }
+            try
+            {
+                if (!LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged())
+                    VamStartupOptimizations.NoteVpbInitNativeRefreshDone();
+            }
+            catch { }
             VamScanFilter.MarkVamRefreshed();
             VamScanFilter.LogScanResult();
         }
@@ -1548,6 +1563,8 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static Exception FinalizeRefresh(Exception __exception)
         {
+            if (VamStartupOptimizations.IsNativeRefreshInvocationSkipped())
+                return __exception;
             VamScanFilter.MarkVamRefreshEnd();
             return __exception;
         }

@@ -75,6 +75,7 @@ namespace VPB
         public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
         public ConfigEntry<bool> StartupDeferPackageDeepScanUntilReady;
         public ConfigEntry<bool> StartupUseCachedVarPathInventory;
+        public ConfigEntry<bool> StartupSkipBootstrapNativeRefresh;
         public ConfigEntry<bool> StartupSqlBatchCatMem;
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
@@ -178,6 +179,7 @@ namespace VPB
             StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
             StartupDeferPackageDeepScanUntilReady = config.Bind<bool>("Startup", "DeferPackageDeepScanUntilReady", true, "When manifest/SQL cache is missing, register all .var paths immediately but defer per-package zip deep scan (DumpVarPackage) until World UI / startup-ready. Unblocks VPB UI on cold start without SQL; gallery SQL waits until scan completes.");
             StartupUseCachedVarPathInventory = config.Bind<bool>("Startup", "UseCachedVarPathInventory", true, "Skip recursive AddonPackages/AllPackages .var walks when SQLite path inventory validates (parallel stat checks). Saves ~15s on large libraries when packages unchanged.");
+            StartupSkipBootstrapNativeRefresh = config.Bind<bool>("Startup", "SkipBootstrapNativeRefreshWhenUnchanged", true, "When VPB init already ran native FileManager.Refresh and .var path inventory is unchanged, skip the synchronous Refresh inside SuperController.SyncToKeyFile (Awake). Avoids redundant scan + OnPackageRefresh/SyncVamX stall.");
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");

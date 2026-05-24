@@ -1827,10 +1827,25 @@ namespace VPB
                 return false;
             }
 
+            bool hasRemovals = removed != null && removed.Count > 0;
+            bool hasAdditions = added != null && added.Count > 0;
+
             // If we have never loaded, the scan just completed and we have a full PackagesByUid
             // for the first time – do a clean initial load now.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
+                if (!hasRemovals && !hasAdditions && HasDeferredStartupRefreshPending)
+                {
+                    LogPackageDeltaSkip("deferred_startup_refresh_pending");
+                    return false;
+                }
+                if (!hasRemovals && !hasAdditions && VpbLocalDatabase.HasGalleryIndexReadyOnDisk())
+                {
+                    lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+                    refreshOnNextShow = false;
+                    LogPackageDeltaSkip("init_sql_ready_empty_delta");
+                    return false;
+                }
                 try
                 {
                     LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
@@ -1845,8 +1860,6 @@ namespace VPB
             // Just sync the timestamp so future notifications aren't treated as "new" and return
             // without touching the grid – this is the key guard that prevents a spurious full
             // refresh (and scroll-to-top) when the initial scan finds no package delta.
-            bool hasRemovals  = removed != null && removed.Count > 0;
-            bool hasAdditions = added   != null && added.Count   > 0;
             if (!hasRemovals && !hasAdditions)
             {
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
@@ -2709,6 +2722,11 @@ namespace VPB
 
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
+            if (!hasLoadedContent)
+            {
+                try { VpbProgressService.BeginGalleryUiLoad(); } catch { }
+            }
+
             int navSessionForThisRun = _boundCategoryNavSessionForCurrentRefresh;
             var swDeep = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
             long syncCpuBeforeFirstYieldMs = 0;
@@ -4207,6 +4225,7 @@ namespace VPB
 
             HideLoadingOverlay();
             hasLoadedContent = true;
+            try { VpbProgressService.NotifyGalleryUiReady(); } catch { }
             refreshCoroutine = null;
             CompletePaneLoadTimingIfPending();
 

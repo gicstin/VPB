@@ -352,6 +352,25 @@ namespace VPB
                         if (p == null) continue;
                         if (p.IsHubMode) continue;
 
+                        if (!hasPackageDelta)
+                        {
+                            bool changed = false;
+                            try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
+                            if (!changed) continue;
+                            if (!p.HasLoadedContent && (p.HasDeferredStartupRefreshPending || p.IsStartupInitialRefreshInProgress))
+                                continue;
+                            if (changed && (p.IsVisible || p.HasLoadedContent))
+                            {
+                                try
+                                {
+                                    if (p.ApplyPackageDelta(added, removed))
+                                        ackDelta = true;
+                                }
+                                catch { }
+                            }
+                            continue;
+                        }
+
                         if (hasPackageDelta)
                         {
                             try
@@ -363,19 +382,6 @@ namespace VPB
                             {
                                 try { LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta error: " + ex.Message); } catch { }
                             }
-                            continue;
-                        }
-
-                        bool changed = false;
-                        try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
-                        if (changed && (p.IsVisible || p.HasLoadedContent))
-                        {
-                            try
-                            {
-                                if (p.ApplyPackageDelta(added, removed))
-                                    ackDelta = true;
-                            }
-                            catch { }
                         }
                     }
 
@@ -432,8 +438,16 @@ namespace VPB
             try { hydrated = VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory(); } catch { }
             if (!hydrated)
             {
-                try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
-                try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+                // Cold start: package inventory is still registering when categories first bind.
+                // Forcing rebuild here bypasses sqlRestore and blocks startup for ~15s. Scan completion
+                // calls ScheduleGalleryIndexUpdateAfterScan() once registry is complete.
+                bool startupReady = false;
+                try { startupReady = LogUtil.IsStartupReadyLogged() || LogUtil.IsReadyLogged(); } catch { }
+                if (startupReady)
+                {
+                    try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
+                    try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+                }
             }
             foreach (var p in panels)
             {

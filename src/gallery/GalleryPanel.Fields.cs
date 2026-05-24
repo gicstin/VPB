@@ -138,6 +138,7 @@ namespace VPB
         public bool IsVisible => canvas != null && canvas.gameObject.activeInHierarchy && canvas.enabled;
         public bool IsSubtreeActive => backgroundBoxGO != null && backgroundBoxGO.activeSelf;
         public bool HasLoadedContent => hasLoadedContent;
+        public bool IsStartupInitialRefreshInProgress => refreshCoroutine != null && !hasLoadedContent;
 
         // Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.
         public void GetPerfTelemetry(out int pendingThumbCacheJobs, out int thumbCacheTotalEnqueued, out int thumbCacheSaved)

@@ -589,15 +589,26 @@ namespace VPB
             while (!LogUtil.IsStartupReadyLogged())
                 yield return null;
 
-            deferredStartupRefreshCoroutine = null;
-            if (hasLoadedContent) yield break;
-            if (canvas == null || !canvas.enabled) yield break;
+            if (hasLoadedContent)
+            {
+                deferredStartupRefreshCoroutine = null;
+                yield break;
+            }
+            if (canvas == null)
+            {
+                deferredStartupRefreshCoroutine = null;
+                yield break;
+            }
 
             try
             {
                 RefreshFiles(false);
             }
             catch { }
+            finally
+            {
+                deferredStartupRefreshCoroutine = null;
+            }
         }
 
         public void Hide()

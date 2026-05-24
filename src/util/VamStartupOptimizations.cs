@@ -157,6 +157,89 @@ namespace VPB
             }
         }
 
+        public static bool SkipBootstrapNativeRefresh
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst == null || inst.StartupSkipBootstrapNativeRefresh == null) return true;
+                    return inst.StartupSkipBootstrapNativeRefresh.Value;
+                }
+                catch { return true; }
+            }
+        }
+
+        static int s_BootstrapNativeRefreshSkipArmed;
+        static int s_NativeRefreshInvocationSkipped;
+        static int s_VpbInitNativeRefreshDone;
+
+        public static void NoteVpbInitNativeRefreshDone()
+        {
+            System.Threading.Interlocked.Exchange(ref s_VpbInitNativeRefreshDone, 1);
+        }
+
+        public static bool IsVpbInitNativeRefreshDone()
+        {
+            return System.Threading.Interlocked.CompareExchange(ref s_VpbInitNativeRefreshDone, 0, 0) == 1;
+        }
+
+        public static bool IsBootstrapNativeRefreshSkipArmed()
+        {
+            return System.Threading.Interlocked.CompareExchange(ref s_BootstrapNativeRefreshSkipArmed, 0, 0) == 1;
+        }
+
+        public static bool IsNativeRefreshInvocationSkipped()
+        {
+            return System.Threading.Interlocked.CompareExchange(ref s_NativeRefreshInvocationSkipped, 0, 0) == 1;
+        }
+
+        public static void ClearNativeRefreshInvocationSkipped()
+        {
+            System.Threading.Interlocked.Exchange(ref s_NativeRefreshInvocationSkipped, 0);
+        }
+
+        /// <summary>Called from SyncToKeyFile prefix before VaM may invoke native Refresh.</summary>
+        public static void ArmBootstrapNativeRefreshSkipIfEligible(bool userInvoked)
+        {
+            if (userInvoked || !SkipBootstrapNativeRefresh)
+            {
+                System.Threading.Interlocked.Exchange(ref s_BootstrapNativeRefreshSkipArmed, 0);
+                return;
+            }
+            if (!VamScanFilter.HasVamRefreshedAtLeastOnce)
+            {
+                StartupDebug("bootstrap skip not armed: no native refresh yet");
+                System.Threading.Interlocked.Exchange(ref s_BootstrapNativeRefreshSkipArmed, 0);
+                return;
+            }
+            bool inventoryStable = VpbLocalDatabase.IsVarPathInventoryUnchangedFast();
+            if (!inventoryStable && !IsVpbInitNativeRefreshDone())
+            {
+                StartupDebug("bootstrap skip not armed: inventory changed since cache");
+                System.Threading.Interlocked.Exchange(ref s_BootstrapNativeRefreshSkipArmed, 0);
+                return;
+            }
+            System.Threading.Interlocked.Exchange(ref s_BootstrapNativeRefreshSkipArmed, 1);
+            StartupDebug("bootstrap skip armed inventoryStable=" + (inventoryStable ? "1" : "0")
+                + " initNativeDone=" + (IsVpbInitNativeRefreshDone() ? "1" : "0"));
+        }
+
+        /// <summary>Prefix on native Refresh: consume one armed bootstrap skip.</summary>
+        public static bool TryConsumeBootstrapNativeRefreshSkip()
+        {
+            if (System.Threading.Interlocked.CompareExchange(ref s_BootstrapNativeRefreshSkipArmed, 0, 1) != 1)
+                return false;
+            System.Threading.Interlocked.Exchange(ref s_NativeRefreshInvocationSkipped, 1);
+            try
+            {
+                LogUtil.Log(LogTag + " native FileManager.Refresh skipped (bootstrap inventory unchanged)");
+            }
+            catch { }
+            return true;
+        }
+
         public static bool SkipGallerySqlRebuildIfValid
         {
             get

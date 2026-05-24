@@ -92,6 +92,7 @@ namespace VPB
         protected static OnRefresh onRefreshHandlers;
         protected static OnRefresh onRegistryReadyHandlers;
         static int s_RegistryReadyNotified;
+        static int s_SuppressInitGalleryDelta;
         static int s_BulkDeepScanDepth;
 
         internal static bool IsBulkDeepScanActive =>
@@ -204,6 +205,19 @@ namespace VPB
             }
 
             int addSetCount = addSet != null ? addSet.Count : 0;
+            if (addSetCount >= 4096
+                && (removeSet == null || removeSet.Count == 0)
+                && s_SuppressInitGalleryDelta != 0
+                && VpbLocalDatabase.HasGalleryIndexReadyOnDisk())
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] MergePackageRefreshDelta skipped init baseline addSet="
+                        + addSetCount + " (gallery SQL index ready)");
+                }
+                catch { }
+                return;
+            }
             if (addSet == null || addSet.Count == 0)
             {
                 if (addSetCount == 0 && (pendingBefore > 0 || lastRemovedPackages.Count > 0))
@@ -1389,6 +1403,8 @@ namespace VPB
         {
             string refreshReason = GetCurrentReasonsForLog();
             VamStartupProfiler.BeginVpbRefresh(refreshReason);
+            if (init)
+                System.Threading.Interlocked.Exchange(ref s_SuppressInitGalleryDelta, 1);
             try
             {
 #if DEBUG
@@ -1598,6 +1614,8 @@ namespace VPB
             }
             finally
             {
+                if (init)
+                    System.Threading.Interlocked.Exchange(ref s_SuppressInitGalleryDelta, 0);
                 VamStartupProfiler.EndVpbRefresh();
             }
         }
