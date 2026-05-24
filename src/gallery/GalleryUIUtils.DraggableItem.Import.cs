@@ -58,25 +58,26 @@ namespace VPB
             string mode = string.IsNullOrEmpty(_lastAppearanceClothingMode) ? "keep" : _lastAppearanceClothingMode;
             string lastLabel = "Last Used (" + GetAppearanceModeLabel(mode) + ")";
 
+            // isSubMenu so the click handler skips Hide(); a later PushPage won't re-activate a hidden canvas.
             options.Add(new ContextMenuPanel.Option(lastLabel, () => {
                 ApplyAppearanceMode(mode, handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Keep Clothing", () => {
                 ApplyAppearanceMode("keep", handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Replace Clothing", () => {
                 ApplyAppearanceMode("replace", handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Merge Clothing", () => {
                 ApplyAppearanceMode("merge", handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Steal Clothing", () => {
                 ApplyAppearanceMode("clothingonly", handler);
-            }));
+            }, false, true));
         }
 
         private void ShowAppearanceClothingModes(FileEntry entry, Atom targetAtom)
