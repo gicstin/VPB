@@ -121,6 +121,13 @@ namespace VPB
                 }
             }
 
+            if (resourceType == VpbResourceType.Appearance && sourceEntry != null)
+            {
+                if (presetJC != null)
+                    preset = CloneJsonClassStatic(preset);
+                VarPresetPathFixups.Apply(preset, UI.NormalizePath(sourceEntry.Uid));
+            }
+
             // REFACTOR-IN-PROGRESS: regions below tag which slice owns each resource type's body.
             // Slice A wired the skeleton + Appearance/Clothing dispatch. Slice C extended Appearance.
             // Slice D will fill Pose. Slice E will fill Hair / ClothingItem / HairItem. Once all

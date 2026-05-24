@@ -926,45 +926,6 @@ namespace VPB
             return null;
         }
 
-        private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName)
-        {
-            if (node == null || string.IsNullOrEmpty(presetPackageName)) return;
-
-            JSONClass obj = node as JSONClass;
-            if (obj != null)
-            {
-                foreach (KeyValuePair<string, JSONNode> kvp in obj)
-                {
-                    FixupUnprefixedCustomPathsInVarPreset(kvp.Value, presetPackageName);
-                }
-                return;
-            }
-
-            JSONArray arr = node as JSONArray;
-            if (arr != null)
-            {
-                for (int i = 0; i < arr.Count; i++)
-                {
-                    FixupUnprefixedCustomPathsInVarPreset(arr[i], presetPackageName);
-                }
-                return;
-            }
-
-            string v = node.Value;
-            if (string.IsNullOrEmpty(v)) return;
-            if (v.IndexOf(':') >= 0) return;
-
-            string vNorm = v.Replace('\\', '/');
-            if (!vNorm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return;
-
-            string candidate = presetPackageName + ":/" + vNorm;
-            string normalizedCandidate = FileManagerSecure.NormalizePath(candidate);
-            if (FileManagerSecure.FileExists(normalizedCandidate))
-            {
-                node.Value = candidate;
-            }
-        }
-
         private static JSONClass LoadPresetJsonWithPathFixups(string normalizedPresetPath)
         {
             if (string.IsNullOrEmpty(normalizedPresetPath)) return null;
@@ -973,36 +934,7 @@ namespace VPB
             JSONClass presetJSON = (node != null) ? node.AsObject : null;
             if (presetJSON == null) return null;
 
-            if (UI.IsLikelyVarPackageReference(normalizedPresetPath))
-            {
-                string presetPackageName = normalizedPresetPath.Substring(0, normalizedPresetPath.IndexOf(':'));
-                string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedPresetPath);
-                folderFullPath = FileManagerSecure.NormalizeLoadPath(folderFullPath);
-
-                string presetJSONString = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 16_384);
-                bool modified = false;
-
-                if (presetJSONString.Contains("SELF:"))
-                {
-                    presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
-                    modified = true;
-                }
-
-                if (presetJSONString.Contains("\":\"./"))
-                {
-                    presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
-                    modified = true;
-                }
-
-                if (modified)
-                {
-                    JSONNode parsed = SimpleJSON.JSON.Parse(presetJSONString);
-                    presetJSON = (parsed != null) ? parsed.AsObject : presetJSON;
-                }
-
-                FixupUnprefixedCustomPathsInVarPreset(presetJSON, presetPackageName);
-            }
-
+            VPB.src.util.VarPresetPathFixups.Apply(presetJSON, normalizedPresetPath);
             return presetJSON;
         }
 

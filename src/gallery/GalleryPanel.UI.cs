@@ -292,6 +292,10 @@ namespace VPB
             _canvasesHiddenForSave = null;
         }
 
+        // Save/browse inventory split (P3):
+        // - GetMediaPathDialog + mediaFileBrowserUI = VaM native browser (Custom/Saves loose tree; whitelist VARs in native FM).
+        // - VPB gallery index + ShowSaveFileBrowser / FileBrowser clone = full 19k VAR inventory (VPB.FileManager).
+        // Post-P1 install flows use FileManagerBridge InstallOnly — no full VPB rescan; coalesced native keeps VaM catalogs aligned.
         private void SaveSceneFromGallery()
         {
             if (SuperController.singleton == null) return;
@@ -661,6 +665,7 @@ namespace VPB
 
             BeginSaveMode();
 
+            // Native media browser for preset path selection; filename prefill via mediaFileBrowserUI (see SaveSceneFromGallery inventory note).
             string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
@@ -3465,7 +3470,7 @@ namespace VPB
             }
             else if (string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase))
             {
-                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Only");
+                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Steal");
                 color = new Color(0.15f, 0.45f, 0.28f, 1f);
             }
             else

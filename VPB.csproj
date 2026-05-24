@@ -282,6 +282,7 @@
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
+    <Compile Include="src\util\VarPresetPathFixups.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
     <Compile Include="src\util\VamStartupProfiler.cs" />
