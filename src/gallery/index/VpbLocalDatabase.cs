@@ -132,6 +132,7 @@ namespace VPB
         /// <summary>Queued <see cref="QueueGalleryIndexUpdateWorker"/> with force — worker must not honor stale skip flags.</summary>
         private static volatile int s_WorkerBypassGallerySkipCheck;
         static int s_LastSqlRebuildDeepScanProgress;
+        static int s_LastGalleryRebuildDeferLogPctBucket = -1;
         private static volatile bool s_GalleryIndexBuildIndicatorPending;
         private static volatile int s_RebuildProgressDone;
         private static volatile int s_RebuildProgressTotal;
@@ -2059,6 +2060,17 @@ namespace VPB
                 catch { }
             }
 
+            try
+            {
+                if (FileManager.IsBulkDeepScanActive)
+                {
+                    Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+                    return;
+                }
+            }
+            catch { }
+
             int rebuildStep = Math.Max(4000, total / 5);
             if (scanned != total && scanned - s_LastSqlRebuildDeepScanProgress < rebuildStep)
                 return;
@@ -2544,130 +2556,41 @@ namespace VPB
         {
             if (packages == null || packages.Count == 0 || classifier == null) return;
 
+            VarPackage[] pkgArray = CopyPackagesToArray(packages);
+            if (pkgArray.Length == 0) return;
+
+            bool parallelCatMem = ShouldParallelGalleryCatMemClassify(pkgArray.Length);
+            int classifyWorkers = parallelCatMem ? GetGalleryIndexClassifyWorkerCount() : 0;
+            List<CatMemRow>[] workerCatMemLists = parallelCatMem ? new List<CatMemRow>[classifyWorkers] : null;
+            long classifyTicks = 0;
+            long catMemSqlTicks = 0;
+
             using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned) VALUES(?,?,?,?,?,?,?,?,?)"))
             using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
             {
-                for (int pi = 0; pi < packages.Count; pi++)
+                long depTicksIgnored = 0;
+                for (int pi = 0; pi < pkgArray.Length; pi++)
                 {
-                    VarPackage pkg = packages[pi];
+                    VarPackage pkg = pkgArray[pi];
                     if (pkg == null) continue;
-                    string uid = pkg.Uid ?? "";
-                    if (uid.Length == 0) continue;
+                    InsertPackageIndexPkgAndDepRows(pkg, existingFirstScanned, insPkg, insDep, ref nPkgInserted, ref nDepInserted, ref depTicksIgnored);
+                }
 
-                    string cr = pkg.Creator ?? "";
-                    long wt = DateTime.MinValue.Ticks;
-                    try { wt = pkg.LastWriteTime.ToBinary(); } catch { }
-                    long sz = 0;
-                    try { sz = pkg.Size; } catch { }
-                    string varPath = pkg.Path ?? "";
-                    string varListPrefix = varPath.Length > 0 ? (varPath + ":/") : ":/";
-                    long ct = DateTime.MinValue.Ticks;
-                    try { ct = pkg.CreationTime.ToBinary(); } catch { }
-                    long ict = long.MinValue;
-                    try { ict = pkg.InternalCreationTimeBinary; } catch { ict = long.MinValue; }
-                    int loaded = ComputePackageLoadedFlagFromVarPath(varPath);
-
-                    long firstScannedBin;
-                    if (existingFirstScanned == null
-                        || !existingFirstScanned.TryGetValue(uid, out firstScannedBin)
-                        || firstScannedBin == 0L
-                        || firstScannedBin == long.MinValue)
-                        firstScannedBin = ResolveFirstScannedForInsert(0L, ict, wt);
-                    else
-                        firstScannedBin = ResolveFirstScannedForInsert(firstScannedBin, ict, wt);
-
-                    insPkg.BindText(1, uid);
-                    insPkg.BindText(2, cr);
-                    insPkg.BindInt64(3, wt);
-                    insPkg.BindInt64(4, sz);
-                    insPkg.BindText(5, varPath);
-                    insPkg.BindInt64(6, ct);
-                    insPkg.BindInt64(7, ict);
-                    insPkg.BindInt64(8, loaded);
-                    insPkg.BindInt64(9, firstScannedBin);
-                    insPkg.Step();
-                    insPkg.Reset();
-                    nPkgInserted++;
-
-                    try
+                if (parallelCatMem)
+                {
+                    ParallelClassifyCatMemForPackages(pkgArray, classifier, workerCatMemLists, classifyWorkers, out classifyTicks);
+                    FlushWorkerCatMemRowLists(workerCatMemLists, classifyWorkers, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
+                }
+                else
+                {
+                    var seqRows = new List<CatMemRow>(256);
+                    for (int pi = 0; pi < pkgArray.Length; pi++)
                     {
-                        var deps = pkg.RecursivePackageDependencies;
-                        if (deps != null)
-                        {
-                            for (int di = 0; di < deps.Count; di++)
-                            {
-                                string dep = NormalizeDependencyUidOrPath(deps[di]);
-                                if (string.IsNullOrEmpty(dep)) continue;
-                                insDep.BindText(1, uid);
-                                insDep.BindText(2, dep);
-                                insDep.Step();
-                                insDep.Reset();
-                                nDepInserted++;
-                            }
-                        }
-                    }
-                    catch { }
-
-                    List<string> names;
-                    List<long> ticks;
-                    List<long> sizes;
-                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
-                        continue;
-
-                    for (int i = 0; i < names.Count; i++)
-                    {
-                        string ip = names[i];
-                        if (string.IsNullOrEmpty(ip)) continue;
-                        string cname = classifier.Classify(ip);
-
-                        string listPath;
-                        if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
-                            listPath = varPath;
-                        else
-                            listPath = varListPrefix + ip;
-
-                        if (!string.IsNullOrEmpty(cname))
-                        {
-                            long clothAttr = 0;
-                            if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
-                                clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
-
-                            if (catMemBatch != null)
-                                catMemBatch.Add(cname, uid, ip, listPath, clothAttr);
-                            else
-                            {
-                                insMem.BindText(1, cname);
-                                insMem.BindText(2, uid);
-                                insMem.BindText(3, ip);
-                                insMem.BindText(4, listPath);
-                                insMem.BindInt64(5, clothAttr);
-                                insMem.Step();
-                                insMem.Reset();
-                            }
-                            nCatMemInserted++;
-                        }
-
-                        int lastDot = ip.LastIndexOf('.');
-                        if (lastDot > 0 && lastDot < ip.Length - 1)
-                        {
-                            string evExt = ip.Substring(lastDot + 1);
-                            if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
-
-                            if (catMemBatch != null)
-                                catMemBatch.Add(Gallery.EverythingCategoryName, uid, ip, listPath, 0);
-                            else
-                            {
-                                insMem.BindText(1, Gallery.EverythingCategoryName);
-                                insMem.BindText(2, uid);
-                                insMem.BindText(3, ip);
-                                insMem.BindText(4, listPath);
-                                insMem.BindInt64(5, 0);
-                                insMem.Step();
-                                insMem.Reset();
-                            }
-                            nCatMemInserted++;
-                        }
+                        VarPackage pkg = pkgArray[pi];
+                        if (pkg == null) continue;
+                        seqRows.Clear();
+                        ClassifyPackageCatMemRows(pkg, classifier, seqRows);
+                        FlushCatMemRows(seqRows, catMemBatch, insMem, ref nCatMemInserted, ref catMemSqlTicks);
                     }
                 }
             }
@@ -2897,14 +2820,64 @@ namespace VPB
         static bool ShouldDeferGalleryRebuildUntilPackageCachesReady(int withCache, int total)
         {
             if (total <= 0) return false;
-            int minRequired = Math.Max(32, total / 10);
             try
             {
+                // Parallel zip workers can fill every cache before StartScanCo exits — never rebuild until bulk scan ends.
                 if (FileManager.IsBulkDeepScanActive)
-                    minRequired = Math.Max(500, total / 4);
+                    return true;
             }
             catch { }
+            int minRequired = Math.Max(32, total / 10);
             return withCache < minRequired;
+        }
+
+        static void LogGalleryRebuildDeferredIfChanged(int withCache, int total)
+        {
+            if (total <= 0) return;
+            bool bulkScan = false;
+            try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
+            int pctBucket;
+            if (bulkScan)
+            {
+                pctBucket = 20;
+            }
+            else
+            {
+                pctBucket = (int)((withCache * 20L) / total);
+                if (pctBucket > 19) pctBucket = 19;
+            }
+            if (pctBucket == s_LastGalleryRebuildDeferLogPctBucket) return;
+            s_LastGalleryRebuildDeferLogPctBucket = pctBucket;
+            try
+            {
+                if (bulkScan)
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQL rebuild deferred (bulk deep scan in progress)"
+                        + " cached=" + withCache + "/" + total
+                        + " scanning=" + (FileManager.IsScanning ? "1" : "0"));
+                }
+                else
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQL rebuild deferred (package zip caches not ready)"
+                        + " cached=" + withCache + "/" + total
+                        + " pct=" + ((pctBucket + 1) * 5)
+                        + " scanning=" + (FileManager.IsScanning ? "1" : "0"));
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>True when rebuild ran before every package had zip file lists (common during overlapping deep scan).</summary>
+        static bool GalleryCatMemIndexIncompleteAfterRebuild(int pkgInserted, int catMemSkippedUnscanned)
+        {
+            if (catMemSkippedUnscanned <= 0) return false;
+            if (pkgInserted <= 0) return true;
+            try
+            {
+                if (FileManager.IsBulkDeepScanActive) return true;
+            }
+            catch { }
+            return catMemSkippedUnscanned > Math.Max(32, pkgInserted / 20);
         }
 
         static void ClearGalleryIndexReadyMeta(VpbSqlite3.Connection conn)
@@ -3050,11 +3023,10 @@ namespace VPB
 
             try
             {
-                if (FileManager.IsBulkDeepScanActive
-                    && !forceFullRebuild
-                    && VamStartupOptimizations.DeferGallerySqlRebuildUntilReady)
+                if (FileManager.IsBulkDeepScanActive)
                 {
                     Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
                     return;
                 }
             }
@@ -3379,7 +3351,15 @@ namespace VPB
             {
                 try
                 {
-                    if (NeedsFullGalleryIndexBuild())
+                    if (!NeedsFullGalleryIndexBuild()) return;
+                    bool bulkScan = false;
+                    try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
+                    if (bulkScan)
+                    {
+                        Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                        lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+                    }
+                    else
                         QueueGalleryIndexUpdateWorker(true);
                 }
                 catch { }
@@ -3504,6 +3484,296 @@ namespace VPB
         {
             if (s == null) return "''";
             return "'" + s.Replace("'", "''") + "'";
+        }
+
+        private struct CatMemRow
+        {
+            public string Category;
+            public string PkgUid;
+            public string InternalPath;
+            public string ListPath;
+            public long ClothAttr;
+        }
+
+        static int GetGalleryIndexClassifyWorkerCount()
+        {
+            int p = Environment.ProcessorCount;
+            if (p < 1) p = 1;
+            return Math.Min(8, p);
+        }
+
+        static bool ShouldParallelGalleryCatMemClassify(int packageCount)
+        {
+            return packageCount >= 32 && GetGalleryIndexClassifyWorkerCount() > 1;
+        }
+
+        /// <summary>Builds cat_mem rows for one package (classify only; no SQLite).</summary>
+        static int ClassifyPackageCatMemRows(VarPackage pkg, CategoryClassifier classifier, List<CatMemRow> rows)
+        {
+            if (pkg == null || classifier == null || rows == null) return 0;
+            string uid = pkg.Uid ?? "";
+            if (uid.Length == 0) return 0;
+
+            List<string> names;
+            List<long> ticks;
+            List<long> sizes;
+            if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                return 0;
+
+            string varPath = pkg.Path ?? "";
+            string varListPrefix = varPath.Length > 0 ? (varPath + ":/") : ":/";
+            int n = 0;
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string ip = names[i];
+                if (string.IsNullOrEmpty(ip)) continue;
+                string cname = classifier.Classify(ip);
+
+                string listPath;
+                if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
+                    listPath = varPath;
+                else
+                    listPath = varListPrefix + ip;
+
+                if (!string.IsNullOrEmpty(cname))
+                {
+                    long clothAttr = 0;
+                    if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
+                        clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
+
+                    rows.Add(new CatMemRow
+                    {
+                        Category = cname,
+                        PkgUid = uid,
+                        InternalPath = ip,
+                        ListPath = listPath,
+                        ClothAttr = clothAttr
+                    });
+                    n++;
+                }
+
+                int lastDot = ip.LastIndexOf('.');
+                if (lastDot > 0 && lastDot < ip.Length - 1)
+                {
+                    string evExt = ip.Substring(lastDot + 1);
+                    if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
+
+                    rows.Add(new CatMemRow
+                    {
+                        Category = Gallery.EverythingCategoryName,
+                        PkgUid = uid,
+                        InternalPath = ip,
+                        ListPath = listPath,
+                        ClothAttr = 0
+                    });
+                    n++;
+                }
+            }
+
+            return n;
+        }
+
+        static void FlushCatMemRows(
+            IList<CatMemRow> rows,
+            CatMemInsertBatcher catMemBatch,
+            VpbSqlite3.Statement insMem,
+            ref int nCatMemInserted,
+            ref long tCatMemSqlTicks)
+        {
+            if (rows == null || rows.Count == 0) return;
+            long tsFreq = Stopwatch.Frequency;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                CatMemRow r = rows[i];
+                long t0 = Stopwatch.GetTimestamp();
+                if (catMemBatch != null)
+                    catMemBatch.Add(r.Category, r.PkgUid, r.InternalPath, r.ListPath, r.ClothAttr);
+                else if (insMem != null)
+                {
+                    insMem.BindText(1, r.Category);
+                    insMem.BindText(2, r.PkgUid);
+                    insMem.BindText(3, r.InternalPath);
+                    insMem.BindText(4, r.ListPath);
+                    insMem.BindInt64(5, r.ClothAttr);
+                    insMem.Step();
+                    insMem.Reset();
+                }
+                if (tsFreq > 0)
+                    tCatMemSqlTicks += Stopwatch.GetTimestamp() - t0;
+                nCatMemInserted++;
+            }
+        }
+
+        static void FlushWorkerCatMemRowLists(
+            List<CatMemRow>[] workerLists,
+            int workerCount,
+            CatMemInsertBatcher catMemBatch,
+            VpbSqlite3.Statement insMem,
+            ref int nCatMemInserted,
+            ref long tCatMemSqlTicks)
+        {
+            if (workerLists == null) return;
+            for (int w = 0; w < workerCount; w++)
+            {
+                List<CatMemRow> list = workerLists[w];
+                if (list == null || list.Count == 0) continue;
+                FlushCatMemRows(list, catMemBatch, insMem, ref nCatMemInserted, ref tCatMemSqlTicks);
+            }
+        }
+
+        /// <summary>Parallel classify pass; each worker list is filled independently.</summary>
+        static int ParallelClassifyCatMemForPackages(
+            VarPackage[] packages,
+            CategoryClassifier classifier,
+            List<CatMemRow>[] workerLists,
+            int workerCount,
+            out long classifyTicks)
+        {
+            classifyTicks = 0;
+            if (packages == null || packages.Length == 0 || classifier == null || workerLists == null || workerCount < 1)
+                return 0;
+
+            int nextIndex = -1;
+            int doneWorkers = 0;
+            ManualResetEvent doneEvent = new ManualResetEvent(false);
+            long t0 = Stopwatch.GetTimestamp();
+
+            for (int w = 0; w < workerCount; w++)
+            {
+                int wi = w;
+                workerLists[wi] = new List<CatMemRow>(Math.Max(256, packages.Length * 4));
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        List<CatMemRow> rows = workerLists[wi];
+                        while (true)
+                        {
+                            int i = Interlocked.Increment(ref nextIndex);
+                            if (i >= packages.Length) break;
+                            VarPackage pkg = packages[i];
+                            if (pkg != null)
+                                ClassifyPackageCatMemRows(pkg, classifier, rows);
+                        }
+                    }
+                    finally
+                    {
+                        if (Interlocked.Increment(ref doneWorkers) == workerCount)
+                        {
+                            try { doneEvent.Set(); } catch { }
+                        }
+                    }
+                });
+            }
+
+            doneEvent.WaitOne();
+            try { doneEvent.Close(); } catch { }
+
+            long tsFreq = Stopwatch.Frequency;
+            if (tsFreq > 0)
+                classifyTicks = Stopwatch.GetTimestamp() - t0;
+
+            int totalRows = 0;
+            for (int w = 0; w < workerCount; w++)
+            {
+                if (workerLists[w] != null)
+                    totalRows += workerLists[w].Count;
+            }
+            return totalRows;
+        }
+
+        static void InsertPackageIndexPkgAndDepRows(
+            VarPackage pkg,
+            Dictionary<string, long> existingFirstScanned,
+            VpbSqlite3.Statement insPkg,
+            VpbSqlite3.Statement insDep,
+            ref int nPkgInserted,
+            ref int nDepInserted,
+            ref long depTicksAccum)
+        {
+            if (pkg == null || insPkg == null) return;
+            string uid = pkg.Uid ?? "";
+            if (uid.Length == 0) return;
+
+            string cr = pkg.Creator ?? "";
+            long wt = DateTime.MinValue.Ticks;
+            try { wt = pkg.LastWriteTime.ToBinary(); } catch { }
+            long sz = 0;
+            try { sz = pkg.Size; } catch { }
+            string varPath = pkg.Path ?? "";
+            long ct = DateTime.MinValue.Ticks;
+            try { ct = pkg.CreationTime.ToBinary(); } catch { }
+            long ict = long.MinValue;
+            try { ict = pkg.InternalCreationTimeBinary; } catch { ict = long.MinValue; }
+            int loaded = ComputePackageLoadedFlagFromVarPath(varPath);
+
+            long firstScannedBin;
+            if (existingFirstScanned == null
+                || !existingFirstScanned.TryGetValue(uid, out firstScannedBin)
+                || firstScannedBin == 0L
+                || firstScannedBin == long.MinValue)
+                firstScannedBin = ResolveFirstScannedForInsert(0L, ict, wt);
+            else
+                firstScannedBin = ResolveFirstScannedForInsert(firstScannedBin, ict, wt);
+
+            insPkg.BindText(1, uid);
+            insPkg.BindText(2, cr);
+            insPkg.BindInt64(3, wt);
+            insPkg.BindInt64(4, sz);
+            insPkg.BindText(5, varPath);
+            insPkg.BindInt64(6, ct);
+            insPkg.BindInt64(7, ict);
+            insPkg.BindInt64(8, loaded);
+            insPkg.BindInt64(9, firstScannedBin);
+            insPkg.Step();
+            insPkg.Reset();
+            nPkgInserted++;
+
+            if (insDep == null) return;
+            long tDep0 = Stopwatch.GetTimestamp();
+            try
+            {
+                var deps = pkg.RecursivePackageDependencies;
+                if (deps == null) return;
+                for (int di = 0; di < deps.Count; di++)
+                {
+                    string dep = NormalizeDependencyUidOrPath(deps[di]);
+                    if (string.IsNullOrEmpty(dep)) continue;
+                    insDep.BindText(1, uid);
+                    insDep.BindText(2, dep);
+                    insDep.Step();
+                    insDep.Reset();
+                    nDepInserted++;
+                }
+            }
+            catch { }
+            finally
+            {
+                long tsFreq = Stopwatch.Frequency;
+                if (tsFreq > 0)
+                    depTicksAccum += Stopwatch.GetTimestamp() - tDep0;
+            }
+        }
+
+        static VarPackage[] CopyPackagesToArray(IList<VarPackage> packages)
+        {
+            if (packages == null || packages.Count == 0)
+                return new VarPackage[0];
+            VarPackage[] arr = new VarPackage[packages.Count];
+            int n = 0;
+            for (int i = 0; i < packages.Count; i++)
+            {
+                VarPackage p = packages[i];
+                if (p != null)
+                    arr[n++] = p;
+            }
+            if (n == arr.Length)
+                return arr;
+            VarPackage[] trimmed = new VarPackage[n];
+            Array.Copy(arr, trimmed, n);
+            return trimmed;
         }
 
         private sealed class CatMemInsertBatcher
@@ -3747,15 +4017,11 @@ namespace VPB
             {
                 Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
                 lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-                try
-                {
-                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQL rebuild deferred (package zip caches not ready)"
-                        + " cached=" + pkgWithCache + "/" + pkgTotal
-                        + " scanning=" + (FileManager.IsScanning ? "1" : "0"));
-                }
-                catch { }
+                LogGalleryRebuildDeferredIfChanged(pkgWithCache, pkgTotal);
                 return;
             }
+
+            s_LastGalleryRebuildDeferLogPctBucket = -1;
 
             string invSigForMeta = ComputePackageInventorySignature(pkgSnap);
             s_RebuildProgressTotal = pkgSnap != null ? pkgSnap.Count : 0;
@@ -3788,6 +4054,8 @@ namespace VPB
             int nCatMemInserted = 0;
             int nCatMemSkippedUnscanned = 0;
             int nPkgErrors = 0;
+            bool parallelRebuildCatMem = false;
+            int rebuildClassifyWorkers = 0;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -3856,6 +4124,26 @@ namespace VPB
                             catch { }
                         }
 
+                        VarPackage[] rebuildPkgArray = new VarPackage[pkgSnap.Count];
+                        int rebuildPkgCount = 0;
+                        foreach (KeyValuePair<string, VarPackage> kv in pkgSnap)
+                        {
+                            if (kv.Value != null)
+                                rebuildPkgArray[rebuildPkgCount++] = kv.Value;
+                        }
+                        if (rebuildPkgCount < rebuildPkgArray.Length)
+                        {
+                            VarPackage[] trimmed = new VarPackage[rebuildPkgCount];
+                            Array.Copy(rebuildPkgArray, trimmed, rebuildPkgCount);
+                            rebuildPkgArray = trimmed;
+                        }
+
+                        parallelRebuildCatMem = ShouldParallelGalleryCatMemClassify(rebuildPkgArray.Length);
+                        rebuildClassifyWorkers = parallelRebuildCatMem ? GetGalleryIndexClassifyWorkerCount() : 0;
+                        List<CatMemRow>[] rebuildWorkerCatMemLists = parallelRebuildCatMem
+                            ? new List<CatMemRow>[rebuildClassifyWorkers]
+                            : null;
+
                         using (var insPkg = conn.Prepare("INSERT OR REPLACE INTO pkg(uid,creator,wtime,psize,var_path,pctime,ictime,loaded,first_scanned) VALUES(?,?,?,?,?,?,?,?,?)"))
                         using (var insDep = conn.Prepare("INSERT OR IGNORE INTO pkg_dep(src_uid,dep_uid) VALUES(?,?)"))
                         {
@@ -3864,72 +4152,24 @@ namespace VPB
                                 insMem = conn.Prepare("INSERT OR IGNORE INTO cat_mem(category,pkg_uid,internal_path,list_path,cloth_attr) VALUES(?,?,?,?,?)");
                             try
                             {
-                            foreach (KeyValuePair<string, VarPackage> kv in pkgSnap)
+                            for (int rpi = 0; rpi < rebuildPkgArray.Length; rpi++)
                             {
-                                VarPackage pkg = kv.Value;
+                                VarPackage pkg = rebuildPkgArray[rpi];
                                 if (pkg == null) continue;
                                 string uid = pkg.Uid ?? "";
                                 if (uid.Length == 0) continue;
                                 try
                                 {
-
-                                string cr = pkg.Creator ?? "";
-                                long wt = DateTime.MinValue.Ticks;
-                                try { wt = pkg.LastWriteTime.ToBinary(); } catch { }
-                                long sz = 0;
-                                try { sz = pkg.Size; } catch { }
-                                string varPath = pkg.Path ?? "";
-                                string varListPrefix = varPath.Length > 0 ? (varPath + ":/") : ":/";
-                                long ct = DateTime.MinValue.Ticks;
-                                try { ct = pkg.CreationTime.ToBinary(); } catch { }
-                                long ict = long.MinValue;
-                                try { ict = pkg.InternalCreationTimeBinary; } catch { ict = long.MinValue; }
-                                int loaded = ComputePackageLoadedFlagFromVarPath(varPath);
-
-                                long firstScannedBin;
-                                if (!existingFirstScanned.TryGetValue(uid, out firstScannedBin) || firstScannedBin == 0L || firstScannedBin == long.MinValue)
-                                    firstScannedBin = ResolveFirstScannedForInsert(0L, ict, wt);
-                                else
-                                    firstScannedBin = ResolveFirstScannedForInsert(firstScannedBin, ict, wt);
-
                                 long tPkg0 = Stopwatch.GetTimestamp();
-                                insPkg.BindText(1, uid);
-                                insPkg.BindText(2, cr);
-                                insPkg.BindInt64(3, wt);
-                                insPkg.BindInt64(4, sz);
-                                insPkg.BindText(5, varPath);
-                                insPkg.BindInt64(6, ct);
-                                insPkg.BindInt64(7, ict);
-                                insPkg.BindInt64(8, loaded);
-                                insPkg.BindInt64(9, firstScannedBin);
-                                insPkg.Step();
-                                insPkg.Reset();
-                                tPkgRow += Stopwatch.GetTimestamp() - tPkg0;
-                                nPkgInserted++;
+                                long depTicks = 0;
+                                InsertPackageIndexPkgAndDepRows(
+                                    pkg, existingFirstScanned, insPkg, insDep,
+                                    ref nPkgInserted, ref nDepInserted, ref depTicks);
+                                long tPkgDone = Stopwatch.GetTimestamp();
+                                tPkgRow += tPkgDone - tPkg0 - depTicks;
+                                tDeps += depTicks;
                                 s_RebuildProgressDone = nPkgInserted;
                                 try { VpbProgressService.ReportGalleryPackages(nPkgInserted, s_RebuildProgressTotal); } catch { }
-
-                                // Store transitive dependency edges (matches existing RecursivePackageDependencies-based behavior).
-                                try
-                                {
-                                    var deps = pkg.RecursivePackageDependencies;
-                                    if (deps != null)
-                                    {
-                                        long tDep0 = Stopwatch.GetTimestamp();
-                                        for (int di = 0; di < deps.Count; di++)
-                                        {
-                                            string dep = NormalizeDependencyUidOrPath(deps[di]);
-                                            if (string.IsNullOrEmpty(dep)) continue;
-                                            insDep.BindText(1, uid);
-                                            insDep.BindText(2, dep);
-                                            insDep.Step();
-                                            insDep.Reset();
-                                            nDepInserted++;
-                                        }
-                                        tDeps += Stopwatch.GetTimestamp() - tDep0;
-                                    }
-                                }
-                                catch { }
 
                                 List<string> names;
                                 List<long> ticks;
@@ -3939,77 +4179,9 @@ namespace VPB
                                 {
                                     tEntryData += Stopwatch.GetTimestamp() - tEntry0;
                                     nCatMemSkippedUnscanned++;
-                                    continue;
                                 }
-                                tEntryData += Stopwatch.GetTimestamp() - tEntry0;
-
-                                long tMem0 = Stopwatch.GetTimestamp();
-                                for (int i = 0; i < names.Count; i++)
-                                {
-                                    string ip = names[i];
-                                    if (string.IsNullOrEmpty(ip)) continue;
-                                    long tCls0 = Stopwatch.GetTimestamp();
-                                    string cname = classifier.Classify(ip);
-                                    tCatMemClassify += Stopwatch.GetTimestamp() - tCls0;
-
-                                    string listPath;
-                                    if (string.Equals(ip, "meta.json", StringComparison.OrdinalIgnoreCase))
-                                        listPath = varPath;
-                                    else
-                                        listPath = varListPrefix + ip;
-
-                                    if (!string.IsNullOrEmpty(cname))
-                                    {
-                                        long clothAttr = 0;
-                                        if (string.Equals(cname, "Clothing", StringComparison.OrdinalIgnoreCase)
-                                            || string.Equals(cname, "Hair", StringComparison.OrdinalIgnoreCase))
-                                            clothAttr = PackClothingGalleryAttrForVarListPath(listPath);
-
-                                        long tMemSql0 = Stopwatch.GetTimestamp();
-                                        if (catMemBatch != null)
-                                        {
-                                            catMemBatch.Add(cname, uid, ip, listPath, clothAttr);
-                                        }
-                                        else
-                                        {
-                                            insMem.BindText(1, cname);
-                                            insMem.BindText(2, uid);
-                                            insMem.BindText(3, ip);
-                                            insMem.BindText(4, listPath);
-                                            insMem.BindInt64(5, clothAttr);
-                                            insMem.Step();
-                                            insMem.Reset();
-                                        }
-                                        tCatMemSql += Stopwatch.GetTimestamp() - tMemSql0;
-                                        nCatMemInserted++;
-                                    }
-
-                                    int lastDot = ip.LastIndexOf('.');
-                                    if (lastDot > 0 && lastDot < ip.Length - 1)
-                                    {
-                                        string evExt = ip.Substring(lastDot + 1);
-                                        if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
-
-                                        long tEv0 = Stopwatch.GetTimestamp();
-                                        if (catMemBatch != null)
-                                        {
-                                            catMemBatch.Add(Gallery.EverythingCategoryName, uid, ip, listPath, 0);
-                                        }
-                                        else
-                                        {
-                                            insMem.BindText(1, Gallery.EverythingCategoryName);
-                                            insMem.BindText(2, uid);
-                                            insMem.BindText(3, ip);
-                                            insMem.BindText(4, listPath);
-                                            insMem.BindInt64(5, 0);
-                                            insMem.Step();
-                                            insMem.Reset();
-                                        }
-                                        tCatMemSql += Stopwatch.GetTimestamp() - tEv0;
-                                        nCatMemInserted++;
-                                    }
-                                }
-                                tCatMem += Stopwatch.GetTimestamp() - tMem0;
+                                else
+                                    tEntryData += Stopwatch.GetTimestamp() - tEntry0;
                                 }
                                 catch (Exception pkgEx)
                                 {
@@ -4025,6 +4197,40 @@ namespace VPB
                                     }
                                 }
                             }
+
+                            long tCatMemPhase0 = Stopwatch.GetTimestamp();
+                            if (parallelRebuildCatMem)
+                            {
+                                long parallelClassifyTicks;
+                                ParallelClassifyCatMemForPackages(
+                                    rebuildPkgArray, classifier, rebuildWorkerCatMemLists, rebuildClassifyWorkers,
+                                    out parallelClassifyTicks);
+                                tCatMemClassify += parallelClassifyTicks;
+                                long flushSqlTicks = 0;
+                                FlushWorkerCatMemRowLists(
+                                    rebuildWorkerCatMemLists, rebuildClassifyWorkers, catMemBatch, insMem,
+                                    ref nCatMemInserted, ref flushSqlTicks);
+                                tCatMemSql += flushSqlTicks;
+                            }
+                            else
+                            {
+                                var seqRows = new List<CatMemRow>(256);
+                                for (int rpi = 0; rpi < rebuildPkgArray.Length; rpi++)
+                                {
+                                    VarPackage pkg = rebuildPkgArray[rpi];
+                                    if (pkg == null) continue;
+                                    long tMem0 = Stopwatch.GetTimestamp();
+                                    seqRows.Clear();
+                                    long tCls0 = Stopwatch.GetTimestamp();
+                                    ClassifyPackageCatMemRows(pkg, classifier, seqRows);
+                                    tCatMemClassify += Stopwatch.GetTimestamp() - tCls0;
+                                    long flushSqlTicks = 0;
+                                    FlushCatMemRows(seqRows, catMemBatch, insMem, ref nCatMemInserted, ref flushSqlTicks);
+                                    tCatMemSql += flushSqlTicks;
+                                    tCatMem += Stopwatch.GetTimestamp() - tMem0;
+                                }
+                            }
+                            tCatMem += Stopwatch.GetTimestamp() - tCatMemPhase0;
                             }
                             finally
                             {
@@ -4036,9 +4242,11 @@ namespace VPB
                         int scannedPkgEstimateNow = Math.Max(0, nPkgInserted - nCatMemSkippedUnscanned);
                         int catMemDenomNow = scannedPkgEstimateNow > 0 ? scannedPkgEstimateNow : nPkgInserted;
                         bool catMemUsableNow = nCatMemInserted >= Math.Max(32, Math.Max(1, catMemDenomNow) / 4);
+                        bool catMemIndexCompleteNow = catMemUsableNow
+                            && !GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned);
 
                         long tMeta0 = Stopwatch.GetTimestamp();
-                        if (catMemUsableNow)
+                        if (catMemIndexCompleteNow)
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
                         else
                         {
@@ -4122,6 +4330,10 @@ namespace VPB
                 sb.Append("catMem=").Append(nCatMemInserted).Append(',');
                 sb.Append("catMemSkippedUnscanned=").Append(nCatMemSkippedUnscanned).Append(',');
                 sb.Append("pkgErrors=").Append(nPkgErrors);
+                sb.Append(",catMemIncomplete=").Append(GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned) ? "1" : "0");
+                sb.Append(" | catMemParallel=").Append(parallelRebuildCatMem ? "1" : "0");
+                if (parallelRebuildCatMem)
+                    sb.Append(" workers=").Append(rebuildClassifyWorkers);
                 sb.Append(" | snap=");
                 sb.Append("cats=").Append(catSnap != null ? catSnap.Count : 0).Append(',');
                 sb.Append("pkgs=").Append(pkgSnap != null ? pkgSnap.Count : 0);
@@ -4139,19 +4351,42 @@ namespace VPB
             int scannedPkgEstimate = Math.Max(0, nPkgInserted - nCatMemSkippedUnscanned);
             int catMemDenom = scannedPkgEstimate > 0 ? scannedPkgEstimate : nPkgInserted;
             bool catMemUsable = nCatMemInserted >= Math.Max(32, Math.Max(1, catMemDenom) / 4);
-            if (!catMemUsable)
+            bool catMemIncomplete = GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned);
+            if (!catMemUsable || catMemIncomplete)
             {
                 Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
-                lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+                lock (s_Sync)
+                {
+                    s_SkipDeferredGallerySqlRebuild = false;
+                    if (catMemIncomplete)
+                    {
+                        s_ReadyScanBinary = long.MinValue;
+                        s_ReadyCategoriesSig = null;
+                        s_ReadyPkgInvSig = null;
+                    }
+                }
                 try
                 {
-                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQL pkg pass only (cat_mem waits for deep scan)"
+                    LogUtil.Log(VamStartupOptimizations.LogTag
+                        + (catMemIncomplete
+                            ? " gallery SQL rebuild partial (cat_mem incomplete until deep scan finishes)"
+                            : " gallery SQL pkg pass only (cat_mem waits for deep scan)")
                         + " pkg=" + nPkgInserted + " catMem=" + nCatMemInserted
                         + " skippedUnscanned=" + nCatMemSkippedUnscanned
                         + " pkgErrors=" + nPkgErrors);
                 }
                 catch { }
-                try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                bool queueAnotherRebuild = true;
+                try
+                {
+                    if (catMemIncomplete && FileManager.IsBulkDeepScanActive)
+                        queueAnotherRebuild = false;
+                }
+                catch { }
+                if (queueAnotherRebuild)
+                {
+                    try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                }
                 return;
             }
 
