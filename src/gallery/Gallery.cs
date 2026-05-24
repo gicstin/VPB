@@ -915,6 +915,13 @@ namespace VPB
         internal static void DrainPendingSqlIndexUpdate()
         {
             if (Interlocked.CompareExchange(ref _pendingGallerySqlIndexUpdate, 0, 1) != 1) return;
+            bool scanning = false;
+            try { scanning = FileManager.IsScanning; } catch { }
+            if (scanning)
+            {
+                Interlocked.Exchange(ref _pendingGallerySqlIndexUpdate, 1);
+                return;
+            }
             var ps = singleton != null ? singleton.panels : null;
             if (ps == null) return;
             for (int i = 0; i < ps.Count; i++)

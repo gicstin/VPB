@@ -102,6 +102,20 @@ namespace VPB
             }
         }
 
+        public static bool UseCachedVarPathInventory
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst == null || inst.StartupUseCachedVarPathInventory == null) return true;
+                    return inst.StartupUseCachedVarPathInventory.Value;
+                }
+                catch { return true; }
+            }
+        }
+
         public static bool SkipGallerySqlRebuildIfValid
         {
             get

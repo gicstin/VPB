@@ -403,6 +403,7 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
             try { conn.ExecUtf8("UPDATE pkg SET first_scanned = ifnull(ictime, wtime) WHERE first_scanned IS NULL;"); } catch { }
+            EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
         }
 
@@ -2004,7 +2005,7 @@ namespace VPB
             s_GalleryIndexBuildIndicatorPending = false;
         }
 
-        static void NoteGalleryIndexReadySkipDeferredRebuild(string reason)
+        static void NoteGalleryIndexReadySkipDeferredRebuild(string reason, long catMemRows = -1)
         {
             s_SkipDeferredGallerySqlRebuild = true;
             s_SqlRebuildDeferredPostReady = false;
@@ -2012,7 +2013,8 @@ namespace VPB
             try { VamStartupProfiler.Milestone("sql_rebuild_skipped_" + reason); } catch { }
             try
             {
-                LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQLite rebuild skipped (" + reason + ")");
+                string catMemSuffix = catMemRows >= 0 ? " cat_mem=" + catMemRows : "";
+                LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQLite rebuild skipped (" + reason + ")" + catMemSuffix);
             }
             catch { }
             try { VamStartupProfiler.RecordSqlRebuildSkipped(); } catch { }
@@ -2236,6 +2238,7 @@ namespace VPB
             long metaMs = 0;
             long invMs = 0;
             bool ok = false;
+            long catMemRows = -1;
             try
             {
                 string metaInv;
@@ -2253,6 +2256,13 @@ namespace VPB
                     metaInv = MetaGet(conn, "pkg_inv_sig");
                     if (string.IsNullOrEmpty(metaInv))
                         return false;
+
+                    catMemRows = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
+                    if (catMemRows <= 0)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: cat_mem empty"); } catch { }
+                        return false;
+                    }
                 }
                 metaMs = sw.ElapsedMilliseconds;
                 long invStart = sw.ElapsedMilliseconds;
@@ -2286,7 +2296,8 @@ namespace VPB
                     sw.Stop();
                     long total = sw.ElapsedMilliseconds;
                     if (total >= 10)
-                        LogUtil.Log("[VPB.Gallery.Timing] sqlRestore total=" + total + "ms meta_ms=" + metaMs + " inv_ms=" + invMs + " ok=" + (ok ? "1" : "0"));
+                        LogUtil.Log("[VPB.Gallery.Timing] sqlRestore total=" + total + "ms meta_ms=" + metaMs + " inv_ms=" + invMs
+                            + " ok=" + (ok ? "1" : "0") + (ok && catMemRows >= 0 ? " cat_mem=" + catMemRows : ""));
                 }
                 catch { }
             }

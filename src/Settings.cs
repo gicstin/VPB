@@ -73,6 +73,7 @@ namespace VPB
         public ConfigEntry<bool> StartupPreferIncrementalGallerySqlIndex;
         public ConfigEntry<int> StartupIncrementalGallerySqlMaxDelta;
         public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
+        public ConfigEntry<bool> StartupUseCachedVarPathInventory;
         public ConfigEntry<bool> StartupSqlBatchCatMem;
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
@@ -174,6 +175,7 @@ namespace VPB
             StartupPreferIncrementalGallerySqlIndex = config.Bind<bool>("Startup", "PreferIncrementalGallerySqlIndex", true, "When package inventory changes by a small delta (Hub download, few adds/removes), patch the gallery SQLite index instead of DELETE+rebuild of all rows.");
             StartupIncrementalGallerySqlMaxDelta = config.Bind<int>("Startup", "IncrementalGallerySqlMaxDelta", 0, "Max package add+remove count for incremental SQL index (0 = auto: min(32, 20% of indexed packages)). Larger changes use full rebuild.");
             StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
+            StartupUseCachedVarPathInventory = config.Bind<bool>("Startup", "UseCachedVarPathInventory", true, "Skip recursive AddonPackages/AllPackages .var walks when SQLite path inventory validates (parallel stat checks). Saves ~15s on large libraries when packages unchanged.");
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");

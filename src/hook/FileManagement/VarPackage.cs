@@ -38,6 +38,34 @@ namespace VPB
             Read(reader, true);
         }
 
+        public void ReadPayloadBody(BinaryReader reader)
+        {
+            Read(reader, false);
+        }
+
+        public byte[] SerializePayloadBody()
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (BinaryWriter writer = new BinaryWriter(ms))
+                {
+                    WritePayloadBody(writer);
+                    writer.Flush();
+                }
+                return ms.ToArray();
+            }
+        }
+
+        public void DeserializePayloadBody(byte[] data)
+        {
+            if (data == null || data.Length == 0) return;
+            using (MemoryStream ms = new MemoryStream(data, false))
+            using (BinaryReader reader = new BinaryReader(ms))
+            {
+                ReadPayloadBody(reader);
+            }
+        }
+
         public void Read(BinaryReader reader, bool includeVarMeta)
         {
             //FileEntryNames
@@ -148,6 +176,15 @@ namespace VPB
 
 		public void Write(BinaryWriter writer)
 		{
+            WritePayloadBody(writer);
+            writer.Write(VarFileSize);
+            writer.Write(VarLastWriteTimeUtcTicks);
+            writer.Write(IsInvalid);
+            writer.Write(VarInternalCreationTimeBinary);
+        }
+
+        public void WritePayloadBody(BinaryWriter writer)
+        {
             //FileEntryNames
             {
                 var count = FileEntryNames?.Count ?? 0;
@@ -245,10 +282,6 @@ namespace VPB
                     }
                 }
             }
-            writer.Write(VarFileSize);
-            writer.Write(VarLastWriteTimeUtcTicks);
-            writer.Write(IsInvalid);
-            writer.Write(VarInternalCreationTimeBinary);
         }
     }
 

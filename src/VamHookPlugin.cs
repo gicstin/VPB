@@ -1445,7 +1445,6 @@ namespace VPB
             VarPackageMgr.singleton.Init();
             cacheInitSw.Stop();
             VamStartupProfiler.AddPhaseMs("vpb_varpackagemgr_init", cacheInitSw.Elapsed.TotalMilliseconds);
-            LogUtil.Log("VarPackageMgr.Init took " + cacheInitSw.ElapsedMilliseconds + "ms");
             if (!s_FileManagerInitialRefreshCompleted)
             {
                 System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();

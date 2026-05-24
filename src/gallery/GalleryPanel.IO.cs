@@ -2732,6 +2732,36 @@ namespace VPB
             bool deepSysCacheHit = false;
 
             if (swDeep != null) syncCpuBeforeFirstYieldMs = swDeep.ElapsedMilliseconds;
+
+            float packageWaitStart = Time.realtimeSinceStartup;
+            while (!Gallery.IsSuppressed() && !IsHubMode)
+            {
+                long scanBin = 0;
+                try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+                if (scanBin != 0 && scanBin != DateTime.MinValue.ToBinary()) break;
+
+                bool inventoryBusy = false;
+                try { inventoryBusy = FileManager.IsScanning; } catch { inventoryBusy = false; }
+                if (!inventoryBusy && VamHookPlugin.IsFileManagerInited) break;
+
+                if (Time.realtimeSinceStartup - packageWaitStart >= 120f) break;
+                yield return null;
+            }
+            if (LogGalleryRefreshDeepTiming)
+            {
+                float waitedMs = (Time.realtimeSinceStartup - packageWaitStart) * 1000f;
+                if (waitedMs >= 50f)
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.DeepTiming] waited for package inventory ms=" + waitedMs.ToString("0")
+                            + " scanning=" + (FileManager.IsScanning ? "1" : "0")
+                            + " refreshTime=" + FileManager.lastPackageRefreshTime.ToString("o"));
+                    }
+                    catch { }
+                }
+            }
+
             yield return null; // Allow UI to render first — next MoveNext may wait while same click handler runs UpdateTabs() etc.
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_first_yield");
             if (swDeep != null)

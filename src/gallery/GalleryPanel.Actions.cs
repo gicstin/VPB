@@ -1559,6 +1559,19 @@ namespace VPB
             if (!IsVisible && !hasLoadedContent) return;
             if (activeContentType != ContentType.Category && activeContentType != ContentType.History) return;
 
+            bool scanning = false;
+            try { scanning = FileManager.IsScanning; } catch { }
+            if (scanning)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
+                return;
+            }
+
             DateTime refreshTime = DateTime.MinValue;
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
