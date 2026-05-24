@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -2081,10 +2082,20 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            if (sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History))
-                RefreshTboxConditionalActionButtons();
-            else if (IsSettingsPanelOpen())
-                RefreshTboxConditionalActionButtons();
+            bool needsTboxActions = sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History) || IsSettingsPanelOpen();
+            if (needsTboxActions)
+            {
+                string tboxKey = BuildTboxConditionalRefreshCacheKey();
+                if (!string.Equals(tboxKey, _tboxConditionalRefreshCacheKey, StringComparison.Ordinal))
+                {
+                    _tboxConditionalRefreshCacheKey = tboxKey;
+                    RefreshTboxConditionalActionButtons();
+                }
+            }
+            else if (!string.IsNullOrEmpty(_tboxConditionalRefreshCacheKey))
+            {
+                _tboxConditionalRefreshCacheKey = "";
+            }
 
             // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
@@ -2100,6 +2111,34 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        private string BuildTboxConditionalRefreshCacheKey()
+        {
+            var sb = new StringBuilder(256);
+            sb.Append(cleanupModeActive ? 'C' : 'c');
+            sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
+            sb.Append((!IsHubMode && activeContentType == ContentType.History) ? 'H' : 'h');
+            try { sb.Append(ScanWhitelistManager.Instance.IsEnabled ? 'W' : 'w'); }
+            catch { sb.Append('w'); }
+
+            if (selectedFiles == null || selectedFiles.Count == 0) return sb.ToString();
+
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            var keys = new List<string>(selectedFiles.Count);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                keys.Add(GetSelectionIdentityKey(f, historyBrowse));
+            }
+            keys.Sort(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                sb.Append('|');
+                sb.Append(keys[i]);
+            }
+            return sb.ToString();
         }
 
         /// <summary>Copy/Delete/Hide/Unhide/Autoinstall: counts in labels and compact layout for the hide/AI group.</summary>
@@ -2331,13 +2370,7 @@ namespace VPB
                             foreach (var depId in deps)
                             {
                                 if (string.IsNullOrEmpty(depId)) continue;
-                                try
-                                {
-                                    var depPkg = FileManager.GetPackage(depId, ensureInstalled: false);
-                                    string depUid = depPkg != null ? depPkg.Uid : depId;
-                                    if (!string.IsNullOrEmpty(depUid)) tempCandidates.Add(depUid);
-                                }
-                                catch { }
+                                tempCandidates.Add(depId);
                             }
                         }
                         catch { }

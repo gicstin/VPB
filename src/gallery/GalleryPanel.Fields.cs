@@ -407,6 +407,8 @@ namespace VPB
         private const float SelectionContextUpdateInterval = 0.25f;
         private int _selectionContextLastSelCount = -1;
         private int _selectionContextLastTotalCount = -1;
+        /// <summary>Fingerprint of selection + modes that drive tbox action counts; avoids repeating package/dep lookups every tick.</summary>
+        private string _tboxConditionalRefreshCacheKey = "";
 
         private string previewRemoveClothingAtomUid = null;
         private string previewRemoveClothingItemUid = null;

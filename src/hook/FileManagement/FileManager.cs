@@ -1961,7 +1961,6 @@ namespace VPB
 			// not the cumulative totals across all coalesced/follow-up passes.
 			VarPackage.ResetScanCounters();
 			s_DeepScanLastManifestFlushScanned = 0;
-			try { VpbLocalDatabase.ResetDeepScanSqlRebuildProgress(); } catch { }
 			Stopwatch indexAllSw = Stopwatch.StartNew();
 			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;

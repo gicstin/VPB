@@ -581,17 +581,10 @@ namespace VPB
                 }
                 foreach (var depId in depCandidateIds)
                 {
-                    try
-                    {
-                        // Resolve aliases like ".latest" to actual local package UID when possible.
-                        var depPkg = FileManager.GetPackage(depId, ensureInstalled: false);
-                        string depUid = depPkg != null ? depPkg.Uid : depId;
-                        if (string.IsNullOrEmpty(depUid)) continue;
-                        if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(depUid)) continue;
-                        if (!seenUids.Add(depUid)) continue;
-                        addUids.Add(depUid);
-                    }
-                    catch { }
+                    if (string.IsNullOrEmpty(depId)) continue;
+                    if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(depId)) continue;
+                    if (!seenUids.Add(depId)) continue;
+                    addUids.Add(depId);
                 }
 
                 if (addUids.Count == 0)

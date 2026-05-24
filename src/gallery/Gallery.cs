@@ -891,6 +891,8 @@ namespace VPB
                 try { VamStartupProfiler.Milestone("sql_rebuild_delay sec=" + delaySec.ToString("0.##")); } catch { }
                 yield return new WaitForSeconds(delaySec);
             }
+            while (FileManager.IsBulkDeepScanActive)
+                yield return null;
             if (VpbLocalDatabase.TrySkipGalleryIndexRebuild())
             {
                 try { VpbLocalDatabase.SetGalleryIndexBuildIndicatorPending(false); } catch { }
