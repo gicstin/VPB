@@ -328,6 +328,177 @@ namespace VPB
             }
         }
 
+        internal struct PackageRegistrationPlan
+        {
+            public string CleanPath;
+            public string Uid;
+            public string Creator;
+            public string PackageName;
+            public string ShortName;
+            public int Version;
+        }
+
+        /// <summary>0 = auto: min(ProcessorCount, 12).</summary>
+        public static int GetEffectiveMaxDeepScanWorkers()
+        {
+            try
+            {
+                var st = Settings.Instance;
+                if (st != null && st.MaxDeepScanWorkers != null && st.MaxDeepScanWorkers.Value > 0)
+                {
+                    int v = st.MaxDeepScanWorkers.Value;
+                    if (v < 1) v = 1;
+                    if (v > 32) v = 32;
+                    return v;
+                }
+            }
+            catch { }
+            int p = Environment.ProcessorCount;
+            if (p < 1) p = 1;
+            return Math.Min(12, p);
+        }
+
+        static bool TryBuildPackageRegistrationPlan(string vpath, out PackageRegistrationPlan plan)
+        {
+            plan = default(PackageRegistrationPlan);
+            if (string.IsNullOrEmpty(vpath)) return false;
+
+            string cleanPath = CleanFilePath(vpath);
+            string text = packagePathToUid(cleanPath).Trim();
+            string[] array = text.Split('.');
+            if (array.Length != 3) return false;
+
+            string text2 = array[0];
+            string text3 = array[1];
+            string s = array[2];
+            int version;
+            if (!int.TryParse(s, out version))
+            {
+                string cleanS = Regex.Replace(s, "[^0-9]", "");
+                if (!int.TryParse(cleanS, out version))
+                    return false;
+            }
+
+            plan.CleanPath = cleanPath;
+            plan.Uid = text;
+            plan.Creator = text2;
+            plan.PackageName = text3;
+            plan.ShortName = text2 + "." + text3;
+            plan.Version = version;
+            return true;
+        }
+
+        static void BuildPackageRegistrationPlans(
+            IEnumerable<string> addPaths,
+            List<PackageRegistrationPlan> validOut,
+            List<string> invalidPathsOut)
+        {
+            if (validOut == null || invalidPathsOut == null || addPaths == null) return;
+            foreach (string vpath in addPaths)
+            {
+                if (string.IsNullOrEmpty(vpath)) continue;
+                PackageRegistrationPlan plan;
+                if (TryBuildPackageRegistrationPlan(vpath, out plan))
+                    validOut.Add(plan);
+                else
+                    invalidPathsOut.Add(vpath);
+            }
+        }
+
+        static VarPackage RegisterPackageFromPlan(PackageRegistrationPlan plan, bool clean)
+        {
+            string text = plan.Uid;
+            string cleanPath = plan.CleanPath;
+            string shortName = plan.ShortName;
+            int version = plan.Version;
+            string text2 = plan.Creator;
+            string text3 = plan.PackageName;
+
+            bool isDuplicated = false;
+            if (!packagesByUid.ContainsKey(text))
+            {
+                VarPackageGroup value;
+                lock (packagesLock)
+                {
+                    if (!packageGroups.TryGetValue(shortName, out value))
+                    {
+                        value = new VarPackageGroup(shortName);
+                        packageGroups.Add(shortName, value);
+                    }
+                }
+                VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
+                lock (packagesLock)
+                {
+                    packagesByUid.Add(text, varPackage);
+                    packagesByPath.Add(varPackage.Path, varPackage);
+                }
+                value.AddPackage(varPackage);
+
+                if (varPackage.Enabled && varPackage.FileEntries != null)
+                {
+                    lock (packagesLock)
+                    {
+                        foreach (VarFileEntry fileEntry in varPackage.FileEntries)
+                        {
+                            uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
+                            pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
+                        }
+                    }
+                }
+                return varPackage;
+            }
+
+            isDuplicated = true;
+            VarPackage existing;
+            if (packagesByUid.TryGetValue(text, out existing))
+            {
+                string existingPath = CleanFilePath(existing.Path);
+                if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!packagesByPath.ContainsKey(cleanPath))
+                    {
+                        lock (packagesLock)
+                        {
+                            packagesByPath.Add(cleanPath, existing);
+                        }
+                    }
+                    return existing;
+                }
+
+                string existingFileId;
+                string newFileId;
+                if (TryGetWindowsFileId(existingPath, out existingFileId)
+                    && TryGetWindowsFileId(cleanPath, out newFileId)
+                    && existingFileId == newFileId)
+                {
+                    LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
+                    if (!packagesByPath.ContainsKey(cleanPath))
+                    {
+                        lock (packagesLock)
+                        {
+                            packagesByPath.Add(cleanPath, existing);
+                        }
+                    }
+                    return existing;
+                }
+
+                LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
+            }
+            else
+            {
+                LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
+            }
+
+            if (clean)
+            {
+                if (isDuplicated)
+                    RemoveToInvalid(plan.CleanPath, "Duplicated");
+                else
+                    RemoveToInvalid(plan.CleanPath, "InvalidName");
+            }
+            return null;
+        }
+
         static PackageRefreshDiff BuildPackageRefreshDiff(
             IList<string> rawPaths,
             bool skipFileIdDedup,
@@ -516,10 +687,42 @@ namespace VPB
                 state.Flag = true;
             }
 
-            int regCount = 0;
-            foreach (string item3 in diff.AddSet)
+            var regPlans = new List<PackageRegistrationPlan>(diff.AddSet.Count);
+            var regInvalidPaths = new List<string>();
+            ManualResetEvent regPlansReady = new ManualResetEvent(false);
+            HashSet<string> addSnap = diff.AddSet;
+            ThreadPool.QueueUserWorkItem(_ =>
             {
-                RegisterPackage(item3, clean);
+                try
+                {
+                    BuildPackageRegistrationPlans(addSnap, regPlans, regInvalidPaths);
+                }
+                catch (Exception ex)
+                {
+                    try { LogUtil.LogError("BuildPackageRegistrationPlans failed: " + ex.Message); } catch { }
+                }
+                finally
+                {
+                    try { regPlansReady.Set(); } catch { }
+                }
+            });
+
+            while (!regPlansReady.WaitOne(0))
+                yield return null;
+            regPlansReady.Close();
+
+            int regCount = 0;
+            for (int ri = 0; ri < regPlans.Count; ri++)
+            {
+                RegisterPackageFromPlan(regPlans[ri], clean);
+                state.Flag = true;
+                regCount++;
+                if ((regCount & 511) == 0)
+                    yield return null;
+            }
+            for (int ii = 0; ii < regInvalidPaths.Count; ii++)
+            {
+                RegisterPackage(regInvalidPaths[ii], clean);
                 state.Flag = true;
                 regCount++;
                 if ((regCount & 511) == 0)
@@ -680,128 +883,29 @@ namespace VPB
             {
                 LogUtil.Log("RegisterPackage " + vpath);
             }
+
+            PackageRegistrationPlan plan;
+            if (TryBuildPackageRegistrationPlan(vpath, out plan))
+                return RegisterPackageFromPlan(plan, clean);
+
             string cleanPath = CleanFilePath(vpath);
             string text = packagePathToUid(cleanPath).Trim();
             string[] array = text.Split('.');
-
-            bool isDuplicated = false;
             if (array.Length == 3)
             {
-                string text2 = array[0];
-                string text3 = array[1];
-                string shortName = text2 + "." + text3;
-                string s = array[2];
                 try
-                {
-                    int version;
-                    if (!int.TryParse(s, out version))
-                    {
-                        // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
-                        string cleanS = Regex.Replace(s, "[^0-9]", "");
-                        if (!int.TryParse(cleanS, out version))
-                        {
-                            throw new FormatException($"Cannot parse version from '{s}'");
-                        }
-                        LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
-                    }
-
-                    if (!packagesByUid.ContainsKey(text))
-                    {
-                        VarPackageGroup value;
-                        lock (packagesLock)
-                        {
-                            if (!packageGroups.TryGetValue(shortName, out value))
-                            {
-                                value = new VarPackageGroup(shortName);
-                                packageGroups.Add(shortName, value);
-                            }
-                        }
-                        VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
-                        lock (packagesLock)
-                        {
-                            packagesByUid.Add(text, varPackage);
-                            packagesByPath.Add(varPackage.Path, varPackage);
-                        }
-                        value.AddPackage(varPackage);
-
-                        // Disabling a var package means creating a "disable" file in the same path
-                        if (varPackage.Enabled)
-                        {
-                            if (varPackage.FileEntries != null)
-                            {
-                                lock (packagesLock)
-                                {
-                                    foreach (VarFileEntry fileEntry in varPackage.FileEntries)
-                                    {
-                                        uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
-                                        pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
-                                    }
-                                }
-                            }
-                        }
-                        return varPackage;
-                    }
-                    isDuplicated = true;
-                    VarPackage existing;
-                    if (packagesByUid.TryGetValue(text, out existing))
-                    {
-                        string existingPath = CleanFilePath(existing.Path);
-                        if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (!packagesByPath.ContainsKey(cleanPath))
-                            {
-                                lock (packagesLock)
-                                {
-                                    packagesByPath.Add(cleanPath, existing);
-                                }
-                            }
-                            return existing;
-                        }
-
-                        string existingFileId;
-                        string newFileId;
-                        if (TryGetWindowsFileId(existingPath, out existingFileId)
-                            && TryGetWindowsFileId(cleanPath, out newFileId)
-                            && existingFileId == newFileId)
-                        {
-                            LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
-                            if (!packagesByPath.ContainsKey(cleanPath))
-                            {
-                                lock (packagesLock)
-                                {
-                                    packagesByPath.Add(cleanPath, existing);
-                                }
-                            }
-                            return existing;
-                        }
-
-                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
-                    }
-                    else
-                    {
-                        LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
-                    }
-                }
-                catch (Exception)
                 {
                     LogUtil.LogError("VAR file " + vpath + " does not use integer version field in name <creator>.<name>.<version>");
                 }
+                catch { }
             }
             else
             {
                 LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
             }
 
-            // Reaching here means it is invalid
             if (clean)
-            {
-                if (isDuplicated)
-                {
-                    RemoveToInvalid(vpath, "Duplicated");
-                }
-                else
-                    RemoveToInvalid(vpath, "InvalidName");
-            }
+                RemoveToInvalid(vpath, "InvalidName");
             return null;
         }
 
@@ -1480,10 +1584,50 @@ namespace VPB
                             return;
                         }
 
-                        foreach (string root in scanRoots)
+                        int rootCount = scanRoots.Length;
+                        if (rootCount <= 1)
                         {
-                            if (Directory.Exists(root))
-                                SafeGetFiles(root, "*.var", allVarFiles);
+                            for (int ri = 0; ri < rootCount; ri++)
+                            {
+                                if (Directory.Exists(scanRoots[ri]))
+                                    SafeGetFiles(scanRoots[ri], "*.var", allVarFiles);
+                            }
+                        }
+                        else
+                        {
+                            var perRoot = new List<string>[rootCount];
+                            var rootDone = new ManualResetEvent[rootCount];
+                            for (int ri = 0; ri < rootCount; ri++)
+                            {
+                                perRoot[ri] = new List<string>();
+                                rootDone[ri] = new ManualResetEvent(false);
+                                string root = scanRoots[ri];
+                                int rootIndex = ri;
+                                ThreadPool.QueueUserWorkItem(__ =>
+                                {
+                                    try
+                                    {
+                                        if (Directory.Exists(root))
+                                            SafeGetFiles(root, "*.var", perRoot[rootIndex]);
+                                    }
+                                    finally
+                                    {
+                                        try { rootDone[rootIndex].Set(); } catch { }
+                                    }
+                                });
+                            }
+                            for (int ri = 0; ri < rootCount; ri++)
+                            {
+                                try { rootDone[ri].WaitOne(); } catch { }
+                                try { rootDone[ri].Close(); } catch { }
+                                if (perRoot[ri] != null && perRoot[ri].Count > 0)
+                                {
+                                    lock (allVarFiles)
+                                    {
+                                        allVarFiles.AddRange(perRoot[ri]);
+                                    }
+                                }
+                            }
                         }
 
                         if (VamStartupOptimizations.UseCachedVarPathInventory && allVarFiles.Count > 0)
@@ -1996,7 +2140,7 @@ namespace VPB
 			int progressLogStep = Math.Max(uiUpdateStep, 2000);
 			string reasonsTag = GetCurrentReasonsForLog();
 			{
-				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
+				int maxWorkers = GetEffectiveMaxDeepScanWorkers();
 				int nextIndex = -1;
 				int doneWorkers = 0;
 				int scannedCount = 0;

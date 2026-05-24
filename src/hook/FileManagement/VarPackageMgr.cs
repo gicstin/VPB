@@ -18,7 +18,7 @@ namespace VPB
 
         const string LegacyCachePath = "Cache/VPB/AllPackages.bytes2";
         const int LegacyCacheMagic = 0x56504231;
-        const int LegacyCacheVersion = 6;
+        const int LegacyCacheVersion = 7;
 
         readonly object lookupLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
@@ -185,7 +185,7 @@ namespace VPB
                     if (includeVarMeta)
                     {
                         int version = reader.ReadInt32();
-                        if (version != LegacyCacheVersion)
+                        if (version != LegacyCacheVersion && version != 6)
                         {
                             LogUtil.Log("VarPackageMgr legacy cache version mismatch " + version);
                             return false;

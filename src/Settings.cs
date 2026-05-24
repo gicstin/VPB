@@ -59,6 +59,8 @@ namespace VPB
         public ConfigEntry<int> MaxLoaderThreads;
         /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
         public ConfigEntry<int> MaxThumbnailThreads;
+        /// <summary>0 = auto: min(ProcessorCount, 12); else clamped 1–32 parallel VAR deep-scan workers.</summary>
+        public ConfigEntry<int> MaxDeepScanWorkers;
 
         public ConfigEntry<bool> AutoOptimizeCache;
         public ConfigEntry<string> LastGalleryPage;
@@ -149,6 +151,7 @@ namespace VPB
             ThumbnailThreshold = config.Bind<int>("Optimze", "ThumbnailThreshold", 600, "Resolution threshold (width & height) below which a texture is considered a thumbnail and skipped by VPB optimizations.");
             MaxLoaderThreads = config.Bind<int>("Optimze", "MaxLoaderThreads", 0, "Concurrent image decode workers (full-res queue). 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
             MaxThumbnailThreads = config.Bind<int>("Optimze", "MaxThumbnailThreads", 0, "Concurrent thumbnail decode workers. 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
+            MaxDeepScanWorkers = config.Bind<int>("Optimze", "MaxDeepScanWorkers", 0, "Parallel workers for deep VAR package scan (zip index). 0 = auto: min(ProcessorCount, 12); else clamped 1–32.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
