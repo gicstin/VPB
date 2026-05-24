@@ -173,16 +173,10 @@ namespace VPB
                 {
                     try
                     {
-                        if (movedUids != null && movedUids.Count > 0)
-                            FileManager.NotifyInstalled(movedUids);
-                    }
-                    catch { }
-
-                    try
-                    {
-                        if (MVR.FileManagement.FileManager.singleton != null)
-                            MVR.FileManagement.FileManager.Refresh();
-                        FileManager.Refresh();
+                        RefreshScope scope = (movedUids != null && movedUids.Count > 0)
+                            ? RefreshScope.InstallOnly
+                            : RefreshScope.Both;
+                        FileManagerBridge.Refresh("scene_import", scope, movedUids, flushNativeImmediately: true);
                     }
                     catch (Exception refreshEx)
                     {

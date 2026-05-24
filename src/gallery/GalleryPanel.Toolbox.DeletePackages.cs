@@ -329,11 +329,8 @@ namespace VPB
             try
             {
                 // Best-effort refresh to reflect moved packages
-                try { FileManager.Refresh(); }
-                catch (Exception ex) { LogSuppressed("DeletePackages.FileManager.Refresh", ex); }
-
-                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); }
-                catch (Exception ex) { LogSuppressed("DeletePackages.MVR.FileManager.Refresh", ex); }
+                try { FileManagerBridge.Refresh("tbox_delete_packages", RefreshScope.Both); }
+                catch (Exception ex) { LogSuppressed("DeletePackages.FileManagerBridge.Refresh", ex); }
             }
             catch (Exception ex) { LogSuppressed("DeletePackages.RefreshWrapper", ex); }
         }

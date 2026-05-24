@@ -129,9 +129,7 @@ namespace VPB
                     var movedUids = new List<string>();
                     if (FileButton.EnsureInstalledByText(root.ToString(), movedUids))
                     {
-                        MVR.FileManagement.FileManager.Refresh();
-                        if (movedUids.Count > 0)
-                            FileManager.NotifyInstalled(movedUids);
+                        FileManagerBridge.Refresh("scene_merge_install", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                     }
                     
                     // Start coroutine to disable suppression after scene merge completes
@@ -566,9 +564,7 @@ namespace VPB
 
             if (installed)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                if (movedUids.Count > 0)
-                    FileManager.NotifyInstalled(movedUids);
+                FileManagerBridge.Refresh("scene_merge_drop", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
             }
 
             bool shouldPrewarmOnDemand =
@@ -872,8 +868,7 @@ namespace VPB
                                     string ensureDepsText = presetJSON.ToString();
                                     if (FileButton.EnsureInstalledByText(ensureDepsText))
                                     {
-                                        MVR.FileManagement.FileManager.Refresh();
-                                        FileManager.Refresh();
+                                        FileManagerBridge.Refresh("scene_merge_preset_deps", RefreshScope.Both);
                                     }
 
                                     LogUtil.Log($"[DragDropDebug] JSON loaded successfully from {normalizedPath}");

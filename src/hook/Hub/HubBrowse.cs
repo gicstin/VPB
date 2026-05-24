@@ -2397,8 +2397,7 @@ namespace VPB
 
             _deferredRefreshAfterDownloads = false;
 
-            try { FileManager.Refresh(); } catch { }
-            try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+            try { FileManagerBridge.Refresh("hub_deferred_downloads", RefreshScope.Both); } catch { }
             RefreshResources();
         }
 

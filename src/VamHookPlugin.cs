@@ -1407,8 +1407,7 @@ namespace VPB
             catch { }
             if (flag)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                VPB.FileManager.Refresh("autoinstall", true);
+                FileManagerBridge.Refresh("autoinstall", RefreshScope.Both, init: true);
             }
         }
 
@@ -1448,7 +1447,7 @@ namespace VPB
             if (!s_FileManagerInitialRefreshCompleted)
             {
                 System.Diagnostics.Stopwatch refreshSw = System.Diagnostics.Stopwatch.StartNew();
-                FileManager.Refresh("init", true);
+                FileManagerBridge.Refresh("init", RefreshScope.Both, init: true, clean: true);
                 refreshSw.Stop();
                 VamStartupProfiler.AddPhaseMs("vpb_refresh_init_call", refreshSw.Elapsed.TotalMilliseconds);
                 LogUtil.Log("FileManager.Refresh call took " + refreshSw.ElapsedMilliseconds + "ms");

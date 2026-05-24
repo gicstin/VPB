@@ -53,8 +53,7 @@ namespace VPB
                             {
                                 if (LocalSceneGallerySupport.InstallDependenciesForSceneJsonFile(absLocalJson))
                                 {
-                                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                                    try { FileManager.Refresh(); } catch { }
+                                    try { FileManagerBridge.Refresh("tbox_autoinstall_local_scene", RefreshScope.Both); } catch { }
                                 }
                             }
                             catch (Exception ex)

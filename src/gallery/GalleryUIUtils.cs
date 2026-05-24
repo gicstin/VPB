@@ -366,12 +366,6 @@ namespace VPB
                     {
                         if (depsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
                         else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
-                        
-                        if (MVR.FileManagement.FileManager.singleton != null)
-                            MVR.FileManagement.FileManager.Refresh();
-
-                        if (depsChanged)
-                            FileManager.Refresh();
 
                         try
                         {
@@ -399,11 +393,16 @@ namespace VPB
                                 }
                             }
 
-                            if (refreshUids != null && refreshUids.Count > 0)
+                            if (depsChanged)
                             {
-                                // Updates packagesByPath + refreshes displayed row FileEntry.Path strings (via Gallery.NotifyDisplayedPathsAfterPackagePathChanges)
-                                // without forcing a full rescan (lastPackageRefreshTime is intentionally unchanged).
-                                FileManager.NotifyInstalled(refreshUids);
+                                RefreshScope scope = (refreshUids != null && refreshUids.Count > 0)
+                                    ? RefreshScope.InstallOnly
+                                    : RefreshScope.Both;
+                                FileManagerBridge.Refresh("gallery_ensure_installed", scope, refreshUids, flushNativeImmediately: true);
+                            }
+                            else
+                            {
+                                FileManagerBridge.Refresh("gallery_scene_allowlist", RefreshScope.NativeOnly, flushNativeImmediately: true);
                             }
                         }
                         catch { }

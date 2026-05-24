@@ -2639,9 +2639,13 @@ namespace VPB
 			if (moved)
 			{
 				LogUtil.Log($"[VPB] Dependencies installed/verified for: {package.Uid}");
-				ScheduleMvrRefresh();
-				FileManager.Refresh();
+				FileManagerBridge.Refresh("dependency_install", RefreshScope.Both);
 			}
+		}
+
+		public static void ScheduleCoalescedNativeRefresh()
+		{
+			ScheduleMvrRefresh();
 		}
 
 		private static void ScheduleMvrRefresh()

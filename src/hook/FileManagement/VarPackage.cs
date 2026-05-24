@@ -1057,7 +1057,7 @@ namespace VPB
 			{
 				FileManager.DeleteFile(path);
 			}
-			FileManager.Refresh();
+			FileManagerBridge.Refresh("package_delete", RefreshScope.Both);
 		}
 
 		public void RestoreFromOriginal()

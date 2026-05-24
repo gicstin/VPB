@@ -509,7 +509,7 @@ namespace VPB
                 catch { }
 
                 // Register the new .var immediately so gallery + SQLite index can update without restart.
-                try { FileManager.Refresh("hub_download"); } catch { }
+                try { FileManagerBridge.Refresh("hub_download", RefreshScope.Both); } catch { }
                 // Do not call Refresh() here — package is not registered until scan finishes and would reset alreadyHaveJSON.
             }
             catch (Exception)
@@ -988,8 +988,7 @@ namespace VPB
                 localPackagePath = null;
                 LogUtil.Log("[VPB] Hub delete: permanently deleted " + uid);
 
-                try { FileManager.Refresh(); } catch { }
-                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+                try { FileManagerBridge.Refresh("hub_delete_permanent", RefreshScope.Both); } catch { }
             }
             catch (Exception ex)
             {
@@ -1023,8 +1022,7 @@ namespace VPB
                 localPackagePath = null;
                 LogUtil.Log("[VPB] Hub delete: moved " + uid + " to DeletedPackages");
 
-                try { FileManager.Refresh(); } catch { }
-                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+                try { FileManagerBridge.Refresh("hub_delete_move", RefreshScope.Both); } catch { }
             }
             catch (Exception ex)
             {

@@ -647,7 +647,7 @@ namespace VPB
             return false;
         }
 
-        private static IEnumerator PostApplyClothingHairFixupCoroutine(Atom atom, string inferredBaseId)
+        private static IEnumerator PostApplyClothingHairFixupCoroutine(Atom atom, string inferredBaseId, bool isClothing)
         {
             if (atom == null) yield break;
 
@@ -698,11 +698,17 @@ namespace VPB
                     }
                 }
 
-                // Also try common VaM aggregate storables.
+                // Also try common VaM aggregate storables (clothing apply must not poke Hair — resets active hair).
                 JSONStorable clothing = null;
                 JSONStorable hair = null;
-                try { clothing = atom.GetStorableByID("Clothing"); } catch { }
-                try { hair = atom.GetStorableByID("Hair"); } catch { }
+                if (isClothing)
+                {
+                    try { clothing = atom.GetStorableByID("Clothing"); } catch { }
+                }
+                else
+                {
+                    try { hair = atom.GetStorableByID("Hair"); } catch { }
+                }
 
                 if (clothing != null)
                 {
@@ -722,13 +728,13 @@ namespace VPB
             catch { }
         }
 
-        private static void SchedulePostApplyFixup(Atom atom, string inferredBaseId)
+        private static void SchedulePostApplyFixup(Atom atom, string inferredBaseId, bool isClothing)
         {
             try
             {
                 if (atom == null) return;
                 if (SuperController.singleton == null) return;
-                SuperController.singleton.StartCoroutine(PostApplyClothingHairFixupCoroutine(atom, inferredBaseId));
+                SuperController.singleton.StartCoroutine(PostApplyClothingHairFixupCoroutine(atom, inferredBaseId, isClothing));
             }
             catch { }
         }
@@ -1200,7 +1206,7 @@ namespace VPB
                         skipDependencyPrewarm: true, updateLastRestoredData: false);
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
-                    SchedulePostApplyFixup(atom, inferredBaseId);
+                    SchedulePostApplyFixup(atom, inferredBaseId, isClothing);
                     yield break;
                 }
 

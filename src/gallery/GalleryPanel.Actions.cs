@@ -289,8 +289,7 @@ namespace VPB
                     return;
                 }
 
-                try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                FileManager.Refresh(true, false, false);
+                try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
                 GalleryFileListSnapshotCache.Clear();
                 GalleryTagCountSnapshotCache.Clear();
                 creatorsCached = false;

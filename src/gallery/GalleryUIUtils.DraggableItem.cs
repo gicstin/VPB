@@ -579,8 +579,7 @@ namespace VPB
             bool installed = EnsureInstalled();
             if (installed)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                FileManagerBridge.Refresh("dragdrop_cua", RefreshScope.Both, flushNativeImmediately: true);
                 yield return new WaitForSeconds(1.0f);
             }
 
@@ -670,8 +669,7 @@ namespace VPB
 
             if (installed)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                FileManagerBridge.Refresh("dragdrop_subscene", RefreshScope.Both, flushNativeImmediately: true);
             }
 
             string normalizedPath = UI.NormalizePath(path);
@@ -1769,8 +1767,7 @@ namespace VPB
                 if (installed)
                 {
                     LogUtil.Log("[VPB] Refreshing FileManagers...");
-                    MVR.FileManagement.FileManager.Refresh();
-                    FileManager.Refresh();
+                    FileManagerBridge.Refresh("dragdrop_merge_scene", RefreshScope.Both, flushNativeImmediately: true);
                 }
 
                 string normalizedPath = UI.NormalizePath(path);

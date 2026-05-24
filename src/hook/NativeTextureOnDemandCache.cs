@@ -3097,7 +3097,7 @@ namespace VPB
                         {
                             if (ztry == 1)
                             {
-                                try { MVR.FileManagement.FileManager.Refresh(); } catch { }
+                                try { FileManagerBridge.Refresh("texture_on_demand_retry", RefreshScope.NativeOnly); } catch { }
                             }
 
                             if (ztry > 0)

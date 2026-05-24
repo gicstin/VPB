@@ -468,19 +468,16 @@ namespace VPB
         /// </summary>
         public void Refresh(string reason)
         {
-            FileManager.Refresh(reason, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh(reason, RefreshScope.Both, init: true);
             RemoveEmptyFolder("AllPackages");
         }
         public void RemoveInvalidVars()
         {
-            FileManager.Refresh(true, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh("remove_invalid_vars", RefreshScope.Both, init: true, clean: true);
         }
         public void RemoveOldVersion()
         {
-            FileManager.Refresh(true, true, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh("remove_old_version", RefreshScope.Both, init: true, clean: true, removeOldVersion: true);
         }
         //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)

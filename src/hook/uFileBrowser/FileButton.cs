@@ -117,10 +117,7 @@ namespace VPB
                                     bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
-                                        MVR.FileManagement.FileManager.Refresh();
-                                        VPB.FileManager.Refresh();
-                                        if (movedUids.Count > 0)
-                                            VPB.FileManager.NotifyInstalled(movedUids);
+                                        FileManagerBridge.Refresh("filebutton_json", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                                     }
                                 }
                             }
@@ -169,10 +166,7 @@ namespace VPB
                                     bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
-                                        MVR.FileManagement.FileManager.Refresh();
-                                        VPB.FileManager.Refresh();
-                                        if (movedUids.Count > 0)
-                                            VPB.FileManager.NotifyInstalled(movedUids);
+                                        FileManagerBridge.Refresh("filebutton_json", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                                     }
                                 }
                             }
@@ -221,9 +215,7 @@ namespace VPB
             }
             if (flag)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                // Refresh this as well; this will raise events.
-                VPB.FileManager.Refresh();
+                FileManagerBridge.Refresh("filebutton_autoinstall_toggle", RefreshScope.Both);
             }
         }
         public void EnsureInstalled()
@@ -285,9 +277,7 @@ namespace VPB
             bool dirty = EnsureInstalledByText(text, movedUids);
             if (dirty)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                if (movedUids.Count > 0)
-                    VPB.FileManager.NotifyInstalled(movedUids);
+                FileManagerBridge.Refresh("filebutton_ensure_installed", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
             }
         }
 
@@ -356,9 +346,7 @@ namespace VPB
             }
             if (flag)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                if (movedUids.Count > 0)
-                    VPB.FileManager.NotifyInstalled(movedUids);
+                FileManagerBridge.Refresh("filebutton_on_installed", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: false);
             }
         }
 

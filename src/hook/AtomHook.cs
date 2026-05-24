@@ -37,7 +37,10 @@ namespace VPB
 
         static bool ShouldSyncRefreshForPresetStorable(string storableId)
         {
-            if (string.IsNullOrEmpty(storableId)) return true;
+            // "unknown" must not trigger person-level ClothingPresets refresh — that resets
+            // per-item color presets and can clear hair during interactive apply.
+            if (string.IsNullOrEmpty(storableId)) return false;
+            if (string.Equals(storableId, "unknown", StringComparison.OrdinalIgnoreCase)) return false;
             return s_SyncRefreshPresetStorables.Contains(storableId);
         }
 
@@ -85,11 +88,13 @@ namespace VPB
             VarFileEntry varFileEntry = FileManager.GetVarFileEntry(url);
             if (varFileEntry != null)
             {
-                bool dirty= varFileEntry.Package.InstallRecursive();
+                var movedUids = new List<string>();
+                bool dirty = varFileEntry.Package.InstallRecursive(movedUids);
                 if (dirty)
                 {
-                    MVR.FileManagement.FileManager.Refresh();
-                    VPB.FileManager.Refresh();
+                    if (movedUids.Count == 0 && !string.IsNullOrEmpty(varFileEntry.Package.Uid))
+                        movedUids.Add(varFileEntry.Package.Uid);
+                    FileManagerBridge.Refresh("preset_sync_browse", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                 }
             }
             else
@@ -121,11 +126,13 @@ namespace VPB
                 var package = FileManager.GetPackage(packagename);
                 if (package != null)
                 {
-                    bool dirty = package.InstallRecursive();
+                    var movedUids = new List<string>();
+                    bool dirty = package.InstallRecursive(movedUids);
                     if (dirty)
                     {
-                        MVR.FileManagement.FileManager.Refresh();
-                        VPB.FileManager.Refresh();
+                        if (movedUids.Count == 0 && !string.IsNullOrEmpty(package.Uid))
+                            movedUids.Add(package.Uid);
+                        FileManagerBridge.Refresh("subscene_install", RefreshScope.InstallOnly, movedUids);
                     }
                 }
             }
