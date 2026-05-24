@@ -1,4 +1,5 @@
 using ICSharpCode.SharpZipLib.Core;
+using ICSharpCode.SharpZipLib.Zip;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -90,6 +91,16 @@ namespace VPB
         protected static Dictionary<string, VarFileEntry> uidToVarFileEntry;
         protected static Dictionary<string, VarFileEntry> pathToVarFileEntry;
         protected static OnRefresh onRefreshHandlers;
+        protected static OnRefresh onRegistryReadyHandlers;
+        static int s_RegistryReadyNotified;
+        static int s_BulkDeepScanActive;
+
+        internal static bool IsBulkDeepScanActive =>
+            System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanActive, 0, 0) != 0;
+        static int s_DeferredDeepScanScheduled;
+        static bool s_DeferredDeepScanInit;
+        static bool s_DeferredDeepScanFlag;
+        static bool s_DeferredDeepScanClean;
         protected static HashSet<string> restrictedReadPaths;
 
         protected static Dictionary<string, string> internalPathToUidPath;
@@ -198,28 +209,51 @@ namespace VPB
             }
 
             int merged = 0;
-            lock (packagesLock)
+            HashSet<string> pendingUids = null;
+            if (lastAddedPackages.Count > 0)
             {
-                foreach (string addedPath in addSet)
+                pendingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < lastAddedPackages.Count; i++)
                 {
-                    VarPackage pkg;
-                    if (!packagesByPath.TryGetValue(addedPath, out pkg) || pkg == null)
-                        continue;
+                    VarPackage pending = lastAddedPackages[i];
+                    if (pending != null && !string.IsNullOrEmpty(pending.Uid))
+                        pendingUids.Add(pending.Uid);
+                }
+            }
 
-                    bool alreadyPending = false;
-                    for (int i = 0; i < lastAddedPackages.Count; i++)
+            if (addSetCount >= 512 && (pendingUids == null || pendingUids.Count == 0))
+            {
+                var bulk = new List<VarPackage>(addSetCount);
+                lock (packagesLock)
+                {
+                    foreach (string addedPath in addSet)
                     {
-                        VarPackage existing = lastAddedPackages[i];
-                        if (existing != null && string.Equals(existing.Uid, pkg.Uid, StringComparison.OrdinalIgnoreCase))
-                        {
-                            alreadyPending = true;
-                            break;
-                        }
+                        VarPackage pkg;
+                        if (packagesByPath.TryGetValue(addedPath, out pkg) && pkg != null)
+                            bulk.Add(pkg);
                     }
-                    if (!alreadyPending)
+                }
+                lastAddedPackages.AddRange(bulk);
+                merged = bulk.Count;
+            }
+            else
+            {
+                lock (packagesLock)
+                {
+                    if (pendingUids == null)
+                        pendingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (string addedPath in addSet)
                     {
-                        lastAddedPackages.Add(pkg);
-                        merged++;
+                        VarPackage pkg;
+                        if (!packagesByPath.TryGetValue(addedPath, out pkg) || pkg == null)
+                            continue;
+                        if (string.IsNullOrEmpty(pkg.Uid))
+                            continue;
+                        if (pendingUids.Add(pkg.Uid))
+                        {
+                            lastAddedPackages.Add(pkg);
+                            merged++;
+                        }
                     }
                 }
             }
@@ -484,6 +518,16 @@ namespace VPB
                 }
                 catch { }
             }
+            try
+            {
+                VamStartupOptimizations.StartupDebug("registry phase done registered=" + regCount
+                    + " ms=" + regSw.ElapsedMilliseconds
+                    + " manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0"));
+            }
+            catch { }
+
+            // Registry is usable for gallery/init as soon as bulk RegisterPackage finishes — do not wait on delta merge.
+            TryNotifyRegistryReadyForInit();
 
             MergePackageRefreshDelta(diff.RemoveSet, diff.AddSet);
             LogDuplicateUidSummary(diff.DuplicateUidPaths);
@@ -821,6 +865,17 @@ namespace VPB
         public static void RegisterRefreshHandler(OnRefresh refreshHandler)
         {
             onRefreshHandlers = (OnRefresh)Delegate.Combine(onRefreshHandlers, refreshHandler);
+        }
+
+        /// <summary>Fires once package paths are registered in memory (before per-package zip deep scan).</summary>
+        public static void RegisterRegistryReadyHandler(OnRefresh readyHandler)
+        {
+            onRegistryReadyHandlers = (OnRefresh)Delegate.Combine(onRegistryReadyHandlers, readyHandler);
+        }
+
+        public static void UnregisterRegistryReadyHandler(OnRefresh readyHandler)
+        {
+            onRegistryReadyHandlers = (OnRefresh)Delegate.Remove(onRegistryReadyHandlers, readyHandler);
         }
 
         public static void UnregisterRefreshHandler(OnRefresh refreshHandler)
@@ -1384,6 +1439,7 @@ namespace VPB
                 List<string> allVarFiles = new List<string>();
                 string[] scanRoots = new string[] { "AddonPackages", "AllPackages" };
 
+                try { VpbProgressService.BeginManifestLoad(); } catch { }
                 ManualResetEvent manifestDone = VarPackageMgr.singleton.BeginManifestLoadIfNeeded();
 
                 VamStartupProfiler.BeginScope("vpb_RefreshCo_var_disk_enum");
@@ -1427,6 +1483,7 @@ namespace VPB
                 {
                     yield return null;
                 }
+                try { VpbProgressService.EndManifestLoad(); } catch { }
                 inventoryDone.Close();
                 VamStartupProfiler.EndScope("vpb_RefreshCo_var_disk_enum");
                 if (usedPathCache)
@@ -1462,15 +1519,43 @@ namespace VPB
                 }
                 flag = applyState.Flag;
             }
+
+            if (init)
+                TryNotifyRegistryReadyForInit();
             
             try
             {
                 bool forceHubScan = RefreshReasonNeedsHubPackageScan(refreshReason);
                 if (init || flag || clean || removeOldVersion || forceHubScan)
                 {
-                    VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_scheduled init=" + (init ? "1" : "0")
-                        + " hub=" + (forceHubScan ? "1" : "0"));
-                    StartScan(init, flag || forceHubScan, clean, true);
+                    bool scanFlag = flag || forceHubScan;
+                    if (ShouldDeferDeepPackageScanOnInit(init))
+                    {
+                        VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_deferred_until_ready init=1 pkgs="
+                            + (packagesByUid != null ? packagesByUid.Count : 0));
+                        try
+                        {
+                            LogUtil.Log(VamStartupOptimizations.LogTag
+                                + " deferring deep package scan until startup ready"
+                                + " | manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0")
+                                + " | registered=" + (packagesByUid != null ? packagesByUid.Count : 0));
+                        }
+                        catch { }
+                        ScheduleDeferredDeepScan(init, scanFlag, clean);
+                    }
+                    else
+                    {
+                        VamStartupProfiler.Milestone("vpb_RefreshCo_StartScan_scheduled init=" + (init ? "1" : "0")
+                            + " hub=" + (forceHubScan ? "1" : "0"));
+                        try
+                        {
+                            VamStartupOptimizations.StartupDebug("StartScan immediate init=" + (init ? "1" : "0")
+                                + " pkgs=" + (packagesByUid != null ? packagesByUid.Count : 0)
+                                + " manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0"));
+                        }
+                        catch { }
+                        StartScan(init, scanFlag, clean, true);
+                    }
                 }
 
                 s_InstalledCount = 0;
@@ -1517,7 +1602,7 @@ namespace VPB
             }
         }
 
-		public void StartScan(bool init, bool flag, bool clean, bool runCo)
+        public void StartScan(bool init, bool flag, bool clean, bool runCo)
 		{
 			if (m_StartScanCo != null)
 			{
@@ -1526,6 +1611,87 @@ namespace VPB
 			}
 			m_StartScanCo = StartCoroutine(StartScanCo(init, flag, clean, runCo));
 		}
+
+        static bool ShouldDeferDeepPackageScanOnInit(bool init)
+        {
+            if (!init) return false;
+            if (!VamStartupOptimizations.DeferPackageDeepScanUntilReady) return false;
+            try
+            {
+                if (LogUtil.IsStartupReadyLogged() || LogUtil.IsReadyLogged()) return false;
+            }
+            catch { }
+            try
+            {
+                if (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady)
+                    return false;
+            }
+            catch { }
+            return true;
+        }
+
+        static void TryNotifyRegistryReadyForInit()
+        {
+            if (System.Threading.Interlocked.CompareExchange(ref s_RegistryReadyNotified, 1, 0) != 0)
+                return;
+            int pkgCount = 0;
+            try
+            {
+                lock (packagesLock)
+                    pkgCount = packagesByUid != null ? packagesByUid.Count : 0;
+            }
+            catch { }
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag + " package registry ready"
+                    + " | pkgs=" + pkgCount
+                    + " | manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0")
+                    + " | deepScanDeferred=" + (ShouldDeferDeepPackageScanOnInit(true) ? "1" : "0"));
+            }
+            catch { }
+            try
+            {
+                if (lastPackageRefreshTime == DateTime.MinValue)
+                    lastPackageRefreshTime = DateTime.UtcNow;
+            }
+            catch { }
+            try { VpbLocalDatabase.NotifyPackageRegistryReady(); } catch { }
+            try
+            {
+                if (onRegistryReadyHandlers != null)
+                    onRegistryReadyHandlers();
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.Startup] registry ready handler failed: " + ex.Message); } catch { }
+            }
+        }
+
+        static void ScheduleDeferredDeepScan(bool init, bool flag, bool clean)
+        {
+            if (System.Threading.Interlocked.CompareExchange(ref s_DeferredDeepScanScheduled, 1, 0) != 0)
+                return;
+            s_DeferredDeepScanInit = init;
+            s_DeferredDeepScanFlag = flag;
+            s_DeferredDeepScanClean = clean;
+            LogUtil.RegisterPostReadyOnce(RunDeferredDeepScanAfterStartupReady);
+        }
+
+        static void RunDeferredDeepScanAfterStartupReady()
+        {
+            if (singleton == null) return;
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag + " starting deferred deep package scan post-READY"
+                    + " | pkgs=" + (packagesByUid != null ? packagesByUid.Count : 0));
+            }
+            catch { }
+            try { singleton.StartScan(s_DeferredDeepScanInit, s_DeferredDeepScanFlag, s_DeferredDeepScanClean, true); }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB.Startup] deferred deep scan failed to start: " + ex.Message); } catch { }
+            }
+        }
 
 		static int s_BulkDepPrewarmScheduled;
 		static int s_BulkDepPrewarmDone;
@@ -1670,6 +1836,19 @@ namespace VPB
 		IEnumerator StartScanCo(bool init, bool flag, bool clean, bool runCo)
 		{
 			List<VarPackage> invalid = new List<VarPackage>();
+			int allCount = 0;
+			try
+			{
+				lock (packagesLock)
+					allCount = packagesByUid != null ? packagesByUid.Count : 0;
+			}
+			catch { }
+			try
+			{
+				VamStartupOptimizations.StartupDebug("StartScanCo begin init=" + (init ? "1" : "0")
+                    + " pkgs=" + allCount + " runCo=" + (runCo ? "1" : "0"));
+			}
+			catch { }
 			VamStartupProfiler.BeginScope("vpb_StartScanCo_scan");
 			if (runCo)
 			{
@@ -1721,6 +1900,12 @@ namespace VPB
 			int addedCount = 0;
 			int removedCount = 0;
 			try { addedCount = lastAddedPackages.Count; removedCount = lastRemovedPackages.Count; } catch { }
+			try
+			{
+				s_DeepScanLastManifestFlushScanned = 0;
+				TryPeriodicManifestFlushDuringDeepScan(allCount, allCount);
+			}
+			catch { }
 			try { VpbLocalDatabase.NotifyPackageScanCompleted(addedCount, removedCount); } catch { }
 
 			if (init)
@@ -1752,17 +1937,38 @@ namespace VPB
 			m_StartScanCo = null;
 		}
 
+		static int s_DeepScanLastManifestFlushScanned;
+
+		static void TryPeriodicManifestFlushDuringDeepScan(int scanned, int total)
+		{
+			if (scanned <= 0) return;
+			int step = Math.Max(2000, Math.Min(10000, total / 10));
+			if (scanned != total && scanned - s_DeepScanLastManifestFlushScanned < step) return;
+			s_DeepScanLastManifestFlushScanned = scanned;
+			ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try { VarPackageMgr.singleton?.Refresh(); } catch { }
+			});
+		}
+
 		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
 			if (packagesByUid == null) yield break;
+			System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 1);
+			try
+			{
 			// Reset per-pass scan counters so logged stats reflect THIS pass only,
 			// not the cumulative totals across all coalesced/follow-up passes.
 			VarPackage.ResetScanCounters();
+			s_DeepScanLastManifestFlushScanned = 0;
+			try { VpbLocalDatabase.ResetDeepScanSqlRebuildProgress(); } catch { }
 			Stopwatch indexAllSw = Stopwatch.StartNew();
 			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;
 			int allCount = packages.Length;
+			try { VpbProgressService.BeginDeepScan(allCount); } catch { }
 			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
+			int progressLogStep = Math.Max(uiUpdateStep, 2000);
 			string reasonsTag = GetCurrentReasonsForLog();
 			{
 				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
@@ -1814,18 +2020,41 @@ namespace VPB
 						idx = current;
 						if ((idx % uiUpdateStep) == 0 || idx == allCount)
 						{
-							MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+							try { VpbProgressService.ReportDeepScan(idx, allCount); } catch { }
+						}
+						if (VamStartupOptimizations.ShouldLogStartupDebug
+                            && ((idx % progressLogStep) == 0 || idx == allCount))
+						{
+							try
+							{
+								LogUtil.Log("[VPB.Startup] deep scan progress " + idx + "/" + allCount
+                                    + " elapsed_ms=" + indexAllSw.ElapsedMilliseconds);
+							}
+							catch { }
+						}
+						if ((idx % progressLogStep) == 0 || idx == allCount)
+						{
+							try { VpbLocalDatabase.NotifyDeepScanProgress(idx, allCount); } catch { }
 						}
 					}
 					yield return null;
 				}
 				doneEvent.Close();
 				idx = allCount;
-				MessageKit<string>.post(MessageDef.UpdateLoading, idx + "/" + allCount);
+				try { VpbProgressService.ReportDeepScan(idx, allCount); } catch { }
 			}
 			indexAllSw.Stop();
 			double indexSeconds = indexAllSw.Elapsed.TotalSeconds;
 			VamStartupProfiler.AddPhaseMs("vpb_scan_index", indexAllSw.Elapsed.TotalMilliseconds);
+			try
+			{
+				LogUtil.Log(VamStartupOptimizations.LogTag + " deep scan complete"
+                    + " pkgs=" + allCount
+                    + " sec=" + indexSeconds.ToString("0.00")
+                    + " ms=" + indexAllSw.ElapsedMilliseconds
+                    + " reason=" + reasonsTag);
+			}
+			catch { }
 			LogUtil.Log("VarPackageMgr index all packages " + allCount + " in " + indexSeconds.ToString("0.00") + "s (" + indexAllSw.ElapsedMilliseconds + "ms) reason=" + reasonsTag);
 			long total;
 			long cacheValidatedHit;
@@ -1833,6 +2062,12 @@ namespace VPB
 			long zipScan;
 			VarPackage.GetScanCounters(out total, out cacheValidatedHit, out cacheHit, out zipScan);
 			LogUtil.Log("VarPackageMgr scan stats total=" + total + " cacheValidatedHit=" + cacheValidatedHit + " cacheHit=" + cacheHit + " zipScan=" + zipScan + " reason=" + reasonsTag);
+			}
+			finally
+			{
+				try { VpbProgressService.EndDeepScan(); } catch { }
+				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
+			}
 		}
 
 		public List<string> GetAllVars()
@@ -2815,6 +3050,9 @@ namespace VPB
 
 		public static VarPackage GetPackage(string packageUidOrPath, bool ensureInstalled = true)
 		{
+			if (VamStartupOptimizations.TryShortCircuitAbsentVamXGetPackage(packageUidOrPath))
+				return null;
+
 			VarPackage TryResolve(string uidOrPath)
 			{
 				VarPackage resolved = null;
@@ -2871,7 +3109,8 @@ namespace VPB
 			{
 				try
 				{
-					if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+					if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value
+						&& VamStartupOptimizations.ShouldLogGetPackageNotFound(packageUidOrPath))
 					{
 						LogUtil.Log("GetPackage not found: " + packageUidOrPath);
 					}
@@ -3329,7 +3568,7 @@ namespace VPB
 					{
 						try
 						{
-							var ze = pkg.ZipFile.GetEntry(internalPath);
+							ZipEntry ze = pkg.ZipFile.GetEntry(internalPath);
 							if (ze != null)
 							{
 								value = new VarFileEntry(pkg, ze.Name, ze.DateTime, ze.Size);
@@ -3564,13 +3803,12 @@ namespace VPB
 			{
 				byte[] buffer = new byte[32768];
 				using (FileEntryStream fileEntryStream = OpenStream(fe))
+				using (MemoryStream destination = new MemoryStream())
 				{
-					byte[] array = new byte[fe.Size];
-					using (MemoryStream destination = new MemoryStream(array))
-					{
-						StreamUtils.Copy(fileEntryStream.Stream, destination, buffer);
-					}
-					return array;
+					StreamUtils.Copy(fileEntryStream.Stream, destination, buffer);
+					if (destination.Length > int.MaxValue)
+						throw new IOException("VAR entry too large for " + (fe.Uid ?? fe.Path ?? ""));
+					return destination.ToArray();
 				}
 			}
 			return File.ReadAllBytes(fe.Path);

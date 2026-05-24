@@ -127,6 +127,8 @@ namespace VPB
         private static volatile bool s_SqlRebuildDeferredPostReady;
         private static volatile bool s_SkipDeferredGallerySqlRebuild;
         private static volatile bool s_RebuildRunning;
+        private static volatile int s_PendingRescheduleAfterRunningRebuild;
+        static int s_LastSqlRebuildDeepScanProgress;
         private static volatile bool s_GalleryIndexBuildIndicatorPending;
         private static volatile int s_RebuildProgressDone;
         private static volatile int s_RebuildProgressTotal;
@@ -1960,6 +1962,7 @@ namespace VPB
         internal static void SetGalleryIndexBuildIndicatorPending(bool pending)
         {
             s_GalleryIndexBuildIndicatorPending = pending;
+            try { VpbProgressService.SetGalleryPending(pending); } catch { }
         }
 
         /// <summary>True while gallery SQLite index is being built or about to start (startup overlay).</summary>
@@ -1998,11 +2001,64 @@ namespace VPB
             return true;
         }
 
+        /// <summary>Registry populated (paths/Uids) but zip manifest may still be empty — allow SQL rebuild to start.</summary>
+        internal static void NotifyPackageRegistryReady()
+        {
+            bool manifestReady = false;
+            try { manifestReady = VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady; } catch { }
+            if (manifestReady) return;
+            lock (s_Sync)
+            {
+                s_SkipDeferredGallerySqlRebuild = false;
+                s_ReadyScanBinary = long.MinValue;
+                s_ReadyCategoriesSig = null;
+                s_ReadyPkgInvSig = null;
+            }
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag
+                    + " gallery SQL rebuild unlocked (registry ready, manifest cache empty until deep scan)");
+            }
+            catch { }
+            try { ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+        }
+
+        internal static void ResetDeepScanSqlRebuildProgress()
+        {
+            s_LastSqlRebuildDeepScanProgress = 0;
+        }
+
+        /// <summary>Progress telemetry while deep zip scan runs; schedules gallery SQL rebuild as scan advances.</summary>
+        internal static void NotifyDeepScanProgress(int scanned, int total)
+        {
+            if (total <= 0 || scanned <= 0) return;
+            int logStep = Math.Max(2000, total / 20);
+            bool logMilestone = scanned == total || (scanned % logStep) == 0;
+            if (logMilestone)
+            {
+                try
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " deep scan SQL wait"
+                        + " scanned=" + scanned + "/" + total
+                        + " manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0")
+                        + " sqlRebuildRunning=" + (s_RebuildRunning ? "1" : "0"));
+                }
+                catch { }
+            }
+
+            int rebuildStep = Math.Max(4000, total / 5);
+            if (scanned != total && scanned - s_LastSqlRebuildDeepScanProgress < rebuildStep)
+                return;
+            s_LastSqlRebuildDeepScanProgress = scanned;
+            try { ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+        }
+
         static void ResetGalleryIndexBuildProgress()
         {
             s_RebuildProgressDone = 0;
             s_RebuildProgressTotal = 0;
             s_GalleryIndexBuildIndicatorPending = false;
+            try { VpbProgressService.EndGalleryRebuild(); } catch { }
         }
 
         static void NoteGalleryIndexReadySkipDeferredRebuild(string reason, long catMemRows = -1)
@@ -2261,6 +2317,35 @@ namespace VPB
                     if (catMemRows <= 0)
                     {
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: cat_mem empty"); } catch { }
+                        return false;
+                    }
+
+                    int pkgCount = 0;
+                    using (var stPkg = conn.Prepare("SELECT COUNT(*) FROM pkg"))
+                    {
+                        if (stPkg.Step() == VpbSqlite3.SqliteRow)
+                            int.TryParse(stPkg.ColumnText(0), out pkgCount);
+                    }
+                    int liveCount = 0;
+                    try
+                    {
+                        lock (FileManager.packagesLock)
+                        {
+                            if (FileManager.PackagesByUid != null)
+                                liveCount = FileManager.PackagesByUid.Count;
+                        }
+                    }
+                    catch { }
+                    if (liveCount > 0 && pkgCount > 0
+                        && (pkgCount < (liveCount * 9) / 10
+                            || catMemRows < Math.Max(32, pkgCount / 4)))
+                    {
+                        try
+                        {
+                            LogUtil.Log("[VPB.Gallery] sqlRestore rejected: partial index pkg=" + pkgCount
+                                + " live=" + liveCount + " cat_mem=" + catMemRows);
+                        }
+                        catch { }
                         return false;
                     }
                 }
@@ -2703,6 +2788,20 @@ namespace VPB
                         }
                         if (liveCount > 0) return true;
                     }
+                    else
+                    {
+                        int liveCount = 0;
+                        lock (FileManager.packagesLock)
+                        {
+                            if (FileManager.PackagesByUid != null)
+                                liveCount = FileManager.PackagesByUid.Count;
+                        }
+                        if (liveCount > 0 && pkgCount < (liveCount * 9) / 10)
+                            return true;
+                        long catMemRows = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
+                        if (liveCount > 0 && catMemRows < Math.Max(32, pkgCount / 4))
+                            return true;
+                    }
                 }
             }
             catch { return true; }
@@ -2740,7 +2839,13 @@ namespace VPB
         static void QueueGalleryIndexUpdateWorker(bool forceFullRebuild)
         {
             if (s_RebuildScheduled || s_RebuildRunning) return;
-            if (TrySkipGalleryIndexRebuild()) return;
+
+            bool manifestReady = false;
+            try { manifestReady = VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady; } catch { }
+            if (!manifestReady)
+                forceFullRebuild = true;
+
+            if (!forceFullRebuild && TrySkipGalleryIndexRebuild()) return;
 
             if (!VpbSqlite3.IsAvailable) return;
 
@@ -2780,7 +2885,17 @@ namespace VPB
         /// <summary>Call after <see cref="FileManager"/> finishes a package scan.</summary>
         internal static void ScheduleGalleryIndexUpdateAfterScan(bool forceFullRebuild = false)
         {
-            if (s_RebuildScheduled || s_RebuildRunning) return;
+            if (s_RebuildScheduled || s_RebuildRunning)
+            {
+                Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
+                return;
+            }
+
+            bool manifestReady = false;
+            try { manifestReady = VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady; } catch { }
+            if (!manifestReady)
+                forceFullRebuild = true;
+
             if (!forceFullRebuild && TrySkipGalleryIndexRebuild()) return;
 
             if (!forceFullRebuild
@@ -2973,6 +3088,7 @@ namespace VPB
             try
             {
                 s_RebuildRunning = true;
+                try { VpbProgressService.BeginGalleryIncremental(); } catch { }
                 long scanAtStart = 0;
                 try { scanAtStart = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
                 if (scanAtStart == 0) return;
@@ -3053,12 +3169,13 @@ namespace VPB
 
         private static void RebuildWorker()
         {
+            long readyBefore;
+            lock (s_Sync) { readyBefore = s_ReadyScanBinary; }
             try
             {
                 s_RebuildRunning = true;
                 if (TrySkipGalleryIndexRebuild()) return;
                 RebuildCore();
-                try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
             }
             catch (Exception ex)
             {
@@ -3076,6 +3193,25 @@ namespace VPB
                 s_RebuildRunning = false;
                 s_RebuildScheduled = false;
                 ResetGalleryIndexBuildProgress();
+            }
+            long readyAfter;
+            lock (s_Sync) { readyAfter = s_ReadyScanBinary; }
+            if (readyAfter != long.MinValue && readyAfter != readyBefore)
+            {
+                try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
+            }
+            else if (Interlocked.CompareExchange(ref s_PendingRescheduleAfterRunningRebuild, 0, 1) == 1)
+            {
+                try { QueueGalleryIndexUpdateWorker(true); } catch { }
+            }
+            else
+            {
+                bool manifestReady = false;
+                try { manifestReady = VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady; } catch { }
+                if (manifestReady && NeedsFullGalleryIndexBuild())
+                {
+                    try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                }
             }
         }
 
@@ -3439,6 +3575,7 @@ namespace VPB
             string invSigForMeta = ComputePackageInventorySignature(pkgSnap);
             s_RebuildProgressTotal = pkgSnap != null ? pkgSnap.Count : 0;
             s_RebuildProgressDone = 0;
+            try { VpbProgressService.BeginGalleryRebuild(s_RebuildProgressTotal); } catch { }
 
             long tsFreq = Stopwatch.Frequency;
             Func<long, long> ticksToMs = t => (t <= 0 || tsFreq <= 0) ? 0 : (long)((t * 1000.0) / tsFreq);
@@ -3464,6 +3601,7 @@ namespace VPB
             int nPkgInserted = 0;
             int nDepInserted = 0;
             int nCatMemInserted = 0;
+            int nCatMemSkippedUnscanned = 0;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -3581,6 +3719,7 @@ namespace VPB
                                 tPkgRow += Stopwatch.GetTimestamp() - tPkg0;
                                 nPkgInserted++;
                                 s_RebuildProgressDone = nPkgInserted;
+                                try { VpbProgressService.ReportGalleryPackages(nPkgInserted, s_RebuildProgressTotal); } catch { }
 
                                 // Store transitive dependency edges (matches existing RecursivePackageDependencies-based behavior).
                                 try
@@ -3611,6 +3750,7 @@ namespace VPB
                                 if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
                                 {
                                     tEntryData += Stopwatch.GetTimestamp() - tEntry0;
+                                    nCatMemSkippedUnscanned++;
                                     continue;
                                 }
                                 tEntryData += Stopwatch.GetTimestamp() - tEntry0;
@@ -3717,6 +3857,7 @@ namespace VPB
                         }
 
                         // Recreate indexes after load (much faster than updating incrementally).
+                        try { VpbProgressService.ReportGalleryCreatingIndexes(); } catch { }
                         t0 = Stopwatch.GetTimestamp();
                         conn.ExecUtf8(
                             "CREATE INDEX IF NOT EXISTS idx_cm_cat ON cat_mem(category);" +
@@ -3778,7 +3919,8 @@ namespace VPB
                 sb.Append(" | counts=");
                 sb.Append("pkg=").Append(nPkgInserted).Append(',');
                 sb.Append("dep=").Append(nDepInserted).Append(',');
-                sb.Append("catMem=").Append(nCatMemInserted);
+                sb.Append("catMem=").Append(nCatMemInserted).Append(',');
+                sb.Append("catMemSkippedUnscanned=").Append(nCatMemSkippedUnscanned);
                 sb.Append(" | snap=");
                 sb.Append("cats=").Append(catSnap != null ? catSnap.Count : 0).Append(',');
                 sb.Append("pkgs=").Append(pkgSnap != null ? pkgSnap.Count : 0);
@@ -3792,6 +3934,21 @@ namespace VPB
             catch { }
 
             if (rebuildAbortReason != null) return;
+
+            int scannedPkgEstimate = Math.Max(0, nPkgInserted - nCatMemSkippedUnscanned);
+            int catMemDenom = scannedPkgEstimate > 0 ? scannedPkgEstimate : nPkgInserted;
+            bool catMemUsable = nCatMemInserted >= Math.Max(32, Math.Max(1, catMemDenom) / 4);
+            if (!catMemUsable)
+            {
+                try
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery SQL pkg pass only (cat_mem waits for deep scan)"
+                        + " pkg=" + nPkgInserted + " catMem=" + nCatMemInserted
+                        + " skippedUnscanned=" + nCatMemSkippedUnscanned);
+                }
+                catch { }
+                return;
+            }
 
             lock (s_Sync)
             {

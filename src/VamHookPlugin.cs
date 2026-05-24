@@ -312,6 +312,7 @@ namespace VPB
 
         public static VamHookPlugin singleton;
         private static bool s_FileManagerInitialRefreshCompleted;
+        private static bool s_UiPendingWarnLogged;
 
         public static string CurrentScenePackageUid;
 
@@ -1079,6 +1080,7 @@ namespace VPB
             VPBLogger.Init(); // in case the plugin is ever partially reloaded for some reason
             MessageKit<string>.addObserver(MessageDef.UpdateLoading, OnProgress);
             MessageKit.addObserver(MessageDef.DeactivateWorldUI, OnDeactivateWorldUI);
+            try { VpbProgressService.EnsureOverlay(); } catch { }
 
         }
         void OnDisable()
@@ -1196,6 +1198,22 @@ namespace VPB
             try
             {
                 LogUtil.StartupWatchdogUpdate(IsFileManagerInited, m_UIInited);
+                if (!m_UIInited && IsFileManagerInited && SuperController.singleton != null && !s_UiPendingWarnLogged)
+                {
+                    float waitUi = Time.realtimeSinceStartup - LogUtil.GetPluginSessionEngineStartSeconds();
+                    if (waitUi > 30f)
+                    {
+                        s_UiPendingWarnLogged = true;
+                        try
+                        {
+                            LogUtil.LogWarning("[VPB.Startup] UI init pending despite registry ready"
+                                + " | wait_sec=" + waitUi.ToString("0")
+                                + " | hubBrowse=" + (MVR.Hub.HubBrowse.singleton != null ? "1" : "0")
+                                + " | fileBrowserWorldUI=" + (SuperController.singleton.fileBrowserWorldUI != null ? "1" : "0"));
+                        }
+                        catch { }
+                    }
+                }
             }
             catch { }
 
@@ -1299,23 +1317,20 @@ namespace VPB
             }
             if (!m_UIInited)
             {
-                if (IsFileManagerInited)
+                if (IsFileManagerInited && SuperController.singleton != null)
                 {
-                    if (MVR.Hub.HubBrowse.singleton != null)
+                    try
                     {
-                        CreateHubBrowse();
-                        CreateFileBrowser();
-                        m_UIInited = true;
-                        LogUtil.LogReadyOnce("UI initialized");
+                        if (MVR.Hub.HubBrowse.singleton != null)
+                            CreateHubBrowse();
                     }
-                    else if (VdsLauncher.IsVdsEnabled())
+                    catch (Exception ex)
                     {
-                        // In VDS mode, HubBrowse might not be available, but we still want to mark UI as inited
-                        // to enable FPS display and other UI features.
-                        CreateFileBrowser();
-                        m_UIInited = true;
-                        LogUtil.LogReadyOnce("UI initialized (VDS)");
+                        try { LogUtil.LogWarning("[VPB.Startup] CreateHubBrowse skipped: " + ex.Message); } catch { }
                     }
+                    try { CreateFileBrowser(); } catch { }
+                    m_UIInited = true;
+                    LogUtil.LogReadyOnce("UI initialized");
                 }
             }
 
@@ -1425,14 +1440,17 @@ namespace VPB
                 child.AddComponent<VPB.ImageLoadingMgr>();
                 child.AddComponent<VPB.Gallery>();
                 LogUtil.Log("Base components initialized on " + child.name);
+                FileManager.RegisterRegistryReadyHandler(() =>
+                {
+                    if (!IsFileManagerInited)
+                    {
+                        IsFileManagerInited = true;
+                        try { LogUtil.Log("[VPB.Startup] IsFileManagerInited=true (registry ready, deep scan may still run)"); } catch { }
+                    }
+                    TryAutoInstall();
+                });
                 FileManager.RegisterRefreshHandler(() =>
                 {
-                    IsFileManagerInited = true;
-                    TryAutoInstall();
-                    // Cache write is non-critical for UI readiness; defer until after READY so
-                    // first-startup writes (which can be tens of MB on large libraries) do not
-                    // sit on the critical UI-ready path. Subsequent refreshes also queue here
-                    // (they're always dirty-gated via VarPackageMgr.dirtyExternal).
                     LogUtil.RegisterPostReadyOnce(() => VarPackageMgr.singleton.Refresh());
                 });
             }
@@ -2018,7 +2036,8 @@ namespace VPB
             int alphaInt = Mathf.RoundToInt(m_WindowAlphaState * 255);
             string alphaHex = alphaInt.ToString("X2");
             // Use a less bright green (LimeGreen #32CD32 approx) instead of pure #00FF00
-            GUILayout.Label(string.Format("<color=#32CD32{0}><b>{1}</b></color> {2}", alphaHex, FileManager.s_InstalledCount, m_ProgressText), m_StyleHeader);
+            string headerProgress = "";
+            GUILayout.Label(string.Format("<color=#32CD32{0}><b>{1}</b></color> {2}", alphaHex, FileManager.s_InstalledCount, headerProgress), m_StyleHeader);
 
             GUILayout.FlexibleSpace();
             const float buttonHeight = 22f;
@@ -2122,21 +2141,6 @@ namespace VPB
                         {
                             m_ShowSpaceSaverWindow = !m_ShowSpaceSaverWindow;
                         }
-                    }
-
-                    // Show progress bar under button if running and (minimized or in auto mode)
-                    if (stats.IsRunning && (!m_ShowSpaceSaverWindow || Settings.Instance.AutoOptimizeCache.Value))
-                    {
-                        GUILayout.Space(2);
-                        float progress = stats.TotalFiles > 0 ? (float)stats.ProcessedFiles / stats.TotalFiles : 0f;
-                        var progressRect = GUILayoutUtility.GetRect(0f, 4f, GUILayout.ExpandWidth(true));
-
-                        // Use solid color for progress bar to ensure visibility
-                        var prevColorProgressBar = GUI.color;
-                        GUI.color = new Color(0.2f, 1f, 0.2f, 0.8f); // Bright green
-                        GUI.DrawTexture(new Rect(progressRect.x, progressRect.y, progressRect.width * progress, progressRect.height), Texture2D.whiteTexture);
-                        GUI.color = prevColorProgressBar;
-                        GUILayout.Space(2);
                     }
 
                     // Handle completion report for Auto Mode
@@ -2332,36 +2336,6 @@ namespace VPB
                 GUI.color = prevColor;
                 GUI.depth = prevDepth;
             }
-            else if (m_Inited
-                && Settings.Instance != null
-                && Settings.Instance.ShowGalleryIndexBuildOverlay != null
-                && Settings.Instance.ShowGalleryIndexBuildOverlay.Value)
-            {
-                string indexOverlayText;
-                if (VpbLocalDatabase.TryGetGalleryIndexBuildOverlayText(out indexOverlayText))
-                {
-                    EnsureStyles();
-                    var prevDepth = GUI.depth;
-                    var prevColor = GUI.color;
-                    GUI.depth = -10000;
-                    GUI.color = Color.white;
-                    var overlayRect = new Rect(0f, 0f, Screen.width / m_UIScale, Screen.height / m_UIScale);
-                    GUI.DrawTexture(overlayRect, m_TexLoadingOverlay);
-
-                    var labelStyle = (m_StyleHeader != null) ? m_StyleHeader : GUI.skin.label;
-                    var prevAlign = labelStyle.alignment;
-                    var prevWrap = labelStyle.wordWrap;
-                    labelStyle.alignment = TextAnchor.MiddleCenter;
-                    labelStyle.wordWrap = true;
-                    GUI.Label(overlayRect, indexOverlayText, labelStyle);
-                    labelStyle.alignment = prevAlign;
-                    labelStyle.wordWrap = prevWrap;
-
-                    GUI.color = prevColor;
-                    GUI.depth = prevDepth;
-                }
-            }
-
             if (m_Inited)
             {
                 bool show = true;

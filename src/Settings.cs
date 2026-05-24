@@ -73,6 +73,7 @@ namespace VPB
         public ConfigEntry<bool> StartupPreferIncrementalGallerySqlIndex;
         public ConfigEntry<int> StartupIncrementalGallerySqlMaxDelta;
         public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
+        public ConfigEntry<bool> StartupDeferPackageDeepScanUntilReady;
         public ConfigEntry<bool> StartupUseCachedVarPathInventory;
         public ConfigEntry<bool> StartupSqlBatchCatMem;
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
@@ -151,11 +152,11 @@ namespace VPB
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
-            ShowGalleryIndexBuildOverlay = config.Bind<bool>("UI", "ShowGalleryIndexBuildOverlay", true, "Show full-screen overlay while the gallery SQLite index is being built at startup. Warns not to close VaM during first-time or full rebuild indexing.");
+            ShowGalleryIndexBuildOverlay = config.Bind<bool>("UI", "ShowGalleryIndexBuildOverlay", true, "Show top progress banner while VAR packages are scanned and the gallery SQLite index is built at startup. Warns not to close VaM during first-time or full rebuild indexing.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", false, "Hide older versions of VAR packages in the gallery; show only the newest version per Creator.Package family.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
-            SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. Disable only if it introduces unexpected stalls; coalesced refresh still fires ~250ms later.");
+            SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous coalesced native VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. When false: coalesced native refresh only (~250ms delay) — first-click preset apply for on-demand packages may miss catalog entries until refresh completes; safe to disable if sync refresh causes stalls. No full VPB rescan on preset apply.");
             HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
@@ -175,6 +176,7 @@ namespace VPB
             StartupPreferIncrementalGallerySqlIndex = config.Bind<bool>("Startup", "PreferIncrementalGallerySqlIndex", true, "When package inventory changes by a small delta (Hub download, few adds/removes), patch the gallery SQLite index instead of DELETE+rebuild of all rows.");
             StartupIncrementalGallerySqlMaxDelta = config.Bind<int>("Startup", "IncrementalGallerySqlMaxDelta", 0, "Max package add+remove count for incremental SQL index (0 = auto: min(32, 20% of indexed packages)). Larger changes use full rebuild.");
             StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
+            StartupDeferPackageDeepScanUntilReady = config.Bind<bool>("Startup", "DeferPackageDeepScanUntilReady", true, "When manifest/SQL cache is missing, register all .var paths immediately but defer per-package zip deep scan (DumpVarPackage) until World UI / startup-ready. Unblocks VPB UI on cold start without SQL; gallery SQL waits until scan completes.");
             StartupUseCachedVarPathInventory = config.Bind<bool>("Startup", "UseCachedVarPathInventory", true, "Skip recursive AddonPackages/AllPackages .var walks when SQLite path inventory validates (parallel stat checks). Saves ~15s on large libraries when packages unchanged.");
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");

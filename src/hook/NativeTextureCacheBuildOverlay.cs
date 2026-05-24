@@ -15,11 +15,16 @@ namespace VPB
         private Text m_SubText;
         private RectTransform m_BarBgRT;
         private RectTransform m_BarFillRT;
+        private RectTransform m_BarStripRT;
         private Text m_ReportText;
         private GameObject m_CancelButtonGO;
         private RectTransform m_CancelButtonRT;
         private GameObject m_OkButtonGO;
         private RectTransform m_OkButtonRT;
+
+        private float m_ForwardProgress01;
+        private const float IndeterminateStripWidth01 = 0.28f;
+        private const float IndeterminateCycleSec = 1.35f;
 
         public static void EnsureCreated()
         {
@@ -37,10 +42,21 @@ namespace VPB
 
         private void Update()
         {
+            try { VpbProgressService.PollStartupCompletion(); } catch { }
+            try { VpbProgressService.PollBulkZstdProgress(); } catch { }
+
+            VpbProgressService.DisplaySnapshot active;
+            if (VpbProgressService.TryGetActiveDisplaySnapshot(out active))
+            {
+                ApplyActiveProgressSnapshot(active);
+                return;
+            }
+
             var snapshot = NativeTextureOnDemandCache.GetUiSnapshot();
             if (!snapshot.Visible)
             {
                 if (m_BannerGO != null && m_BannerGO.activeSelf) m_BannerGO.SetActive(false);
+                ResetProgressBarMotion();
                 return;
             }
 
@@ -58,7 +74,45 @@ namespace VPB
             if (m_TitleText != null) m_TitleText.text = snapshot.Title ?? string.Empty;
             if (m_SubText != null) m_SubText.text = snapshot.Subtitle ?? string.Empty;
 
+            if (m_CancelButtonGO != null && !m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(true);
+
+            SetMovingStripVisible(false);
             UpdateProgressBar(snapshot.Progress01);
+        }
+
+        private void ApplyActiveProgressSnapshot(VpbProgressService.DisplaySnapshot snapshot)
+        {
+            ExitSummaryMode();
+            if (m_BannerGO != null && !m_BannerGO.activeSelf) m_BannerGO.SetActive(true);
+            if (m_TitleText != null) m_TitleText.text = snapshot.Title ?? string.Empty;
+            if (m_SubText != null) m_SubText.text = snapshot.Subtitle ?? string.Empty;
+
+            bool showCancel = snapshot.Cancellable;
+            if (m_CancelButtonGO != null)
+            {
+                if (showCancel && !m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(true);
+                if (!showCancel && m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(false);
+            }
+
+            if (snapshot.Progress01 < 0f)
+            {
+                ClearProgressBarFill();
+                SetMovingStripVisible(snapshot.ShowMovingStrip);
+                if (snapshot.ShowMovingStrip) UpdateProgressBarStrip();
+            }
+            else
+            {
+                UpdateProgressBar(snapshot.Progress01);
+                SetMovingStripVisible(snapshot.ShowMovingStrip);
+                if (snapshot.ShowMovingStrip) UpdateProgressBarStrip();
+            }
+        }
+
+        private void ResetProgressBarMotion()
+        {
+            m_ForwardProgress01 = 0f;
+            SetMovingStripVisible(false);
+            ClearProgressBarFill();
         }
 
         private void CreateUI()
@@ -140,6 +194,19 @@ namespace VPB
             barFillImg.color = new Color(0.3f, 0.8f, 0.35f, 0.9f);
             barFillImg.raycastTarget = false;
 
+            var barStripGO = new GameObject("BarStrip");
+            barStripGO.transform.SetParent(barBgGO.transform, false);
+            m_BarStripRT = barStripGO.AddComponent<RectTransform>();
+            m_BarStripRT.anchorMin = new Vector2(0f, 0f);
+            m_BarStripRT.anchorMax = new Vector2(0f, 1f);
+            m_BarStripRT.pivot = new Vector2(0f, 0.5f);
+            m_BarStripRT.anchoredPosition = Vector2.zero;
+            m_BarStripRT.sizeDelta = new Vector2(0f, 0f);
+            var barStripImg = barStripGO.AddComponent<Image>();
+            barStripImg.color = new Color(0.55f, 0.95f, 0.6f, 0.95f);
+            barStripImg.raycastTarget = false;
+            barStripGO.SetActive(false);
+
             var reportGO = new GameObject("Report");
             reportGO.transform.SetParent(m_BannerGO.transform, false);
             m_ReportText = reportGO.AddComponent<Text>();
@@ -160,7 +227,7 @@ namespace VPB
 
             m_CancelButtonGO = UI.CreateUIButton(m_BannerGO, 132, 40, "Cancel", 18, 0, 0, AnchorPresets.middleCenter, () =>
             {
-                NativeTextureOnDemandCache.RequestCancel();
+                VpbProgressService.RequestCancelActiveJob();
             });
             m_CancelButtonRT = m_CancelButtonGO.GetComponent<RectTransform>();
             if (m_CancelButtonRT != null)
@@ -200,6 +267,22 @@ namespace VPB
             m_BannerGO.SetActive(false);
         }
 
+        private void ClearProgressBarFill()
+        {
+            if (m_BarFillRT == null) return;
+            m_BarFillRT.anchorMin = new Vector2(0f, 0f);
+            m_BarFillRT.anchorMax = new Vector2(0f, 1f);
+            m_BarFillRT.offsetMin = Vector2.zero;
+            m_BarFillRT.offsetMax = Vector2.zero;
+        }
+
+        private void SetMovingStripVisible(bool visible)
+        {
+            if (m_BarStripRT == null) return;
+            if (m_BarStripRT.gameObject.activeSelf != visible)
+                m_BarStripRT.gameObject.SetActive(visible);
+        }
+
         private void UpdateProgressBar(float progress01)
         {
             if (m_BarBgRT == null || m_BarFillRT == null) return;
@@ -207,11 +290,31 @@ namespace VPB
             float p = progress01;
             if (p < 0f) p = 0f;
             if (p > 1f) p = 1f;
+            if (p > m_ForwardProgress01) m_ForwardProgress01 = p;
+            p = m_ForwardProgress01;
 
             m_BarFillRT.anchorMin = new Vector2(0f, 0f);
             m_BarFillRT.anchorMax = new Vector2(p, 1f);
             m_BarFillRT.offsetMin = Vector2.zero;
             m_BarFillRT.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>Indeterminate: fixed-width strip marches left → right, then loops.</summary>
+        private void UpdateProgressBarStrip()
+        {
+            if (m_BarStripRT == null) return;
+
+            float cycle = IndeterminateCycleSec > 0.001f
+                ? (Time.unscaledTime % IndeterminateCycleSec) / IndeterminateCycleSec
+                : 0f;
+            float stripW = Mathf.Clamp(IndeterminateStripWidth01, 0.08f, 0.45f);
+            float maxStart = 1f - stripW;
+            float start = cycle * maxStart;
+
+            m_BarStripRT.anchorMin = new Vector2(start, 0f);
+            m_BarStripRT.anchorMax = new Vector2(start + stripW, 1f);
+            m_BarStripRT.offsetMin = Vector2.zero;
+            m_BarStripRT.offsetMax = Vector2.zero;
         }
 
         private void EnterSummaryMode(string title, string summary)

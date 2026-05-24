@@ -25,6 +25,8 @@ namespace VPB
         private const int AlphaCacheVersion = 3;
         /// <summary>Max decompressed bytes for zstd serve on calling thread (LoadImage immediate, etc.).</summary>
         private const int MaxSyncDecompressedPayloadBytes = 8 * 1024 * 1024;
+        private const int MaxCachePayloadBytes = 32 * 1024 * 1024;
+        private const int MaxCacheDimension = 8192;
 
         private readonly Queue<DecompressedData> pendingMainThreadTextureCreates = new Queue<DecompressedData>();
         private readonly object pendingMainThreadLock = new object();
@@ -204,9 +206,37 @@ namespace VPB
                 queueCreateMipMaps, meta.CreateMipMaps, meta.MipStorage, data.Length, meta.Width, meta.Height, meta.Format);
         }
 
+        private static bool IsCacheMetaAndPayloadSane(MetadataEntry meta, byte[] data)
+        {
+            if (meta == null || data == null || data.Length == 0) return false;
+            if (data.Length > MaxCachePayloadBytes) return false;
+            if (meta.Width <= 0 || meta.Height <= 0) return false;
+            if (meta.Width > MaxCacheDimension || meta.Height > MaxCacheDimension) return false;
+            long pixels = (long)meta.Width * meta.Height;
+            if (pixels > (long)MaxCacheDimension * MaxCacheDimension) return false;
+            return true;
+        }
+
+        private static void TryDeleteCorruptNativeCache(string nativePath)
+        {
+            if (string.IsNullOrEmpty(nativePath)) return;
+            try
+            {
+                if (File.Exists(nativePath)) File.Delete(nativePath);
+            }
+            catch { }
+            try
+            {
+                string meta = nativePath + "meta";
+                if (File.Exists(meta)) File.Delete(meta);
+            }
+            catch { }
+        }
+
         private static bool IsRawDataValidForMeta(MetadataEntry meta, byte[] data, bool queueCreateMipMaps = false, string diskCachePath = null)
         {
             if (meta == null || data == null || data.Length == 0) return false;
+            if (!IsCacheMetaAndPayloadSane(meta, data)) return false;
 
             bool legacyMipMeta = TextureUtil.DiskCacheMetaLacksMipFields(diskCachePath);
 
@@ -593,6 +623,8 @@ namespace VPB
                 
                 int w = metaJson["width"].AsInt;
                 int h = metaJson["height"].AsInt;
+                if (w <= 0 || h <= 0 || w > MaxCacheDimension || h > MaxCacheDimension)
+                    return null;
                 TextureFormat fmt = TextureFormat.RGBA32;
                 try { fmt = (TextureFormat)Enum.Parse(typeof(TextureFormat), metaJson["format"].Value); } catch { }
                 
@@ -914,9 +946,22 @@ namespace VPB
                     return;
                 }
 
+                if (data.Length > MaxCachePayloadBytes)
+                {
+                    try
+                    {
+                        LogUtil.LogWarning("[VPB] Rejecting oversize native cache (" + data.Length + " bytes): " + nativePath);
+                    }
+                    catch { }
+                    TryDeleteCorruptNativeCache(nativePath);
+                    lock (inflightLock) { inflightKeys.Remove(cacheKey); }
+                    return;
+                }
+
                 bool queueMip = ResolveQueueCreateMipMaps(qi);
                 if (!IsRawDataValidForMeta(meta, data, queueMip, nativePath))
                 {
+                    TryDeleteCorruptNativeCache(nativePath);
                     lock (inflightLock) { inflightKeys.Remove(cacheKey); }
                     return;
                 }
@@ -1063,6 +1108,13 @@ namespace VPB
                     LogUtil.Log($"[VPB SIM] CreateTexture: path='{path}', isSimPath={isSimTexturePath}, metaIsReadable={data.Meta.IsReadable}, finalIsSim={isSimTexture}");
                 }
 
+                if (!IsCacheMetaAndPayloadSane(data.Meta, data.Data))
+                {
+                    LogUtil.LogWarning("[VPB] CreateTexture rejected insane cache payload for " + path);
+                    lock (inflightLock) { inflightKeys.Remove(data.CacheKey); }
+                    return;
+                }
+
                 bool createMipMaps = data.Meta.CreateMipMaps;
                 if (!createMipMaps && data.OriginalQI != null)
                     createMipMaps = ResolveQueueCreateMipMaps(data.OriginalQI);
@@ -1207,6 +1259,7 @@ namespace VPB
 
             LogUtil.Log("Starting bulk Zstd compression from " + nativeCacheDir + " to " + vpbCacheDir);
             CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = false, StartTime = DateTime.Now };
+            try { VpbProgressService.BeginBulkZstd(decompress: false); } catch { }
 
             ThreadPool.QueueUserWorkItem((state) =>
             {
@@ -1218,6 +1271,7 @@ namespace VPB
                 {
                     LogUtil.LogError("Bulk Zstd compression failed: " + ex.ToString());
                     CurrentZstdStats.IsRunning = false;
+                    try { VpbProgressService.EndBulkZstd(); } catch { }
                 }
             });
         }
@@ -1547,6 +1601,7 @@ namespace VPB
 
             LogUtil.Log("Starting bulk Zstd decompression from " + vpbCacheDir + " to " + nativeCacheDir);
             CurrentZstdStats = new ZstdStats { IsRunning = true, IsDecompression = true, StartTime = DateTime.Now };
+            try { VpbProgressService.BeginBulkZstd(decompress: true); } catch { }
 
             ThreadPool.QueueUserWorkItem((state) =>
             {
@@ -1558,6 +1613,7 @@ namespace VPB
                 {
                     LogUtil.LogError("Bulk Zstd decompression failed: " + ex.ToString());
                     CurrentZstdStats.IsRunning = false;
+                    try { VpbProgressService.EndBulkZstd(); } catch { }
                 }
             });
         }

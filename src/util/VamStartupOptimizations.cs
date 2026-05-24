@@ -102,6 +102,47 @@ namespace VPB
             }
         }
 
+        public static bool DeferPackageDeepScanUntilReady
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst == null || inst.StartupDeferPackageDeepScanUntilReady == null) return true;
+                    return inst.StartupDeferPackageDeepScanUntilReady.Value;
+                }
+                catch { return true; }
+            }
+        }
+
+        public static bool ShouldLogStartupDebug
+        {
+            get
+            {
+                try
+                {
+                    var inst = Settings.Instance;
+                    if (inst == null) return false;
+                    if (inst.LogStartupDetails != null && inst.LogStartupDetails.Value) return true;
+                    if (inst.LogStartupTiming != null && inst.LogStartupTiming.Value) return true;
+                }
+                catch { }
+                return false;
+            }
+        }
+
+        public static void StartupDebug(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            try
+            {
+                if (!ShouldLogStartupDebug) return;
+                LogUtil.Log("[VPB.Startup] " + message);
+            }
+            catch { }
+        }
+
         public static bool UseCachedVarPathInventory
         {
             get
@@ -228,6 +269,46 @@ namespace VPB
                 return;
             }
             s_VamXKnownAbsent = true;
+        }
+
+        /// <summary>When vamX was confirmed absent, skip repeated VPB GetPackage lookups (VaM polls every frame).</summary>
+        public static bool TryShortCircuitAbsentVamXGetPackage(string packageUidOrPath)
+        {
+            if (!s_VamXKnownAbsent || string.IsNullOrEmpty(packageUidOrPath)) return false;
+            return packageUidOrPath.StartsWith("vamX", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>Suppress noisy GetPackage-not-found logs for basename/icon/scene probes that are not var UIDs.</summary>
+        public static bool ShouldLogGetPackageNotFound(string packageUidOrPath)
+        {
+            if (string.IsNullOrEmpty(packageUidOrPath)) return false;
+            if (TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return false;
+            return LooksLikeVarPackageLookup(packageUidOrPath);
+        }
+
+        static bool LooksLikeVarPackageLookup(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            if (IsInvalidPackageFolderProbe(s)) return false;
+            if (s.IndexOf("AddonPackages/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (s.IndexOf("AllPackages/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)) return true;
+            if (s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) return true;
+            int firstDot = s.IndexOf('.');
+            if (firstDot <= 0) return false;
+            int secondDot = s.IndexOf('.', firstDot + 1);
+            return secondDot > firstDot;
+        }
+
+        static bool IsInvalidPackageFolderProbe(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return true;
+            string norm = s.Replace('\\', '/').Trim();
+            if (norm.Equals("AddonPackages/E", StringComparison.OrdinalIgnoreCase)
+                || norm.Equals("AllPackages/E", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (norm.Length == 1 && char.IsLetter(norm[0])) return true;
+            return false;
         }
 
         public static bool IsVamXBootstrapPath(string path)

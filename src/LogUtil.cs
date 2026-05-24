@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -162,6 +162,10 @@ namespace VPB
             readyLoggedRealtime = 0f;
             sincePluginAwake.Reset();
             pluginAwakeMarked = false;
+        }
+        public static float GetPluginSessionEngineStartSeconds()
+        {
+            return pluginSessionEngineStartSeconds;
         }
 
         public static void RegisterPostReadyOnce(Action action)

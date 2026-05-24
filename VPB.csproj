@@ -302,6 +302,7 @@
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
     <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
+    <Compile Include="src\hook\VpbProgressService.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />
     <Compile Include="src\hook\TurboJpegStats.cs" />
