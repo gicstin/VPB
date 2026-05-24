@@ -37,7 +37,10 @@ namespace VPB
 
                 case RefreshScope.NativeOnly:
                     if (flushNativeImmediately)
-                        VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh(r);
+                    {
+                        if (!VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh(r))
+                            VamOnDemandLoader.RunVamFileManagerRefreshNow(r);
+                    }
                     else
                         VamOnDemandLoader.RequestCoalescedVamRefresh(r);
                     break;

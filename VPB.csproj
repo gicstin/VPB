@@ -276,6 +276,7 @@
     <Compile Include="src\ByteArrayPool.cs" />
     <Compile Include="src\ClothingLoadingUtils.cs" />
     <Compile Include="src\SceneUtils.cs" />
+    <Compile Include="src\SceneLoadInstrumentation.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\XrUtils.cs" />

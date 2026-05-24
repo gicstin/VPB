@@ -333,145 +333,6 @@ namespace VPB
 
         private static readonly char[] s_InvalidFileNameChars = System.IO.Path.GetInvalidFileNameChars();
 
-        private static void TryPurgeSimZstdCacheVariants(string imgPath, MVR.FileManagement.FileEntry fileEntry, string cacheDir)
-        {
-            if (string.IsNullOrEmpty(imgPath) || fileEntry == null || string.IsNullOrEmpty(cacheDir)) return;
-            try
-            {
-                string fileName = System.IO.Path.GetFileName(imgPath);
-                fileName = SanitizeFileName(fileName).Replace('.', '_');
-                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
-
-                string sizeStr = fileEntry.Size.ToString();
-                string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
-                string prefix = fileName + "_" + sizeStr + "_" + timeStr + "_";
-
-                string[] matches;
-                try { matches = Directory.GetFiles(cacheDir, prefix + "*.zvamcache", SearchOption.TopDirectoryOnly); }
-                catch { matches = null; }
-                if (matches == null || matches.Length == 0) return;
-
-                int deleted = 0;
-                for (int i = 0; i < matches.Length; i++)
-                {
-                    string p = matches[i];
-                    if (string.IsNullOrEmpty(p)) continue;
-                    // Only purge .zvamcache files that VPB itself wrote as a sim/readable variant.
-                    // Bulk-compressed files originating from VaM's native cache have no isReadable
-                    // field in their meta → IsZstdMetaReadable returns false → leave them alone.
-                    // Purging those would cause VaM to regenerate .vamcache unnecessarily.
-                    if (!IsZstdMetaReadable(p)) continue;
-                    try
-                    {
-                        if (File.Exists(p))
-                        {
-                            File.Delete(p);
-                            deleted++;
-                        }
-                    }
-                    catch { }
-
-                    try
-                    {
-                        string meta = p + "meta";
-                        if (File.Exists(meta)) File.Delete(meta);
-                    }
-                    catch { }
-                }
-
-                try
-                {
-                    if (deleted > 0 && Settings.Instance != null && Settings.Instance.TextureLogLevel != null && Settings.Instance.TextureLogLevel.Value >= 1)
-                        LogUtil.Log($"[VPB SIM] Purged {deleted} corrupted .zvamcache file(s) for sim texture: {imgPath}");
-                }
-                catch { }
-            }
-            catch { }
-        }
-
-        private static bool IsZstdMetaReadable(string zvamcachePath)
-        {
-            if (string.IsNullOrEmpty(zvamcachePath)) return false;
-            try
-            {
-                string metaPath = zvamcachePath + "meta";
-                if (!File.Exists(metaPath)) return false;
-                string json = File.ReadAllText(metaPath);
-                if (string.IsNullOrEmpty(json)) return false;
-                var n = SimpleJSON.JSON.Parse(json);
-                if (n == null) return false;
-                return n["isReadable"].AsBool;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool AnyMatchingZstdVariantHasReadableMeta(string imgPath, MVR.FileManagement.FileEntry fileEntry, string cacheDir)
-        {
-            if (string.IsNullOrEmpty(imgPath) || fileEntry == null || string.IsNullOrEmpty(cacheDir)) return false;
-            try
-            {
-                string fileName = System.IO.Path.GetFileName(imgPath);
-                fileName = SanitizeFileName(fileName).Replace('.', '_');
-                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
-
-                string sizeStr = fileEntry.Size.ToString();
-                string timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
-                string prefix = fileName + "_" + sizeStr + "_" + timeStr + "_";
-
-                string[] matches;
-                try { matches = Directory.GetFiles(cacheDir, prefix + "*.zvamcache", SearchOption.TopDirectoryOnly); }
-                catch { matches = null; }
-                if (matches == null || matches.Length == 0) return false;
-
-                for (int i = 0; i < matches.Length; i++)
-                {
-                    string p = matches[i];
-                    if (string.IsNullOrEmpty(p)) continue;
-                    if (IsZstdMetaReadable(p)) return true;
-                }
-                return false;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void TryPurgeSimZstdByFilenameFallback(string imgPath, string cacheDir)
-        {
-            if (string.IsNullOrEmpty(imgPath) || string.IsNullOrEmpty(cacheDir)) return;
-            try
-            {
-                string fileName = System.IO.Path.GetFileName(imgPath);
-                fileName = SanitizeFileName(fileName).Replace('.', '_');
-                if (string.IsNullOrEmpty(fileName)) return;
-                if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
-
-                // Fallback for early scene-load where FileEntry is not available yet.
-                // Cache filenames are: {fileName}_{size}_{time}_{sig}.zvamcache
-                // We match by sanitized filename only, then delete the variants.
-                string[] matches;
-                try { matches = Directory.GetFiles(cacheDir, fileName + "_*_*.zvamcache", SearchOption.TopDirectoryOnly); }
-                catch { matches = null; }
-                if (matches == null || matches.Length == 0) return;
-
-                for (int i = 0; i < matches.Length; i++)
-                {
-                    string p = matches[i];
-                    if (string.IsNullOrEmpty(p)) continue;
-                    // Only purge .zvamcache files that VPB itself wrote (isReadable=true in meta).
-                    // Bulk-compressed files from VaM's native cache have no isReadable field → spare them.
-                    if (!IsZstdMetaReadable(p)) continue;
-                    try { if (File.Exists(p)) File.Delete(p); } catch { }
-                    try { string meta = p + "meta"; if (File.Exists(meta)) File.Delete(meta); } catch { }
-                }
-            }
-            catch { }
-        }
-
         public static string SanitizeFileName(string value)
         {
             if (string.IsNullOrEmpty(value)) return "img";
@@ -500,11 +361,18 @@ namespace VPB
                 try
                 {
                     FileEntry vpbEntry = FileManager.GetFileEntry(imgPath);
-                    VarFileEntry vfe = vpbEntry as VarFileEntry;
-                    if (vfe != null) return vfe.EntrySize;
+                    if (vpbEntry != null) return GetFileEntryCacheSizeToken(vpbEntry);
                 }
                 catch { }
             }
+            return fileEntry.Size;
+        }
+
+        public static long GetFileEntryCacheSizeToken(FileEntry fileEntry)
+        {
+            if (fileEntry == null) return 0;
+            VarFileEntry vfe = fileEntry as VarFileEntry;
+            if (vfe != null) return vfe.EntrySize;
             return fileEntry.Size;
         }
 
@@ -873,7 +741,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return null;
 
-            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+            var fileEntry = FileManager.GetFileEntry(imgPath);
             string textureCacheDir = MVR.FileManagement.CacheManager.GetTextureCacheDir();
             if (fileEntry == null || string.IsNullOrEmpty(textureCacheDir)) return null;
 
@@ -895,8 +763,8 @@ namespace VPB
             if (string.IsNullOrEmpty(cachePath)) return false;
             try
             {
-                if (MVR.FileManagement.FileManager.FileExists(cachePath)
-                    && MVR.FileManagement.FileManager.FileExists(cachePath + "meta"))
+                if (FileManager.FileExists(cachePath)
+                    && FileManager.FileExists(cachePath + "meta"))
                 {
                     return true;
                 }
@@ -958,14 +826,14 @@ namespace VPB
 
             if (string.IsNullOrEmpty(imgPath) || imgPath == "NULL") return false;
 
-            var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+            var fileEntry = FileManager.GetFileEntry(imgPath);
             if (fileEntry == null) return false;
 
             cacheDir = VamHookPlugin.GetCacheDir();
             fileName = SanitizeFileName(System.IO.Path.GetFileName(imgPath)).Replace('.', '_');
             if (fileName.Length > 100) fileName = fileName.Substring(0, 100);
 
-            sizeStr = GetFileEntryCacheSizeToken(fileEntry, imgPath).ToString();
+            sizeStr = GetFileEntryCacheSizeToken(fileEntry).ToString();
             timeStr = fileEntry.LastWriteTime.ToFileTime().ToString();
 
             sig = "";
@@ -1053,10 +921,10 @@ namespace VPB
             string found = TryResolveZstdCacheOnDisk(cacheDir, fileName, sizeStr, timeStr, sig, isSimReq, isReadable);
             if (!string.IsNullOrEmpty(found)) return found;
 
-            // Pre-refactor caches (and bulk-from-native) often used MVR FileEntry.Size, not per-entry VarFileEntry.EntrySize.
+            // Pre-refactor caches may have used package Size instead of EntrySize; VPB index resolves both.
             try
             {
-                var fileEntry = MVR.FileManagement.FileManager.GetFileEntry(imgPath);
+                var fileEntry = FileManager.GetFileEntry(imgPath);
                 if (fileEntry != null)
                 {
                     string legacySizeStr = fileEntry.Size.ToString();

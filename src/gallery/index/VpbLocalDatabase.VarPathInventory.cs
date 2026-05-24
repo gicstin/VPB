@@ -12,6 +12,8 @@ namespace VPB
     internal static partial class VpbLocalDatabase
     {
         const string MetaVarPathInventoryCountKey = "var_path_inventory_count_v1";
+        const string MetaVarPathInventoryAddonRootMtimeKey = "var_path_inventory_addon_root_mtime_v1";
+        const string MetaVarPathInventoryAllRootMtimeKey = "var_path_inventory_all_root_mtime_v1";
 
         struct VarPathRow
         {
@@ -28,6 +30,110 @@ namespace VPB
                 "path TEXT PRIMARY KEY," +
                 "file_size INTEGER NOT NULL," +
                 "mtime_ticks INTEGER NOT NULL);");
+        }
+
+        static bool TryGetScanRootMtimeUtcTicks(string root, out long ticks)
+        {
+            ticks = 0;
+            try
+            {
+                if (!Directory.Exists(root))
+                    return true;
+                ticks = Directory.GetLastWriteTimeUtc(root).Ticks;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool TryLoadVarPathInventoryRootMeta(
+            VpbSqlite3.Connection conn,
+            out long addonRootMtimeTicks,
+            out long allRootMtimeTicks,
+            out int savedCount)
+        {
+            addonRootMtimeTicks = 0;
+            allRootMtimeTicks = 0;
+            savedCount = 0;
+            if (conn == null) return false;
+            try
+            {
+                using (var st = conn.Prepare(
+                    "SELECT k, v FROM meta WHERE k IN (?, ?, ?)"))
+                {
+                    st.BindText(1, MetaVarPathInventoryCountKey);
+                    st.BindText(2, MetaVarPathInventoryAddonRootMtimeKey);
+                    st.BindText(3, MetaVarPathInventoryAllRootMtimeKey);
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string key = st.ColumnText(0) ?? string.Empty;
+                        string val = st.ColumnText(1) ?? string.Empty;
+                        if (key == MetaVarPathInventoryCountKey)
+                        {
+                            int c;
+                            if (int.TryParse(val, out c))
+                                savedCount = c;
+                        }
+                        else if (key == MetaVarPathInventoryAddonRootMtimeKey)
+                        {
+                            long t;
+                            if (long.TryParse(val, out t))
+                                addonRootMtimeTicks = t;
+                        }
+                        else if (key == MetaVarPathInventoryAllRootMtimeKey)
+                        {
+                            long t;
+                            if (long.TryParse(val, out t))
+                                allRootMtimeTicks = t;
+                        }
+                    }
+                }
+                return savedCount > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static void SaveVarPathInventoryRootMeta(VpbSqlite3.Connection conn, int pathCount)
+        {
+            if (conn == null || pathCount <= 0) return;
+            long addonTicks;
+            long allTicks;
+            if (!TryGetScanRootMtimeUtcTicks("AddonPackages", out addonTicks)) return;
+            if (!TryGetScanRootMtimeUtcTicks("AllPackages", out allTicks)) return;
+
+            using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+            {
+                st.BindText(1, MetaVarPathInventoryCountKey);
+                st.BindText(2, pathCount.ToString());
+                st.Step();
+                st.Reset();
+                st.BindText(1, MetaVarPathInventoryAddonRootMtimeKey);
+                st.BindText(2, addonTicks.ToString());
+                st.Step();
+                st.Reset();
+                st.BindText(1, MetaVarPathInventoryAllRootMtimeKey);
+                st.BindText(2, allTicks.ToString());
+                st.Step();
+            }
+        }
+
+        static bool TryFastRejectVarPathInventory(
+            int rowCount,
+            long cachedAddonRootMtimeTicks,
+            long cachedAllRootMtimeTicks,
+            int cachedCount)
+        {
+            if (rowCount <= 0 || cachedCount != rowCount) return false;
+            long addonNow;
+            long allNow;
+            if (!TryGetScanRootMtimeUtcTicks("AddonPackages", out addonNow)) return false;
+            if (!TryGetScanRootMtimeUtcTicks("AllPackages", out allNow)) return false;
+            return addonNow == cachedAddonRootMtimeTicks && allNow == cachedAllRootMtimeTicks;
         }
 
         /// <summary>Load cached paths and validate size/mtime in parallel (no recursive directory walk).</summary>
@@ -61,6 +167,30 @@ namespace VPB
                 }
 
                 if (rows.Count == 0) return false;
+
+                long cachedAddonRootMtimeTicks = 0;
+                long cachedAllRootMtimeTicks = 0;
+                int cachedCount = 0;
+                using (var connMeta = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(connMeta);
+                    TryLoadVarPathInventoryRootMeta(connMeta, out cachedAddonRootMtimeTicks, out cachedAllRootMtimeTicks, out cachedCount);
+                }
+
+                if (TryFastRejectVarPathInventory(rows.Count, cachedAddonRootMtimeTicks, cachedAllRootMtimeTicks, cachedCount))
+                {
+                    paths = new List<string>(rows.Count);
+                    for (int i = 0; i < rows.Count; i++)
+                        paths.Add(rows[i].Path);
+                    sw.Stop();
+                    try
+                    {
+                        LogUtil.Log("Var path inventory cache HIT paths=" + paths.Count
+                            + " validate_ms=" + sw.ElapsedMilliseconds + " mode=root_mtime_fast_reject");
+                    }
+                    catch { }
+                    return true;
+                }
 
                 int failCount = 0;
                 int chunkSize = 512;
@@ -200,6 +330,7 @@ namespace VPB
                             st.BindText(2, rows.Count.ToString());
                             st.Step();
                         }
+                        SaveVarPathInventoryRootMeta(conn, rows.Count);
                         conn.ExecUtf8("COMMIT;");
                     }
                     catch

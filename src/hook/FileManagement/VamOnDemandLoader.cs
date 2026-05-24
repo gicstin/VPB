@@ -307,6 +307,10 @@ namespace VPB
         private static float s_PendingVamRefreshFirstRequestedAt;
         private static int s_PendingVamRefreshRequestCount;
         private static string s_PendingVamRefreshReason;
+        // UIDs registered on-demand this session whose clothing/hair/morph catalogs may still be stale.
+        private static readonly HashSet<string> s_CatalogStaleUids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_CatalogStaleLock = new object();
 
         private const int MaxDrainPerFrame = 10;
         private const float CoalescedVamRefreshDelayStartupSeconds = 1.0f;
@@ -431,6 +435,110 @@ namespace VPB
                 s_RefreshInProgressDeferredPaths.Clear();
                 s_RefreshInProgressDeferredUids.Clear();
             }
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Clear();
+        }
+
+        /// <summary>True when UID was on-demand registered this session and native catalogs may still be stale.</summary>
+        public static bool IsPromotedPackageCatalogStale(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            lock (s_CatalogStaleLock)
+                return s_CatalogStaleUids.Contains(uid);
+        }
+
+        /// <summary>Called when native FileManager.Refresh completes — DAZ catalogs are fresh again.</summary>
+        public static void NotifyNativeCatalogRefreshed()
+        {
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Clear();
+        }
+
+        /// <summary>
+        /// Whether a coalesced native refresh is needed after on-demand registration for these UIDs.
+        /// Skips refresh when every UID was already registered and no catalog is stale.
+        /// </summary>
+        public static bool ShouldRequestCoalescedNativeRefreshForUids(ICollection<string> uids, int newlyRegisteredCount)
+        {
+            if (!ScanWhitelistManager.Instance.IsEnabled) return false;
+            if (newlyRegisteredCount <= 0) return false;
+            if (uids == null || uids.Count == 0) return false;
+
+            foreach (string uid in uids)
+            {
+                if (string.IsNullOrEmpty(uid)) continue;
+                if (IsCatalogDependentUid(uid)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether native clothing/hair/morph catalogs need rebuilding after registering this package.
+        /// </summary>
+        public static bool PackageRegistrationNeedsNativeCatalogRefresh(string uid, string entryPath)
+        {
+            if (IsPluginEntryPath(entryPath)) return false;
+            if (!string.IsNullOrEmpty(entryPath) && IsCatalogDependentEntryPath(entryPath)) return true;
+            return IsCatalogDependentUid(uid);
+        }
+
+        static void MarkPromotedPackageCatalogStale(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Add(uid);
+        }
+
+        static bool IsCatalogDependentEntryPath(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return false;
+            string p = entryPath.Replace('\\', '/');
+            return p.IndexOf(":/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf(":/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf(":/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool IsCatalogDependentUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                SerializableVarPackage cached = VarPackageMgr.singleton.TryGetCache(uid);
+                if (cached != null && cached.FileEntryNames != null)
+                {
+                    List<string> names = cached.FileEntryNames;
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string internalPath = names[i];
+                        if (string.IsNullOrEmpty(internalPath)) continue;
+                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    return false;
+                }
+
+                VarPackage pkg = FileManager.GetPackage(uid, false);
+                if (pkg == null) return true;
+
+                List<string> manifestNames;
+                List<long> ticks;
+                List<long> sizes;
+                if (pkg.TryGetCachedFileEntryData(out manifestNames, out ticks, out sizes) && manifestNames != null)
+                {
+                    for (int i = 0; i < manifestNames.Count; i++)
+                    {
+                        string internalPath = manifestNames[i];
+                        if (string.IsNullOrEmpty(internalPath)) continue;
+                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    return false;
+                }
+            }
+            catch { }
+            return true;
         }
 
         /// <summary>
@@ -748,20 +856,7 @@ namespace VPB
         {
             string uid = UidFromEntryPath(entryPath);
             if (string.IsNullOrEmpty(uid)) return null;
-            string registeredPath = TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
-            if (!string.IsNullOrEmpty(registeredPath))
-            {
-                try
-                {
-                    // Clothing/hair/morph catalogs are populated from Refresh package handlers.
-                    // Coalesce to avoid spamming refresh while still making newly on-demand
-                    // packages visible during active scene/bootstrap load.
-                    if (!IsPluginEntryPath(entryPath))
-                        RequestCoalescedVamRefresh("entrypath_on_demand_catalog");
-                }
-                catch { }
-            }
-            return registeredPath;
+            return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
         }
 
         /// <summary>
@@ -811,6 +906,8 @@ namespace VPB
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM refresh completed - promoted " + promoted + " deferred registrations");
+
+            NotifyNativeCatalogRefreshed();
         }
 
         private static void RegisterNow(string uid, string varPath)
@@ -860,6 +957,11 @@ namespace VPB
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
                 try { DependencyGraph.EnsureForPackage(uid); } catch { }
+                MarkPromotedPackageCatalogStale(uid);
+                if (PackageRegistrationNeedsNativeCatalogRefresh(uid, null))
+                {
+                    try { RequestCoalescedVamRefresh("ondemand_register_catalog"); } catch { }
+                }
             }
             else
             {
@@ -1086,6 +1188,32 @@ namespace VPB
             }
 
             DrainCoalescedVamRefresh();
+        }
+
+        /// <summary>
+        /// Runs MVR.FileManagement.FileManager.Refresh immediately and clears any pending coalesced request.
+        /// </summary>
+        public static void RunVamFileManagerRefreshNow(string reason = null)
+        {
+            lock (s_RefreshRequestLock)
+            {
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] Running immediate FileManager.Refresh (reason="
+                    + (string.IsNullOrEmpty(reason) ? "immediate" : reason) + ")");
+                MVR.FileManagement.FileManager.Refresh();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] Immediate FileManager.Refresh failed: " + ex.Message);
+            }
         }
 
         /// <summary>

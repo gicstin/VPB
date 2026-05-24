@@ -309,6 +309,27 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Right-click Refresh: native VaM FileManager.Refresh only (catalog / package handlers).
+        /// Does not rescan the VPB package index or reload the gallery grid.
+        /// </summary>
+        public void UserRequestedNativeFileManagerRefresh()
+        {
+            try
+            {
+                LogUtil.Log("[VPB] Gallery refresh right-click: native VaM FileManager.Refresh");
+                if (!IsHubMode)
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_vam_files", "Refreshing VaM file list..."), 1.5f);
+
+                FileManagerBridge.Refresh("gallery_native", RefreshScope.NativeOnly, flushNativeImmediately: true);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Native file manager refresh failed: " + ex);
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
+            }
+        }
+
         public void Show(string title, string extension, string path)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();

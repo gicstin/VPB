@@ -954,7 +954,7 @@ namespace VPB
 
                 if (ImageLoadingMgr.singleton != null)
                 {
-                    ImageLoadingMgr.singleton.ClearCandidates();
+                    ImageLoadingMgr.singleton.PrepareForSceneLoad();
                 }
 
                 if (!string.IsNullOrEmpty(saveName))
@@ -1328,6 +1328,26 @@ namespace VPB
                 ImageLoadingMgr.singleton.TrackCandidate(qi);
             }
             return true;
+        }
+
+        internal static void RequeueVaMImageLoad(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
+            try
+            {
+                qi.tex = null;
+                var loader = ImageLoaderThreaded.singleton;
+                if (loader == null)
+                {
+                    LogUtil.LogWarning("[VPB] RequeueVaMImageLoad: ImageLoaderThreaded.singleton is null for " + qi.imgPath);
+                    return;
+                }
+                loader.QueueImage(qi);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RequeueVaMImageLoad failed for " + qi.imgPath + ": " + ex.Message);
+            }
         }
 
         // It is added to cache before the callback, so we need to set skipCache one step earlier.

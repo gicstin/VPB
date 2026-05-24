@@ -377,11 +377,11 @@ namespace VPB
 		//[HideInInspector]
 		private List<string> drives;
 
-		//private List<DirectoryButton> dirButtons;
+		private List<DirectoryButton> dirButtons;
 
 		//private List<ShortCutButton> shortCutButtons;
 
-		//private List<GameObject> dirSpacers;
+		private List<GameObject> dirSpacers;
 
 		private FileButton selected;
 
@@ -738,6 +738,7 @@ namespace VPB
 						onlyShowLatestToggle.isOn = _onlyShowLatest;
 					}
 					UpdateDirectoryList();
+					ResetDisplayedPage();
 				}
 			}
 		}
@@ -1616,6 +1617,8 @@ namespace VPB
 		public void GotoDirectory(string path, string pkgFilter = null, bool flatten = true, bool includeRegularDirs = false)
 		{
 			currentPackageFilter = pkgFilter;
+			if (string.IsNullOrEmpty(pkgFilter))
+				currentPackageUid = string.Empty;
 			useFlatten = flatten;
 			includeRegularDirsInFlatten = includeRegularDirs;
 			if (string.IsNullOrEmpty(path))
@@ -1803,6 +1806,29 @@ namespace VPB
 					package.OpenOnHub();
 				}
 			}
+		}
+
+		public void OnDirectoryClick(DirectoryButton db)
+		{
+			if (db == null)
+				return;
+
+			currentPackageUid = db.package ?? string.Empty;
+			currentPackageFilter = db.packageFilter ?? string.Empty;
+
+			if (!string.IsNullOrEmpty(db.fullPath))
+			{
+				GotoDirectory(NormalizeBrowserPath(db.fullPath), currentPackageFilter, useFlatten, includeRegularDirsInFlatten);
+				return;
+			}
+
+			fileListDirty = true;
+			if (_useVirtualizedScrolling)
+			{
+				_virtualizedMatchHash = 0;
+				_virtualizedMatchSourceCount = -1;
+			}
+			UpdateFileList();
 		}
 
 		private void SelectFile(FileButton fb)
@@ -2977,6 +3003,26 @@ namespace VPB
 				}
 			}
 
+			if (!string.IsNullOrEmpty(currentPackageFilter))
+			{
+				VarFileEntry filteredEntry = fileEntry as VarFileEntry;
+				if (filteredEntry == null || filteredEntry.Package == null)
+					return false;
+				VarPackage filteredPkg = filteredEntry.Package;
+				string groupName = filteredPkg.Group != null ? filteredPkg.Group.Name : null;
+				if (!string.Equals(filteredPkg.Uid, currentPackageFilter, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(groupName, currentPackageFilter, StringComparison.OrdinalIgnoreCase)
+					&& !filteredPkg.Uid.StartsWith(currentPackageFilter + ".", StringComparison.OrdinalIgnoreCase))
+					return false;
+			}
+
+			if (_onlyShowLatest)
+			{
+				VarFileEntry latestEntry = fileEntry as VarFileEntry;
+				if (latestEntry != null && latestEntry.Package != null && !latestEntry.Package.isNewestEnabledVersion)
+					return false;
+			}
+
 			return true;
 		}
 
@@ -3318,6 +3364,11 @@ namespace VPB
 				creatorFilterChooser.valNoCallback = snapshot.creatorChoice ?? "All";
 				_creatorFilter = snapshot.creatorChoice ?? "All";
 			}
+
+			if (!FileManager.IsScanning)
+			{
+				try { UpdateDirectoryList(); } catch { }
+			}
 		}
 
 		private IEnumerator FileListCacheBuildRoutine(int generation)
@@ -3478,7 +3529,10 @@ namespace VPB
 
 		protected void UpdateFileListCacheThreadSafe()
 		{
-			ApplyFileListCacheSnapshot(BuildFileListCacheSnapshotWorker());
+			EvaluateFileListDirtyConditions();
+			if (!fileListDirty)
+				return;
+			RequestFileListCacheRebuild();
 		}
 
 		private void UpdateFileList()
@@ -3504,9 +3558,118 @@ namespace VPB
 			RequestFileListCacheRebuild();
 		}
 		static bool s_OptimzeFileButton = true;
+		const int MaxDirectorySidebarPackages = 256;
+
+		private void ClearDirectoryListButtons()
+		{
+			if (dirButtons != null)
+			{
+				for (int i = 0; i < dirButtons.Count; i++)
+				{
+					DirectoryButton btn = dirButtons[i];
+					if (btn != null && btn.gameObject != null)
+						PoolManager.ReleaseObject(btn.gameObject);
+				}
+				dirButtons.Clear();
+			}
+			if (dirSpacers != null)
+			{
+				for (int i = 0; i < dirSpacers.Count; i++)
+				{
+					GameObject spacer = dirSpacers[i];
+					if (spacer != null)
+						PoolManager.ReleaseObject(spacer);
+				}
+				dirSpacers.Clear();
+			}
+		}
+
+		private void AddDirectoryListButton(string packageUid, string packageFilter, string label, string fullPath)
+		{
+			if (dirContent == null || directoryButtonPrefab == null)
+				return;
+			if (dirButtons == null)
+				dirButtons = new List<DirectoryButton>();
+
+			GameObject go = PoolManager.SpawnObject(directoryButtonPrefab);
+			if (go == null)
+				return;
+			go.transform.SetParent(dirContent, false);
+			DirectoryButton db = go.GetComponent<DirectoryButton>();
+			if (db == null)
+				return;
+			db.Set(this, packageUid ?? string.Empty, packageFilter ?? string.Empty, label ?? string.Empty, fullPath ?? string.Empty);
+			dirButtons.Add(db);
+		}
 
 		private void UpdateDirectoryList()
 		{
+			if (dirContent == null || directoryButtonPrefab == null)
+				return;
+			if (FileManager.IsScanning)
+				return;
+
+			ClearDirectoryListButtons();
+
+			if (inGame || !useFlatten)
+				return;
+
+			string browsePath = FileManager.CleanDirectoryPath(string.IsNullOrEmpty(currentPath) ? defaultPath : currentPath) ?? string.Empty;
+
+			if (fileFormat == "var")
+			{
+				if (showInstallFolderInDirectoryList)
+				{
+					AddDirectoryListButton(string.Empty, string.Empty, "AddonPackages", "AddonPackages");
+					AddDirectoryListButton(string.Empty, string.Empty, "AllPackages", "AllPackages");
+				}
+				return;
+			}
+
+			if (cachedFiles == null || cachedFiles.Count == 0)
+				return;
+
+			var packages = new List<VarPackage>(Math.Min(MaxDirectorySidebarPackages, 64));
+			var seenUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			for (int i = 0; i < cachedFiles.Count; i++)
+			{
+				if (seenUids.Count >= MaxDirectorySidebarPackages)
+					break;
+				FileAndDirInfo info = cachedFiles[i];
+				if (info == null || info.isDirectory)
+					continue;
+				VarFileEntry varEntry = info.FileEntry as VarFileEntry;
+				if (varEntry == null || varEntry.Package == null)
+					continue;
+				VarPackage pkg = varEntry.Package;
+				if (!pkg.Enabled || pkg.invalid)
+					continue;
+				if (_onlyShowLatest && !pkg.isNewestEnabledVersion)
+					continue;
+				if (!seenUids.Add(pkg.Uid))
+					continue;
+				packages.Add(pkg);
+			}
+
+			if (packages.Count == 0)
+				return;
+
+			packages.Sort((a, b) =>
+			{
+				string an = string.IsNullOrEmpty(a.Name) ? a.Uid : a.Name;
+				string bn = string.IsNullOrEmpty(b.Name) ? b.Uid : b.Name;
+				return string.Compare(an, bn, StringComparison.OrdinalIgnoreCase);
+			});
+
+			for (int i = 0; i < packages.Count && i < MaxDirectorySidebarPackages; i++)
+			{
+				VarPackage pkg = packages[i];
+				if (pkg == null)
+					continue;
+				string label = string.IsNullOrEmpty(pkg.Name) ? pkg.Uid : pkg.Name;
+				string filter = pkg.Uid;
+				AddDirectoryListButton(pkg.Uid, filter, label, browsePath);
+			}
 		}
 
 		private void Awake()
@@ -3516,6 +3679,8 @@ namespace VPB
 			drives = new List<string>(Directory.GetLogicalDrives());
 			displayedFileButtons = new HashSet<FileButton>();
 			queuedThumbnails = new HashSet<VPB.CustomImageLoaderThreaded.QueuedImage>();
+			dirButtons = new List<DirectoryButton>();
+			dirSpacers = new List<GameObject>();
 		}
 
 		private void OnEnable()
@@ -3532,7 +3697,13 @@ namespace VPB
 		{
 			installStatusDirty = true;
 			if (window != null && window.activeSelf)
+			{
 				ProcessInstallStatusDirty();
+				if (!FileManager.IsScanning)
+				{
+					try { UpdateDirectoryList(); } catch { }
+				}
+			}
 		}
 		void Start()
 		{ 

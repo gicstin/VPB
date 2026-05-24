@@ -452,10 +452,23 @@ namespace VPB
 
             Button refreshButton = refreshBtn.GetComponent<Button>();
             refreshButton.onClick.RemoveAllListeners();
-            refreshButton.onClick.AddListener(() => { UserRequestedPackageRefresh(); });
+
+            EventTrigger refreshEt = refreshBtn.GetComponent<EventTrigger>();
+            if (refreshEt == null) refreshEt = refreshBtn.AddComponent<EventTrigger>();
+            var refreshPointerClick = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+            refreshPointerClick.callback.AddListener((data) =>
+            {
+                var ped = (PointerEventData)data;
+                if (ped.button == PointerEventData.InputButton.Right)
+                    UserRequestedNativeFileManagerRefresh();
+                else if (ped.button == PointerEventData.InputButton.Left)
+                    UserRequestedPackageRefresh();
+            });
+            refreshEt.triggers.Add(refreshPointerClick);
+
             titleBarRefreshBtnText = refreshBtn.GetComponentInChildren<Text>();
             VPBUiFont.ApplyTo(titleBarRefreshBtnText);
-            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
+            AddTooltip(refreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
             { var s = UI.LoadIconSprite("vpb_icons/refresh.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
@@ -787,8 +800,21 @@ namespace VPB
                 { var rt = rrRT; var t = rightRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
                 Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
                 rightRefreshButton.onClick.RemoveAllListeners();
-                rightRefreshButton.onClick.AddListener(() => { UserRequestedPackageRefresh(); });
-                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages");
+
+                EventTrigger rightRefreshEt = rightRefreshBtn.GetComponent<EventTrigger>();
+                if (rightRefreshEt == null) rightRefreshEt = rightRefreshBtn.AddComponent<EventTrigger>();
+                var rightRefreshPointerClick = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+                rightRefreshPointerClick.callback.AddListener((data) =>
+                {
+                    var ped = (PointerEventData)data;
+                    if (ped.button == PointerEventData.InputButton.Right)
+                        UserRequestedNativeFileManagerRefresh();
+                    else if (ped.button == PointerEventData.InputButton.Left)
+                        UserRequestedPackageRefresh();
+                });
+                rightRefreshEt.triggers.Add(rightRefreshPointerClick);
+
+                AddTooltip(rightRefreshBtn, "gallery.tooltip.refresh_packages", "Refresh Packages (right-click: VaM file list only)");
 
                 _rightMainSideSearchOnValueChanged = (val) => {
                     if (_suppressMainSideSearchValueChanged) return;

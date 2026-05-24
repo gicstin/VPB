@@ -15,8 +15,11 @@ namespace VPB
 {
     class AtomHook
     {
-        private static readonly HashSet<string> s_PresetCatalogRefreshedUids =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private struct PresetInstallResult
+        {
+            public bool NeedsNativeCatalogRefresh;
+            public List<string> NewlyRegisteredUids;
+        }
 
         // Person-level preset storables need a synchronous FileManager.Refresh before VaM binds
         // morph/clothing/hair from on-demand packages. Per-item clothing/hair preset storables
@@ -52,9 +55,9 @@ namespace VPB
         {
             LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
             SuperControllerHook.ParsePresetForSimTextures(saveName);
-            if (MVR.FileManagement.FileManager.FileExists(saveName))
+            if (FileManager.FileExists(saveName))
             {
-                using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
+                using (FileEntryStreamReader fileEntryStreamReader = FileManager.OpenStreamReader(saveName, true))
                 {
                     string aJSON = fileEntryStreamReader.ReadToEnd();
                     FileButton.EnsureInstalledInternal(aJSON);
@@ -71,9 +74,9 @@ namespace VPB
         {
             LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
             SuperControllerHook.ParsePresetForSimTextures(saveName);
-            if (MVR.FileManagement.FileManager.FileExists(saveName))
+            if (FileManager.FileExists(saveName))
             {
-                using (MVR.FileManagement.FileEntryStreamReader fileEntryStreamReader = MVR.FileManagement.FileManager.OpenStreamReader(saveName, true))
+                using (FileEntryStreamReader fileEntryStreamReader = FileManager.OpenStreamReader(saveName, true))
                 {
                     string aJSON = fileEntryStreamReader.ReadToEnd();
                     FileButton.EnsureInstalledInternal(aJSON);
@@ -207,10 +210,10 @@ namespace VPB
             if (processJSON != null)
             {
                 SuperControllerHook.ParsePresetForSimTextures(processJSON, __instance.presetName);
-                bool shouldRefreshCatalog = EnsureInstalledFromJSON(processJSON);
-                if (shouldRefreshCatalog)
+                PresetInstallResult installResult = EnsureInstalledFromJSON(processJSON);
+                if (installResult.NeedsNativeCatalogRefresh)
                 {
-                    try { VamOnDemandLoader.RequestCoalescedVamRefresh("preset_json_catalog"); } catch { }
+                    try { FileManagerBridge.Refresh("preset_json_catalog", RefreshScope.NativeOnly); } catch { }
 
                     // VaM's per-type catalogs (DAZ morph/clothing/hair) only repopulate during MVR FileManager.Refresh.
                     // Coalesced refresh fires 250ms+ later on a subsequent Update frame, after VaM has already
@@ -222,15 +225,24 @@ namespace VPB
                     try { syncRefreshEnabled = Settings.Instance != null && Settings.Instance.SyncRefreshOnPresetLoad != null ? Settings.Instance.SyncRefreshOnPresetLoad.Value : true; } catch { }
                     if (!sceneLoad && syncRefreshEnabled && ShouldSyncRefreshForPresetStorable(storableId))
                     {
-                        try { VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("preset_json_catalog_interactive"); } catch { }
+                        try { FileManagerBridge.Refresh("preset_json_catalog_interactive", RefreshScope.NativeOnly, flushNativeImmediately: true); } catch { }
                     }
+                }
+
+                if (installResult.NewlyRegisteredUids != null && installResult.NewlyRegisteredUids.Count > 0)
+                {
+                    try { FileManager.NotifyInstalled(installResult.NewlyRegisteredUids); } catch { }
                 }
             }
         }
 
-        static bool EnsureInstalledFromJSON(JSONNode node)
+        static PresetInstallResult EnsureInstalledFromJSON(JSONNode node)
         {
-            bool shouldRefreshCatalog = false;
+            var result = new PresetInstallResult
+            {
+                NeedsNativeCatalogRefresh = false,
+                NewlyRegisteredUids = null
+            };
             var results = new HashSet<string>();
             JSONOptimization.ExtractAllVariableReferences(node, results);
             if (results.Count > 0)
@@ -255,8 +267,7 @@ namespace VPB
                     else
                         touchedUid = key;
 
-                    // In scan-whitelist mode, installing via VPB's package registry alone is not enough.
-                    // Pre-register the resolved UID in VaM FileManager before preset item lookups (hair/clothing).
+                    // In scan-whitelist mode, pre-register the resolved UID in native VaM FileManager before preset lookups.
                     if (ScanWhitelistManager.Instance.IsEnabled)
                     {
                         try
@@ -266,20 +277,24 @@ namespace VPB
                                 od = VamOnDemandLoader.TryRegisterPackageOnDemand(pkg.Uid);
                             else
                                 od = VamOnDemandLoader.TryRegisterPackageOnDemand(key);
-                            if (!string.IsNullOrEmpty(od)) shouldRefreshCatalog = true;
-                        }
-                        catch { }
-
-                        // Edge case: first UIA preset load can still miss catalog population until a later browse/refresh.
-                        // Force a one-time refresh per dependency UID encountered through preset JSON.
-                        if (!string.IsNullOrEmpty(touchedUid))
-                        {
-                            if (!s_PresetCatalogRefreshedUids.Contains(touchedUid))
+                            if (!string.IsNullOrEmpty(od))
                             {
-                                s_PresetCatalogRefreshedUids.Add(touchedUid);
-                                shouldRefreshCatalog = true;
+                                if (VamOnDemandLoader.PackageRegistrationNeedsNativeCatalogRefresh(touchedUid, null))
+                                {
+                                    result.NeedsNativeCatalogRefresh = true;
+                                    if (result.NewlyRegisteredUids == null)
+                                        result.NewlyRegisteredUids = new List<string>();
+                                    if (!string.IsNullOrEmpty(touchedUid))
+                                        result.NewlyRegisteredUids.Add(touchedUid);
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(touchedUid)
+                                && VamOnDemandLoader.IsPromotedPackageCatalogStale(touchedUid))
+                            {
+                                result.NeedsNativeCatalogRefresh = true;
                             }
                         }
+                        catch { }
                     }
 
                     if (pkg == null)
@@ -305,7 +320,7 @@ namespace VPB
                     LogUtil.LogWarning(sb.ToString());
                 }
             }
-            return shouldRefreshCatalog;
+            return result;
         }
     }
 }

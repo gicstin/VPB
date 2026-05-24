@@ -87,16 +87,26 @@ namespace VPB
         protected static Dictionary<string, VarPackage> packagesByPath;
 
         protected static Dictionary<string, VarPackageGroup> packageGroups;
-        protected static HashSet<VarFileEntry> allVarFileEntries;
         protected static Dictionary<string, VarFileEntry> uidToVarFileEntry;
         protected static Dictionary<string, VarFileEntry> pathToVarFileEntry;
         protected static OnRefresh onRefreshHandlers;
         protected static OnRefresh onRegistryReadyHandlers;
         static int s_RegistryReadyNotified;
-        static int s_BulkDeepScanActive;
+        static int s_BulkDeepScanDepth;
 
         internal static bool IsBulkDeepScanActive =>
-            System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanActive, 0, 0) != 0;
+            System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanDepth, 0, 0) > 0;
+
+        internal static void EnterBulkDeepScan()
+        {
+            System.Threading.Interlocked.Increment(ref s_BulkDeepScanDepth);
+        }
+
+        internal static void ExitBulkDeepScan()
+        {
+            if (System.Threading.Interlocked.Decrement(ref s_BulkDeepScanDepth) < 0)
+                System.Threading.Interlocked.Exchange(ref s_BulkDeepScanDepth, 0);
+        }
         static int s_DeferredDeepScanScheduled;
         static bool s_DeferredDeepScanInit;
         static bool s_DeferredDeepScanFlag;
@@ -709,7 +719,6 @@ namespace VPB
                                 {
                                     foreach (VarFileEntry fileEntry in varPackage.FileEntries)
                                     {
-                                        allVarFileEntries.Add(fileEntry);
                                         uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
                                         pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
                                     }
@@ -852,7 +861,6 @@ namespace VPB
                     {
                         foreach (VarFileEntry fileEntry in vp.FileEntries)
                         {
-                            allVarFileEntries.Remove(fileEntry);
                             uidToVarFileEntry.Remove(fileEntry.Uid);
                             pathToVarFileEntry.Remove(fileEntry.Path);
                         }
@@ -902,10 +910,6 @@ namespace VPB
                 if (packageGroups != null)
                 {
                     packageGroups.Clear();
-                }
-                if (allVarFileEntries != null)
-                {
-                    allVarFileEntries.Clear();
                 }
                 if (uidToVarFileEntry != null)
                 {
@@ -1403,10 +1407,6 @@ namespace VPB
             if (packageGroups == null)
             {
                 packageGroups = new Dictionary<string, VarPackageGroup>(StringComparer.OrdinalIgnoreCase);
-            }
-            if (allVarFileEntries == null)
-            {
-                allVarFileEntries = new HashSet<VarFileEntry>();
             }
             if (uidToVarFileEntry == null)
             {
@@ -1942,6 +1942,11 @@ namespace VPB
 		static void TryPeriodicManifestFlushDuringDeepScan(int scanned, int total)
 		{
 			if (scanned <= 0) return;
+			try
+			{
+				if (VpbLocalDatabase.IsGalleryIndexRebuildActive()) return;
+			}
+			catch { }
 			int step = Math.Max(2000, Math.Min(10000, total / 10));
 			if (scanned != total && scanned - s_DeepScanLastManifestFlushScanned < step) return;
 			s_DeepScanLastManifestFlushScanned = scanned;
@@ -1954,19 +1959,22 @@ namespace VPB
 		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
 			if (packagesByUid == null) yield break;
-			System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 1);
+			EnterBulkDeepScan();
 			try
 			{
 			// Reset per-pass scan counters so logged stats reflect THIS pass only,
 			// not the cumulative totals across all coalesced/follow-up passes.
 			VarPackage.ResetScanCounters();
 			s_DeepScanLastManifestFlushScanned = 0;
+			try { VpbLocalDatabase.ResetDeepScanSqlRebuildProgress(); } catch { }
 			Stopwatch indexAllSw = Stopwatch.StartNew();
 			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;
 			int allCount = packages.Length;
 			try { VpbProgressService.BeginDeepScan(allCount); } catch { }
-			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
+			try { VpbProgressService.ReportDeepScan(0, allCount); } catch { }
+			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 50 : 100;
+			uiUpdateStep = Math.Max(1, Math.Min(uiUpdateStep, Math.Max(1, allCount / 400)));
 			int progressLogStep = Math.Max(uiUpdateStep, 2000);
 			string reasonsTag = GetCurrentReasonsForLog();
 			{
@@ -2011,13 +2019,15 @@ namespace VPB
 					});
 				}
 
+				int uiFrameCounter = 0;
 				while (!doneEvent.WaitOne(0))
 				{
 					int current = Interlocked.CompareExchange(ref scannedCount, 0, 0);
-					if (current != idx)
+					uiFrameCounter++;
+					if (current != idx || (current == 0 && (uiFrameCounter % 15) == 0))
 					{
 						idx = current;
-						if ((idx % uiUpdateStep) == 0 || idx == allCount)
+						if ((idx % uiUpdateStep) == 0 || idx == allCount || (idx == 0 && (uiFrameCounter % 15) == 0))
 						{
 							try { VpbProgressService.ReportDeepScan(idx, allCount); } catch { }
 						}
@@ -2034,6 +2044,7 @@ namespace VPB
 						if ((idx % progressLogStep) == 0 || idx == allCount)
 						{
 							try { VpbLocalDatabase.NotifyDeepScanProgress(idx, allCount); } catch { }
+							try { TryPeriodicManifestFlushDuringDeepScan(idx, allCount); } catch { }
 						}
 					}
 					yield return null;
@@ -2065,7 +2076,11 @@ namespace VPB
 			finally
 			{
 				try { VpbProgressService.EndDeepScan(); } catch { }
-				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
+				ExitBulkDeepScan();
+				if (!IsBulkDeepScanActive)
+				{
+					try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
+				}
 			}
 		}
 
@@ -2173,6 +2188,7 @@ namespace VPB
 
 		private static void LogForceLatestDecisionOnce(string key, string message)
 		{
+			if (IsBulkDeepScanActive) return;
 			if (!ShouldLogForceLatestDependencies()) return;
 			if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
 			try
@@ -3095,7 +3111,8 @@ namespace VPB
 					value = TryResolve(normalized);
 					try
 					{
-						if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+						if (!IsBulkDeepScanActive
+							&& Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
 						{
 							LogUtil.Log("GetPackage normalize whitespace | raw=" + packageUidOrPath + " | normalized=" + normalized + " | found=" + (value != null));
 						}
@@ -3104,7 +3121,7 @@ namespace VPB
 				}
 			}
 
-			if (value == null)
+			if (value == null && !IsBulkDeepScanActive)
 			{
 				try
 				{
@@ -3439,14 +3456,73 @@ namespace VPB
 				return;
 			}
 
+			if (TryFindVarFilesRegexViaInternalPathIndex(dir, rx, foundFiles))
+				return;
+
 			VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
 			if (snapshot == null) return;
 
-			foreach (VarPackage pkg in snapshot)
+			for (int i = 0; i < snapshot.Length; i++)
 			{
+				VarPackage pkg = snapshot[i];
 				if (pkg == null || !pkg.Enabled || pkg.invalid) continue;
 				AppendVarFilesForPackage(pkg, dir, rx, foundFiles);
 			}
+		}
+
+		/// <summary>
+		/// Flatten-mode browse: walk the internal-path index instead of per-package loops.
+		/// Falls back to package snapshot when index is empty (pre-scan / no manifest cache).
+		/// </summary>
+		const int MaxIndexBrowseMatches = 20000;
+
+		static bool TryFindVarFilesRegexViaInternalPathIndex(string dirPrefix, Regex regex, List<FileEntry> foundFiles)
+		{
+			if (foundFiles == null || regex == null) return false;
+			// Resolve entries via GetVarFileEntry / packages — main thread only (cache worker uses package snapshot path).
+			if (!VamOnDemandLoader.IsMainThread()) return false;
+
+			List<string> matchingUidPaths = null;
+			lock (internalPathToUidPathLock)
+			{
+				EnsureInternalPathIndex();
+				if (internalPathToUidPath == null || internalPathToUidPath.Count == 0)
+					return false;
+
+				dirPrefix = NormalizeBrowseInternalPath(dirPrefix);
+				matchingUidPaths = new List<string>(Math.Min(4096, internalPathToUidPath.Count));
+				foreach (KeyValuePair<string, string> kv in internalPathToUidPath)
+				{
+					string internalPath = kv.Key;
+					if (string.IsNullOrEmpty(internalPath)) continue;
+					if (!InternalPathMatchesBrowseDir(internalPath, dirPrefix)) continue;
+
+					string name = Path.GetFileName(internalPath.Replace('\\', '/'));
+					if (string.IsNullOrEmpty(name) || !regex.IsMatch(name)) continue;
+
+					string uidPath = kv.Value;
+					if (string.IsNullOrEmpty(uidPath))
+						uidPath = internalPath;
+					else if (uidPath.IndexOf(":/") < 0)
+						uidPath = uidPath + ":/" + internalPath;
+					matchingUidPaths.Add(uidPath);
+					if (matchingUidPaths.Count >= MaxIndexBrowseMatches)
+						break;
+				}
+			}
+
+			if (matchingUidPaths == null || matchingUidPaths.Count == 0)
+				return false;
+
+			for (int i = 0; i < matchingUidPaths.Count; i++)
+			{
+				string uidPath = matchingUidPaths[i];
+				VarFileEntry entry = GetVarFileEntry(uidPath);
+				if (entry == null) continue;
+				TryRegisterVarFileEntryLookup(entry);
+				foundFiles.Add(entry);
+			}
+			return true;
 		}
 
 		public static bool FileExists(string path, bool onlySystemFiles = false, bool restrictPath = false)

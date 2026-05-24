@@ -492,7 +492,7 @@ namespace VPB
         /// This avoids one-shot missing item failures where VaM does not retry lookups after an initial miss.
         /// Returns the number of unique UID candidates attempted.
         /// </summary>
-        public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null)
+        public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null, bool queueCoalescedRefresh = true)
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
             if (entry == null && string.IsNullOrEmpty(pathHint)) return 0;
@@ -615,7 +615,8 @@ namespace VPB
             // have their files accessible but their clothing items are invisible to VaM's clothing system,
             // causing 'Param not found' / 'Clothing item missing' errors.
             // This mirrors what EnsureInstalled + Refresh() does in non-whitelist mode.
-            if (newlyRegistered > 0)
+            if (queueCoalescedRefresh
+                && VamOnDemandLoader.ShouldRequestCoalescedNativeRefreshForUids(uidCandidates, newlyRegistered))
             {
                 try
                 {
