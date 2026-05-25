@@ -411,9 +411,141 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
-            try { conn.ExecUtf8("UPDATE pkg SET first_scanned = ifnull(ictime, wtime) WHERE first_scanned IS NULL;"); } catch { }
+
+            // Backfill NULL first_scanned from wtime as a best-effort "when user got this" proxy.
+            // wtime is FileInfo.LastWriteTime.ToBinary() (Local kind); convert to UTC binary so
+            // DateTime.CompareTo (which sorts by Ticks ignoring Kind) compares actual moments.
+            try { ConvertWtimeToUtcAndCopyToFirstScanned(conn, "first_scanned IS NULL"); } catch { }
+
+            // One-shot reset: align all rows to wtime so DateAdded reflects when the file landed
+            // on disk. New rows stamp UtcNow at insert and float above.
+            const string FirstScannedRepairKey = "first_scanned_repair_v1";
+            if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedRepairKey)))
+            {
+                try { ConvertWtimeToUtcAndCopyToFirstScanned(conn, "wtime != 0 AND wtime != -9223372036854775808"); } catch { }
+                MetaSet(conn, FirstScannedRepairKey, "1");
+            }
+
+            // Convert any Local-kind first_scanned binaries (negative ToBinary values) to UTC binary
+            // so Ticks comparison reflects the actual moment.
+            const string FirstScannedUtcRepairKey = "first_scanned_repair_v2_utc";
+            if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedUtcRepairKey)))
+            {
+                int converted = ConvertNegativeFirstScannedToUtc(conn);
+                try { LogUtil.Log("[VPB] first_scanned UTC repair: converted " + converted + " rows"); } catch { }
+                MetaSet(conn, FirstScannedUtcRepairKey, "1");
+            }
+
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
+        }
+
+        /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process.</summary>
+        static void ConvertWtimeToUtcAndCopyToFirstScanned(VpbSqlite3.Connection conn, string whereClause)
+        {
+            var fixups = new List<KeyValuePair<string, long>>();
+            string sql = "SELECT uid, wtime FROM pkg WHERE wtime != 0 AND wtime != -9223372036854775808 AND (" + whereClause + ")";
+            using (var sel = conn.Prepare(sql))
+            {
+                while (sel.Step() == VpbSqlite3.SqliteRow)
+                {
+                    string uid = sel.ColumnText(0);
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    long bin = sel.ColumnInt64(1);
+                    DateTime dt;
+                    try { dt = DateTime.FromBinary(bin); } catch { continue; }
+                    DateTime utc = dt.Kind == DateTimeKind.Utc
+                        ? dt
+                        : (dt.Kind == DateTimeKind.Local ? dt.ToUniversalTime() : DateTime.SpecifyKind(dt, DateTimeKind.Utc));
+                    fixups.Add(new KeyValuePair<string, long>(uid, utc.ToBinary()));
+                }
+            }
+            if (fixups.Count == 0) return;
+            conn.ExecUtf8("BEGIN;");
+            try
+            {
+                using (var up = conn.Prepare("UPDATE pkg SET first_scanned = ? WHERE uid = ?"))
+                {
+                    for (int i = 0; i < fixups.Count; i++)
+                    {
+                        up.BindInt64(1, fixups[i].Value);
+                        up.BindText(2, fixups[i].Key);
+                        up.Step();
+                        up.Reset();
+                    }
+                }
+                conn.ExecUtf8("COMMIT;");
+            }
+            catch
+            {
+                try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                throw;
+            }
+        }
+
+        static int ConvertNegativeFirstScannedToUtc(VpbSqlite3.Connection conn)
+        {
+            var fixups = new List<KeyValuePair<string, long>>();
+            try
+            {
+                using (var sel = conn.Prepare("SELECT uid, first_scanned FROM pkg WHERE first_scanned IS NOT NULL AND first_scanned < 0"))
+                {
+                    while (sel.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string uid = sel.ColumnText(0);
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        long bin = sel.ColumnInt64(1);
+                        DateTime dt;
+                        try { dt = DateTime.FromBinary(bin); } catch { continue; }
+                        if (dt.Kind == DateTimeKind.Utc) continue;
+                        DateTime utc = dt.Kind == DateTimeKind.Local
+                            ? dt.ToUniversalTime()
+                            : DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                        fixups.Add(new KeyValuePair<string, long>(uid, utc.ToBinary()));
+                    }
+                }
+            }
+            catch { return 0; }
+            if (fixups.Count == 0) return 0;
+            try
+            {
+                conn.ExecUtf8("BEGIN;");
+                try
+                {
+                    using (var up = conn.Prepare("UPDATE pkg SET first_scanned = ? WHERE uid = ?"))
+                    {
+                        for (int i = 0; i < fixups.Count; i++)
+                        {
+                            up.BindInt64(1, fixups[i].Value);
+                            up.BindText(2, fixups[i].Key);
+                            up.Step();
+                            up.Reset();
+                        }
+                    }
+                    conn.ExecUtf8("COMMIT;");
+                }
+                catch
+                {
+                    try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                    return 0;
+                }
+            }
+            catch { return 0; }
+            return fixups.Count;
+        }
+
+        static void MetaSet(VpbSqlite3.Connection conn, string key, string value)
+        {
+            try
+            {
+                using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                {
+                    st.BindText(1, key);
+                    st.BindText(2, value ?? "");
+                    st.Step();
+                }
+            }
+            catch { }
         }
 
 
@@ -2793,8 +2925,8 @@ namespace VPB
         static long ResolveFirstScannedForInsert(long existing, long ict, long wt)
         {
             if (existing != 0 && existing != long.MinValue) return existing;
-            if (ict != 0 && ict != long.MinValue) return ict;
-            if (wt != 0 && wt != DateTime.MinValue.Ticks) return wt;
+            // Brand-new uid: stamp now. ict (creator build date) and wt (file mtime) don't reflect
+            // when VPB first saw this uid, so they're unused here.
             return DateTime.UtcNow.ToBinary();
         }
 
@@ -2907,6 +3039,40 @@ namespace VPB
                 }
             }
             catch { }
+        }
+
+        /// <summary>Copy <c>pkg.first_scanned</c> onto live <see cref="VarPackage.FirstScannedBinary"/> for every uid in <paramref name="byUid"/>.</summary>
+        internal static int HydrateFirstScannedBinaryFromPkg(Dictionary<string, VarPackage> byUid)
+        {
+            if (!VpbSqlite3.IsAvailable || byUid == null || byUid.Count == 0) return 0;
+            int n = 0;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT uid, first_scanned FROM pkg WHERE first_scanned IS NOT NULL AND first_scanned != 0"))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string uid = st.ColumnText(0);
+                            if (string.IsNullOrEmpty(uid)) continue;
+                            long fs = st.ColumnInt64(1);
+                            if (fs == 0 || fs == long.MinValue) continue;
+                            VarPackage pkg;
+                            if (byUid.TryGetValue(uid, out pkg) && pkg != null)
+                            {
+                                try { pkg.FirstScannedBinary = fs; n++; } catch { }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] HydrateFirstScannedBinaryFromPkg failed: " + ex.Message); } catch { }
+            }
+            return n;
         }
 
         /// <summary>After package scan: invalidate stale SQL gate when inventory changed; schedule index patch.</summary>
@@ -3733,6 +3899,8 @@ namespace VPB
             insPkg.Step();
             insPkg.Reset();
             nPkgInserted++;
+            // Mirror onto the in-memory VarPackage so consumers that read it directly stay in sync with SQL.
+            try { pkg.FirstScannedBinary = firstScannedBin; } catch { }
 
             if (insDep == null) return;
             long tDep0 = Stopwatch.GetTimestamp();
@@ -4368,6 +4536,12 @@ namespace VPB
                         s_ReadyPkgInvSig = null;
                     }
                 }
+                bool bulkActive = false;
+                try { bulkActive = FileManager.IsBulkDeepScanActive; } catch { }
+                int attempts = bulkActive
+                    ? s_PostBulkIncompleteRebuildAttempts
+                    : Interlocked.Increment(ref s_PostBulkIncompleteRebuildAttempts);
+                bool givingUp = !bulkActive && attempts >= MaxPostBulkIncompleteRebuildAttempts;
                 try
                 {
                     LogUtil.Log(VamStartupOptimizations.LogTag

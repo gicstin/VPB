@@ -756,6 +756,16 @@ namespace VPB
             // Registry is usable for gallery/init as soon as bulk RegisterPackage finishes — do not wait on delta merge.
             TryNotifyRegistryReadyForInit();
 
+            // Stamp pkg.first_scanned (from SQL) onto every live VarPackage so consumers reading
+            // VarPackage.FirstScannedBinary directly stay in sync with the persisted value.
+            try
+            {
+                int hydrated = VpbLocalDatabase.HydrateFirstScannedBinaryFromPkg(packagesByUid);
+                if (hydrated > 0)
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " hydrated FirstScannedBinary for " + hydrated + " packages from SQL");
+            }
+            catch { }
+
             MergePackageRefreshDelta(diff.RemoveSet, diff.AddSet);
             LogDuplicateUidSummary(diff.DuplicateUidPaths);
         }

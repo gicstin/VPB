@@ -538,6 +538,19 @@ namespace VPB
             return uid.Substring(0, lastDot);
         }
 
+        /// <summary>
+        /// Convert to UTC kind before sort. DateTime.CompareTo compares Ticks ignoring Kind, so a
+        /// Local-kind value sorts the local UTC offset ahead of any UTC-kind value at the same
+        /// wall-clock minute; converting realigns Ticks so the comparison reflects the actual moment.
+        /// </summary>
+        private static DateTime NormalizeToUtcForCompare(DateTime dt)
+        {
+            if (dt == DateTime.MinValue) return dt;
+            if (dt.Kind == DateTimeKind.Local) return dt.ToUniversalTime();
+            if (dt.Kind == DateTimeKind.Unspecified) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            return dt;
+        }
+
         /// <summary>Per-row indexed first_scanned, with VarPackage fallback. Returns DateTime.MinValue when unknown.</summary>
         private static DateTime GetIndexedFirstScannedForFile(FileEntry file)
         {
@@ -545,22 +558,22 @@ namespace VPB
             DateTime dt;
             if (file is VarFileEntry vfe)
             {
-                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return NormalizeToUtcForCompare(dt);
                 try
                 {
                     if (vfe.Package != null && vfe.Package.FirstScannedBinary != long.MinValue && vfe.Package.FirstScannedBinary != 0L)
-                        return DateTime.FromBinary(vfe.Package.FirstScannedBinary);
+                        return NormalizeToUtcForCompare(DateTime.FromBinary(vfe.Package.FirstScannedBinary));
                 }
                 catch { }
                 return DateTime.MinValue;
             }
             if (file is PackageListEntry ple)
             {
-                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return NormalizeToUtcForCompare(dt);
                 try
                 {
                     if (ple.Package != null && ple.Package.FirstScannedBinary != long.MinValue && ple.Package.FirstScannedBinary != 0L)
-                        return DateTime.FromBinary(ple.Package.FirstScannedBinary);
+                        return NormalizeToUtcForCompare(DateTime.FromBinary(ple.Package.FirstScannedBinary));
                 }
                 catch { }
             }
@@ -572,10 +585,10 @@ namespace VPB
                 try
                 {
                     DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
-                    if (ct != DateTime.MinValue) return ct;
+                    if (ct != DateTime.MinValue) return NormalizeToUtcForCompare(ct);
                 }
                 catch { }
-                return sfe.LastWriteTime;
+                return NormalizeToUtcForCompare(sfe.LastWriteTime);
             }
             return DateTime.MinValue;
         }
