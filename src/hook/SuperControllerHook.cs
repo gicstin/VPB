@@ -1339,6 +1339,9 @@ namespace VPB
             try
             {
                 qi.tex = null;
+                // Skip cache on requeue: if cache invalidation failed (file locked / permissions),
+                // VaM's loader would re-read the same corrupt cache, fail again, and bounce back here.
+                try { qi.skipCache = true; } catch { }
                 var loader = ImageLoaderThreaded.singleton;
                 if (loader == null)
                 {
