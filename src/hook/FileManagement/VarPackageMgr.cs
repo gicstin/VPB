@@ -181,10 +181,11 @@ namespace VPB
                 {
                     int first = reader.ReadInt32();
                     int count = 0;
+                    int version = LegacyCacheVersion;
                     bool includeVarMeta = first == LegacyCacheMagic;
                     if (includeVarMeta)
                     {
-                        int version = reader.ReadInt32();
+                        version = reader.ReadInt32();
                         if (version != LegacyCacheVersion && version != 6)
                         {
                             LogUtil.Log("VarPackageMgr legacy cache version mismatch " + version);
@@ -204,7 +205,7 @@ namespace VPB
                             string key = reader.ReadString();
                             if (string.IsNullOrEmpty(key)) continue;
                             var pkg = new SerializableVarPackage();
-                            pkg.Read(reader, includeVarMeta);
+                            pkg.Read(reader, includeVarMeta, version);
                             if (!target.ContainsKey(key))
                                 target.Add(key, pkg);
                             loadedCount++;

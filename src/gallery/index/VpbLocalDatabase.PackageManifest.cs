@@ -445,11 +445,13 @@ namespace VPB
                 {
                     int first = reader.ReadInt32();
                     int count = 0;
+                    int version = LegacyManifestCacheVersion;
                     bool includeVarMeta = first == LegacyManifestCacheMagic;
                     if (includeVarMeta)
                     {
-                        int version = reader.ReadInt32();
-                        if (version != LegacyManifestCacheVersion)
+                        version = reader.ReadInt32();
+                        // v7 added a trailing ZipNameCodePage int per record; v6 records lack it.
+                        if (version != 6 && version != 7)
                         {
                             LogUtil.Log("VarPackageMgr legacy cache version mismatch " + version);
                             return false;
@@ -466,7 +468,7 @@ namespace VPB
                         string key = reader.ReadString();
                         if (string.IsNullOrEmpty(key)) continue;
                         var pkg = new SerializableVarPackage();
-                        pkg.Read(reader, includeVarMeta);
+                        pkg.Read(reader, includeVarMeta, version);
                         if (!lookup.ContainsKey(key))
                             lookup.Add(key, pkg);
                     }

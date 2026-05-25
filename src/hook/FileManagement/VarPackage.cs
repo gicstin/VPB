@@ -70,6 +70,11 @@ namespace VPB
 
         public void Read(BinaryReader reader, bool includeVarMeta)
         {
+            Read(reader, includeVarMeta, 7);
+        }
+
+        public void Read(BinaryReader reader, bool includeVarMeta, int legacyVersion)
+        {
             //FileEntryNames
             {
                 var count = reader.ReadInt32();
@@ -174,7 +179,11 @@ namespace VPB
                 IsInvalid = reader.ReadBoolean();
                 VarInternalCreationTimeBinary = reader.ReadInt64();
                 ZipNameCodePage = 0;
-                if (reader.BaseStream != null && reader.BaseStream.Length - reader.BaseStream.Position >= 4)
+                // v7 added trailing ZipNameCodePage int. For v6, those 4 bytes belong to the next
+                // record's string-length prefix; reading them here shifts position and corrupts the rest.
+                if (legacyVersion >= 7
+                    && reader.BaseStream != null
+                    && reader.BaseStream.Length - reader.BaseStream.Position >= 4)
                 {
                     try { ZipNameCodePage = reader.ReadInt32(); } catch { ZipNameCodePage = 0; }
                 }
