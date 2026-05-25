@@ -418,30 +418,35 @@ namespace VPB
             try { ConvertWtimeToUtcAndCopyToFirstScanned(conn, "first_scanned IS NULL"); } catch { }
 
             // One-shot reset: align all rows to wtime so DateAdded reflects when the file landed
-            // on disk. New rows stamp UtcNow at insert and float above.
+            // on disk. New rows stamp UtcNow at insert and float above. Sentinel only on success,
+            // otherwise a transient SQLite failure here would skip the repair forever.
             const string FirstScannedRepairKey = "first_scanned_repair_v1";
             if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedRepairKey)))
             {
-                try { ConvertWtimeToUtcAndCopyToFirstScanned(conn, "wtime != 0 AND wtime != -9223372036854775808"); } catch { }
-                MetaSet(conn, FirstScannedRepairKey, "1");
+                bool ok = false;
+                try { ok = ConvertWtimeToUtcAndCopyToFirstScanned(conn, "wtime != 0 AND wtime != -9223372036854775808"); } catch { ok = false; }
+                if (ok) MetaSet(conn, FirstScannedRepairKey, "1");
             }
 
             // Convert any Local-kind first_scanned binaries (negative ToBinary values) to UTC binary
-            // so Ticks comparison reflects the actual moment.
+            // so Ticks comparison reflects the actual moment. Sentinel only on success.
             const string FirstScannedUtcRepairKey = "first_scanned_repair_v2_utc";
             if (string.IsNullOrEmpty(MetaGet(conn, FirstScannedUtcRepairKey)))
             {
-                int converted = ConvertNegativeFirstScannedToUtc(conn);
-                try { LogUtil.Log("[VPB] first_scanned UTC repair: converted " + converted + " rows"); } catch { }
-                MetaSet(conn, FirstScannedUtcRepairKey, "1");
+                int converted;
+                if (TryConvertNegativeFirstScannedToUtc(conn, out converted))
+                {
+                    try { LogUtil.Log("[VPB] first_scanned UTC repair: converted " + converted + " rows"); } catch { }
+                    MetaSet(conn, FirstScannedUtcRepairKey, "1");
+                }
             }
 
             EnsurePackageManifestSchema(conn);
             EnsureGalleryUserTagTables(conn);
         }
 
-        /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process.</summary>
-        static void ConvertWtimeToUtcAndCopyToFirstScanned(VpbSqlite3.Connection conn, string whereClause)
+        /// <summary>UPDATE pkg SET first_scanned = utcbin(wtime) WHERE ...; converts Local-kind wtime to UTC binary in-process. Returns true on success (including no-op).</summary>
+        static bool ConvertWtimeToUtcAndCopyToFirstScanned(VpbSqlite3.Connection conn, string whereClause)
         {
             var fixups = new List<KeyValuePair<string, long>>();
             string sql = "SELECT uid, wtime FROM pkg WHERE wtime != 0 AND wtime != -9223372036854775808 AND (" + whereClause + ")";
@@ -460,7 +465,7 @@ namespace VPB
                     fixups.Add(new KeyValuePair<string, long>(uid, utc.ToBinary()));
                 }
             }
-            if (fixups.Count == 0) return;
+            if (fixups.Count == 0) return true;
             conn.ExecUtf8("BEGIN;");
             try
             {
@@ -481,10 +486,13 @@ namespace VPB
                 try { conn.ExecUtf8("ROLLBACK;"); } catch { }
                 throw;
             }
+            return true;
         }
 
-        static int ConvertNegativeFirstScannedToUtc(VpbSqlite3.Connection conn)
+        /// <summary>Returns true on success (including no-op); convertedRows is the number of rows actually rewritten.</summary>
+        static bool TryConvertNegativeFirstScannedToUtc(VpbSqlite3.Connection conn, out int convertedRows)
         {
+            convertedRows = 0;
             var fixups = new List<KeyValuePair<string, long>>();
             try
             {
@@ -505,8 +513,8 @@ namespace VPB
                     }
                 }
             }
-            catch { return 0; }
-            if (fixups.Count == 0) return 0;
+            catch { return false; }
+            if (fixups.Count == 0) return true;
             try
             {
                 conn.ExecUtf8("BEGIN;");
@@ -527,11 +535,12 @@ namespace VPB
                 catch
                 {
                     try { conn.ExecUtf8("ROLLBACK;"); } catch { }
-                    return 0;
+                    return false;
                 }
             }
-            catch { return 0; }
-            return fixups.Count;
+            catch { return false; }
+            convertedRows = fixups.Count;
+            return true;
         }
 
         static void MetaSet(VpbSqlite3.Connection conn, string key, string value)
