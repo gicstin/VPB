@@ -7,11 +7,11 @@ namespace VPB
 {
     public class PosePeopleCountIndex
     {
-        private static PosePeopleCountIndex _instance;
-        public static PosePeopleCountIndex Instance => _instance ?? (_instance = new PosePeopleCountIndex());
+        // Static-init guarantees a single instance; lazy-on-first-access would race off-thread callers.
+        private static readonly PosePeopleCountIndex _instance = new PosePeopleCountIndex();
+        public static PosePeopleCountIndex Instance => _instance;
 
-        // Dictionary<,> is not safe for concurrent read+write, and foreach in Save throws on
-        // concurrent mutation. Lock guards all access in case any Set() caller runs off-thread.
+        // Dictionary<,> is not safe for concurrent read+write, and foreach in Save throws on concurrent mutation. Lock guards all access in case any Set() caller runs off-thread.
         private readonly object _lock = new object();
         private readonly Dictionary<string, int> _counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private bool _loaded;
