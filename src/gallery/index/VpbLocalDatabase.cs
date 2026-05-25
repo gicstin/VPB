@@ -5449,11 +5449,13 @@ namespace VPB
             }
             // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
             // completing between bump and this check can leave scanBin ahead even when content
-            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read after.
+            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read both clocks
+            // after so a scan that completed during the bump can't slip past as accepted.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
                 lock (s_Sync) { readyScan = s_ReadyScanBinary; catSig = s_ReadyCategoriesSig; }
+                try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
                 if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
                 {
                     stats.RejectReason = "index_stale_or_empty_sig readyScan=" + readyScan + " scanBin=" + scanBin + " sigEmpty=" + (string.IsNullOrEmpty(catSig) ? "1" : "0");
@@ -6031,11 +6033,13 @@ namespace VPB
             }
             // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
             // completing between bump and this check can leave scanBin ahead even when content
-            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read after.
+            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read both clocks
+            // after so a scan that completed during the bump can't slip past as accepted.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
                 lock (s_Sync) { readyScan = s_ReadyScanBinary; catSig = s_ReadyCategoriesSig; }
+                try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
                 if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
                     return false;
             }
