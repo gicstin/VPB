@@ -64,7 +64,14 @@ namespace VPB
         {
             if (flushImmediately)
             {
-                try { VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh(reason); } catch { }
+                // ForceRunPendingCoalescedVamRefresh returns false when nothing is queued; fall through
+                // to a direct Refresh so flushNativeImmediately:true callers actually get one.
+                try
+                {
+                    if (!VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh(reason))
+                        VamOnDemandLoader.RunVamFileManagerRefreshNow(reason);
+                }
+                catch { }
                 return;
             }
             FileManager.ScheduleCoalescedNativeRefresh();
