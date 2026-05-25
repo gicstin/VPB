@@ -110,6 +110,7 @@ namespace VPB
         public ConfigEntry<bool> LoadDependenciesWithPackage;
         public ConfigEntry<bool> SyncRefreshOnPresetLoad;
         public ConfigEntry<bool> HairSwapKeepVisibleUntilLoaded;
+        public ConfigEntry<bool> ReturnToSceneViewOnStartup;
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
@@ -161,6 +162,7 @@ namespace VPB
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
             SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous coalesced native VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. When false: coalesced native refresh only (~250ms delay) — first-click preset apply for on-demand packages may miss catalog entries until refresh completes; safe to disable if sync refresh causes stalls. No full VPB rescan on preset apply.");
             HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
+            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View).");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");

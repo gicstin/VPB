@@ -676,6 +676,26 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "helpers.returnToSceneViewOnStartup", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_return_to_scene_on_startup", "Return to scene view on startup"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.ReturnToSceneViewOnStartup != null
+                            && Settings.Instance.ReturnToSceneViewOnStartup.Value;
+                    } catch { return false; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.ReturnToSceneViewOnStartup != null)
+                            Settings.Instance.ReturnToSceneViewOnStartup.Value = v;
+                        Settings.SaveConfig();
+                    } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginThumbs", GroupKey = "lists", Label = VPBTranslation.T("settings.plugin_gallery_grid_thumbnails", "Plugin thumbnails in grid"),
                 Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_grid_thumbnails", "Use sister-image thumbnails for plugin files in grid."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.PluginGalleryGridThumbnails,

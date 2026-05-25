@@ -747,10 +747,39 @@ namespace VPB
             MessageKit.post(MessageDef.DeactivateWorldUI);
         }
 
+        static bool s_ReturnToSceneViewOnStartupApplied;
+
+        static bool IsReturnToSceneViewOnStartupEnabled()
+        {
+            try
+            {
+                return Settings.Instance != null
+                    && Settings.Instance.ReturnToSceneViewOnStartup != null
+                    && Settings.Instance.ReturnToSceneViewOnStartup.Value;
+            }
+            catch { return false; }
+        }
+
+        static void TryReturnToSceneViewOnStartup(SuperController sc)
+        {
+            if (s_ReturnToSceneViewOnStartupApplied || sc == null) return;
+            if (!IsReturnToSceneViewOnStartupEnabled())
+            {
+                s_ReturnToSceneViewOnStartupApplied = true;
+                return;
+            }
+            if (LogUtil.IsSceneLoadActive()) return;
+
+            s_ReturnToSceneViewOnStartupApplied = true;
+            try { sc.DeactivateWorldUI(); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] ReturnToSceneViewOnStartup failed: " + ex.Message); }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "ActivateWorldUI")]
         public static void PostActivateWorldUI(SuperController __instance)
         {
+            TryReturnToSceneViewOnStartup(__instance);
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
