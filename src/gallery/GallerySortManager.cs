@@ -630,6 +630,10 @@ namespace VPB
                     try { added = FileStat.GetCreationTimeOrMin(sfe.Path); } catch { }
                     DateTime updated = sfe.LastWriteTime;
                     if (added == DateTime.MinValue) added = updated;
+                    // File timestamps come back as Local kind; normalize so loose-file families
+                    // sort against UTC-normalized VAR families on the same axis.
+                    added = NormalizeToUtcForCompare(added);
+                    updated = NormalizeToUtcForCompare(updated);
                     map[famKey] = new FamilyScanTimes { MinScanned = added, HighestVersion = 0, HighestVersionScanned = updated };
                     continue;
                 }
