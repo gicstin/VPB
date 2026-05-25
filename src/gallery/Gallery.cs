@@ -918,7 +918,8 @@ namespace VPB
                 VamStartupProfiler.Milestone("sql_rebuild_deferred_run_begin");
             }
             catch { }
-            try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(); } catch { }
+            // Deferred coroutine runs post-startup-ready; force routes to full-rebuild instead of incremental.
+            try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
         }
 
         /// <summary>After SQLite index patch completes, refresh visible gallery grids that use SQL.</summary>
