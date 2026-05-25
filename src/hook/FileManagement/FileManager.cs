@@ -758,9 +758,15 @@ namespace VPB
 
             // Stamp pkg.first_scanned (from SQL) onto every live VarPackage so consumers reading
             // VarPackage.FirstScannedBinary directly stay in sync with the persisted value.
+            // SQL read runs lock-free; only the in-memory apply holds packagesLock.
             try
             {
-                int hydrated = VpbLocalDatabase.HydrateFirstScannedBinaryFromPkg(packagesByUid);
+                var fsByUid = VpbLocalDatabase.ReadFirstScannedBinariesFromPkg();
+                int hydrated;
+                lock (packagesLock)
+                {
+                    hydrated = VpbLocalDatabase.ApplyFirstScannedToPackages(packagesByUid, fsByUid);
+                }
                 if (hydrated > 0)
                     LogUtil.Log(VamStartupOptimizations.LogTag + " hydrated FirstScannedBinary for " + hydrated + " packages from SQL");
             }

@@ -3050,11 +3050,15 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Copy <c>pkg.first_scanned</c> onto live <see cref="VarPackage.FirstScannedBinary"/> for every uid in <paramref name="byUid"/>.</summary>
-        internal static int HydrateFirstScannedBinaryFromPkg(Dictionary<string, VarPackage> byUid)
+        /// <summary>
+        /// Pure-SQL pass: returns every <c>pkg.first_scanned</c> as a uid → binary dict. Cheap to
+        /// call without holding any in-memory dict lock; pair with <see cref="ApplyFirstScannedToPackages"/>
+        /// under the caller's lock so SQL I/O doesn't span the lock window.
+        /// </summary>
+        internal static Dictionary<string, long> ReadFirstScannedBinariesFromPkg()
         {
-            if (!VpbSqlite3.IsAvailable || byUid == null || byUid.Count == 0) return 0;
-            int n = 0;
+            var fsByUid = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            if (!VpbSqlite3.IsAvailable) return fsByUid;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -3068,18 +3072,30 @@ namespace VPB
                             if (string.IsNullOrEmpty(uid)) continue;
                             long fs = st.ColumnInt64(1);
                             if (fs == 0 || fs == long.MinValue) continue;
-                            VarPackage pkg;
-                            if (byUid.TryGetValue(uid, out pkg) && pkg != null)
-                            {
-                                try { pkg.FirstScannedBinary = fs; n++; } catch { }
-                            }
+                            fsByUid[uid] = fs;
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                try { LogUtil.LogWarning("[VPB] HydrateFirstScannedBinaryFromPkg failed: " + ex.Message); } catch { }
+                try { LogUtil.LogWarning("[VPB] ReadFirstScannedBinariesFromPkg failed: " + ex.Message); } catch { }
+            }
+            return fsByUid;
+        }
+
+        /// <summary>In-memory apply pass; caller must hold the dict's lock.</summary>
+        internal static int ApplyFirstScannedToPackages(Dictionary<string, VarPackage> byUid, Dictionary<string, long> fsByUid)
+        {
+            if (byUid == null || byUid.Count == 0 || fsByUid == null || fsByUid.Count == 0) return 0;
+            int n = 0;
+            foreach (var kv in fsByUid)
+            {
+                VarPackage pkg;
+                if (byUid.TryGetValue(kv.Key, out pkg) && pkg != null)
+                {
+                    try { pkg.FirstScannedBinary = kv.Value; n++; } catch { }
+                }
             }
             return n;
         }
