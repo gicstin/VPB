@@ -131,6 +131,9 @@ namespace VPB
         private static volatile int s_PendingSqlRebuildAfterDeepScan;
         /// <summary>Queued <see cref="QueueGalleryIndexUpdateWorker"/> with force — worker must not honor stale skip flags.</summary>
         private static volatile int s_WorkerBypassGallerySkipCheck;
+        /// <summary>Consecutive rebuilds that finished with cat_mem incomplete (skip threshold). Capped to break re-queue loops when a handful of VARs are genuinely uncacheable.</summary>
+        private static volatile int s_PostBulkIncompleteRebuildAttempts;
+        private const int MaxPostBulkIncompleteRebuildAttempts = 3;
         static int s_LastSqlRebuildDeepScanProgress;
         static int s_LastGalleryRebuildDeferLogPctBucket = -1;
         private static volatile bool s_GalleryIndexBuildIndicatorPending;
@@ -4373,22 +4376,20 @@ namespace VPB
                             : " gallery SQL pkg pass only (cat_mem waits for deep scan)")
                         + " pkg=" + nPkgInserted + " catMem=" + nCatMemInserted
                         + " skippedUnscanned=" + nCatMemSkippedUnscanned
-                        + " pkgErrors=" + nPkgErrors);
+                        + " pkgErrors=" + nPkgErrors
+                        + (bulkActive ? "" : " attempt=" + attempts + "/" + MaxPostBulkIncompleteRebuildAttempts)
+                        + (givingUp ? " (giving up; some packages are persistently uncacheable)" : ""));
                 }
                 catch { }
-                bool queueAnotherRebuild = true;
-                try
-                {
-                    if (catMemIncomplete && FileManager.IsBulkDeepScanActive)
-                        queueAnotherRebuild = false;
-                }
-                catch { }
+                bool queueAnotherRebuild = !givingUp;
+                if (catMemIncomplete && bulkActive) queueAnotherRebuild = false;
                 if (queueAnotherRebuild)
                 {
                     try { QueueGalleryIndexUpdateWorker(true); } catch { }
                 }
                 return;
             }
+            Interlocked.Exchange(ref s_PostBulkIncompleteRebuildAttempts, 0);
 
             lock (s_Sync)
             {
@@ -5272,11 +5273,18 @@ namespace VPB
                 readyScan = s_ReadyScanBinary;
                 catSig = s_ReadyCategoriesSig;
             }
+            // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
+            // completing between bump and this check can leave scanBin ahead even when content
+            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read after.
             if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
-                stats.RejectReason = "index_stale_or_empty_sig readyScan=" + readyScan + " scanBin=" + scanBin + " sigEmpty=" + (string.IsNullOrEmpty(catSig) ? "1" : "0");
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
-                return false;
+                lock (s_Sync) { readyScan = s_ReadyScanBinary; catSig = s_ReadyCategoriesSig; }
+                if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
+                {
+                    stats.RejectReason = "index_stale_or_empty_sig readyScan=" + readyScan + " scanBin=" + scanBin + " sigEmpty=" + (string.IsNullOrEmpty(catSig) ? "1" : "0");
+                    return false;
+                }
             }
             if (s_RebuildRunning)
             {
@@ -5847,11 +5855,17 @@ namespace VPB
                 readyScan = s_ReadyScanBinary;
                 catSig = s_ReadyCategoriesSig;
             }
-            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+            // scanBin advances on every scan; readyScan only on rebuild or inline bump. A scan
+            // completing between bump and this check can leave scanBin ahead even when content
+            // is unchanged. AutoSchedule bumps inline when inventory matches; re-read after.
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
             {
                 AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
-                return false;
+                lock (s_Sync) { readyScan = s_ReadyScanBinary; catSig = s_ReadyCategoriesSig; }
+                if (readyScan != scanBin || string.IsNullOrEmpty(catSig))
+                    return false;
             }
+            if (s_RebuildRunning) return false;
 
             try
             {
