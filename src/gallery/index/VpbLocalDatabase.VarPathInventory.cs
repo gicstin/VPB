@@ -37,10 +37,14 @@ namespace VPB
             ticks = 0;
             try
             {
+                // Nonexistent root is a valid "0" cache key (no files to track).
                 if (!Directory.Exists(root))
                     return true;
-                ticks = Directory.GetLastWriteTimeUtc(root).Ticks;
-                return true;
+                // NTFS only bumps a directory's own mtime on immediate-child changes; deep walk is
+                // required to detect files added inside subfolders.
+                ticks = DeepMaxDirMtimeBinary(root);
+                // 0 on an existing dir means the probe failed; refuse so a 0/0 cached pair can't pass.
+                return ticks > 0;
             }
             catch
             {
@@ -256,17 +260,16 @@ namespace VPB
                     return false;
                 }
 
-                paths = new List<string>(rows.Count);
-                for (int i = 0; i < rows.Count; i++)
-                    paths.Add(rows[i].Path);
-
+                // Reached here only because TryFastRejectVarPathInventory returned false (root mtime
+                // changed) AND no existing rows failed validation. The only remaining cause is file
+                // additions, which the cached row list cannot reflect. Force disk enum to pick them up.
                 try
                 {
-                    LogUtil.Log("Var path inventory cache HIT paths=" + paths.Count
+                    LogUtil.Log("Var path inventory cache MISS additions_likely rows=" + rows.Count
                         + " validate_ms=" + sw.ElapsedMilliseconds);
                 }
                 catch { }
-                return true;
+                return false;
             }
             catch (Exception ex)
             {
