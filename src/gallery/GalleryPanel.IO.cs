@@ -978,26 +978,18 @@ namespace VPB
 
                 if (batch.Count == 0) break;
 
-                int batchDone = 0;
-                string batchGroupId = groupId;
-                ThreadPool.QueueUserWorkItem(_ =>
+                // Must stay on the main thread: ComputeAndCachePosePeopleCount opens VarFileEntry
+                // streams via the package's shared SharpZipLib ZipFile, which is not thread-safe.
+                for (int bi = 0; bi < batch.Count; bi++)
                 {
-                    try
+                    if (groupId != posePeopleIndexGroupId)
                     {
-                        for (int bi = 0; bi < batch.Count; bi++)
-                        {
-                            if (batchGroupId != posePeopleIndexGroupId) break;
-                            try { ComputeAndCachePosePeopleCount(batch[bi]); } catch { }
-                        }
+                        // Persist counts already Set() in this partial batch before bailing.
+                        try { PosePeopleCountIndex.Instance.Save(); } catch { }
+                        yield break;
                     }
-                    finally
-                    {
-                        System.Threading.Interlocked.Exchange(ref batchDone, 1);
-                    }
-                });
-
-                while (System.Threading.Interlocked.CompareExchange(ref batchDone, 0, 0) == 0)
-                    yield return null;
+                    try { ComputeAndCachePosePeopleCount(batch[bi]); } catch { }
+                }
 
                 processed += batch.Count;
                 sinceSave += batch.Count;
