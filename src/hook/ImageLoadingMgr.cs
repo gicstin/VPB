@@ -25,8 +25,8 @@ namespace VPB
         private const int AlphaCacheVersion = 3;
         /// <summary>Max decompressed bytes for zstd serve on calling thread (LoadImage immediate, etc.).</summary>
         private const int MaxSyncDecompressedPayloadBytes = 8 * 1024 * 1024;
-        /// <summary>Max decompressed bytes when serving from disk cache (4K RGBA full mip ≈ 85MB).</summary>
-        private const int MaxServeCachePayloadBytes = 128 * 1024 * 1024;
+        /// <summary>Sized for an 8K RGBA full mip chain (8192² × 4 × 4/3 ≈ 341 MiB); 512 MiB is the next round bucket.</summary>
+        private const int MaxServeCachePayloadBytes = 512 * 1024 * 1024;
         private const int MaxCacheDimension = 8192;
 
         private readonly Queue<DecompressedData> pendingMainThreadTextureCreates = new Queue<DecompressedData>();
@@ -86,6 +86,22 @@ namespace VPB
         HashSet<string> inflightKeys = new HashSet<string>();
         private readonly object textureCacheLock = new object();
         private readonly object inflightLock = new object();
+        private readonly HashSet<string> quarantinedZstdPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly object quarantineLock = new object();
+
+        private bool IsZstdPathQuarantined(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            lock (quarantineLock)
+                return quarantinedZstdPaths.Contains(cachePath);
+        }
+
+        private bool QuarantineZstdPath(string cachePath)
+        {
+            if (string.IsNullOrEmpty(cachePath)) return false;
+            lock (quarantineLock)
+                return quarantinedZstdPaths.Add(cachePath);
+        }
         
         private class DecompressedData
         {
@@ -1334,6 +1350,11 @@ namespace VPB
 
         private void LoadAndDecompressBackground(string cacheKey, string cachePath, ImageLoaderThreaded.QueuedImage qi)
         {
+            if (IsZstdPathQuarantined(cachePath))
+            {
+                HandleBusyOrTransientDiskCacheFailure(cacheKey, cachePath, qi, DiskCacheFailureKind.VpbZstd);
+                return;
+            }
             try
             {
                 var meta = FastLoadMetadata(cachePath);
@@ -1352,7 +1373,8 @@ namespace VPB
 
                 if (meta.Width <= 0 || meta.Height <= 0)
                 {
-                    LogUtil.LogError($"LoadAndDecompress: Invalid texture dimensions {meta.Width}x{meta.Height} for {cachePath}");
+                    if (QuarantineZstdPath(cachePath))
+                        LogUtil.LogError($"LoadAndDecompress: Invalid texture dimensions {meta.Width}x{meta.Height} for {cachePath} (quarantined for session)");
                     HandleBusyOrTransientDiskCacheFailure(cacheKey, cachePath, qi, DiskCacheFailureKind.VpbZstd);
                     return;
                 }
@@ -1360,10 +1382,13 @@ namespace VPB
                 bool queueMip = ResolveQueueCreateMipMaps(qi);
                 if (!IsRawDataValidForMeta(meta, decompressedData, queueMip, cachePath))
                 {
-                    if (decompressedData.Length > MaxServeCachePayloadBytes)
-                        LogUtil.LogError("LoadAndDecompress: Decompressed payload too large (" + decompressedData.Length + ") for " + cachePath);
-                    else
-                        LogUtil.LogError("LoadAndDecompress: Decompressed data size mismatch for " + cachePath);
+                    if (QuarantineZstdPath(cachePath))
+                    {
+                        if (decompressedData.Length > MaxServeCachePayloadBytes)
+                            LogUtil.LogError("LoadAndDecompress: Decompressed payload too large (" + decompressedData.Length + ") for " + cachePath + " (quarantined for session)");
+                        else
+                            LogUtil.LogError("LoadAndDecompress: Decompressed data size mismatch for " + cachePath + " (quarantined for session)");
+                    }
                     HandleBusyOrTransientDiskCacheFailure(cacheKey, cachePath, qi, DiskCacheFailureKind.VpbZstd);
                     return;
                 }
