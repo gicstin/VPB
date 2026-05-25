@@ -26,6 +26,14 @@ namespace VPB
         private const float IndeterminateStripWidth01 = 0.28f;
         private const float IndeterminateCycleSec = 1.35f;
 
+        private const float BannerWidth = 680f;
+        private const float BannerHeightProgress = 44f;
+        private const float BannerHeightSummary = 320f;
+        private const float BannerTopInset = 8f;
+        private const float BarHeightPx = 3f;
+        private const float BarBottomInset = 5f;
+        private const float TextRowSideInset = 14f;
+
         public static void EnsureCreated()
         {
             if (s_Instance != null) return;
@@ -75,6 +83,7 @@ namespace VPB
             if (m_SubText != null) m_SubText.text = snapshot.Subtitle ?? string.Empty;
 
             if (m_CancelButtonGO != null && !m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(true);
+            ApplyTextRowInsets(true);
 
             SetMovingStripVisible(false);
             UpdateProgressBar(snapshot.Progress01);
@@ -93,6 +102,7 @@ namespace VPB
                 if (showCancel && !m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(true);
                 if (!showCancel && m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(false);
             }
+            ApplyTextRowInsets(showCancel);
 
             if (snapshot.Progress01 < 0f)
             {
@@ -135,51 +145,56 @@ namespace VPB
             m_BannerRT.anchorMin = new Vector2(0.5f, 1f);
             m_BannerRT.anchorMax = new Vector2(0.5f, 1f);
             m_BannerRT.pivot = new Vector2(0.5f, 1f);
-            m_BannerRT.anchoredPosition = new Vector2(0, -20);
-            m_BannerRT.sizeDelta = new Vector2(760, 96);
+            m_BannerRT.anchoredPosition = new Vector2(0f, -BannerTopInset);
+            m_BannerRT.sizeDelta = new Vector2(BannerWidth, BannerHeightProgress);
 
             var bg = m_BannerGO.AddComponent<Image>();
-            bg.color = new Color(0.08f, 0.08f, 0.08f, 0.92f);
+            bg.color = new Color(0.04f, 0.05f, 0.07f, 0.88f);
             bg.raycastTarget = false;
 
             var titleGO = new GameObject("Title");
             titleGO.transform.SetParent(m_BannerGO.transform, false);
             m_TitleText = titleGO.AddComponent<Text>();
             m_TitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            m_TitleText.fontSize = 22;
-            m_TitleText.color = Color.white;
-            m_TitleText.alignment = TextAnchor.UpperCenter;
+            m_TitleText.fontSize = 15;
+            m_TitleText.color = new Color(0.96f, 0.98f, 1f, 1f);
+            m_TitleText.alignment = TextAnchor.MiddleLeft;
             m_TitleText.supportRichText = true;
+            m_TitleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            m_TitleText.verticalOverflow = VerticalWrapMode.Truncate;
             m_TitleText.raycastTarget = false;
             var titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0f, 0.45f);
-            titleRT.anchorMax = new Vector2(1f, 1f);
-            titleRT.offsetMin = new Vector2(12, 0);
-            titleRT.offsetMax = new Vector2(-12, -8);
+            titleRT.anchorMin = new Vector2(0f, 0f);
+            titleRT.anchorMax = new Vector2(0.58f, 1f);
+            titleRT.offsetMin = new Vector2(TextRowSideInset + 92f, BarHeightPx + BarBottomInset + 2f);
+            titleRT.offsetMax = new Vector2(-6f, -2f);
 
             var subGO = new GameObject("Sub");
             subGO.transform.SetParent(m_BannerGO.transform, false);
             m_SubText = subGO.AddComponent<Text>();
             m_SubText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            m_SubText.fontSize = 16;
-            m_SubText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
-            m_SubText.alignment = TextAnchor.UpperCenter;
+            m_SubText.fontSize = 12;
+            m_SubText.color = new Color(0.62f, 0.68f, 0.74f, 1f);
+            m_SubText.alignment = TextAnchor.MiddleRight;
+            m_SubText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            m_SubText.verticalOverflow = VerticalWrapMode.Truncate;
             m_SubText.raycastTarget = false;
             var subRT = subGO.GetComponent<RectTransform>();
-            subRT.anchorMin = new Vector2(0f, 0.18f);
-            subRT.anchorMax = new Vector2(1f, 0.55f);
-            subRT.offsetMin = new Vector2(12, 0);
-            subRT.offsetMax = new Vector2(-12, 0);
+            subRT.anchorMin = new Vector2(0.42f, 0f);
+            subRT.anchorMax = new Vector2(1f, 1f);
+            subRT.offsetMin = new Vector2(6f, BarHeightPx + BarBottomInset + 2f);
+            subRT.offsetMax = new Vector2(-TextRowSideInset, -2f);
 
             var barBgGO = new GameObject("BarBg");
             barBgGO.transform.SetParent(m_BannerGO.transform, false);
             m_BarBgRT = barBgGO.AddComponent<RectTransform>();
             m_BarBgRT.anchorMin = new Vector2(0f, 0f);
-            m_BarBgRT.anchorMax = new Vector2(1f, 0.18f);
-            m_BarBgRT.offsetMin = new Vector2(12, 12);
-            m_BarBgRT.offsetMax = new Vector2(-12, 6);
+            m_BarBgRT.anchorMax = new Vector2(1f, 0f);
+            m_BarBgRT.pivot = new Vector2(0.5f, 0f);
+            m_BarBgRT.anchoredPosition = new Vector2(0f, BarBottomInset);
+            m_BarBgRT.sizeDelta = new Vector2(-TextRowSideInset * 2f, BarHeightPx);
             var barBg = barBgGO.AddComponent<Image>();
-            barBg.color = new Color(1f, 1f, 1f, 0.12f);
+            barBg.color = new Color(1f, 1f, 1f, 0.1f);
             barBg.raycastTarget = false;
 
             var barFillGO = new GameObject("BarFill");
@@ -191,7 +206,7 @@ namespace VPB
             m_BarFillRT.anchoredPosition = Vector2.zero;
             m_BarFillRT.sizeDelta = new Vector2(0f, 0f);
             var barFillImg = barFillGO.AddComponent<Image>();
-            barFillImg.color = new Color(0.3f, 0.8f, 0.35f, 0.9f);
+            barFillImg.color = new Color(0.35f, 0.82f, 1f, 0.95f);
             barFillImg.raycastTarget = false;
 
             var barStripGO = new GameObject("BarStrip");
@@ -203,7 +218,7 @@ namespace VPB
             m_BarStripRT.anchoredPosition = Vector2.zero;
             m_BarStripRT.sizeDelta = new Vector2(0f, 0f);
             var barStripImg = barStripGO.AddComponent<Image>();
-            barStripImg.color = new Color(0.55f, 0.95f, 0.6f, 0.95f);
+            barStripImg.color = new Color(0.65f, 0.9f, 1f, 1f);
             barStripImg.raycastTarget = false;
             barStripGO.SetActive(false);
 
@@ -225,17 +240,17 @@ namespace VPB
             reportRT.offsetMax = new Vector2(-18, -70);
             reportGO.SetActive(false);
 
-            m_CancelButtonGO = UI.CreateUIButton(m_BannerGO, 132, 40, "Cancel", 18, 0, 0, AnchorPresets.middleCenter, () =>
+            m_CancelButtonGO = UI.CreateUIButton(m_BannerGO, 84, 26, "Cancel", 13, 0, 0, AnchorPresets.middleCenter, () =>
             {
                 VpbProgressService.RequestCancelActiveJob();
             });
             m_CancelButtonRT = m_CancelButtonGO.GetComponent<RectTransform>();
             if (m_CancelButtonRT != null)
             {
-                m_CancelButtonRT.anchorMin = new Vector2(0f, 1f);
-                m_CancelButtonRT.anchorMax = new Vector2(0f, 1f);
-                m_CancelButtonRT.pivot = new Vector2(0f, 1f);
-                m_CancelButtonRT.anchoredPosition = new Vector2(14, -10);
+                m_CancelButtonRT.anchorMin = new Vector2(0f, 0.5f);
+                m_CancelButtonRT.anchorMax = new Vector2(0f, 0.5f);
+                m_CancelButtonRT.pivot = new Vector2(0f, 0.5f);
+                m_CancelButtonRT.anchoredPosition = new Vector2(TextRowSideInset, -(BarHeightPx + BarBottomInset) * 0.5f);
             }
 
             try
@@ -265,6 +280,16 @@ namespace VPB
             m_OkButtonGO.SetActive(false);
 
             m_BannerGO.SetActive(false);
+        }
+
+        private void ApplyTextRowInsets(bool reserveCancelSlot)
+        {
+            if (m_TitleText == null) return;
+            var titleRT = m_TitleText.GetComponent<RectTransform>();
+            if (titleRT == null) return;
+            float left = TextRowSideInset + (reserveCancelSlot ? 92f : 0f);
+            float bottom = BarHeightPx + BarBottomInset + 2f;
+            titleRT.offsetMin = new Vector2(left, bottom);
         }
 
         private void ClearProgressBarFill()
@@ -335,7 +360,8 @@ namespace VPB
 
             if (m_BannerRT != null)
             {
-                if (m_BannerRT.sizeDelta.y < 320f) m_BannerRT.sizeDelta = new Vector2(m_BannerRT.sizeDelta.x, 320f);
+                if (m_BannerRT.sizeDelta.y < BannerHeightSummary)
+                    m_BannerRT.sizeDelta = new Vector2(BannerWidth, BannerHeightSummary);
             }
         }
 
@@ -349,10 +375,12 @@ namespace VPB
             if (m_OkButtonGO != null && m_OkButtonGO.activeSelf) m_OkButtonGO.SetActive(false);
 
             if (m_CancelButtonGO != null && !m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(true);
+            ApplyTextRowInsets(true);
 
             if (m_BannerRT != null)
             {
-                if (m_BannerRT.sizeDelta.y != 96f) m_BannerRT.sizeDelta = new Vector2(m_BannerRT.sizeDelta.x, 96f);
+                if (Math.Abs(m_BannerRT.sizeDelta.y - BannerHeightProgress) > 0.5f)
+                    m_BannerRT.sizeDelta = new Vector2(BannerWidth, BannerHeightProgress);
             }
         }
     }
