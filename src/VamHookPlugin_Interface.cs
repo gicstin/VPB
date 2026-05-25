@@ -168,6 +168,14 @@ namespace VPB
             }
         }
 
+        public void ToggleGalleryVisibility()
+        {
+            if (Gallery.singleton != null && Gallery.singleton.IsVisible)
+                Gallery.singleton.Hide();
+            else
+                OpenGallery();
+        }
+
         public void OpenCreateGallery()
         {
             if (Gallery.singleton != null)
@@ -181,7 +189,7 @@ namespace VPB
 		// liu modification: show/hide
 		public void LgShow()
 		{
-			VamHookPlugin.m_Show = !VamHookPlugin.m_Show;
+			ToggleGalleryVisibility();
 		}
         void OpenFileBrowser(string msg)
         {

@@ -988,6 +988,21 @@ namespace VPB
                 VamHookPlugin.singleton?.OpenHubBrowse();
                 Hide();
             });
+            footerCompressCacheBtn = UI.CreateUIButton(leftSection, 40, 40, "", 14, 0, 0, AnchorPresets.middleCenter, GalleryTriggerBulkZstdCompression);
+            footerCompressCacheBtn.name = "Footer_CompressCache";
+            footerCompressCacheBtn.GetComponent<Image>().color = UI.IconButtonBackdrop;
+            { var s = LoadCompressCacheIconSprite(UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerCompressCacheBtn, s); }
+            RegisterFooterCompressCacheHover(footerCompressCacheBtn);
+
+            footerPluginInfoBtn = UI.CreateUIButton(leftSection, 40, 40, "", 14, 0, 0, AnchorPresets.middleCenter, FooterPluginInfoOpenSettings);
+            footerPluginInfoBtn.name = "Footer_PluginInfo";
+            footerPluginInfoBtnImage = footerPluginInfoBtn.GetComponent<Image>();
+            footerPluginInfoBtnImage.color = UI.IconButtonBackdrop;
+            { var s = UI.LoadIconSprite("vpb_icons/info_square.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerPluginInfoBtn, s); }
+            RegisterFooterPluginInfoHover(footerPluginInfoBtn);
+            AddRightClickDelegate(footerPluginInfoBtn, FooterPluginInfoCheckUpdateOnRightClick);
+            FooterPluginInfoRefreshChrome();
+
             footerHubBtnImage = footerHubBtnGO.GetComponent<Image>();
             footerHubBtnImage.color = UI.IconButtonBackdrop;
             footerHubBtnText = footerHubBtnGO.GetComponentInChildren<Text>();
@@ -1268,10 +1283,14 @@ namespace VPB
                 var rndT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponentInChildren<Text>() : null;
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
+                var ccRT = footerCompressCacheBtn != null ? footerCompressCacheBtn.GetComponent<RectTransform>() : null;
+                var piRT = footerPluginInfoBtn != null ? footerPluginInfoBtn.GetComponent<RectTransform>() : null;
                 innerPaneScaleActions.Add(s => {
                     if (uRT != null) uRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (ccRT != null) ccRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (piRT != null) piRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     const int baseFont = 14;
                     const int minFont = 9;

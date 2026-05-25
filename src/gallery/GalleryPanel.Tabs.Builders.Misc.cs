@@ -99,6 +99,7 @@ namespace VPB
                 CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
                 {
                     currentSettingsGroup = key;
+                    try { CancelPluginHotkeyCapture(false); } catch { }
                     UpdateTabs();
                     RefreshInternalSettingsListRows(true);
                 }, trackedButtons, null, null, null, TextAnchor.MiddleLeft, 10f * groupTabScale, 8f * groupTabScale);
@@ -120,6 +121,10 @@ namespace VPB
             if (BaImporter.TryDetectBaDataDir(out _))
                 AddGroupRow("ba_migration", VPBTranslation.T("settings.group.ba_migration", "BrowserAssist Migration"));
             AddGroupRow("updater", VPBTranslation.T("settings.group.updater", "Auto-Updater"));
+            AddGroupRow("plugin_hotkeys", VPBTranslation.T("settings.group.plugin_hotkeys", "Hotkeys"));
+            AddGroupRow("plugin_zstd", VPBTranslation.T("settings.group.plugin_zstd", "Texture cache"));
+            AddGroupRow("plugin_scan_whitelist", VPBTranslation.T("settings.group.plugin_scan_whitelist", "VaM scan whitelist"));
+            AddGroupRow("plugin_quickmenu", VPBTranslation.T("settings.group.plugin_quickmenu", "Quick Menu"));
         }
 
         private void BuildRatingsTabs(GameObject container, List<GameObject> trackedButtons)

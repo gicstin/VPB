@@ -62,7 +62,6 @@ namespace VPB
         /// <summary>0 = auto: min(ProcessorCount, 12); else clamped 1–32 parallel VAR deep-scan workers.</summary>
         public ConfigEntry<int> MaxDeepScanWorkers;
 
-        public ConfigEntry<bool> AutoOptimizeCache;
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
 
@@ -204,7 +203,6 @@ namespace VPB
             HubHideDownloaded = config.Bind<bool>("HubBrowser", "HideDownloaded", false, "Hub Browser: Hide packages already downloaded to disk.");
 
 
-            AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Compress Cache button will start compression without opening the confirmation window.");
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "", "Last opened Gallery page.");
         }
     }

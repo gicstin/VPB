@@ -1811,7 +1811,8 @@ namespace VPB
             catch { zstdFiles = new string[0]; }
 
             var touchedZstdTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            int eligibleCount = 0;
+            int workCount = 0;
+            CurrentZstdStats.CurrentFile = "Scanning...";
             foreach (var f in files)
             {
                 try
@@ -1819,7 +1820,11 @@ namespace VPB
                     if (!File.Exists(f + "meta")) continue;
                     var mj = JSON.Parse(File.ReadAllText(f + "meta"));
                     if (BulkZstdIsThumbnail(mj, threshold)) continue;
-                    eligibleCount++;
+                    string cacheFileBase = Path.GetFileNameWithoutExtension(Path.GetFileName(f));
+                    string targetPath = TextureUtil.ResolveBulkZstdTargetPath(vpbCacheDir, cacheFileBase, out _);
+                    if (string.IsNullOrEmpty(targetPath)) continue;
+                    if (BulkZstdNeedsCompression(f, targetPath, compressionLevel))
+                        workCount++;
                 }
                 catch { }
             }
@@ -1832,14 +1837,23 @@ namespace VPB
                     if (!File.Exists(zf + "meta")) continue;
                     var mj = JSON.Parse(File.ReadAllText(zf + "meta"));
                     if (BulkZstdIsThumbnail(mj, threshold)) continue;
-                    eligibleCount++;
+                    string cacheFileBase = Path.GetFileNameWithoutExtension(Path.GetFileName(zf));
+                    string nativeTarget = TextureUtil.ResolveBulkZstdTargetPath(vpbCacheDir, cacheFileBase, out _);
+                    if (!string.IsNullOrEmpty(nativeTarget))
+                    {
+                        string nativePath = Path.Combine(nativeCacheDir, cacheFileBase + ".vamcache");
+                        if (File.Exists(nativePath)) continue;
+                    }
+                    if (BulkZstdNeedsCompression(zf, zf, compressionLevel))
+                        workCount++;
                 }
                 catch { }
             }
-            CurrentZstdStats.TotalFiles = eligibleCount;
-            if (eligibleCount == 0)
+            CurrentZstdStats.TotalFiles = workCount;
+            CurrentZstdStats.CurrentFile = null;
+            if (workCount == 0)
             {
-                LogUtil.Log("[VPB] Bulk compress: no eligible caches (native=" + files.Length + " zstd=" + zstdFiles.Length + ") in " + nativeCacheDir);
+                LogUtil.Log("[VPB] Bulk compress: nothing to compress (native=" + files.Length + " zstd=" + zstdFiles.Length + ") in " + nativeCacheDir);
             }
 
             foreach (var file in files)
@@ -1852,8 +1866,6 @@ namespace VPB
                 try
                 {
                     string fileName = Path.GetFileName(file);
-                    CurrentZstdStats.CurrentFile = fileName;
-
                     string metaPath = file + "meta";
                     if (!File.Exists(metaPath)) continue;
 
@@ -1873,17 +1885,20 @@ namespace VPB
 
                     touchedZstdTargets.Add(targetPath);
 
-                    long originalSize = new FileInfo(file).Length;
-                    CurrentZstdStats.TotalOriginalSize += originalSize;
-
-                    if (BulkZstdNeedsCompression(file, targetPath, compressionLevel))
+                    bool needsWork = BulkZstdNeedsCompression(file, targetPath, compressionLevel);
+                    if (needsWork)
                     {
+                        CurrentZstdStats.CurrentFile = fileName;
+                        long originalSize = new FileInfo(file).Length;
+                        CurrentZstdStats.TotalOriginalSize += originalSize;
                         BulkZstdCompressNativeToZstd(file, targetPath, compressionLevel, metaJson);
+                        if (File.Exists(targetPath))
+                            CurrentZstdStats.TotalCompressedSize += new FileInfo(targetPath).Length;
+                        CurrentZstdStats.ProcessedFiles++;
                     }
-
-                    if (File.Exists(targetPath))
+                    else
                     {
-                        CurrentZstdStats.TotalCompressedSize += new FileInfo(targetPath).Length;
+                        CurrentZstdStats.SkippedCount++;
                     }
 
                     if (deleteOriginal)
@@ -1891,8 +1906,6 @@ namespace VPB
                         File.Delete(file);
                         File.Delete(metaPath);
                     }
-
-                    CurrentZstdStats.ProcessedFiles++;
                 }
                 catch (Exception ex)
                 {
@@ -1918,7 +1931,6 @@ namespace VPB
 
                 try
                 {
-                    CurrentZstdStats.CurrentFile = Path.GetFileName(zstdPath);
                     string zmetaPath = zstdPath + "meta";
                     if (!File.Exists(zmetaPath)) continue;
 
@@ -1931,20 +1943,21 @@ namespace VPB
                     }
                     catch { continue; }
 
-                    long originalSize = new FileInfo(zstdPath).Length;
-                    CurrentZstdStats.TotalOriginalSize += originalSize;
-
-                    if (BulkZstdNeedsCompression(zstdPath, zstdPath, compressionLevel))
+                    bool needsWork = BulkZstdNeedsCompression(zstdPath, zstdPath, compressionLevel);
+                    if (needsWork)
                     {
+                        CurrentZstdStats.CurrentFile = Path.GetFileName(zstdPath);
+                        long originalSize = new FileInfo(zstdPath).Length;
+                        CurrentZstdStats.TotalOriginalSize += originalSize;
                         BulkZstdRecompressZstdInPlace(zstdPath, compressionLevel, metaJson);
+                        if (File.Exists(zstdPath))
+                            CurrentZstdStats.TotalCompressedSize += new FileInfo(zstdPath).Length;
+                        CurrentZstdStats.ProcessedFiles++;
                     }
-
-                    if (File.Exists(zstdPath))
+                    else
                     {
-                        CurrentZstdStats.TotalCompressedSize += new FileInfo(zstdPath).Length;
+                        CurrentZstdStats.SkippedCount++;
                     }
-
-                    CurrentZstdStats.ProcessedFiles++;
                 }
                 catch (Exception ex)
                 {
@@ -1958,7 +1971,9 @@ namespace VPB
             CurrentZstdStats.IsRunning = false;
             CurrentZstdStats.Completed = true;
             CurrentZstdStats.CurrentFile = "Completed";
-            LogUtil.Log(string.Format("Bulk compression completed: {0} processed, {1} failed", CurrentZstdStats.ProcessedFiles, CurrentZstdStats.FailedCount));
+            LogUtil.Log(string.Format(
+                "Bulk compression completed: {0} compressed, {1} already up to date, {2} failed",
+                CurrentZstdStats.ProcessedFiles, CurrentZstdStats.SkippedCount, CurrentZstdStats.FailedCount));
         }
 
         public void StartBulkZstdDecompression()

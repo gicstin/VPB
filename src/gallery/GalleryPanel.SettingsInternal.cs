@@ -15,6 +15,7 @@ namespace VPB
             TextArea,
             Button,
             ColorRgb,
+            Hotkey,
         }
 
         private sealed class InternalSettingDefinition
@@ -199,6 +200,13 @@ namespace VPB
             public string GalleryCategoryQuickOrder;
             public string GalleryCategoryQuickSwitchHidden;
             public HashSet<string> HiddenCategories;
+
+            public string PluginGalleryKey;
+            public string PluginCreateGalleryKey;
+            public string PluginHubKey;
+            public string PluginClearConsoleKey;
+            public bool PluginDownscale8kTo4k;
+            public bool PluginScanWhitelistEnabled;
         }
 
         private static string NextOf(string cur, string[] options)
@@ -986,11 +994,14 @@ namespace VPB
                         OnAction = () =>
                         {
                             updater.ClearStagedUpdate();
+                            InvalidateInternalSettingsDefsCache();
                             RefreshInternalSettingsListRows(true);
                         }
                     });
                 }
             }
+
+            AppendPluginInternalSettingDefinitions(defs);
 
             return defs;
         }
@@ -1022,7 +1033,7 @@ namespace VPB
 
         private InternalSettingsSnapshot CreateInternalSettingsSnapshot()
         {
-            return new InternalSettingsSnapshot
+            var snap = new InternalSettingsSnapshot
             {
                 DisableGalleryTransparency = VPBConfig.Instance.DisableGalleryTransparency,
                 DisableGalleryPaneTransparency = VPBConfig.Instance.DisableGalleryPaneTransparency,
@@ -1087,6 +1098,8 @@ namespace VPB
                     ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             };
+            CapturePluginSettingsIntoSnapshot(snap);
+            return snap;
         }
 
         private void EnsureInternalSettingsSession()
@@ -1097,14 +1110,42 @@ namespace VPB
             internalSettingsPreSessionScrollNormalized = (scrollRect != null) ? scrollRect.verticalNormalizedPosition : 1f;
             internalSettingsHadPreSessionViewState = true;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
+            PluginSettingsBeginSession();
             internalSettingsSessionActive = true;
         }
 
         public void NotifyUpdaterStatusChanged()
         {
             InvalidateInternalSettingsDefsCache();
+            try { FooterPluginInfoRefreshChrome(); } catch { }
+            if (_footerPluginInfoHovering)
+            {
+                _footerPluginInfoTooltipKey = int.MinValue;
+                try { FooterPluginInfoPollHoverTooltip(); } catch { }
+            }
             if (IsSettingsPanelOpen())
                 RefreshInternalSettingsListRows(true);
+        }
+
+        /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
+        public void OpenSettingsGroup(string groupKey)
+        {
+            if (string.IsNullOrEmpty(groupKey))
+                groupKey = "all";
+            currentSettingsGroup = groupKey;
+            try { CancelPluginHotkeyCapture(false); } catch { }
+            if (!IsSettingsPanelOpen())
+            {
+                if (isFixedLocally)
+                    ToggleLeft(ContentType.Settings);
+                else
+                    ToggleRight(ContentType.Settings);
+            }
+            else
+            {
+                try { UpdateTabs(); } catch { }
+                RefreshInternalSettingsListRows(true);
+            }
         }
 
         private bool IsSettingsPanelOpen()
@@ -1317,6 +1358,7 @@ namespace VPB
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
             if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
+            if (def.ControlType == InternalSettingControlType.Hotkey) return false;
             ApplyInternalSettingDefinition(def, secondary);
             if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                 NotifyInternalSettingsHoverPreviewChanged();
@@ -1419,6 +1461,7 @@ namespace VPB
             }
             detailsTr.gameObject.SetActive(true);
             DestroyChildrenByName(detailsTr, "SettingsControlContainer");
+            DestroyChildrenByName(detailsTr, "SettingsHotkeyHost");
 
             GameObject controls = new GameObject("SettingsControlContainer");
             controls.transform.SetParent(detailsTr, false);
@@ -1698,12 +1741,44 @@ namespace VPB
                 return;
             }
 
-            if (def.ControlType == InternalSettingControlType.Button && def.OnAction != null)
+            if (def.ControlType == InternalSettingControlType.Hotkey)
             {
-                CreateMiniButton(controls.transform, "CLICK", 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
-                    def.OnAction?.Invoke();
-                    RefreshInternalSettingsListRows(true);
-                });
+                RebuildPluginHotkeyRowControls(controls.transform, def, paneScale);
+                return;
+            }
+
+            if (def.ControlType == InternalSettingControlType.Button)
+            {
+                if (def.OnAction == null
+                    && string.Equals(def.Key, "plugin.scan_whitelist.empty_warn", StringComparison.OrdinalIgnoreCase))
+                {
+                    GameObject warn = new GameObject("SettingsWarningLabel");
+                    warn.transform.SetParent(controls.transform, false);
+                    LayoutElement wle = warn.AddComponent<LayoutElement>();
+                    wle.flexibleWidth = 1f;
+                    wle.preferredHeight = 32f * paneScale;
+                    Text wt = warn.AddComponent<Text>();
+                    wt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    wt.fontSize = Mathf.Max(10, Mathf.RoundToInt(14f * paneScale));
+                    wt.color = new Color(1f, 0.75f, 0.2f, 1f);
+                    wt.alignment = TextAnchor.MiddleRight;
+                    wt.supportRichText = false;
+                    wt.text = def.Label ?? "";
+                    try { VPBUiFont.ApplyTo(wt); } catch { }
+                    return;
+                }
+                if (def.OnAction != null)
+                {
+                    string btnLabel = VPBTranslation.T("settings.row.action", "CLICK");
+                    if (string.Equals(def.Key, "plugin.scan_whitelist.manage", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
+                    else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
+                    CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                        def.OnAction?.Invoke();
+                        RefreshInternalSettingsListRows(true);
+                    });
+                }
                 return;
             }
         }
@@ -1721,10 +1796,14 @@ namespace VPB
         private void SaveInternalSettingsSession()
         {
             if (!internalSettingsSessionActive) return;
+            if (!TryCommitPluginSettingsOnSave())
+                return;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             try { VPBConfig.Instance.Save(false); } catch { }
             VPBConfig.Instance.TriggerChange();
+            try { Settings.SaveConfig(); } catch { }
             try { SetHoverPreviewDummyActive(false); } catch { }
+            PluginSettingsEndSession();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
         }
@@ -1822,6 +1901,8 @@ namespace VPB
                 ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            RestorePluginSettingsFromSnapshot(b);
+
             if (this != null)
             {
                 ApplySideButtonScale();
@@ -1831,6 +1912,7 @@ namespace VPB
             }
             ApplyGalleryTransparencyToAllPanels();
             VPBConfig.Instance.TriggerChange();
+            PluginSettingsEndSession();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
         }

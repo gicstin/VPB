@@ -361,7 +361,6 @@
     <Compile Include="src\VamHookPlugin.cs" />
     <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
-    <Compile Include="src\VamHookPlugin.QuickMenu.cs" />
     <Compile Include="src\VamHookPlugin.State.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
@@ -394,6 +393,13 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FooterPluginInfo.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.ScanWhitelist.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.QuickMenuPos.cs" />
+    <Compile Include="src\VamHookPlugin.GalleryModalsBridge.cs" />
+    <Compile Include="src\VamHookPlugin.TextureCacheApi.cs" />
     <Compile Include="src\gallery\GalleryPanel.Helpers.cs" />
     <Compile Include="src\gallery\GalleryPanel.GlobalSourceFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />

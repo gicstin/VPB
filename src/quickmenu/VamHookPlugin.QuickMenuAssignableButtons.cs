@@ -15,7 +15,7 @@ namespace VPB
         private const float QuickMenuGridButtonSize = 44f;
         private const float QuickMenuGridGap = 6f;
         private const float QuickMenuGridCell = QuickMenuGridButtonSize + QuickMenuGridGap;
-        private static readonly Vector2 QuickMenuAnchorBaseline = new Vector2(-515f, -12f); // shown as (0,0) in the position UI
+        internal static readonly Vector2 QuickMenuAnchorBaseline = new Vector2(-515f, -12f); // shown as (0,0) in the position UI
         private static readonly Vector2 QuickMenuPopupOffset = new Vector2(260f, -20f);
 
         private static readonly Color QmBackdropAssignedTransparent = new Color(0f, 0f, 0f, 0.35f);
@@ -470,11 +470,11 @@ namespace VPB
             // Otherwise Update() would fight the preview and some slots would appear "stuck".
             try
             {
-                if (m_ShowQuickMenuPosWindow)
+                var panel = GalleryPanel.GetAnchoredInstance();
+                if (panel != null && panel.TryGetQuickMenuPositionEditorPreview(out float relX, out float relY))
                 {
-                    isVR = false; // window is desktop-only
-                    // In the UI, X/Y are shown relative to the baseline.
-                    center = QuickMenuAnchorBaseline + new Vector2(m_QuickMenuPosCreateX, m_QuickMenuPosCreateY);
+                    isVR = false;
+                    center = QuickMenuAnchorBaseline + new Vector2(relX, relY);
                 }
             }
             catch { }
@@ -1226,7 +1226,12 @@ namespace VPB
                     m_QmFpsLastLabelUpdateTime = now;
 
                     float fps = 0f;
-                    try { fps = 1f / Mathf.Max(0.00001f, m_FpsSmoothedDelta); }
+                    try
+                    {
+                        float dt = Time.unscaledDeltaTime;
+                        if (dt <= 0f) dt = Time.deltaTime;
+                        fps = 1f / Mathf.Max(0.00001f, dt);
+                    }
                     catch { fps = 0f; }
 
                     // Display as an integer 0..999 (no decimals), per quick-menu compact constraint.
@@ -1465,12 +1470,7 @@ namespace VPB
 
         private void QuickMenuOpenCompressCache()
         {
-            try
-            {
-                // Open the existing "Compress Cache (Zstd)" window in the main plugin UI.
-                m_ShowSpaceSaverWindow = true;
-                m_Show = true;
-            }
+            try { GalleryPanel.GalleryTriggerBulkZstdCompression(); }
             catch { }
         }
 

@@ -38,6 +38,8 @@ namespace VPB
         private static volatile bool s_GalleryUiActive;
         private static volatile bool s_AwaitingGalleryUi;
         private static volatile bool s_GalleryUiReady;
+        /// <summary>True after any gallery panel finished its first grid load this VaM session (survives panel close/recreate).</summary>
+        private static volatile bool s_GalleryUiEverReady;
 
         private static readonly object s_StartupStateSync = new object();
         private static bool s_StartupCycleInProgress;
@@ -66,7 +68,8 @@ namespace VPB
                 if (s_ManifestActive) return true;
                 if (s_DeepScanActive) return true;
                 if (s_GalleryActive || s_GalleryPending) return true;
-                if (s_GalleryUiActive || (s_AwaitingGalleryUi && !s_GalleryUiReady)) return true;
+                if (!s_GalleryUiEverReady
+                    && (s_GalleryUiActive || (s_AwaitingGalleryUi && !s_GalleryUiReady))) return true;
                 if (DateTime.UtcNow < s_ReadyUntilUtc) return true;
                 return false;
             }
@@ -162,21 +165,33 @@ namespace VPB
                 snapshot.Progress01 = Mathf.Clamp01((float)done / total);
                 snapshot.ShowMovingStrip = true;
                 snapshot.Subtitle = "Progress " + done + "/" + total;
+                if (!string.IsNullOrEmpty(current) && current != "Completed" && current != "Cancelled" && current != "Scanning...")
+                    snapshot.Subtitle += " | " + current;
+            }
+            else if (current == "Scanning...")
+            {
+                snapshot.Progress01 = -1f;
+                snapshot.ShowMovingStrip = true;
+                snapshot.Subtitle = "Scanning cache...";
+            }
+            else if (current == "Completed" || current == "Cancelled")
+            {
+                snapshot.Progress01 = 1f;
+                snapshot.ShowMovingStrip = false;
+                snapshot.Subtitle = current;
             }
             else
             {
                 snapshot.Progress01 = -1f;
-                snapshot.ShowMovingStrip = true;
-                snapshot.Subtitle = "Preparing file list...";
+                snapshot.ShowMovingStrip = false;
+                snapshot.Subtitle = "All caches already compressed";
             }
-            if (!string.IsNullOrEmpty(current) && current != "Completed" && current != "Cancelled")
-                snapshot.Subtitle += " | " + current;
             return true;
         }
 
         internal static void PollStartupCompletion()
         {
-            if (!s_AwaitingGalleryUi || s_GalleryUiReady) return;
+            if (!s_AwaitingGalleryUi || s_GalleryUiReady || s_GalleryUiEverReady) return;
             try
             {
                 if (Gallery.singleton != null && Gallery.singleton.AnyPanelHasLoadedContent)
@@ -212,6 +227,7 @@ namespace VPB
 
         internal static void BeginGalleryUiLoad()
         {
+            if (s_GalleryUiEverReady) return;
             s_GalleryUiActive = true;
             s_AwaitingGalleryUi = true;
             s_GalleryUiReady = false;
@@ -229,6 +245,7 @@ namespace VPB
         {
             s_GalleryUiActive = false;
             s_GalleryUiReady = true;
+            s_GalleryUiEverReady = true;
             s_AwaitingGalleryUi = false;
             TryEnterReadyState();
         }
@@ -401,7 +418,8 @@ namespace VPB
                 }
             }
 
-            if (s_GalleryUiActive || (s_AwaitingGalleryUi && !s_GalleryUiReady))
+            if (!s_GalleryUiEverReady
+                && (s_GalleryUiActive || (s_AwaitingGalleryUi && !s_GalleryUiReady)))
             {
                 snapshot.Visible = true;
                 snapshot.Title = "Loading gallery";
@@ -444,7 +462,7 @@ namespace VPB
 
         private static void RefreshGalleryUiExpectation()
         {
-            if (s_GalleryUiReady) return;
+            if (s_GalleryUiReady || s_GalleryUiEverReady) return;
             s_AwaitingGalleryUi = ExpectGalleryUiLoad();
         }
 
@@ -471,7 +489,7 @@ namespace VPB
             if (s_DeepScanActive) return;
             if (s_GalleryActive || s_GalleryPending) return;
             if (s_GalleryUiActive) return;
-            if (s_AwaitingGalleryUi && !s_GalleryUiReady) return;
+            if (!s_GalleryUiEverReady && s_AwaitingGalleryUi && !s_GalleryUiReady) return;
 
             lock (s_StartupStateSync)
             {

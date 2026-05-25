@@ -2475,7 +2475,8 @@ namespace VPB
                     {
                         Transform ch = detailsTrReset.GetChild(i);
                         if (ch == null) continue;
-                        if (string.Equals(ch.name, "SettingsControlContainer", StringComparison.Ordinal))
+                        if (string.Equals(ch.name, "SettingsControlContainer", StringComparison.Ordinal)
+                            || string.Equals(ch.name, "SettingsHotkeyHost", StringComparison.Ordinal))
                         {
                             UnityEngine.Object.Destroy(ch.gameObject);
                             continue;

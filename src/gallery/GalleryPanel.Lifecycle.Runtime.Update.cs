@@ -71,6 +71,10 @@ namespace VPB
 
             try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
 
+            try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
+            try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
+            try { FooterPluginInfoPollHoverTooltip(); } catch { }
+
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 
             if (canvas != null && VPBConfig.Instance != null)
@@ -619,6 +623,9 @@ namespace VPB
 
         private void HandleKeyboardInput()
         {
+            if (IsPluginHotkeyCaptureActive())
+                return;
+
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
