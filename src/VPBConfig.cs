@@ -329,6 +329,8 @@ namespace VPB
         public bool GalleryAnchorToVamMenu = true;
         /// <summary>Offset for anchoring gallery pane relative to the VAM menu system.</summary>
         public Vector3 GalleryAnchorOffset = new Vector3(0f, 0.1f, -0.1f);
+        /// <summary>When anchored to VaM menu, hide the gallery if a full-screen VaM panel becomes active (Settings, Hub, package managers) so they never overlap.</summary>
+        public bool AnchorYieldsToVamPanels = true;
 
         // Interaction toggles (persisted)
         public bool SpringScrollButtonEnabled = true;
@@ -843,6 +845,7 @@ namespace VPB
                             GalleryAnchorToVamMenu = true;
                             GalleryAnchorOffset = new Vector3(o["x"].AsFloat, 0.1f, -0.1f);
                         }
+                        if (node["AnchorYieldsToVamPanels"] != null) AnchorYieldsToVamPanels = node["AnchorYieldsToVamPanels"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["SideButtonScaleVR"] != null) SideButtonScaleVR = node["SideButtonScaleVR"].AsFloat;
                         else SideButtonScaleVR = SideButtonScale;
@@ -1117,6 +1120,7 @@ namespace VPB
                 o["y"].AsFloat = GalleryAnchorOffset.y;
                 o["z"].AsFloat = GalleryAnchorOffset.z;
                 node["GalleryAnchorOffset"] = o;
+                node["AnchorYieldsToVamPanels"].AsBool = AnchorYieldsToVamPanels;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["SideButtonScaleVR"].AsFloat = SideButtonScaleVR;
                 node["SideButtonScaleDesktop"].AsFloat = SideButtonScaleDesktop;

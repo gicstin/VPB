@@ -336,6 +336,28 @@ namespace VPB
             bool needsInit = canvas == null;
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
+
+            // Otherwise the next-frame yield path immediately hides us again.
+            if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
+                  && VPBConfig.Instance.AnchorYieldsToVamPanels && XrUtils.IsVrActive())
+            {
+                try
+                {
+                    var sc = SuperController.singleton;
+                    if (sc != null)
+                    {
+                        if (sc.activeUI != SuperController.ActiveUI.None)
+                            sc.activeUI = SuperController.ActiveUI.None;
+                        if (sc.fileBrowserUI != null && sc.fileBrowserUI.window != null && sc.fileBrowserUI.window.activeSelf)
+                            sc.fileBrowserUI.Hide();
+                        if (sc.mediaFileBrowserUI != null && sc.mediaFileBrowserUI.window != null && sc.mediaFileBrowserUI.window.activeSelf)
+                            sc.mediaFileBrowserUI.Hide();
+                        if (sc.GetSelectedController() != null) sc.ClearSelection();
+                    }
+                }
+                catch (Exception ex) { LogUtil.LogError("Show priority-takeover failed: " + ex.Message); }
+            }
+
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
@@ -790,11 +812,55 @@ namespace VPB
 
             // The anchor-based gate only applies to the specific panel that is anchored.
             bool isAnchoredInstance = (GetAnchoredInstance() == this);
+            bool isAnchored = isVR && VPBConfig.Instance.GalleryAnchorToVamMenu && isAnchoredInstance;
 
-            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
+            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || isAnchored;
             bool menuVisible = IsVamMenuVisible();
 
-            if (!gate)
+            // SelectedOptions is VaM's idle default state; only treat as yield when a controller is actually selected.
+            bool yieldTrigger = false;
+            if (isAnchored && VPBConfig.Instance.AnchorYieldsToVamPanels)
+            {
+                var sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    var aui = sc.activeUI;
+                    yieldTrigger = aui == SuperController.ActiveUI.MainMenu
+                                || aui == SuperController.ActiveUI.MainMenuOnly
+                                || aui == SuperController.ActiveUI.OnlineBrowser
+                                || aui == SuperController.ActiveUI.PackageBuilder
+                                || aui == SuperController.ActiveUI.PackageManager
+                                || aui == SuperController.ActiveUI.PackageDownloader
+                                || aui == SuperController.ActiveUI.MultiButtonPanel
+                                || aui == SuperController.ActiveUI.EmbeddedScenePanel
+                                || aui == SuperController.ActiveUI.Custom;
+
+                    if (!yieldTrigger && aui == SuperController.ActiveUI.SelectedOptions)
+                    {
+                        // Edit to Play does not clear selectedController; without gameMode guard VPB stays hidden in Play.
+                        try
+                        {
+                            var ctrl = sc.GetSelectedController();
+                            yieldTrigger = ctrl != null && !ctrl.guihidden && sc.gameMode == SuperController.GameMode.Edit;
+                        }
+                        catch { }
+                    }
+
+                    if (!yieldTrigger)
+                    {
+                        try
+                        {
+                            if (sc.fileBrowserUI != null && sc.fileBrowserUI.window != null && sc.fileBrowserUI.window.activeSelf)
+                                yieldTrigger = true;
+                            else if (sc.mediaFileBrowserUI != null && sc.mediaFileBrowserUI.window != null && sc.mediaFileBrowserUI.window.activeSelf)
+                                yieldTrigger = true;
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            if (!gate && !yieldTrigger)
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
@@ -805,7 +871,9 @@ namespace VPB
                 return;
             }
 
-            if (!menuVisible)
+            bool shouldHide = yieldTrigger || (gate && !menuVisible);
+
+            if (shouldHide)
             {
                 if (canvas.enabled)
                 {
@@ -828,10 +896,7 @@ namespace VPB
         private void ApplyVamMenuAnchoring()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            
-            bool isVR = XrUtils.IsVrActive();
-            
-            if (!isVR) return;
+            if (!XrUtils.IsVrActive()) return;
             if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;
 
             // Priority check: only the first visible panel gets anchored.
@@ -840,28 +905,28 @@ namespace VPB
             // If we are the priority panel, check if menu is visible for snapping.
             if (!IsVamMenuVisible()) return;
 
-            Transform vamMenuTrans = SuperController.singleton.mainHUD.transform;
+            var sc = SuperController.singleton;
+            Transform vamMenuTrans = sc.mainHUD.transform;
             if (vamMenuTrans == null) return;
 
-            Vector3 localOffset = VPBConfig.Instance.GalleryAnchorOffset;
-            
+            // Land VPB's bottom at the dock's top using mainHUD's own RectTransform; lossyScale captures any HUD or world-scale.
             RectTransform canvasRT = canvas.GetComponent<RectTransform>();
             float galleryHalfHeight = (canvasRT.rect.height * 0.5f) * canvasRT.lossyScale.y;
+            RectTransform hudRT = vamMenuTrans.GetComponent<RectTransform>();
+            float hudHalfHeight = (hudRT != null) ? (hudRT.rect.height * 0.5f) * hudRT.lossyScale.y : 0.1f;
+            float gap = 0.01f;
+            Vector3 targetPos = vamMenuTrans.position + (vamMenuTrans.up * (hudHalfHeight + gap + galleryHalfHeight));
 
-            // Anchor the gallery such that its bottom matches the localOffset relative to the VAM menu top.
-            // In VaM, mainHUD has its own scale and rotation.
-            Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
-            Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
-
-            // WorldSpace canvas transform writes force a full canvas rebuild; skip when menu hasn't moved.
+            // WorldSpace canvas transform writes force a full canvas rebuild; skip when nothing moved.
             if (canvas.transform.position != targetPos)
                 canvas.transform.position = targetPos;
 
+            // mainHUD's forward faces away from user; rotate 180 on local Y so the canvas faces the user.
             Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
             if (canvas.transform.rotation != targetRot)
                 canvas.transform.rotation = targetRot;
 
-            // Keep offsets reset so follow mode captures the anchored position when anchoring ends
+            // Keep offsets reset so follow mode captures the anchored position when anchoring ends.
             offsetsInitialized = false;
         }
 
