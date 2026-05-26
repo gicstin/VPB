@@ -601,7 +601,7 @@ namespace VPB
                     return;
                 }
 
-                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                try { RefreshVisibleGridVisualsOnly(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
                 ShowTemporaryStatus($"Temporarily whitelisted {addedCount} package(s) for this VaM session.", 2.5f);
             }

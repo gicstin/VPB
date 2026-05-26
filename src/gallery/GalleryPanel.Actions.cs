@@ -1218,28 +1218,46 @@ namespace VPB
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
         }
 
-        private void OnFileRightClick(FileEntry file)
+        private bool PrepareFileEntryGestureSelection(FileEntry file)
         {
-            if (file == null) return;
+            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            string idKey = GetSelectionIdentityKey(file, historyBrowse);
+            bool applyToSelection = selectedFiles != null && selectedFiles.Count > 0
+                && !string.IsNullOrEmpty(idKey)
+                && selectedFilePaths != null && selectedFilePaths.Contains(idKey);
 
-            // Right click selects if not selected.
-            // Note: We intentionally do NOT open the actions panel here; right-click should not
-            // force any bottom UI to appear (a separate context menu implementation will handle actions).
-            if (!selectedFilePaths.Contains(file.Path))
+            if (!applyToSelection)
             {
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
-                selectedFiles.Add(file);
-                selectedFilePaths.Add(file.Path);
-                selectedPath = file.Path;
+                AddFileToSelection(file, historyBrowse);
+                selectedPath = !string.IsNullOrEmpty(file.Path) ? file.Path : idKey;
                 selectedHubItem = null;
-                selectionAnchorPath = file.Path;
-                
-                // Selection should not "stick" the hover path.
+                SetSelectionAnchor(file, historyBrowse);
+
                 SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
+
+            return applyToSelection;
+        }
+
+        internal void OnFileRightClick(FileEntry file)
+        {
+            if (file == null || file is InternalSettingRowEntry) return;
+
+            // Right click selects if not selected.
+            // Note: We intentionally do NOT open the actions panel here; right-click should not
+            // force any bottom UI to appear (a separate context menu implementation will handle actions).
+            bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
+
+            try
+            {
+                bool temporary = IsCtrlHeld();
+                HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary);
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
 
             if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
             {
@@ -1247,6 +1265,16 @@ namespace VPB
                 UpdateFooterHeightState();
                 UpdateLayout();
             }
+        }
+
+        internal void OnFileMiddleClick(FileEntry file)
+        {
+            if (file == null || file is InternalSettingRowEntry) return;
+
+            bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
+
+            try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
+            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileMiddleClick scan whitelist: " + ex); }
         }
 
         internal void OnFileClick(FileEntry file)

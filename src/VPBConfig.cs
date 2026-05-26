@@ -321,6 +321,75 @@ namespace VPB
             GalleryGridBorderColorA = c.a;
             try { TriggerChange(); } catch { }
         }
+
+        /// <summary>Gallery: draw inward border on packages included in VaM scan whitelist.</summary>
+        public bool GalleryScanWlBorderEnabled = true;
+        /// <summary>Gallery grid view: show scan-whitelist border on included packages.</summary>
+        public bool GalleryScanWlBorderShowInGrid = true;
+        /// <summary>Gallery list view: show scan-whitelist border on included packages.</summary>
+        public bool GalleryScanWlBorderShowInList = true;
+        /// <summary>Gallery: scan-whitelist border strip thickness (pixels).</summary>
+        public float GalleryScanWlBorderWidth = 4f;
+        /// <summary>Grid: inward frame inset for scan-whitelist border (pixels).</summary>
+        public float GalleryScanWlGridFrameInset = 0f;
+        /// <summary>List: inward frame inset for scan-whitelist border (pixels).</summary>
+        public float GalleryScanWlListFrameInset = 2f;
+        /// <summary>Grid: when true, border hugs thumbnail rect; when false, full cell.</summary>
+        public bool GalleryScanWlBorderOnThumbnail = true;
+        public float GalleryScanWlBorderColorR = 0.2f;
+        public float GalleryScanWlBorderColorG = 0.95f;
+        public float GalleryScanWlBorderColorB = 1f;
+        public float GalleryScanWlBorderColorA = 1f;
+
+        public Color GetGalleryScanWlBorderColor()
+        {
+            return new Color(
+                Mathf.Clamp01(GalleryScanWlBorderColorR),
+                Mathf.Clamp01(GalleryScanWlBorderColorG),
+                Mathf.Clamp01(GalleryScanWlBorderColorB),
+                Mathf.Clamp01(GalleryScanWlBorderColorA));
+        }
+
+        public void SetGalleryScanWlBorderColor(Color c)
+        {
+            GalleryScanWlBorderColorR = c.r;
+            GalleryScanWlBorderColorG = c.g;
+            GalleryScanWlBorderColorB = c.b;
+            GalleryScanWlBorderColorA = c.a;
+            try { TriggerChange(); } catch { }
+        }
+
+        /// <summary>Gallery: inward border on session-only temporary scan-whitelist UID overrides.</summary>
+        public bool GalleryScanWlTempBorderEnabled = true;
+        public bool GalleryScanWlTempBorderShowInGrid = true;
+        public bool GalleryScanWlTempBorderShowInList = true;
+        public float GalleryScanWlTempBorderWidth = 4f;
+        public float GalleryScanWlTempGridFrameInset = 0f;
+        public float GalleryScanWlTempListFrameInset = 2f;
+        public bool GalleryScanWlTempBorderOnThumbnail = true;
+        public float GalleryScanWlTempBorderColorR = 1f;
+        public float GalleryScanWlTempBorderColorG = 0.15f;
+        public float GalleryScanWlTempBorderColorB = 1f;
+        public float GalleryScanWlTempBorderColorA = 1f;
+
+        public Color GetGalleryScanWlTempBorderColor()
+        {
+            return new Color(
+                Mathf.Clamp01(GalleryScanWlTempBorderColorR),
+                Mathf.Clamp01(GalleryScanWlTempBorderColorG),
+                Mathf.Clamp01(GalleryScanWlTempBorderColorB),
+                Mathf.Clamp01(GalleryScanWlTempBorderColorA));
+        }
+
+        public void SetGalleryScanWlTempBorderColor(Color c)
+        {
+            GalleryScanWlTempBorderColorR = c.r;
+            GalleryScanWlTempBorderColorG = c.g;
+            GalleryScanWlTempBorderColorB = c.b;
+            GalleryScanWlTempBorderColorA = c.a;
+            try { TriggerChange(); } catch { }
+        }
+
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
@@ -667,6 +736,28 @@ namespace VPB
             GalleryGridBorderColorG = 1f;
             GalleryGridBorderColorB = 0f;
             GalleryGridBorderColorA = 1f;
+            GalleryScanWlBorderEnabled = true;
+            GalleryScanWlBorderShowInGrid = true;
+            GalleryScanWlBorderShowInList = true;
+            GalleryScanWlBorderWidth = 4f;
+            GalleryScanWlGridFrameInset = 0f;
+            GalleryScanWlListFrameInset = 2f;
+            GalleryScanWlBorderOnThumbnail = true;
+            GalleryScanWlBorderColorR = 0.2f;
+            GalleryScanWlBorderColorG = 0.95f;
+            GalleryScanWlBorderColorB = 1f;
+            GalleryScanWlBorderColorA = 1f;
+            GalleryScanWlTempBorderEnabled = true;
+            GalleryScanWlTempBorderShowInGrid = true;
+            GalleryScanWlTempBorderShowInList = true;
+            GalleryScanWlTempBorderWidth = 4f;
+            GalleryScanWlTempGridFrameInset = 0f;
+            GalleryScanWlTempListFrameInset = 2f;
+            GalleryScanWlTempBorderOnThumbnail = true;
+            GalleryScanWlTempBorderColorR = 1f;
+            GalleryScanWlTempBorderColorG = 0.15f;
+            GalleryScanWlTempBorderColorB = 1f;
+            GalleryScanWlTempBorderColorA = 1f;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
             SpringScrollButtonEnabled = true;
@@ -836,6 +927,28 @@ namespace VPB
                         if (node["GalleryGridBorderColorG"] != null) GalleryGridBorderColorG = Mathf.Clamp01(node["GalleryGridBorderColorG"].AsFloat);
                         if (node["GalleryGridBorderColorB"] != null) GalleryGridBorderColorB = Mathf.Clamp01(node["GalleryGridBorderColorB"].AsFloat);
                         if (node["GalleryGridBorderColorA"] != null) GalleryGridBorderColorA = Mathf.Clamp01(node["GalleryGridBorderColorA"].AsFloat);
+                        if (node["GalleryScanWlBorderEnabled"] != null) GalleryScanWlBorderEnabled = node["GalleryScanWlBorderEnabled"].AsBool;
+                        if (node["GalleryScanWlBorderShowInGrid"] != null) GalleryScanWlBorderShowInGrid = node["GalleryScanWlBorderShowInGrid"].AsBool;
+                        if (node["GalleryScanWlBorderShowInList"] != null) GalleryScanWlBorderShowInList = node["GalleryScanWlBorderShowInList"].AsBool;
+                        if (node["GalleryScanWlBorderWidth"] != null) GalleryScanWlBorderWidth = Mathf.Clamp(node["GalleryScanWlBorderWidth"].AsFloat, 0f, 20f);
+                        if (node["GalleryScanWlGridFrameInset"] != null) GalleryScanWlGridFrameInset = Mathf.Clamp(node["GalleryScanWlGridFrameInset"].AsFloat, 0f, 24f);
+                        if (node["GalleryScanWlListFrameInset"] != null) GalleryScanWlListFrameInset = Mathf.Clamp(node["GalleryScanWlListFrameInset"].AsFloat, 0f, 24f);
+                        if (node["GalleryScanWlBorderOnThumbnail"] != null) GalleryScanWlBorderOnThumbnail = node["GalleryScanWlBorderOnThumbnail"].AsBool;
+                        if (node["GalleryScanWlBorderColorR"] != null) GalleryScanWlBorderColorR = Mathf.Clamp01(node["GalleryScanWlBorderColorR"].AsFloat);
+                        if (node["GalleryScanWlBorderColorG"] != null) GalleryScanWlBorderColorG = Mathf.Clamp01(node["GalleryScanWlBorderColorG"].AsFloat);
+                        if (node["GalleryScanWlBorderColorB"] != null) GalleryScanWlBorderColorB = Mathf.Clamp01(node["GalleryScanWlBorderColorB"].AsFloat);
+                        if (node["GalleryScanWlBorderColorA"] != null) GalleryScanWlBorderColorA = Mathf.Clamp01(node["GalleryScanWlBorderColorA"].AsFloat);
+                        if (node["GalleryScanWlTempBorderEnabled"] != null) GalleryScanWlTempBorderEnabled = node["GalleryScanWlTempBorderEnabled"].AsBool;
+                        if (node["GalleryScanWlTempBorderShowInGrid"] != null) GalleryScanWlTempBorderShowInGrid = node["GalleryScanWlTempBorderShowInGrid"].AsBool;
+                        if (node["GalleryScanWlTempBorderShowInList"] != null) GalleryScanWlTempBorderShowInList = node["GalleryScanWlTempBorderShowInList"].AsBool;
+                        if (node["GalleryScanWlTempBorderWidth"] != null) GalleryScanWlTempBorderWidth = Mathf.Clamp(node["GalleryScanWlTempBorderWidth"].AsFloat, 0f, 20f);
+                        if (node["GalleryScanWlTempGridFrameInset"] != null) GalleryScanWlTempGridFrameInset = Mathf.Clamp(node["GalleryScanWlTempGridFrameInset"].AsFloat, 0f, 24f);
+                        if (node["GalleryScanWlTempListFrameInset"] != null) GalleryScanWlTempListFrameInset = Mathf.Clamp(node["GalleryScanWlTempListFrameInset"].AsFloat, 0f, 24f);
+                        if (node["GalleryScanWlTempBorderOnThumbnail"] != null) GalleryScanWlTempBorderOnThumbnail = node["GalleryScanWlTempBorderOnThumbnail"].AsBool;
+                        if (node["GalleryScanWlTempBorderColorR"] != null) GalleryScanWlTempBorderColorR = Mathf.Clamp01(node["GalleryScanWlTempBorderColorR"].AsFloat);
+                        if (node["GalleryScanWlTempBorderColorG"] != null) GalleryScanWlTempBorderColorG = Mathf.Clamp01(node["GalleryScanWlTempBorderColorG"].AsFloat);
+                        if (node["GalleryScanWlTempBorderColorB"] != null) GalleryScanWlTempBorderColorB = Mathf.Clamp01(node["GalleryScanWlTempBorderColorB"].AsFloat);
+                        if (node["GalleryScanWlTempBorderColorA"] != null) GalleryScanWlTempBorderColorA = Mathf.Clamp01(node["GalleryScanWlTempBorderColorA"].AsFloat);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
@@ -1112,6 +1225,28 @@ namespace VPB
                 node["GalleryGridBorderColorG"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorG);
                 node["GalleryGridBorderColorB"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorB);
                 node["GalleryGridBorderColorA"].AsFloat = Mathf.Clamp01(GalleryGridBorderColorA);
+                node["GalleryScanWlBorderEnabled"].AsBool = GalleryScanWlBorderEnabled;
+                node["GalleryScanWlBorderShowInGrid"].AsBool = GalleryScanWlBorderShowInGrid;
+                node["GalleryScanWlBorderShowInList"].AsBool = GalleryScanWlBorderShowInList;
+                node["GalleryScanWlBorderWidth"].AsFloat = Mathf.Clamp(GalleryScanWlBorderWidth, 0f, 20f);
+                node["GalleryScanWlGridFrameInset"].AsFloat = Mathf.Clamp(GalleryScanWlGridFrameInset, 0f, 24f);
+                node["GalleryScanWlListFrameInset"].AsFloat = Mathf.Clamp(GalleryScanWlListFrameInset, 0f, 24f);
+                node["GalleryScanWlBorderOnThumbnail"].AsBool = GalleryScanWlBorderOnThumbnail;
+                node["GalleryScanWlBorderColorR"].AsFloat = Mathf.Clamp01(GalleryScanWlBorderColorR);
+                node["GalleryScanWlBorderColorG"].AsFloat = Mathf.Clamp01(GalleryScanWlBorderColorG);
+                node["GalleryScanWlBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlBorderColorB);
+                node["GalleryScanWlBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlBorderColorA);
+                node["GalleryScanWlTempBorderEnabled"].AsBool = GalleryScanWlTempBorderEnabled;
+                node["GalleryScanWlTempBorderShowInGrid"].AsBool = GalleryScanWlTempBorderShowInGrid;
+                node["GalleryScanWlTempBorderShowInList"].AsBool = GalleryScanWlTempBorderShowInList;
+                node["GalleryScanWlTempBorderWidth"].AsFloat = Mathf.Clamp(GalleryScanWlTempBorderWidth, 0f, 20f);
+                node["GalleryScanWlTempGridFrameInset"].AsFloat = Mathf.Clamp(GalleryScanWlTempGridFrameInset, 0f, 24f);
+                node["GalleryScanWlTempListFrameInset"].AsFloat = Mathf.Clamp(GalleryScanWlTempListFrameInset, 0f, 24f);
+                node["GalleryScanWlTempBorderOnThumbnail"].AsBool = GalleryScanWlTempBorderOnThumbnail;
+                node["GalleryScanWlTempBorderColorR"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorR);
+                node["GalleryScanWlTempBorderColorG"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorG);
+                node["GalleryScanWlTempBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorB);
+                node["GalleryScanWlTempBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorA);
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;

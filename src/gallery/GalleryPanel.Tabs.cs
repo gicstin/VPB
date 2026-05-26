@@ -1641,6 +1641,33 @@ namespace VPB
             thumbRT.offsetMin = new Vector2(pad, pad);
             thumbRT.offsetMax = new Vector2(-pad, -pad);
 
+            // Scan-whitelist included ring (always inward, parented under thumbnail in grid).
+            GameObject scanWlBorderGO = new GameObject("ScanWlBorder");
+            scanWlBorderGO.transform.SetParent(thumbGO.transform, false);
+            RectTransform swbRT = scanWlBorderGO.AddComponent<RectTransform>();
+            swbRT.anchorMin = Vector2.zero;
+            swbRT.anchorMax = Vector2.one;
+            swbRT.offsetMin = Vector2.zero;
+            swbRT.offsetMax = Vector2.zero;
+            AddBorderEdgeNamed(scanWlBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 4));
+            AddBorderEdgeNamed(scanWlBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 4));
+            AddBorderEdgeNamed(scanWlBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(4, 0));
+            AddBorderEdgeNamed(scanWlBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(4, 0));
+            scanWlBorderGO.SetActive(false);
+
+            GameObject scanWlTempBorderGO = new GameObject("ScanWlTempBorder");
+            scanWlTempBorderGO.transform.SetParent(thumbGO.transform, false);
+            RectTransform swtRT = scanWlTempBorderGO.AddComponent<RectTransform>();
+            swtRT.anchorMin = Vector2.zero;
+            swtRT.anchorMax = Vector2.one;
+            swtRT.offsetMin = Vector2.zero;
+            swtRT.offsetMax = Vector2.zero;
+            AddBorderEdgeNamed(scanWlTempBorderGO, "Top",    new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1f), new Vector2(0, 4));
+            AddBorderEdgeNamed(scanWlTempBorderGO, "Bottom", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0f), new Vector2(0, 4));
+            AddBorderEdgeNamed(scanWlTempBorderGO, "Left",   new Vector2(0, 0), new Vector2(0, 1), new Vector2(0f, 0.5f), new Vector2(4, 0));
+            AddBorderEdgeNamed(scanWlTempBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(4, 0));
+            scanWlTempBorderGO.SetActive(false);
+
             // Grid-mode inward border (4 edge Images inside cell). Used when padding = 0.
             GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
             gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
@@ -2141,6 +2168,121 @@ namespace VPB
             }
         }
 
+        private static void SetGalleryBorderRectInset(GameObject borderGO, float inset)
+        {
+            if (borderGO == null) return;
+            RectTransform rt = borderGO.GetComponent<RectTransform>();
+            if (rt == null) return;
+            float i = Mathf.Max(0f, inset);
+            rt.offsetMin = new Vector2(i, i);
+            rt.offsetMax = new Vector2(-i, -i);
+        }
+
+        private static Transform FindScanWlBorderTransform(Transform btnRoot)
+        {
+            if (btnRoot == null) return null;
+            Transform t = btnRoot.Find("Thumbnail/ScanWlBorder");
+            if (t != null) return t;
+            return btnRoot.Find("ScanWlBorder");
+        }
+
+        private static Transform FindScanWlTempBorderTransform(Transform btnRoot)
+        {
+            if (btnRoot == null) return null;
+            Transform t = btnRoot.Find("Thumbnail/ScanWlTempBorder");
+            if (t != null) return t;
+            return btnRoot.Find("ScanWlTempBorder");
+        }
+
+        /// <summary>Applies inward edge strips on thumbnail (grid) or full row (list).</summary>
+        private static void ApplyInwardGalleryEdgeBorder(GameObject borderGO, float thickness, Color tint, float frameInset)
+        {
+            if (borderGO == null) return;
+            SetGalleryBorderRectInset(borderGO, frameInset);
+            SetBorderThickness(borderGO, thickness);
+            SetGalleryInnerBorderEdgeTint(borderGO, tint);
+        }
+
+        private void ApplyGalleryScanWlBorderLayer(
+            GameObject btnGO,
+            bool isListRow,
+            Transform borderTr,
+            bool packageMatches,
+            bool settingsEnabled,
+            bool showInLayout,
+            float width,
+            Color color,
+            float gridInset,
+            float listInset,
+            bool onThumbnail)
+        {
+            if (btnGO == null || borderTr == null) return;
+            GameObject borderGO = borderTr.gameObject;
+
+            bool show = packageMatches && settingsEnabled && width > 0.01f && showInLayout;
+            if (!show)
+            {
+                borderGO.SetActive(false);
+                return;
+            }
+
+            Transform thumbTr = btnGO.transform.Find("Thumbnail");
+            Transform frameParent = isListRow ? btnGO.transform : (onThumbnail && thumbTr != null ? thumbTr : btnGO.transform);
+            if (borderTr.parent != frameParent)
+                borderTr.SetParent(frameParent, false);
+
+            RectTransform borderRT = borderGO.GetComponent<RectTransform>();
+            if (borderRT != null)
+            {
+                borderRT.anchorMin = Vector2.zero;
+                borderRT.anchorMax = Vector2.one;
+                borderRT.pivot = new Vector2(0.5f, 0.5f);
+                borderRT.anchoredPosition = Vector2.zero;
+                borderRT.localScale = Vector3.one;
+            }
+
+            float frameInset = isListRow ? listInset : gridInset;
+            ApplyInwardGalleryEdgeBorder(borderGO, width, color, frameInset);
+            borderTr.SetAsLastSibling();
+            borderGO.SetActive(true);
+        }
+
+        /// <summary>Persistent inward ring (folder or persisted UID override).</summary>
+        private void ApplyScanWhitelistIncludedBorderVisual(GameObject btnGO, FileEntry file, bool isListRow)
+        {
+            Transform wlTr = FindScanWlBorderTransform(btnGO != null ? btnGO.transform : null);
+            ApplyGalleryScanWlBorderLayer(
+                btnGO,
+                isListRow,
+                wlTr,
+                ScanWhitelistManager.IsGalleryPersistentScanWhitelistBorderVisible(file),
+                EffectiveGalleryScanWlBorderEnabled(),
+                isListRow ? EffectiveGalleryScanWlBorderShowInList() : EffectiveGalleryScanWlBorderShowInGrid(),
+                EffectiveGalleryScanWlBorderWidth(),
+                EffectiveGalleryScanWlBorderColor(),
+                EffectiveGalleryScanWlGridFrameInset(),
+                EffectiveGalleryScanWlListFrameInset(),
+                EffectiveGalleryScanWlBorderOnThumbnail());
+        }
+
+        /// <summary>Session-only temporary UID override inward ring.</summary>
+        private void ApplyScanWhitelistTemporaryBorderVisual(GameObject btnGO, FileEntry file, bool isListRow)
+        {
+            Transform wlTr = FindScanWlTempBorderTransform(btnGO != null ? btnGO.transform : null);
+            ApplyGalleryScanWlBorderLayer(
+                btnGO,
+                isListRow,
+                wlTr,
+                ScanWhitelistManager.IsGalleryTemporaryScanWhitelistBorderVisible(file),
+                EffectiveGalleryScanWlTempBorderEnabled(),
+                isListRow ? EffectiveGalleryScanWlTempBorderShowInList() : EffectiveGalleryScanWlTempBorderShowInGrid(),
+                EffectiveGalleryScanWlTempBorderWidth(),
+                EffectiveGalleryScanWlTempBorderColor(),
+                EffectiveGalleryScanWlTempGridFrameInset(),
+                EffectiveGalleryScanWlTempListFrameInset(),
+                EffectiveGalleryScanWlTempBorderOnThumbnail());
+        }
+
         private const float GalleryBadgeSlotStartX = 6f;
         private const float GalleryBadgeSlotStartY = -6f;
         private const float GalleryBadgeSlotStepX = 36f;
@@ -2281,6 +2423,7 @@ namespace VPB
                     hoverBorder.hoverIndicatorUsesSeparateSelectionVisual = false;
                     hoverBorder.isSelected = isSelected;
                 }
+                SetGalleryBorderRectInset(innerBorderGO, 0f);
                 SetBorderThickness(innerBorderGO, w);
                 SetGalleryInnerBorderEdgeTint(innerBorderGO, borderTint);
                 innerBorderGO.SetActive(isSelected);
@@ -2297,9 +2440,15 @@ namespace VPB
                     hoverBorder.inward = listOutlineInwardFallback;
                     hoverBorder.ApplyBorderSettings();
                 }
-                if (innerBorderGO != null) innerBorderGO.SetActive(false);
+                if (innerBorderGO != null)
+                {
+                    SetGalleryBorderRectInset(innerBorderGO, 0f);
+                    innerBorderGO.SetActive(false);
+                }
             }
             ApplyUserTagDropVisual(btnGO, file);
+            ApplyScanWhitelistIncludedBorderVisual(btnGO, file, isListRow);
+            ApplyScanWhitelistTemporaryBorderVisual(btnGO, file, isListRow);
         }
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
@@ -2373,24 +2522,15 @@ namespace VPB
             // Update Visuals
             UpdateFileButtonVisuals(btnGO, file);
 
-            // Button
-            Button btn = btnGO.GetComponent<Button>();
-            if (btn != null)
-            {
-                btn.onClick.RemoveAllListeners();
-                // Left: IPointerUp + slop (see UIFileEntryLeftReleaseSelect) — ScrollRect eats Button.onClick when
-                // pointer moved enough to count as scroll drag; right-click path unaffected.
-                var leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-                if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
-                leftUp.Panel = this;
-                leftUp.File = file;
-            }
+            // Button + row pointer routing (left/right/middle)
+            UIFileEntryLeftReleaseSelect leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+            if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
+            leftUp.Panel = this;
+            leftUp.File = file;
+            leftUp.enabled = true;
 
-            // Right Click
-            // Kept: right click selects + opens the actions panel, but no longer shows the dependency context menu.
-            var rightClick = btnGO.GetComponent<UIRightClickDelegate>();
-            if (rightClick == null) rightClick = btnGO.AddComponent<UIRightClickDelegate>();
-            rightClick.OnRightClick = () => OnFileRightClick(file);
+            Button btn = btnGO.GetComponent<Button>();
+            if (btn != null) btn.onClick.RemoveAllListeners();
 
             bool isListMode = (layoutMode == GalleryLayoutMode.List);
             bool isSettingsRow = file is InternalSettingRowEntry;
@@ -2463,6 +2603,8 @@ namespace VPB
                 if (holdSpecial != null) holdSpecial.enabled = false;
                 return;
             }
+
+            EnsureFileEntryPointerForwarding(btnGO, leftUp);
 
             // Reset any settings-only controls on recycled rows when binding normal files.
             Transform listRowTrReset = btnGO.transform.Find("ListRow");
@@ -2644,9 +2786,12 @@ namespace VPB
                         var rootLu = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
                         if (rootLu != null)
                         {
-                            var fwd = thumbTr.gameObject.GetComponent<GalleryThumbPointerForwarder>();
-                            if (fwd == null) fwd = thumbTr.gameObject.AddComponent<GalleryThumbPointerForwarder>();
-                            fwd.Target = rootLu;
+                            var fwd = thumbTr.gameObject.GetComponent<UIFileEntryPointerForwarder>();
+                            if (fwd != null)
+                            {
+                                fwd.Target = rootLu;
+                                fwd.ForwardLeftPointerUp = true;
+                            }
                         }
                     }
                     catch { }
@@ -3218,6 +3363,44 @@ namespace VPB
 
             Transform indicator = parent.Find("FilterIndicator");
             if (indicator != null) indicator.gameObject.SetActive(false);
+        }
+
+        private static bool ShouldSkipFileEntryPointerForwarder(Transform t, Transform rowRoot)
+        {
+            if (t == null || rowRoot == null) return true;
+            Transform p = t;
+            while (p != null && p != rowRoot)
+            {
+                string n = p.name ?? "";
+                if (string.Equals(n, "RatingSelector", StringComparison.Ordinal)) return true;
+                p = p.parent;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Child graphics (thumbnail, list detail columns) steal raycasts — forward alt-clicks to row root handler.
+        /// </summary>
+        private void EnsureFileEntryPointerForwarding(GameObject btnGO, UIFileEntryLeftReleaseSelect handler)
+        {
+            if (btnGO == null || handler == null) return;
+            Transform rowRoot = btnGO.transform;
+            Graphic[] graphics = btnGO.GetComponentsInChildren<Graphic>(true);
+            if (graphics == null) return;
+
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                Graphic g = graphics[i];
+                if (g == null || !g.raycastTarget) continue;
+                Transform gt = g.transform;
+                if (gt == rowRoot) continue;
+                if (ShouldSkipFileEntryPointerForwarder(gt, rowRoot)) continue;
+
+                UIFileEntryPointerForwarder fwd = gt.GetComponent<UIFileEntryPointerForwarder>();
+                if (fwd == null) fwd = gt.gameObject.AddComponent<UIFileEntryPointerForwarder>();
+                fwd.Target = handler;
+                fwd.ForwardLeftPointerUp = string.Equals(gt.name, "Thumbnail", StringComparison.Ordinal);
+            }
         }
 
     }

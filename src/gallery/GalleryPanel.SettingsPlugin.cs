@@ -81,6 +81,7 @@ namespace VPB
                 {
                     ScanWhitelistManager.Instance.SetEnabled(b.PluginScanWhitelistEnabled);
                     ScanWhitelistManager.Instance.Save();
+                    try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
                 }
             }
             catch { }

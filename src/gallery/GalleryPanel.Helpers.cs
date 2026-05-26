@@ -40,44 +40,117 @@ namespace VPB
     public class UIRightClickDelegate : MonoBehaviour, IPointerClickHandler
     {
         public Action OnRightClick;
+        public Action OnMiddleClick;
+
         public void OnPointerClick(PointerEventData eventData)
         {
             if (eventData.button == PointerEventData.InputButton.Right)
-            {
                 OnRightClick?.Invoke();
-            }
+            else if (eventData.button == PointerEventData.InputButton.Middle)
+                OnMiddleClick?.Invoke();
         }
     }
 
     /// <summary>
-    /// Left selection on <see cref="IPointerUpHandler"/> with tap slop: ScrollRect only steals <b>left</b> drags,
-    /// so <see cref="Button.onClick"/> drops taps that moved past the drag threshold; right-click uses
-    /// <see cref="IPointerClickHandler"/> and does not fight the scroll view the same way.
+    /// Forwards non-left pointer events from child raycasts (thumbnail, list detail columns) to the row root handler.
     /// </summary>
-    /// <summary>
-    /// Thumbnail <see cref="RawImage"/> sits above row root and steals raycasts. Forward <see cref="IPointerUpHandler"/>
-    /// to root <see cref="UIFileEntryLeftReleaseSelect"/> so <see cref="UIDraggableItem"/> / hold-to-launch / slop logic
-    /// runs on correct GameObject (duplicate <c>UIFileEntryLeftReleaseSelect</c> on thumb used <c>GetComponent</c> on wrong transform).
-    /// </summary>
-    internal sealed class GalleryThumbPointerForwarder : MonoBehaviour, IPointerUpHandler
+    internal sealed class UIFileEntryPointerForwarder : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public UIFileEntryLeftReleaseSelect Target;
+        /// <summary>Thumbnail only: forward left pointer-up for row select / drag slop.</summary>
+        public bool ForwardLeftPointerUp;
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (Target != null) Target.OnPointerUp(eventData);
+            if (Target == null || eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+            {
+                if (ForwardLeftPointerUp) Target.OnPointerUp(eventData);
+                return;
+            }
+            Target.OnAlternatePointerUp(eventData);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (Target == null || eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left) return;
+            Target.OnAlternatePointerClick(eventData);
         }
     }
 
-    public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler
+    /// <summary>
+    /// Row pointer routing: left uses <see cref="IPointerUpHandler"/> + slop (ScrollRect-safe).
+    /// Right/middle use pointer-up plus click fallback; child forwarders relay hits from overlay graphics.
+    /// </summary>
+    public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public GalleryPanel Panel;
         public FileEntry File;
         private const float TapSlopPixels = 22f;
+        private int _lastAltClickToken = int.MinValue;
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+                HandleLeftPointerUp(eventData);
+            else
+                OnAlternatePointerUp(eventData);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            OnAlternatePointerClick(eventData);
+        }
+
+        internal void OnAlternatePointerUp(PointerEventData eventData)
+        {
+            if (eventData == null || Panel == null || File == null) return;
+            if (eventData.button != PointerEventData.InputButton.Right
+                && eventData.button != PointerEventData.InputButton.Middle)
+                return;
+            if (!PassesTapSlop(eventData)) return;
+            if (!TryConsumeAlternateClick(eventData)) return;
+
+            if (eventData.button == PointerEventData.InputButton.Middle)
+                Panel.OnFileMiddleClick(File);
+            else
+                Panel.OnFileRightClick(File);
+        }
+
+        internal void OnAlternatePointerClick(PointerEventData eventData)
+        {
+            if (eventData == null || Panel == null || File == null) return;
+            if (eventData.button != PointerEventData.InputButton.Right
+                && eventData.button != PointerEventData.InputButton.Middle)
+                return;
+            if (!PassesTapSlop(eventData)) return;
+            if (!TryConsumeAlternateClick(eventData)) return;
+
+            if (eventData.button == PointerEventData.InputButton.Middle)
+                Panel.OnFileMiddleClick(File);
+            else
+                Panel.OnFileRightClick(File);
+        }
+
+        private bool TryConsumeAlternateClick(PointerEventData eventData)
+        {
+            int token = (Time.frameCount << 8) ^ (eventData.pointerId << 4)
+                ^ (eventData.button == PointerEventData.InputButton.Middle ? 2 : 1);
+            if (token == _lastAltClickToken) return false;
+            _lastAltClickToken = token;
+            return true;
+        }
+
+        private static bool PassesTapSlop(PointerEventData eventData)
+        {
+            Vector2 delta = (Vector2)eventData.position - eventData.pressPosition;
+            return delta.sqrMagnitude <= TapSlopPixels * TapSlopPixels;
+        }
+
+        private void HandleLeftPointerUp(PointerEventData eventData)
+        {
             if (Panel == null || File == null) return;
             var dragItem = GetComponent<UIDraggableItem>();
             if (dragItem != null && dragItem.IsLongPress) return;
@@ -93,8 +166,7 @@ namespace VPB
                 if (Time.unscaledTime - dragItem.LastPointerDownUnscaledTime >= holdSec - 0.001f)
                     return;
             }
-            Vector2 delta = (Vector2)eventData.position - eventData.pressPosition;
-            if (delta.sqrMagnitude > TapSlopPixels * TapSlopPixels) return;
+            if (!PassesTapSlop(eventData)) return;
             Panel.OnFileClick(File);
         }
     }

@@ -21,6 +21,11 @@ namespace VPB
         private const float ScanWlRemoveBtnWidthScale = 92f;
         private const float ScanWlRowHeightScale = 34f;
 
+        private static void RefreshGalleryAfterScanWhitelistChange()
+        {
+            try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+        }
+
         public void ShowScanWhitelistEditorModal()
         {
             if (backgroundBoxGO == null) return;
@@ -188,6 +193,7 @@ namespace VPB
                         ScanWhitelistManager.Instance.SetEnabled(true);
                         ScanWhitelistManager.Instance.Save();
                         RebuildScanWhitelistModalRows();
+                        RefreshGalleryAfterScanWhitelistChange();
                         if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
                     }
                 }
@@ -273,6 +279,7 @@ namespace VPB
                             ScanWhitelistManager.Instance.Save();
                             if (_scanWlNewFolderInput != null) _scanWlNewFolderInput.text = "";
                             RebuildScanWhitelistModalRows();
+                            RefreshGalleryAfterScanWhitelistChange();
                         }
                     }
                     catch { }
@@ -296,6 +303,7 @@ namespace VPB
                             ScanWhitelistManager.Instance.Save();
                             if (_scanWlNewUidInput != null) _scanWlNewUidInput.text = "";
                             RebuildScanWhitelistModalRows();
+                            RefreshGalleryAfterScanWhitelistChange();
                         }
                     }
                     catch { }
@@ -388,6 +396,7 @@ namespace VPB
                 catch { }
                 HideScanWhitelistDisableConfirmModal();
                 RebuildScanWhitelistModalRows();
+                RefreshGalleryAfterScanWhitelistChange();
                 try
                 {
                     if (IsSettingsPanelOpen())
@@ -455,6 +464,7 @@ namespace VPB
                             ScanWhitelistManager.Instance.RemoveFolder(path);
                             ScanWhitelistManager.Instance.Save();
                             RebuildScanWhitelistModalRows();
+                            RefreshGalleryAfterScanWhitelistChange();
                         }
                         catch { }
                     });
@@ -478,6 +488,7 @@ namespace VPB
                             ScanWhitelistManager.Instance.RemoveUidOverride(uid);
                             ScanWhitelistManager.Instance.Save();
                             RebuildScanWhitelistModalRows();
+                            RefreshGalleryAfterScanWhitelistChange();
                         }
                         catch { }
                     });

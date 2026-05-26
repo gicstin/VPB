@@ -89,6 +89,122 @@ namespace VPB
             catch { return false; }
         }
 
+        private bool EffectiveGalleryScanWlBorderEnabled()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderEnabled; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlBorderShowInGrid()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderShowInGrid; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlBorderShowInList()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderShowInList; } catch { }
+            return true;
+        }
+
+        private float EffectiveGalleryScanWlBorderWidth()
+        {
+            float v = 4f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 4f;
+            return Mathf.Clamp(v, 0f, 20f);
+        }
+
+        private float EffectiveGalleryScanWlGridFrameInset()
+        {
+            float v = 0f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlGridFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private float EffectiveGalleryScanWlListFrameInset()
+        {
+            float v = 2f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlListFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 2f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private bool EffectiveGalleryScanWlBorderOnThumbnail()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderOnThumbnail; } catch { }
+            return true;
+        }
+
+        private Color EffectiveGalleryScanWlBorderColor()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null) return VPBConfig.Instance.GetGalleryScanWlBorderColor();
+            }
+            catch { }
+            return new Color(0.2f, 0.95f, 1f, 1f);
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderEnabled()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderEnabled; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderShowInGrid()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderShowInList()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderShowInList; } catch { }
+            return true;
+        }
+
+        private float EffectiveGalleryScanWlTempBorderWidth()
+        {
+            float v = 4f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 4f;
+            return Mathf.Clamp(v, 0f, 20f);
+        }
+
+        private float EffectiveGalleryScanWlTempGridFrameInset()
+        {
+            float v = 0f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempGridFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private float EffectiveGalleryScanWlTempListFrameInset()
+        {
+            float v = 2f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempListFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 2f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderOnThumbnail()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail; } catch { }
+            return true;
+        }
+
+        private Color EffectiveGalleryScanWlTempBorderColor()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null) return VPBConfig.Instance.GetGalleryScanWlTempBorderColor();
+            }
+            catch { }
+            return new Color(1f, 0.15f, 1f, 1f);
+        }
+
         /// <summary>
         /// Splits a search query into lowercase terms (whitespace separated), removing empties.
         /// </summary>

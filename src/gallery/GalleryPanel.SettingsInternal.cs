@@ -195,6 +195,28 @@ namespace VPB
             public float GalleryGridBorderColorG;
             public float GalleryGridBorderColorB;
             public float GalleryGridBorderColorA;
+            public bool GalleryScanWlBorderEnabled;
+            public bool GalleryScanWlBorderShowInGrid;
+            public bool GalleryScanWlBorderShowInList;
+            public float GalleryScanWlBorderWidth;
+            public float GalleryScanWlGridFrameInset;
+            public float GalleryScanWlListFrameInset;
+            public bool GalleryScanWlBorderOnThumbnail;
+            public float GalleryScanWlBorderColorR;
+            public float GalleryScanWlBorderColorG;
+            public float GalleryScanWlBorderColorB;
+            public float GalleryScanWlBorderColorA;
+            public bool GalleryScanWlTempBorderEnabled;
+            public bool GalleryScanWlTempBorderShowInGrid;
+            public bool GalleryScanWlTempBorderShowInList;
+            public float GalleryScanWlTempBorderWidth;
+            public float GalleryScanWlTempGridFrameInset;
+            public float GalleryScanWlTempListFrameInset;
+            public bool GalleryScanWlTempBorderOnThumbnail;
+            public float GalleryScanWlTempBorderColorR;
+            public float GalleryScanWlTempBorderColorG;
+            public float GalleryScanWlTempBorderColorB;
+            public float GalleryScanWlTempBorderColorA;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
             public string GalleryCategoryQuickOrder;
@@ -854,6 +876,142 @@ namespace VPB
             });
 
             defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.enabled", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_enabled", "Persistent whitelist border"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_enabled", "Draw an inward border on gallery rows for packages in whitelisted folders or with a persisted UID override."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.showGrid", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_show_grid", "Show in grid view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_show_grid", "Show scan-whitelist border on included packages in grid layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderShowInGrid,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderShowInGrid = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.showList", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_show_list", "Show in list view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_show_list", "Show scan-whitelist border on included packages in list layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderShowInList,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderShowInList = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.width", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_width", "Border width"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_width", "Thickness of the scan-whitelist border (pixels). Set to 0 to hide without disabling."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlBorderWidth = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 12f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.color", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_color", "Border color"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_color", "Color of the scan-whitelist border in grid and list layout."),
+                ControlType = InternalSettingControlType.ColorRgb,
+                GetColor = () => VPBConfig.Instance.GetGalleryScanWlBorderColor(),
+                SetColor = c => { VPBConfig.Instance.SetGalleryScanWlBorderColor(c); RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.gridInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_grid_inset", "Grid frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_grid_inset", "Inset of the border frame from the grid cell or thumbnail edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlGridFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlGridFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.listInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_list_inset", "List frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_list_inset", "Inset of the border frame from the list row edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlListFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlListFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.onThumbnail", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_on_thumbnail", "Grid: border on thumbnail"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_on_thumbnail", "When enabled, grid border hugs the thumbnail. When off, border uses the full cell."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderOnThumbnail,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderOnThumbnail = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.enabled", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_enabled", "Temporary whitelist border"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_enabled", "Draw an inward border on gallery rows for packages with a session-only temporary UID override."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.showGrid", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_show_grid", "Temporary: show in grid view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_show_grid", "Show temporary whitelist border in grid layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.showList", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_show_list", "Temporary: show in list view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_show_list", "Show temporary whitelist border in list layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderShowInList,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderShowInList = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.width", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_width", "Temporary border width"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_width", "Thickness of the temporary whitelist border (pixels). Set to 0 to hide without disabling."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempBorderWidth = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 12f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.color", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_color", "Temporary border color"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_color", "Color of the temporary whitelist border in grid and list layout."),
+                ControlType = InternalSettingControlType.ColorRgb,
+                GetColor = () => VPBConfig.Instance.GetGalleryScanWlTempBorderColor(),
+                SetColor = c => { VPBConfig.Instance.SetGalleryScanWlTempBorderColor(c); RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.gridInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_grid_inset", "Temporary grid frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_grid_inset", "Inset of the temporary border frame from the grid cell or thumbnail edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempGridFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempGridFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.listInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_list_inset", "Temporary list frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_list_inset", "Inset of the temporary border frame from the list row edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempListFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempListFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.onThumbnail", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_on_thumbnail", "Temporary grid: border on thumbnail"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_on_thumbnail", "When enabled, temporary grid border hugs the thumbnail. When off, border uses the full cell."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
                 Key = "vr.menuGate", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_gate", "Show only when VaM menu is visible"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_gate", "Hide gallery panes automatically when VaM menu is closed."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
@@ -1110,6 +1268,28 @@ namespace VPB
                 GalleryGridBorderColorG = VPBConfig.Instance.GalleryGridBorderColorG,
                 GalleryGridBorderColorB = VPBConfig.Instance.GalleryGridBorderColorB,
                 GalleryGridBorderColorA = VPBConfig.Instance.GalleryGridBorderColorA,
+                GalleryScanWlBorderEnabled = VPBConfig.Instance.GalleryScanWlBorderEnabled,
+                GalleryScanWlBorderShowInGrid = VPBConfig.Instance.GalleryScanWlBorderShowInGrid,
+                GalleryScanWlBorderShowInList = VPBConfig.Instance.GalleryScanWlBorderShowInList,
+                GalleryScanWlBorderWidth = VPBConfig.Instance.GalleryScanWlBorderWidth,
+                GalleryScanWlGridFrameInset = VPBConfig.Instance.GalleryScanWlGridFrameInset,
+                GalleryScanWlListFrameInset = VPBConfig.Instance.GalleryScanWlListFrameInset,
+                GalleryScanWlBorderOnThumbnail = VPBConfig.Instance.GalleryScanWlBorderOnThumbnail,
+                GalleryScanWlBorderColorR = VPBConfig.Instance.GalleryScanWlBorderColorR,
+                GalleryScanWlBorderColorG = VPBConfig.Instance.GalleryScanWlBorderColorG,
+                GalleryScanWlBorderColorB = VPBConfig.Instance.GalleryScanWlBorderColorB,
+                GalleryScanWlBorderColorA = VPBConfig.Instance.GalleryScanWlBorderColorA,
+                GalleryScanWlTempBorderEnabled = VPBConfig.Instance.GalleryScanWlTempBorderEnabled,
+                GalleryScanWlTempBorderShowInGrid = VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid,
+                GalleryScanWlTempBorderShowInList = VPBConfig.Instance.GalleryScanWlTempBorderShowInList,
+                GalleryScanWlTempBorderWidth = VPBConfig.Instance.GalleryScanWlTempBorderWidth,
+                GalleryScanWlTempGridFrameInset = VPBConfig.Instance.GalleryScanWlTempGridFrameInset,
+                GalleryScanWlTempListFrameInset = VPBConfig.Instance.GalleryScanWlTempListFrameInset,
+                GalleryScanWlTempBorderOnThumbnail = VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail,
+                GalleryScanWlTempBorderColorR = VPBConfig.Instance.GalleryScanWlTempBorderColorR,
+                GalleryScanWlTempBorderColorG = VPBConfig.Instance.GalleryScanWlTempBorderColorG,
+                GalleryScanWlTempBorderColorB = VPBConfig.Instance.GalleryScanWlTempBorderColorB,
+                GalleryScanWlTempBorderColorA = VPBConfig.Instance.GalleryScanWlTempBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
@@ -1230,6 +1410,11 @@ namespace VPB
             }
             RefreshFiles(true);
             internalSettingsHadPreSessionViewState = false;
+        }
+
+        private void RefreshGalleryScanWlBorderVisuals()
+        {
+            try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
         }
 
         private void RefreshInternalSettingsListRows(bool keepScroll = false)
@@ -1913,6 +2098,28 @@ namespace VPB
             VPBConfig.Instance.GalleryGridBorderColorG = b.GalleryGridBorderColorG;
             VPBConfig.Instance.GalleryGridBorderColorB = b.GalleryGridBorderColorB;
             VPBConfig.Instance.GalleryGridBorderColorA = b.GalleryGridBorderColorA;
+            VPBConfig.Instance.GalleryScanWlBorderEnabled = b.GalleryScanWlBorderEnabled;
+            VPBConfig.Instance.GalleryScanWlBorderShowInGrid = b.GalleryScanWlBorderShowInGrid;
+            VPBConfig.Instance.GalleryScanWlBorderShowInList = b.GalleryScanWlBorderShowInList;
+            VPBConfig.Instance.GalleryScanWlBorderWidth = b.GalleryScanWlBorderWidth;
+            VPBConfig.Instance.GalleryScanWlGridFrameInset = b.GalleryScanWlGridFrameInset;
+            VPBConfig.Instance.GalleryScanWlListFrameInset = b.GalleryScanWlListFrameInset;
+            VPBConfig.Instance.GalleryScanWlBorderOnThumbnail = b.GalleryScanWlBorderOnThumbnail;
+            VPBConfig.Instance.GalleryScanWlBorderColorR = b.GalleryScanWlBorderColorR;
+            VPBConfig.Instance.GalleryScanWlBorderColorG = b.GalleryScanWlBorderColorG;
+            VPBConfig.Instance.GalleryScanWlBorderColorB = b.GalleryScanWlBorderColorB;
+            VPBConfig.Instance.GalleryScanWlBorderColorA = b.GalleryScanWlBorderColorA;
+            VPBConfig.Instance.GalleryScanWlTempBorderEnabled = b.GalleryScanWlTempBorderEnabled;
+            VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid = b.GalleryScanWlTempBorderShowInGrid;
+            VPBConfig.Instance.GalleryScanWlTempBorderShowInList = b.GalleryScanWlTempBorderShowInList;
+            VPBConfig.Instance.GalleryScanWlTempBorderWidth = b.GalleryScanWlTempBorderWidth;
+            VPBConfig.Instance.GalleryScanWlTempGridFrameInset = b.GalleryScanWlTempGridFrameInset;
+            VPBConfig.Instance.GalleryScanWlTempListFrameInset = b.GalleryScanWlTempListFrameInset;
+            VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail = b.GalleryScanWlTempBorderOnThumbnail;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorR = b.GalleryScanWlTempBorderColorR;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorG = b.GalleryScanWlTempBorderColorG;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorB = b.GalleryScanWlTempBorderColorB;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";

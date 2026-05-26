@@ -115,6 +115,7 @@ namespace VPB
             AddGroupRow("categories", VPBTranslation.T("settings.header.category_visibility", "Category Visibility"));
             AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
             AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
+            AddGroupRow("scan_wl_border", VPBTranslation.T("settings.group.scan_wl_border", "Scan whitelist highlight"));
             AddGroupRow("search", VPBTranslation.T("settings.header.search", "Search"));
             AddGroupRow("quick", VPBTranslation.T("settings.group.category_quick", "Header category menu"));
             AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));

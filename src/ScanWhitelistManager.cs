@@ -433,6 +433,57 @@ namespace VPB
 
         // --- Gallery helpers ---
 
+        /// <summary>True when UID is included only via runtime temporary override (not persisted JSON).</summary>
+        public bool IsUidTemporaryOverrideOnly(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            lock (lockObj)
+            {
+                if (!_enabled) return false;
+                string key = uid.Trim();
+                return _temporaryIncludedPackageUids.Contains(key) && !_includedPackageUids.Contains(key);
+            }
+        }
+
+        private static VarPackage TryResolveGalleryVarPackage(FileEntry entry)
+        {
+            if (entry == null) return null;
+            if (entry is VarFileEntry vfe && vfe.Package != null) return vfe.Package;
+            if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null) return sfe.package;
+            if (entry is PackageListEntry ple && ple.Package != null) return ple.Package;
+            return null;
+        }
+
+        /// <summary>Folder-whitelisted or persisted UID override (not session-only temporary).</summary>
+        public static bool IsGalleryPersistentScanWhitelistBorderVisible(FileEntry entry)
+        {
+            if (entry == null) return false;
+            try
+            {
+                if (!Instance.IsEnabled) return false;
+                VarPackage pkg = TryResolveGalleryVarPackage(entry);
+                if (pkg == null) return false;
+                if (Instance.IsPathWhitelisted(pkg.Path ?? "")) return true;
+                if (Instance.IsUidOverridePersisted(pkg.Uid)) return true;
+                return false;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Session-only temporary UID override (excludes folder/persisted inclusion).</summary>
+        public static bool IsGalleryTemporaryScanWhitelistBorderVisible(FileEntry entry)
+        {
+            if (entry == null) return false;
+            try
+            {
+                if (!Instance.IsEnabled) return false;
+                VarPackage pkg = TryResolveGalleryVarPackage(entry);
+                if (pkg == null) return false;
+                return Instance.IsUidTemporaryOverrideOnly(pkg.Uid);
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Returns true if this file entry should show the gallery "W" badge.
         /// Current gallery behavior shows this only for packages effectively included by VaM's scan whitelist
