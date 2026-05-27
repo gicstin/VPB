@@ -99,6 +99,10 @@ namespace VPB
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, ThumbPlaceholderLabelParts> thumbPlaceholderLabelCache = new Dictionary<string, ThumbPlaceholderLabelParts>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, bool> thumbPathMarkedBlankCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        private int _thumbPlaceholderFontSize = 14;
+        private int _thumbPlaceholderFontLayoutSig = int.MinValue;
 
         private List<GameObject> activeButtons = new List<GameObject>();
         private Stack<GameObject> fileButtonPool = new Stack<GameObject>();
@@ -319,6 +323,8 @@ namespace VPB
         /// <summary>While true, main side-rail search <see cref="InputField.onValueChanged"/> handlers ignore events (programmatic text assignment / layout).</summary>
         private bool _suppressMainSideSearchValueChanged;
         private string currentSettingsGroup = "all";
+        /// <summary>Sub-filter within <c>categories</c> settings group: <c>options</c> or <c>visibility</c>.</summary>
+        private string currentSettingsCategoriesSubGroup = "options";
         private bool settingsListViewActive = false;
         private bool internalSettingsSessionActive = false;
         private InternalSettingsSnapshot internalSettingsBackup;

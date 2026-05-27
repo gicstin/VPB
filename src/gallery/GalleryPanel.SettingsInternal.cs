@@ -22,6 +22,8 @@ namespace VPB
         {
             public string Key;
             public string GroupKey;
+            /// <summary>When <see cref="GroupKey"/> is <c>categories</c>, filters rows under that settings tab.</summary>
+            public string SubGroupKey;
             public string Label;
             public string Tooltip;
             public InternalSettingControlType ControlType;
@@ -177,6 +179,9 @@ namespace VPB
             public bool GalleryHideCreatorSideButtons;
             public bool GalleryConsolidateCreatorNames;
             public bool PluginGalleryGridThumbnails;
+            public bool PluginGalleryCategoryLabelsOnly;
+            public bool GalleryThumbPlaceholderLabelsEnabled;
+            public float GalleryThumbPlaceholderSizeScale;
             public bool GalleryListNamesLegacyFileName;
             public string GalleryHoverPreviewMode;
             public float GalleryListHoverPreviewSize;
@@ -512,7 +517,7 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "interaction.autoGenderFilter", GroupKey = "interaction", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
+                Key = "interaction.autoGenderFilter", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAutoGenderFilter,
                 SetBool = v => { VPBConfig.Instance.GalleryAutoGenderFilter = v; VPBConfig.Instance.TriggerChange(); }
@@ -592,7 +597,7 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedEnforceDockSide
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "desktop.initialCategory", GroupKey = "desktop", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
+                Key = "desktop.initialCategory", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
                 Tooltip = VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when gallery opens."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" },
                 GetString = () => VPBConfig.NormalizeInitialGalleryCategory(VPBConfig.Instance.InitialGalleryCategory),
@@ -729,6 +734,17 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "lists.pluginLabelsOnly", GroupKey = "categories", SubGroupKey = "options",
+                Label = VPBTranslation.T("settings.plugin_gallery_category_labels_only", "Plugins category: labels only"),
+                Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_category_labels_only", "In the Plugins category, hide all thumbnails and show in-preview labels for every plugin row, including items that have sister images."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.PluginGalleryCategoryLabelsOnly,
+                SetBool = v => {
+                    VPBConfig.Instance.PluginGalleryCategoryLabelsOnly = v;
+                    RefreshThumbPlaceholderLabelLayout();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.pluginConsolidateCslist", GroupKey = "lists",
                 Label = VPBTranslation.T("settings.plugin_consolidate_cslist", "Plugins: consolidate .cslist source files"),
                 Tooltip = VPBTranslation.T("settings.tip.plugin_consolidate_cslist", "Hide .cs files that a .cslist already references, so multi-file plugins show as a single .cslist row. Standalone .cs files (not in any .cslist) always show."),
@@ -841,6 +857,30 @@ namespace VPB
                 SetFloat = v => { VPBConfig.Instance.GalleryGridLabelFontSize = v; RebuildGridLayout(); },
                 Min = 8f, Max = 32f, Step = 1f, Decimals = 0,
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.thumbPlaceholder", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.gallery_thumb_placeholder_labels", "In-preview labels (no thumbnail)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_thumb_placeholder_labels", "Show creator, package, and item name inside the preview when no thumbnail is available or the image is blank."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled = v;
+                    RefreshThumbPlaceholderLabelLayout();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.thumbPlaceholderScale", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.gallery_thumb_placeholder_size", "In-preview label size"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_thumb_placeholder_size", "Scales placeholder text with grid cell size. Lower values avoid overlap in dense grids."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GetGalleryThumbPlaceholderSizeScale(),
+                SetFloat = v => {
+                    VPBConfig.Instance.GalleryThumbPlaceholderSizeScale = VPBConfig.ClampGalleryThumbPlaceholderSizeScale(v);
+                    RefreshThumbPlaceholderLabelLayout();
+                },
+                Min = 0.25f, Max = 2f, Step = 0.05f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled
             });
 
             defs.Add(new InternalSettingDefinition {
@@ -1050,7 +1090,8 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "quick.categoryEditor",
-                GroupKey = "quick",
+                GroupKey = "categories",
+                SubGroupKey = "options",
                 Label = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown"),
                 Tooltip = VPBTranslation.T("settings.tip.category_quick.editor", "Edit header dropdown order + hidden list."),
                 ControlType = InternalSettingControlType.TextArea,
@@ -1067,6 +1108,7 @@ namespace VPB
                 {
                     Key = "categories.show." + capturedName,
                     GroupKey = "categories",
+                    SubGroupKey = "visibility",
                     Label = VPBTranslation.T("settings.category_visibility.show", "Show category: ") + capturedName,
                     Tooltip = VPBTranslation.T("settings.tip.category_visibility.show", "Toggle whether this category appears in the Categories side list."),
                     ControlType = InternalSettingControlType.Toggle,
@@ -1272,6 +1314,9 @@ namespace VPB
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
                 GalleryConsolidateCreatorNames = VPBConfig.Instance.GalleryConsolidateCreatorNames,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
+                PluginGalleryCategoryLabelsOnly = VPBConfig.Instance.PluginGalleryCategoryLabelsOnly,
+                GalleryThumbPlaceholderLabelsEnabled = VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled,
+                GalleryThumbPlaceholderSizeScale = VPBConfig.Instance.GetGalleryThumbPlaceholderSizeScale(),
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
                 GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
                 GalleryListHoverPreviewSize = VPBConfig.Instance.GalleryListHoverPreviewSize,
@@ -1355,6 +1400,13 @@ namespace VPB
             if (string.IsNullOrEmpty(groupKey))
                 groupKey = "all";
             currentSettingsGroup = groupKey;
+            if (string.Equals(groupKey, "categories", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(currentSettingsCategoriesSubGroup)
+                    || (!string.Equals(currentSettingsCategoriesSubGroup, "options", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(currentSettingsCategoriesSubGroup, "visibility", StringComparison.OrdinalIgnoreCase)))
+                    currentSettingsCategoriesSubGroup = "options";
+            }
             try { CancelPluginHotkeyCapture(false); } catch { }
             if (!IsSettingsPanelOpen())
             {
@@ -1502,6 +1554,15 @@ namespace VPB
             bool GroupAllowed(string group) =>
                 string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(currentSettingsGroup, group, StringComparison.OrdinalIgnoreCase);
+            bool SubGroupAllowed(InternalSettingDefinition def)
+            {
+                if (def == null) return true;
+                if (!string.Equals(def.GroupKey, "categories", StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.Equals(currentSettingsGroup, "categories", StringComparison.OrdinalIgnoreCase)) return true;
+                string sub = string.IsNullOrEmpty(def.SubGroupKey) ? "options" : def.SubGroupKey;
+                return string.Equals(currentSettingsCategoriesSubGroup, sub, StringComparison.OrdinalIgnoreCase);
+            }
             bool FilterAllowed(string label) =>
                 string.IsNullOrEmpty(f) || (label ?? "").IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0;
             void Add(InternalSettingDefinition def)
@@ -1511,6 +1572,7 @@ namespace VPB
                 string group = def.GroupKey;
                 string label = def.Label;
                 if (!GroupAllowed(group)) return;
+                if (!SubGroupAllowed(def)) return;
                 if (!FilterAllowed(label)) return;
                 try
                 {
@@ -2102,6 +2164,9 @@ namespace VPB
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
             VPBConfig.Instance.GalleryConsolidateCreatorNames = b.GalleryConsolidateCreatorNames;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
+            VPBConfig.Instance.PluginGalleryCategoryLabelsOnly = b.PluginGalleryCategoryLabelsOnly;
+            VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled = b.GalleryThumbPlaceholderLabelsEnabled;
+            VPBConfig.Instance.GalleryThumbPlaceholderSizeScale = VPBConfig.ClampGalleryThumbPlaceholderSizeScale(b.GalleryThumbPlaceholderSizeScale);
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryHoverPreviewMode = b.GalleryHoverPreviewMode;
             VPBConfig.Instance.GalleryListHoverPreviewSize = b.GalleryListHoverPreviewSize;

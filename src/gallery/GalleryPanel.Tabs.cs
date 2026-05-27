@@ -1668,6 +1668,8 @@ namespace VPB
             AddBorderEdgeNamed(scanWlTempBorderGO, "Right",  new Vector2(1, 0), new Vector2(1, 1), new Vector2(1f, 0.5f), new Vector2(4, 0));
             scanWlTempBorderGO.SetActive(false);
 
+            EnsurePluginThumbPlaceholderUi(thumbGO.transform);
+
             // Grid-mode inward border (4 edge Images inside cell). Used when padding = 0.
             GameObject gridInnerBorderGO = new GameObject("GridInnerBorder");
             gridInnerBorderGO.transform.SetParent(btnGO.transform, false);
@@ -2759,16 +2761,19 @@ namespace VPB
                 {
                     // Let LoadThumbnail decide whether this is a true rebind or the same
                     // thumbnail; unconditional clearing causes a visible flash on reopen.
-                    LoadThumbnail(file, thumbImg);
-                    if (thumbImg.texture == null)
-                    {
-                        thumbImg.color = new Color(0f, 0f, 0f, 0.55f);
-                    }
+                    bool forcePluginLabelsOnly = ShouldForcePluginsCategoryLabelOnly(file);
+                    if (forcePluginLabelsOnly)
+                        ClearThumbnailTarget(thumbImg);
                     else
-                    {
-                        // Reset color on every rebind so recycled rows never keep a stale tint.
-                        thumbImg.color = Color.white;
-                    }
+                        LoadThumbnail(file, thumbImg);
+                    ResolveThumbPlaceholderUi(
+                        thumbTr,
+                        thumbImg,
+                        file,
+                        isListMode,
+                        out bool noUsableThumb,
+                        out bool showThumbLabels);
+                    ApplyPluginThumbPlaceholder(thumbTr, thumbImg, file, isListMode, showThumbLabels);
 
                     // List-layout hover preview: bind hover handler to the thumbnail only.
                     // (Use the thumbnail rect so the full row doesn't trigger the popup.)

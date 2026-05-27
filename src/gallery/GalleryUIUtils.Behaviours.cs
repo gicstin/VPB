@@ -963,6 +963,8 @@ namespace VPB
         // Grid State
         private float itemWidth = 100f;
         private float itemHeight = 100f;
+        public float CellWidth => itemWidth;
+        public float CellHeight => itemHeight;
         private float spacingX = 5f;
         private float spacingY = 5f;
         private int colCount = 1;

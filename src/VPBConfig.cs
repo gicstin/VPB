@@ -266,6 +266,12 @@ namespace VPB
 
         /// <summary>When false, plugin rows (.cs/.cslist/.dll under Custom/Scripts) show no thumbnail in the grid/list; selection info box can still show a sister .jpg/.png preview.</summary>
         public bool PluginGalleryGridThumbnails = true;
+        /// <summary>When true, Plugins gallery category always shows in-preview labels and hides thumbnails, including rows that have sister images.</summary>
+        public bool PluginGalleryCategoryLabelsOnly = false;
+        /// <summary>When true (default), missing/black thumbnails show creator / package / item text inside the preview area.</summary>
+        public bool GalleryThumbPlaceholderLabelsEnabled = true;
+        /// <summary>Multiplier for in-preview placeholder font size (0.25–2). Scales with grid cell side length.</summary>
+        public float GalleryThumbPlaceholderSizeScale = 0.7f;
         /// <summary>When true, gallery list layout uses each item's file name (legacy). When false (default), .var rows show Creator.Package.Version (package uid, no .var suffix).</summary>
         public bool GalleryListNamesLegacyFileName = false;
         /// <summary>When true (default), gallery labels strip "Preset_"/"Plugins_" prefixes and the file extension so presets appear by their human name; the original path moves into the hover tooltip. Mirrors BA's resourceDisplayName behavior.</summary>
@@ -597,6 +603,16 @@ namespace VPB
         public string GalleryUserTagPinnedOrder = "";
 
         /// <summary>True when always-on grid label strip should render (respects auto-hide at highest two column counts).</summary>
+        public static float ClampGalleryThumbPlaceholderSizeScale(float scale)
+        {
+            return Mathf.Clamp(scale, 0.25f, 2f);
+        }
+
+        public float GetGalleryThumbPlaceholderSizeScale()
+        {
+            return ClampGalleryThumbPlaceholderSizeScale(GalleryThumbPlaceholderSizeScale);
+        }
+
         public bool GalleryGridLabelsStripVisible()
         {
             if (!GalleryGridLabelsEnabled) return false;
@@ -726,6 +742,9 @@ namespace VPB
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
+            GalleryThumbPlaceholderLabelsEnabled = true;
+            GalleryThumbPlaceholderSizeScale = 0.7f;
+            PluginGalleryCategoryLabelsOnly = false;
             GalleryGridSpacingX = 0f;
             GalleryGridSpacingY = 0f;
             GalleryGridThumbnailPadding = 0f;
@@ -904,6 +923,9 @@ namespace VPB
                         if (node["GalleryLayoutMode"] != null) GalleryLayoutMode = node["GalleryLayoutMode"].AsInt;
                         if (node["GalleryShowHiddenPackages"] != null) GalleryShowHiddenPackages = node["GalleryShowHiddenPackages"].AsBool;
                         if (node["PluginGalleryGridThumbnails"] != null) PluginGalleryGridThumbnails = node["PluginGalleryGridThumbnails"].AsBool;
+                        if (node["PluginGalleryCategoryLabelsOnly"] != null) PluginGalleryCategoryLabelsOnly = node["PluginGalleryCategoryLabelsOnly"].AsBool;
+                        if (node["GalleryThumbPlaceholderLabelsEnabled"] != null) GalleryThumbPlaceholderLabelsEnabled = node["GalleryThumbPlaceholderLabelsEnabled"].AsBool;
+                        if (node["GalleryThumbPlaceholderSizeScale"] != null) GalleryThumbPlaceholderSizeScale = ClampGalleryThumbPlaceholderSizeScale(node["GalleryThumbPlaceholderSizeScale"].AsFloat);
                         if (node["GalleryListNamesLegacyFileName"] != null) GalleryListNamesLegacyFileName = node["GalleryListNamesLegacyFileName"].AsBool;
                         if (node["GalleryPrettyPresetNames"] != null) GalleryPrettyPresetNames = node["GalleryPrettyPresetNames"].AsBool;
                         if (node["GallerySearchScope"] != null) GallerySearchScope = NormalizeGallerySearchScope(node["GallerySearchScope"].Value);
@@ -1205,6 +1227,9 @@ namespace VPB
                 node["GalleryLayoutMode"].AsInt = GalleryLayoutMode;
                 node["GalleryShowHiddenPackages"].AsBool = GalleryShowHiddenPackages;
                 node["PluginGalleryGridThumbnails"].AsBool = PluginGalleryGridThumbnails;
+                node["PluginGalleryCategoryLabelsOnly"].AsBool = PluginGalleryCategoryLabelsOnly;
+                node["GalleryThumbPlaceholderLabelsEnabled"].AsBool = GalleryThumbPlaceholderLabelsEnabled;
+                node["GalleryThumbPlaceholderSizeScale"].AsFloat = GetGalleryThumbPlaceholderSizeScale();
                 node["GalleryListNamesLegacyFileName"].AsBool = GalleryListNamesLegacyFileName;
                 node["GalleryPrettyPresetNames"].AsBool = GalleryPrettyPresetNames;
                 node["GallerySearchScope"] = NormalizeGallerySearchScope(GallerySearchScope);
