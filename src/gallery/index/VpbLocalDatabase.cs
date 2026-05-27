@@ -384,7 +384,8 @@ namespace VPB
                 "CREATE TABLE IF NOT EXISTS item_usage (item_key TEXT PRIMARY KEY, kind TEXT, use_count INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_count ON item_usage(use_count);" +
                 "CREATE INDEX IF NOT EXISTS idx_iu_last ON item_usage(last_used);" +
-                "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);");
+                "CREATE INDEX IF NOT EXISTS idx_cfs_panel ON cat_filter_state(panel_id);" +
+                "CREATE INDEX IF NOT EXISTS idx_cm_pkg_ipath ON cat_mem(pkg_uid, internal_path);");
             // Once-per-build wipe of pre-deep-sig sys_sig:* rows, gated by sentinel so it survives
             // EnsureSchema's per-connection invocation. Old shallow-mtime sigs could otherwise
             // coincidentally match a new deep-mtime sig and return stale cache rows.
@@ -439,6 +440,24 @@ namespace VPB
                     try { LogUtil.Log("[VPB] first_scanned UTC repair: converted " + converted + " rows"); } catch { }
                     MetaSet(conn, FirstScannedUtcRepairKey, "1");
                 }
+            }
+
+            const string EverythingDematKey = "everything_dematerialized_v1";
+            if (string.IsNullOrEmpty(MetaGet(conn, EverythingDematKey)))
+            {
+                bool evOk = false;
+                try
+                {
+                    conn.ExecUtf8(
+                        "DELETE FROM cat_mem WHERE category='EVERYTHING' AND EXISTS (" +
+                        "  SELECT 1 FROM cat_mem c2 WHERE c2.pkg_uid=cat_mem.pkg_uid" +
+                        "    AND c2.internal_path=cat_mem.internal_path AND c2.category<>'EVERYTHING');");
+                    long deleted = ScalarInt64(conn, "SELECT changes();");
+                    try { LogUtil.Log("[VPB.DB] EVERYTHING de-materialize migration deleted " + deleted + " redundant rows"); } catch { }
+                    evOk = true;
+                }
+                catch { }
+                if (evOk) MetaSet(conn, EverythingDematKey, "1");
             }
 
             EnsurePackageManifestSchema(conn);
@@ -2622,7 +2641,7 @@ namespace VPB
             long metaMs = 0;
             long invMs = 0;
             bool ok = false;
-            long catMemRows = -1;
+            long pkgsInMem = -1;
             try
             {
                 string metaInv;
@@ -2648,8 +2667,8 @@ namespace VPB
                         return false;
                     }
 
-                    catMemRows = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
-                    if (catMemRows <= 0)
+                    pkgsInMem = ScalarInt64(conn, "SELECT COUNT(DISTINCT pkg_uid) FROM cat_mem;");
+                    if (pkgsInMem <= 0)
                     {
                         try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: cat_mem empty"); } catch { }
                         return false;
@@ -2673,12 +2692,12 @@ namespace VPB
                     catch { }
                     if (liveCount > 0 && pkgCount > 0
                         && (pkgCount < (liveCount * 9) / 10
-                            || catMemRows < Math.Max(32, pkgCount / 4)))
+                            || pkgsInMem < Math.Max(8, pkgCount / 2)))
                     {
                         try
                         {
                             LogUtil.Log("[VPB.Gallery] sqlRestore rejected: partial index pkg=" + pkgCount
-                                + " live=" + liveCount + " cat_mem=" + catMemRows);
+                                + " live=" + liveCount + " pkgs_in_mem=" + pkgsInMem);
                         }
                         catch { }
                         return false;
@@ -2717,7 +2736,7 @@ namespace VPB
                     long total = sw.ElapsedMilliseconds;
                     if (total >= 10)
                         LogUtil.Log("[VPB.Gallery.Timing] sqlRestore total=" + total + "ms meta_ms=" + metaMs + " inv_ms=" + invMs
-                            + " ok=" + (ok ? "1" : "0") + (ok && catMemRows >= 0 ? " cat_mem=" + catMemRows : ""));
+                            + " ok=" + (ok ? "1" : "0") + (ok && pkgsInMem >= 0 ? " pkgs_in_mem=" + pkgsInMem : ""));
                 }
                 catch { }
             }
@@ -3044,8 +3063,8 @@ namespace VPB
                         }
                         if (liveCount > 0 && pkgCount < (liveCount * 9) / 10)
                             return true;
-                        long catMemRows = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
-                        if (liveCount > 0 && catMemRows < Math.Max(32, pkgCount / 4))
+                        long pkgsInMem = ScalarInt64(conn, "SELECT COUNT(DISTINCT pkg_uid) FROM cat_mem;");
+                        if (liveCount > 0 && pkgsInMem < Math.Max(8, pkgCount / 2))
                             return true;
                     }
                 }
@@ -3895,21 +3914,25 @@ namespace VPB
                     n++;
                 }
 
-                int lastDot = ip.LastIndexOf('.');
-                if (lastDot > 0 && lastDot < ip.Length - 1)
+                if (string.IsNullOrEmpty(cname))
                 {
-                    string evExt = ip.Substring(lastDot + 1);
-                    if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
-
-                    rows.Add(new CatMemRow
+                    // Orphan: no real-category row, so keep an EVERYTHING row; categorized files are recovered via DISTINCT at query time.
+                    int lastDot = ip.LastIndexOf('.');
+                    if (lastDot > 0 && lastDot < ip.Length - 1)
                     {
-                        Category = Gallery.EverythingCategoryName,
-                        PkgUid = uid,
-                        InternalPath = ip,
-                        ListPath = listPath,
-                        ClothAttr = 0
-                    });
-                    n++;
+                        string evExt = ip.Substring(lastDot + 1);
+                        if (Gallery.IsEverythingExcludedPreviewExtension(evExt)) continue;
+
+                        rows.Add(new CatMemRow
+                        {
+                            Category = Gallery.EverythingCategoryName,
+                            PkgUid = uid,
+                            InternalPath = ip,
+                            ListPath = listPath,
+                            ClothAttr = 0
+                        });
+                        n++;
+                    }
                 }
             }
 
@@ -4824,10 +4847,8 @@ namespace VPB
                     }
                     AppendSqlActiveUserTagExists(sb, userTagBindNames, activeUserTags, "m");
                     
-                    // Issue #101: top-level Clothing/Hair counts represent BASE items (.vam) only,
-                    // excluding .vap presets (which are also indexed under those categories).
-                    // EVERYTHING must count all indexed rows for that category (including .vap under Clothing/Hair).
-                    sb.Append(" AND ((m.category NOT IN ('Clothing','Hair') OR lower(m.internal_path) LIKE '%.vam') OR m.category = ?)");
+                    // Clothing/Hair top-level counts represent BASE items (.vam) only; .vap presets excluded.
+                    sb.Append(" AND (m.category NOT IN ('Clothing','Hair') OR lower(m.internal_path) LIKE '%.vam')");
 
                     sb.Append(" GROUP BY m.category");
 
@@ -4846,7 +4867,6 @@ namespace VPB
                         }
                         for (int ui = 0; ui < userTagBindNames.Count; ui++)
                             stmt.BindText(bind++, userTagBindNames[ui]);
-                        stmt.BindText(bind++, Gallery.EverythingCategoryName);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -4857,6 +4877,48 @@ namespace VPB
                             if (countsByCategoryName.ContainsKey(cname))
                                 countsByCategoryName[cname] = n;
                         }
+                    }
+
+                    if (countsByCategoryName.ContainsKey(Gallery.EverythingCategoryName))
+                    {
+                        try
+                        {
+                            var sbEv = new StringBuilder(256);
+                            sbEv.Append("SELECT COUNT(*) FROM (SELECT DISTINCT m.pkg_uid, m.internal_path FROM cat_mem m");
+                            if (hasCreator || hasPackagePathFilter) sbEv.Append(" INNER JOIN pkg p ON p.uid = m.pkg_uid");
+                            sbEv.Append(" WHERE 1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                            if (hasCreator) AppendCreatorFilterSql(sbEv, "p.creator", creatorList);
+                            if (hasPackagePathFilter)
+                                sbEv.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
+                            if (hasTags)
+                            {
+                                foreach (var tag in tagsList)
+                                    sbEv.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
+                            }
+                            var utBindEv = new List<string>();
+                            AppendSqlActiveUserTagExists(sbEv, utBindEv, activeUserTags, "m", Gallery.EverythingCategoryName);
+                            sbEv.Append(")");
+                            using (var stEv = conn.Prepare(sbEv.ToString()))
+                            {
+                                int bEv = 1;
+                                if (hasCreator) BindCreatorFilterSql(stEv, ref bEv, creatorList);
+                                if (hasPackagePathFilter)
+                                    stEv.BindText(bEv++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
+                                if (hasTags)
+                                {
+                                    foreach (var tag in tagsList)
+                                        stEv.BindText(bEv++, "%[" + EscapeLike(tag) + "]%");
+                                }
+                                for (int ui = 0; ui < utBindEv.Count; ui++)
+                                    stEv.BindText(bEv++, utBindEv[ui]);
+                                if (stEv.Step() == VpbSqlite3.SqliteRow)
+                                {
+                                    int nEv = (int)stEv.ColumnInt64(0);
+                                    countsByCategoryName[Gallery.EverythingCategoryName] = nEv;
+                                }
+                            }
+                        }
+                        catch { /* keep previous GROUP BY value */ }
                     }
 
                     // Package-level pseudo-category: ALL VAR (varpkg) is not represented in cat_mem.
@@ -4956,12 +5018,14 @@ namespace VPB
                         hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
                     }
                     bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
+                    bool isEverythingC3 = hasCat && Gallery.IsEverythingCategoryName(categoryTitle);
                     var sb = new StringBuilder();
-                    string countExpr = hasCat ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
+                    string countExpr = (hasCat && !isEverythingC3) ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
                     sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
                     sb.Append("WHERE length(trim(coalesce(p.creator,''))) > 0");
-                    if (hasCat) sb.Append(" AND m.category = ?");
+                    if (hasCat && !isEverythingC3) sb.Append(" AND m.category = ?");
+                    if (isEverythingC3) sb.Append(BuildEverythingNonPreviewAnd("m.internal_path"));
                     if (hasPackagePathFilter)
                         sb.Append(" AND lower(replace(ifnull(p.var_path,''),'\\','/')) LIKE ? ESCAPE '\\'");
 
@@ -5011,14 +5075,14 @@ namespace VPB
                         }
                     }
                     var utBind = new List<string>();
-                    AppendSqlActiveUserTagExists(sb, utBind, activeUserTags, "m");
-                    
+                    AppendSqlActiveUserTagExists(sb, utBind, activeUserTags, "m", isEverythingC3 ? Gallery.EverythingCategoryName : null);
+
                     sb.Append(" GROUP BY p.creator");
 
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        if (hasCat) stmt.BindText(bind++, categoryTitle);
+                        if (hasCat && !isEverythingC3) stmt.BindText(bind++, categoryTitle);
                         if (hasPackagePathFilter)
                             stmt.BindText(bind++, EscapeLike(normalizedPackagePathFilter.ToLowerInvariant()) + "/%");
 
@@ -5146,10 +5210,15 @@ namespace VPB
                     bool hasCreator = creatorList.Count > 0;
                     bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
 
+                    bool isEverythingC2 = Gallery.IsEverythingCategoryName(categoryTitle);
+                    string countExprC2 = isEverythingC2 ? "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)" : "COUNT(*)";
                     var sb = new StringBuilder();
-                    sb.Append("SELECT ifnull(p.var_path,''), COUNT(*) ");
+                    sb.Append("SELECT ifnull(p.var_path,''), ").Append(countExprC2).Append(" ");
                     sb.Append("FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid ");
-                    sb.Append("WHERE m.category = ?");
+                    if (isEverythingC2)
+                        sb.Append("WHERE 1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    else
+                        sb.Append("WHERE m.category = ?");
                     if (hasCreator) AppendCreatorFilterSql(sb, "p.creator", creatorList);
 
                     if (extSet.Count > 0)
@@ -5194,14 +5263,14 @@ namespace VPB
                             sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
                     }
                     var utBindPf = new List<string>();
-                    AppendSqlActiveUserTagExists(sb, utBindPf, activeUserTags, "m");
+                    AppendSqlActiveUserTagExists(sb, utBindPf, activeUserTags, "m", isEverythingC2 ? Gallery.EverythingCategoryName : null);
 
                     sb.Append(" GROUP BY p.var_path");
 
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        stmt.BindText(bind++, categoryTitle);
+                        if (!isEverythingC2) stmt.BindText(bind++, categoryTitle);
                         if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (extSet.Count > 0)
@@ -5321,10 +5390,19 @@ namespace VPB
 
                     var creatorList = SplitCreatorFilterList(creatorFilter);
                     bool hasCreator = creatorList.Count > 0;
+                    bool isEverythingTrc = Gallery.IsEverythingCategoryName(categoryTitle);
                     var sbSql = new StringBuilder(256);
-                    sbSql.Append("SELECT m.internal_path, m.pkg_uid, ifnull(m.cloth_attr,'0'), m.list_path FROM cat_mem m ");
+                    sbSql.Append("SELECT ");
+                    if (isEverythingTrc) sbSql.Append("DISTINCT ");
+                    // cloth_attr forced '0' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
+                    sbSql.Append("m.internal_path, m.pkg_uid, ");
+                    sbSql.Append(isEverythingTrc ? "'0'" : "ifnull(m.cloth_attr,'0')");
+                    sbSql.Append(", m.list_path FROM cat_mem m ");
                     sbSql.Append("INNER JOIN pkg p ON p.uid = m.pkg_uid ");
-                    sbSql.Append("WHERE m.category = ?");
+                    if (isEverythingTrc)
+                        sbSql.Append("WHERE 1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    else
+                        sbSql.Append("WHERE m.category = ?");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
                     sbSql.Append(clothSqlAnd).Append(hairSqlAnd).Append(tagSqlAnd);
                     string sql = sbSql.ToString();
@@ -5332,7 +5410,7 @@ namespace VPB
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
-                        stmt.BindText(bind++, categoryTitle);
+                        if (!isEverythingTrc) stmt.BindText(bind++, categoryTitle);
                         if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (activeTagsList != null)
@@ -5578,6 +5656,11 @@ namespace VPB
             public int AppearanceSubfilterCurrentCountUnknown;
         }
 
+        private static string BuildEverythingNonPreviewAnd(string col)
+        {
+            return " AND " + col + " NOT LIKE '%.jpg' AND " + col + " NOT LIKE '%.jpeg' AND " + col + " NOT LIKE '%.png'";
+        }
+
         /// <summary>
         /// Returns true if rows were read from SQLite (caller still applies path quirks e.g. Saves/Person vs appearance, name filter, PassesFilters).
         /// </summary>
@@ -5741,6 +5824,9 @@ namespace VPB
                     var sbUt = new StringBuilder();
                     AppendSqlActiveUserTagExists(sbUt, userTagBindNames, activeUserTags, "m");
                     string userTagSqlAnd = sbUt.ToString();
+                    var sbUtEv = new StringBuilder();
+                    AppendSqlActiveUserTagExists(sbUtEv, new List<string>(), activeUserTags, "m", Gallery.EverythingCategoryName);
+                    string everythingUserTagSqlAnd = sbUtEv.ToString();
 
                     string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
                     string orderBy = "";
@@ -5758,19 +5844,29 @@ namespace VPB
 
                     var creatorList = SplitCreatorFilterList(creatorFilter);
                     bool hasCreator = creatorList.Count > 0;
+                    bool isEverything = Gallery.IsEverythingCategoryName(categoryTitle);
                     var sbSql = new StringBuilder(512);
-                    sbSql.Append("SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ifnull(m.cloth_attr,''), ");
+                    sbSql.Append("SELECT ");
+                    if (isEverything) sbSql.Append("DISTINCT ");
+                    sbSql.Append("m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ");
+                    // cloth_attr forced '' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
+                    sbSql.Append(isEverything ? "''" : "ifnull(m.cloth_attr,'')");
+                    sbSql.Append(", ");
                     sbSql.Append(loadedSelect);
                     sbSql.Append(", ifnull(p.first_scanned, 0)");
-                    sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?");
+                    sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE ");
+                    if (isEverything)
+                        sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    else
+                        sbSql.Append("m.category = ?");
                     if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
-                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(inclusionSqlAnd).Append(tagSqlAnd).Append(userTagSqlAnd).Append(orderBy);
+                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(inclusionSqlAnd).Append(tagSqlAnd).Append(isEverything ? everythingUserTagSqlAnd : userTagSqlAnd).Append(orderBy);
                     string sql = sbSql.ToString();
                     
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
-                        stmt.BindText(bind++, categoryTitle);
+                        if (!isEverything) stmt.BindText(bind++, categoryTitle);
                         if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
 
                         if (nameTerms != null && nameTerms.Length > 0)

@@ -171,9 +171,11 @@ namespace VPB
             catch { }
         }
 
-        private static void AppendSqlActiveUserTagExists(StringBuilder sb, List<string> bindNamesOut, HashSet<string> activeUserTags, string mAlias)
+        private static void AppendSqlActiveUserTagExists(StringBuilder sb, List<string> bindNamesOut, HashSet<string> activeUserTags, string mAlias, string categoryLiteral = null)
         {
             if (activeUserTags == null || activeUserTags.Count == 0 || bindNamesOut == null) return;
+            // categoryLiteral pins gut.category to a literal so DISTINCT scans match only tags recorded under that view.
+            string catExpr = categoryLiteral != null ? "'" + categoryLiteral + "'" : mAlias + ".category";
             foreach (var raw in activeUserTags)
             {
                 string n = NormalizeGalleryUserTagName(raw);
@@ -181,7 +183,7 @@ namespace VPB
                 bindNamesOut.Add(n);
                 sb.Append(" AND EXISTS (SELECT 1 FROM gallery_item_user_tag gut");
                 sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
-                sb.Append(" WHERE gut.category=").Append(mAlias).Append(".category");
+                sb.Append(" WHERE gut.category=").Append(catExpr);
                 sb.Append(" AND gut.pkg_uid=").Append(mAlias).Append(".pkg_uid");
                 sb.Append(" AND gut.internal_path=").Append(mAlias).Append(".internal_path");
                 sb.Append(" AND gt.name=?)");
@@ -765,14 +767,21 @@ namespace VPB
                     if (IsGalleryAllVarPseudoCategory(categoryTitle))
                         return TryBuildAllVarPkgInternalPathKeysMatchingAllUserTags(conn, activeUserTags, keysOut);
 
+                    bool isEveryTags = Gallery.IsEverythingCategoryName(categoryTitle);
                     var bindNames = new List<string>();
                     var sb = new StringBuilder();
-                    sb.Append("SELECT m.pkg_uid, m.internal_path FROM cat_mem m WHERE m.category=?");
-                    AppendSqlActiveUserTagExists(sb, bindNames, activeUserTags, "m");
+                    sb.Append("SELECT ");
+                    if (isEveryTags) sb.Append("DISTINCT ");
+                    sb.Append("m.pkg_uid, m.internal_path FROM cat_mem m WHERE ");
+                    if (isEveryTags)
+                        sb.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    else
+                        sb.Append("m.category=?");
+                    AppendSqlActiveUserTagExists(sb, bindNames, activeUserTags, "m", isEveryTags ? Gallery.EverythingCategoryName : null);
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        stmt.BindText(bind++, categoryTitle);
+                        if (!isEveryTags) stmt.BindText(bind++, categoryTitle);
                         for (int i = 0; i < bindNames.Count; i++)
                             stmt.BindText(bind++, bindNames[i]);
                         while (stmt.Step() == VpbSqlite3.SqliteRow)
@@ -1521,7 +1530,7 @@ namespace VPB
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
                     EnsureSchema(conn);
-                    using (var st = conn.Prepare("SELECT category FROM cat_mem WHERE pkg_uid=? AND internal_path=? LIMIT 1"))
+                    using (var st = conn.Prepare("SELECT category FROM cat_mem WHERE pkg_uid=? AND internal_path=? AND category<>'EVERYTHING' LIMIT 1"))
                     {
                         st.BindText(1, pkgUid);
                         st.BindText(2, ip);
