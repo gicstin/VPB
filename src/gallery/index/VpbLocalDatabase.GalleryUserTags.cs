@@ -190,6 +190,31 @@ namespace VPB
             }
         }
 
+        /// <summary>Restrict <c>cat_mem</c> rows to items with no SQLite user tags (browse category semantics).</summary>
+        internal static void AppendSqlNoUserTagExists(StringBuilder sb, string mAlias, string categoryTitle, bool everythingView = false)
+        {
+            if (sb == null || string.IsNullOrEmpty(mAlias)) return;
+            sb.Append(" AND NOT EXISTS (SELECT 1 FROM gallery_item_user_tag gut WHERE ");
+            if (IsGalleryAllVarPseudoCategory(categoryTitle))
+                sb.Append("gut.pkg_uid=").Append(mAlias).Append(".pkg_uid");
+            else if (everythingView)
+                sb.Append("gut.pkg_uid=").Append(mAlias).Append(".pkg_uid AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+            else
+                sb.Append("gut.category=").Append(mAlias).Append(".category AND gut.pkg_uid=").Append(mAlias).Append(".pkg_uid AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+            sb.Append(')');
+        }
+
+        /// <summary>True when row has no user tags for current browse semantics (ALL VAR package rows use package-wide check).</summary>
+        internal static bool TryGalleryRowHasNoUserTags(string categoryTitle, string pkgUid, string internalPath)
+        {
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (IsGalleryAllVarPseudoCategory(categoryTitle)
+                && string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(pkgUid))
+                return !TryHasAnyGalleryUserTagsForPackageAnyPath(pkgUid);
+            return !TryHasAnyGalleryUserTagsForRow(categoryTitle, pkgUid, internalPath);
+        }
+
         /// <summary>Side tab: distinct user tag names with counts for current category (+ creator/path filters).</summary>
         internal static bool TryReadGalleryUserTagSideTabCounts(
             string categoryTitle,
@@ -790,6 +815,79 @@ namespace VPB
                             string ip = stmt.ColumnText(1) ?? "";
                             keysOut.Add(FormatCatMemRowLookupKey(pu, ip));
                         }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// One query: cat_mem row keys in <paramref name="categoryTitle"/> with no user tags (browse semantics).
+        /// </summary>
+        internal static bool TryBuildCatMemRowKeysWithNoUserTags(
+            string categoryTitle,
+            HashSet<string> keysOut)
+        {
+            keysOut?.Clear();
+            if (keysOut == null) return false;
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    if (IsGalleryAllVarPseudoCategory(categoryTitle))
+                        return TryBuildAllVarPkgInternalPathKeysWithNoUserTags(conn, keysOut);
+
+                    bool isEveryTags = Gallery.IsEverythingCategoryName(categoryTitle);
+                    var sb = new StringBuilder();
+                    sb.Append("SELECT ");
+                    if (isEveryTags) sb.Append("DISTINCT ");
+                    sb.Append("m.pkg_uid, m.internal_path FROM cat_mem m WHERE ");
+                    if (isEveryTags)
+                        sb.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
+                    else
+                        sb.Append("m.category=?");
+                    AppendSqlNoUserTagExists(sb, "m", categoryTitle, isEveryTags);
+                    using (var stmt = conn.Prepare(sb.ToString()))
+                    {
+                        int bind = 1;
+                        if (!isEveryTags) stmt.BindText(bind++, categoryTitle);
+                        while (stmt.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string pu = stmt.ColumnText(0) ?? "";
+                            string ip = stmt.ColumnText(1) ?? "";
+                            keysOut.Add(FormatCatMemRowLookupKey(pu, ip));
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryBuildAllVarPkgInternalPathKeysWithNoUserTags(VpbSqlite3.Connection conn, HashSet<string> keysOut)
+        {
+            keysOut?.Clear();
+            if (keysOut == null || conn == null) return false;
+            try
+            {
+                const string sql = "SELECT DISTINCT m.pkg_uid, m.internal_path FROM cat_mem m WHERE NOT EXISTS (SELECT 1 FROM gallery_item_user_tag gut WHERE gut.pkg_uid=m.pkg_uid)";
+                using (var stmt = conn.Prepare(sql))
+                {
+                    while (stmt.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string pu = stmt.ColumnText(0) ?? "";
+                        string ip = stmt.ColumnText(1) ?? "";
+                        keysOut.Add(FormatCatMemRowLookupKey(pu, ip));
                     }
                 }
                 return true;

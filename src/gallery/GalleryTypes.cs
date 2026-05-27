@@ -9,6 +9,9 @@ namespace VPB
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }
     public enum GalleryHistoryFilterMode { Recent, MostUsed, Scenes, Appearance, Clothing, Hair, Plugins, Pose, Body, Misc }
+
+    /// <summary>User Tags Available pane: apply tags, filter grid by selected tags, or show only untagged rows.</summary>
+    public enum UserTagAvailMode { Tag = 0, FilterByTags = 1, FilterUntagged = 2 }
     
     public struct CreatorCacheEntry 
     { 

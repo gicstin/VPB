@@ -1677,7 +1677,7 @@ namespace VPB
 
             // Gallery SQLite user tags (Available Filter Mode). VAR rows from SQLite bulk query already match tags;
             // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
-            if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0
+            if (_userTagAvailMode != UserTagAvailMode.Tag
                 && activeContentType == ContentType.Category && VpbSqlite3.IsAvailable)
             {
                 VarFileEntry vfeUt = entry as VarFileEntry;
@@ -1692,8 +1692,22 @@ namespace VPB
                     if (string.IsNullOrEmpty(catUt)) return false;
                     string pkgK, ipK;
                     if (!TryGetGalleryRowKeysForUserTags(entry, out pkgK, out ipK)) return false;
-                    if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, pkgK, ipK, activeUserTags))
-                        return false;
+                    if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    {
+                        if (!VpbLocalDatabase.TryGalleryRowHasNoUserTags(catUt, pkgK, ipK))
+                        {
+                            string selKeyUt = GetSelectionIdentityKey(entry, false);
+                            bool keepTaggedVisible = !string.IsNullOrEmpty(selKeyUt)
+                                && ((selectedFilePaths != null && selectedFilePaths.Contains(selKeyUt))
+                                    || _untaggedTaggedPinKeys.Contains(selKeyUt));
+                            if (!keepTaggedVisible) return false;
+                        }
+                    }
+                    else if (activeUserTags != null && activeUserTags.Count > 0)
+                    {
+                        if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, pkgK, ipK, activeUserTags))
+                            return false;
+                    }
                 }
             }
 
@@ -2292,8 +2306,8 @@ namespace VPB
                     }
                 }
                 sb.Append('\u001E');
-                sb.Append(_userTagAvailFilterMode ? '1' : '0').Append('\u001E');
-                if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0)
+                sb.Append((int)_userTagAvailMode).Append('\u001E');
+                if (_userTagAvailMode == UserTagAvailMode.FilterByTags && activeUserTags != null && activeUserTags.Count > 0)
                 {
                     var uarr = new List<string>(activeUserTags);
                     uarr.Sort(StringComparer.Ordinal);
@@ -3260,9 +3274,10 @@ namespace VPB
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
-                bool userTagGridFilterModeSnap = _userTagAvailFilterMode;
+                bool userTagGridFilterByTagsSnap = _userTagAvailMode == UserTagAvailMode.FilterByTags;
+                bool userTagGridFilterUntaggedSnap = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
                 HashSet<string> userTagNamesForGridSqlSnap = null;
-                if (userTagGridFilterModeSnap && activeUserTags != null && activeUserTags.Count > 0)
+                if (userTagGridFilterByTagsSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
                 int[] refreshDrainUtSqlFilterApplied = { 0 };
                 int[] refreshWorkerUsedSqliteFlag = { 0 };
@@ -3332,7 +3347,8 @@ namespace VPB
                                 pathInclusions: pathInclusionsForSql,
                                 activeTags: activeTags,
                                 activeUserTags: userTagNamesForGridSqlSnap,
-                                sortState: fileListSortSnapForWorker);
+                                sortState: fileListSortSnapForWorker,
+                                userTagsUntaggedOnly: userTagGridFilterUntaggedSnap);
                             }
                         }
                         else
@@ -3497,11 +3513,15 @@ namespace VPB
                             {
                                 HashSet<string> utCatMemKeyHits = null;
                                 if (activeContentSnap == ContentType.Category
-                                    && userTagGridFilterModeSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0
                                     && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
                                 {
                                     var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                    if (VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt))
+                                    bool utOk = false;
+                                    if (userTagGridFilterUntaggedSnap)
+                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysWithNoUserTags(titleForIndexMain, utBuilt);
+                                    else if (userTagGridFilterByTagsSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt);
+                                    if (utOk)
                                     {
                                         utCatMemKeyHits = utBuilt;
                                         System.Threading.Interlocked.Exchange(ref _refreshWorkerFallbackUserTagPrefilterFlag, 1);
@@ -3736,7 +3756,8 @@ namespace VPB
                         try
                         {
                             if (useSqliteIndex && activeContentSnap == ContentType.Category
-                                && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                && (userTagGridFilterUntaggedSnap
+                                    || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)))
                                 refreshDrainUtSqlFilterApplied[0] = 1;
                         }
                         catch { }
@@ -4737,7 +4758,7 @@ namespace VPB
             if (IsFilterActive) return false;
             if (currentPackageFilterMode != PackageFilterMode.None) return false;
             try { if (cleanupModeActive) return false; } catch { }
-            try { if (_userTagAvailFilterMode) return false; } catch { }
+            try { if (_userTagAvailMode != UserTagAvailMode.Tag) return false; } catch { }
             try
             {
                 if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;

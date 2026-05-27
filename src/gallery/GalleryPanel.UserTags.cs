@@ -111,6 +111,45 @@ namespace VPB
             updatePanelForSelection();
         }
 
+        private void ClearUntaggedTaggedPinKeys()
+        {
+            _untaggedTaggedPinKeys.Clear();
+        }
+
+        /// <summary>Not Tagged: drop pinned tagged rows the user just deselected (O(deselected) scan, no SQLite).</summary>
+        private void PruneUntaggedGridAfterSelectionChange(HashSet<string> deselectedSelKeys)
+        {
+            if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return;
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged) return;
+            if (!TryPruneUntaggedGridForDeselectedPins(deselectedSelKeys)) return;
+
+            if (recyclingGrid != null)
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+            try { UpdatePaginationText(); } catch { }
+        }
+
+        private static HashSet<string> SnapshotSelectionIdentityKeys(GalleryPanel panel)
+        {
+            if (panel == null || panel.selectedFilePaths == null || panel.selectedFilePaths.Count == 0)
+                return null;
+            return new HashSet<string>(panel.selectedFilePaths, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static HashSet<string> BuildDeselectedSelectionKeys(HashSet<string> before, HashSet<string> after)
+        {
+            if (before == null || before.Count == 0) return null;
+            var deselected = new HashSet<string>(before, StringComparer.OrdinalIgnoreCase);
+            if (after != null)
+            {
+                foreach (string k in after)
+                    deselected.Remove(k);
+            }
+            return deselected.Count > 0 ? deselected : null;
+        }
+
         private void updatePanelForSelection()
         {
             CacheAppliedUserTagsForSelection();
@@ -1006,9 +1045,9 @@ namespace VPB
             }
 
             strip.SetActive(true);
-            string pickTip = _userTagAvailFilterMode
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
+            string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
             float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
 
@@ -1620,7 +1659,7 @@ namespace VPB
         private bool TryPruneVisibleGridAfterUserTagRemove(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
             if (updatedRows == null || updatedRows.Count == 0) return false;
-            if (!_userTagAvailFilterMode || activeUserTags == null || activeUserTags.Count == 0)
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags || activeUserTags == null || activeUserTags.Count == 0)
                 return false;
             if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable)
                 return false;
@@ -1660,6 +1699,97 @@ namespace VPB
             return true;
         }
 
+        private bool TryGetSelectionKeyForGalleryUserTagRow(string pkgUid, string internalPath, out string selKey)
+        {
+            selKey = null;
+            if (selectedFiles != null)
+            {
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry fe = selectedFiles[i];
+                    if (fe == null) continue;
+                    if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                    if (!string.Equals(pkg ?? "", pkgUid ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(ip ?? "", internalPath ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    selKey = GetSelectionIdentityKey(fe, false);
+                    return !string.IsNullOrEmpty(selKey);
+                }
+            }
+            if (currentFilteredFiles != null)
+            {
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    FileEntry fe = currentFilteredFiles[i];
+                    if (fe == null) continue;
+                    if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                    if (!string.Equals(pkg ?? "", pkgUid ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(ip ?? "", internalPath ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    selKey = GetSelectionIdentityKey(fe, false);
+                    return !string.IsNullOrEmpty(selKey);
+                }
+            }
+            return false;
+        }
+
+        private void SyncUntaggedTaggedPinKeysAfterMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged || updatedRows == null || updatedRows.Count == 0)
+                return;
+            if (!VpbSqlite3.IsAvailable) return;
+
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+            if (string.IsNullOrEmpty(cat)) return;
+
+            for (int i = 0; i < updatedRows.Count; i++)
+            {
+                var r = updatedRows[i];
+                if (!TryGetSelectionKeyForGalleryUserTagRow(r.PkgUid, r.InternalPath, out string selKey))
+                    continue;
+                if (!remove)
+                {
+                    _untaggedTaggedPinKeys.Add(selKey);
+                    continue;
+                }
+                if (VpbLocalDatabase.TryGalleryRowHasNoUserTags(cat, r.PkgUid, r.InternalPath))
+                    _untaggedTaggedPinKeys.Remove(selKey);
+            }
+        }
+
+        /// <summary>Remove grid rows for deselected keys that were pinned as tagged overrides.</summary>
+        private bool TryPruneUntaggedGridForDeselectedPins(HashSet<string> deselectedSelKeys)
+        {
+            if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return false;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return false;
+
+            bool anyPin = false;
+            foreach (string k in deselectedSelKeys)
+            {
+                if (_untaggedTaggedPinKeys.Contains(k)) { anyPin = true; break; }
+            }
+            if (!anyPin) return false;
+
+            var removeRefs = new HashSet<FileEntry>();
+            for (int i = 0; i < currentFilteredFiles.Count; i++)
+            {
+                FileEntry fe = currentFilteredFiles[i];
+                if (fe == null) continue;
+                string selKey = GetSelectionIdentityKey(fe, false);
+                if (string.IsNullOrEmpty(selKey) || !deselectedSelKeys.Contains(selKey)) continue;
+                if (!_untaggedTaggedPinKeys.Remove(selKey)) continue;
+                removeRefs.Add(fe);
+            }
+
+            if (removeRefs.Count == 0) return false;
+
+            RemoveFileEntriesFromLists(currentFilteredFiles, removeRefs);
+            RemoveFileEntriesFromLists(lastFilteredFiles, removeRefs);
+            InvalidateGalleryPreHideFileListSnapshot();
+            RemoveFileEntriesFromLists(topSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(filterSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(selectedFiles, removeRefs);
+            return true;
+        }
+
         private void RefreshUiAfterUserTagMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows, List<string> tags)
         {
             bool appearanceGenderLive = false;
@@ -1677,9 +1807,10 @@ namespace VPB
             }
 
             CacheAppliedUserTagsForSelection();
+            try { SyncUntaggedTaggedPinKeysAfterMutate(remove, updatedRows); } catch { }
 
             bool filterModeRemove = remove
-                && _userTagAvailFilterMode
+                && _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && activeUserTags != null && activeUserTags.Count > 0
                 && activeContentType == ContentType.Category
                 && VpbSqlite3.IsAvailable;
@@ -2161,7 +2292,7 @@ namespace VPB
                 OnUserTagAvailFilterModeClicked);
             filterGo.name = "VPB_UserTagFilterModeBtn";
             AddUserTagFilterButtonIconAndLabel(filterGo, s);
-            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "When on, clicking tag rows filters the main grid by those tags. When off, clicking tag rows toggles tags on selected item(s)."));
+            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "Cycles: Tag Mode (apply tags), Filter Mode (grid matches selected tags), Not Tagged (grid shows only items with no user tags)."));
             filterGo.transform.SetSiblingIndex(Mathf.Min(1, filterGo.transform.GetSiblingIndex()));
 
             HorizontalLayoutGroup hlg = btnRow.GetComponent<HorizontalLayoutGroup>();
@@ -2231,7 +2362,10 @@ namespace VPB
 
         private void OnUserTagAvailFilterModeClicked()
         {
-            _userTagAvailFilterMode = !_userTagAvailFilterMode;
+            UserTagAvailMode prev = _userTagAvailMode;
+            _userTagAvailMode = (UserTagAvailMode)(((int)_userTagAvailMode + 1) % 3);
+            if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                ClearUntaggedTaggedPinKeys();
             try
             {
                 string t = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
@@ -2276,23 +2410,37 @@ namespace VPB
             if (tagSpr == null) tagSpr = offSpr;
             if (iconImg != null)
             {
-                iconImg.sprite = _userTagAvailFilterMode ? onSpr : tagSpr;
+                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+                    iconImg.sprite = onSpr;
+                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    iconImg.sprite = offSpr != null ? offSpr : onSpr;
+                else
+                    iconImg.sprite = tagSpr;
                 iconImg.color = Color.white;
             }
             Text label = filterBtn.GetComponentInChildren<Text>(true);
             if (label != null)
             {
                 label.gameObject.SetActive(true);
-                label.text = _userTagAvailFilterMode
-                    ? VPBTranslation.T("gallery.usertags.filter_button_on_label", "Filter Mode")
-                    : VPBTranslation.T("gallery.usertags.tag_mode_button_label", "Tag Mode");
+                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+                    label.text = VPBTranslation.T("gallery.usertags.filter_button_on_label", "Filter Mode");
+                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    label.text = VPBTranslation.T("gallery.usertags.not_tagged_mode_button_label", "Not Tagged");
+                else
+                    label.text = VPBTranslation.T("gallery.usertags.tag_mode_button_label", "Tag Mode");
             }
             Image bd = filterBtn.GetComponent<Image>();
             if (bd != null)
             {
                 Color tagModeBackdrop = new Color(0.20f, 0.50f, 0.25f, 1f);
                 Color filterModeBackdrop = new Color(0.18f, 0.38f, 0.62f, 1f);
-                bd.color = _userTagAvailFilterMode ? filterModeBackdrop : tagModeBackdrop;
+                Color untaggedModeBackdrop = new Color(0.45f, 0.32f, 0.14f, 1f);
+                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+                    bd.color = filterModeBackdrop;
+                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    bd.color = untaggedModeBackdrop;
+                else
+                    bd.color = tagModeBackdrop;
             }
         }
 

@@ -19,7 +19,7 @@ namespace VPB
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
             s.UserTags = new List<string>(activeUserTags);
-            s.UserTagAvailFilterMode = _userTagAvailFilterMode ? 1 : 0;
+            s.UserTagAvailFilterMode = (int)_userTagAvailMode;
             s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
             s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
@@ -103,7 +103,11 @@ namespace VPB
                     string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
                     if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
                 }
-            _userTagAvailFilterMode = state.UserTagAvailFilterMode != 0;
+            int utfm = state.UserTagAvailFilterMode;
+            if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
+            _userTagAvailMode = (UserTagAvailMode)utfm;
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
+                try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
             currentSceneSourceFilter = state.SceneSourceFilter ?? "";
@@ -122,6 +126,8 @@ namespace VPB
                 try { UpdateSortButtonText(fileSortTypeText, fileSortDirText, state.FileSortState); } catch { }
                 try { SyncRatingSortToggleState(); } catch { }
             }
+
+            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }
 
         private void ClearFiltersForNewCategory()
@@ -139,7 +145,8 @@ namespace VPB
 
             activeTags.Clear();
             activeUserTags.Clear();
-            _userTagAvailFilterMode = false;
+            _userTagAvailMode = UserTagAvailMode.Tag;
+            try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;
             currentSceneSourceFilter = "";
             currentAppearanceSourceFilter = "";

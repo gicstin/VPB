@@ -48,7 +48,7 @@ namespace VPB
                     {
                         activeUserTags.Clear();
                         userTagsCached = false;
-                        if (_userTagAvailFilterMode) { try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { } }
+                        if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { } }
                         try { RefreshUserTagsAvailPaneInPlace(isLeft); } catch { }
                     }, trackedButtons);
             }

@@ -584,10 +584,12 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Checked tags in Available pick list. When <see cref="_userTagAvailFilterMode"/> is off: staging for Apply. When on: SQL/exists grid filter for category browse.</summary>
+        /// <summary>Checked tags in Available pick list. Tag mode: staging for Apply. Filter-by-tags: SQL grid AND filter. Untagged: grid shows rows with no user tags.</summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>When true, selected user tags narrow main grid/list (SQLite EXISTS); when false, picks only affect Apply.</summary>
-        private bool _userTagAvailFilterMode;
+        /// <summary>Available pane mode: apply, filter by selected tags, or filter untagged items only.</summary>
+        private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.Tag;
+        /// <summary>Not Tagged mode: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
+        private readonly HashSet<string> _untaggedTaggedPinKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>
         private bool _userTagInheritVarToChildren;
         /// <summary>Set during refresh drain when SQLite category query already constrained rows by gallery user tags.</summary>

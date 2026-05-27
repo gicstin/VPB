@@ -10,7 +10,7 @@ namespace VPB
         public string Creator = "";
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
-        /// <summary>1 when Available pane Filter Mode is on (grid narrows by picked tags).</summary>
+        /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only). Legacy: 1 meant filter-by-tags only.</summary>
         public int UserTagAvailFilterMode = 0;
         /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
         public int UserTagInheritVarToChildren = 0;

@@ -1228,12 +1228,26 @@ namespace VPB
 
             if (!applyToSelection)
             {
+                HashSet<string> untaggedSelBefore = _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    ? SnapshotSelectionIdentityKeys(this)
+                    : null;
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
                 AddFileToSelection(file, historyBrowse);
                 selectedPath = !string.IsNullOrEmpty(file.Path) ? file.Path : idKey;
                 selectedHubItem = null;
                 SetSelectionAnchor(file, historyBrowse);
+
+                if (untaggedSelBefore != null)
+                {
+                    try
+                    {
+                        HashSet<string> deselected = BuildDeselectedSelectionKeys(untaggedSelBefore, SnapshotSelectionIdentityKeys(this));
+                        if (deselected != null)
+                            PruneUntaggedGridAfterSelectionChange(deselected);
+                    }
+                    catch { }
+                }
 
                 SetHoverPath("");
                 RefreshSelectionVisuals();
@@ -1310,6 +1324,9 @@ namespace VPB
             lastClickTime = time;
 
             bool selectionChanged = false;
+            HashSet<string> untaggedSelBefore = _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                ? SnapshotSelectionIdentityKeys(this)
+                : null;
 
             // Update selection set (Ctrl toggle / Shift range / single)
             if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
@@ -1388,6 +1405,16 @@ namespace VPB
             // Keep primary selection path for double-click detection / hover path
             if (selectionChanged || !string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase))
             {
+                if (selectionChanged && untaggedSelBefore != null)
+                {
+                    try
+                    {
+                        HashSet<string> deselected = BuildDeselectedSelectionKeys(untaggedSelBefore, SnapshotSelectionIdentityKeys(this));
+                        if (deselected != null)
+                            PruneUntaggedGridAfterSelectionChange(deselected);
+                    }
+                    catch { }
+                }
                 selectedPath = fileKey;
                 selectedHubItem = null;
                 // Selection should not "stick" the hover path.

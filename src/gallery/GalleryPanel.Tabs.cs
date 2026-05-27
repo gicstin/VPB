@@ -725,7 +725,7 @@ namespace VPB
             bool isCreateRow = ut.Count == CreateRowCountSentinel;
             UserTagSelectionState state = isCreateRow ? UserTagSelectionState.Off : GetUserTagSelectionState(tagSnap);
             bool isFilterActive = !isCreateRow
-                && _userTagAvailFilterMode
+                && _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && activeUserTags != null
                 && activeUserTags.Contains(tagSnap);
             bool isPulsing = !isCreateRow
@@ -758,7 +758,7 @@ namespace VPB
                                 _userTagVirtViewSig = null;
                             }
                         }
-                        else if (_userTagAvailFilterMode)
+                        else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
                         {
                             if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
                             else activeUserTags.Add(tagSnap);
@@ -859,9 +859,9 @@ namespace VPB
             if (sr == null) sr = holderGo.GetComponentInParent<ScrollRect>();
             if (sr == null) return;
 
-            string pickTip = _userTagAvailFilterMode
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
+            string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
             if (rowH <= 1f) rowH = 37f;
 

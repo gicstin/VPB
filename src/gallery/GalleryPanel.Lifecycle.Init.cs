@@ -841,7 +841,7 @@ namespace VPB
                         userTagFilter = "";
                         activeUserTags.Clear();
                         userTagsCached = false;
-                        if (_userTagAvailFilterMode) { try { RefreshFiles(true); } catch { } }
+                        if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true); } catch { } }
                         try { UpdateTabs(); } catch { }
                     }
                     else if (rightActiveContent == ContentType.Path) {
@@ -1148,7 +1148,7 @@ namespace VPB
                         userTagFilter = "";
                         activeUserTags.Clear();
                         userTagsCached = false;
-                        if (_userTagAvailFilterMode) { try { RefreshFiles(true); } catch { } }
+                        if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true); } catch { } }
                         try { UpdateTabs(); } catch { }
                     }
                     else if (leftActiveContent == ContentType.Path) {
