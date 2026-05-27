@@ -590,6 +590,153 @@ namespace VPB
             }
         }
 
+        // One connection, one SELECT for every cslist-referenced path (disk + per-VAR keys).
+        // No per-uid sig check: rows are overwritten on the same cache_key when a VAR changes,
+        // so a stale row cannot outlive a rescan.
+        public static void TryReadAllCslistReferencedFromCache(HashSet<string> outPaths)
+        {
+            if (outPaths == null) return;
+            if (!VpbSqlite3.IsAvailable) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT path FROM sys_file WHERE cache_key LIKE 'plugins:cslist_referenced_%'"))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string p = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(p)) outPaths.Add(p);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // uid -> persisted cslist-ref sig, loaded once from the cslref_sig:<uid> meta keys.
+        // A dedicated queryable key is needed because the generic sys_file sig (SysSigMetaKey)
+        // is FNV-hashed and cannot be looked up by uid.
+        private static volatile Dictionary<string, string> _cslistRefVarSigCache;
+        private static readonly object _cslistRefVarSigCacheLock = new object();
+        private const string CslistRefVarSigMetaPrefix = "cslref_sig:";
+
+        private static void EnsureCslistRefVarSigCacheLoaded()
+        {
+            if (_cslistRefVarSigCache != null) return;
+            lock (_cslistRefVarSigCacheLock)
+            {
+                if (_cslistRefVarSigCache != null) return;
+                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (VpbSqlite3.IsAvailable)
+                {
+                    try
+                    {
+                        using (var conn = new VpbSqlite3.Connection(DbPath))
+                        {
+                            EnsureSchema(conn);
+                            using (var st = conn.Prepare("SELECT k, v FROM meta WHERE k LIKE 'cslref_sig:%'"))
+                            {
+                                while (st.Step() == VpbSqlite3.SqliteRow)
+                                {
+                                    string k = st.ColumnText(0);
+                                    string v = st.ColumnText(1);
+                                    if (string.IsNullOrEmpty(k)) continue;
+                                    if (k.Length <= CslistRefVarSigMetaPrefix.Length) continue;
+                                    string uid = k.Substring(CslistRefVarSigMetaPrefix.Length);
+                                    dict[uid] = v ?? string.Empty;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                _cslistRefVarSigCache = dict;
+            }
+        }
+
+        // In-memory sig lookup; an unchanged VAR can skip all disk and SQLite work.
+        public static bool TryGetCslistRefVarSig(string uid, out string sig)
+        {
+            sig = null;
+            if (string.IsNullOrEmpty(uid)) return false;
+            EnsureCslistRefVarSigCacheLoaded();
+            var cache = _cslistRefVarSigCache;
+            if (cache == null) return false;
+            lock (_cslistRefVarSigCacheLock)
+            {
+                return cache.TryGetValue(uid, out sig);
+            }
+        }
+
+        public static void UpdateCslistRefVarSig(string uid, string sig)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            lock (_cslistRefVarSigCacheLock)
+            {
+                if (_cslistRefVarSigCache == null)
+                    _cslistRefVarSigCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                _cslistRefVarSigCache[uid] = sig ?? string.Empty;
+            }
+        }
+
+        // Writes the referenced rows and the queryable cslref_sig:<uid> sig in one connection.
+        // The sig is what a later scan checks to skip re-parsing an unchanged VAR.
+        public static void WriteCslistReferencedForVar(string uid, string sig, List<SystemFileRow> rows)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(uid)) return;
+            string cacheKey = "plugins:cslist_referenced_var|uid=" + uid;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var del = conn.Prepare("DELETE FROM sys_file WHERE cache_key = ?"))
+                        {
+                            del.BindText(1, cacheKey);
+                            del.Step();
+                        }
+                        if (rows != null && rows.Count > 0)
+                        {
+                            using (var ins = conn.Prepare("INSERT OR REPLACE INTO sys_file(cache_key,path,wtime,size) VALUES(?,?,?,?)"))
+                            {
+                                for (int i = 0; i < rows.Count; i++)
+                                {
+                                    var r = rows[i];
+                                    if (string.IsNullOrEmpty(r.Path)) continue;
+                                    ins.BindText(1, cacheKey);
+                                    ins.BindText(2, r.Path);
+                                    ins.BindText(3, r.LastWriteBinaryOrInvalid.ToString());
+                                    ins.BindText(4, r.SizeOrInvalid.ToString());
+                                    ins.Step();
+                                    ins.Reset();
+                                }
+                            }
+                        }
+                        using (var up = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                        {
+                            up.BindText(1, CslistRefVarSigMetaPrefix + uid);
+                            up.BindText(2, sig ?? string.Empty);
+                            up.Step();
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+                UpdateCslistRefVarSig(uid, sig);
+            }
+            catch { }
+        }
+
         internal static string BuildUsageKey(FileEntry file)
         {
             if (file == null) return "";

@@ -729,6 +729,28 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "lists.pluginConsolidateCslist", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.plugin_consolidate_cslist", "Plugins: consolidate .cslist source files"),
+                Tooltip = VPBTranslation.T("settings.tip.plugin_consolidate_cslist", "Hide .cs files that a .cslist already references, so multi-file plugins show as a single .cslist row. Standalone .cs files (not in any .cslist) always show."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.PluginConsolidateCslist != null
+                            && Settings.Instance.PluginConsolidateCslist.Value;
+                    } catch { return false; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.PluginConsolidateCslist != null)
+                            Settings.Instance.PluginConsolidateCslist.Value = v;
+                        Settings.SaveConfig();
+                        if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                        else RefreshFiles(true);
+                    } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.legacyNames", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_list_legacy_names", "Legacy gallery list names"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_list_legacy_names", "Use old file/item name mode in list rows."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryListNamesLegacyFileName,

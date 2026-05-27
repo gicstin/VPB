@@ -256,6 +256,25 @@ namespace VPB
                 GalleryFileListSnapshotCache.Clear();
                 GalleryTagCountSnapshotCache.Clear();
             }
+
+            // VAR scan rewrote per-uid cslist-referenced rows; drop the in-memory set so the
+            // next read sees the fresh SQLite state.
+            try
+            {
+                if (panels != null)
+                {
+                    for (int i = 0; i < panels.Count; i++)
+                    {
+                        var p = panels[i];
+                        if (p != null)
+                        {
+                            try { p.InvalidateCslistReferencedCache(); } catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;

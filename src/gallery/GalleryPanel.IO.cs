@@ -1369,7 +1369,6 @@ namespace VPB
 
         /// <summary>
         /// Hair path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
-        /// Mirrors Clothing preset-hiding behavior from Issue #101.
         /// </summary>
         internal static bool PassesHairGalleryFiltersForPath(string path, HairSubfilter hairSubfilter, bool isVarPackageEntry)
         {
@@ -1594,6 +1593,17 @@ namespace VPB
                     if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(g, appearanceSubfilter))
                         return false;
                 }
+            }
+
+            bool isPluginsCategory = title.IndexOf("Plugins", StringComparison.OrdinalIgnoreCase) >= 0
+                                     && title.IndexOf("Preset", StringComparison.OrdinalIgnoreCase) < 0;
+            if (isPluginsCategory)
+            {
+                var settings = Settings.Instance;
+                bool consolidate = settings != null && settings.PluginConsolidateCslist != null
+                    && settings.PluginConsolidateCslist.Value;
+                if (consolidate && IsCsReferencedByAnyCslist(entry))
+                    return false;
             }
 
             // Rating/Size filters
@@ -2257,6 +2267,12 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
+                // Plugin-category filter settings must be in the snapshot key, otherwise toggling
+                // them reuses a stale cached list that bypasses PassesFilters entirely.
+                {
+                    var _ps = Settings.Instance;
+                    sb.Append(_ps != null && _ps.PluginConsolidateCslist != null && _ps.PluginConsolidateCslist.Value ? '1' : '0').Append('\u001E');
+                }
                 sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentRatingFilter ?? "").Append('\u001E');
@@ -2321,6 +2337,19 @@ namespace VPB
             {
                 if (!string.IsNullOrEmpty(currentAppearanceSourceFilter)) return false;
                 if (appearanceSubfilter != 0) return false;
+            }
+
+            // Plugins category: cslist consolidation lives in PassesFilters, not SQLite.
+            // Force the slow drain path so PassesFilters actually runs when consolidation is on.
+            {
+                bool isPluginsCategory = title.IndexOf("Plugins", StringComparison.OrdinalIgnoreCase) >= 0
+                                         && title.IndexOf("Preset", StringComparison.OrdinalIgnoreCase) < 0;
+                if (isPluginsCategory)
+                {
+                    var _ps = Settings.Instance;
+                    bool pluginConsolidate = _ps != null && _ps.PluginConsolidateCslist != null && _ps.PluginConsolidateCslist.Value;
+                    if (pluginConsolidate) return false;
+                }
             }
 
             if (!filtersAppliedOnWorker)

@@ -697,6 +697,9 @@ namespace VPB
             Dual,
         }
 
+        private HashSet<string> _cslistReferencedPaths;
+        private readonly object _cslistReferencedLock = new object();
+
         private ClothingSubfilter clothingSubfilter = 0;
         private HairSubfilter hairSubfilter = 0;
 

@@ -1191,6 +1191,123 @@ namespace VPB
 			RecursivePackageDependencies = null;
 			PackageDependencies = null;
 		}
+		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
+		// zero references, so a later sig check is a positive hit instead of a re-parse.
+		private void PersistCslistReferencedPathsToDb()
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(Uid)) return;
+
+				// Already persisted under this LastWriteTime: skip the zip-open and SQLite write.
+				// An unchanged VAR costs only the in-memory sig lookup.
+				string sig = "0";
+				try { sig = LastWriteTime.ToBinary().ToString(); } catch { }
+				string existingSig;
+				if (VpbLocalDatabase.TryGetCslistRefVarSig(Uid, out existingSig)
+					&& string.Equals(existingSig, sig, StringComparison.Ordinal))
+				{
+					return;
+				}
+
+				// Fast path populates cachedFileEntryNames; slow path populates FileEntries.
+				// Snapshot whichever is available to avoid holding the lock during zip I/O.
+				List<string> namesCopy = null;
+				lock (cachedEntriesLock)
+				{
+					if (cachedFileEntryNames != null && cachedFileEntryNames.Count > 0)
+					{
+						namesCopy = new List<string>(cachedFileEntryNames.Count);
+						for (int i = 0; i < cachedFileEntryNames.Count; i++)
+							namesCopy.Add(cachedFileEntryNames[i]);
+					}
+					else if (fileEntries != null && fileEntries.Count > 0)
+					{
+						namesCopy = new List<string>(fileEntries.Count);
+						for (int i = 0; i < fileEntries.Count; i++)
+						{
+							var fe = fileEntries[i];
+							if (fe != null && !string.IsNullOrEmpty(fe.InternalPath))
+								namesCopy.Add(fe.InternalPath);
+						}
+					}
+				}
+
+				var cslistNames = new List<string>();
+				if (namesCopy != null)
+				{
+					for (int i = 0; i < namesCopy.Count; i++)
+					{
+						string n = namesCopy[i];
+						if (string.IsNullOrEmpty(n)) continue;
+						string norm = n.Replace('\\', '/');
+						if (!norm.StartsWith("Custom/Scripts/", StringComparison.OrdinalIgnoreCase)) continue;
+						if (!norm.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase)) continue;
+						cslistNames.Add(norm);
+					}
+				}
+
+				var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+				if (cslistNames.Count > 0 && File.Exists(Path))
+				{
+					int codePage = _resolvedZipNameCodePage != int.MinValue ? _resolvedZipNameCodePage : CodePageUtf8;
+					ZipFile zf = null;
+					try
+					{
+						zf = OpenZipFileForRead(Path, codePage);
+						for (int i = 0; i < cslistNames.Count; i++)
+						{
+							string cslistInternal = cslistNames[i];
+							try
+							{
+								ZipEntry ze = zf.GetEntry(cslistInternal);
+								if (ze == null)
+								{
+									// Try original-case lookup with backslashes (some packers write that form).
+									ze = zf.GetEntry(cslistInternal.Replace('/', '\\'));
+								}
+								if (ze == null) continue;
+
+								string cslistDir = cslistInternal;
+								int lastSlash = cslistDir.LastIndexOf('/');
+								cslistDir = lastSlash > 0 ? cslistDir.Substring(0, lastSlash) : string.Empty;
+
+								using (var s = zf.GetInputStream(ze))
+								{
+									var refs = VPB.src.util.CslistParser.ParseReferencedCsPaths(s, cslistDir);
+									for (int ri = 0; ri < refs.Count; ri++)
+									{
+										string rel = refs[ri];
+										if (string.IsNullOrEmpty(rel)) continue;
+										string fullAddr = (Uid + ":/" + rel).ToLowerInvariant();
+										referenced.Add(fullAddr);
+									}
+								}
+							}
+							catch { }
+						}
+					}
+					finally
+					{
+						try { if (zf != null) zf.Close(); } catch { }
+					}
+				}
+
+				var rows = new List<VpbLocalDatabase.SystemFileRow>(referenced.Count);
+				foreach (var rp in referenced)
+				{
+					var r = new VpbLocalDatabase.SystemFileRow();
+					r.Path = rp;
+					r.LastWriteBinaryOrInvalid = long.MinValue;
+					r.SizeOrInvalid = long.MinValue;
+					rows.Add(r);
+				}
+				try { VpbLocalDatabase.WriteCslistReferencedForVar(Uid, sig, rows); } catch { }
+			}
+			catch { }
+		}
+
 		public void Scan()
 		{
 			if (Scaned)
@@ -1279,6 +1396,7 @@ namespace VPB
 							flag = true;
 							Interlocked.Increment(ref scanCacheHit);
 							Interlocked.Increment(ref scanCacheValidatedHit);
+							PersistCslistReferencedPathsToDb();
 							Scaned = true;
 							return;
 						}
@@ -1582,6 +1700,7 @@ namespace VPB
 						}
 					}
 				}
+				PersistCslistReferencedPathsToDb();
 				Scaned = true;
 			}
 		}

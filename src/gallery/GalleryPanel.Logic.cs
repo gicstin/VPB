@@ -769,6 +769,55 @@ namespace VPB
                 }
             }
             catch { }
+
+            // Ref cache has its own sig so it rebuilds even when the file-list cache is warm.
+            const string refKey = "plugins:cslist_referenced_disk|root=Custom/Scripts";
+            try
+            {
+                var refProbe = new List<VpbLocalDatabase.SystemFileRow>(1);
+                bool refHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(refKey, sig, refProbe);
+                if (!refHit)
+                {
+                    var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var cslistBuf = new List<string>();
+                    try { FileManager.SafeGetFiles(root, "*.cslist", cslistBuf); } catch { }
+                    for (int i = 0; i < cslistBuf.Count; i++)
+                    {
+                        string cslistRel = cslistBuf[i];
+                        if (string.IsNullOrEmpty(cslistRel)) continue;
+                        try
+                        {
+                            string cslistFullForIO;
+                            try { cslistFullForIO = Path.GetFullPath(cslistRel); } catch { cslistFullForIO = cslistRel; }
+                            string cslistRelN = cslistRel.Replace('\\', '/');
+                            string cslistRelDir;
+                            int lastSlash = cslistRelN.LastIndexOf('/');
+                            cslistRelDir = lastSlash > 0 ? cslistRelN.Substring(0, lastSlash) : string.Empty;
+                            using (var fs = new FileStream(cslistFullForIO, FileMode.Open, FileAccess.Read, FileShare.Read))
+                            {
+                                var refs = VPB.src.util.CslistParser.ParseReferencedCsPaths(fs, cslistRelDir);
+                                for (int ri = 0; ri < refs.Count; ri++)
+                                {
+                                    string rp = refs[ri];
+                                    if (!string.IsNullOrEmpty(rp)) referenced.Add(rp);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                    var refRows = new List<VpbLocalDatabase.SystemFileRow>(referenced.Count);
+                    foreach (var rp in referenced)
+                    {
+                        var rr = new VpbLocalDatabase.SystemFileRow();
+                        rr.Path = rp;
+                        rr.LastWriteBinaryOrInvalid = long.MinValue;
+                        rr.SizeOrInvalid = long.MinValue;
+                        refRows.Add(rr);
+                    }
+                    try { VpbLocalDatabase.TryWriteSystemFilesForCacheKey(refKey, sig, refRows); } catch { }
+                }
+            }
+            catch { }
             counts["Plugins"] += n;
         }
 
