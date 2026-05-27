@@ -227,6 +227,14 @@ namespace VPB
                     if (candidate.StartsWith("/")) candidate = candidate.Substring(1);
                     if (candidate.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase))
                     {
+                        // A loose file on disk always wins over a VAR copy with the same internal path.
+                        // The rewrite only heals references whose loose target is missing.
+                        string loosePath = Path.Combine(Directory.GetCurrentDirectory(), candidate);
+                        if (File.Exists(loosePath))
+                        {
+                            return;
+                        }
+
                         if (VPB.FileManager.TryResolveCustomInternalPathToUidPath(candidate, out string uidPath) && !string.IsNullOrEmpty(uidPath))
                         {
                             jd.Value = uidPath;
