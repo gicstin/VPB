@@ -1835,9 +1835,8 @@ namespace VPB
                                 ClothingSubfilter cur = clothingSubfilter;
                                 bool PassesClothingSubfilters(ClothingSubfilter f)
                                 {
-                                    // Issue #101: with no flags set, default-hide .vap presets so the
-                                    // grid does not show duplicate base + preset pairs.
-                                    if (f == 0) return !isPresetEntry;
+                                    // Default view keeps custom-loose presets visible, hides other .vap presets.
+                                    if (f == 0) return !isPresetEntry || isCustomPreset;
 
                                     bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                                     bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
@@ -2044,7 +2043,8 @@ namespace VPB
                                 HairSubfilter cur = hairSubfilter;
                                 bool PassesHairSubfilters(HairSubfilter f)
                                 {
-                                    if (f == 0) return !isPresetEntry;
+                                    // Default view keeps custom-loose presets visible, hides other .vap presets.
+                                    if (f == 0) return !isPresetEntry || isCustomPreset;
                                     bool wantsPresets = (f & HairSubfilter.Presets) != 0;
                                     bool wantsCustom = (f & HairSubfilter.Custom) != 0;
                                     if (wantsPresets) { if (!isPresetEntry) return false; }

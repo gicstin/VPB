@@ -709,7 +709,8 @@ namespace VPB
                             GalleryPanel.HairSubfilter cur = hairSubfilter;
                             bool PassesHairSubfiltersLoose(GalleryPanel.HairSubfilter f)
                             {
-                                if (f == 0) return !isPresetEntry;
+                                // Default view keeps custom-loose presets visible, hides other .vap presets.
+                                if (f == 0) return !isPresetEntry || isCustomPreset;
                                 bool wantsPresets = (f & GalleryPanel.HairSubfilter.Presets) != 0;
                                 bool wantsCustom = (f & GalleryPanel.HairSubfilter.Custom) != 0;
                                 if (wantsPresets) { if (!isPresetEntry) return false; }
@@ -966,7 +967,8 @@ namespace VPB
 
         private static bool PassesClothingSubfiltersLoose(GalleryPanel.ClothingSubfilter f, bool isDecal, bool isPresetEntry, bool isCustomPreset, ClothingLoadingUtils.ResourceGender cg)
         {
-            if (f == 0) return true;
+            // Default view keeps custom-loose presets visible, hides other .vap presets.
+            if (f == 0) return !isPresetEntry || isCustomPreset;
             bool wantsRealType = ((f & (GalleryPanel.ClothingSubfilter.RealClothing | GalleryPanel.ClothingSubfilter.Presets | GalleryPanel.ClothingSubfilter.Custom | GalleryPanel.ClothingSubfilter.Items | GalleryPanel.ClothingSubfilter.Male | GalleryPanel.ClothingSubfilter.Female)) != 0);
             bool wantsDecalType = ((f & GalleryPanel.ClothingSubfilter.Decals) != 0);
             bool typeExplicit = ((f & (GalleryPanel.ClothingSubfilter.RealClothing | GalleryPanel.ClothingSubfilter.Decals)) != 0);

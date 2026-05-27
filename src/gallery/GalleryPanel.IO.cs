@@ -1329,12 +1329,11 @@ namespace VPB
 
             bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
 
-            // Issue #101: when no clothing subfilter is active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs. Toggling "Presets" or "Custom"
-            // on the side panel re-enables preset visibility.
+            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
+            // Custom-loose presets (user files under Custom/ or Saves/) stay visible.
             if (clothingSubfilter == 0)
             {
-                if (isPreset) return false;
+                if (isPreset && !isCustomLoose) return false;
             }
             else
             {
@@ -1391,11 +1390,11 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Issue #101 parity: when no hair subfilter active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs.
+            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
+            // Custom-loose presets (user files under Custom/ or Saves/) stay visible.
             if (hairSubfilter == 0)
             {
-                if (isPreset) return false;
+                if (isPreset && !isCustomLoose) return false;
             }
             else
             {
