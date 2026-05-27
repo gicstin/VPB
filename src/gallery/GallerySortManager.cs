@@ -39,7 +39,9 @@ namespace VPB
         /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
         DateAdded = 18,
         /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
-        DateUpdated = 19
+        DateUpdated = 19,
+        /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
+        Random = 20
     }
 
     public enum SortDirection
@@ -237,6 +239,23 @@ namespace VPB
                     LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
                     break;
                 }
+                case SortType.Random:
+                    ShuffleFiles(files);
+                    break;
+            }
+        }
+
+        /// <summary>Fisher–Yates shuffle; safe on worker threads (uses <see cref="System.Random"/>).</summary>
+        public static void ShuffleFiles(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            var rng = new System.Random();
+            for (int i = files.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                FileEntry tmp = files[i];
+                files[i] = files[j];
+                files[j] = tmp;
             }
         }
 
@@ -476,6 +495,9 @@ namespace VPB
                     });
                     return true;
                 }
+                case SortType.Random:
+                    ShuffleFiles(files);
+                    return true;
                 default:
                     return false;
             }

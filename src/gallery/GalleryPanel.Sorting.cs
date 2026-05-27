@@ -236,6 +236,7 @@ namespace VPB
             SortType.DateAdded, SortType.DateUpdated,
             SortType.Size, SortType.Rating,
             SortType.UsageCount,
+            SortType.Random,
             SortType.UnusedOnly,
             SortType.Deps, SortType.Dependents, SortType.Missing,
             SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
@@ -253,6 +254,7 @@ namespace VPB
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
                 case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
+                case SortType.Random: return VPBTranslation.T("gallery.sort.full.random", "Random");
                 case SortType.UnusedOnly: return VPBTranslation.T("gallery.sort.full.unused_only", "Unused (only)");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
                 case SortType.Dependents: return VPBTranslation.T("gallery.sort.full.dependents", "Dependents");
@@ -653,6 +655,7 @@ namespace VPB
                     || type == SortType.DateAdded || type == SortType.DateUpdated
                     || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
+                    || type == SortType.Random
                     || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
@@ -813,6 +816,7 @@ namespace VPB
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
                 case SortType.UsageCount: symbol = "Us"; break;
+                case SortType.Random: symbol = "Rnd"; break;
                 case SortType.UnusedOnly: symbol = "U0"; break;
                 case SortType.Deps: symbol = "Dp"; break;
                 case SortType.Dependents: symbol = "Dn"; break;
@@ -846,6 +850,7 @@ namespace VPB
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
                     case SortType.UsageCount: symbol = "Us"; break;
+                    case SortType.Random: symbol = "Rnd"; break;
                     case SortType.UnusedOnly: symbol = "U0"; break;
                     case SortType.Deps: symbol = "Dp"; break;
                     case SortType.Dependents: symbol = "Dn"; break;
