@@ -956,8 +956,6 @@ namespace VPB
             posePeopleIndexCoroutine = StartCoroutine(PosePeopleIndexRoutine(groupId));
         }
 
-        private const int PosePeopleIndexWorkerBatchSize = 16;
-
         private IEnumerator PosePeopleIndexRoutine(string groupId)
         {
             int processed = 0;
@@ -969,43 +967,37 @@ namespace VPB
             {
                 if (groupId != posePeopleIndexGroupId) yield break;
 
-                var batch = new List<FileEntry>(PosePeopleIndexWorkerBatchSize);
+                FileEntry entry = null;
                 lock (posePeopleIndexLock)
                 {
-                    while (batch.Count < PosePeopleIndexWorkerBatchSize && posePeopleIndexQueue.Count > 0)
-                        batch.Add(posePeopleIndexQueue.Dequeue());
+                    if (posePeopleIndexQueue.Count > 0) entry = posePeopleIndexQueue.Dequeue();
                 }
 
-                if (batch.Count == 0) break;
+                if (entry == null) break;
 
-                // Must stay on the main thread: ComputeAndCachePosePeopleCount opens VarFileEntry
-                // streams via the package's shared SharpZipLib ZipFile, which is not thread-safe.
-                for (int bi = 0; bi < batch.Count; bi++)
-                {
-                    if (groupId != posePeopleIndexGroupId)
-                    {
-                        // Persist counts already Set() in this partial batch before bailing.
-                        try { PosePeopleCountIndex.Instance.Save(); } catch { }
-                        yield break;
-                    }
-                    try { ComputeAndCachePosePeopleCount(batch[bi]); } catch { }
-                }
+                // This will do the expensive scan only once and persist it.
+                try { GetPosePeopleCount(entry); } catch { }
 
-                processed += batch.Count;
-                sinceSave += batch.Count;
+                processed++;
+                sinceSave++;
 
+                // Periodically update UI counters (non-blocking)
                 if (Time.realtimeSinceStartup - lastUiUpdate > 0.35f)
                 {
                     lastUiUpdate = Time.realtimeSinceStartup;
                     try { UpdateTabs(); } catch { }
                 }
 
+                // Save occasionally
                 if (sinceSave >= 100)
                 {
                     sinceSave = 0;
                     try { PosePeopleCountIndex.Instance.Save(); } catch { }
                 }
 
+                // If filtering by Dual/Single, re-run refresh sometimes so list becomes accurate as we learn counts.
+                // NOTE: don't call RefreshFiles() here; it resets currentLoadingGroupId and would cancel this coroutine.
+                // We instead just refresh the tab labels and let the user trigger a refresh if needed.
                 if (posePeopleFilter != PosePeopleFilter.All && (processed % 250) == 0)
                 {
                     if (Time.realtimeSinceStartup - lastRefresh > 1.0f)
@@ -1015,7 +1007,8 @@ namespace VPB
                     }
                 }
 
-                yield return null;
+                // Yield every few items to keep UI responsive.
+                if ((processed % 10) == 0) yield return null;
             }
 
             try { PosePeopleCountIndex.Instance.Save(); } catch { }
@@ -1054,31 +1047,41 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Reads pose JSON off the main thread; updates memory + persistent index caches.</summary>
-        private void ComputeAndCachePosePeopleCount(FileEntry entry)
-        {
-            if (entry == null) return;
-            int count = ComputePosePeopleCountUncached(entry);
-            string key = null;
-            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
-            if (string.IsNullOrEmpty(key)) return;
-
-            lock (posePeopleCountCacheLock)
-            {
-                if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
-                posePeopleCountCache[key] = count;
-            }
-            try { PosePeopleCountIndex.Instance.Set(key, count); } catch { }
-        }
-
-        private int ComputePosePeopleCountUncached(FileEntry entry)
+        private int GetPosePeopleCount(FileEntry entry)
         {
             if (entry == null) return 1;
 
+            // Only .json poses can be dual/multi; everything else is treated as Single.
             string entryPath = null;
             try { entryPath = entry.Path; } catch { entryPath = null; }
             if (string.IsNullOrEmpty(entryPath) || !entryPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 return 1;
+
+            string key = null;
+            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
+            if (string.IsNullOrEmpty(key)) return 1;
+
+            // Persistent index for .var (and any UID-based entries)
+            try
+            {
+                int persisted;
+                if (PosePeopleCountIndex.Instance.TryGet(key, out persisted))
+                {
+                    lock (posePeopleCountCacheLock)
+                    {
+                        if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
+                        posePeopleCountCache[key] = persisted;
+                    }
+                    return persisted;
+                }
+            }
+            catch { }
+
+            lock (posePeopleCountCacheLock)
+            {
+                int cached;
+                if (posePeopleCountCache.TryGetValue(key, out cached)) return cached;
+            }
 
             int count = 1;
             try
@@ -1253,50 +1256,20 @@ namespace VPB
                 count = 1;
             }
 
-            return count;
-        }
-
-        private int GetPosePeopleCount(FileEntry entry)
-        {
-            if (entry == null) return 1;
-
-            string entryPath = null;
-            try { entryPath = entry.Path; } catch { entryPath = null; }
-            if (string.IsNullOrEmpty(entryPath) || !entryPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                return 1;
-
-            string key = null;
-            try { key = !string.IsNullOrEmpty(entry.Uid) ? entry.Uid : entry.Path; } catch { key = entry.Path; }
-            if (string.IsNullOrEmpty(key)) return 1;
-
-            try
-            {
-                int persisted;
-                if (PosePeopleCountIndex.Instance.TryGet(key, out persisted))
-                {
-                    lock (posePeopleCountCacheLock)
-                    {
-                        if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
-                        posePeopleCountCache[key] = persisted;
-                    }
-                    return persisted;
-                }
-            }
-            catch { }
-
             lock (posePeopleCountCacheLock)
             {
-                int cached;
-                if (posePeopleCountCache.TryGetValue(key, out cached)) return cached;
-            }
-
-            int count = ComputePosePeopleCountUncached(entry);
-            lock (posePeopleCountCacheLock)
-            {
+                // Cap cache size to avoid unbounded growth
                 if (posePeopleCountCache.Count > 20000) posePeopleCountCache.Clear();
                 posePeopleCountCache[key] = count;
             }
-            try { PosePeopleCountIndex.Instance.Set(key, count); } catch { }
+
+            try
+            {
+                // Persist discovered counts so VAR pose browsing doesn't need rescans next time.
+                PosePeopleCountIndex.Instance.Set(key, count);
+            }
+            catch { }
+
             return count;
         }
 
@@ -1329,11 +1302,12 @@ namespace VPB
 
             bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
 
-            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
-            // Custom-loose presets (user files under Custom/ or Saves/) stay visible.
+            // Issue #101: when no clothing subfilter is active, default to base items only (.vam)
+            // so the grid does not show duplicate .vam + .vap pairs. Toggling "Presets" or "Custom"
+            // on the side panel re-enables preset visibility.
             if (clothingSubfilter == 0)
             {
-                if (isPreset && !isCustomLoose) return false;
+                if (isPreset) return false;
             }
             else
             {
@@ -1369,6 +1343,7 @@ namespace VPB
 
         /// <summary>
         /// Hair path gate (classify + subfilters) for <see cref="VarFileEntry.Path"/> or loose file path form.
+        /// Mirrors Clothing preset-hiding behavior from Issue #101.
         /// </summary>
         internal static bool PassesHairGalleryFiltersForPath(string path, HairSubfilter hairSubfilter, bool isVarPackageEntry)
         {
@@ -1389,11 +1364,11 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
-            // Custom-loose presets (user files under Custom/ or Saves/) stay visible.
+            // Issue #101 parity: when no hair subfilter active, default to base items only (.vam)
+            // so the grid does not show duplicate .vam + .vap pairs.
             if (hairSubfilter == 0)
             {
-                if (isPreset && !isCustomLoose) return false;
+                if (isPreset) return false;
             }
             else
             {
@@ -1593,17 +1568,6 @@ namespace VPB
                     if (!AppearanceGenderClassifier.PassesAppearanceGenderSubfilter(g, appearanceSubfilter))
                         return false;
                 }
-            }
-
-            bool isPluginsCategory = title.IndexOf("Plugins", StringComparison.OrdinalIgnoreCase) >= 0
-                                     && title.IndexOf("Preset", StringComparison.OrdinalIgnoreCase) < 0;
-            if (isPluginsCategory)
-            {
-                var settings = Settings.Instance;
-                bool consolidate = settings != null && settings.PluginConsolidateCslist != null
-                    && settings.PluginConsolidateCslist.Value;
-                if (consolidate && IsCsReferencedByAnyCslist(entry))
-                    return false;
             }
 
             // Rating/Size filters
@@ -1877,25 +1841,10 @@ namespace VPB
                 return false;
             }
 
-            bool hasRemovals = removed != null && removed.Count > 0;
-            bool hasAdditions = added != null && added.Count > 0;
-
             // If we have never loaded, the scan just completed and we have a full PackagesByUid
             // for the first time – do a clean initial load now.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
-                if (!hasRemovals && !hasAdditions && HasDeferredStartupRefreshPending)
-                {
-                    LogPackageDeltaSkip("deferred_startup_refresh_pending");
-                    return false;
-                }
-                if (!hasRemovals && !hasAdditions && VpbLocalDatabase.HasGalleryIndexReadyOnDisk())
-                {
-                    lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
-                    refreshOnNextShow = false;
-                    LogPackageDeltaSkip("init_sql_ready_empty_delta");
-                    return false;
-                }
                 try
                 {
                     LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
@@ -1910,6 +1859,8 @@ namespace VPB
             // Just sync the timestamp so future notifications aren't treated as "new" and return
             // without touching the grid – this is the key guard that prevents a spurious full
             // refresh (and scroll-to-top) when the initial scan finds no package delta.
+            bool hasRemovals  = removed != null && removed.Count > 0;
+            bool hasAdditions = added   != null && added.Count   > 0;
             if (!hasRemovals && !hasAdditions)
             {
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
@@ -2242,7 +2193,7 @@ namespace VPB
             try { CacheCategoryCounts(); } catch { }
             try { CacheCreators(); } catch { }
             if (!IsVisible && !hasLoadedContent) yield break;
-            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
@@ -2281,12 +2232,6 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
-                // Plugin-category filter settings must be in the snapshot key, otherwise toggling
-                // them reuses a stale cached list that bypasses PassesFilters entirely.
-                {
-                    var _ps = Settings.Instance;
-                    sb.Append(_ps != null && _ps.PluginConsolidateCslist != null && _ps.PluginConsolidateCslist.Value ? '1' : '0').Append('\u001E');
-                }
                 sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentRatingFilter ?? "").Append('\u001E');
@@ -2334,8 +2279,7 @@ namespace VPB
         /// When true, SQLite bulk rows need no per-item work on the main thread (filters/ratings/pose are default),
         /// so <see cref="List{T}.AddRange"/> is equivalent to the drain loop.
         /// </summary>
-        /// <param name="filtersAppliedOnWorker">Category SQL query already applied clothing/hair/source subfilters.</param>
-        private bool RefreshFilesRoutineCanFastAppendSqliteBulkList(bool wantsPoseCountsLocal, bool filtersAppliedOnWorker)
+        private bool RefreshFilesRoutineCanFastAppendSqliteBulkList(bool wantsPoseCountsLocal)
         {
             if (isRatingSortToggleEnabled) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
@@ -2346,40 +2290,10 @@ namespace VPB
             // LoadedOnly/UnloadedOnly is applied in the SQLite query via loadedState.
 
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
-            string cp = currentPath ?? "";
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 if (!string.IsNullOrEmpty(currentAppearanceSourceFilter)) return false;
                 if (appearanceSubfilter != 0) return false;
-            }
-
-            // Plugins category: cslist consolidation lives in PassesFilters, not SQLite.
-            // Force the slow drain path so PassesFilters actually runs when consolidation is on.
-            {
-                bool isPluginsCategory = title.IndexOf("Plugins", StringComparison.OrdinalIgnoreCase) >= 0
-                                         && title.IndexOf("Preset", StringComparison.OrdinalIgnoreCase) < 0;
-                if (isPluginsCategory)
-                {
-                    var _ps = Settings.Instance;
-                    bool pluginConsolidate = _ps != null && _ps.PluginConsolidateCslist != null && _ps.PluginConsolidateCslist.Value;
-                    if (pluginConsolidate) return false;
-                }
-            }
-
-            if (!filtersAppliedOnWorker)
-            {
-                bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
-                    || cp.IndexOf("/Clothing", StringComparison.OrdinalIgnoreCase) >= 0
-                    || cp.IndexOf("\\Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isClothing && clothingSubfilter != 0) return false;
-
-                bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
-                    || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
-                    || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isHair && hairSubfilter != 0) return false;
-
-                if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
-                    return false;
             }
 
             return true;
@@ -2809,11 +2723,6 @@ namespace VPB
 
         private IEnumerator RefreshFilesRoutine(bool keepScroll, bool scrollToBottom)
         {
-            if (!hasLoadedContent)
-            {
-                try { VpbProgressService.BeginGalleryUiLoad(); } catch { }
-            }
-
             int navSessionForThisRun = _boundCategoryNavSessionForCurrentRefresh;
             var swDeep = LogGalleryRefreshDeepTiming ? System.Diagnostics.Stopwatch.StartNew() : null;
             long syncCpuBeforeFirstYieldMs = 0;
@@ -3280,7 +3189,6 @@ namespace VPB
                 if (userTagGridFilterByTagsSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
                 int[] refreshDrainUtSqlFilterApplied = { 0 };
-                int[] refreshWorkerUsedSqliteFlag = { 0 };
 
                 ThreadPool.QueueUserWorkItem((state) =>
                 {
@@ -3363,9 +3271,6 @@ namespace VPB
                             else
                                 catQueryStats.RejectReason = "gate:category_not_sqlite_indexable";
                         }
-
-                        if (useSqliteIndex)
-                            System.Threading.Interlocked.Exchange(ref refreshWorkerUsedSqliteFlag[0], 1);
 
                         if (useSqliteIndex)
                         {
@@ -3513,6 +3418,8 @@ namespace VPB
                             {
                                 HashSet<string> utCatMemKeyHits = null;
                                 if (activeContentSnap == ContentType.Category
+                                    && (userTagGridFilterUntaggedSnap
+                                        || (userTagGridFilterByTagsSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0))
                                     && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
                                 {
                                     var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3608,145 +3515,96 @@ namespace VPB
                                     return;
                                 }
 
-                                VarPackage[] refreshPkgSnap;
-                                lock (FileManager.packagesLock)
+                                foreach (var pkg in FileManager.PackagesByUid.Values)
                                 {
-                                    if (FileManager.PackagesByUid == null || FileManager.PackagesByUid.Count == 0)
-                                        refreshPkgSnap = new VarPackage[0];
+                                if (localLoadingGroupId != currentLoadingGroupId) return;
+
+                                // Use captured snapshot to avoid cross-thread stale reads
+                                if (creatorFilterSetForWorker != null && creatorFilterSetForWorker.Count > 0)
+                                {
+                                    if (string.IsNullOrEmpty(pkg.Creator) || !creatorFilterSetForWorker.Contains(pkg.Creator)) continue;
+                                }
+                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
+                                    !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
+                                {
+                                    continue;
+                                }
+
+                                List<string> names;
+                                List<long> ticks;
+                                List<long> sizes;
+                                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                                {
+                                    skippedForNoCache[0]++;
+                                    if (skippedForNoCacheSampleCount < skippedForNoCacheSample.Length)
+                                    {
+                                        try { skippedForNoCacheSample[skippedForNoCacheSampleCount++] = pkg != null ? (pkg.Uid ?? pkg.Path ?? "") : ""; } catch { }
+                                    }
+                                    continue;
+                                }
+
+                                for (int i = 0; i < names.Count; i++)
+                                {
+                                    if (localLoadingGroupId != currentLoadingGroupId) return;
+                                    string internalPath = names[i];
+
+                                    string checkPath = internalPath;
+
+                                    bool extMatch = false;
+                                    if (Gallery.IsEverythingCategoryExtension(currentExtension))
+                                    {
+                                        string evExt = Path.GetExtension(checkPath);
+                                        if (!string.IsNullOrEmpty(evExt) && evExt.Length > 1)
+                                        {
+                                            string eNd = evExt.Substring(1);
+                                            extMatch = !Gallery.IsEverythingExcludedPreviewExtension(eNd);
+                                        }
+                                    }
+                                    else if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
+                                    {
+                                        extMatch = true;
+                                    }
                                     else
                                     {
-                                        var vals = FileManager.PackagesByUid.Values;
-                                        refreshPkgSnap = new VarPackage[vals.Count];
-                                        int copyIdx = 0;
-                                        foreach (VarPackage vp in vals)
-                                            refreshPkgSnap[copyIdx++] = vp;
+                                        string entryExt = Path.GetExtension(checkPath);
+                                        if (!string.IsNullOrEmpty(entryExt))
+                                        {
+                                            entryExt = entryExt.Substring(1);
+                                            for (int e = 0; e < extensions.Length; e++)
+                                            {
+                                                string ext = extensions[e];
+                                                if (string.Equals(entryExt, ext, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    extMatch = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (!extMatch) continue;
+
+                                    if (!appearanceWorkerSkipPathMatch
+                                        && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
+                                        continue;
+
+                                    if (hasNameFilter)
+                                    {
+                                        if (!MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
+                                    }
+
+                                    if (utCatMemKeyHits != null)
+                                    {
+                                        string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg != null ? pkg.Uid : "", internalPath);
+                                        if (!utCatMemKeyHits.Contains(utk)) continue;
+                                    }
+
+                                    DateTime entryTime = pkg != null ? pkg.LastWriteTime : DateTime.MinValue;
+                                    long entrySize = pkg != null ? pkg.Size : 0;
+                                    lock (candidateQueueLock)
+                                    {
+                                        candidateQueue.Enqueue(new VarFileEntry(pkg, internalPath, entryTime, entrySize));
                                     }
                                 }
-
-                                int refreshPkgNext = -1;
-                                int refreshScanWorkers = Math.Min(
-                                    FileManager.GetEffectiveMaxDeepScanWorkers(),
-                                    Math.Max(1, refreshPkgSnap.Length / 48));
-                                var refreshScanDone = new ManualResetEvent(false);
-                                int refreshScanDoneCount = 0;
-                                for (int rw = 0; rw < refreshScanWorkers; rw++)
-                                {
-                                    ThreadPool.QueueUserWorkItem(__ =>
-                                    {
-                                        try
-                                        {
-                                            while (true)
-                                            {
-                                                int pi = System.Threading.Interlocked.Increment(ref refreshPkgNext);
-                                                if (pi >= refreshPkgSnap.Length) break;
-                                                VarPackage pkg = refreshPkgSnap[pi];
-                                                if (localLoadingGroupId != currentLoadingGroupId) return;
-
-                                                if (creatorFilterSetForWorker != null && creatorFilterSetForWorker.Count > 0)
-                                                {
-                                                    if (string.IsNullOrEmpty(pkg.Creator) || !creatorFilterSetForWorker.Contains(pkg.Creator)) continue;
-                                                }
-                                                if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
-                                                    !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
-                                                    continue;
-
-                                                List<string> names;
-                                                List<long> ticks;
-                                                List<long> sizes;
-                                                if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
-                                                {
-                                                    System.Threading.Interlocked.Increment(ref skippedForNoCache[0]);
-                                                    lock (candidateQueueLock)
-                                                    {
-                                                        if (skippedForNoCacheSampleCount < skippedForNoCacheSample.Length)
-                                                        {
-                                                            try
-                                                            {
-                                                                skippedForNoCacheSample[skippedForNoCacheSampleCount++] =
-                                                                    pkg != null ? (pkg.Uid ?? pkg.Path ?? "") : "";
-                                                            }
-                                                            catch { }
-                                                        }
-                                                    }
-                                                    continue;
-                                                }
-
-                                                for (int i = 0; i < names.Count; i++)
-                                                {
-                                                    if (localLoadingGroupId != currentLoadingGroupId) return;
-                                                    string internalPath = names[i];
-                                                    string checkPath = internalPath;
-
-                                                    bool extMatch = false;
-                                                    if (Gallery.IsEverythingCategoryExtension(currentExtension))
-                                                    {
-                                                        string evExt = Path.GetExtension(checkPath);
-                                                        if (!string.IsNullOrEmpty(evExt) && evExt.Length > 1)
-                                                        {
-                                                            string eNd = evExt.Substring(1);
-                                                            extMatch = !Gallery.IsEverythingExcludedPreviewExtension(eNd);
-                                                        }
-                                                    }
-                                                    else if (extensions == null || extensions.Length == 0 || (extensions.Length == 1 && string.IsNullOrEmpty(extensions[0])))
-                                                    {
-                                                        extMatch = true;
-                                                    }
-                                                    else
-                                                    {
-                                                        string entryExt = Path.GetExtension(checkPath);
-                                                        if (!string.IsNullOrEmpty(entryExt))
-                                                        {
-                                                            entryExt = entryExt.Substring(1);
-                                                            for (int e = 0; e < extensions.Length; e++)
-                                                            {
-                                                                string ext = extensions[e];
-                                                                if (string.Equals(entryExt, ext, StringComparison.OrdinalIgnoreCase))
-                                                                {
-                                                                    extMatch = true;
-                                                                    break;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    if (!extMatch) continue;
-
-                                                    if (!appearanceWorkerSkipPathMatch
-                                                        && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
-                                                        continue;
-
-                                                    if (hasNameFilter)
-                                                    {
-                                                        if (!MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
-                                                    }
-
-                                                    if (utCatMemKeyHits != null)
-                                                    {
-                                                        string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg != null ? pkg.Uid : "", internalPath);
-                                                        if (!utCatMemKeyHits.Contains(utk)) continue;
-                                                    }
-
-                                                    DateTime entryTime = pkg != null ? pkg.LastWriteTime : DateTime.MinValue;
-                                                    long entrySize = pkg != null ? pkg.Size : 0;
-                                                    lock (candidateQueueLock)
-                                                    {
-                                                        candidateQueue.Enqueue(new VarFileEntry(pkg, internalPath, entryTime, entrySize));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        finally
-                                        {
-                                            if (System.Threading.Interlocked.Increment(ref refreshScanDoneCount) == refreshScanWorkers)
-                                            {
-                                                try { refreshScanDone.Set(); } catch { }
-                                            }
-                                        }
-                                    });
-                                }
-                                if (refreshPkgSnap.Length > 0)
-                                {
-                                    refreshScanDone.WaitOne();
-                                    try { refreshScanDone.Close(); } catch { }
                                 }
                             }
                         }
@@ -3840,8 +3698,7 @@ namespace VPB
                         else if (bc >= 8000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 120L);
                         else if (bc >= 3000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 80L);
 
-                        bool filtersOnWorker = System.Threading.Interlocked.CompareExchange(ref refreshWorkerUsedSqliteFlag[0], 0, 0) != 0;
-                        if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts, filtersOnWorker) && bulk.Count > 0)
+                        if (RefreshFilesRoutineCanFastAppendSqliteBulkList(wantsPoseCounts) && bulk.Count > 0)
                         {
                             if (localLoadingGroupId != currentLoadingGroupId)
                             {
@@ -4373,7 +4230,6 @@ namespace VPB
 
             HideLoadingOverlay();
             hasLoadedContent = true;
-            try { VpbProgressService.NotifyGalleryUiReady(); } catch { }
             refreshCoroutine = null;
             CompletePaneLoadTimingIfPending();
 

@@ -371,6 +371,28 @@ namespace VPB
             return true;
         }
 
+        /// <summary>
+        /// True when row has no resolvable preview path. Must run after <see cref="GalleryPanel.LoadThumbnail"/>
+        /// so <see cref="ThumbnailBindingTag.ExpectedTag"/> reflects path resolution (texture may still be null while decoding).
+        /// </summary>
+        private static bool ShouldShowThumbPlaceholder(FileEntry file, RawImage thumbImg)
+        {
+            if (thumbImg == null) return true;
+            if (thumbImg.texture != null) return false;
+            ThumbnailBindingTag bind = thumbImg.GetComponent<ThumbnailBindingTag>();
+            if (bind != null)
+            {
+                if (bind.CurrentTexture != null) return false;
+                if (!string.IsNullOrEmpty(bind.ExpectedTag))
+                {
+                    int sep = bind.ExpectedTag.IndexOf('|');
+                    if (sep >= 0 && sep < bind.ExpectedTag.Length - 1)
+                        return false;
+                }
+            }
+            return true;
+        }
+
         private static string GetThumbPlaceholderItemLine(FileEntry file)
         {
             if (file == null) return "";
@@ -728,6 +750,20 @@ namespace VPB
             catch { }
         }
 
+        private static void HidePluginThumbPlaceholder(Transform thumbTr)
+        {
+            if (thumbTr == null) return;
+            try
+            {
+                PluginThumbPlaceholderRefs refs = thumbTr.GetComponent<PluginThumbPlaceholderRefs>();
+                if (refs == null) return;
+                refs.WantsLabel = false;
+                if (refs.Root != null && refs.Root.activeSelf)
+                    refs.Root.SetActive(false);
+            }
+            catch { }
+        }
+
         private static PluginThumbPlaceholderRefs GetOrCreatePluginThumbPlaceholderRefs(Transform thumbTr)
         {
             if (thumbTr == null) return null;
@@ -878,7 +914,7 @@ namespace VPB
 
             bool forcePluginLabelsOnly = ShouldForcePluginsCategoryLabelOnly(file);
             noUsableThumb = ShouldOfferThumbPlaceholderForEntry(file)
-                            && (forcePluginLabelsOnly || ShouldShowThumbPlaceholder(thumbImg));
+                            && (forcePluginLabelsOnly || ShouldShowThumbPlaceholder(file, thumbImg));
             showThumbLabels = ShouldOfferThumbPlaceholderForEntry(file)
                               && (forcePluginLabelsOnly
                                   || (GalleryThumbPlaceholderLabelsActive() && noUsableThumb));

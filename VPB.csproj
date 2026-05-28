@@ -428,6 +428,7 @@
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Misc.cs" />
     <Compile Include="src\gallery\GalleryPanel.Thumbnails.cs" />
     <Compile Include="src\gallery\GalleryPanel.ThumbPlaceholderBitmap.cs" />
+    <Compile Include="src\gallery\PluginThumbPlaceholderRefs.cs" />
     <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />

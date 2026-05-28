@@ -8,19 +8,6 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    /// <summary>Pooled thumbnail rows: in-preview label when no usable thumb texture.</summary>
-    internal class PluginThumbPlaceholderRefs : MonoBehaviour
-    {
-        public GameObject Root;
-        public RawImage LabelImage;
-        public Text Label;
-        internal bool WantsLabel;
-        internal bool UseBitmapLabel;
-        internal string CachedText;
-        internal int CachedFontSize = -1;
-        internal long CachedBitmapKey;
-    }
-
     internal class ThumbnailBindingTag : MonoBehaviour
     {
         public string ExpectedTag;
@@ -54,7 +41,7 @@ namespace VPB
         private const float ThumbnailHangWatchMaxDelaySec = 1.50f;
         private const float ThumbnailHangWatchScrollQuietSec = 0.25f;
         private const int AllVarThumbQueuePressureThreshold = 80;
-        private static readonly Color ThumbnailPlaceholderBackdrop = new Color(0f, 0f, 0f, 0.55f);
+        private static readonly Color ThumbnailPlaceholderBackdrop = new Color(0.25f, 0.25f, 0.25f, 0.55f);
 
         // Cache for package list thumbnails: package UID -> internal image path (within the package).
         // Keeps package preview lookups cheap while scrolling.
@@ -632,7 +619,7 @@ namespace VPB
         }
 
         /// <summary>Plugin script paths under Custom/Scripts.</summary>
-        internal static bool IsPluginScriptGalleryFile(FileEntry file)
+        private static bool IsPluginScriptGalleryFile(FileEntry file)
         {
             if (file == null || string.IsNullOrEmpty(file.Path)) return false;
             string p = file.Path.Replace('\\', '/');
@@ -654,12 +641,6 @@ namespace VPB
                 VPBConfig.Instance != null &&
                 !VPBConfig.Instance.PluginGalleryGridThumbnails &&
                 IsPluginScriptGalleryFile(file))
-            {
-                ClearThumbnailTarget(target);
-                return;
-            }
-
-            if (ShouldForcePluginsCategoryLabelOnly(file))
             {
                 ClearThumbnailTarget(target);
                 return;
@@ -846,9 +827,6 @@ namespace VPB
 
             string capturedGroupId = currentLoadingGroupId;
             string expectedTag = capturedGroupId + "|" + imgPath;
-            int thumbTd = turboJpegThumbnailDenom > 0
-                ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
-                : TurboJpegNative.ScaleDenomFromGridColumns(EffectiveGridColumnsForThumbDecode());
             ThumbnailBindingTag bind = null;
             if (target != null)
             {
@@ -862,7 +840,7 @@ namespace VPB
                 {
                     target.color = Color.white;
                     UpdateAspectRatio(target, bind.CurrentTexture);
-                    if (file != null) SyncThumbPlaceholderForFile(target.transform, target, file);
+                    try { SyncThumbPlaceholderForFile(target.transform, target, file); } catch { }
                     return;
                 }
 
@@ -888,6 +866,9 @@ namespace VPB
             }
 
             // 1. Memory Cache (tier: optional full-res for hover; else TurboJPEG scale from grid columns)
+            int thumbTd = turboJpegThumbnailDenom > 0
+                ? TurboJpegNative.NormalizeScaleDenom(turboJpegThumbnailDenom)
+                : TurboJpegNative.ScaleDenomFromGridColumns(EffectiveGridColumnsForThumbDecode());
             Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath, thumbTd, thumbnailUnityDecodeOnly);
             if (tex != null)
             {
@@ -899,7 +880,7 @@ namespace VPB
                 target.texture = tex;
                 target.color = Color.white;
                 UpdateAspectRatio(target, tex);
-                if (file != null) SyncThumbPlaceholderForFile(target.transform, target, file);
+                try { SyncThumbPlaceholderForFile(target.transform, target, file); } catch { }
                 return;
             }
 
@@ -935,7 +916,7 @@ namespace VPB
                         target.texture = res.tex;
                         target.color = Color.white;
                         UpdateAspectRatio(target, res.tex);
-                        if (file != null) SyncThumbPlaceholderForFile(target.transform, target, file);
+                        try { SyncThumbPlaceholderForFile(target.transform, target, file); } catch { }
                     }
 
                     long imgTime = 0;
@@ -1038,28 +1019,6 @@ namespace VPB
                 RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: false);
                 yield break;
             }
-        }
-
-        internal static void HidePluginThumbPlaceholder(Transform thumbTr)
-        {
-            if (thumbTr == null) return;
-            try
-            {
-                PluginThumbPlaceholderRefs refs = thumbTr.GetComponent<PluginThumbPlaceholderRefs>();
-                if (refs == null) return;
-                refs.WantsLabel = false;
-                refs.UseBitmapLabel = false;
-                if (refs.LabelImage != null) refs.LabelImage.texture = null;
-                refs.CachedBitmapKey = 0;
-                if (refs.Root == null) return;
-                if (refs.Root.activeSelf) refs.Root.SetActive(false);
-            }
-            catch { }
-        }
-
-        private static bool ShouldShowThumbPlaceholder(RawImage thumbImg)
-        {
-            return thumbImg != null && thumbImg.texture == null;
         }
 
         private static void ClearThumbnailTarget(RawImage target)

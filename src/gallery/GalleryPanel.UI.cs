@@ -292,10 +292,6 @@ namespace VPB
             _canvasesHiddenForSave = null;
         }
 
-        // Save/browse inventory split (P3):
-        // - GetMediaPathDialog + mediaFileBrowserUI = VaM native browser (Custom/Saves loose tree; whitelist VARs in native FM).
-        // - VPB gallery index + ShowSaveFileBrowser / FileBrowser clone = full 19k VAR inventory (VPB.FileManager).
-        // Post-P1 install flows use FileManagerBridge InstallOnly — no full VPB rescan; coalesced native keeps VaM catalogs aligned.
         private void SaveSceneFromGallery()
         {
             if (SuperController.singleton == null) return;
@@ -665,7 +661,6 @@ namespace VPB
 
             BeginSaveMode();
 
-            // Native media browser for preset path selection; filename prefill via mediaFileBrowserUI (see SaveSceneFromGallery inventory note).
             string defaultName = GetDefaultPresetSaveName(target, storableId, rootFolder);
             if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
                 SuperController.singleton.ShowMainHUDMonitor();
@@ -988,21 +983,6 @@ namespace VPB
                 VamHookPlugin.singleton?.OpenHubBrowse();
                 Hide();
             });
-            footerCompressCacheBtn = UI.CreateUIButton(leftSection, 40, 40, "", 14, 0, 0, AnchorPresets.middleCenter, GalleryTriggerBulkZstdCompression);
-            footerCompressCacheBtn.name = "Footer_CompressCache";
-            footerCompressCacheBtn.GetComponent<Image>().color = UI.IconButtonBackdrop;
-            { var s = LoadCompressCacheIconSprite(UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerCompressCacheBtn, s); }
-            RegisterFooterCompressCacheHover(footerCompressCacheBtn);
-
-            footerPluginInfoBtn = UI.CreateUIButton(leftSection, 40, 40, "", 14, 0, 0, AnchorPresets.middleCenter, FooterPluginInfoOpenSettings);
-            footerPluginInfoBtn.name = "Footer_PluginInfo";
-            footerPluginInfoBtnImage = footerPluginInfoBtn.GetComponent<Image>();
-            footerPluginInfoBtnImage.color = UI.IconButtonBackdrop;
-            { var s = UI.LoadIconSprite("vpb_icons/info_square.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerPluginInfoBtn, s); }
-            RegisterFooterPluginInfoHover(footerPluginInfoBtn);
-            AddRightClickDelegate(footerPluginInfoBtn, FooterPluginInfoCheckUpdateOnRightClick);
-            FooterPluginInfoRefreshChrome();
-
             footerHubBtnImage = footerHubBtnGO.GetComponent<Image>();
             footerHubBtnImage.color = UI.IconButtonBackdrop;
             footerHubBtnText = footerHubBtnGO.GetComponentInChildren<Text>();
@@ -1283,14 +1263,10 @@ namespace VPB
                 var rndT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponentInChildren<Text>() : null;
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
-                var ccRT = footerCompressCacheBtn != null ? footerCompressCacheBtn.GetComponent<RectTransform>() : null;
-                var piRT = footerPluginInfoBtn != null ? footerPluginInfoBtn.GetComponent<RectTransform>() : null;
                 innerPaneScaleActions.Add(s => {
                     if (uRT != null) uRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (ccRT != null) ccRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (piRT != null) piRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     const int baseFont = 14;
                     const int minFont = 9;
@@ -1771,6 +1747,8 @@ namespace VPB
                 {
                     if (holdToLaunchEnabled)
                     {
+                        // Avoid gesture conflicts: hold-to-launch uses pointer-down hold, same as drag start.
+                        // Keep user preference (EnableDragDrop) intact; runtime suppression handled by VPBConfig.EffectiveEnableDragDrop.
                         holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.EnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop = holdToLaunchPrevEnableDragDrop;
                         VPBConfig.Instance.HoldToLaunchEnabled = true;
@@ -3487,7 +3465,7 @@ namespace VPB
             }
             else if (string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase))
             {
-                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Steal");
+                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Only");
                 color = new Color(0.15f, 0.45f, 0.28f, 1f);
             }
             else

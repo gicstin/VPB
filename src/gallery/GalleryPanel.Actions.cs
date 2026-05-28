@@ -511,6 +511,8 @@ namespace VPB
                     refreshOnNextShow = false;
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                 }
+                // Restore split sub-pane chrome (tags / scene source) after hide — no list rebuild.
+                try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
                 try { EnsureSideTabsFreshForPackageScan(); } catch { }
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");

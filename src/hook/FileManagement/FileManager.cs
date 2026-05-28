@@ -87,27 +87,16 @@ namespace VPB
         protected static Dictionary<string, VarPackage> packagesByPath;
 
         protected static Dictionary<string, VarPackageGroup> packageGroups;
+        protected static HashSet<VarFileEntry> allVarFileEntries;
         protected static Dictionary<string, VarFileEntry> uidToVarFileEntry;
         protected static Dictionary<string, VarFileEntry> pathToVarFileEntry;
         protected static OnRefresh onRefreshHandlers;
         protected static OnRefresh onRegistryReadyHandlers;
         static int s_RegistryReadyNotified;
-        static int s_SuppressInitGalleryDelta;
-        static int s_BulkDeepScanDepth;
+        static int s_BulkDeepScanActive;
 
         internal static bool IsBulkDeepScanActive =>
-            System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanDepth, 0, 0) > 0;
-
-        internal static void EnterBulkDeepScan()
-        {
-            System.Threading.Interlocked.Increment(ref s_BulkDeepScanDepth);
-        }
-
-        internal static void ExitBulkDeepScan()
-        {
-            if (System.Threading.Interlocked.Decrement(ref s_BulkDeepScanDepth) < 0)
-                System.Threading.Interlocked.Exchange(ref s_BulkDeepScanDepth, 0);
-        }
+            System.Threading.Interlocked.CompareExchange(ref s_BulkDeepScanActive, 0, 0) != 0;
         static int s_DeferredDeepScanScheduled;
         static bool s_DeferredDeepScanInit;
         static bool s_DeferredDeepScanFlag;
@@ -205,19 +194,6 @@ namespace VPB
             }
 
             int addSetCount = addSet != null ? addSet.Count : 0;
-            if (addSetCount >= 4096
-                && (removeSet == null || removeSet.Count == 0)
-                && s_SuppressInitGalleryDelta != 0
-                && VpbLocalDatabase.HasGalleryIndexReadyOnDisk())
-            {
-                try
-                {
-                    LogUtil.Log("[VPB.Gallery.Delta] MergePackageRefreshDelta skipped init baseline addSet="
-                        + addSetCount + " (gallery SQL index ready)");
-                }
-                catch { }
-                return;
-            }
             if (addSet == null || addSet.Count == 0)
             {
                 if (addSetCount == 0 && (pendingBefore > 0 || lastRemovedPackages.Count > 0))
@@ -326,177 +302,6 @@ namespace VPB
                     packagesByPath = new Dictionary<string, VarPackage>(expectedAddCount, StringComparer.OrdinalIgnoreCase);
                 }
             }
-        }
-
-        internal struct PackageRegistrationPlan
-        {
-            public string CleanPath;
-            public string Uid;
-            public string Creator;
-            public string PackageName;
-            public string ShortName;
-            public int Version;
-        }
-
-        /// <summary>0 = auto: min(ProcessorCount, 12).</summary>
-        public static int GetEffectiveMaxDeepScanWorkers()
-        {
-            try
-            {
-                var st = Settings.Instance;
-                if (st != null && st.MaxDeepScanWorkers != null && st.MaxDeepScanWorkers.Value > 0)
-                {
-                    int v = st.MaxDeepScanWorkers.Value;
-                    if (v < 1) v = 1;
-                    if (v > 32) v = 32;
-                    return v;
-                }
-            }
-            catch { }
-            int p = Environment.ProcessorCount;
-            if (p < 1) p = 1;
-            return Math.Min(12, p);
-        }
-
-        static bool TryBuildPackageRegistrationPlan(string vpath, out PackageRegistrationPlan plan)
-        {
-            plan = default(PackageRegistrationPlan);
-            if (string.IsNullOrEmpty(vpath)) return false;
-
-            string cleanPath = CleanFilePath(vpath);
-            string text = packagePathToUid(cleanPath).Trim();
-            string[] array = text.Split('.');
-            if (array.Length != 3) return false;
-
-            string text2 = array[0];
-            string text3 = array[1];
-            string s = array[2];
-            int version;
-            if (!int.TryParse(s, out version))
-            {
-                string cleanS = Regex.Replace(s, "[^0-9]", "");
-                if (!int.TryParse(cleanS, out version))
-                    return false;
-            }
-
-            plan.CleanPath = cleanPath;
-            plan.Uid = text;
-            plan.Creator = text2;
-            plan.PackageName = text3;
-            plan.ShortName = text2 + "." + text3;
-            plan.Version = version;
-            return true;
-        }
-
-        static void BuildPackageRegistrationPlans(
-            IEnumerable<string> addPaths,
-            List<PackageRegistrationPlan> validOut,
-            List<string> invalidPathsOut)
-        {
-            if (validOut == null || invalidPathsOut == null || addPaths == null) return;
-            foreach (string vpath in addPaths)
-            {
-                if (string.IsNullOrEmpty(vpath)) continue;
-                PackageRegistrationPlan plan;
-                if (TryBuildPackageRegistrationPlan(vpath, out plan))
-                    validOut.Add(plan);
-                else
-                    invalidPathsOut.Add(vpath);
-            }
-        }
-
-        static VarPackage RegisterPackageFromPlan(PackageRegistrationPlan plan, bool clean)
-        {
-            string text = plan.Uid;
-            string cleanPath = plan.CleanPath;
-            string shortName = plan.ShortName;
-            int version = plan.Version;
-            string text2 = plan.Creator;
-            string text3 = plan.PackageName;
-
-            bool isDuplicated = false;
-            if (!packagesByUid.ContainsKey(text))
-            {
-                VarPackageGroup value;
-                lock (packagesLock)
-                {
-                    if (!packageGroups.TryGetValue(shortName, out value))
-                    {
-                        value = new VarPackageGroup(shortName);
-                        packageGroups.Add(shortName, value);
-                    }
-                }
-                VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
-                lock (packagesLock)
-                {
-                    packagesByUid.Add(text, varPackage);
-                    packagesByPath.Add(varPackage.Path, varPackage);
-                }
-                value.AddPackage(varPackage);
-
-                if (varPackage.Enabled && varPackage.FileEntries != null)
-                {
-                    lock (packagesLock)
-                    {
-                        foreach (VarFileEntry fileEntry in varPackage.FileEntries)
-                        {
-                            uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
-                            pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
-                        }
-                    }
-                }
-                return varPackage;
-            }
-
-            isDuplicated = true;
-            VarPackage existing;
-            if (packagesByUid.TryGetValue(text, out existing))
-            {
-                string existingPath = CleanFilePath(existing.Path);
-                if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!packagesByPath.ContainsKey(cleanPath))
-                    {
-                        lock (packagesLock)
-                        {
-                            packagesByPath.Add(cleanPath, existing);
-                        }
-                    }
-                    return existing;
-                }
-
-                string existingFileId;
-                string newFileId;
-                if (TryGetWindowsFileId(existingPath, out existingFileId)
-                    && TryGetWindowsFileId(cleanPath, out newFileId)
-                    && existingFileId == newFileId)
-                {
-                    LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
-                    if (!packagesByPath.ContainsKey(cleanPath))
-                    {
-                        lock (packagesLock)
-                        {
-                            packagesByPath.Add(cleanPath, existing);
-                        }
-                    }
-                    return existing;
-                }
-
-                LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
-            }
-            else
-            {
-                LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
-            }
-
-            if (clean)
-            {
-                if (isDuplicated)
-                    RemoveToInvalid(plan.CleanPath, "Duplicated");
-                else
-                    RemoveToInvalid(plan.CleanPath, "InvalidName");
-            }
-            return null;
         }
 
         static PackageRefreshDiff BuildPackageRefreshDiff(
@@ -687,42 +492,10 @@ namespace VPB
                 state.Flag = true;
             }
 
-            var regPlans = new List<PackageRegistrationPlan>(diff.AddSet.Count);
-            var regInvalidPaths = new List<string>();
-            ManualResetEvent regPlansReady = new ManualResetEvent(false);
-            HashSet<string> addSnap = diff.AddSet;
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                try
-                {
-                    BuildPackageRegistrationPlans(addSnap, regPlans, regInvalidPaths);
-                }
-                catch (Exception ex)
-                {
-                    try { LogUtil.LogError("BuildPackageRegistrationPlans failed: " + ex.Message); } catch { }
-                }
-                finally
-                {
-                    try { regPlansReady.Set(); } catch { }
-                }
-            });
-
-            while (!regPlansReady.WaitOne(0))
-                yield return null;
-            regPlansReady.Close();
-
             int regCount = 0;
-            for (int ri = 0; ri < regPlans.Count; ri++)
+            foreach (string item3 in diff.AddSet)
             {
-                RegisterPackageFromPlan(regPlans[ri], clean);
-                state.Flag = true;
-                regCount++;
-                if ((regCount & 511) == 0)
-                    yield return null;
-            }
-            for (int ii = 0; ii < regInvalidPaths.Count; ii++)
-            {
-                RegisterPackage(regInvalidPaths[ii], clean);
+                RegisterPackage(item3, clean);
                 state.Flag = true;
                 regCount++;
                 if ((regCount & 511) == 0)
@@ -755,22 +528,6 @@ namespace VPB
 
             // Registry is usable for gallery/init as soon as bulk RegisterPackage finishes — do not wait on delta merge.
             TryNotifyRegistryReadyForInit();
-
-            // Stamp pkg.first_scanned (from SQL) onto every live VarPackage so consumers reading
-            // VarPackage.FirstScannedBinary directly stay in sync with the persisted value.
-            // SQL read runs lock-free; only the in-memory apply holds packagesLock.
-            try
-            {
-                var fsByUid = VpbLocalDatabase.ReadFirstScannedBinariesFromPkg();
-                int hydrated;
-                lock (packagesLock)
-                {
-                    hydrated = VpbLocalDatabase.ApplyFirstScannedToPackages(packagesByUid, fsByUid);
-                }
-                if (hydrated > 0)
-                    LogUtil.Log(VamStartupOptimizations.LogTag + " hydrated FirstScannedBinary for " + hydrated + " packages from SQL");
-            }
-            catch { }
 
             MergePackageRefreshDelta(diff.RemoveSet, diff.AddSet);
             LogDuplicateUidSummary(diff.DuplicateUidPaths);
@@ -899,29 +656,129 @@ namespace VPB
             {
                 LogUtil.Log("RegisterPackage " + vpath);
             }
-
-            PackageRegistrationPlan plan;
-            if (TryBuildPackageRegistrationPlan(vpath, out plan))
-                return RegisterPackageFromPlan(plan, clean);
-
             string cleanPath = CleanFilePath(vpath);
             string text = packagePathToUid(cleanPath).Trim();
             string[] array = text.Split('.');
+
+            bool isDuplicated = false;
             if (array.Length == 3)
             {
+                string text2 = array[0];
+                string text3 = array[1];
+                string shortName = text2 + "." + text3;
+                string s = array[2];
                 try
+                {
+                    int version;
+                    if (!int.TryParse(s, out version))
+                    {
+                        // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
+                        string cleanS = Regex.Replace(s, "[^0-9]", "");
+                        if (!int.TryParse(cleanS, out version))
+                        {
+                            throw new FormatException($"Cannot parse version from '{s}'");
+                        }
+                        LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
+                    }
+
+                    if (!packagesByUid.ContainsKey(text))
+                    {
+                        VarPackageGroup value;
+                        lock (packagesLock)
+                        {
+                            if (!packageGroups.TryGetValue(shortName, out value))
+                            {
+                                value = new VarPackageGroup(shortName);
+                                packageGroups.Add(shortName, value);
+                            }
+                        }
+                        VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
+                        lock (packagesLock)
+                        {
+                            packagesByUid.Add(text, varPackage);
+                            packagesByPath.Add(varPackage.Path, varPackage);
+                        }
+                        value.AddPackage(varPackage);
+
+                        // Disabling a var package means creating a "disable" file in the same path
+                        if (varPackage.Enabled)
+                        {
+                            if (varPackage.FileEntries != null)
+                            {
+                                lock (packagesLock)
+                                {
+                                    foreach (VarFileEntry fileEntry in varPackage.FileEntries)
+                                    {
+                                        allVarFileEntries.Add(fileEntry);
+                                        uidToVarFileEntry.Add(fileEntry.Uid, fileEntry);
+                                        pathToVarFileEntry.Add(fileEntry.Path, fileEntry);
+                                    }
+                                }
+                            }
+                        }
+                        return varPackage;
+                    }
+                    isDuplicated = true;
+                    VarPackage existing;
+                    if (packagesByUid.TryGetValue(text, out existing))
+                    {
+                        string existingPath = CleanFilePath(existing.Path);
+                        if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (!packagesByPath.ContainsKey(cleanPath))
+                            {
+                                lock (packagesLock)
+                                {
+                                    packagesByPath.Add(cleanPath, existing);
+                                }
+                            }
+                            return existing;
+                        }
+
+                        string existingFileId;
+                        string newFileId;
+                        if (TryGetWindowsFileId(existingPath, out existingFileId)
+                            && TryGetWindowsFileId(cleanPath, out newFileId)
+                            && existingFileId == newFileId)
+                        {
+                            LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
+                            if (!packagesByPath.ContainsKey(cleanPath))
+                            {
+                                lock (packagesLock)
+                                {
+                                    packagesByPath.Add(cleanPath, existing);
+                                }
+                            }
+                            return existing;
+                        }
+
+                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
+                    }
+                    else
+                    {
+                        LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
+                    }
+                }
+                catch (Exception)
                 {
                     LogUtil.LogError("VAR file " + vpath + " does not use integer version field in name <creator>.<name>.<version>");
                 }
-                catch { }
             }
             else
             {
                 LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
             }
 
+            // Reaching here means it is invalid
             if (clean)
-                RemoveToInvalid(vpath, "InvalidName");
+            {
+                if (isDuplicated)
+                {
+                    RemoveToInvalid(vpath, "Duplicated");
+                }
+                else
+                    RemoveToInvalid(vpath, "InvalidName");
+            }
             return null;
         }
 
@@ -995,6 +852,7 @@ namespace VPB
                     {
                         foreach (VarFileEntry fileEntry in vp.FileEntries)
                         {
+                            allVarFileEntries.Remove(fileEntry);
                             uidToVarFileEntry.Remove(fileEntry.Uid);
                             pathToVarFileEntry.Remove(fileEntry.Path);
                         }
@@ -1044,6 +902,10 @@ namespace VPB
                 if (packageGroups != null)
                 {
                     packageGroups.Clear();
+                }
+                if (allVarFileEntries != null)
+                {
+                    allVarFileEntries.Clear();
                 }
                 if (uidToVarFileEntry != null)
                 {
@@ -1523,8 +1385,6 @@ namespace VPB
         {
             string refreshReason = GetCurrentReasonsForLog();
             VamStartupProfiler.BeginVpbRefresh(refreshReason);
-            if (init)
-                System.Threading.Interlocked.Exchange(ref s_SuppressInitGalleryDelta, 1);
             try
             {
 #if DEBUG
@@ -1543,6 +1403,10 @@ namespace VPB
             if (packageGroups == null)
             {
                 packageGroups = new Dictionary<string, VarPackageGroup>(StringComparer.OrdinalIgnoreCase);
+            }
+            if (allVarFileEntries == null)
+            {
+                allVarFileEntries = new HashSet<VarFileEntry>();
             }
             if (uidToVarFileEntry == null)
             {
@@ -1600,50 +1464,10 @@ namespace VPB
                             return;
                         }
 
-                        int rootCount = scanRoots.Length;
-                        if (rootCount <= 1)
+                        foreach (string root in scanRoots)
                         {
-                            for (int ri = 0; ri < rootCount; ri++)
-                            {
-                                if (Directory.Exists(scanRoots[ri]))
-                                    SafeGetFiles(scanRoots[ri], "*.var", allVarFiles);
-                            }
-                        }
-                        else
-                        {
-                            var perRoot = new List<string>[rootCount];
-                            var rootDone = new ManualResetEvent[rootCount];
-                            for (int ri = 0; ri < rootCount; ri++)
-                            {
-                                perRoot[ri] = new List<string>();
-                                rootDone[ri] = new ManualResetEvent(false);
-                                string root = scanRoots[ri];
-                                int rootIndex = ri;
-                                ThreadPool.QueueUserWorkItem(__ =>
-                                {
-                                    try
-                                    {
-                                        if (Directory.Exists(root))
-                                            SafeGetFiles(root, "*.var", perRoot[rootIndex]);
-                                    }
-                                    finally
-                                    {
-                                        try { rootDone[rootIndex].Set(); } catch { }
-                                    }
-                                });
-                            }
-                            for (int ri = 0; ri < rootCount; ri++)
-                            {
-                                try { rootDone[ri].WaitOne(); } catch { }
-                                try { rootDone[ri].Close(); } catch { }
-                                if (perRoot[ri] != null && perRoot[ri].Count > 0)
-                                {
-                                    lock (allVarFiles)
-                                    {
-                                        allVarFiles.AddRange(perRoot[ri]);
-                                    }
-                                }
-                            }
+                            if (Directory.Exists(root))
+                                SafeGetFiles(root, "*.var", allVarFiles);
                         }
 
                         if (VamStartupOptimizations.UseCachedVarPathInventory && allVarFiles.Count > 0)
@@ -1774,8 +1598,6 @@ namespace VPB
             }
             finally
             {
-                if (init)
-                    System.Threading.Interlocked.Exchange(ref s_SuppressInitGalleryDelta, 0);
                 VamStartupProfiler.EndVpbRefresh();
             }
         }
@@ -2120,11 +1942,6 @@ namespace VPB
 		static void TryPeriodicManifestFlushDuringDeepScan(int scanned, int total)
 		{
 			if (scanned <= 0) return;
-			try
-			{
-				if (VpbLocalDatabase.IsGalleryIndexRebuildActive()) return;
-			}
-			catch { }
 			int step = Math.Max(2000, Math.Min(10000, total / 10));
 			if (scanned != total && scanned - s_DeepScanLastManifestFlushScanned < step) return;
 			s_DeepScanLastManifestFlushScanned = scanned;
@@ -2137,26 +1954,23 @@ namespace VPB
 		IEnumerator ScanVarPackagesCo(bool clean, List<VarPackage> invalid)
 		{
 			if (packagesByUid == null) yield break;
-			EnterBulkDeepScan();
+			System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 1);
 			try
 			{
 			// Reset per-pass scan counters so logged stats reflect THIS pass only,
 			// not the cumulative totals across all coalesced/follow-up passes.
 			VarPackage.ResetScanCounters();
 			s_DeepScanLastManifestFlushScanned = 0;
-			try { VpbLocalDatabase.ResetDeepScanSqlRebuildProgress(); } catch { }
 			Stopwatch indexAllSw = Stopwatch.StartNew();
 			VarPackage[] packages = packagesByUid.Values.ToArray();
 			int idx = 0;
 			int allCount = packages.Length;
 			try { VpbProgressService.BeginDeepScan(allCount); } catch { }
-			try { VpbProgressService.ReportDeepScan(0, allCount); } catch { }
-			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 50 : 100;
-			uiUpdateStep = Math.Max(1, Math.Min(uiUpdateStep, Math.Max(1, allCount / 400)));
+			int uiUpdateStep = (VarPackageMgr.singleton != null && VarPackageMgr.singleton.existCache) ? 100 : 200;
 			int progressLogStep = Math.Max(uiUpdateStep, 2000);
 			string reasonsTag = GetCurrentReasonsForLog();
 			{
-				int maxWorkers = GetEffectiveMaxDeepScanWorkers();
+				int maxWorkers = Math.Min(8, Math.Max(1, System.Environment.ProcessorCount));
 				int nextIndex = -1;
 				int doneWorkers = 0;
 				int scannedCount = 0;
@@ -2197,15 +2011,13 @@ namespace VPB
 					});
 				}
 
-				int uiFrameCounter = 0;
 				while (!doneEvent.WaitOne(0))
 				{
 					int current = Interlocked.CompareExchange(ref scannedCount, 0, 0);
-					uiFrameCounter++;
-					if (current != idx || (current == 0 && (uiFrameCounter % 15) == 0))
+					if (current != idx)
 					{
 						idx = current;
-						if ((idx % uiUpdateStep) == 0 || idx == allCount || (idx == 0 && (uiFrameCounter % 15) == 0))
+						if ((idx % uiUpdateStep) == 0 || idx == allCount)
 						{
 							try { VpbProgressService.ReportDeepScan(idx, allCount); } catch { }
 						}
@@ -2222,7 +2034,6 @@ namespace VPB
 						if ((idx % progressLogStep) == 0 || idx == allCount)
 						{
 							try { VpbLocalDatabase.NotifyDeepScanProgress(idx, allCount); } catch { }
-							try { TryPeriodicManifestFlushDuringDeepScan(idx, allCount); } catch { }
 						}
 					}
 					yield return null;
@@ -2254,11 +2065,7 @@ namespace VPB
 			finally
 			{
 				try { VpbProgressService.EndDeepScan(); } catch { }
-				ExitBulkDeepScan();
-				if (!IsBulkDeepScanActive)
-				{
-					try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
-				}
+				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
 			}
 		}
 
@@ -2366,7 +2173,6 @@ namespace VPB
 
 		private static void LogForceLatestDecisionOnce(string key, string message)
 		{
-			if (IsBulkDeepScanActive) return;
 			if (!ShouldLogForceLatestDependencies()) return;
 			if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
 			try
@@ -3289,8 +3095,7 @@ namespace VPB
 					value = TryResolve(normalized);
 					try
 					{
-						if (!IsBulkDeepScanActive
-							&& Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
+						if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value)
 						{
 							LogUtil.Log("GetPackage normalize whitespace | raw=" + packageUidOrPath + " | normalized=" + normalized + " | found=" + (value != null));
 						}
@@ -3299,7 +3104,7 @@ namespace VPB
 				}
 			}
 
-			if (value == null && !IsBulkDeepScanActive)
+			if (value == null)
 			{
 				try
 				{
@@ -3634,73 +3439,14 @@ namespace VPB
 				return;
 			}
 
-			if (TryFindVarFilesRegexViaInternalPathIndex(dir, rx, foundFiles))
-				return;
-
 			VarPackage[] snapshot = GetPackagesSnapshotForBrowse();
 			if (snapshot == null) return;
 
-			for (int i = 0; i < snapshot.Length; i++)
+			foreach (VarPackage pkg in snapshot)
 			{
-				VarPackage pkg = snapshot[i];
 				if (pkg == null || !pkg.Enabled || pkg.invalid) continue;
 				AppendVarFilesForPackage(pkg, dir, rx, foundFiles);
 			}
-		}
-
-		/// <summary>
-		/// Flatten-mode browse: walk the internal-path index instead of per-package loops.
-		/// Falls back to package snapshot when index is empty (pre-scan / no manifest cache).
-		/// </summary>
-		const int MaxIndexBrowseMatches = 20000;
-
-		static bool TryFindVarFilesRegexViaInternalPathIndex(string dirPrefix, Regex regex, List<FileEntry> foundFiles)
-		{
-			if (foundFiles == null || regex == null) return false;
-			// Resolve entries via GetVarFileEntry / packages — main thread only (cache worker uses package snapshot path).
-			if (!VamOnDemandLoader.IsMainThread()) return false;
-
-			List<string> matchingUidPaths = null;
-			lock (internalPathToUidPathLock)
-			{
-				EnsureInternalPathIndex();
-				if (internalPathToUidPath == null || internalPathToUidPath.Count == 0)
-					return false;
-
-				dirPrefix = NormalizeBrowseInternalPath(dirPrefix);
-				matchingUidPaths = new List<string>(Math.Min(4096, internalPathToUidPath.Count));
-				foreach (KeyValuePair<string, string> kv in internalPathToUidPath)
-				{
-					string internalPath = kv.Key;
-					if (string.IsNullOrEmpty(internalPath)) continue;
-					if (!InternalPathMatchesBrowseDir(internalPath, dirPrefix)) continue;
-
-					string name = Path.GetFileName(internalPath.Replace('\\', '/'));
-					if (string.IsNullOrEmpty(name) || !regex.IsMatch(name)) continue;
-
-					string uidPath = kv.Value;
-					if (string.IsNullOrEmpty(uidPath))
-						uidPath = internalPath;
-					else if (uidPath.IndexOf(":/") < 0)
-						uidPath = uidPath + ":/" + internalPath;
-					matchingUidPaths.Add(uidPath);
-					if (matchingUidPaths.Count >= MaxIndexBrowseMatches)
-						break;
-				}
-			}
-
-			if (matchingUidPaths == null || matchingUidPaths.Count == 0)
-				return false;
-
-			for (int i = 0; i < matchingUidPaths.Count; i++)
-			{
-				string uidPath = matchingUidPaths[i];
-				VarFileEntry entry = GetVarFileEntry(uidPath);
-				if (entry == null) continue;
-				TryRegisterVarFileEntryLookup(entry);
-				foundFiles.Add(entry);
-			}
-			return true;
 		}
 
 		public static bool FileExists(string path, bool onlySystemFiles = false, bool restrictPath = false)

@@ -679,13 +679,19 @@ namespace VPB
         /// <summary>Rebuild category/creator tabs when package scan advanced since last side-tab count build.</summary>
         private void EnsureSideTabsFreshForPackageScan()
         {
-            EnsureSideTabCountsFreshAfterGridReady(force: false);
+            bool countsRefreshed = false;
+            try { countsRefreshed = EnsureSideTabCountsFreshAfterGridReady(force: false); } catch { }
             if (!IsVisible && !hasLoadedContent) return;
-            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+            // rebuildSubPaneSideTabLists must be true when main strips rebuild — (true, false) clears split sub lists with no refill.
+            if (countsRefreshed)
+            {
+                try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
+            }
         }
 
         /// <summary>Rebuild side-tab counts once SQL/index + package scan are ready.</summary>
-        private void EnsureSideTabCountsFreshAfterGridReady(bool force)
+        /// <returns>True when category/creator counts were rebuilt (caller should refresh side-tab UI).</returns>
+        private bool EnsureSideTabCountsFreshAfterGridReady(bool force)
         {
             DateTime scanNow = DateTime.MinValue;
             try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
@@ -693,7 +699,7 @@ namespace VPB
                 || !categoriesCached
                 || !creatorsCached
                 || (scanNow > DateTime.MinValue && scanNow > _lastCategoryCountsScanTime);
-            if (!stale) return;
+            if (!stale) return false;
 
             categoriesCached = false;
             creatorsCached = false;
@@ -708,6 +714,7 @@ namespace VPB
                     + " cached=" + (categoriesCached ? "1" : "0"));
             }
             catch { }
+            return true;
         }
 
         /// <summary>
