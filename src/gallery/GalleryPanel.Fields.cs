@@ -609,6 +609,13 @@ namespace VPB
         private readonly List<UserTagSideTabEntry> _userTagAppliedPinnedRows = new List<UserTagSideTabEntry>(24);
         private readonly List<UserTagSideTabEntry> _userTagVirtView = new List<UserTagSideTabEntry>(256);
         private string _userTagVirtViewSig = null;
+        // Visible-window cache for the scroll-jitter gate; only scroll callbacks consult it, forced repaints overwrite it.
+        private int _lastUserTagVirtFirstIdxLeft = int.MinValue;
+        private int _lastUserTagVirtFirstIdxRight = int.MinValue;
+        private int _lastUserTagVirtVisibleLeft = -1;
+        private int _lastUserTagVirtVisibleRight = -1;
+        private int _lastUserTagVirtTotalLeft = -1;
+        private int _lastUserTagVirtTotalRight = -1;
         private int _userTagPinRevision = 0;
         private readonly List<string> _userTagPinOrderRuntime = new List<string>(24);
         private bool _userTagPinOrderRuntimeLoaded;

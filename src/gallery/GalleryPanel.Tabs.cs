@@ -666,7 +666,7 @@ namespace VPB
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagScrollCb++;
                 if (leftTabContainerGO == null || leftActiveContent != ContentType.UserTags) return;
-                UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
+                UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform, fromScroll: true);
             }
             catch { }
         }
@@ -677,7 +677,7 @@ namespace VPB
             {
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagScrollCb++;
                 if (rightTabContainerGO == null || rightActiveContent != ContentType.UserTags) return;
-                UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
+                UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform, fromScroll: true);
             }
             catch { }
         }
@@ -852,10 +852,9 @@ namespace VPB
             dr.PrimaryTag = isCreateRow ? "" : tagSnap;
         }
 
-        private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer)
+        private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer, bool fromScroll = false)
         {
             if (tabContainer == null) return;
-            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagVirtVis++;
             GameObject holderGo = EnsureUserTagPickVirtualHolder(tabContainer);
             if (holderGo == null) return;
 
@@ -882,7 +881,6 @@ namespace VPB
                 return;
             }
             float contentH = total * rowH;
-            if (holderLe != null) holderLe.preferredHeight = contentH;
 
             float scrollRange = Mathf.Max(0f, contentH - viewportH);
             float scrollY = (1f - Mathf.Clamp01(sr.verticalNormalizedPosition)) * scrollRange;
@@ -891,6 +889,20 @@ namespace VPB
             if (firstIdx > total - 1) firstIdx = Mathf.Max(0, total - 1);
 
             int visible = Mathf.CeilToInt(viewportH / rowH) + 6;
+
+            // onValueChanged fires every frame from pointer micro-jitter; rebind only when the visible window shifts. Forced repaints pass fromScroll=false.
+            if (fromScroll
+                && firstIdx == (isLeft ? _lastUserTagVirtFirstIdxLeft : _lastUserTagVirtFirstIdxRight)
+                && visible == (isLeft ? _lastUserTagVirtVisibleLeft : _lastUserTagVirtVisibleRight)
+                && total == (isLeft ? _lastUserTagVirtTotalLeft : _lastUserTagVirtTotalRight))
+                return;
+            if (isLeft) { _lastUserTagVirtFirstIdxLeft = firstIdx; _lastUserTagVirtVisibleLeft = visible; _lastUserTagVirtTotalLeft = total; }
+            else { _lastUserTagVirtFirstIdxRight = firstIdx; _lastUserTagVirtVisibleRight = visible; _lastUserTagVirtTotalRight = total; }
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagVirtVis++;
+
+            // Below the gate so a skipped scroll callback doesn't re-dirty layout; forced and window-shift rebinds still set it.
+            if (holderLe != null) holderLe.preferredHeight = contentH;
+
             EnsureUserTagVirtPool(isLeft, holderGo.transform, visible);
 
             List<GameObject> pool = isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons;
