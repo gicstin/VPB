@@ -105,6 +105,14 @@ namespace VPB
 
         protected JSONStorableAction openSceneAction;
 
+        protected Text downloadButtonTextUI;
+        protected Image downloadButtonImage;
+        protected Color defaultDownloadButtonColor = new Color(1f, 1f, 1f, 1f);
+        protected string defaultDownloadButtonText;
+        protected bool hasDownloadButtonError;
+        protected string lastErrorDetail;
+        private static readonly Color DownloadButtonErrorColor = new Color32(214, 80, 80, 255);
+
         public string GroupName { get; protected set; }
 
         public string Creator { get; protected set; }
@@ -465,6 +473,7 @@ namespace VPB
         {
             isDownloadQueuedJSON.val = false;
             isDownloadingJSON.val = true;
+            ClearDownloadButtonError();
         }
 
         protected void DownloadProgress(float f,ulong downloadedBytes)
@@ -513,11 +522,12 @@ namespace VPB
                 // Register package before refresh so hub Refresh() does not reset alreadyHaveJSON.
                 try { FileManagerBridge.Refresh("hub_download", RefreshScope.Both); } catch { }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                LogUtil.Log("Error while trying to save file AddonPackages/" + text + " after download");
+                LogUtil.LogWarning("Error while trying to save file AddonPackages/" + text + " after download: " + ex.Message);
                 isDownloadQueuedJSON.val = false;
                 isDownloadingJSON.val = false;
+                ApplyDownloadButtonError("save: " + ex.Message);
             }
         }
 
@@ -525,7 +535,58 @@ namespace VPB
         {
             isDownloadQueuedJSON.val = false;
             isDownloadingJSON.val = false;
+            ApplyDownloadButtonError(err);
             LogUtil.Log("Error while downloading " + Name + ": " + err);
+        }
+
+        // Short labels fit on the Download button; full reason goes to the log.
+        private static string FormatDownloadErrorShort(string err)
+        {
+            if (string.IsNullOrEmpty(err)) return "Failed";
+            if (err.StartsWith("save:", StringComparison.Ordinal)) return "Save err";
+            Match codeMatch = Regex.Match(err, @"Code:\s*(\d+)");
+            if (codeMatch.Success)
+            {
+                string code = codeMatch.Groups[1].Value;
+                switch (code)
+                {
+                    case "401":
+                    case "403":
+                        return "Login req";
+                    case "404":
+                        return "Not found";
+                    case "429":
+                        return "Rate limit";
+                    case "500":
+                    case "502":
+                    case "503":
+                    case "504":
+                        return "HTTP " + code;
+                    default:
+                        return "HTTP " + code;
+                }
+            }
+            if (err.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0) return "Timeout";
+            return "Failed";
+        }
+
+        private void ApplyDownloadButtonError(string err)
+        {
+            hasDownloadButtonError = true;
+            lastErrorDetail = err;
+            string shortLabel = FormatDownloadErrorShort(err);
+            if (downloadButtonImage != null) downloadButtonImage.color = DownloadButtonErrorColor;
+            if (downloadButtonTextUI != null) downloadButtonTextUI.text = shortLabel;
+        }
+
+        private void ClearDownloadButtonError()
+        {
+            if (!hasDownloadButtonError) return;
+            hasDownloadButtonError = false;
+            lastErrorDetail = null;
+            if (downloadButtonImage != null) downloadButtonImage.color = defaultDownloadButtonColor;
+            if (downloadButtonTextUI != null && !string.IsNullOrEmpty(defaultDownloadButtonText))
+                downloadButtonTextUI.text = defaultDownloadButtonText;
         }
  
         protected void SyncThumbnailTexture(HubImageLoaderThreaded.QueuedImage qi)
@@ -1129,6 +1190,18 @@ namespace VPB
                 updateMsgJSON.text = ui.updateMsgText;
                 updateAction.button = ui.updateButton;
                 downloadAction.button = ui.downloadButton;
+                if (ui.downloadButton != null)
+                {
+                    downloadButtonImage = ui.downloadButton.GetComponent<Image>();
+                    if (downloadButtonImage != null) defaultDownloadButtonColor = downloadButtonImage.color;
+                    downloadButtonTextUI = ui.downloadButton.GetComponentInChildren<Text>(true);
+                    if (downloadButtonTextUI != null) defaultDownloadButtonText = downloadButtonTextUI.text;
+                    if (hasDownloadButtonError)
+                    {
+                        if (downloadButtonImage != null) downloadButtonImage.color = DownloadButtonErrorColor;
+                        if (downloadButtonTextUI != null) downloadButtonTextUI.text = FormatDownloadErrorShort(lastErrorDetail);
+                    }
+                }
                 if (ui.updateButton != null)
                 {
                     Image updateImage = ui.updateButton.GetComponent<Image>();
