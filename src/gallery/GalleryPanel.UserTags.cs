@@ -1034,6 +1034,7 @@ namespace VPB
         {
             GameObject strip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
             if (strip == null) return;
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagPinnedRebuild++;
             for (int i = strip.transform.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
 

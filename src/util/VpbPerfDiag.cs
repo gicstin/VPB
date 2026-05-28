@@ -18,10 +18,16 @@ namespace VPB
         public static long SetCanvasVisibleOn;
         public static long SetCanvasVisibleOff;
         public static long MenuGateFlip;
+        public static long UserTagBind;
+        public static long UserTagVirtVis;
+        public static long UserTagScrollCb;
+        public static long UserTagPinnedRebuild;
+        public static long TooltipAttach;
 
         static long _lastQmRefresh, _lastQmIconCreate, _lastQmIconSwap, _lastPointerSib;
         static long _lastGalUpdateFull;
         static long _lastSetCanvasVisibleOn, _lastSetCanvasVisibleOff, _lastMenuGateFlip;
+        static long _lastUserTagBind, _lastUserTagVirtVis, _lastUserTagScrollCb, _lastUserTagPinnedRebuild, _lastTooltipAttach;
         static float _lastEmitRealtime;
         static float _nextEmitRealtime;
 
@@ -65,6 +71,11 @@ namespace VPB
                     _lastSetCanvasVisibleOn = SetCanvasVisibleOn;
                     _lastSetCanvasVisibleOff = SetCanvasVisibleOff;
                     _lastMenuGateFlip = MenuGateFlip;
+                    _lastUserTagBind = UserTagBind;
+                    _lastUserTagVirtVis = UserTagVirtVis;
+                    _lastUserTagScrollCb = UserTagScrollCb;
+                    _lastUserTagPinnedRebuild = UserTagPinnedRebuild;
+                    _lastTooltipAttach = TooltipAttach;
                     _nextEmitRealtime = 0f;
                     return;
                 }
@@ -91,6 +102,11 @@ namespace VPB
                 long setOn = SetCanvasVisibleOn - _lastSetCanvasVisibleOn;
                 long setOff = SetCanvasVisibleOff - _lastSetCanvasVisibleOff;
                 long gateFlip = MenuGateFlip - _lastMenuGateFlip;
+                long utBind = UserTagBind - _lastUserTagBind;
+                long utVirtVis = UserTagVirtVis - _lastUserTagVirtVis;
+                long utScrollCb = UserTagScrollCb - _lastUserTagScrollCb;
+                long utPinnedRebuild = UserTagPinnedRebuild - _lastUserTagPinnedRebuild;
+                long tooltipAttach = TooltipAttach - _lastTooltipAttach;
 
                 _lastQmRefresh = QmRefresh;
                 _lastQmIconCreate = QmIconCreate;
@@ -100,6 +116,11 @@ namespace VPB
                 _lastSetCanvasVisibleOn = SetCanvasVisibleOn;
                 _lastSetCanvasVisibleOff = SetCanvasVisibleOff;
                 _lastMenuGateFlip = MenuGateFlip;
+                _lastUserTagBind = UserTagBind;
+                _lastUserTagVirtVis = UserTagVirtVis;
+                _lastUserTagScrollCb = UserTagScrollCb;
+                _lastUserTagPinnedRebuild = UserTagPinnedRebuild;
+                _lastTooltipAttach = TooltipAttach;
 
                 // Snapshot panel state. `gallSubtreeActive` counts panels whose UI subtree is currently
                 // active (Phase 3); the diff vs gallVis surfaces transition windows where canvas just
@@ -135,12 +156,15 @@ namespace VPB
                     "[VPB.Diag] fps={0:0.0} dt={1:0.00}s | panels={2} gallVis={3} gallHid={4} gallSubtreeActive={5}" +
                     " | qmRefresh={6}/s qmIconCreate={7}/s qmIconSwap={8}/s" +
                     " | galUpd={9}/s setVisOn={10}/s setVisOff={11}/s gateFlip={12}/s" +
-                    " | pointerSib={13}/s",
+                    " | pointerSib={13}/s" +
+                    " | utBind={14}/s utVirtVis={15}/s utScrollCb={16}/s utPinnedRebuild={17}/s tooltipAttach={18}/s",
                     fps, dt, panels, vis, hid, subtree,
                     (long)(qmRefresh / dt), (long)(qmIcon / dt), (long)(qmSwap / dt),
                     (long)(galFull / dt),
                     (long)(setOn / dt), (long)(setOff / dt), (long)(gateFlip / dt),
-                    (long)(pointerSib / dt));
+                    (long)(pointerSib / dt),
+                    (long)(utBind / dt), (long)(utVirtVis / dt), (long)(utScrollCb / dt),
+                    (long)(utPinnedRebuild / dt), (long)(tooltipAttach / dt));
                 LogUtil.LogWarning(msg);
             }
             catch { }

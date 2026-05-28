@@ -664,6 +664,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagScrollCb++;
                 if (leftTabContainerGO == null || leftActiveContent != ContentType.UserTags) return;
                 UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
             }
@@ -674,6 +675,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagScrollCb++;
                 if (rightTabContainerGO == null || rightActiveContent != ContentType.UserTags) return;
                 UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
             }
@@ -717,6 +719,7 @@ namespace VPB
         private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)
         {
             if (btnGO == null) return;
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagBind++;
             const int CreateRowCountSentinel = int.MinValue;
             const string CreateLabelKey = "gallery.usertags.create_from_search";
             const string CreateTipKey = "gallery.usertags.create_from_search_tip";
@@ -852,6 +855,7 @@ namespace VPB
         private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer)
         {
             if (tabContainer == null) return;
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagVirtVis++;
             GameObject holderGo = EnsureUserTagPickVirtualHolder(tabContainer);
             if (holderGo == null) return;
 

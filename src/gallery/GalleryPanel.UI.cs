@@ -2453,8 +2453,10 @@ namespace VPB
             if (go == null) return;
             var del = go.GetComponent<UIHoverDelegate>();
             if (del == null) del = go.AddComponent<UIHoverDelegate>();
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.TooltipAttach++;
 
-            del.OnHoverChange += (enter) =>
+            if (del.TooltipHandler != null) del.OnHoverChange -= del.TooltipHandler;
+            Action<bool> handler = (enter) =>
             {
                 string msg = VPBTranslation.T(tooltipKey, englishDefault);
                 if (enter)
@@ -2473,6 +2475,8 @@ namespace VPB
                     if (temporaryStatusOwner == go) temporaryStatusOwner = null;
                 }
             };
+            del.TooltipHandler = handler;
+            del.OnHoverChange += handler;
         }
 
         private void AddTooltipPlain(GameObject go, string tooltip)
@@ -2480,8 +2484,10 @@ namespace VPB
             if (go == null) return;
             var del = go.GetComponent<UIHoverDelegate>();
             if (del == null) del = go.AddComponent<UIHoverDelegate>();
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.TooltipAttach++;
 
-            del.OnHoverChange += (enter) =>
+            if (del.TooltipHandler != null) del.OnHoverChange -= del.TooltipHandler;
+            Action<bool> handler = (enter) =>
             {
                 if (enter)
                 {
@@ -2499,6 +2505,8 @@ namespace VPB
                     if (temporaryStatusOwner == go) temporaryStatusOwner = null;
                 }
             };
+            del.TooltipHandler = handler;
+            del.OnHoverChange += handler;
         }
 
         private void UpdateDesktopModeButton()
