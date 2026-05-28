@@ -512,28 +512,52 @@ namespace VPB
 
 		public static bool TryEnsureLocalSceneJsonHidden(FileEntry entry)
 		{
+			string entryPath = entry != null ? entry.Path : "(null)";
 			try
 			{
-				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp))
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: could not build local-scene hide path for " + entryPath);
+					return false;
+				}
 				UncacheLocalSceneHiddenPath(hp);
 				if (File.Exists(hp)) return true;
 				File.WriteAllText(hp, string.Empty);
-				return File.Exists(hp);
+				if (File.Exists(hp)) return true;
+				LogUtil.LogWarning("[VPB] HidePrefs: wrote local-scene hide marker but file did not materialize at " + hp);
+				return false;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception hiding local scene " + entryPath + ": " + ex.Message);
+				return false;
+			}
 		}
 
 		public static bool TryRemoveLocalSceneJsonHide(FileEntry entry)
 		{
+			string entryPath = entry != null ? entry.Path : "(null)";
 			try
 			{
-				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp)) return false;
+				if (!TryBuildLocalSceneJsonHidePath(entry, out string hp))
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: could not build local-scene hide path for " + entryPath);
+					return false;
+				}
 				UncacheLocalSceneHiddenPath(hp);
-				if (!File.Exists(hp)) return false;
+				if (!File.Exists(hp))
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: local-scene hide marker missing at " + hp + " (already unhidden?)");
+					return false;
+				}
 				File.Delete(hp);
 				return true;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception unhiding local scene " + entryPath + ": " + ex.Message);
+				return false;
+			}
 		}
 
 		private static FileEntry ResolveToolboxTargetForPackageHideOps(FileEntry entry)
@@ -546,6 +570,7 @@ namespace VPB
 
 		public static bool TryEnsureVpbPackageHidden(FileEntry entry)
 		{
+			string entryPath = entry != null ? entry.Path : "(null)";
 			try
 			{
 				FileEntry target = ResolveToolboxTargetForPackageHideOps(entry);
@@ -565,7 +590,11 @@ namespace VPB
 				}
 				catch { pkg = null; }
 
-				if (pkg == null) return false;
+				if (pkg == null)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: could not resolve VarPackage from " + entryPath);
+					return false;
+				}
 
 				// Clean up legacy hide path if it exists
 				try
@@ -580,8 +609,13 @@ namespace VPB
 
 				// Create native VaM-compatible hide markers for all scenes
 				var hidePaths = BuildNativeCompatibleHidePaths(pkg);
-				if (hidePaths.Count == 0) return false;
+				if (hidePaths.Count == 0)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: package " + pkg.Uid + " has no scenes to hide (native hide marker requires a scene .json)");
+					return false;
+				}
 
+				int writeFailures = 0;
 				bool anyCreated = false;
 				foreach (var hidePath in hidePaths)
 				{
@@ -598,19 +632,36 @@ namespace VPB
 						File.WriteAllText(hidePath, string.Empty);
 						if (File.Exists(hidePath))
 							anyCreated = true;
+						else
+							writeFailures++;
 					}
-					catch { }
+					catch (Exception exWrite)
+					{
+						writeFailures++;
+						LogUtil.LogWarning("[VPB] HidePrefs: failed to write hide marker " + hidePath + ": " + exWrite.Message);
+					}
 				}
+				if (!anyCreated)
+					LogUtil.LogWarning("[VPB] HidePrefs: no hide markers created for " + pkg.Uid + " (" + writeFailures + "/" + hidePaths.Count + " writes failed)");
 				return anyCreated;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception hiding package " + entryPath + ": " + ex.Message);
+				return false;
+			}
 		}
 
 		public static bool TryEnsureVpbPackageHidden(VarPackage pkg)
 		{
+			string uid = pkg != null ? pkg.Uid : "(null)";
 			try
 			{
-				if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) return false;
+				if (pkg == null || string.IsNullOrEmpty(pkg.Uid))
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: TryEnsureVpbPackageHidden called with null/empty pkg");
+					return false;
+				}
 				try { UncacheVarHiddenUid(pkg.Uid); } catch { }
 
 				// Clean up legacy hide path if it exists
@@ -626,8 +677,13 @@ namespace VPB
 
 				// Create native VaM-compatible hide markers for all scenes
 				var hidePaths = BuildNativeCompatibleHidePaths(pkg);
-				if (hidePaths.Count == 0) return false;
+				if (hidePaths.Count == 0)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: package " + uid + " has no scenes to hide (native hide marker requires a scene .json)");
+					return false;
+				}
 
+				int writeFailures = 0;
 				bool anyCreated = false;
 				foreach (var hidePath in hidePaths)
 				{
@@ -644,16 +700,29 @@ namespace VPB
 						File.WriteAllText(hidePath, string.Empty);
 						if (File.Exists(hidePath))
 							anyCreated = true;
+						else
+							writeFailures++;
 					}
-					catch { }
+					catch (Exception exWrite)
+					{
+						writeFailures++;
+						LogUtil.LogWarning("[VPB] HidePrefs: failed to write hide marker " + hidePath + ": " + exWrite.Message);
+					}
 				}
+				if (!anyCreated)
+					LogUtil.LogWarning("[VPB] HidePrefs: no hide markers created for " + uid + " (" + writeFailures + "/" + hidePaths.Count + " writes failed)");
 				return anyCreated;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception hiding package " + uid + ": " + ex.Message);
+				return false;
+			}
 		}
 
 		public static bool TryRemovePackageVarHide(FileEntry entry)
 		{
+			string entryPath = entry != null ? entry.Path : "(null)";
 			try
 			{
 				FileEntry target = ResolveToolboxTargetForPackageHideOps(entry);
@@ -673,7 +742,11 @@ namespace VPB
 				}
 				catch { pkg = null; }
 
-				if (pkg == null) return false;
+				if (pkg == null)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: could not resolve VarPackage from " + entryPath + " for unhide");
+					return false;
+				}
 
 				bool anyRemoved = false;
 
@@ -690,7 +763,10 @@ namespace VPB
 					}
 					File.Delete(legacyPath + ".vpb");
 				}
-				catch { }
+				catch (Exception exLegacy)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: failed to remove legacy hide marker for " + pkg.Uid + ": " + exLegacy.Message);
+				}
 
 				// Remove native VaM-compatible hide markers for all scenes
 				var hidePaths = BuildNativeCompatibleHidePaths(pkg);
@@ -704,19 +780,33 @@ namespace VPB
 							anyRemoved = true;
 						}
 					}
-					catch { }
+					catch (Exception exDel)
+					{
+						LogUtil.LogWarning("[VPB] HidePrefs: failed to delete hide marker " + hidePath + ": " + exDel.Message);
+					}
 				}
 
+				if (!anyRemoved)
+					LogUtil.LogWarning("[VPB] HidePrefs: no hide markers found to remove for " + pkg.Uid + " (already unhidden?)");
 				return anyRemoved;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception unhiding package " + entryPath + ": " + ex.Message);
+				return false;
+			}
 		}
 
 		public static bool TryRemovePackageVarHide(VarPackage pkg)
 		{
+			string uid = pkg != null ? pkg.Uid : "(null)";
 			try
 			{
-				if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) return false;
+				if (pkg == null || string.IsNullOrEmpty(pkg.Uid))
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: TryRemovePackageVarHide called with null/empty pkg");
+					return false;
+				}
 				try { UncacheVarHiddenUid(pkg.Uid); } catch { }
 
 				bool anyRemoved = false;
@@ -734,7 +824,10 @@ namespace VPB
 					}
 					File.Delete(legacyPath + ".vpb");
 				}
-				catch { }
+				catch (Exception exLegacy)
+				{
+					LogUtil.LogWarning("[VPB] HidePrefs: failed to remove legacy hide marker for " + uid + ": " + exLegacy.Message);
+				}
 
 				// Remove native VaM-compatible hide markers for all scenes
 				var hidePaths = BuildNativeCompatibleHidePaths(pkg);
@@ -748,12 +841,21 @@ namespace VPB
 							anyRemoved = true;
 						}
 					}
-					catch { }
+					catch (Exception exDel)
+					{
+						LogUtil.LogWarning("[VPB] HidePrefs: failed to delete hide marker " + hidePath + ": " + exDel.Message);
+					}
 				}
 
+				if (!anyRemoved)
+					LogUtil.LogWarning("[VPB] HidePrefs: no hide markers found to remove for " + uid + " (already unhidden?)");
 				return anyRemoved;
 			}
-			catch { return false; }
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] HidePrefs: exception unhiding package " + uid + ": " + ex.Message);
+				return false;
+			}
 		}
 	}
 }
