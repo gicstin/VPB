@@ -85,6 +85,11 @@ namespace VPB
             float end = start + Mathf.Max(0.05f, holdSeconds);
             while (Time.unscaledTime < end)
             {
+                if (UIDraggableItem.IsDragging)
+                {
+                    Cancel();
+                    yield break;
+                }
                 float t = Mathf.InverseLerp(start, end, Time.unscaledTime);
                 if (_fill != null) _fill.fillAmount = t;
                 if (_text != null)

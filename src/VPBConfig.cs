@@ -230,13 +230,10 @@ namespace VPB
         public bool GalleryAutoGenderFilter = true;
         /// <summary>When true (default), visible gallery panes collapse (fixed dock) or hide (floating) when a scene is launched.</summary>
         public bool GalleryCollapseOnSceneLaunch = true;
-        /// <summary>
-        /// Effective drag-and-drop state at runtime.
-        /// Hold-to-launch uses same pointer-down gesture as drag start, so it suppresses drag even if user preference is enabled.
-        /// </summary>
+        /// <summary>Effective drag-and-drop state at runtime; mirrors <see cref="EnableDragDrop"/>.</summary>
         public bool EffectiveEnableDragDrop
         {
-            get { return EnableDragDrop && !HoldToLaunchEnabled; }
+            get { return EnableDragDrop; }
         }
         /// <summary>Legacy persisted flag; ignored for behavior when <see cref="EnableDragDrop"/> is on — hold is always required then. Serialized for forward compatibility.</summary>
         public bool RequireDragHoldBeforeMove = false;
@@ -1054,7 +1051,7 @@ namespace VPB
                     }
 
                     // Migration: older builds forced EnableDragDrop off when HoldToLaunchEnabled was on, and persisted that forced-off value.
-                    // Restore user intent (EnableDragDrop) from HoldToLaunchPrevEnableDragDrop while keeping effective suppression via EffectiveEnableDragDrop.
+                    // Restore user intent (EnableDragDrop) from HoldToLaunchPrevEnableDragDrop.
                     try
                     {
                         if (HoldToLaunchEnabled && !EnableDragDrop && HoldToLaunchPrevEnableDragDrop)
