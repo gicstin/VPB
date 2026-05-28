@@ -62,10 +62,6 @@ namespace VPB
         // Cache for fast ALL VAR sister JPG existence checks: package UID -> set of internal .jpg paths (normalized, no leading "/").
         private readonly Dictionary<string, HashSet<string>> _packageInternalJpgSetCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
 
-        private const float ThumbBlankLuminanceThreshold = 0.045f;
-        private const int ThumbBlankProbeGrid = 4;
-        private const int ThumbBlankGetPixels32Max = 8192;
-
         /// <summary>Gallery thumbnails / previews: <c>.jpg</c> only (no <c>.png</c> / <c>.jpeg</c> probes).</summary>
         private static bool IsImagePath(string path)
         {
@@ -864,11 +860,6 @@ namespace VPB
                 // immediately restores it from cache, which looks like a full redraw.
                 if (bind.ExpectedTag == expectedTag && bind.CurrentTexture != null && target.texture == bind.CurrentTexture)
                 {
-                    if (IsThumbnailPathMarkedBlank(imgPath))
-                    {
-                        TryRejectBlankThumbnail(bind.CurrentTexture, imgPath, target, file, thumbTd, thumbnailUnityDecodeOnly);
-                        return;
-                    }
                     target.color = Color.white;
                     UpdateAspectRatio(target, bind.CurrentTexture);
                     if (file != null) SyncThumbPlaceholderForFile(target.transform, target, file);
@@ -900,8 +891,6 @@ namespace VPB
             Texture2D tex = CustomImageLoaderThreaded.singleton.GetCachedThumbnail(imgPath, thumbTd, thumbnailUnityDecodeOnly);
             if (tex != null)
             {
-                if (TryRejectBlankThumbnail(tex, imgPath, target, file, thumbTd, thumbnailUnityDecodeOnly))
-                    return;
                 if (bind != null)
                 {
                     bind.CurrentTexture = tex;
@@ -937,8 +926,6 @@ namespace VPB
                     ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
                     if (cbBind != null && cbBind.ExpectedTag == expectedTag)
                     {
-                        if (TryRejectBlankThumbnail(res.tex, imgPath, target, file, turboJpegScaleDenom, thumbnailUnityDecodeOnly))
-                            return;
                         if (cbBind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
                             CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(cbBind.CurrentTexture);
                         cbBind.CurrentTexture = res.tex;
@@ -982,7 +969,6 @@ namespace VPB
         private void RequestThumbnailRetryAfterFailure(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, bool aggressiveSkipCache)
         {
             if (target == null) return;
-            if (IsThumbnailPathMarkedBlank(imgPath)) return;
             ThumbnailBindingTag b = target.GetComponent<ThumbnailBindingTag>();
             if (b == null || b.ExpectedTag != expectedTag) return;
             if (b.ThumbRetryCount >= MaxThumbnailDecodeRetries) return;
@@ -1071,133 +1057,9 @@ namespace VPB
             catch { }
         }
 
-        private static string ExtractImgPathFromThumbExpectedTag(string expectedTag)
+        private static bool ShouldShowThumbPlaceholder(RawImage thumbImg)
         {
-            if (string.IsNullOrEmpty(expectedTag)) return null;
-            int bar = expectedTag.IndexOf('|');
-            if (bar < 0 || bar >= expectedTag.Length - 1) return null;
-            return expectedTag.Substring(bar + 1);
-        }
-
-        private bool IsThumbnailPathMarkedBlank(string imgPath)
-        {
-            if (string.IsNullOrEmpty(imgPath)) return false;
-            try
-            {
-                return thumbPathMarkedBlankCache != null
-                       && thumbPathMarkedBlankCache.TryGetValue(imgPath, out bool blank)
-                       && blank;
-            }
-            catch { return false; }
-        }
-
-        private void MarkThumbnailPathBlank(string imgPath)
-        {
-            if (string.IsNullOrEmpty(imgPath)) return;
-            try
-            {
-                if (thumbPathMarkedBlankCache == null) return;
-                if (thumbPathMarkedBlankCache.Count > 16000) thumbPathMarkedBlankCache.Clear();
-                thumbPathMarkedBlankCache[imgPath] = true;
-            }
-            catch { }
-        }
-
-        private static bool ProbeThumbnailTextureIsBlank(Texture2D tex)
-        {
-            if (tex == null) return true;
-            int w = tex.width;
-            int h = tex.height;
-            if (w <= 0 || h <= 0) return true;
-
-            try
-            {
-                int pixels = w * h;
-                if (pixels > 0 && pixels <= ThumbBlankGetPixels32Max)
-                {
-                    Color32[] buf = tex.GetPixels32();
-                    if (buf == null || buf.Length == 0) return false;
-                    for (int i = 0; i < buf.Length; i++)
-                    {
-                        Color32 c = buf[i];
-                        float lum = (c.r * 0.299f + c.g * 0.587f + c.b * 0.114f) / 255f;
-                        if (lum > ThumbBlankLuminanceThreshold) return false;
-                    }
-                    return true;
-                }
-
-                int grid = ThumbBlankProbeGrid;
-                int dark = 0;
-                int total = 0;
-                for (int gy = 0; gy < grid; gy++)
-                {
-                    int py = (grid == 1) ? 0 : (gy * (h - 1)) / (grid - 1);
-                    for (int gx = 0; gx < grid; gx++)
-                    {
-                        int px = (grid == 1) ? 0 : (gx * (w - 1)) / (grid - 1);
-                        Color c = tex.GetPixel(px, py);
-                        total++;
-                        float lum = c.r * 0.299f + c.g * 0.587f + c.b * 0.114f;
-                        if (lum <= ThumbBlankLuminanceThreshold) dark++;
-                    }
-                }
-                return total > 0 && dark == total;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>Reject blank thumb; clears target and leaves path in blank cache. Returns true when rejected.</summary>
-        private bool TryRejectBlankThumbnail(Texture2D tex, string imgPath, RawImage target, FileEntry file, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
-        {
-            if (tex == null || string.IsNullOrEmpty(imgPath)) return false;
-            if (!ProbeThumbnailTextureIsBlank(tex))
-            {
-                if (!string.IsNullOrEmpty(imgPath) && thumbPathMarkedBlankCache != null)
-                {
-                    try { thumbPathMarkedBlankCache[imgPath] = false; } catch { }
-                }
-                return false;
-            }
-
-            MarkThumbnailPathBlank(imgPath);
-            try
-            {
-                if (CustomImageLoaderThreaded.singleton != null)
-                {
-                    CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
-                    CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(tex);
-                }
-            }
-            catch { }
-            try { UnityEngine.Object.Destroy(tex); } catch { }
-
-            ClearThumbnailTarget(target);
-            if (target != null && file != null)
-                SyncThumbPlaceholderAfterThumbnail(target.transform, target, file);
-            return true;
-        }
-
-        private bool IsThumbBindingMarkedBlank(RawImage thumbImg)
-        {
-            if (thumbImg == null) return false;
-            ThumbnailBindingTag bind = thumbImg.GetComponent<ThumbnailBindingTag>();
-            string imgPath = ExtractImgPathFromThumbExpectedTag(bind != null ? bind.ExpectedTag : null);
-            return IsThumbnailPathMarkedBlank(imgPath);
-        }
-
-        private bool ShouldShowThumbPlaceholder(RawImage thumbImg)
-        {
-            if (thumbImg == null) return false;
-            if (thumbImg.texture == null) return true;
-            return IsThumbBindingMarkedBlank(thumbImg);
-        }
-
-        private void SyncThumbPlaceholderAfterThumbnail(Transform thumbTr, RawImage thumbImg, FileEntry file)
-        {
-            SyncThumbPlaceholderForFile(thumbTr, thumbImg, file);
+            return thumbImg != null && thumbImg.texture == null;
         }
 
         private static void ClearThumbnailTarget(RawImage target)

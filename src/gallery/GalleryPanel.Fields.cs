@@ -100,7 +100,6 @@ namespace VPB
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, ThumbPlaceholderLabelParts> thumbPlaceholderLabelCache = new Dictionary<string, ThumbPlaceholderLabelParts>(StringComparer.OrdinalIgnoreCase);
-        private Dictionary<string, bool> thumbPathMarkedBlankCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         private int _thumbPlaceholderFontSize = 14;
         private int _thumbPlaceholderFontLayoutSig = int.MinValue;
 
