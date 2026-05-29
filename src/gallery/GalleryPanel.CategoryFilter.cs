@@ -145,7 +145,7 @@ namespace VPB
 
             activeTags.Clear();
             activeUserTags.Clear();
-            _userTagAvailMode = UserTagAvailMode.Tag;
+            _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;
             currentSceneSourceFilter = "";

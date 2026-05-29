@@ -472,7 +472,10 @@ namespace VPB
                 + "|" + (int)(st != null ? st.Type : 0)
                 + "|" + (int)(st != null ? st.Direction : 0)
                 + "|" + scale.ToString("R")
-                + "|" + _userTagPinRevision;
+                + "|" + _userTagPinRevision
+                + "|" + (int)_userTagAvailMode
+                + "|" + (VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode ? 1 : 0)
+                + "|" + (userTagsCached ? 1 : 0);
         }
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
@@ -531,6 +534,7 @@ namespace VPB
             {
                 UserTagSideTabEntry ut = rowsUt[ui];
                 if (string.IsNullOrEmpty(ut.Name)) continue;
+                if (ShouldHideUnusedUserTagInFilterAvailList(ut)) continue;
                 if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 filteredUt.Add(ut);
             }
@@ -863,7 +867,7 @@ namespace VPB
             if (sr == null) return;
 
             string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
+                ? GetUserTagPickRowTooltipFilter()
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
             if (rowH <= 1f) rowH = 37f;

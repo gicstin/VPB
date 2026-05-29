@@ -69,6 +69,8 @@ namespace VPB
             rightActiveContent = targetR;
             UpdateLayout();
             UpdateTabs();
+            if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
+                try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
         }
 
         private static bool NullableContentTypeEqual(ContentType? a, ContentType? b)

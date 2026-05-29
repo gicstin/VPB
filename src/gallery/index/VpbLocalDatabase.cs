@@ -5679,7 +5679,8 @@ namespace VPB
             HashSet<string> activeTags = null,
             HashSet<string> activeUserTags = null,
             SortState sortState = null,
-            bool userTagsUntaggedOnly = false)
+            bool userTagsUntaggedOnly = false,
+            bool userTagsRequireAll = false)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -5826,13 +5827,13 @@ namespace VPB
                     if (userTagsUntaggedOnly)
                         AppendSqlNoUserTagExists(sbUt, "m", categoryTitle, false);
                     else
-                        AppendSqlActiveUserTagExists(sbUt, userTagBindNames, activeUserTags, "m");
+                        AppendSqlActiveUserTagFilter(sbUt, userTagBindNames, activeUserTags, "m", userTagsRequireAll);
                     string userTagSqlAnd = sbUt.ToString();
                     var sbUtEv = new StringBuilder();
                     if (userTagsUntaggedOnly)
                         AppendSqlNoUserTagExists(sbUtEv, "m", categoryTitle, true);
                     else
-                        AppendSqlActiveUserTagExists(sbUtEv, new List<string>(), activeUserTags, "m", Gallery.EverythingCategoryName);
+                        AppendSqlActiveUserTagFilter(sbUtEv, new List<string>(), activeUserTags, "m", userTagsRequireAll, Gallery.EverythingCategoryName);
                     string everythingUserTagSqlAnd = sbUtEv.ToString();
 
                     string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";

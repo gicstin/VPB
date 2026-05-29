@@ -476,6 +476,12 @@ namespace VPB
         public string GalleryDefaultLeftSidePanel = "None";
         /// <summary>Which list opens on the right when a gallery pane is created: None, Category, Creator, or Tags.</summary>
         public string GalleryDefaultRightSidePanel = "None";
+        /// <summary>Default User Tags side panel mode when opening tags: FilterByTags (default), Tag, or FilterUntagged.</summary>
+        public string GalleryDefaultUserTagAvailMode = "FilterByTags";
+        /// <summary>When true (default), User Tags available list in filter-by-tags mode hides tags with zero items in the current category view.</summary>
+        public bool GalleryHideUnusedUserTagsInFilterMode = true;
+        /// <summary>Multi-tag grid filter: Compound (any selected tag, default) or Isolate (all selected tags).</summary>
+        public string GalleryUserTagFilterCombineMode = "Compound";
         /// <summary>Big scroll button step in viewport heights.</summary>
         public float GalleryScrollButtonStepViewportFraction = 0.65f;
         /// <summary>When true, show big VR up/down scroll buttons on gallery and tag lists.</summary>
@@ -502,6 +508,85 @@ namespace VPB
                     return s_GallerySidePanelCanonical[i];
             }
             return "None";
+        }
+
+        private static readonly string[] s_GalleryDefaultUserTagAvailModeCanonical = { "FilterByTags", "Tag", "FilterUntagged" };
+
+        /// <summary>Maps user/config values to FilterByTags, Tag, or FilterUntagged.</summary>
+        public static string NormalizeGalleryDefaultUserTagAvailMode(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "FilterByTags";
+            string v = value.Trim();
+            for (int i = 0; i < s_GalleryDefaultUserTagAvailModeCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_GalleryDefaultUserTagAvailModeCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_GalleryDefaultUserTagAvailModeCanonical[i];
+            }
+            if (string.Equals(v, "Filter tags", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Filter", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Filter Mode", StringComparison.OrdinalIgnoreCase))
+                return "FilterByTags";
+            if (string.Equals(v, "Apply tags", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Apply", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Tag Mode", StringComparison.OrdinalIgnoreCase))
+                return "Tag";
+            if (string.Equals(v, "Untagged only", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Untagged", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "Not Tagged", StringComparison.OrdinalIgnoreCase))
+                return "FilterUntagged";
+            return "FilterByTags";
+        }
+
+        /// <summary>Settings cycle label for <see cref="GalleryDefaultUserTagAvailMode"/>.</summary>
+        public static string FormatGalleryDefaultUserTagAvailModeForSettings(string value)
+        {
+            string n = NormalizeGalleryDefaultUserTagAvailMode(value);
+            if (string.Equals(n, "Tag", StringComparison.OrdinalIgnoreCase))
+                return "Apply tags";
+            if (string.Equals(n, "FilterUntagged", StringComparison.OrdinalIgnoreCase))
+                return "Untagged only";
+            return "Filter tags";
+        }
+
+        /// <summary>Resolved default when opening User Tags side panel or clearing category tag filters.</summary>
+        public UserTagAvailMode ResolveDefaultUserTagAvailMode()
+        {
+            string n = NormalizeGalleryDefaultUserTagAvailMode(GalleryDefaultUserTagAvailMode);
+            if (string.Equals(n, "Tag", StringComparison.OrdinalIgnoreCase))
+                return UserTagAvailMode.Tag;
+            if (string.Equals(n, "FilterUntagged", StringComparison.OrdinalIgnoreCase))
+                return UserTagAvailMode.FilterUntagged;
+            return UserTagAvailMode.FilterByTags;
+        }
+
+        private static readonly string[] s_GalleryUserTagFilterCombineModeCanonical = { "Compound", "Isolate" };
+
+        /// <summary>Maps user/config values to Compound or Isolate.</summary>
+        public static string NormalizeGalleryUserTagFilterCombineMode(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Compound";
+            string v = value.Trim();
+            for (int i = 0; i < s_GalleryUserTagFilterCombineModeCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_GalleryUserTagFilterCombineModeCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_GalleryUserTagFilterCombineModeCanonical[i];
+            }
+            if (string.Equals(v, "Any", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "OR", StringComparison.OrdinalIgnoreCase))
+                return "Compound";
+            if (string.Equals(v, "All", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(v, "AND", StringComparison.OrdinalIgnoreCase))
+                return "Isolate";
+            return "Compound";
+        }
+
+        /// <summary>True when multi-tag filter requires every selected tag (Isolate); false for Compound (any tag).</summary>
+        public bool IsGalleryUserTagFilterIsolate()
+        {
+            return string.Equals(
+                NormalizeGalleryUserTagFilterCombineMode(GalleryUserTagFilterCombineMode),
+                "Isolate",
+                StringComparison.OrdinalIgnoreCase);
         }
         public bool DesktopFixedMode = false;
         public bool DesktopFixedAutoCollapse = true;
@@ -734,6 +819,9 @@ namespace VPB
             GallerySearchScope = "PathAndName";
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
+            GalleryDefaultUserTagAvailMode = "FilterByTags";
+            GalleryHideUnusedUserTagsInFilterMode = true;
+            GalleryUserTagFilterCombineMode = "Compound";
             GalleryHideCreatorSideButtons = false;
             GalleryConsolidateCreatorNames = true;
             GalleryGridLabelsEnabled = true;
@@ -894,6 +982,12 @@ namespace VPB
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
                             GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
+                        if (node["GalleryDefaultUserTagAvailMode"] != null)
+                            GalleryDefaultUserTagAvailMode = NormalizeGalleryDefaultUserTagAvailMode(node["GalleryDefaultUserTagAvailMode"].Value);
+                        if (node["GalleryHideUnusedUserTagsInFilterMode"] != null)
+                            GalleryHideUnusedUserTagsInFilterMode = node["GalleryHideUnusedUserTagsInFilterMode"].AsBool;
+                        if (node["GalleryUserTagFilterCombineMode"] != null)
+                            GalleryUserTagFilterCombineMode = NormalizeGalleryUserTagFilterCombineMode(node["GalleryUserTagFilterCombineMode"].Value);
                         if (node["GalleryScrollButtonStepViewportFraction"] != null)
                             GalleryScrollButtonStepViewportFraction = Mathf.Clamp(node["GalleryScrollButtonStepViewportFraction"].AsFloat, 0.10f, 2.00f);
                         if (node["GalleryScrollButtonsEnabled"] != null)
@@ -1205,6 +1299,9 @@ namespace VPB
                 node["global_source_filter"] = GlobalSourceFilter.ToString();
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
+                node["GalleryDefaultUserTagAvailMode"] = NormalizeGalleryDefaultUserTagAvailMode(GalleryDefaultUserTagAvailMode);
+                node["GalleryHideUnusedUserTagsInFilterMode"].AsBool = GalleryHideUnusedUserTagsInFilterMode;
+                node["GalleryUserTagFilterCombineMode"] = NormalizeGalleryUserTagFilterCombineMode(GalleryUserTagFilterCombineMode);
                 node["GalleryScrollButtonStepViewportFraction"].AsFloat = Mathf.Clamp(GalleryScrollButtonStepViewportFraction, 0.10f, 2.00f);
                 node["GalleryScrollButtonsEnabled"].AsBool = GalleryScrollButtonsEnabled;
                 node["GalleryVrThumbstickScrollEnabled"].AsBool = GalleryVrThumbstickScrollEnabled;

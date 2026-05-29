@@ -3258,6 +3258,7 @@ namespace VPB
         {
             if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
+            bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
             if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
@@ -3334,12 +3335,17 @@ namespace VPB
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();
+
+            bool userTagsNowOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
+            if (!userTagsWasOpen && userTagsNowOpen)
+                try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
         }
 
         private void ToggleLeft(ContentType type)
         {
             if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
+            bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
             if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
                 ExitInternalSettingsMode(true);
             if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
@@ -3416,6 +3422,10 @@ namespace VPB
 
             if (timeCategoryCreatorSwitch)
                 EndSideTabCategoryCreatorTiming();
+
+            bool userTagsNowOpenLeft = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
+            if (!userTagsWasOpen && userTagsNowOpenLeft)
+                try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
         }
 
         private void UpdateReplaceButtonState()

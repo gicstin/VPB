@@ -1669,7 +1669,7 @@ namespace VPB
                     }
                     else if (activeUserTags != null && activeUserTags.Count > 0)
                     {
-                        if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, pkgK, ipK, activeUserTags))
+                        if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(catUt, pkgK, ipK, activeUserTags, UserTagFilterRequiresAllTags()))
                             return false;
                     }
                 }
@@ -3185,6 +3185,7 @@ namespace VPB
 
                 bool userTagGridFilterByTagsSnap = _userTagAvailMode == UserTagAvailMode.FilterByTags;
                 bool userTagGridFilterUntaggedSnap = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
+                bool userTagFilterIsolateSnap = userTagGridFilterByTagsSnap && UserTagFilterRequiresAllTags();
                 HashSet<string> userTagNamesForGridSqlSnap = null;
                 if (userTagGridFilterByTagsSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
@@ -3256,7 +3257,8 @@ namespace VPB
                                 activeTags: activeTags,
                                 activeUserTags: userTagNamesForGridSqlSnap,
                                 sortState: fileListSortSnapForWorker,
-                                userTagsUntaggedOnly: userTagGridFilterUntaggedSnap);
+                                userTagsUntaggedOnly: userTagGridFilterUntaggedSnap,
+                                userTagsRequireAll: userTagFilterIsolateSnap);
                             }
                         }
                         else
@@ -3427,7 +3429,7 @@ namespace VPB
                                     if (userTagGridFilterUntaggedSnap)
                                         utOk = VpbLocalDatabase.TryBuildCatMemRowKeysWithNoUserTags(titleForIndexMain, utBuilt);
                                     else if (userTagGridFilterByTagsSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
-                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt);
+                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysMatchingUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt, userTagFilterIsolateSnap);
                                     if (utOk)
                                     {
                                         utCatMemKeyHits = utBuilt;

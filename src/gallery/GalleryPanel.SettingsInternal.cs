@@ -173,6 +173,9 @@ namespace VPB
             public string InitialGalleryCategory;
             public string GalleryDefaultLeftSidePanel;
             public string GalleryDefaultRightSidePanel;
+            public string GalleryDefaultUserTagAvailMode;
+            public bool GalleryHideUnusedUserTagsInFilterMode;
+            public string GalleryUserTagFilterCombineMode;
             public float GalleryScrollButtonStepViewportFraction;
             public bool GalleryScrollButtonsEnabled;
             public bool GalleryVrThumbstickScrollEnabled;
@@ -626,6 +629,44 @@ namespace VPB
                     // Avoid clobbering the active Settings side tab while user is interacting with Settings UI.
                     if (!IsSettingsPanelOpen()) ApplySidePanelDefaultsFromConfig();
                     VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "tags.defaultAction", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_default_user_tag_mode", "Tags panel default action"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_user_tag_mode", "Mode when opening the User Tags side panel: filter grid by tags, apply tags to selection, or show untagged items only."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Filter tags", "Apply tags", "Untagged only" },
+                GetString = () => VPBConfig.FormatGalleryDefaultUserTagAvailModeForSettings(VPBConfig.Instance.GalleryDefaultUserTagAvailMode),
+                SetString = v => {
+                    VPBConfig.Instance.GalleryDefaultUserTagAvailMode = VPBConfig.NormalizeGalleryDefaultUserTagAvailMode(v);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "tags.hideUnusedInFilterMode", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_hide_unused_user_tags_in_filter", "Hide unused tags in filter mode"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_hide_unused_user_tags_in_filter", "In filter-by-tags mode, hide tags that are not on any item in the current category view."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode = v;
+                    VPBConfig.Instance.TriggerChange();
+                    try { UpdateTabs(); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "tags.filterCombineMode", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_user_tag_filter_combine", "Multi-tag filter combine"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_user_tag_filter_combine", "With multiple tags selected in filter mode: Compound shows items with any selected tag; Isolate shows items that have all selected tags."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Compound", "Isolate" },
+                GetString = () => VPBConfig.NormalizeGalleryUserTagFilterCombineMode(VPBConfig.Instance.GalleryUserTagFilterCombineMode),
+                SetString = v => {
+                    VPBConfig.Instance.GalleryUserTagFilterCombineMode = VPBConfig.NormalizeGalleryUserTagFilterCombineMode(v);
+                    VPBConfig.Instance.TriggerChange();
+                    try { RefreshFiles(true, false, false, "user_tag_filter_combine"); } catch { }
+                    try { UpdateTabs(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -1306,6 +1347,9 @@ namespace VPB
                 InitialGalleryCategory = VPBConfig.Instance.InitialGalleryCategory,
                 GalleryDefaultLeftSidePanel = VPBConfig.Instance.GalleryDefaultLeftSidePanel,
                 GalleryDefaultRightSidePanel = VPBConfig.Instance.GalleryDefaultRightSidePanel,
+                GalleryDefaultUserTagAvailMode = VPBConfig.Instance.GalleryDefaultUserTagAvailMode,
+                GalleryHideUnusedUserTagsInFilterMode = VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode,
+                GalleryUserTagFilterCombineMode = VPBConfig.Instance.GalleryUserTagFilterCombineMode,
                 GalleryScrollButtonStepViewportFraction = VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
                 GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
                 GalleryVrThumbstickScrollEnabled = VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
@@ -2156,6 +2200,9 @@ namespace VPB
             VPBConfig.Instance.InitialGalleryCategory = b.InitialGalleryCategory;
             VPBConfig.Instance.GalleryDefaultLeftSidePanel = b.GalleryDefaultLeftSidePanel;
             VPBConfig.Instance.GalleryDefaultRightSidePanel = b.GalleryDefaultRightSidePanel;
+            VPBConfig.Instance.GalleryDefaultUserTagAvailMode = b.GalleryDefaultUserTagAvailMode;
+            VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode = b.GalleryHideUnusedUserTagsInFilterMode;
+            VPBConfig.Instance.GalleryUserTagFilterCombineMode = b.GalleryUserTagFilterCombineMode;
             VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = b.GalleryScrollButtonStepViewportFraction;
             VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
             VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = b.GalleryVrThumbstickScrollEnabled;

@@ -1047,7 +1047,7 @@ namespace VPB
 
             strip.SetActive(true);
             string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
+                ? GetUserTagPickRowTooltipFilter()
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
             float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
@@ -1685,7 +1685,7 @@ namespace VPB
                 if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
                 string k = (pkg ?? "") + "\n" + (ip ?? "");
                 if (!updatedKeys.Contains(k)) continue;
-                if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(cat, pkg, ip, activeUserTags))
+                if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(cat, pkg, ip, activeUserTags, UserTagFilterRequiresAllTags()))
                     removeRefs.Add(fe);
             }
 
@@ -2359,6 +2359,68 @@ namespace VPB
                     trt.offsetMax = new Vector2(-10f * s, trt.offsetMax.y);
                 }
             }
+        }
+
+        private UserTagAvailMode ResolveDefaultUserTagAvailMode()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.ResolveDefaultUserTagAvailMode();
+            }
+            catch { }
+            return UserTagAvailMode.FilterByTags;
+        }
+
+        /// <summary>True when multi-tag grid filter uses Isolate (all tags); false for Compound (any tag).</summary>
+        internal bool UserTagFilterRequiresAllTags()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.IsGalleryUserTagFilterIsolate();
+            }
+            catch { }
+            return false;
+        }
+
+        private string GetUserTagPickRowTooltipFilter()
+        {
+            return UserTagFilterRequiresAllTags()
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Click: filter main grid by this tag (multi-select, any can match). Drag to Applied below.");
+        }
+
+        /// <summary>True when available tag row should be omitted in filter-by-tags mode (unused in current category).</summary>
+        private bool ShouldHideUnusedUserTagInFilterAvailList(UserTagSideTabEntry ut)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return false;
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
+                    return false;
+            }
+            catch { return false; }
+            if (!userTagsCached) return false;
+            if (ut.Count == int.MinValue) return false;
+            return ut.Count <= 0;
+        }
+
+        /// <summary>When User Tags side panel opens, apply configured default mode (filter / apply / untagged).</summary>
+        internal void ApplyDefaultUserTagAvailModeOnTagsPanelOpen()
+        {
+            UserTagAvailMode mode = ResolveDefaultUserTagAvailMode();
+            if (_userTagAvailMode == mode)
+            {
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                return;
+            }
+            UserTagAvailMode prev = _userTagAvailMode;
+            _userTagAvailMode = mode;
+            if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                try { ClearUntaggedTaggedPinKeys(); } catch { }
+            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+            try { RefreshFiles(true, false, false, null); } catch { }
         }
 
         private void OnUserTagAvailFilterModeClicked()

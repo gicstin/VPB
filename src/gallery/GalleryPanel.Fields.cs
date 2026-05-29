@@ -586,7 +586,7 @@ namespace VPB
         /// <summary>Checked tags in Available pick list. Tag mode: staging for Apply. Filter-by-tags: SQL grid AND filter. Untagged: grid shows rows with no user tags.</summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Available pane mode: apply, filter by selected tags, or filter untagged items only.</summary>
-        private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.Tag;
+        private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.FilterByTags;
         /// <summary>Not Tagged mode: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
         private readonly HashSet<string> _untaggedTaggedPinKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>
