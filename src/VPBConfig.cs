@@ -974,8 +974,10 @@ namespace VPB
                         if (node["GalleryAnchorOffset"] != null)
                         {
                             var o = node["GalleryAnchorOffset"];
-                            GalleryAnchorToVamMenu = true;
-                            GalleryAnchorOffset = new Vector3(o["x"].AsFloat, 0.1f, -0.1f);
+                            GalleryAnchorOffset = new Vector3(
+                                o["x"].AsFloat,
+                                o["y"] != null ? o["y"].AsFloat : 0.1f,
+                                o["z"] != null ? o["z"].AsFloat : -0.1f);
                         }
                         if (node["AnchorYieldsToVamPanels"] != null) AnchorYieldsToVamPanels = node["AnchorYieldsToVamPanels"].AsBool;
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
@@ -1321,7 +1323,39 @@ namespace VPB
                 long msBuild = sw.ElapsedMilliseconds;
                 string jsonOutput = JsonSerializationUtil.Serialize(node, 32_768);
                 long msAfterToString = sw.ElapsedMilliseconds;
-                File.WriteAllText(path, jsonOutput);
+
+                // tmp + verify + backup-rotate + move so a crash mid-write can't truncate the live config.
+                string tmpPath = path + ".tmp";
+                File.WriteAllText(tmpPath, jsonOutput);
+
+                if (!File.Exists(tmpPath) || new FileInfo(tmpPath).Length < 2)
+                {
+                    VPBLogger.Config.LogError("[VPB] Failed to write temporary config file, aborting save.");
+                    return;
+                }
+
+                string backupPath = path + ".bak";
+                if (File.Exists(path))
+                {
+                    if (new FileInfo(path).Length > 2)
+                    {
+                        try
+                        {
+                            if (File.Exists(backupPath)) File.Delete(backupPath);
+                            File.Move(path, backupPath);
+                        }
+                        catch (Exception bakEx)
+                        {
+                            VPBLogger.Config.LogWarning("[VPB] Failed to rotate config backup: " + bakEx.Message);
+                            if (File.Exists(path)) File.Delete(path);
+                        }
+                    }
+                    else
+                    {
+                        File.Delete(path);
+                    }
+                }
+                File.Move(tmpPath, path);
                 long msAfterDisk = sw.ElapsedMilliseconds;
                 if (notifyListeners)
                 {
