@@ -560,51 +560,7 @@
   </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <!-- DLL + vpb_translations + vpb_fonts + vpb_icons: same PostBuildEvent so copies always run with the DLL (AfterTargets=PostBuildEvent is unreliable across MSBuild/VS). Robocopy: exit 0-7 = success. -->
-    <PostBuildEvent>copy /Y "$(TargetPath)" "$(VaMPath)\BepInEx\plugins\VPB.dll"
-copy /Y "$(TargetPath)" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\VPB.dll"
-if exist "$(VaMPath)\BepInEx\scripts\sqlite3.dll" del /F /Q "$(VaMPath)\BepInEx\scripts\sqlite3.dll"
-if exist "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" (
-if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
-copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(VaMPath)\BepInEx\plugins\sqlite3.dll"
-if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
-copy /Y "$(MSBuildProjectDirectory)\lib\sqlite-native\sqlite3.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\sqlite3.dll"
-)
-if exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
-if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
-copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
-if not exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins" mkdir "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins"
-copy /Y "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll"
-)
-if not exist "$(MSBuildProjectDirectory)\lib\turbojpeg\turbojpeg.dll" (
-if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" (
-if not exist "$(VaMPath)\BepInEx\plugins" mkdir "$(VaMPath)\BepInEx\plugins"
-if not exist "$(VaMPath)\BepInEx\plugins\turbojpeg.dll" copy /Y "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\turbojpeg.dll" "$(VaMPath)\BepInEx\plugins\turbojpeg.dll"
-)
-)
-if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations\" (
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(VaMPath)\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_translations" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-)
-if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts\" (
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(VaMPath)\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_fonts" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-)
-if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons\" (
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(VaMPath)\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_icons" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-)
-if exist "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes\" (
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(VaMPath)\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-robocopy "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" "$(MSBuildProjectDirectory)\vam_patch\BepInEx\plugins\vpb_themes" /E /NFL /NDL /NJH /NJS /NC /NS /NP
-if errorlevel 8 exit 1
-)</PostBuildEvent>
+    <!-- Deploy logic lives in scripts/PostBuildDeploy.ps1 so cmd-batch quoting and silent copy /Y failures stop eating locked-DLL replacements. Script never fails the build, emits MSBuild-formatted warnings (yellow in Errors panel) on copy/lock issues. -->
+    <PostBuildEvent>powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildProjectDirectory)\scripts\PostBuildDeploy.ps1" -TargetPath "$(TargetPath)" -VaMPath "$(VaMPath)" -ProjectDir "$(MSBuildProjectDirectory)"</PostBuildEvent>
   </PropertyGroup>
 </Project>
