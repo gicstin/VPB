@@ -1,0 +1,124 @@
+name: Discord commit notifications
+
+on:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: discord-commit-notify-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    if: github.event.head_commit != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post push summary to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "DISCORD_WEBHOOK_URL secret is not set. Skipping Discord notification."
+            exit 0
+          fi
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.request
+
+          event_path = os.environ.get("GITHUB_EVENT_PATH")
+          if not event_path:
+              print("GITHUB_EVENT_PATH missing.", file=sys.stderr)
+              sys.exit(1)
+
+          with open(event_path, encoding="utf-8") as handle:
+              event = json.load(handle)
+
+          head = event.get("head_commit") or {}
+          message = (head.get("message") or "").strip()
+          if re.search(r"\[skip discord\]", message, re.IGNORECASE):
+              print("Commit message contains [skip discord]. Skipping.")
+              sys.exit(0)
+
+          repo = os.environ.get("GITHUB_REPOSITORY", event.get("repository", {}).get("full_name", "unknown"))
+          branch = os.environ.get("GITHUB_REF_NAME") or event.get("ref", "").split("/")[-1]
+          actor = os.environ.get("GITHUB_ACTOR") or event.get("pusher", {}).get("name", "unknown")
+          author = (head.get("author") or {}).get("name") or (head.get("author") or {}).get("username") or actor
+          commit_url = head.get("url") or ""
+          compare_url = event.get("compare") or ""
+          sha = head.get("id") or os.environ.get("GITHUB_SHA", "")
+          short_sha = sha[:7] if sha else "unknown"
+          commits = event.get("commits") or []
+          commit_count = len(commits) if commits else 1
+
+          lines = message.splitlines()
+          title_line = lines[0] if lines else "(no message)"
+          if len(title_line) > 240:
+              title_line = title_line[:237] + "..."
+
+          extra_lines = lines[1:]
+          description = "\n".join(extra_lines).strip()
+          if len(description) > 1800:
+              description = description[:1797] + "..."
+
+          if commit_count > 1:
+              title = f"{commit_count} commits pushed to `{branch}`"
+              embed_title = title_line
+          else:
+              title = f"New commit on `{branch}`"
+              embed_title = title_line
+
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          fields = [
+              {"name": "Repository", "value": f"[{repo}]({server}/{repo})", "inline": True},
+              {"name": "Author", "value": author, "inline": True},
+              {"name": "Commit", "value": f"[`{short_sha}`]({commit_url})", "inline": True},
+          ]
+
+          if actor and actor != author:
+              fields.append({"name": "Pusher", "value": actor, "inline": True})
+
+          embed = {
+              "title": embed_title,
+              "url": commit_url or compare_url,
+              "color": 5793266,
+              "fields": fields,
+              "footer": {"text": "GitHub push notification"},
+          }
+
+          if description:
+              embed["description"] = description
+
+          payload = {
+              "username": "GitHub",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "content": title,
+              "embeds": [embed],
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          request = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=data,
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "github-discord-notify/1.0",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  print(f"Discord webhook responded with HTTP {response.status}")
+          except urllib.error.HTTPError as error:
+              body = error.read().decode("utf-8", errors="replace")
+              print(f"Discord webhook failed: HTTP {error.code} {body}", file=sys.stderr)
+              sys.exit(1)
+          PY
