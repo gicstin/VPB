@@ -8,10 +8,11 @@ namespace VPB
 {
     // Read-only periodic snapshot for diagnosing progressive FPS degradation.
     // Off by default; toggled via BepInEx config Logging.LogPerfTelemetry.
-    // Emits one tagged "VPB_PERF_TELEMETRY ..." line every IntervalSeconds; safe to grep.
+    // Emits one tagged "VPB_PERF_TELEMETRY ..." line every Logging.LogPerfTelemetryIntervalSeconds (1-30); safe to grep.
     static class VpbPerfTelemetry
     {
-        const float IntervalSeconds = 30f;
+        const int MinIntervalSeconds = 1;
+        const int MaxIntervalSeconds = 30;
 
         static float _nextEmitRealtime;
         static Snapshot _prev;
@@ -54,7 +55,7 @@ namespace VPB
 
                 float now = Time.realtimeSinceStartup;
                 if (now < _nextEmitRealtime) return;
-                _nextEmitRealtime = now + IntervalSeconds;
+                _nextEmitRealtime = now + IntervalSeconds();
 
                 Snapshot s = Capture();
                 Emit(s, _prev);
@@ -76,6 +77,20 @@ namespace VPB
                 return inst.LogPerfTelemetry.Value;
             }
             catch { return false; }
+        }
+
+        static float IntervalSeconds()
+        {
+            try
+            {
+                var inst = Settings.Instance;
+                if (inst == null || inst.LogPerfTelemetryIntervalSeconds == null) return MaxIntervalSeconds;
+                int v = inst.LogPerfTelemetryIntervalSeconds.Value;
+                if (v < MinIntervalSeconds) v = MinIntervalSeconds;
+                if (v > MaxIntervalSeconds) v = MaxIntervalSeconds;
+                return v;
+            }
+            catch { return MaxIntervalSeconds; }
         }
 
         static Snapshot Capture()

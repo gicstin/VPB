@@ -81,6 +81,7 @@ namespace VPB
         public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
         public ConfigEntry<bool> LogPerfTelemetry;
+        public ConfigEntry<int> LogPerfTelemetryIntervalSeconds;
         public ConfigEntry<bool> LogPerfDiagnostics;
         public ConfigEntry<bool> LogSavePerf;
 
@@ -189,7 +190,8 @@ namespace VPB
             StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
             StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
-            LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line (30s interval) with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
+            LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
+            LogPerfTelemetryIntervalSeconds = config.Bind<int>("Logging", "LogPerfTelemetryIntervalSeconds", 30, "Seconds between VPB_PERF_TELEMETRY snapshots (clamped 1-30). Only used when LogPerfTelemetry is enabled.");
             LogPerfDiagnostics = config.Bind<bool>("Logging", "LogPerfDiagnostics", false, "Emit a 1Hz VPB.Diag line with per-frame call counters (quick-menu refresh, icon GO churn, gallery Update gating, pointer sibling reorders) plus one-shot transition logs for show/hide/menu-gate. Enable temporarily to pinpoint frame-cost hotspots; disable for normal use.");
             LogSavePerf = config.Bind<bool>("Logging", "LogSavePerf", false, "Log scene-save timing split: bridge prep vs native SaveScene invocation. Enable when diagnosing save-time regressions vs native VaM baseline.");
 
