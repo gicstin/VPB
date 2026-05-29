@@ -158,9 +158,19 @@ namespace VPB
             return rewritten;
         }
 
+        // Cached once; Path.GetInvalidPathChars allocates a fresh array per call on Mono.
+        private static readonly char[] s_InvalidPathChars = Path.GetInvalidPathChars();
+
         private static string TryRewriteMissingEntryPathWithinSamePackage(string entryPath)
         {
             if (string.IsNullOrEmpty(entryPath)) return null;
+
+            // Trigger action URLs in some VaM scenes contain trailing CR/LF (saved from
+            // dirty clipboard data). Path.GetDirectoryName throws ArgumentException on those,
+            // which would unwind out of MacGruber's per-state loop and drop every state after
+            // the bad one. Bail to "no rewrite" so VaM's caller falls back to the original path.
+            if (entryPath.IndexOfAny(s_InvalidPathChars) >= 0) return null;
+
             string p = entryPath.Replace('\\', '/');
 
             int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);

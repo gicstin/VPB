@@ -590,18 +590,26 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "NormalizeLoadPath", new Type[] { typeof(string) })]
         public static void PreNormalizeLoadPath(ref string path)
         {
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            // Defense in depth: NormalizeLoadPath is on the trigger-action restore path. Any
+            // exception escaping this prefix unwinds out of MacGruber's per-state loop in
+            // LateRestoreFromJSON and silently drops every state after the throw point.
+            try
             {
-                path = rewritten;
-            }
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
 
-            // If VaM is about to resolve a var entry path, ensure it targets a concrete newest UID
-            // so plugin compiles/includes don't keep using an older missing versioned prefix.
-            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
-            if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    path = best;
+                }
+            }
+            catch (Exception ex)
             {
-                path = best;
+                LogUtil.LogWarning("[VPB] PreNormalizeLoadPath swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -613,16 +621,25 @@ namespace VPB
                 return false;
             }
 
-            string rewritten = RewriteVdsPathIfNeeded(__0);
-            if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
+            // Same defensive wrap as PreNormalizeLoadPath: FileExists is on the trigger restore
+            // path too, and an unguarded throw breaks MacGruber-style per-state JSON loops.
+            try
             {
-                __0 = rewritten;
-            }
+                string rewritten = RewriteVdsPathIfNeeded(__0);
+                if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
+                {
+                    __0 = rewritten;
+                }
 
-            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
-            if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
+                if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+                {
+                    __0 = best;
+                }
+            }
+            catch (Exception ex)
             {
-                __0 = best;
+                LogUtil.LogWarning("[VPB] PreFileExists swallowed exception for path='" + __0 + "': " + ex.GetType().Name + ": " + ex.Message);
             }
             return true;
         }

@@ -468,6 +468,7 @@ namespace VPB
             DAZClothingHook.PatchAll(m_Harmony);
             DAZHairSwapHook.PatchAll(m_Harmony);
             ThirdPartyFixHook.PatchAll(m_Harmony);
+            StateMachineDiagnostic.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
 

@@ -84,6 +84,7 @@ namespace VPB
         public ConfigEntry<int> LogPerfTelemetryIntervalSeconds;
         public ConfigEntry<bool> LogPerfDiagnostics;
         public ConfigEntry<bool> LogSavePerf;
+        public ConfigEntry<bool> LogStateMachineApply;
 
         public ConfigEntry<string> HubHostedOption;
         public ConfigEntry<string> HubPayTypeFilter;
@@ -194,6 +195,7 @@ namespace VPB
             LogPerfTelemetryIntervalSeconds = config.Bind<int>("Logging", "LogPerfTelemetryIntervalSeconds", 30, "Seconds between VPB_PERF_TELEMETRY snapshots (clamped 1-30). Only used when LogPerfTelemetry is enabled.");
             LogPerfDiagnostics = config.Bind<bool>("Logging", "LogPerfDiagnostics", false, "Emit a 1Hz VPB.Diag line with per-frame call counters (quick-menu refresh, icon GO churn, gallery Update gating, pointer sibling reorders) plus one-shot transition logs for show/hide/menu-gate. Enable temporarily to pinpoint frame-cost hotspots; disable for normal use.");
             LogSavePerf = config.Bind<bool>("Logging", "LogSavePerf", false, "Log scene-save timing split: bridge prep vs native SaveScene invocation. Enable when diagnosing save-time regressions vs native VaM baseline.");
+            LogStateMachineApply = config.Bind<bool>("Logging", "LogStateMachineApply", false, "Trace MacGruber StateMachine storable restore: Atom.Restore entry, Atom.RestoreFromLast match outcome, MVRPluginManager.CreateScriptController insideRestore field, JSONStorable.RestoreFromJSON payload size. Off by default. Enable only when investigating per-instance storable apply failures (ref. issue #52).");
 
             HubHostedOption = config.Bind<string>("HubBrowser", "HostedOption", "Hub And Dependencies", "Hub Browser: Hosted option filter.");
             HubPayTypeFilter = config.Bind<string>("HubBrowser", "PayTypeFilter", "All", "Hub Browser: Pay type filter.");
