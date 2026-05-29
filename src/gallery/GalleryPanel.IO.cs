@@ -1302,12 +1302,11 @@ namespace VPB
 
             bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
 
-            // Issue #101: when no clothing subfilter is active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs. Toggling "Presets" or "Custom"
-            // on the side panel re-enables preset visibility.
+            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
+            // Custom-loose presets (user files under Custom/ or Saves/) have no such duplicate, so keep them visible.
             if (clothingSubfilter == 0)
             {
-                if (isPreset) return false;
+                if (isPreset && !isCustomLoose) return false;
             }
             else
             {
@@ -1364,11 +1363,11 @@ namespace VPB
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Issue #101 parity: when no hair subfilter active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs.
+            // Default view shows base items only: hide VAR-bundled .vap presets that duplicate a base .vam.
+            // Custom-loose presets (user files under Custom/ or Saves/) have no such duplicate, so keep them visible.
             if (hairSubfilter == 0)
             {
-                if (isPreset) return false;
+                if (isPreset && !isCustomLoose) return false;
             }
             else
             {
@@ -1454,11 +1453,12 @@ namespace VPB
                     return false;
             }
 
-            // Hair subfilter (Issue #101 parity with Clothing)
+            // Hair subfilter gate. Shares skipClothingGalleryFilters with clothing: when set, both
+            // subfilter gates are bypassed because the subfilter was applied upstream (SQL for VAR rows).
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (isHair)
+            if (isHair && !skipClothingGalleryFilters)
             {
                 string p = entry.Path;
                 bool isVarPackageEntry = (entry is VarFileEntry) || ((entry as SystemFileEntry) != null && ((SystemFileEntry)entry).isVar);
@@ -3786,9 +3786,12 @@ namespace VPB
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: category + extensions + search paths.
+                        // Cache key: format tag + category + extensions + search paths. The "sf2" tag marks the
+                        // filter-agnostic listing format (rows stored before the clothing/hair subfilter, which is
+                        // not part of the key); the signature is folder mtime, so changing what is written here
+                        // without bumping the tag leaves stale caches that never rebuild until a file changes.
                         var sbKey = new System.Text.StringBuilder(256);
-                        sbKey.Append(currentCategoryTitle ?? "").Append("|ext=");
+                        sbKey.Append("sf2|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
                         {
                             var ex = new List<string>(extensions);
@@ -3911,8 +3914,12 @@ namespace VPB
 
                                 var sysEntry = new SystemFileEntry(sysPath);
 
-                                bool baseOk = PassesFilters(sysEntry, true);
-                                if (!baseOk) continue;
+                                // Cache membership ignores the clothing/hair subfilter (not part of the cache key):
+                                // store rows that pass with it skipped, and re-apply the active subfilter on read.
+                                // Grid add below uses the full gate. Without this split, a scan under one subfilter
+                                // state bakes that filtering into the cache and other states read pre-filtered rows.
+                                if (!PassesFilters(sysEntry, true, true)) continue;
+                                bool gridOk = PassesFilters(sysEntry, true);
 
                                 int pcPose = 1;
                                 bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
@@ -3951,10 +3958,13 @@ namespace VPB
                                     if (RatingsManager.Instance.GetRating(sysEntry) <= 0) continue;
                                 }
 
-                                files.Add(sysEntry);
-                                if (sysLooseFilesAddedCount != null)
-                                    sysLooseFilesAddedCount[0]++;
-                                if (swDeep != null) deepSysFilesAdded++;
+                                if (gridOk)
+                                {
+                                    files.Add(sysEntry);
+                                    if (sysLooseFilesAddedCount != null)
+                                        sysLooseFilesAddedCount[0]++;
+                                    if (swDeep != null) deepSysFilesAdded++;
+                                }
 
                                 try
                                 {
