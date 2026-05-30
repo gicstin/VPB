@@ -475,7 +475,8 @@ namespace VPB
                 + "|" + _userTagPinRevision
                 + "|" + (int)_userTagAvailMode
                 + "|" + (VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode ? 1 : 0)
-                + "|" + (userTagsCached ? 1 : 0);
+                + "|" + (userTagsCached ? 1 : 0)
+                + "|sel:" + BuildUserTagSelectionVirtSignature();
         }
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
@@ -538,6 +539,7 @@ namespace VPB
                 if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 filteredUt.Add(ut);
             }
+            EnsureSelectionUserTagsInAvailList(filteredUt);
             var pinnedUt = new List<UserTagSideTabEntry>(8);
             var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
             PartitionUserTagRowsPinnedFirst(filteredUt, pinnedUt, normalUt);
@@ -739,11 +741,17 @@ namespace VPB
                 && !string.IsNullOrEmpty(_userTagPulseTag)
                 && string.Equals(_userTagPulseTag, tagSnap, StringComparison.OrdinalIgnoreCase)
                 && Time.unscaledTime < _userTagPulseUntil;
+            bool hasGridSelection = selectedFiles != null && selectedFiles.Count > 0;
+            bool isOnSelection = !isCreateRow
+                && (state == UserTagSelectionState.On || state == UserTagSelectionState.Mixed);
+            bool preferSelectionColor = _userTagAvailMode == UserTagAvailMode.FilterByTags
+                && hasGridSelection && isOnSelection && !isFilterActive;
             Color btnColor = isCreateRow ? new Color(0.25f, 0.45f, 0.28f, 1f)
                 : (isFilterActive ? UserTagFilterActiveColor
+                : (preferSelectionColor ? UserTagStateOnColor
                 : (isPulsing ? UserTagStatePulseColor
                 : (state == UserTagSelectionState.On ? UserTagStateOnColor
-                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : ColorInactiveRow))));
+                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : ColorInactiveRow)))));
             string labelUt = isCreateRow
                 ? (VPBTranslation.T(CreateLabelKey, "Create Tag") + ": " + tagSnap)
                 : (tagSnap + " (" + ut.Count + ")");
@@ -818,7 +826,7 @@ namespace VPB
                 txt.text = shownUt;
             }
             SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
-            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s, isLeft);
+            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s, isLeft, appliedRow: false, availSelectionState: state);
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();

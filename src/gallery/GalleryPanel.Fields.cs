@@ -73,6 +73,8 @@ namespace VPB
         private Coroutine _earlyMetaApplyCoroutine;
         /// <summary>Sliced tag/facet scan started from <see cref="GalleryPanel.UpdateTabs"/> (e.g. clothing subfilter) so we never block the main thread like <c>CacheTagCounts()</c>.</summary>
         private Coroutine _sideTabsTagCountSliceCo;
+        /// <summary>Time-sliced loose .vap gender facet merge for Appearance sub-pane (avoids multi-second category switch stalls).</summary>
+        private Coroutine _appearanceLooseMergeCo;
         /// <summary>Background History filter-tab counts (SQLite); avoids multi-second stalls on History toggle.</summary>
         private Coroutine _historyModeCountsCo;
 

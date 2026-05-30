@@ -197,6 +197,7 @@ namespace VPB
             if (container == null) return;
             EnsureUserTagAvailScrollTrackingHooks();
             SnapshotUserTagAvailScrollForPreserve(isLeft);
+            CacheAppliedUserTagsForSelection();
 
             if (!userTagsCached)
             {

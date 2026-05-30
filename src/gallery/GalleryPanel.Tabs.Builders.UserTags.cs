@@ -145,7 +145,7 @@ namespace VPB
                     () => { OnAppliedUserTagRowClicked(viCapture, visibleApplied, tagFocusSnap); },
                     trackedButtons, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInsetApp, 0f);
                 if (trackedButtons != null && trackedButtons.Count > trackedBefore)
-                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp, isLeft);
+                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp, isLeft, appliedRow: true);
             }
 
             SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);

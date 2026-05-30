@@ -1778,6 +1778,11 @@ namespace VPB
                 try { StopCoroutine(_sideTabsTagCountSliceCo); } catch { }
                 _sideTabsTagCountSliceCo = null;
             }
+            if (_appearanceLooseMergeCo != null)
+            {
+                try { StopCoroutine(_appearanceLooseMergeCo); } catch { }
+                _appearanceLooseMergeCo = null;
+            }
             if (_historyModeCountsCo != null)
             {
                 try { StopCoroutine(_historyModeCountsCo); } catch { }
@@ -2139,10 +2144,7 @@ namespace VPB
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 if (!TryRecomputeAppearanceGenderFacetCountsScoped())
-                {
-                    if (TryApplyAppearanceFacetCountsFromSql())
-                        TryMergeLooseVapAppearanceGenderFacetCounts();
-                }
+                    TryApplyAppearanceFacetCountsFromSql();
                 tagsCached = true;
             }
             else
@@ -4399,10 +4401,18 @@ namespace VPB
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
-                if (!primed && TryApplyAppearanceFacetCountsFromSql())
+                if (!primed)
+                    primed = TryApplyAppearanceFacetCountsFromSql();
+                if (primed && ShouldCountLooseAppearanceGenderFiles() && !IsAppearanceLooseScopedBrowsing())
                 {
-                    TryMergeLooseVapAppearanceGenderFacetCounts();
-                    primed = true;
+                    IEnumerator looseMerge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, deferredSubPaneSessionWhenScheduled);
+                    while (looseMerge.MoveNext())
+                    {
+                        if (deferredSubPaneSessionWhenScheduled != _deferredSubPaneSessionId)
+                            yield break;
+                        yield return looseMerge.Current;
+                    }
+                    ranSlicedTagScan = true;
                 }
                 if (primed)
                 {

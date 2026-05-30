@@ -97,7 +97,8 @@ namespace VPB
 
             if (TryApplyAppearanceFacetCountsFromSql())
             {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
+                // Loose .vap merge is deferred to CoMergeLooseVapAppearanceGenderFacetCounts so category
+                // navigation stays interactive (sync ClassifyLooseVapPath over tens of thousands of files froze VAM).
                 tagsCached = true;
                 return true;
             }
@@ -115,14 +116,12 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
-            {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
-            }
             else
                 InvalidateTags();
 
             RefreshFilesAndTabs();
+            ScheduleAppearanceLooseMergeRefresh();
         }
 
         /// <summary>
@@ -169,10 +168,9 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
-            {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
-            }
+
+            ScheduleAppearanceLooseMergeRefresh();
 
             string tckPut;
             if (TryBuildTagCountCacheKey(out tckPut))

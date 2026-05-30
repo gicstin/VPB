@@ -153,7 +153,7 @@ namespace VPB
         private void updatePanelForSelection()
         {
             CacheAppliedUserTagsForSelection();
-            try { RefreshVisibleUserTagRows(); } catch { }
+            try { EnsureUserTagAvailViewReflectsSelection(); } catch { }
             try
             {
                 if (leftActiveContent == ContentType.UserTags && leftSubTabContainerGO != null
@@ -168,6 +168,122 @@ namespace VPB
                     UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
             catch { }
+        }
+
+        private string BuildUserTagSelectionVirtSignature()
+        {
+            if (_userTagSelectionRowCount <= 0 || _userTagSelectionStates.Count == 0) return "";
+            var names = new List<string>(_userTagSelectionStates.Count);
+            foreach (var kv in _userTagSelectionStates)
+            {
+                if (!string.IsNullOrEmpty(kv.Key)) names.Add(kv.Key);
+            }
+            names.Sort((a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase));
+            var sb = new StringBuilder(Math.Max(32, names.Count * 8));
+            sb.Append(_userTagSelectionRowCount);
+            for (int i = 0; i < names.Count; i++)
+            {
+                sb.Append('\u001f');
+                sb.Append(names[i]);
+                sb.Append(':');
+                UserTagSelectionState st;
+                sb.Append(_userTagSelectionStates.TryGetValue(names[i], out st) ? (int)st : 0);
+            }
+            return sb.ToString();
+        }
+
+        private void EnsureSelectionUserTagsInAvailList(List<UserTagSideTabEntry> rows)
+        {
+            if (rows == null) return;
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags || _userTagSelectionRowCount <= 0) return;
+
+            foreach (var kv in _userTagSelectionStates)
+            {
+                string name = kv.Key;
+                if (string.IsNullOrEmpty(name)) continue;
+                bool found = false;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (string.Equals(rows[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) continue;
+
+                int selCount = 0;
+                for (int i = 0; i < cachedAppliedUserTagsSelection.Count; i++)
+                {
+                    if (string.Equals(cachedAppliedUserTagsSelection[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selCount = cachedAppliedUserTagsSelection[i].Count;
+                        break;
+                    }
+                }
+                rows.Add(new UserTagSideTabEntry { Name = name, Count = selCount });
+            }
+        }
+
+        private void EnsureUserTagAvailViewReflectsSelection()
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return;
+            bool leftOpen = leftActiveContent == ContentType.UserTags && leftTabContainerGO != null;
+            bool rightOpen = rightActiveContent == ContentType.UserTags && rightTabContainerGO != null;
+            if (!leftOpen && !rightOpen) return;
+
+            string sigNew = ComputeUserTagVirtDataSignature();
+            if (!string.Equals(_userTagVirtViewSig, sigNew, StringComparison.Ordinal))
+            {
+                _userTagVirtViewSig = sigNew;
+                if (leftOpen)
+                {
+                    SnapshotUserTagAvailScrollForPreserve(true);
+                    RebuildUserTagVirtViewList(true, resetScrollToTop: false);
+                    RestorePreservedUserTagAvailScroll();
+                }
+                if (rightOpen)
+                {
+                    SnapshotUserTagAvailScrollForPreserve(false);
+                    RebuildUserTagVirtViewList(false, resetScrollToTop: false);
+                    RestorePreservedUserTagAvailScroll();
+                }
+            }
+            RefreshVisibleUserTagRows(skipSelectionCache: true);
+        }
+
+        private static bool TagsIntersectActiveUserTagFilter(IEnumerable<string> tags, HashSet<string> activeFilterTags)
+        {
+            if (tags == null || activeFilterTags == null || activeFilterTags.Count == 0) return false;
+            foreach (string raw in tags)
+            {
+                string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(raw);
+                if (!string.IsNullOrEmpty(norm) && activeFilterTags.Contains(norm)) return true;
+            }
+            return false;
+        }
+
+        private void SyncGridAfterUserTagRemoveInFilterMode(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows, List<string> tags)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return;
+            if (activeUserTags == null || activeUserTags.Count == 0) return;
+            if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable) return;
+
+            if (TryPruneVisibleGridAfterUserTagRemove(updatedRows))
+            {
+                if (recyclingGrid != null)
+                {
+                    recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    recyclingGrid.Refresh();
+                }
+                try { UpdatePaginationText(); } catch { }
+                return;
+            }
+
+            if (tags != null && TagsIntersectActiveUserTagFilter(tags, activeUserTags))
+            {
+                try { RefreshFiles(true, false, false, "user_tag_remove_filter_resync"); } catch { }
+            }
         }
 
         private void OnLeftSubSortButtonClicked()
@@ -879,8 +995,10 @@ namespace VPB
             _userTagVisualPulseCoroutine = null;
         }
 
-        private void RefreshVisibleUserTagRows()
+        private void RefreshVisibleUserTagRows(bool skipSelectionCache = false)
         {
+            if (!skipSelectionCache)
+                CacheAppliedUserTagsForSelection();
             try
             {
                 if (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null)
@@ -1099,7 +1217,7 @@ namespace VPB
                     null, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInset, 0f);
                 Transform last = strip.transform.GetChild(strip.transform.childCount - 1);
                 if (last != null)
-                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale, isLeft);
+                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale, isLeft, appliedRow: true);
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
@@ -1160,6 +1278,8 @@ namespace VPB
 
         private const char UserTagPinnedOrderLegacySep = '\x1e';
         private const string UserTagPinBtnName = "VPB_UserTagPinBtn";
+        private const string UserTagAppliedRemoveBtnName = "VPB_UserTagAppliedRemoveBtn";
+        private Sprite _userTagAppliedRemoveSprite;
 
         private static void ParseUserTagPinnedOrderSpec(string spec, List<string> dest)
         {
@@ -1356,9 +1476,115 @@ namespace VPB
                 _userTagPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
         }
 
-        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale, bool isLeft)
+        private void EnsureUserTagAppliedRemoveSprite()
+        {
+            if (_userTagAppliedRemoveSprite == null)
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/list_remove.png", Color.white);
+            if (_userTagAppliedRemoveSprite == null)
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
+        }
+
+        private bool ShouldShowUserTagRemoveForRow(bool appliedRow, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return false;
+            if (selectedFiles == null || selectedFiles.Count == 0) return false;
+            if (appliedRow) return true;
+            return availSelectionState == UserTagSelectionState.On
+                || availSelectionState == UserTagSelectionState.Mixed;
+        }
+
+        private void SyncUserTagRowRemoveButton(GameObject rowGo, string tagName, float scale)
         {
             if (rowGo == null) return;
+            Transform existing = rowGo.transform.Find(UserTagAppliedRemoveBtnName);
+            GameObject removeGo = existing != null ? existing.gameObject : null;
+            if (removeGo == null)
+            {
+                removeGo = new GameObject(UserTagAppliedRemoveBtnName);
+                removeGo.transform.SetParent(rowGo.transform, false);
+                Image bg = removeGo.AddComponent<Image>();
+                bg.color = new Color(0.62f, 0.14f, 0.14f, 1f);
+                bg.raycastTarget = true;
+                Button btn = removeGo.AddComponent<Button>();
+                ColorBlock cb = btn.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
+                cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+                btn.colors = cb;
+                btn.transition = Selectable.Transition.None;
+                btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                removeGo.AddComponent<UIHoverBorder>();
+            }
+
+            string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(norm))
+            {
+                removeGo.SetActive(false);
+                return;
+            }
+
+            EnsureUserTagAppliedRemoveSprite();
+
+            Image bgImg = removeGo.GetComponent<Image>();
+            if (bgImg != null) bgImg.color = new Color(0.62f, 0.14f, 0.14f, 1f);
+
+            Button removeBtn = removeGo.GetComponent<Button>();
+            if (removeBtn != null)
+            {
+                removeBtn.onClick.RemoveAllListeners();
+                string snap = norm;
+                removeBtn.onClick.AddListener(() => RemoveSingleAppliedUserTagFromSelection(snap));
+            }
+
+            Image iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
+            if (iconImg == null && _userTagAppliedRemoveSprite != null)
+            {
+                UI.AddIconToButton(removeGo, _userTagAppliedRemoveSprite, 6f, Color.white);
+                iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
+            }
+            if (iconImg != null)
+            {
+                if (_userTagAppliedRemoveSprite != null) iconImg.sprite = _userTagAppliedRemoveSprite;
+                iconImg.color = Color.white;
+                iconImg.raycastTarget = false;
+            }
+
+            float edge = Mathf.Clamp(26f * scale, 20f, 36f);
+            RectTransform rt = removeGo.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 0.5f);
+                rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(edge, edge);
+                rt.anchoredPosition = new Vector2(6f * scale, 0f);
+            }
+            removeGo.SetActive(true);
+            removeGo.transform.SetAsLastSibling();
+
+            AddTooltipPlain(removeGo, VPBTranslation.T("gallery.usertags.remove_applied_row_tip", "Remove this tag from selected item(s)."));
+        }
+
+        private void HideUserTagRowRemoveButton(GameObject rowGo)
+        {
+            if (rowGo == null) return;
+            Transform existing = rowGo.transform.Find(UserTagAppliedRemoveBtnName);
+            if (existing != null) existing.gameObject.SetActive(false);
+        }
+
+        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale, bool isLeft, bool appliedRow = false, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
+        {
+            if (rowGo == null) return;
+
+            if (ShouldShowUserTagRemoveForRow(appliedRow, availSelectionState))
+            {
+                Transform pinHide = rowGo.transform.Find(UserTagPinBtnName);
+                if (pinHide != null) pinHide.gameObject.SetActive(false);
+                SyncUserTagRowRemoveButton(rowGo, tagName, scale);
+                return;
+            }
+
+            HideUserTagRowRemoveButton(rowGo);
             Transform existing = rowGo.transform.Find(UserTagPinBtnName);
             GameObject pinGo = existing != null ? existing.gameObject : null;
             if (hide)
@@ -1629,6 +1855,19 @@ namespace VPB
             userTagAppliedRemoveAnchor = null;
         }
 
+        private void RemoveSingleAppliedUserTagFromSelection(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return;
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.none_selected", "Nothing selected."), 1.5f);
+                return;
+            }
+            userTagAppliedRemoveSelection.Clear();
+            userTagAppliedRemoveAnchor = null;
+            ApplyTagsToSelectedPackages(new List<string> { tagName }, remove: true);
+        }
+
         private void ApplyActiveFilterUserTagsToSelection()
         {
             if (activeUserTags == null || activeUserTags.Count == 0)
@@ -1810,25 +2049,12 @@ namespace VPB
             CacheAppliedUserTagsForSelection();
             try { SyncUntaggedTaggedPinKeysAfterMutate(remove, updatedRows); } catch { }
 
-            bool filterModeRemove = remove
-                && _userTagAvailMode == UserTagAvailMode.FilterByTags
-                && activeUserTags != null && activeUserTags.Count > 0
-                && activeContentType == ContentType.Category
-                && VpbSqlite3.IsAvailable;
+            bool filterModeRemove = remove && _userTagAvailMode == UserTagAvailMode.FilterByTags;
 
             if (filterModeRemove)
             {
-                if (TryPruneVisibleGridAfterUserTagRemove(updatedRows))
-                {
-                    if (recyclingGrid != null)
-                    {
-                        recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                        recyclingGrid.Refresh();
-                    }
-                    try { UpdatePaginationText(); } catch { }
-                }
+                SyncGridAfterUserTagRemoveInFilterMode(updatedRows, tags);
                 try { RefreshSelectionVisuals(); } catch { }
-                try { UpdateTabs(); } catch { }
             }
             else
             {
@@ -2403,6 +2629,11 @@ namespace VPB
             catch { return false; }
             if (!userTagsCached) return false;
             if (ut.Count == int.MinValue) return false;
+            if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
+            {
+                UserTagSelectionState st = GetUserTagSelectionState(ut.Name);
+                if (st != UserTagSelectionState.Off) return false;
+            }
             return ut.Count <= 0;
         }
 
