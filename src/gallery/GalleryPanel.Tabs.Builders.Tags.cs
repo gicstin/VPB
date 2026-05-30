@@ -22,7 +22,7 @@ namespace VPB
                     Color inactive = ColorInactiveRow;
                     Color active = ColorFacetActiveRow;
 
-                    string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Base Clothing", "Male", "Female", "Decals" };
+                    string[] options = new string[] { "Real Clothing", "Presets", "Custom", "Custom Preset", "Base Clothing", "Male", "Female", "Decals" };
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
@@ -30,6 +30,7 @@ namespace VPB
                         if (opt == "Real Clothing") flag = ClothingSubfilter.RealClothing;
                         else if (opt == "Presets") flag = ClothingSubfilter.Presets;
                         else if (opt == "Custom") flag = ClothingSubfilter.Custom;
+                        else if (opt == "Custom Preset") flag = ClothingSubfilter.CustomPreset;
                         else if (opt == "Base Clothing") flag = ClothingSubfilter.Items;
                         else if (opt == "Male") flag = ClothingSubfilter.Male;
                         else if (opt == "Female") flag = ClothingSubfilter.Female;
@@ -42,6 +43,7 @@ namespace VPB
                         if (opt == "Real Clothing") cnt = isActive ? clothingSubfilterCountReal : clothingSubfilterFacetCountReal;
                         else if (opt == "Presets") cnt = isActive ? clothingSubfilterCountPresets : clothingSubfilterFacetCountPresets;
                         else if (opt == "Custom") cnt = isActive ? clothingSubfilterCountCustom : clothingSubfilterFacetCountCustom;
+                        else if (opt == "Custom Preset") cnt = isActive ? clothingSubfilterCountCustomPreset : clothingSubfilterFacetCountCustomPreset;
                         else if (opt == "Base Clothing") cnt = isActive ? clothingSubfilterCountItems : clothingSubfilterFacetCountItems;
                         else if (opt == "Male") cnt = isActive ? clothingSubfilterCountMale : clothingSubfilterFacetCountMale;
                         else if (opt == "Female") cnt = isActive ? clothingSubfilterCountFemale : clothingSubfilterFacetCountFemale;
@@ -77,13 +79,14 @@ namespace VPB
                     Color inactive = ColorInactiveRow;
                     Color active = ColorFacetActiveRow;
 
-                    string[] options = new string[] { "Presets", "Custom", "Base Hair", "Male", "Female" };
+                    string[] options = new string[] { "Presets", "Custom", "Custom Preset", "Base Hair", "Male", "Female" };
                     for (int gi = 0; gi < options.Length; gi++)
                     {
                         string opt = options[gi];
                         HairSubfilter flag = 0;
                         if (opt == "Presets") flag = HairSubfilter.Presets;
                         else if (opt == "Custom") flag = HairSubfilter.Custom;
+                        else if (opt == "Custom Preset") flag = HairSubfilter.CustomPreset;
                         else if (opt == "Base Hair") flag = HairSubfilter.Items;
                         else if (opt == "Male") flag = HairSubfilter.Male;
                         else if (opt == "Female") flag = HairSubfilter.Female;
@@ -94,6 +97,7 @@ namespace VPB
                         int cnt = 0;
                         if (opt == "Presets") cnt = isActive ? hairSubfilterCountPresets : hairSubfilterFacetCountPresets;
                         else if (opt == "Custom") cnt = isActive ? hairSubfilterCountCustom : hairSubfilterFacetCountCustom;
+                        else if (opt == "Custom Preset") cnt = isActive ? hairSubfilterCountCustomPreset : hairSubfilterFacetCountCustomPreset;
                         else if (opt == "Base Hair") cnt = isActive ? hairSubfilterCountItems : hairSubfilterFacetCountItems;
                         else if (opt == "Male") cnt = isActive ? hairSubfilterCountMale : hairSubfilterFacetCountMale;
                         else if (opt == "Female") cnt = isActive ? hairSubfilterCountFemale : hairSubfilterFacetCountFemale;

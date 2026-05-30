@@ -291,6 +291,51 @@ namespace VPB
             return false;
         }
 
+        /// <summary>Loose path under <c>Custom/Clothing/</c> or <c>Saves/Person/Clothing/</c> (items, not atom outfit presets).</summary>
+        public static bool IsLooseCustomClothingItemPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            if (norm.Length == 0) return false;
+            if (IsLooseCustomClothingPresetPath(norm)) return false;
+            if (norm.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (norm.IndexOf("Saves/Person/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Loose full-outfit preset under <c>Custom/Atom/Person/Clothing/</c>.</summary>
+        public static bool IsLooseCustomClothingPresetPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            return norm.IndexOf("Custom/Atom/Person/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Loose path under <c>Custom/Hair/</c> (items, not atom hair presets).</summary>
+        public static bool IsLooseCustomHairItemPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            if (norm.Length == 0) return false;
+            if (IsLooseCustomHairPresetPath(norm)) return false;
+            if (norm.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (norm.IndexOf("Saves/Person/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Loose full hair preset under <c>Custom/Atom/Person/Hair/</c>.</summary>
+        public static bool IsLooseCustomHairPresetPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            return norm.IndexOf("Custom/Atom/Person/Hair/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static string NormalizeLooseGalleryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            string p = path.Replace('\\', '/');
+            int sep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (sep >= 0 && sep + 2 < p.Length) p = p.Substring(sep + 2);
+            return p;
+        }
+
         public static HashSet<string> GetClothingMetadataRegionsFromEntry(FileEntry entry)
         {
             if (entry == null) return null;

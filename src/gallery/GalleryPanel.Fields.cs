@@ -683,6 +683,7 @@ namespace VPB
             Female = 1 << 4,
             Decals = 1 << 5,
             Custom = 1 << 6,
+            CustomPreset = 1 << 7,
         }
 
         [Flags]
@@ -693,6 +694,7 @@ namespace VPB
             Male = 1 << 2,
             Female = 1 << 3,
             Custom = 1 << 4,
+            CustomPreset = 1 << 5,
         }
 
         [Flags]
@@ -728,6 +730,7 @@ namespace VPB
         private int clothingSubfilterCountReal = 0;
         private int clothingSubfilterCountPresets = 0;
         private int clothingSubfilterCountCustom = 0;
+        private int clothingSubfilterCountCustomPreset = 0;
         private int clothingSubfilterCountItems = 0;
         private int clothingSubfilterCountMale = 0;
         private int clothingSubfilterCountFemale = 0;
@@ -736,6 +739,7 @@ namespace VPB
         private int clothingSubfilterFacetCountReal = 0;
         private int clothingSubfilterFacetCountPresets = 0;
         private int clothingSubfilterFacetCountCustom = 0;
+        private int clothingSubfilterFacetCountCustomPreset = 0;
         private int clothingSubfilterFacetCountItems = 0;
         private int clothingSubfilterFacetCountMale = 0;
         private int clothingSubfilterFacetCountFemale = 0;
@@ -744,12 +748,14 @@ namespace VPB
         private int hairSubfilterCountAll = 0;
         private int hairSubfilterCountPresets = 0;
         private int hairSubfilterCountCustom = 0;
+        private int hairSubfilterCountCustomPreset = 0;
         private int hairSubfilterCountItems = 0;
         private int hairSubfilterCountMale = 0;
         private int hairSubfilterCountFemale = 0;
 
         private int hairSubfilterFacetCountPresets = 0;
         private int hairSubfilterFacetCountCustom = 0;
+        private int hairSubfilterFacetCountCustomPreset = 0;
         private int hairSubfilterFacetCountItems = 0;
         private int hairSubfilterFacetCountMale = 0;
         private int hairSubfilterFacetCountFemale = 0;

@@ -16,6 +16,7 @@ namespace VPB
         public int ClothingSubfilterCountReal;
         public int ClothingSubfilterCountPresets;
         public int ClothingSubfilterCountCustom;
+        public int ClothingSubfilterCountCustomPreset;
         public int ClothingSubfilterCountItems;
         public int ClothingSubfilterCountMale;
         public int ClothingSubfilterCountFemale;
@@ -24,6 +25,7 @@ namespace VPB
         public int HairSubfilterCountAll;
         public int HairSubfilterCountPresets;
         public int HairSubfilterCountCustom;
+        public int HairSubfilterCountCustomPreset;
         public int HairSubfilterCountItems;
         public int HairSubfilterCountMale;
         public int HairSubfilterCountFemale;
@@ -39,6 +41,7 @@ namespace VPB
         public int ClothingSubfilterFacetCountReal;
         public int ClothingSubfilterFacetCountPresets;
         public int ClothingSubfilterFacetCountCustom;
+        public int ClothingSubfilterFacetCountCustomPreset;
         public int ClothingSubfilterFacetCountItems;
         public int ClothingSubfilterFacetCountMale;
         public int ClothingSubfilterFacetCountFemale;
@@ -46,6 +49,7 @@ namespace VPB
 
         public int HairSubfilterFacetCountPresets;
         public int HairSubfilterFacetCountCustom;
+        public int HairSubfilterFacetCountCustomPreset;
         public int HairSubfilterFacetCountItems;
         public int HairSubfilterFacetCountMale;
         public int HairSubfilterFacetCountFemale;
@@ -133,6 +137,7 @@ namespace VPB
                 ClothingSubfilterCountReal = s.ClothingSubfilterCountReal,
                 ClothingSubfilterCountPresets = s.ClothingSubfilterCountPresets,
                 ClothingSubfilterCountCustom = s.ClothingSubfilterCountCustom,
+                ClothingSubfilterCountCustomPreset = s.ClothingSubfilterCountCustomPreset,
                 ClothingSubfilterCountItems = s.ClothingSubfilterCountItems,
                 ClothingSubfilterCountMale = s.ClothingSubfilterCountMale,
                 ClothingSubfilterCountFemale = s.ClothingSubfilterCountFemale,
@@ -140,6 +145,7 @@ namespace VPB
                 HairSubfilterCountAll = s.HairSubfilterCountAll,
                 HairSubfilterCountPresets = s.HairSubfilterCountPresets,
                 HairSubfilterCountCustom = s.HairSubfilterCountCustom,
+                HairSubfilterCountCustomPreset = s.HairSubfilterCountCustomPreset,
                 HairSubfilterCountItems = s.HairSubfilterCountItems,
                 HairSubfilterCountMale = s.HairSubfilterCountMale,
                 HairSubfilterCountFemale = s.HairSubfilterCountFemale,
@@ -153,12 +159,14 @@ namespace VPB
                 ClothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal,
                 ClothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets,
                 ClothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom,
+                ClothingSubfilterFacetCountCustomPreset = s.ClothingSubfilterFacetCountCustomPreset,
                 ClothingSubfilterFacetCountItems = s.ClothingSubfilterFacetCountItems,
                 ClothingSubfilterFacetCountMale = s.ClothingSubfilterFacetCountMale,
                 ClothingSubfilterFacetCountFemale = s.ClothingSubfilterFacetCountFemale,
                 ClothingSubfilterFacetCountDecals = s.ClothingSubfilterFacetCountDecals,
                 HairSubfilterFacetCountPresets = s.HairSubfilterFacetCountPresets,
                 HairSubfilterFacetCountCustom = s.HairSubfilterFacetCountCustom,
+                HairSubfilterFacetCountCustomPreset = s.HairSubfilterFacetCountCustomPreset,
                 HairSubfilterFacetCountItems = s.HairSubfilterFacetCountItems,
                 HairSubfilterFacetCountMale = s.HairSubfilterFacetCountMale,
                 HairSubfilterFacetCountFemale = s.HairSubfilterFacetCountFemale,

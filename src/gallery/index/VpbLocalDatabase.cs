@@ -2053,11 +2053,12 @@ namespace VPB
             const GalleryPanel.ClothingSubfilter Dec = GalleryPanel.ClothingSubfilter.Decals;
             const GalleryPanel.ClothingSubfilter Pre = GalleryPanel.ClothingSubfilter.Presets;
             const GalleryPanel.ClothingSubfilter Cus = GalleryPanel.ClothingSubfilter.Custom;
+            const GalleryPanel.ClothingSubfilter CusPre = GalleryPanel.ClothingSubfilter.CustomPreset;
             const GalleryPanel.ClothingSubfilter Itm = GalleryPanel.ClothingSubfilter.Items;
             const GalleryPanel.ClothingSubfilter Mal = GalleryPanel.ClothingSubfilter.Male;
             const GalleryPanel.ClothingSubfilter Fem = GalleryPanel.ClothingSubfilter.Female;
 
-            bool wantsRealType = ((clothingSubfilter & (Real | Pre | Cus | Itm | Mal | Fem)) != 0);
+            bool wantsRealType = ((clothingSubfilter & (Real | Pre | Cus | CusPre | Itm | Mal | Fem)) != 0);
             bool wantsDecalType = ((clothingSubfilter & Dec) != 0);
 
             bool typeExplicit = ((clothingSubfilter & (Real | Dec)) != 0);
@@ -2074,10 +2075,12 @@ namespace VPB
 
             bool wantsPresets = (clothingSubfilter & Pre) != 0;
             bool wantsCustom = (clothingSubfilter & Cus) != 0;
+            bool wantsCustomPreset = (clothingSubfilter & CusPre) != 0;
             if (wantsPresets) { if (!isPreset) return false; }
             if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
-            // Default-hide presets unless Presets/Custom toggle is on.
-            if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+            if (wantsCustomPreset) return false; // loose Custom/Atom/Person/Clothing only
+            // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
             if ((clothingSubfilter & Itm) != 0) { if (isPreset) return false; }
             if ((clothingSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
             if ((clothingSubfilter & Fem) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Female && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -2099,15 +2102,18 @@ namespace VPB
 
             const GalleryPanel.HairSubfilter Pre = GalleryPanel.HairSubfilter.Presets;
             const GalleryPanel.HairSubfilter Cus = GalleryPanel.HairSubfilter.Custom;
+            const GalleryPanel.HairSubfilter CusPre = GalleryPanel.HairSubfilter.CustomPreset;
             const GalleryPanel.HairSubfilter Itm = GalleryPanel.HairSubfilter.Items;
             const GalleryPanel.HairSubfilter Mal = GalleryPanel.HairSubfilter.Male;
             const GalleryPanel.HairSubfilter Fem = GalleryPanel.HairSubfilter.Female;
 
             bool wantsPresets = (hairSubfilter & Pre) != 0;
             bool wantsCustom = (hairSubfilter & Cus) != 0;
+            bool wantsCustomPreset = (hairSubfilter & CusPre) != 0;
             if (wantsPresets) { if (!isPreset) return false; }
             if (wantsCustom) return false; // VAR rows: isCustomLoose is always false
-            if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+            if (wantsCustomPreset) return false; // loose Custom/Atom/Person/Hair only
+            if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
             if ((hairSubfilter & Itm) != 0) { if (isPreset) return false; }
             if ((hairSubfilter & Mal) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Male && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
             if ((hairSubfilter & Fem) != 0) { if (gender != (int)ClothingLoadingUtils.ResourceGender.Female && gender != (int)ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -2134,6 +2140,7 @@ namespace VPB
             const GalleryPanel.ClothingSubfilter Dec = GalleryPanel.ClothingSubfilter.Decals;
             const GalleryPanel.ClothingSubfilter Pre = GalleryPanel.ClothingSubfilter.Presets;
             const GalleryPanel.ClothingSubfilter Cus = GalleryPanel.ClothingSubfilter.Custom;
+            const GalleryPanel.ClothingSubfilter CusPre = GalleryPanel.ClothingSubfilter.CustomPreset;
             const GalleryPanel.ClothingSubfilter Itm = GalleryPanel.ClothingSubfilter.Items;
             const GalleryPanel.ClothingSubfilter Mal = GalleryPanel.ClothingSubfilter.Male;
             const GalleryPanel.ClothingSubfilter Fem = GalleryPanel.ClothingSubfilter.Female;
@@ -2151,8 +2158,9 @@ namespace VPB
                 return sb0.ToString();
             }
 
-            // VAR rows never satisfy Custom alone (or with Presets, etc.); SQL path is VAR-only here.
+            // VAR rows never satisfy Custom / Custom Preset; SQL path is VAR-only here.
             if ((f & Cus) != 0) return " AND (1=0)";
+            if ((f & CusPre) != 0) return " AND (1=0)";
             if (((f & Pre) != 0) && ((f & Itm) != 0)) return " AND (1=0)";
             if (((f & Mal) != 0) && ((f & Fem) != 0)) return " AND (1=0)";
 
@@ -2160,7 +2168,7 @@ namespace VPB
             sb.Append(" AND (").Append(c).Append(" & 2147483648) <> 0");
             sb.Append(" AND (").Append(c).Append(" & 15) = 1");
 
-            bool wantsRealType = ((f & (Real | Pre | Cus | Itm | Mal | Fem)) != 0);
+            bool wantsRealType = ((f & (Real | Pre | Cus | CusPre | Itm | Mal | Fem)) != 0);
             bool wantsDecalType = ((f & Dec) != 0);
             bool typeExplicit = ((f & (Real | Dec)) != 0);
             if (typeExplicit)
@@ -2175,8 +2183,8 @@ namespace VPB
 
             if ((f & Pre) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) <> 0");
-            else if ((f & Cus) == 0)
-                // Default-hide presets unless Presets/Custom toggle is on.
+            else if ((f & Cus) == 0 && (f & CusPre) == 0)
+                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
             if ((f & Itm) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
@@ -2202,6 +2210,7 @@ namespace VPB
 
             const GalleryPanel.HairSubfilter Pre = GalleryPanel.HairSubfilter.Presets;
             const GalleryPanel.HairSubfilter Cus = GalleryPanel.HairSubfilter.Custom;
+            const GalleryPanel.HairSubfilter CusPre = GalleryPanel.HairSubfilter.CustomPreset;
             const GalleryPanel.HairSubfilter Itm = GalleryPanel.HairSubfilter.Items;
             const GalleryPanel.HairSubfilter Mal = GalleryPanel.HairSubfilter.Male;
             const GalleryPanel.HairSubfilter Fem = GalleryPanel.HairSubfilter.Female;
@@ -2219,8 +2228,9 @@ namespace VPB
                 return sb0.ToString();
             }
 
-            // VAR rows never satisfy Custom.
+            // VAR rows never satisfy Custom / Custom Preset.
             if ((f & Cus) != 0) return " AND (1=0)";
+            if ((f & CusPre) != 0) return " AND (1=0)";
             if (((f & Pre) != 0) && ((f & Itm) != 0)) return " AND (1=0)";
             if (((f & Mal) != 0) && ((f & Fem) != 0)) return " AND (1=0)";
 
@@ -2230,7 +2240,7 @@ namespace VPB
 
             if ((f & Pre) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) <> 0");
-            else if ((f & Cus) == 0)
+            else if ((f & Cus) == 0 && (f & CusPre) == 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
             if ((f & Itm) != 0)
                 sb.Append(" AND (").Append(c).Append(" & 256) = 0");
@@ -5614,6 +5624,7 @@ namespace VPB
             public int ClothingSubfilterCountReal;
             public int ClothingSubfilterCountPresets;
             public int ClothingSubfilterCountCustom;
+            public int ClothingSubfilterCountCustomPreset;
             public int ClothingSubfilterCountItems;
             public int ClothingSubfilterCountMale;
             public int ClothingSubfilterCountFemale;
@@ -5621,6 +5632,7 @@ namespace VPB
             public int HairSubfilterCountAll;
             public int HairSubfilterCountPresets;
             public int HairSubfilterCountCustom;
+            public int HairSubfilterCountCustomPreset;
             public int HairSubfilterCountItems;
             public int HairSubfilterCountMale;
             public int HairSubfilterCountFemale;
@@ -5634,12 +5646,14 @@ namespace VPB
             public int ClothingSubfilterFacetCountReal;
             public int ClothingSubfilterFacetCountPresets;
             public int ClothingSubfilterFacetCountCustom;
+            public int ClothingSubfilterFacetCountCustomPreset;
             public int ClothingSubfilterFacetCountItems;
             public int ClothingSubfilterFacetCountMale;
             public int ClothingSubfilterFacetCountFemale;
             public int ClothingSubfilterFacetCountDecals;
             public int HairSubfilterFacetCountPresets;
             public int HairSubfilterFacetCountCustom;
+            public int HairSubfilterFacetCountCustomPreset;
             public int HairSubfilterFacetCountItems;
             public int HairSubfilterFacetCountMale;
             public int HairSubfilterFacetCountFemale;
