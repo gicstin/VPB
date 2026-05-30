@@ -155,7 +155,8 @@ namespace VPB
 
             string[] parts = name.Split('.');
             if (parts.Length != 3) return false;
-            if (!int.TryParse(parts[2], out version)) return false;
+            if (string.IsNullOrEmpty(parts[0]) || string.IsNullOrEmpty(parts[1])) return false;
+            if (!FileManager.TryParseVarVersionSegment(parts[2], out version)) return false;
 
             groupKey = parts[0] + "." + parts[1];
             uid = groupKey + "." + version;

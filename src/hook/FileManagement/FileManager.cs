@@ -604,6 +604,41 @@ namespace VPB
             return Regex.Replace(input, ".*/", string.Empty);
         }
 
+        /// <summary>
+        /// Parses the final <c>&lt;version&gt;</c> segment: digits only, or digits plus Windows copy suffix
+        /// <c>(n)</c> / <c> (n)</c> (e.g. <c>2(1)</c> → version <c>2</c>). Rejects digit-stripping junk like <c>1_1</c>.
+        /// </summary>
+        internal static bool TryParseVarVersionSegment(string segment, out int version)
+        {
+            version = 0;
+            if (string.IsNullOrEmpty(segment)) return false;
+
+            if (TryParseDigitsOnlyVarVersionSegment(segment, out version))
+                return true;
+
+            int paren = segment.IndexOf('(');
+            if (paren <= 0) return false;
+
+            string basePart = segment.Substring(0, paren).TrimEnd();
+            if (!TryParseDigitsOnlyVarVersionSegment(basePart, out version))
+                return false;
+
+            string suffix = segment.Substring(paren);
+            return Regex.IsMatch(suffix, @"^\(\d+\)$");
+        }
+
+        static bool TryParseDigitsOnlyVarVersionSegment(string segment, out int version)
+        {
+            version = 0;
+            if (string.IsNullOrEmpty(segment)) return false;
+            for (int i = 0; i < segment.Length; i++)
+            {
+                char c = segment[i];
+                if (c < '0' || c > '9') return false;
+            }
+            return int.TryParse(segment, out version);
+        }
+
         static bool RefreshReasonNeedsFreshVarDiskEnum(string refreshReason)
         {
             if (string.IsNullOrEmpty(refreshReason)) return false;
@@ -669,19 +704,21 @@ namespace VPB
                 string s = array[2];
                 try
                 {
+                    if (string.IsNullOrEmpty(text2) || string.IsNullOrEmpty(text3))
+                        throw new FormatException("Empty creator or package name segment");
+
                     int version;
-                    if (!int.TryParse(s, out version))
+                    if (!TryParseVarVersionSegment(s, out version))
+                        throw new FormatException($"Version segment must be digits only, got '{s}'");
+
+                    string canonicalUid = shortName + "." + version;
+                    if (!string.Equals(s, version.ToString(), StringComparison.Ordinal))
                     {
-                        // Relaxed parsing for malformed versions like "1_1" -> 11, "1 (1)" -> 11
-                        string cleanS = Regex.Replace(s, "[^0-9]", "");
-                        if (!int.TryParse(cleanS, out version))
-                        {
-                            throw new FormatException($"Cannot parse version from '{s}'");
-                        }
-                        LogUtil.LogWarning($"[VPB] Parsed malformed version '{s}' as '{version}' for package {text}");
+                        LogUtil.LogWarning("[VPB] VAR version segment '" + s + "' normalized to " + version
+                            + " for package " + canonicalUid + " (path '" + cleanPath + "')");
                     }
 
-                    if (!packagesByUid.ContainsKey(text))
+                    if (!packagesByUid.ContainsKey(canonicalUid))
                     {
                         VarPackageGroup value;
                         lock (packagesLock)
@@ -692,10 +729,10 @@ namespace VPB
                                 packageGroups.Add(shortName, value);
                             }
                         }
-                        VarPackage varPackage = new VarPackage(text, cleanPath, value, text2, text3, version);
+                        VarPackage varPackage = new VarPackage(canonicalUid, cleanPath, value, text2, text3, version);
                         lock (packagesLock)
                         {
-                            packagesByUid.Add(text, varPackage);
+                            packagesByUid.Add(canonicalUid, varPackage);
                             packagesByPath.Add(varPackage.Path, varPackage);
                         }
                         value.AddPackage(varPackage);
@@ -720,7 +757,7 @@ namespace VPB
                     }
                     isDuplicated = true;
                     VarPackage existing;
-                    if (packagesByUid.TryGetValue(text, out existing))
+                    if (packagesByUid.TryGetValue(canonicalUid, out existing))
                     {
                         string existingPath = CleanFilePath(existing.Path);
                         if (string.Equals(existingPath, cleanPath, StringComparison.OrdinalIgnoreCase))
@@ -741,7 +778,7 @@ namespace VPB
                             && TryGetWindowsFileId(cleanPath, out newFileId)
                             && existingFileId == newFileId)
                         {
-                            LogUtil.LogWarning("Duplicate package uid " + text + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
+                            LogUtil.LogWarning("Duplicate package uid " + canonicalUid + " points to same file via different path. Existing: " + existing.Path + " New: " + cleanPath + ". Skipping duplicate registration");
                             if (!packagesByPath.ContainsKey(cleanPath))
                             {
                                 lock (packagesLock)
@@ -752,11 +789,11 @@ namespace VPB
                             return existing;
                         }
 
-                        LogUtil.LogError("Duplicate package uid " + text + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
+                        LogUtil.LogError("Duplicate package uid " + canonicalUid + ". Existing: " + existing.Path + " New: " + cleanPath + ". Cannot register");
                     }
                     else
                     {
-                        LogUtil.LogError("Duplicate package uid " + text + ". Cannot register");
+                        LogUtil.LogError("Duplicate package uid " + canonicalUid + ". Cannot register");
                     }
                 }
                 catch (Exception)
