@@ -402,6 +402,53 @@ namespace VPB
 			return ComputeIsPackageVarHidden(entry);
 		}
 
+		/// <summary>UID-keyed gallery hide check for callers that have a pkg_uid string (facet counting) rather
+		/// than a FileEntry. Shares the <see cref="s_varHiddenByUid"/> cache with <see cref="IsPackageVarHidden"/>,
+		/// so uids the grid already evaluated are free. Honors the <c>GalleryShowHiddenPackages</c> toggle.</summary>
+		public static bool IsVarPackageHiddenByUid(string uid)
+		{
+			if (string.IsNullOrEmpty(uid)) return false;
+			try
+			{
+				if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) return false;
+			}
+			catch { }
+
+			if (s_varHiddenByUid != null && s_varHiddenByUid.TryGetValue(uid, out bool cached))
+				return cached;
+
+			bool v = false;
+			bool resolved = false;
+			try
+			{
+				VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+				if (pkg != null)
+				{
+					resolved = true;
+					// Package-level subset of ComputeIsPackageVarHidden: native markers, then legacy with migration.
+					if (NativeCompatibleHideMarkersExist(pkg))
+						v = true;
+					else if (TryBuildLegacyPackageVarHidePath(pkg, out string legacyPath) && File.Exists(legacyPath))
+					{
+						MigrateLegacyHideToNativeFormat(pkg);
+						v = NativeCompatibleHideMarkersExist(pkg);
+					}
+				}
+			}
+			catch { v = false; resolved = false; }
+
+			// Only cache a resolved verdict. When the package isn't registered, the FileEntry path
+			// (ComputeIsPackageVarHidden) has extra disk-resolve routes this string-keyed path lacks,
+			// so caching false here would poison the shared cache with an order-dependent answer.
+			if (resolved)
+			{
+				if (s_varHiddenByUid == null)
+					s_varHiddenByUid = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+				s_varHiddenByUid[uid] = v;
+			}
+			return v;
+		}
+
 		/// <summary>Prefer marker path from <paramref name="entry"/> (no <c>GetFileEntry</c>); disk resolve only when needed.
 		/// Checks native VaM format first, then legacy VPB format with automatic migration.</summary>
 		private static bool ComputeIsPackageVarHidden(FileEntry entry)

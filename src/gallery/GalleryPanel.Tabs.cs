@@ -1225,7 +1225,7 @@ namespace VPB
             return ell;
         }
 
-        private void CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f)
+        private GameObject CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f)
         {
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
@@ -1327,6 +1327,7 @@ namespace VPB
             }
 
             if (targetList != null) targetList.Add(btnGO);
+            return btnGO;
         }
 
         private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null)
@@ -1452,6 +1453,13 @@ namespace VPB
         private void ReturnTabButton(GameObject btn)
         {
             if (btn == null) return;
+            // Drop the active-chip handle if this is the chip being recycled, so a later pool reuse for
+            // a different row can't have its label stamped by UpdateSelectionContextMenu.
+            if (_activeSubfilterChipText != null)
+            {
+                var textComp = btn.GetComponentInChildren<Text>();
+                if (textComp == _activeSubfilterChipText) { _activeSubfilterChipText = null; _activeSubfilterChipLabelPrefix = null; }
+            }
             btn.SetActive(false);
             // Clear hover event handlers to prevent old handlers from submenu modes persisting when buttons are reused
             var hoverDel = btn.GetComponent<UIHoverDelegate>();

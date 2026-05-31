@@ -119,6 +119,8 @@ namespace VPB
 
         /// <summary>High bit: row has <see cref="ClothingAttrPacked"/> from index rebuild (fast clothing subfilter path).</summary>
         internal const int ClothingAttrPresentFlag = unchecked((int)0x80000000);
+        // Loose-only: a user-saved .vap under Custom/. VAR rows never set this. Bit chosen from the free range (bits 10-30 unused; 0-9 are kind/gender/preset/decal, 31 is present-flag).
+        internal const int ClothingAttrIsCustomFlag = 0x400; // bit 10
 
         private const int SchemaVersion = 12;
 
@@ -410,6 +412,28 @@ namespace VPB
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN pctime TEXT;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN ictime INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE cat_mem ADD COLUMN cloth_attr TEXT;");
+            conn.ExecUtf8(LooseCatMemDdl);
+
+            // One-shot repair: stamp the present-flag onto pre-existing cat_mem rows packed before the flag
+            // existed, so the grid's clothing/hair subfilter SQL (which gates on it) doesn't drop them.
+            if (string.IsNullOrEmpty(MetaGet(conn, ClothAttrPresentBackfillKey)))
+            {
+                int repacked = 0, unresolved = 0;
+                try
+                {
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    BackfillClothAttrPresentFlag(conn, out repacked, out unresolved);
+                    MetaSet(conn, ClothAttrPresentBackfillKey, "1");
+                    try { LogUtil.Log("[VPB] cloth_attr present-flag backfill: repacked=" + repacked + " unresolved=" + unresolved); } catch { }
+                    conn.ExecUtf8("COMMIT;");
+                }
+                catch (Exception ex)
+                {
+                    try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                    try { LogUtil.LogWarning("[VPB] cloth_attr backfill failed (will retry next launch): " + ex.Message); } catch { }
+                }
+            }
+
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN loaded INTEGER;");
             TryAddColumnIgnoreFailure(conn, "ALTER TABLE pkg ADD COLUMN first_scanned INTEGER;");
 
@@ -5495,9 +5519,12 @@ namespace VPB
                                         {
                                             outFacets.ClothingSubfilterCountReal++;
                                             if (isPreset) outFacets.ClothingSubfilterCountPresets++;
-                                            // Note: VAR rows are never "Custom" (loose files only), so ClothingSubfilterCountCustom remains 0.
-                                            // We explicitly initialize it here to clear the compiler warning.
-                                            outFacets.ClothingSubfilterCountCustom = 0; 
+                                            // VAR rows are never "Custom" or "Custom Preset" (those are loose .vap files only),
+                                            // so these counters stay 0 here and the loose-file pass adds any real hits. Assign
+                                            // explicitly so the fields are written at least once (clears CS0649).
+                                            outFacets.ClothingSubfilterCountCustom = 0;
+                                            outFacets.ClothingSubfilterCountCustomPreset = 0;
+                                            outFacets.ClothingSubfilterFacetCountCustomPreset = 0;
                                             if (!isPreset) outFacets.ClothingSubfilterCountItems++;
                                             if (gender == (int)ClothingLoadingUtils.ResourceGender.Male) outFacets.ClothingSubfilterCountMale++;
                                             else if (gender == (int)ClothingLoadingUtils.ResourceGender.Female) outFacets.ClothingSubfilterCountFemale++;
@@ -5526,7 +5553,11 @@ namespace VPB
                                         if (HairPackedAttrMatchesSubfilter(clothAttr, hairSubfilter ^ GalleryPanel.HairSubfilter.Female)) outFacets.HairSubfilterFacetCountFemale++;
 
                                         if (isPreset) outFacets.HairSubfilterCountPresets++;
+                                        // VAR rows are never "Custom" / "Custom Preset" (loose .vap only); the loose pass
+                                        // adds real hits. Assign explicitly so the fields are written once (clears CS0649).
                                         outFacets.HairSubfilterCountCustom = 0;
+                                        outFacets.HairSubfilterCountCustomPreset = 0;
+                                        outFacets.HairSubfilterFacetCountCustomPreset = 0;
                                         if (!isPreset) outFacets.HairSubfilterCountItems++;
                                         if (gender == (int)ClothingLoadingUtils.ResourceGender.Male) outFacets.HairSubfilterCountMale++;
                                         else if (gender == (int)ClothingLoadingUtils.ResourceGender.Female) outFacets.HairSubfilterCountFemale++;
@@ -5675,6 +5706,193 @@ namespace VPB
             return " AND " + col + " NOT LIKE '%.jpg' AND " + col + " NOT LIKE '%.jpeg' AND " + col + " NOT LIKE '%.png'";
         }
 
+        // Shared WHERE context built by BuildGalleryCategoryWhere.
+        // Holds the non-SELECT, non-ORDER portion of the cat_mem + pkg query so both the paged SELECT
+        // and per-chip COUNT(*) queries can reuse it with only the cloth AND swapped.
+        internal struct GalleryCategoryWhereContext
+        {
+            // FROM + WHERE prefix up to and including the cloth AND placeholder point.
+            // Append clothAnd, then any additional per-query suffix (ORDER BY / LIMIT).
+            public string CreatorAndFragment;  // " AND (p.creator = ? ...)" or ""
+            public string LoadedAndFragment;   // " AND ifnull(p.loaded,0)..." or ""
+            public string NameAndFragment;     // " AND (m.list_path LIKE ? ...) ..." or ""
+            public string ExclusionAndFragment;// " AND m.internal_path NOT LIKE ? ..." or ""
+            public string InclusionAndFragment;// " AND (m.internal_path LIKE ? ...) " or ""
+            public string TagAndFragment;      // " AND m.list_path LIKE ? ..." or ""
+            public string UserTagAndFragment;  // user-tag correlated subquery or ""
+
+            // Bind values in the order they appear after the cloth AND slot.
+            // category bind comes first (slot 1), then creatorBindValues, then the rest.
+            public List<string> CreatorBindValues;
+            public List<string> NameBindValues;  // already LIKE-escaped pairs
+            public List<string> ExclusionBindValues;
+            public List<string> InclusionBindValues;
+            public List<string> TagBindValues;
+            public List<string> UserTagBindValues;
+
+            public bool IsEverything;
+            public bool PkgHasLoadedCol;
+            public string CategoryTitle;
+        }
+
+        // Builds the WHERE context for a clothing-category COUNT(*) or the full SELECT.
+        // clothAndFragment is NOT included here: callers build their own prefix (SELECT or COUNT(*))
+        // then append creatorAnd, clothAnd per chip, then the remaining fragments.
+        internal static GalleryCategoryWhereContext BuildGalleryCategoryWhere(
+            VpbSqlite3.Connection conn,
+            string categoryTitle,
+            string creatorFilter,
+            int loadedState,
+            string[] nameTerms,
+            List<string> pathExclusions,
+            List<string> pathInclusions,
+            HashSet<string> activeTags,
+            HashSet<string> activeUserTags,
+            bool userTagsUntaggedOnly,
+            bool userTagsRequireAll)
+        {
+            var ctx = new GalleryCategoryWhereContext();
+            ctx.CategoryTitle = categoryTitle;
+            ctx.IsEverything = Gallery.IsEverythingCategoryName(categoryTitle);
+
+            // loaded
+            ctx.PkgHasLoadedCol = false;
+            try { ctx.PkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { }
+            ctx.LoadedAndFragment = "";
+            if (loadedState == 1)
+                ctx.LoadedAndFragment = ctx.PkgHasLoadedCol ? " AND ifnull(p.loaded,0) != 0" : " AND 0";
+            else if (loadedState == 0 && ctx.PkgHasLoadedCol)
+                ctx.LoadedAndFragment = " AND ifnull(p.loaded,0) = 0";
+
+            // creator
+            var creatorList = SplitCreatorFilterList(creatorFilter);
+            ctx.CreatorBindValues = creatorList;
+            if (creatorList.Count > 0)
+            {
+                var sbCr = new StringBuilder(128);
+                AppendCreatorFilterSql(sbCr, "p.creator", creatorList);
+                ctx.CreatorAndFragment = sbCr.ToString();
+            }
+            else
+            {
+                ctx.CreatorAndFragment = "";
+            }
+
+            // name search
+            ctx.NameBindValues = new List<string>();
+            if (nameTerms != null && nameTerms.Length > 0)
+            {
+                var sbN = new StringBuilder();
+                for (int i = 0; i < nameTerms.Length; i++)
+                {
+                    if (string.IsNullOrEmpty(nameTerms[i])) continue;
+                    sbN.Append(" AND (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
+                    string esc = "%" + EscapeLike(nameTerms[i]) + "%";
+                    ctx.NameBindValues.Add(esc);
+                    ctx.NameBindValues.Add(esc);
+                }
+                ctx.NameAndFragment = sbN.ToString();
+            }
+            else
+            {
+                ctx.NameAndFragment = "";
+            }
+
+            // path exclusions
+            ctx.ExclusionBindValues = new List<string>();
+            if (pathExclusions != null && pathExclusions.Count > 0)
+            {
+                var sbEx = new StringBuilder();
+                for (int i = 0; i < pathExclusions.Count; i++)
+                {
+                    if (string.IsNullOrEmpty(pathExclusions[i])) continue;
+                    sbEx.Append(" AND m.internal_path NOT LIKE ? ESCAPE '\\'");
+                    ctx.ExclusionBindValues.Add(EscapeLike(pathExclusions[i]) + "%");
+                }
+                ctx.ExclusionAndFragment = sbEx.ToString();
+            }
+            else
+            {
+                ctx.ExclusionAndFragment = "";
+            }
+
+            // path inclusions
+            ctx.InclusionBindValues = new List<string>();
+            if (pathInclusions != null && pathInclusions.Count > 0)
+            {
+                var sbIn = new StringBuilder();
+                sbIn.Append(" AND (");
+                bool firstInc = true;
+                for (int i = 0; i < pathInclusions.Count; i++)
+                {
+                    if (string.IsNullOrEmpty(pathInclusions[i])) continue;
+                    if (!firstInc) sbIn.Append(" OR ");
+                    firstInc = false;
+                    sbIn.Append("m.internal_path LIKE ? ESCAPE '\\'");
+                    ctx.InclusionBindValues.Add(EscapeLike(pathInclusions[i].Replace('\\', '/').TrimEnd('/')) + "/%");
+                }
+                if (!firstInc) { sbIn.Append(")"); ctx.InclusionAndFragment = sbIn.ToString(); }
+                else { ctx.InclusionAndFragment = ""; ctx.InclusionBindValues.Clear(); }
+            }
+            else
+            {
+                ctx.InclusionAndFragment = "";
+            }
+
+            // Active category tags (TagFilter.* presets like "Top"/"Dress") matched as a plain
+            // substring of list_path: deliberate fuzzy heuristic, NOT a bracketed [tag] token.
+            // list_path holds file paths, so %tag% is the intended match; mirrors the other
+            // tag-LIKE sites in this file. One placeholder per tag, one bind each, ANDed together.
+            ctx.TagBindValues = new List<string>();
+            if (activeTags != null && activeTags.Count > 0)
+            {
+                var sbT = new StringBuilder();
+                foreach (var tag in activeTags)
+                {
+                    sbT.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
+                    ctx.TagBindValues.Add("%" + EscapeLike(tag) + "%");
+                }
+                ctx.TagAndFragment = sbT.ToString();
+            }
+            else
+            {
+                ctx.TagAndFragment = "";
+            }
+
+            // user tags
+            ctx.UserTagBindValues = new List<string>();
+            var sbUt = new StringBuilder();
+            if (userTagsUntaggedOnly)
+                AppendSqlNoUserTagExists(sbUt, "m", categoryTitle, ctx.IsEverything);
+            else
+                AppendSqlActiveUserTagFilter(sbUt, ctx.UserTagBindValues, activeUserTags, "m", userTagsRequireAll, ctx.IsEverything ? Gallery.EverythingCategoryName : null);
+            ctx.UserTagAndFragment = sbUt.ToString();
+
+            return ctx;
+        }
+
+        // Applies binds from a GalleryCategoryWhereContext to a prepared statement, starting at bind slot `bindStart`.
+        // Order: category (if not everything), creator, nameTerms, exclusions, inclusions, tags, userTags.
+        // Returns next available bind slot.
+        internal static int BindGalleryCategoryWhere(VpbSqlite3.Statement stmt, GalleryCategoryWhereContext ctx, int bindStart)
+        {
+            int b = bindStart;
+            if (!ctx.IsEverything) stmt.BindText(b++, ctx.CategoryTitle);
+            if (ctx.CreatorBindValues != null)
+                for (int i = 0; i < ctx.CreatorBindValues.Count; i++) stmt.BindText(b++, ctx.CreatorBindValues[i] ?? "");
+            if (ctx.NameBindValues != null)
+                for (int i = 0; i < ctx.NameBindValues.Count; i++) stmt.BindText(b++, ctx.NameBindValues[i] ?? "");
+            if (ctx.ExclusionBindValues != null)
+                for (int i = 0; i < ctx.ExclusionBindValues.Count; i++) stmt.BindText(b++, ctx.ExclusionBindValues[i] ?? "");
+            if (ctx.InclusionBindValues != null)
+                for (int i = 0; i < ctx.InclusionBindValues.Count; i++) stmt.BindText(b++, ctx.InclusionBindValues[i] ?? "");
+            if (ctx.TagBindValues != null)
+                for (int i = 0; i < ctx.TagBindValues.Count; i++) stmt.BindText(b++, ctx.TagBindValues[i] ?? "");
+            if (ctx.UserTagBindValues != null)
+                for (int i = 0; i < ctx.UserTagBindValues.Count; i++) stmt.BindText(b++, ctx.UserTagBindValues[i] ?? "");
+            return b;
+        }
+
         /// <summary>
         /// Returns true if rows were read from SQLite (caller still applies path quirks e.g. Saves/Person vs appearance, name filter, PassesFilters).
         /// </summary>
@@ -5762,95 +5980,14 @@ namespace VPB
                 var swSql = Stopwatch.StartNew();
                 using (var conn = new VpbSqlite3.Connection(DbPath))
                 {
-                    bool pkgHasLoadedCol = false;
-                    try { pkgHasLoadedCol = PkgHasLoadedColumn(conn); } catch { pkgHasLoadedCol = false; }
+                    var ctx = BuildGalleryCategoryWhere(
+                        conn, categoryTitle, creatorFilter, loadedState,
+                        nameTerms, pathExclusions, pathInclusions,
+                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
-                    string loadedSqlAnd = "";
-                    if (loadedState == 1)
-                    {
-                        // If the column doesn't exist, nothing can be "loaded".
-                        if (!pkgHasLoadedCol) loadedSqlAnd = " AND 0";
-                        else loadedSqlAnd = " AND ifnull(p.loaded,0) != 0";
-                    }
-                    else if (loadedState == 0)
-                    {
-                        // If the column doesn't exist, treat everything as unloaded (no extra filter needed).
-                        if (pkgHasLoadedCol) loadedSqlAnd = " AND ifnull(p.loaded,0) = 0";
-                    }
+                    string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
 
-                    string nameSqlAnd = "";
-                    if (nameTerms != null && nameTerms.Length > 0)
-                    {
-                        var sb = new StringBuilder();
-                        for (int i = 0; i < nameTerms.Length; i++)
-                        {
-                            if (string.IsNullOrEmpty(nameTerms[i])) continue;
-                            // Match against list_path (which includes package name) or internal_path.
-                            sb.Append(" AND (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
-                        }
-                        nameSqlAnd = sb.ToString();
-                    }
-
-                    string exclusionSqlAnd = "";
-                    if (pathExclusions != null && pathExclusions.Count > 0)
-                    {
-                        var sb = new StringBuilder();
-                        for (int i = 0; i < pathExclusions.Count; i++)
-                        {
-                            if (string.IsNullOrEmpty(pathExclusions[i])) continue;
-                            sb.Append(" AND m.internal_path NOT LIKE ? ESCAPE '\\'");
-                        }
-                        exclusionSqlAnd = sb.ToString();
-                    }
-
-                    string inclusionSqlAnd = "";
-                    if (pathInclusions != null && pathInclusions.Count > 0)
-                    {
-                        var sb = new StringBuilder();
-                        sb.Append(" AND (");
-                        bool firstInc = true;
-                        for (int i = 0; i < pathInclusions.Count; i++)
-                        {
-                            if (string.IsNullOrEmpty(pathInclusions[i])) continue;
-                            if (!firstInc) sb.Append(" OR ");
-                            firstInc = false;
-                            sb.Append("m.internal_path LIKE ? ESCAPE '\\'");
-                        }
-                        if (!firstInc) sb.Append(")");
-                        else inclusionSqlAnd = "";
-                        if (!firstInc) inclusionSqlAnd = sb.ToString();
-                    }
-
-                    string tagSqlAnd = "";
-                    List<string> activeTagsList = null;
-                    if (activeTags != null && activeTags.Count > 0)
-                    {
-                        activeTagsList = new List<string>(activeTags);
-                        var sb = new StringBuilder();
-                        for (int i = 0; i < activeTagsList.Count; i++)
-                        {
-                            // Tags are stored in list_path as [tag] or similar.
-                            // This is a heuristic; real tag filtering is complex.
-                            sb.Append(" AND m.list_path LIKE ? ESCAPE '\\'");
-                        }
-                        tagSqlAnd = sb.ToString();
-                    }
-                    var userTagBindNames = new List<string>();
-                    var sbUt = new StringBuilder();
-                    if (userTagsUntaggedOnly)
-                        AppendSqlNoUserTagExists(sbUt, "m", categoryTitle, false);
-                    else
-                        AppendSqlActiveUserTagFilter(sbUt, userTagBindNames, activeUserTags, "m", userTagsRequireAll);
-                    string userTagSqlAnd = sbUt.ToString();
-                    var sbUtEv = new StringBuilder();
-                    if (userTagsUntaggedOnly)
-                        AppendSqlNoUserTagExists(sbUtEv, "m", categoryTitle, true);
-                    else
-                        AppendSqlActiveUserTagFilter(sbUtEv, new List<string>(), activeUserTags, "m", userTagsRequireAll, Gallery.EverythingCategoryName);
-                    string everythingUserTagSqlAnd = sbUtEv.ToString();
-
-                    string loadedSelect = pkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
                     string orderBy = "";
                     if (sortState != null)
                     {
@@ -5864,74 +6001,33 @@ namespace VPB
                         }
                     }
 
-                    var creatorList = SplitCreatorFilterList(creatorFilter);
-                    bool hasCreator = creatorList.Count > 0;
-                    bool isEverything = Gallery.IsEverythingCategoryName(categoryTitle);
                     var sbSql = new StringBuilder(512);
                     sbSql.Append("SELECT ");
-                    if (isEverything) sbSql.Append("DISTINCT ");
+                    if (ctx.IsEverything) sbSql.Append("DISTINCT ");
                     sbSql.Append("m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ");
                     // cloth_attr forced '' for EVERYTHING: DISTINCT needs a stable value across real-category rows with packed attrs.
-                    sbSql.Append(isEverything ? "''" : "ifnull(m.cloth_attr,'')");
+                    sbSql.Append(ctx.IsEverything ? "''" : "ifnull(m.cloth_attr,'')");
                     sbSql.Append(", ");
                     sbSql.Append(loadedSelect);
                     sbSql.Append(", ifnull(p.first_scanned, 0)");
                     sbSql.Append(" FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE ");
-                    if (isEverything)
+                    if (ctx.IsEverything)
                         sbSql.Append("1=1").Append(BuildEverythingNonPreviewAnd("m.internal_path"));
                     else
                         sbSql.Append("m.category = ?");
-                    if (hasCreator) AppendCreatorFilterSql(sbSql, "p.creator", creatorList);
-                    sbSql.Append(clothSqlAnd).Append(loadedSqlAnd).Append(nameSqlAnd).Append(exclusionSqlAnd).Append(inclusionSqlAnd).Append(tagSqlAnd).Append(isEverything ? everythingUserTagSqlAnd : userTagSqlAnd).Append(orderBy);
+                    sbSql.Append(ctx.CreatorAndFragment);
+                    sbSql.Append(clothSqlAnd);
+                    sbSql.Append(ctx.LoadedAndFragment).Append(ctx.NameAndFragment)
+                         .Append(ctx.ExclusionAndFragment).Append(ctx.InclusionAndFragment)
+                         .Append(ctx.TagAndFragment).Append(ctx.UserTagAndFragment)
+                         .Append(orderBy);
                     string sql = sbSql.ToString();
-                    
+
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
-                        if (!isEverything) stmt.BindText(bind++, categoryTitle);
-                        if (hasCreator) BindCreatorFilterSql(stmt, ref bind, creatorList);
-
-                        if (nameTerms != null && nameTerms.Length > 0)
-                        {
-                            for (int i = 0; i < nameTerms.Length; i++)
-                            {
-                                if (string.IsNullOrEmpty(nameTerms[i])) continue;
-                                string esc = "%" + EscapeLike(nameTerms[i]) + "%";
-                                stmt.BindText(bind++, esc);
-                                stmt.BindText(bind++, esc);
-                            }
-                        }
-
-                        if (pathExclusions != null && pathExclusions.Count > 0)
-                        {
-                            for (int i = 0; i < pathExclusions.Count; i++)
-                            {
-                                if (string.IsNullOrEmpty(pathExclusions[i])) continue;
-                                string esc = EscapeLike(pathExclusions[i]) + "%";
-                                stmt.BindText(bind++, esc);
-                            }
-                        }
-
-                        if (pathInclusions != null && pathInclusions.Count > 0)
-                        {
-                            for (int i = 0; i < pathInclusions.Count; i++)
-                            {
-                                if (string.IsNullOrEmpty(pathInclusions[i])) continue;
-                                string esc = EscapeLike(pathInclusions[i].Replace('\\', '/').TrimEnd('/')) + "/%";
-                                stmt.BindText(bind++, esc);
-                            }
-                        }
-
-                        if (activeTagsList != null)
-                        {
-                            for (int i = 0; i < activeTagsList.Count; i++)
-                            {
-                                string esc = "%" + EscapeLike(activeTagsList[i]) + "%";
-                                stmt.BindText(bind++, esc);
-                            }
-                        }
-                        for (int ui = 0; ui < userTagBindNames.Count; ui++)
-                            stmt.BindText(bind++, userTagBindNames[ui]);
+                        BindGalleryCategoryWhere(stmt, ctx, bind);
+                        // BindGalleryCategoryWhere returns next slot; we don't need it here.
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)

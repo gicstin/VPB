@@ -2115,6 +2115,11 @@ namespace VPB
                 return false;
             }
 
+            // Grid mutated in place: bump the sub-pane session so the clothing chip-count memo
+            // (keyed on _deferredSubPaneSessionId) recomputes against the already-updated cat_mem
+            // index instead of returning its pre-change cache.
+            unchecked { _deferredSubPaneSessionId++; }
+
             InvalidateGalleryPreHideFileListSnapshot();
 
             // ── Update grid ───────────────────────────────────────────────────────────────
@@ -4795,6 +4800,9 @@ namespace VPB
                         }
                     }
                     UpdatePaginationText();
+                    // Active chip reads currentFilteredFiles.Count; this pass just settled it (hide-strip +
+                    // hide-old-versions), so rebuild the sub-pane chips so the active chip shows the final count.
+                    try { if (clothingSubfilter != 0 || hairSubfilter != 0) RebuildSubPaneSideTabListsOnly(); } catch { }
                 }
                 catch { }
             }

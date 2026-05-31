@@ -1994,6 +1994,26 @@ namespace VPB
 
         // ─────────────────────────────────────────────────────────────────────────
 
+        // Records the active subfilter chip's label Text so UpdateSelectionContextMenu can keep its
+        // "(N)" equal to the grid's live count. The captured Text is the same one CreateTabButton ran
+        // EllipsizeTextPreferredWidth on; the chip labels here are short enough not to ellipsize.
+        private void CaptureActiveSubfilterChip(GameObject chipGO, string labelPrefix)
+        {
+            _activeSubfilterChipText = null;
+            _activeSubfilterChipLabelPrefix = null;
+            if (chipGO == null) return;
+            try
+            {
+                var t = chipGO.GetComponentInChildren<Text>();
+                if (t != null)
+                {
+                    _activeSubfilterChipText = t;
+                    _activeSubfilterChipLabelPrefix = labelPrefix;
+                }
+            }
+            catch { }
+        }
+
         private void UpdateSelectionContextMenu()
         {
             if (canvas == null) return;
@@ -2028,6 +2048,14 @@ namespace VPB
                 {
                     tboxLabel.text = countStr;
                 }
+            }
+
+            // Active clothing/hair chip uses the same `total` as the bottom counter, so the selected
+            // chip's "(N)" can't diverge from the grid (survives package add/remove, hide-old-versions).
+            if (_activeSubfilterChipText != null)
+            {
+                try { _activeSubfilterChipText.text = _activeSubfilterChipLabelPrefix + " (" + total + ")"; }
+                catch { _activeSubfilterChipText = null; }
             }
 
             // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).

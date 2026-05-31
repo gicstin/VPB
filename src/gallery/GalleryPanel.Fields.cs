@@ -576,6 +576,10 @@ namespace VPB
         private bool _sideTabsNeedFullRebuildAfterFirstRefresh;
         private bool _deferSideTabCountsForceRefresh;
         private Coroutine _packageDeltaSideTabsCoroutine;
+        // Handle to the active clothing/hair subfilter chip's label Text. UpdateSelectionContextMenu
+        // rewrites its "(N)" from the live grid count each tick so it stays equal to the bottom "X Items".
+        private UnityEngine.UI.Text _activeSubfilterChipText;
+        private string _activeSubfilterChipLabelPrefix;
         
         private string nameFilter = "";
         private string nameFilterLower = "";

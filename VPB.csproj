@@ -377,6 +377,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.PackageManifest.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.VarPathInventory.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTags.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />

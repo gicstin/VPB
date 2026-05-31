@@ -11,12 +11,17 @@ namespace VPB
         {
             if (!tagsCached) ScheduleTagCountsForSideTabsNonBlocking();
 
+            // Cleared on every sub-pane rebuild; the active chip (if any) re-registers its handle.
+            _activeSubfilterChipText = null;
+            _activeSubfilterChipLabelPrefix = null;
+
             // Determine which tags to show
             List<string> tagsToShow = new List<string>();
             string title = titleText != null ? titleText.text : "";
 
             if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
             {
+                ApplyClothingChipCountsFromSqlIfEnabled();
                 // Clothing subfilters (shown only for Clothing)
                 {
                     Color inactive = ColorInactiveRow;
@@ -49,9 +54,13 @@ namespace VPB
                         else if (opt == "Female") cnt = isActive ? clothingSubfilterCountFemale : clothingSubfilterFacetCountFemale;
                         else if (opt == "Decals") cnt = isActive ? clothingSubfilterCountDecals : clothingSubfilterFacetCountDecals;
 
+                        // Active chip shows the live grid count (kept equal to the bottom "X Items" by
+                        // UpdateSelectionContextMenu); inactive chips show the SQL facet count as a prediction.
+                        if (isActive && currentFilteredFiles != null) cnt = currentFilteredFiles.Count;
+
                         string label = opt + " (" + cnt + ")";
 
-                        CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        GameObject chipGO = CreateTabButton(container.transform, label, btnColor, isActive, () => {
                             if (flag != 0)
                             {
                                 if ((clothingSubfilter & flag) != 0) clothingSubfilter = 0;
@@ -65,6 +74,7 @@ namespace VPB
                             tagsCached = false;
                             RefreshFilesAndTabs();
                         }, trackedButtons);
+                        if (isActive) CaptureActiveSubfilterChip(chipGO, opt);
                     }
                 }
 
@@ -102,9 +112,11 @@ namespace VPB
                         else if (opt == "Male") cnt = isActive ? hairSubfilterCountMale : hairSubfilterFacetCountMale;
                         else if (opt == "Female") cnt = isActive ? hairSubfilterCountFemale : hairSubfilterFacetCountFemale;
 
+                        if (isActive && currentFilteredFiles != null) cnt = currentFilteredFiles.Count;
+
                         string label = opt + " (" + cnt + ")";
 
-                        CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                        GameObject chipGO = CreateTabButton(container.transform, label, btnColor, isActive, () => {
                             if (flag != 0)
                             {
                                 if ((hairSubfilter & flag) != 0) hairSubfilter = 0;
@@ -118,6 +130,7 @@ namespace VPB
                             tagsCached = false;
                             RefreshFilesAndTabs();
                         }, trackedButtons);
+                        if (isActive) CaptureActiveSubfilterChip(chipGO, opt);
                     }
                 }
 

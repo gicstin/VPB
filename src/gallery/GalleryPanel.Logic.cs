@@ -2061,6 +2061,8 @@ namespace VPB
                 }
             }
 
+            // Tally override moved to BuildTagsTabs (last writer before chip render; covers the cache-hit and parallel-scan paths this coroutine doesn't).
+
             // Count Hair (local filesystem) entries for subfilter facet counts.
             // Separate from package loop above (mirrors Clothing block).
             if (isHairTitle)
@@ -2465,6 +2467,9 @@ namespace VPB
                 try { utc = TagsManager.Instance.GetAllUserTags().Count; } catch { utc = 0; }
                 sb.Append(utc).Append('\u001E');
                 sb.Append(userTagSideTabDataRevision);
+                bool hov = false;
+                try { hov = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { hov = false; }
+                sb.Append('').Append(hov ? 1 : 0);
                 key = sb.ToString();
                 return true;
             }
@@ -2530,6 +2535,89 @@ namespace VPB
             }
 
             return true;
+        }
+
+        // Memo keyed on the refresh-session id (bumped in RefreshFiles, the routine that rebuilds the grid).
+        // The sub-pane rebuilds several times per refresh (left+right panes, multiple hooks); counts can't
+        // change within one session, so compute once and reuse. New refresh -> new session -> recompute,
+        // in lockstep with the grid, so the chip numbers stay consistent with what the grid shows.
+        private int _clothingChipCountsSession = -1;
+        private VpbLocalDatabase.ClothingChipCounts _clothingChipCountsCached;
+
+        // Counts each chip using the grid's own SQL WHERE builder (BuildGalleryCategoryWhere),
+        // so the number on each chip = what the grid shows when only that chip is active.
+        // Memoized per refresh session; called on every clothing sub-pane build.
+        private void ApplyClothingChipCountsFromSqlIfEnabled()
+        {
+            try
+            {
+                string cp = currentPath ?? "";
+                int sourceFilterMode = ResolveEffectiveSourceFilterMode(false, cp);
+                string creator = currentCreator ?? "";
+
+                // loadedState from current sort state (mirrors how RefreshFilesRoutine derives it).
+                int loadedState = -1;
+                try
+                {
+                    var st = GetSortState("Files");
+                    if (st.Type == SortType.LoadedOnly) loadedState = 1;
+                    else if (st.Type == SortType.UnloadedOnly) loadedState = 0;
+                }
+                catch { }
+
+                // User tag filter params (mirrors RefreshFilesRoutine worker snapshot).
+                bool utFilterByTags = _userTagAvailMode == UserTagAvailMode.FilterByTags;
+                bool utUntaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
+                bool utRequireAll = utFilterByTags && UserTagFilterRequiresAllTags();
+                HashSet<string> utNames = null;
+                if (utFilterByTags && activeUserTags != null && activeUserTags.Count > 0)
+                    utNames = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+
+                int session = _deferredSubPaneSessionId;
+                bool memoHit = session == _clothingChipCountsSession;
+
+                VpbLocalDatabase.ClothingChipCounts chips;
+                if (memoHit)
+                {
+                    chips = _clothingChipCountsCached;
+                }
+                else
+                {
+                    bool hideOldVersions = false;
+                    try { hideOldVersions = Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; }
+                    catch { }
+
+                    if (!VpbLocalDatabase.TryQueryClothingChipCounts(
+                        creator, loadedState, nameFilterTerms,
+                        null, null, // pathExclusions/pathInclusions: both null for Clothing
+                        activeTags, utNames, utUntaggedOnly, utRequireAll,
+                        sourceFilterMode, hideOldVersions, out chips)) return;
+                    _clothingChipCountsCached = chips;
+                    _clothingChipCountsSession = session;
+                }
+
+                // Single-select: each chip shows count for that chip alone (not XOR toggle).
+                // Assign both Count and FacetCount equal so the chip shows the same number active or inactive.
+                clothingSubfilterCountAll       = chips.Default;
+                clothingSubfilterCountReal      = chips.Real;
+                clothingSubfilterCountPresets   = chips.Presets;
+                clothingSubfilterCountCustom    = chips.Custom;
+                clothingSubfilterCountCustomPreset = chips.CustomPreset;
+                clothingSubfilterCountItems     = chips.Items;
+                clothingSubfilterCountMale      = chips.Male;
+                clothingSubfilterCountFemale    = chips.Female;
+                clothingSubfilterCountDecals    = chips.Decals;
+
+                clothingSubfilterFacetCountReal     = chips.Real;
+                clothingSubfilterFacetCountPresets  = chips.Presets;
+                clothingSubfilterFacetCountCustom   = chips.Custom;
+                clothingSubfilterFacetCountCustomPreset = chips.CustomPreset;
+                clothingSubfilterFacetCountItems    = chips.Items;
+                clothingSubfilterFacetCountMale     = chips.Male;
+                clothingSubfilterFacetCountFemale   = chips.Female;
+                clothingSubfilterFacetCountDecals   = chips.Decals;
+            }
+            catch (Exception ex) { try { LogUtil.LogWarning("[VPB] ApplyClothingChipCountsFromSql failed: " + ex.Message); } catch { } }
         }
 
         private TagCountSnapshot CaptureTagCountSnapshot()
