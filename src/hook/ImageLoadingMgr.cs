@@ -482,6 +482,9 @@ namespace VPB
             if (string.IsNullOrEmpty(sourcePath)) return;
             try
             {
+                TextureUtil.TryDeleteNativeThumbnailDiskCachesForSource(sourcePath);
+                TextureUtil.TryDeleteZstdThumbnailDiskCachesForSource(sourcePath);
+
                 string full = FileManager.GetFullPath(sourcePath.Replace('\\', '/'));
                 InvalidateCachePathMapForDiskPath(full);
                 InvalidateMetadataCacheForDiskPath(full);
@@ -489,6 +492,7 @@ namespace VPB
                 string native = FindNativeDiskCachePathForThumbnailSource(sourcePath);
                 if (!string.IsNullOrEmpty(native))
                 {
+                    TryDeleteCorruptNativeCache(native);
                     InvalidateCachePathMapForDiskPath(native);
                     InvalidateMetadataCacheForDiskPath(native);
                 }
@@ -497,6 +501,7 @@ namespace VPB
                     sourcePath, false, false, false, false, false, false, 0, 0, 0f, false);
                 if (!string.IsNullOrEmpty(zstd))
                 {
+                    TextureUtil.TryDeleteZstdCacheFile(zstd);
                     InvalidateCachePathMapForDiskPath(zstd);
                     InvalidateMetadataCacheForDiskPath(zstd);
                 }

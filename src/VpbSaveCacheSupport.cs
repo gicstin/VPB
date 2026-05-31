@@ -240,7 +240,7 @@ namespace VPB
         {
             if (paths == null || string.IsNullOrEmpty(path)) return;
 
-            void add(string p)
+            void addRaw(string p)
             {
                 if (string.IsNullOrEmpty(p)) return;
                 paths.Add(p);
@@ -248,19 +248,39 @@ namespace VPB
                 paths.Add(p.Replace('/', '\\'));
             }
 
-            add(path);
+            void addResolved(string p)
+            {
+                if (string.IsNullOrEmpty(p)) return;
+                addRaw(p);
+
+                try
+                {
+                    string full = InvokeGameFileManagerGetFullPath(p.Replace('\\', '/'));
+                    if (!string.IsNullOrEmpty(full)) addRaw(full);
+                }
+                catch { }
+
+                try
+                {
+                    string norm = FileManager.NormalizePath(p.Replace('\\', '/'));
+                    if (!string.IsNullOrEmpty(norm)) addRaw(norm);
+                }
+                catch { }
+            }
+
+            addResolved(path);
 
             try
             {
                 string norm = path.Replace('\\', '/');
-                add(Path.ChangeExtension(norm, ".jpg"));
-                add(Path.ChangeExtension(norm, ".png"));
+                addResolved(Path.ChangeExtension(norm, ".jpg"));
+                addResolved(Path.ChangeExtension(norm, ".png"));
                 if (norm.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                    add(norm.Substring(0, norm.Length - 5) + ".jpg");
+                    addResolved(norm.Substring(0, norm.Length - 5) + ".jpg");
                 if (norm.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
-                    add(norm.Substring(0, norm.Length - 4) + ".jpg");
+                    addResolved(norm.Substring(0, norm.Length - 4) + ".jpg");
                 if (norm.EndsWith(".vac", StringComparison.OrdinalIgnoreCase))
-                    add(norm.Substring(0, norm.Length - 4) + ".jpg");
+                    addResolved(norm.Substring(0, norm.Length - 4) + ".jpg");
             }
             catch { }
         }

@@ -383,8 +383,9 @@ namespace VPB
 
             // Let VaM finish writing the .jpg before we invalidate caches and reload thumbs.
             yield return new WaitForSecondsRealtime(0.2f);
-            InvalidateSceneSaveGalleryCaches(path);
+            // Restore gallery visibility first — RefreshVisibleGridVisualsOnly no-ops while hidden.
             EndSaveMode();
+            InvalidateSceneSaveGalleryCaches(path);
         }
 
         private void InvalidateSceneSaveGalleryCaches(string scenePath)
@@ -806,13 +807,14 @@ namespace VPB
                 return;
             }
 
+            bool savedOk = false;
             try
             {
                 JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
                 if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
                 presetJS.CallAction("StorePreset");
                 ShowTemporaryStatus("Preset saved: " + path, 2f);
-                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
+                savedOk = true;
             }
             catch (Exception ex)
             {
@@ -824,6 +826,9 @@ namespace VPB
                 if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
                 EndSaveMode();
             }
+
+            if (savedOk)
+                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
         }
 
         private IEnumerator SavePresetWithScreenshotCoroutine(JSONStorable presetJS, string path, JSONStorableBool loadOnSelectJSB, bool loadOnSelectPreState)
@@ -872,11 +877,13 @@ namespace VPB
                     yield return null;
                 }
                 yield return new WaitForSecondsRealtime(0.2f);
-                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
             }
 
             if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
             EndSaveMode();
+
+            if (saved)
+                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
         }
         private void CreatePaginationControls()
         {

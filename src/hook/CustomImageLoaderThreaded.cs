@@ -581,11 +581,11 @@ namespace VPB
 	                            }
 	                            else
 	                            {
-	                                FileEntry fe = FileManager.GetFileEntry(imgPath);
-	                                if (fe != null)
+	                                lastWriteTime = GetLooseThumbnailLastWriteTime(imgPath);
+	                                foundTime = lastWriteTime != 0;
+	                                if (!foundTime)
 	                                {
-	                                    lastWriteTime = fe.LastWriteTime.ToFileTime();
-	                                    foundTime = true;
+	                                    try { foundTime = FileManager.FileExists(imgPath); } catch { foundTime = false; }
 	                                }
 	                            }
 
@@ -953,12 +953,8 @@ namespace VPB
 					}
 					else
 					{
-						FileEntry fe = FileManager.GetFileEntry(imgPath);
-						if (fe != null)
-						{
-							lastWriteTime = fe.LastWriteTime.ToFileTime();
-							foundTime = true;
-						}
+						lastWriteTime = GetLooseThumbnailLastWriteTime(imgPath);
+						foundTime = lastWriteTime != 0;
 					}
 
 					if (!foundTime || tex.width > 512 || tex.height > 512) return;
@@ -1547,6 +1543,29 @@ namespace VPB
             string k = turboJpegScaleDenom <= 1 ? path : path + "|tj" + turboJpegScaleDenom;
             if (unityDecodeOnly) return k + "|uj";
             return k;
+        }
+
+        /// <summary>Live disk mtime for loose thumbs; FileEntry can stay stale after overwrite save.</summary>
+        private static long GetLooseThumbnailLastWriteTime(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return 0;
+
+            try
+            {
+                string full = FileManager.GetFullPath(imgPath.Replace('\\', '/'));
+                if (!string.IsNullOrEmpty(full) && File.Exists(full))
+                    return File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
+            }
+            catch { }
+
+            try
+            {
+                FileEntry fe = FileManager.GetFileEntry(imgPath);
+                if (fe != null) return fe.LastWriteTime.ToFileTime();
+            }
+            catch { }
+
+            return 0;
         }
 
         private static int ClampInt(int v, int lo, int hi)

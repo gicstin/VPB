@@ -63,6 +63,44 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// VaM <c>FileBrowser.CollectFlattenedFileEntries</c> (inGame + json): recursive scan under
+        /// <c>Saves/scene</c>, include <c>.json</c> only when sibling <c>.jpg</c> exists on disk.
+        /// </summary>
+        public static bool IsVaMLocalSceneListingCandidate(string jsonPath)
+        {
+            if (string.IsNullOrEmpty(jsonPath)) return false;
+            if (!jsonPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+            if (IsVpbGeneratedLocalScenePath(jsonPath)) return false;
+
+            string full;
+            try
+            {
+                if (Path.IsPathRooted(jsonPath))
+                    full = Path.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+                else
+                    full = FileManager.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(full) || !File.Exists(full)) return false;
+
+            string sceneRoot = GetSavesSceneDirectoryFullPath();
+            if (string.IsNullOrEmpty(sceneRoot) || !IsStrictFilePathInsideDirectory(full, sceneRoot))
+                return false;
+
+            string norm = full.Replace('\\', '/');
+            string lower = norm.ToLowerInvariant();
+            if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
+
+            // Same sibling rule as VaM: strip ".json" (4 chars) and append "jpg".
+            string jpgPath = full.Substring(0, full.Length - 4) + "jpg";
+            return File.Exists(jpgPath);
+        }
+
         public static bool IsVpbGeneratedLocalScenePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;

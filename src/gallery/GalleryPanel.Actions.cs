@@ -510,6 +510,7 @@ namespace VPB
                 {
                     refreshOnNextShow = false;
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
+                    try { RefreshVisibleGridVisualsOnly(); } catch { }
                 }
                 // Restore split sub-pane chrome (tags / scene source) after hide — no list rebuild.
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }

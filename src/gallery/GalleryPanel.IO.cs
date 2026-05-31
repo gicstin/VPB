@@ -2232,6 +2232,14 @@ namespace VPB
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
                 sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
                 sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                try
+                {
+                    sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
+                }
+                catch
+                {
+                    sb.Append("0").Append('\u001E');
+                }
                 sb.Append(currentRatingFilter ?? "").Append('\u001E');
                 sb.Append(currentSizeFilter ?? "").Append('\u001E');
                 sb.Append(categoryFilter ?? "").Append('\u001E');
@@ -3768,8 +3776,7 @@ namespace VPB
             }
 
             List<string> pathsToSearch = new List<string>();
-            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
-            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+            Gallery.CollectLooseDiskSearchRoots(pathsToSearch, currentPaths, currentPath);
 
             if (activeContentType == ContentType.Category)
             {
@@ -3779,6 +3786,10 @@ namespace VPB
                     // Re-enumerating Saves/* (SafeGetFiles + PassesFilters per path) duplicates work and can burn 10s+ on large trees with sysAdded=0.
                     if (!fileListFromCache)
                     {
+                    string titleForLooseSceneScan = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                    bool applyVaMLocalSceneLooseFilter =
+                        titleForLooseSceneScan.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
+                        && titleForLooseSceneScan.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) < 0;
                     // Fast path: reuse SQLite-cached loose-file listings for this category/path/ext combo when unchanged.
                     string sysCacheKey = null;
                     string sysCacheSig = null;
@@ -3786,12 +3797,10 @@ namespace VPB
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: format tag + category + extensions + search paths. The "sf2" tag marks the
-                        // filter-agnostic listing format (rows stored before the clothing/hair subfilter, which is
-                        // not part of the key); the signature is folder mtime, so changing what is written here
-                        // without bumping the tag leaves stale caches that never rebuild until a file changes.
+                        // Cache key: format tag + category + extensions + search paths. The "sf3" tag marks resolved
+                        // disk roots + VaM local-scene listing rules (json + sibling jpg under Saves/scene).
                         var sbKey = new System.Text.StringBuilder(256);
-                        sbKey.Append("sf2|").Append(currentCategoryTitle ?? "").Append("|ext=");
+                        sbKey.Append("sf3|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
                         {
                             var ex = new List<string>(extensions);
@@ -3860,6 +3869,11 @@ namespace VPB
                                 try { wt = DateTime.FromBinary(r.LastWriteBinaryOrInvalid); } catch { wt = DateTime.MinValue; }
                             }
                             long sz = r.SizeOrInvalid != long.MinValue ? r.SizeOrInvalid : 0;
+                            if (applyVaMLocalSceneLooseFilter
+                                && r.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                                && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(r.Path))
+                                continue;
+
                             var sysEntryFast = new SystemFileEntry(r.Path, wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
                             files.Add(sysEntryFast);
@@ -3911,6 +3925,11 @@ namespace VPB
                                     yieldWatch.Reset();
                                     yieldWatch.Start();
                                 }
+
+                                if (applyVaMLocalSceneLooseFilter
+                                    && string.Equals(ext, "json", StringComparison.OrdinalIgnoreCase)
+                                    && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(sysPath))
+                                    continue;
 
                                 var sysEntry = new SystemFileEntry(sysPath);
 

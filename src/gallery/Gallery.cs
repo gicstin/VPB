@@ -103,6 +103,50 @@ namespace VPB
             return splitExtensions;
         }
 
+        /// <summary>
+        /// Resolves VaM-relative category roots (e.g. <c>Saves/scene</c>) to on-disk paths for
+        /// <see cref="FileManager.SafeGetFiles"/> / <see cref="Directory.Exists"/> (matches VaM cwd semantics).
+        /// </summary>
+        public static void CollectLooseDiskSearchRoots(List<string> dest, IList<string> categoryPaths, string categoryPath)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (categoryPaths != null && categoryPaths.Count > 0)
+            {
+                for (int i = 0; i < categoryPaths.Count; i++)
+                    TryAddLooseDiskSearchRoot(dest, categoryPaths[i]);
+            }
+            else
+                TryAddLooseDiskSearchRoot(dest, categoryPath);
+        }
+
+        private static void TryAddLooseDiskSearchRoot(List<string> dest, string path)
+        {
+            if (dest == null || string.IsNullOrEmpty(path)) return;
+            string full = null;
+            try
+            {
+                string norm = path.Replace('\\', '/').TrimEnd('/');
+                if (Path.IsPathRooted(norm))
+                    full = Path.GetFullPath(norm.Replace('/', Path.DirectorySeparatorChar));
+                else
+                    full = FileManager.GetFullPath(norm.Replace('/', Path.DirectorySeparatorChar));
+            }
+            catch
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(full) || !Directory.Exists(full)) return;
+
+            for (int i = 0; i < dest.Count; i++)
+            {
+                if (string.Equals(dest[i], full, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            dest.Add(full);
+        }
+
         private List<Category> categories = new List<Category>();
         
         // Panels management

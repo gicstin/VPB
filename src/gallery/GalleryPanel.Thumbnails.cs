@@ -597,6 +597,35 @@ namespace VPB
             try { RefreshVisibleGridVisualsOnly(); } catch { }
         }
 
+        private static long GetThumbnailSourceWriteTimeForBinding(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return 0;
+
+            try
+            {
+                if (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                    return 0;
+            }
+            catch { }
+
+            try
+            {
+                string full = FileManager.GetFullPath(imgPath.Replace('\\', '/'));
+                if (!string.IsNullOrEmpty(full) && File.Exists(full))
+                    return File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
+            }
+            catch { }
+
+            try
+            {
+                FileEntry fe = FileManager.GetFileEntry(imgPath);
+                if (fe != null) return fe.LastWriteTime.ToFileTime();
+            }
+            catch { }
+
+            return 0;
+        }
+
         private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
@@ -842,7 +871,7 @@ namespace VPB
             if (CustomImageLoaderThreaded.singleton == null) return;
 
             string capturedGroupId = currentLoadingGroupId;
-            string expectedTag = capturedGroupId + "|" + imgPath;
+            string expectedTag = capturedGroupId + "|" + imgPath + "|" + GetThumbnailSourceWriteTimeForBinding(imgPath);
             ThumbnailBindingTag bind = null;
             if (target != null)
             {

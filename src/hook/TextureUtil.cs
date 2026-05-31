@@ -577,6 +577,51 @@ namespace VPB
             try { string meta = zstdPath + "meta"; if (File.Exists(meta)) File.Delete(meta); } catch { }
         }
 
+        /// <summary>Delete all VaM native .vamcache rows for a loose thumbnail (any size/time token).</summary>
+        public static void TryDeleteNativeThumbnailDiskCachesForSource(string sourcePath)
+        {
+            if (string.IsNullOrEmpty(sourcePath)) return;
+
+            string fileName = System.IO.Path.GetFileName(sourcePath);
+            if (string.IsNullOrEmpty(fileName)) return;
+            try { fileName = SanitizeFileName(fileName).Replace('.', '_'); }
+            catch { fileName = fileName.Replace('.', '_'); }
+
+            string cacheDir = ResolveTextureCacheDirFullPath();
+            if (string.IsNullOrEmpty(cacheDir) || !Directory.Exists(cacheDir)) return;
+
+            string[] matches = null;
+            try { matches = Directory.GetFiles(cacheDir, fileName + "_*.vamcache", SearchOption.TopDirectoryOnly); }
+            catch { matches = null; }
+            if (matches == null) return;
+
+            for (int i = 0; i < matches.Length; i++)
+                TryDeleteZstdCacheFile(matches[i]);
+        }
+
+        /// <summary>Delete all VPB .zvamcache rows for a loose thumbnail (any size/time token).</summary>
+        public static void TryDeleteZstdThumbnailDiskCachesForSource(string sourcePath)
+        {
+            if (string.IsNullOrEmpty(sourcePath)) return;
+
+            string fileName = System.IO.Path.GetFileName(sourcePath);
+            if (string.IsNullOrEmpty(fileName)) return;
+            try { fileName = SanitizeFileName(fileName).Replace('.', '_'); }
+            catch { fileName = fileName.Replace('.', '_'); }
+
+            string cacheDir = null;
+            try { cacheDir = VamHookPlugin.GetCacheDir(); } catch { cacheDir = null; }
+            if (string.IsNullOrEmpty(cacheDir) || !Directory.Exists(cacheDir)) return;
+
+            string[] matches = null;
+            try { matches = Directory.GetFiles(cacheDir, fileName + "_*.zvamcache", SearchOption.TopDirectoryOnly); }
+            catch { matches = null; }
+            if (matches == null) return;
+
+            for (int i = 0; i < matches.Length; i++)
+                TryDeleteZstdCacheFile(matches[i]);
+        }
+
         private static readonly Regex s_NativeCacheFlagSuffix = new Regex(@"_(_?[CLNAIR]|BN\d+(?:\.\d+)?)$", RegexOptions.Compiled);
         private static readonly Regex s_NativeCacheTimeSuffix = new Regex(@"_(\d{17,18})$", RegexOptions.Compiled);
         private static readonly Regex s_NativeCacheSizeSuffix = new Regex(@"_(\d{1,12})$", RegexOptions.Compiled);
