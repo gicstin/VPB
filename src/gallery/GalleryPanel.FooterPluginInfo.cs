@@ -6,8 +6,12 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        // Assigned when the footer plugin-info button row is built. That build path is not wired, so
+        // the field stays null and the hover/chrome handlers null-guard and no-op (dormant, not dead).
+#pragma warning disable 0649
         private GameObject footerPluginInfoBtn;
         private Image footerPluginInfoBtnImage;
+#pragma warning restore 0649
         private bool _footerPluginInfoHovering;
         private int _footerPluginInfoTooltipKey = int.MinValue;
         private float _footerPluginInfoLastUpdateCheckUnscaled = -999f;

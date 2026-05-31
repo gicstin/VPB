@@ -7,7 +7,11 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        // Assigned when the footer compress-cache button is built. That build path is not wired, so
+        // the field stays null and the hover handlers null-guard and no-op (dormant, not dead).
+#pragma warning disable 0649
         private GameObject footerCompressCacheBtn;
+#pragma warning restore 0649
         private int _footerCompressCacheCount = -1;
         private bool _footerCompressCacheHovering;
         private bool _footerCompressCacheCounting;
