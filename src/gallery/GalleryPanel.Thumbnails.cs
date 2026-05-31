@@ -581,6 +581,22 @@ namespace VPB
             }
         }
 
+        /// <summary>After save/overwrite: bust VPB/VaM thumb caches and force visible grid cells to reload.</summary>
+        internal void OnGalleryAssetSavedInvalidateThumbnails(string savedAssetPath)
+        {
+            refreshOnNextShow = true;
+
+            try
+            {
+                if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+                    CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+                currentLoadingGroupId = Guid.NewGuid().ToString();
+            }
+            catch { }
+
+            try { RefreshVisibleGridVisualsOnly(); } catch { }
+        }
+
         private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();

@@ -46,6 +46,7 @@ namespace VPB
         private GameObject tboxThumbDebugBtn;
         private GameObject tboxOpenHubBtn;
         private GameObject tboxSceneImportBtn;
+        private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
@@ -176,6 +177,7 @@ namespace VPB
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
             one(tboxSceneImportBtn);
+            one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
@@ -219,6 +221,7 @@ namespace VPB
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
             d(tboxSceneImportBtn);
+            d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
@@ -339,6 +342,7 @@ namespace VPB
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
+                if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
                 if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
                 if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
@@ -806,6 +810,26 @@ namespace VPB
             const int tboxActionBtnFont = 16;
 
             // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
+
+            tboxOverwriteSceneBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxOverwriteSaveSceneClicked
+            );
+            tboxOverwriteSceneBtn.name = "Tbox_OverwriteScene";
+            TboxConfigureActionButtonFlex(tboxOverwriteSceneBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(
+                tboxOverwriteSceneBtn,
+                "gallery.tooltip.overwrite_scene",
+                "Overwrite Save: open save dialog with the selected scene name prefilled.");
+            try
+            {
+                var saveSpr = gallerySaveSprite ?? UI.LoadIconSprite("vpb_icons/gallery_save.png", Color.white);
+                if (saveSpr != null)
+                    UI.AddIconToButton(tboxOverwriteSceneBtn, saveSpr, padding: 6f, backdropOverride: new Color(0.18f, 0.42f, 0.28f, 0.96f));
+            }
+            catch { }
 
             tboxSceneImportBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -2207,6 +2231,7 @@ namespace VPB
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxSceneImportBtn, false);
+                show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
@@ -2259,6 +2284,7 @@ namespace VPB
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
             show(tboxSceneImportBtn, !isCleanup);
+            show(tboxOverwriteSceneBtn, !isCleanup && !IsHubMode);
             show(tboxSuppressScaleBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
             show(tboxClearSelectionBtn, !isCleanup);
@@ -2292,6 +2318,7 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
+                show(tboxOverwriteSceneBtn, false);
 
                 try { RefreshTboxGridRateControlState(); } catch { }
                 RefreshTboxFlexButtonLayout();
@@ -2448,6 +2475,11 @@ namespace VPB
                 SetTboxButtonEnabledVisual(
                     tboxRemoveHistoryBtn,
                     historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
+
+            bool canOverwriteScene = false;
+            try { canOverwriteScene = TryGetSceneOverwriteSaveContext(out _); } catch { canOverwriteScene = false; }
+            if (tboxOverwriteSceneBtn != null)
+                SetTboxButtonEnabledVisual(tboxOverwriteSceneBtn, canOverwriteScene);
 
             try { RefreshTboxGridRateControlState(); } catch { }
             RefreshTboxFlexButtonLayout();

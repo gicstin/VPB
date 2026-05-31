@@ -50,6 +50,7 @@ namespace VPB
             try
             {
                 EnsurePluginHashRegistered(finalPluginHash);
+                VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm();
                 Action<object, object[]> invoker = GetOrCreateSignedInvoker(method, finalAssemblyName);
                 if (invoker == null)
                 {
@@ -99,16 +100,16 @@ namespace VPB
 
                 Type fmType = typeof(MVR.FileManagement.FileManager);
                 TryInvokeStatic(fmType, "RegisterPluginHashToPluginPath", new object[] { pluginHash, pluginPath });
-
-                // Keep scene write registrations because this bridge originated from save flows.
-                TryInvokeStatic(fmType, "RegisterPluginSecureWritePath", new object[] { "Saves", false });
-                TryInvokeStatic(fmType, "RegisterPluginSecureWritePath", new object[] { "Saves/scene", false });
-                TryInvokeStatic(fmType, "RegisterPluginSecureWritePath", new object[] { "Saves\\scene", false });
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB] Failed to register plugin signature bridge: " + ex.Message);
             }
+        }
+
+        internal static void RegisterPluginSceneWritePathsNoConfirm()
+        {
+            VpbSaveCacheSupport.RegisterPluginSceneWritePathsNoConfirm();
         }
 
         private static Action<object, object[]> GetOrCreateSignedInvoker(MethodInfo method, string fakeAssemblyName)
@@ -223,6 +224,8 @@ namespace VPB
 
             MethodInfo saveMethod = ResolveSaveMethod();
             if (saveMethod == null) return false;
+
+            VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm();
 
             return PluginSignatureBridge.TryInvoke(
                 saveMethod,

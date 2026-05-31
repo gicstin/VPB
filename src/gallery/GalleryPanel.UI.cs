@@ -135,6 +135,17 @@ namespace VPB
                 });
             }
 
+            bool canOverwriteScene = SuperController.singleton != null && TryGetSceneOverwriteSaveContext(out _);
+            options.Add(new SaveMenuOption
+            {
+                Label = VPBTranslation.T("gallery.save.overwrite_scene", "Overwrite Save..."),
+                Tooltip = VPBTranslation.T(
+                    "gallery.save.overwrite_scene_tooltip",
+                    "Save scene using the selected gallery scene name."),
+                Enabled = canOverwriteScene,
+                Action = () => OverwriteSaveSceneFromGallery()
+            });
+
             // Scene and core presets at the bottom
             options.Add(new SaveMenuOption
             {
@@ -240,6 +251,7 @@ namespace VPB
 
         private void BeginSaveMode()
         {
+            try { VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm(); } catch { }
             if (_canvasesHiddenForSave != null) return; // already in save mode
             _canvasesHiddenForSave = new List<Canvas>();
             _panelsHiddenForSave = new List<GalleryPanel>();
@@ -292,67 +304,10 @@ namespace VPB
             _canvasesHiddenForSave = null;
         }
 
-        private void SaveSceneFromGallery()
-        {
-            if (SuperController.singleton == null) return;
-            string defaultFolder = "Saves/scene";
-            string defaultName = "scene_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
-
-            BeginSaveMode();
-
-            if (SuperController.singleton.mainHUD != null && !SuperController.singleton.mainHUD.gameObject.activeSelf)
-                SuperController.singleton.ShowMainHUDMonitor();
-            SuperController.singleton.GetMediaPathDialog((selectedPath) =>
-            {
-                if (string.IsNullOrEmpty(selectedPath))
-                {
-                    EndSaveMode();
-                    return;
-                }
-                string path = selectedPath;
-                if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) path += ".json";
-                path = NormalizeSceneSavePath(path);
-                bool exists = false;
-                try { exists = MVR.FileManagementSecure.FileManagerSecure.FileExists(path); } catch { exists = false; }
-
-                if (exists)
-                {
-                    try
-                    {
-                        SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
-                        {
-                            SaveSceneFinal(path, true);
-                        }, () => { EndSaveMode(); });
-                    }
-                    catch
-                    {
-                        ShowTemporaryStatus("Scene already exists.", 2f);
-                        EndSaveMode();
-                    }
-                    return;
-                }
-
-                SaveSceneFinal(path, false);
-            }, "json", defaultFolder, false, true, false, null, true);
-
-            try
-            {
-                if (SuperController.singleton.mediaFileBrowserUI != null)
-                {
-                    SuperController.singleton.mediaFileBrowserUI.SetTextEntry(true);
-                    if (SuperController.singleton.mediaFileBrowserUI.fileEntryField != null)
-                    {
-                        SuperController.singleton.mediaFileBrowserUI.fileEntryField.text = defaultName;
-                        SuperController.singleton.mediaFileBrowserUI.ActivateFileNameField();
-                    }
-                }
-            }
-            catch { }
-        }
-
         private void SaveSceneFinal(string path, bool overwriteConfirmed)
         {
             path = NormalizeSceneSavePath(path);
+            try { VpbSaveCacheSupport.RegisterPluginSaveWritePathForFile(path); } catch { }
             bool saveInvoked = false;
             try
             {
@@ -425,28 +380,16 @@ namespace VPB
             }
 
             _sceneSaveFinalizeCoroutine = null;
+
+            // Let VaM finish writing the .jpg before we invalidate caches and reload thumbs.
+            yield return new WaitForSecondsRealtime(0.2f);
             InvalidateSceneSaveGalleryCaches(path);
             EndSaveMode();
         }
 
         private void InvalidateSceneSaveGalleryCaches(string scenePath)
         {
-            if (string.IsNullOrEmpty(scenePath)) return;
-
-            try
-            {
-                string jpgPath = Path.ChangeExtension(scenePath, ".jpg");
-                if (CustomImageLoaderThreaded.singleton != null)
-                    CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(jpgPath);
-            }
-            catch { }
-
-            if (_panelsHiddenForSave == null) return;
-            for (int i = 0; i < _panelsHiddenForSave.Count; i++)
-            {
-                GalleryPanel panel = _panelsHiddenForSave[i];
-                if (panel != null) panel.refreshOnNextShow = true;
-            }
+            VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(scenePath);
         }
 
         private void HidePanelsForSaveTracking()
@@ -827,18 +770,11 @@ namespace VPB
 
             if (MVR.FileManagementSecure.FileManagerSecure.FileExists(path))
             {
-                try
-                {
-                    SuperController.singleton.Alert("Resource " + path + " already exists. Overwrite?", () =>
-                    {
-                        SavePresetFinal(target, storableId, path, useScreenshot);
-                    }, () => { EndSaveMode(); });
-                }
-                catch
-                {
-                    ShowTemporaryStatus("Preset already exists.", 2f);
-                    EndSaveMode();
-                }
+                VpbSaveCacheSupport.ConfirmOverwriteThenSave(
+                    path,
+                    "Resource " + path + " already exists. Overwrite?",
+                    () => SavePresetFinal(target, storableId, path, useScreenshot),
+                    () => { EndSaveMode(); });
             }
             else
             {
@@ -848,6 +784,7 @@ namespace VPB
 
         private void SavePresetFinal(Atom target, string storableId, string path, bool useScreenshot)
         {
+            try { VpbSaveCacheSupport.RegisterPluginSaveWritePathForFile(path); } catch { }
             if (target == null) { EndSaveMode(); return; }
             JSONStorable presetJS = null;
             try { presetJS = target.GetStorableByID(storableId); } catch { presetJS = null; }
@@ -875,6 +812,7 @@ namespace VPB
                 if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
                 presetJS.CallAction("StorePreset");
                 ShowTemporaryStatus("Preset saved: " + path, 2f);
+                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
             }
             catch (Exception ex)
             {
@@ -894,11 +832,13 @@ namespace VPB
             // hide is in effect before VAM captures the screenshot.
             yield return new WaitForEndOfFrame();
 
+            bool saved = false;
             try
             {
                 JSONStorableUrl presetPathJSON = presetJS.GetUrlJSONParam("presetBrowsePath");
                 if (presetPathJSON != null) presetPathJSON.val = SuperController.singleton.NormalizePath(path);
                 presetJS.CallAction("StorePresetWithScreenshot");
+                saved = true;
                 ShowTemporaryStatus("Preset saved: " + path, 2f);
             }
             catch (Exception ex)
@@ -906,11 +846,37 @@ namespace VPB
                 LogUtil.LogError("[VPB] Save preset failed: " + ex);
                 ShowTemporaryStatus("Preset save failed. See log.", 2f);
             }
-            finally
+
+            if (saved)
             {
-                if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
-                EndSaveMode();
+                float waitStart = Time.unscaledTime;
+                const float waitForScreenshotStartMax = 12f;
+                const float waitForScreenshotFinishMax = 45f;
+                bool sawScreenshot = false;
+                yield return null;
+                while (true)
+                {
+                    bool screenshotActive = IsScreenshotCaptureActive();
+                    if (screenshotActive) sawScreenshot = true;
+
+                    if (sawScreenshot)
+                    {
+                        if (!screenshotActive) break;
+                        if (Time.unscaledTime - waitStart > waitForScreenshotFinishMax) break;
+                    }
+                    else if (Time.unscaledTime - waitStart > waitForScreenshotStartMax)
+                    {
+                        break;
+                    }
+
+                    yield return null;
+                }
+                yield return new WaitForSecondsRealtime(0.2f);
+                VpbSaveCacheSupport.NotifyGalleryPanelsInvalidateAfterSave(path);
             }
+
+            if (loadOnSelectJSB != null) loadOnSelectJSB.val = loadOnSelectPreState;
+            EndSaveMode();
         }
         private void CreatePaginationControls()
         {

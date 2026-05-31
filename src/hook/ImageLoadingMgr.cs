@@ -476,6 +476,41 @@ namespace VPB
                 metadataCache.Remove(diskPath);
         }
 
+        /// <summary>Drop VPB zstd / native preprocess entries after a file was overwritten on disk (e.g. scene/preset thumb .jpg).</summary>
+        public void InvalidateProcessedCachesForSourcePath(string sourcePath)
+        {
+            if (string.IsNullOrEmpty(sourcePath)) return;
+            try
+            {
+                string full = FileManager.GetFullPath(sourcePath.Replace('\\', '/'));
+                InvalidateCachePathMapForDiskPath(full);
+                InvalidateMetadataCacheForDiskPath(full);
+
+                string native = FindNativeDiskCachePathForThumbnailSource(sourcePath);
+                if (!string.IsNullOrEmpty(native))
+                {
+                    InvalidateCachePathMapForDiskPath(native);
+                    InvalidateMetadataCacheForDiskPath(native);
+                }
+
+                string zstd = TextureUtil.ResolveServeZstdCachePath(
+                    sourcePath, false, false, false, false, false, false, 0, 0, 0f, false);
+                if (!string.IsNullOrEmpty(zstd))
+                {
+                    InvalidateCachePathMapForDiskPath(zstd);
+                    InvalidateMetadataCacheForDiskPath(zstd);
+                }
+            }
+            catch { }
+        }
+
+        private static string FindNativeDiskCachePathForThumbnailSource(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return null;
+            return TextureUtil.FindVaMNativeDiskCachePath(
+                imgPath, false, false, false, false, false, false, 0, 0, 0f);
+        }
+
         private enum DiskCacheFailureKind
         {
             VpbZstd,

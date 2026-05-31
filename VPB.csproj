@@ -344,6 +344,7 @@
     <Compile Include="src\hook\uFileBrowser\ShortCutButton.cs" />
     <Compile Include="src\hook\VarNameParser.cs" />
     <Compile Include="src\hook\PluginSignatureBridge.cs" />
+    <Compile Include="src\VpbSaveCacheSupport.cs" />
     <Compile Include="src\KeyUtil.cs" />
     <Compile Include="src\LogUtil.cs" />
     <Compile Include="src\MessageDef.cs" />
@@ -433,6 +434,7 @@
     <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SceneOverwriteSave.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
     <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />

@@ -518,6 +518,7 @@ namespace VPB
                 Directory.CreateDirectory("AllPackages");
             }
             MVR.FileManagement.FileManager.RegisterInternalSecureWritePath("AllPackages");
+            VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm();
 
             int threshold = Settings.Instance.ThumbnailThreshold.Value;
             System.Threading.ThreadPool.QueueUserWorkItem((state) => {
@@ -661,6 +662,7 @@ namespace VPB
                 m_Inited = false;
                 IsFileManagerInited = false;
                 m_UIInited = false;
+                try { VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm(); } catch { }
             }
         }
         void OnEnable()
