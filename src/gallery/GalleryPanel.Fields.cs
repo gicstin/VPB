@@ -859,7 +859,6 @@ namespace VPB
 
         private RectTransform previewBorderRT;
         private float fpsTimer = 0f;
-        private int fpsFrames = 0;
         private const float FpsInterval = 0.5f;
         private string _fpsLastAppliedText = null;
 

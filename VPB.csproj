@@ -286,6 +286,7 @@
     <Compile Include="src\util\VarPresetPathFixups.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
+    <Compile Include="src\util\VpbFrameRate.cs" />
     <Compile Include="src\util\VamStartupProfiler.cs" />
     <Compile Include="src\util\VamStartupOptimizations.cs" />
     <Compile Include="src\hook\VamStartupProfilerPatches.cs" />

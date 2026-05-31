@@ -1414,7 +1414,13 @@ namespace VPB
             {
                 // Do not treat absolute Windows paths (E:/...) as package UIDs.
                 if (colonIdx == 1 && char.IsLetter(p[0])) return null;
-                return p.Substring(0, colonIdx);
+                string uid = p.Substring(0, colonIdx);
+                // "SELF:/" is VaM's in-package self-reference, not a package UID, and resolves internally
+                // against the current package. Real UIDs are Author.Name[.ver] (always a dot); a bare token
+                // like SELF would otherwise drive a full recursive AddonPackages walk for "<token>.var" on
+                // every probe.
+                if (uid.IndexOf('.') < 0) return null;
+                return uid;
             }
             return null;
         }

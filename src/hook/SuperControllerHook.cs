@@ -666,6 +666,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHook++;
                 if (result) return;
                 if (onlySystemFiles) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
@@ -678,6 +679,7 @@ namespace VPB
                 if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
                     return;
 
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHookHeavy++;
                 LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;
@@ -875,6 +877,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.ScriptCtrlCreate++;
                 string pluginName = "unknown";
                 try
                 {
@@ -1630,6 +1633,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
                 if (__result != null) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (VamOnDemandLoader.s_InOnDemand) return;

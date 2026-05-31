@@ -438,22 +438,19 @@ namespace VPB
 
             // Info bar (hoverPathRT) is always active — no show/hide needed
 
-            // FPS (lightweight, ~2Hz)
+            // FPS readout, ~2Hz. Value comes from VpbFrameRate; the timer only throttles the text write.
             if (fpsText != null)
             {
                 fpsTimer += Time.unscaledDeltaTime;
-                fpsFrames++;
                 if (fpsTimer >= FpsInterval)
                 {
-                    float fps = fpsFrames / fpsTimer;
-                    string txt = string.Format("{0:0} FPS", fps);
+                    string txt = string.Format("{0:0} FPS", VpbFrameRate.Current);
                     if (_fpsLastAppliedText != txt)
                     {
                         _fpsLastAppliedText = txt;
                         fpsText.text = txt;
                     }
                     fpsTimer = 0f;
-                    fpsFrames = 0;
                 }
             }
 

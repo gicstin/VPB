@@ -763,6 +763,7 @@ namespace VPB
 
         void Update()
         {
+            VpbFrameRate.Tick();
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
