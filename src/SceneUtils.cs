@@ -485,14 +485,39 @@ namespace VPB
                         if (string.IsNullOrEmpty(dep)) continue;
                         VarPackage pkg = null;
                         try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
-                        if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
-                            result.Add(pkg.Uid);
+                        if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
+                        result.Add(pkg.Uid);
+                        // A scene stores an item's full path but references its package group by
+                        // .latest/version. When a newer version renamed or replaced that file (e.g.
+                        // group ships "Side Bob" in v1, "Side Bob 2" in v2), VaM's appearance restore
+                        // falls back to the item's internalId (DAZCharacterSelector.LoadFromJSON ->
+                        // GetHairItem/GetClothingItem), which only resolves if the version that owns
+                        // the referenced item is registered. Resolving to .latest alone starves that
+                        // fallback under the scan whitelist. Register every installed version of the
+                        // referenced group, matching stock VaM (which registers all versions on disk).
+                        AddAllGroupVersionUids(pkg, result);
                     }
                 }
             }
             catch { }
 
             return result;
+        }
+
+        private static void AddAllGroupVersionUids(VarPackage pkg, HashSet<string> result)
+        {
+            try
+            {
+                var versions = pkg?.Group?.Packages;
+                if (versions == null) return;
+                for (int i = 0; i < versions.Count; i++)
+                {
+                    var v = versions[i];
+                    if (v != null && !string.IsNullOrEmpty(v.Uid))
+                        result.Add(v.Uid);
+                }
+            }
+            catch { }
         }
 
         /// <summary>
