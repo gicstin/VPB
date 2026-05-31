@@ -115,8 +115,7 @@ namespace VPB
 
             try
             {
-                if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
-                    Directory.CreateDirectory(GlobalInfo.PluginInfoDirectory);
+                GlobalInfo.EnsurePluginDataInitialized();
                 File.WriteAllText(IndexPath, serialized);
                 // Clear dirty flags only if the write succeeded AND no new Set() arrived since the snapshot.
                 lock (_lock)

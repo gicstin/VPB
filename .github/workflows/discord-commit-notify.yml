@@ -153,32 +153,11 @@ jobs:
 
           version_label = current_version or "unknown"
           if version_changed:
-              version_field_value = f"`{previous_version}` → **`{current_version}`**"
-              headline = f"**VPB {version_label}** pushed to `{branch}` (version bump)"
+              embed_author_name = f"VPB · {previous_version} → {current_version}"
           else:
-              version_field_value = f"**`{version_label}`**"
-              if commit_count > 1:
-                  headline = f"**VPB {version_label}** · {commit_count} commits on `{branch}`"
-              else:
-                  headline = f"**VPB {version_label}** · new commit on `{branch}`"
+              embed_author_name = f"VPB · {version_label}"
 
-          fields = [
-              {"name": "Plugin version", "value": version_field_value, "inline": True},
-              {"name": "Branch", "value": f"`{branch}`", "inline": True},
-              {"name": "Repository", "value": f"[{repo}]({repo_url})", "inline": True},
-          ]
-
-          if actor:
-              fields.append({"name": "Pushed by", "value": actor, "inline": True})
-
-          if compare_url:
-              fields.append(
-                  {
-                      "name": "Changes",
-                      "value": f"[View compare on GitHub]({compare_url})",
-                      "inline": True,
-                  }
-              )
+          embed_author = {"name": embed_author_name, "url": repo_url}
 
           if commit_count == 1:
               commit = commits[0]
@@ -189,19 +168,21 @@ jobs:
               title_line = truncate(first_line(message), 240)
               body = "\n".join(message.splitlines()[1:]).strip()
 
-              fields.extend(
-                  [
-                      {"name": "Author", "value": author, "inline": True},
-                      {"name": "Commit", "value": f"[`{sha}`]({commit_url})", "inline": True},
-                  ]
-              )
+              fields = [
+                  {"name": "Branch", "value": f"`{branch}`", "inline": True},
+                  {"name": "Commit", "value": f"[`{sha}`]({commit_url})", "inline": True},
+                  {"name": "Author", "value": author, "inline": True},
+              ]
+              if actor and actor != author:
+                  fields.append({"name": "Pushed by", "value": actor, "inline": True})
 
               embed = {
+                  "author": embed_author,
                   "title": title_line,
                   "url": commit_url or compare_url or repo_url,
                   "color": DISCORD_GREEN if version_changed else DISCORD_BLUE,
                   "fields": fields,
-                  "footer": {"text": f"VPB {version_label} · GitHub push"},
+                  "footer": {"text": f"{repo} · GitHub push"},
               }
 
               if body:
@@ -237,15 +218,29 @@ jobs:
               if len(authors) > 4:
                   author_summary += f", +{len(authors) - 4} more"
 
-              fields.append({"name": "Authors", "value": author_summary or "unknown", "inline": False})
+              fields = [
+                  {"name": "Branch", "value": f"`{branch}`", "inline": True},
+                  {"name": "Authors", "value": author_summary or "unknown", "inline": True},
+              ]
+              if compare_url:
+                  fields.append(
+                      {
+                          "name": "Compare",
+                          "value": f"[View on GitHub]({compare_url})",
+                          "inline": True,
+                      }
+                  )
+              if actor and actor not in authors:
+                  fields.append({"name": "Pushed by", "value": actor, "inline": True})
 
               embed = {
+                  "author": embed_author,
                   "title": f"{commit_count} commits",
                   "url": compare_url or repo_url,
                   "description": description,
                   "color": DISCORD_GREEN if version_changed else DISCORD_ORANGE,
                   "fields": fields,
-                  "footer": {"text": f"VPB {version_label} · GitHub push"},
+                  "footer": {"text": f"{repo} · GitHub push"},
               }
 
               ts = discord_timestamp(head.get("timestamp"))
@@ -255,7 +250,6 @@ jobs:
           payload = {
               "username": "VPB GitHub",
               "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-              "content": headline,
               "embeds": [embed],
           }
 

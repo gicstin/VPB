@@ -72,8 +72,7 @@ namespace VPB
                     }
                 }
 
-                if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
-                    Directory.CreateDirectory(GlobalInfo.PluginInfoDirectory);
+                GlobalInfo.EnsurePluginDataInitialized();
 
                 File.WriteAllText(tagsPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 8192));
             }

@@ -92,6 +92,7 @@ namespace VPB
             {
 				if (s_AutoInstallLookup == null)
 				{
+					GlobalInfo.EnsurePluginDataInitialized();
 					s_AutoInstallLookup = new HashSet<string>();
 					if (File.Exists(GlobalInfo.AutoInstallPath))
 					{
@@ -123,10 +124,7 @@ namespace VPB
 				AutoInstallLookup.Remove(key);
 			}
 
-			if (!Directory.Exists(GlobalInfo.PluginInfoDirectory))
-			{
-				Directory.CreateDirectory(GlobalInfo.PluginInfoDirectory);
-			}
+			GlobalInfo.EnsurePluginDataInitialized();
 
 			SerializableNames sf = new SerializableNames();
 			var list = new List<string>();

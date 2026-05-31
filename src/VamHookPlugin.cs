@@ -413,6 +413,7 @@ namespace VPB
                 var _ = DependencyWhitelistManager.Instance;
             }
             catch { }
+            try { GlobalInfo.EnsurePluginDataInitialized(); } catch { }
             try
             {
                 VPBConfig.ReloadFromDisk();
