@@ -468,12 +468,27 @@ namespace VPB
             GenericTextureHook.PatchAll(m_Harmony);
             DAZClothingHook.PatchAll(m_Harmony);
             DAZHairSwapHook.PatchAll(m_Harmony);
+            VpbPerfHairHook.PatchAll(m_Harmony);
             ThirdPartyFixHook.PatchAll(m_Harmony);
             StateMachineDiagnostic.PatchAll(m_Harmony);
 
             // Zstd support is now handled by ZstdNet (auto-initialized)
 
             InitUpdater();
+            try { VpbPerfController.Initialize(); } catch { }
+        }
+
+        private bool _perfMonSilencerPatched;
+
+        internal void EnsurePerfMonSilencerPatched()
+        {
+            if (_perfMonSilencerPatched || m_Harmony == null) return;
+            try
+            {
+                PerfMonSilencer.Patch(m_Harmony);
+                _perfMonSilencerPatched = true;
+            }
+            catch { }
         }
 
         private void SetMiniMode(bool enabled)
@@ -617,6 +632,7 @@ namespace VPB
         }
         void OnDestroy()
         {
+            try { VpbPerfController.Shutdown(); } catch { }
             try
             {
                 if (VPBConfig.Instance != null)

@@ -76,6 +76,17 @@ namespace VPB
             catch { }
             if (BaImporter.TryDetectBaDataDir(out _)) sig = unchecked(sig * 31 + 1);
             if (BaImporter.MigrationManifestExists()) sig = unchecked(sig * 31 + 2);
+            try
+            {
+                var c = VPBConfig.Instance;
+                if (c != null)
+                {
+                    sig = unchecked(sig * 31 + (c.PerfApplyHair ? 1 : 0));
+                    sig = unchecked(sig * 31 + (c.PerfApplyMirrors ? 2 : 0));
+                    sig = unchecked(sig * 31 + (c.PerfApplyVaMQualityPreset ? 4 : 0));
+                }
+            }
+            catch { }
             return sig;
         }
 
@@ -1282,6 +1293,7 @@ namespace VPB
                 }
             }
 
+            AppendGalleryPerfSettings(defs);
             AppendPluginInternalSettingDefinitions(defs);
 
             return defs;
@@ -1510,6 +1522,7 @@ namespace VPB
             if (open)
             {
                 settingsListViewActive = true;
+                InvalidateInternalSettingsDefsCache();
                 RefreshInternalSettingsListRows();
                 return;
             }

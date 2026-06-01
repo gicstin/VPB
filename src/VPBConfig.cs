@@ -254,6 +254,100 @@ namespace VPB
         }
         public string ApplyMode = "DoubleClick";
         public string LastGalleryCategory = "";
+        /// <summary>Gallery footer performance tuning (hair + mirrors) enabled.</summary>
+        public bool PerfModeEnabled = false;
+        /// <summary>Performance level 0–9 (10 steps). Persisted across sessions.</summary>
+        public int PerfStepIndex = 0;
+        /// <summary>Bump when step table changes; triggers one-time index remap on load.</summary>
+        public int PerfStepScaleVersion = 0;
+        /// <summary>Legacy 0–1 blend; used only to migrate old configs to PerfStepIndex.</summary>
+        public float PerfBlend = 0f;
+        /// <summary>Legacy preset id; migrated once if new keys absent.</summary>
+        public string PerfPresetMode = "None";
+        /// <summary>Obsolete: perf always re-applies on scene load while On. Kept for config compat only.</summary>
+        public bool PerfReapplyOnSceneLoad = true;
+
+        /// <summary>What session perf applies while footer perf is On (see Settings → Performance).</summary>
+        public bool PerfApplyHair = true;
+        public bool PerfApplyMirrors = true;
+        /// <summary>Obsolete: VaM SetQuality preset removed from UI; always false.</summary>
+        public bool PerfApplyVaMQualityPreset = false;
+        public bool PerfApplyRenderScale = false;
+        public bool PerfApplyMsaa = false;
+        public bool PerfApplyPixelLightCount = false;
+        /// <summary>Obsolete: shader LOD removed from UI; always false.</summary>
+        public bool PerfApplyShaderLod = false;
+        public bool PerfApplySmoothPasses = false;
+        public bool PerfApplyMirrorReflections = false;
+        public bool PerfApplyRealtimeReflectionProbes = false;
+        public bool PerfApplySoftPhysics = false;
+        public bool PerfApplyGlowEffects = false;
+
+        public static int PerfStepMaxIndex()
+        {
+            int n = VpbPerfController.StepCount;
+            return n > 0 ? n - 1 : 0;
+        }
+
+        public static int ClampPerfStepIndex(int index)
+        {
+            return Mathf.Clamp(index, 0, PerfStepMaxIndex());
+        }
+
+        public static float ClampPerfBlend(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v)) return 0f;
+            return Mathf.Clamp01(v);
+        }
+
+        public static int BlendToPerfStepIndex(float blend01)
+        {
+            int max = PerfStepMaxIndex();
+            if (max <= 0) return 0;
+            return ClampPerfStepIndex(Mathf.RoundToInt(ClampPerfBlend(blend01) * max));
+        }
+
+        public void RemapPerfStepIndexIfScaleVersionChanged()
+        {
+            if (PerfStepScaleVersion >= VpbPerfController.PerfStepScaleVersion)
+                return;
+            int prev = PerfStepIndex;
+            if (PerfStepScaleVersion < 2)
+            {
+                if (prev <= 1)
+                    PerfStepIndex = 0;
+                else
+                    PerfStepIndex = ClampPerfStepIndex(prev - 2);
+            }
+            PerfStepIndex = ClampPerfStepIndex(PerfStepIndex);
+            PerfStepScaleVersion = VpbPerfController.PerfStepScaleVersion;
+        }
+
+        public static void MigrateLegacyPerfPresetFields(VPBConfig cfg, bool hadExplicitPerfModeKey)
+        {
+            if (cfg == null) return;
+            string mode = cfg.PerfPresetMode ?? "";
+            if (string.IsNullOrEmpty(mode) || string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (string.Equals(mode, "P2", StringComparison.OrdinalIgnoreCase)) cfg.PerfStepIndex = 0;
+            else if (string.Equals(mode, "P1", StringComparison.OrdinalIgnoreCase)) cfg.PerfStepIndex = 2;
+            else if (string.Equals(mode, "Q1", StringComparison.OrdinalIgnoreCase)) cfg.PerfStepIndex = 6;
+            else if (string.Equals(mode, "Q2", StringComparison.OrdinalIgnoreCase)) cfg.PerfStepIndex = PerfStepMaxIndex();
+            else cfg.PerfStepIndex = BlendToPerfStepIndex(cfg.PerfBlend);
+            cfg.PerfStepIndex = ClampPerfStepIndex(cfg.PerfStepIndex);
+
+            // Old saves without PerfModeEnabled: infer On from legacy preset name only.
+            if (!hadExplicitPerfModeKey && !cfg.PerfModeEnabled && LegacyPerfPresetImpliesEnabled(mode))
+                cfg.PerfModeEnabled = true;
+        }
+
+        static bool LegacyPerfPresetImpliesEnabled(string mode)
+        {
+            if (string.IsNullOrEmpty(mode)) return false;
+            if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
+        }
         /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed".</summary>
         public string InitialGalleryCategory = "Scenes";
         /// <summary>Global source filter for gallery: All (default), Local (loose files only), or Var (.var packages only).</summary>
@@ -798,6 +892,24 @@ namespace VPB
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
             LastGalleryCategory = "";
+            PerfModeEnabled = false;
+            PerfStepIndex = 0;
+            PerfStepScaleVersion = VpbPerfController.PerfStepScaleVersion;
+            PerfBlend = 0f;
+            PerfPresetMode = "None";
+            PerfReapplyOnSceneLoad = false;
+            PerfApplyHair = true;
+            PerfApplyMirrors = true;
+            PerfApplyVaMQualityPreset = false;
+            PerfApplyRenderScale = false;
+            PerfApplyMsaa = false;
+            PerfApplyPixelLightCount = false;
+            PerfApplyShaderLod = false;
+            PerfApplySmoothPasses = false;
+            PerfApplyMirrorReflections = false;
+            PerfApplyRealtimeReflectionProbes = false;
+            PerfApplySoftPhysics = false;
+            PerfApplyGlowEffects = false;
             InitialGalleryCategory = "Scenes";
             DesktopFixedMode = false;
             DesktopFixedAutoCollapse = true;
@@ -957,6 +1069,33 @@ namespace VPB
                             RequireDragHoldBeforeMove = node["RequireDragHoldBeforeMove"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
+                        bool hadPerfModeKey = node["PerfModeEnabled"] != null;
+                        bool hadPerfStepKey = node["PerfStepIndex"] != null;
+                        bool hadPerfBlendKey = node["PerfBlend"] != null;
+                        if (hadPerfModeKey) PerfModeEnabled = node["PerfModeEnabled"].AsBool;
+                        if (hadPerfStepKey) PerfStepIndex = ClampPerfStepIndex(node["PerfStepIndex"].AsInt);
+                        if (hadPerfBlendKey) PerfBlend = ClampPerfBlend(node["PerfBlend"].AsFloat);
+                        if (node["PerfStepScaleVersion"] != null)
+                            PerfStepScaleVersion = node["PerfStepScaleVersion"].AsInt;
+                        if (node["PerfPresetMode"] != null) PerfPresetMode = node["PerfPresetMode"].Value;
+                        if (node["PerfReapplyOnSceneLoad"] != null) PerfReapplyOnSceneLoad = node["PerfReapplyOnSceneLoad"].AsBool;
+                        if (node["PerfApplyHair"] != null) PerfApplyHair = node["PerfApplyHair"].AsBool;
+                        if (node["PerfApplyMirrors"] != null) PerfApplyMirrors = node["PerfApplyMirrors"].AsBool;
+                        PerfApplyVaMQualityPreset = false;
+                        if (node["PerfApplyRenderScale"] != null) PerfApplyRenderScale = node["PerfApplyRenderScale"].AsBool;
+                        if (node["PerfApplyMsaa"] != null) PerfApplyMsaa = node["PerfApplyMsaa"].AsBool;
+                        if (node["PerfApplyPixelLightCount"] != null) PerfApplyPixelLightCount = node["PerfApplyPixelLightCount"].AsBool;
+                        PerfApplyShaderLod = false;
+                        if (node["PerfApplySmoothPasses"] != null) PerfApplySmoothPasses = node["PerfApplySmoothPasses"].AsBool;
+                        if (node["PerfApplyMirrorReflections"] != null) PerfApplyMirrorReflections = node["PerfApplyMirrorReflections"].AsBool;
+                        if (node["PerfApplyRealtimeReflectionProbes"] != null) PerfApplyRealtimeReflectionProbes = node["PerfApplyRealtimeReflectionProbes"].AsBool;
+                        if (node["PerfApplySoftPhysics"] != null) PerfApplySoftPhysics = node["PerfApplySoftPhysics"].AsBool;
+                        if (node["PerfApplyGlowEffects"] != null) PerfApplyGlowEffects = node["PerfApplyGlowEffects"].AsBool;
+                        if (!hadPerfStepKey && (hadPerfBlendKey || hadPerfModeKey || !string.IsNullOrEmpty(PerfPresetMode)))
+                            MigrateLegacyPerfPresetFields(this, hadPerfModeKey);
+                        else
+                            PerfStepIndex = ClampPerfStepIndex(PerfStepIndex);
+                        RemapPerfStepIndexIfScaleVersionChanged();
                         if (node["InitialGalleryCategory"] != null)
                             InitialGalleryCategory = NormalizeInitialGalleryCategory(node["InitialGalleryCategory"].Value);
                         if (node["global_source_filter"] != null)
@@ -1295,6 +1434,28 @@ namespace VPB
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
                 node["LastGalleryCategory"] = LastGalleryCategory;
+                PerfStepIndex = ClampPerfStepIndex(PerfStepIndex);
+                PerfStepScaleVersion = VpbPerfController.PerfStepScaleVersion;
+                int perfMax = PerfStepMaxIndex();
+                PerfBlend = perfMax > 0 ? (float)PerfStepIndex / (float)perfMax : 0f;
+                node["PerfModeEnabled"].AsBool = PerfModeEnabled;
+                node["PerfStepIndex"].AsInt = PerfStepIndex;
+                node["PerfStepScaleVersion"].AsInt = PerfStepScaleVersion;
+                node["PerfBlend"].AsFloat = PerfBlend;
+                node["PerfPresetMode"] = PerfModeEnabled ? "On" : "None";
+                node["PerfReapplyOnSceneLoad"].AsBool = PerfReapplyOnSceneLoad;
+                node["PerfApplyHair"].AsBool = PerfApplyHair;
+                node["PerfApplyMirrors"].AsBool = PerfApplyMirrors;
+                node["PerfApplyVaMQualityPreset"].AsBool = false;
+                node["PerfApplyRenderScale"].AsBool = PerfApplyRenderScale;
+                node["PerfApplyMsaa"].AsBool = PerfApplyMsaa;
+                node["PerfApplyPixelLightCount"].AsBool = PerfApplyPixelLightCount;
+                node["PerfApplyShaderLod"].AsBool = false;
+                node["PerfApplySmoothPasses"].AsBool = PerfApplySmoothPasses;
+                node["PerfApplyMirrorReflections"].AsBool = PerfApplyMirrorReflections;
+                node["PerfApplyRealtimeReflectionProbes"].AsBool = PerfApplyRealtimeReflectionProbes;
+                node["PerfApplySoftPhysics"].AsBool = PerfApplySoftPhysics;
+                node["PerfApplyGlowEffects"].AsBool = PerfApplyGlowEffects;
                 node["InitialGalleryCategory"] = InitialGalleryCategory;
                 node["global_source_filter"] = GlobalSourceFilter.ToString();
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;

@@ -115,6 +115,7 @@ namespace VPB
             AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
             AddGroupRow("visuals", VPBTranslation.T("settings.header.visuals", "Visuals"));
             AddGroupRow("follow", VPBTranslation.T("settings.header.follow_mode", "Follow Mode"));
+            AddGroupRow("performance", VPBTranslation.T("settings.group.performance", "Quality"));
             AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
             AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
             AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));

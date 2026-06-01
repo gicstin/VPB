@@ -2320,6 +2320,7 @@ namespace VPB
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
+            try { RefreshFooterPerfChrome(); } catch { }
 
             // Status Bar (Now shares the hoverPathRT container)
             GameObject statusBarGO = new GameObject("StatusBar");

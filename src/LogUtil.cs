@@ -1255,6 +1255,8 @@ namespace VPB
             // Scene content (including Person atoms in GetAtoms()) is reliably settled once total load completes.
             try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
 
+            try { VpbPerfController.OnSceneLoadComplete(); } catch { }
+
             CacheCleanupManager.FlushHitsBatch();
         }
 

@@ -224,6 +224,11 @@ namespace VPB
             catch { }
         }
 
+        internal void QuickMenu_TogglePerfMode()
+        {
+            try { ToggleFooterPerfMode(); } catch { }
+        }
+
         internal void QuickMenu_RemoveAllHair()
         {
             try

@@ -1004,6 +1004,12 @@ namespace VPB
                 }
                 catch { }
 
+                try
+                {
+                    VpbPerfController.OnSceneLoadStarting(saveName, loadMerge);
+                }
+                catch { }
+
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.PrepareForSceneLoad();

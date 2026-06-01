@@ -440,4 +440,17 @@ namespace VPB
             }
         }
     }
+
+    /// <summary>Mouse wheel on gallery footer quality toggle steps level up/down.</summary>
+    public sealed class FooterPerfToggleScroll : MonoBehaviour, IScrollHandler
+    {
+        public void OnScroll(PointerEventData data)
+        {
+            if (data == null || Mathf.Abs(data.scrollDelta.y) <= 0.01f) return;
+            if (!VpbPerfController.IsPerfModeWanted) return;
+
+            int delta = data.scrollDelta.y > 0f ? 1 : -1;
+            try { VpbPerfController.StepBy(delta, true, false); } catch { }
+        }
+    }
 }

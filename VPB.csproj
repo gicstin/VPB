@@ -287,6 +287,9 @@
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
     <Compile Include="src\util\VpbPerfDiag.cs" />
     <Compile Include="src\util\VpbFrameRate.cs" />
+    <Compile Include="src\perf\VpbPerfSnapshot.cs" />
+    <Compile Include="src\perf\VpbPerfController.cs" />
+    <Compile Include="src\hook\VpbPerfHairHook.cs" />
     <Compile Include="src\util\VamStartupProfiler.cs" />
     <Compile Include="src\util\VamStartupOptimizations.cs" />
     <Compile Include="src\hook\VamStartupProfilerPatches.cs" />
@@ -329,6 +332,7 @@
     <Compile Include="src\ZstdNet\ZstdException.cs" />
     <Compile Include="src\hook\ImageLoadingMgr.cs" />
     <Compile Include="src\hook\SuperControllerHook.cs" />
+    <Compile Include="src\hook\PerfMonSilencer.cs" />
     <Compile Include="src\hook\ThirdPartyFixHook.cs" />
     <Compile Include="src\hook\StateMachineDiagnostic.cs" />
     <Compile Include="src\hook\TagFilter.cs" />
@@ -398,9 +402,11 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
     <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.FooterPluginInfo.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PerfPreset.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.ScanWhitelist.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.QuickMenuPos.cs" />
     <Compile Include="src\VamHookPlugin.GalleryModalsBridge.cs" />
