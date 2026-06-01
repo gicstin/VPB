@@ -141,8 +141,11 @@ namespace VPB
         {
             if (entry == null || string.IsNullOrEmpty(entry.Path)) return ItemType.Other;
             string p = entry.Path.Replace('\\', '/');
-            // .var display paths: "AddonPackages/pkg.var:/Custom/Atom/..." — prefix checks need internal path only
+            // .var display paths ("AddonPackages/pkg.var:/Custom/Atom/..."): prefix checks need internal path only
             int varSep = p.IndexOf(":/", StringComparison.Ordinal);
+            // "E:/..." is a Windows drive, not a var prefix; skip it so an absolute path isn't sliced to junk.
+            if (varSep == 1 && char.IsLetter(p[0]))
+                varSep = p.IndexOf(":/", varSep + 1, StringComparison.Ordinal);
             if (varSep >= 0 && varSep + 2 < p.Length)
                 p = p.Substring(varSep + 2);
             bool isVap = p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase);

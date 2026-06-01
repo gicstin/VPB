@@ -3879,7 +3879,9 @@ namespace VPB
                                 && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(r.Path))
                                 continue;
 
-                            var sysEntryFast = new SystemFileEntry(r.Path, wt, sz, exists: true);
+                            // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
+                            // logic keys off VaM-relative paths, so normalize the entry path back.
+                            var sysEntryFast = new SystemFileEntry(FileManager.NormalizePath(r.Path), wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
                             files.Add(sysEntryFast);
                             if (sysLooseFilesAddedCount != null) sysLooseFilesAddedCount[0]++;
@@ -3936,7 +3938,9 @@ namespace VPB
                                     && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(sysPath))
                                     continue;
 
-                                var sysEntry = new SystemFileEntry(sysPath);
+                                // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
+                                // logic keys off VaM-relative paths, so normalize the entry path back.
+                                var sysEntry = new SystemFileEntry(FileManager.NormalizePath(sysPath));
 
                                 // Cache membership ignores the clothing/hair subfilter (not part of the cache key):
                                 // store rows that pass with it skipped, and re-apply the active subfilter on read.
