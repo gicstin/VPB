@@ -24,18 +24,19 @@ namespace VPB
         public static long UserTagPinnedRebuild;
         public static long TooltipAttach;
         // File-hook activity, for attributing a stalled frame to the on-demand path vs VaM itself.
-        // fxHook = FileExists postfix calls, fxHeavy = those that ran the on-demand resolve, getVar =
-        // GetVarFileEntry postfix calls, scriptCtrl = plugin creates.
+        // fxHook/getVar = FileExists/GetVarFileEntry postfix calls, fxHeavy/getVarHeavy = those that ran
+        // the on-demand resolve, scriptCtrl = plugin creates.
         public static long FileExistsHook;
         public static long FileExistsHookHeavy;
         public static long GetVarEntryHook;
+        public static long GetVarEntryHookHeavy;
         public static long ScriptCtrlCreate;
 
         static long _lastQmRefresh, _lastQmIconCreate, _lastQmIconSwap, _lastPointerSib;
         static long _lastGalUpdateFull;
         static long _lastSetCanvasVisibleOn, _lastSetCanvasVisibleOff, _lastMenuGateFlip;
         static long _lastUserTagBind, _lastUserTagVirtVis, _lastUserTagScrollCb, _lastUserTagPinnedRebuild, _lastTooltipAttach;
-        static long _lastFileExistsHook, _lastFileExistsHookHeavy, _lastGetVarEntryHook, _lastScriptCtrlCreate;
+        static long _lastFileExistsHook, _lastFileExistsHookHeavy, _lastGetVarEntryHook, _lastGetVarEntryHookHeavy, _lastScriptCtrlCreate;
         static float _lastEmitRealtime;
         static float _nextEmitRealtime;
 
@@ -87,6 +88,7 @@ namespace VPB
                     _lastFileExistsHook = FileExistsHook;
                     _lastFileExistsHookHeavy = FileExistsHookHeavy;
                     _lastGetVarEntryHook = GetVarEntryHook;
+                    _lastGetVarEntryHookHeavy = GetVarEntryHookHeavy;
                     _lastScriptCtrlCreate = ScriptCtrlCreate;
                     _nextEmitRealtime = 0f;
                     return;
@@ -122,6 +124,7 @@ namespace VPB
                 long fxHook = FileExistsHook - _lastFileExistsHook;
                 long fxHeavy = FileExistsHookHeavy - _lastFileExistsHookHeavy;
                 long getVar = GetVarEntryHook - _lastGetVarEntryHook;
+                long getVarHeavy = GetVarEntryHookHeavy - _lastGetVarEntryHookHeavy;
                 long scriptCtrl = ScriptCtrlCreate - _lastScriptCtrlCreate;
 
                 _lastQmRefresh = QmRefresh;
@@ -140,6 +143,7 @@ namespace VPB
                 _lastFileExistsHook = FileExistsHook;
                 _lastFileExistsHookHeavy = FileExistsHookHeavy;
                 _lastGetVarEntryHook = GetVarEntryHook;
+                _lastGetVarEntryHookHeavy = GetVarEntryHookHeavy;
                 _lastScriptCtrlCreate = ScriptCtrlCreate;
 
                 // Snapshot panel state. `gallSubtreeActive` counts panels whose UI subtree is currently
@@ -179,7 +183,7 @@ namespace VPB
                     " | galUpd={9}/s setVisOn={10}/s setVisOff={11}/s gateFlip={12}/s" +
                     " | pointerSib={13}/s" +
                     " | utBind={14}/s utVirtVis={15}/s utScrollCb={16}/s utPinnedRebuild={17}/s tooltipAttach={18}/s" +
-                    " | fxHook={20} fxHeavy={21} getVar={22} scriptCtrl={23} (raw/interval)",
+                    " | fxHook={20} fxHeavy={21} getVar={22} getVarHeavy={24} scriptCtrl={23} (raw/interval)",
                     fps, dt, panels, vis, hid, subtree,
                     (long)(qmRefresh / dt), (long)(qmIcon / dt), (long)(qmSwap / dt),
                     (long)(galFull / dt),
@@ -188,7 +192,7 @@ namespace VPB
                     (long)(utBind / dt), (long)(utVirtVis / dt), (long)(utScrollCb / dt),
                     (long)(utPinnedRebuild / dt), (long)(tooltipAttach / dt),
                     loopFps,
-                    fxHook, fxHeavy, getVar, scriptCtrl);
+                    fxHook, fxHeavy, getVar, scriptCtrl, getVarHeavy);
                 LogUtil.LogWarning(msg);
             }
             catch { }

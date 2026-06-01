@@ -1651,6 +1651,7 @@ namespace VPB
                 if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
                     return;
 
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHookHeavy++;
                 LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;

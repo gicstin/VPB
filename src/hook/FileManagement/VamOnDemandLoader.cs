@@ -578,7 +578,12 @@ namespace VPB
             }
 
             if (!TryResolveVarPathForUid(uid, out string resolvedUid, out string varPath))
+            {
+                // Genuinely unresolvable: arm the failure cooldown so repeated probes for the same uid
+                // short-circuit instead of re-running the recursive AddonPackages walk on every hook call.
+                MarkFailure(uid);
                 return null;
+            }
             if (string.IsNullOrEmpty(varPath)) return null;
 
             string deferUidCheck = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
