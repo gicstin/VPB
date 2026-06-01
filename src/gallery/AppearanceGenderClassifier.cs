@@ -209,9 +209,12 @@ namespace VPB
         }
 
         internal static AppearanceGender ClassifyLooseVapPath(string absolutePath, string categoryTitle)
-            => ClassifyLooseVapPath(absolutePath, categoryTitle, null);
+            => ClassifyLooseVapPath(absolutePath, categoryTitle, null, null);
 
         internal static AppearanceGender ClassifyLooseVapPath(string absolutePath, string categoryTitle, Dictionary<string, HashSet<string>> tagsByRowKey)
+            => ClassifyLooseVapPath(absolutePath, categoryTitle, tagsByRowKey, null);
+
+        internal static AppearanceGender ClassifyLooseVapPath(string absolutePath, string categoryTitle, Dictionary<string, HashSet<string>> tagsByRowKey, LooseVapGenderBulkCache genderBulk)
         {
             if (string.IsNullOrEmpty(absolutePath)) return AppearanceGender.Unknown;
 
@@ -219,7 +222,7 @@ namespace VPB
             AppearanceGender? fromTags = ClassifyFromUserTags(userTags);
             if (fromTags.HasValue) return fromTags.Value;
 
-            AppearanceGender fromProbe = ClassifyFromLooseVapProbe(absolutePath);
+            AppearanceGender fromProbe = ClassifyFromLooseVapProbe(absolutePath, genderBulk);
             if (fromProbe != AppearanceGender.Unknown) return fromProbe;
 
             string norm = absolutePath.Replace('\\', '/');
@@ -376,9 +379,12 @@ namespace VPB
         }
 
         private static AppearanceGender ClassifyFromLooseVapProbe(string filePath)
+            => ClassifyFromLooseVapProbe(filePath, null);
+
+        private static AppearanceGender ClassifyFromLooseVapProbe(string filePath, LooseVapGenderBulkCache genderBulk)
         {
             LooseVapGenderProbe.Gender pg;
-            try { pg = LooseVapGenderProbe.Classify(filePath); }
+            try { pg = LooseVapGenderProbe.Classify(filePath, genderBulk); }
             catch { return AppearanceGender.Unknown; }
 
             if (pg == LooseVapGenderProbe.Gender.Female) return AppearanceGender.Female;

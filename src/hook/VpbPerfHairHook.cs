@@ -96,6 +96,7 @@ namespace VPB
 
         public static void PostOnLoadComplete(JSONStorableDynamic __instance)
         {
+            VamOnDemandLoader.NotifyDynamicItemLoaded();
             var hair = __instance as DAZHairGroup;
             if (hair == null) return;
             VpbPerfController.OnHairLoadCompleted(hair);

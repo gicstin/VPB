@@ -1883,6 +1883,91 @@ namespace VPB
             catch { }
         }
 
+        internal struct LooseVapGenderRow
+        {
+            public long Wtime;
+            public long Size;
+            public int Gender;
+        }
+
+        // Bulk-load loose_vap_gender in one connection: the per-file TryReadLooseVapGender opens a connection + runs EnsureSchema each call, so a scan over thousands of loose .vap files pays that bootstrap thousands of times.
+        internal static bool TryLoadAllLooseVapGender(Dictionary<string, LooseVapGenderRow> outMap)
+        {
+            if (outMap == null) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("SELECT path, wtime, size, gender FROM loose_vap_gender"))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string path = st.ColumnText(0);
+                            if (string.IsNullOrEmpty(path)) continue;
+                            long wt, sz; int g;
+                            string wtxt = st.ColumnText(1);
+                            string sztxt = st.ColumnText(2);
+                            string gtxt = st.ColumnText(3);
+                            if (string.IsNullOrEmpty(wtxt) || !long.TryParse(wtxt, out wt)) continue;
+                            if (string.IsNullOrEmpty(sztxt) || !long.TryParse(sztxt, out sz)) continue;
+                            if (string.IsNullOrEmpty(gtxt) || !int.TryParse(gtxt, out g)) continue;
+                            LooseVapGenderRow row;
+                            row.Wtime = wt;
+                            row.Size = sz;
+                            row.Gender = g;
+                            outMap[path] = row;
+                        }
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static void WriteLooseVapGenderBatch(IList<KeyValuePair<string, LooseVapGenderRow>> rows)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (rows == null || rows.Count == 0) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    conn.ExecUtf8("BEGIN IMMEDIATE;");
+                    try
+                    {
+                        using (var ins = conn.Prepare("INSERT OR REPLACE INTO loose_vap_gender(path,wtime,size,gender) VALUES(?,?,?,?)"))
+                        {
+                            for (int i = 0; i < rows.Count; i++)
+                            {
+                                string path = rows[i].Key;
+                                if (string.IsNullOrEmpty(path)) continue;
+                                LooseVapGenderRow r = rows[i].Value;
+                                ins.BindText(1, path);
+                                ins.BindText(2, r.Wtime.ToString());
+                                ins.BindText(3, r.Size.ToString());
+                                ins.BindText(4, r.Gender.ToString());
+                                ins.Step();
+                                ins.Reset();
+                            }
+                        }
+                        conn.ExecUtf8("COMMIT;");
+                    }
+                    catch
+                    {
+                        try { conn.ExecUtf8("ROLLBACK;"); } catch { }
+                        throw;
+                    }
+                }
+            }
+            catch { }
+        }
+
         /// <summary>DAZCharacter displayName -> isMale map, built from the live DAZCharacterSelector and persisted in meta. Used by the on-disk vap classifier so non-conforming displayName strings still resolve correctly when the user has the pack installed.</summary>
         internal static bool TryReadCharacterGenderDict(out Dictionary<string, bool> outMap)
         {
@@ -3360,6 +3445,7 @@ namespace VPB
 
             if (forceFullRebuild || NeedsFullGalleryIndexBuild())
             {
+                try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (" + (forceFullRebuild ? "forceFullRebuild" : "NeedsFullGalleryIndexBuild") + ")"); } catch { }
                 s_GalleryIndexBuildIndicatorPending = true;
                 s_RebuildScheduled = true;
                 ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
@@ -3368,6 +3454,7 @@ namespace VPB
 
             if (!VamStartupOptimizations.PreferIncrementalGallerySqlIndex)
             {
+                try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (prefer-incremental off)"); } catch { }
                 s_GalleryIndexBuildIndicatorPending = true;
                 s_RebuildScheduled = true;
                 ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
@@ -3567,7 +3654,8 @@ namespace VPB
                             try { if (insMem != null) insMem.Dispose(); } catch { }
                         }
 
-                        if (nCatMemInserted > 0)
+                        // Delete-only (nRemoved>0, nothing added) leaves the index consistent: clearing ready meta would wipe categories_sig and force the next op into a full rebuild.
+                        if (nCatMemInserted > 0 || nRemoved > 0)
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
                         else
                             ClearGalleryIndexReadyMeta(conn);

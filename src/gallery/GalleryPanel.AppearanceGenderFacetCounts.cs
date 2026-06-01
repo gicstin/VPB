@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -128,6 +129,7 @@ namespace VPB
                 sysCached = null;
             }
 
+            var genderBulk = new LooseVapGenderBulkCache();
             for (int pi = 0; pi < pathsToSearch.Count; pi++)
             {
                 string searchPath = pathsToSearch[pi];
@@ -167,7 +169,7 @@ namespace VPB
                     if (isPresetLoose) appearanceSourceCountPresets++;
 
                     AppearanceGender lg;
-                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey); }
+                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
                     catch { lg = AppearanceGender.Unknown; }
 
                     appearanceSubfilterCountAll++;
@@ -195,6 +197,7 @@ namespace VPB
                     }
                 }
             }
+            genderBulk.Flush();
         }
 
         /// <summary>Time-sliced loose .vap merge — keeps category switch responsive on huge libraries.</summary>
@@ -249,6 +252,7 @@ namespace VPB
                 sysCached = null;
             }
 
+            var genderBulk = new LooseVapGenderBulkCache();
             for (int pi = 0; pi < pathsToSearch.Count; pi++)
             {
                 if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
@@ -292,7 +296,7 @@ namespace VPB
                     if (isPresetLoose) appearanceSourceCountPresets++;
 
                     AppearanceGender lg;
-                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey); }
+                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
                     catch { lg = AppearanceGender.Unknown; }
 
                     appearanceSubfilterCountAll++;
@@ -328,6 +332,7 @@ namespace VPB
                     }
                 }
             }
+            genderBulk.Flush();
         }
 
         private void ScheduleAppearanceLooseMergeRefresh()

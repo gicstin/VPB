@@ -1205,6 +1205,94 @@ namespace VPB
             DrainCoalescedVamRefresh();
         }
 
+        // Interactive FileManager.Refresh rebuilds every live Person's clothing/hair; on a female soft-body
+        // atom that NaNs the pelvic/genital sim and freezes the skin. Hold VaM's sim reset across the rebuild.
+        private static AsyncFlag s_RefreshSimFlag;
+        private static float s_RefreshSimHeldSince;
+        private static float s_LastDynamicItemLoad;
+        private static FieldInfo s_LoadingIconFlagsField;
+        private static bool s_LoadingIconFieldResolved;
+        private const float RefreshSimMinHoldSeconds = 0.3f;
+        private const float RefreshSimSettleSeconds = 0.5f;
+        private const float RefreshSimMaxHoldSeconds = 12f;
+
+        // Freeze via VaM's own onCharacterLoadedFlag mechanism: PauseSimulation(flag) holds the reset until
+        // the flag is raised, so the freeze spans the whole rebuild instead of a guessed frame count.
+        public static void PausePhysicsForCatalogRefresh()
+        {
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc == null) return;
+                if (s_RefreshSimFlag != null) return;            // already holding for an in-flight rebuild
+                if (sc.freezeAnimation) return;                  // already frozen (scene load / user freeze)
+                s_RefreshSimFlag = new AsyncFlag("vpb_catalog_refresh");
+                float now = Time.realtimeSinceStartup;
+                s_RefreshSimHeldSince = now;
+                s_LastDynamicItemLoad = now;
+                sc.PauseSimulation(s_RefreshSimFlag);
+            }
+            catch { s_RefreshSimFlag = null; }
+        }
+
+        // Called from a JSONStorableDynamic.OnLoadComplete postfix: extends the hold while items keep arriving.
+        public static void NotifyDynamicItemLoaded()
+        {
+            if (s_RefreshSimFlag != null)
+                try { s_LastDynamicItemLoad = Time.realtimeSinceStartup; } catch { }
+        }
+
+        // Polled every frame: release the hold once the rebuild's item loads settle (or the backstop elapses).
+        public static void TickRefreshSimHold()
+        {
+            var flag = s_RefreshSimFlag;
+            if (flag == null) return;
+            try
+            {
+                float now = Time.realtimeSinceStartup;
+                float held = now - s_RefreshSimHeldSince;
+                bool settled = held >= RefreshSimMinHoldSeconds
+                    && (now - s_LastDynamicItemLoad) >= RefreshSimSettleSeconds
+                    && !IsLoadingIconBusy();
+                if (settled || held >= RefreshSimMaxHoldSeconds)
+                {
+                    flag.Raise();
+                    s_RefreshSimFlag = null;
+                }
+            }
+            catch
+            {
+                try { flag.Raise(); } catch { }
+                s_RefreshSimFlag = null;
+            }
+        }
+
+        private static bool IsLoadingIconBusy()
+        {
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc == null) return false;
+                if (sc.isLoading) return true;
+                if (!s_LoadingIconFieldResolved)
+                {
+                    s_LoadingIconFlagsField = typeof(SuperController).GetField(
+                        "loadingIconFlags", BindingFlags.Instance | BindingFlags.NonPublic);
+                    s_LoadingIconFieldResolved = true;
+                }
+                var list = s_LoadingIconFlagsField != null
+                    ? s_LoadingIconFlagsField.GetValue(sc) as System.Collections.IList : null;
+                if (list == null) return false;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var f = list[i] as AsyncFlag;
+                    if (f != null && !f.Raised) return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
+
         /// <summary>
         /// Runs MVR.FileManagement.FileManager.Refresh immediately and clears any pending coalesced request.
         /// </summary>
@@ -1223,6 +1311,7 @@ namespace VPB
             {
                 LogUtil.Log("[VPB OnDemand] Running immediate FileManager.Refresh (reason="
                     + (string.IsNullOrEmpty(reason) ? "immediate" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
                 MVR.FileManagement.FileManager.Refresh();
             }
             catch (Exception ex)
@@ -1299,6 +1388,7 @@ namespace VPB
             {
                 LogUtil.Log("[VPB OnDemand] Running coalesced FileManager.Refresh (requests="
                     + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
                 MVR.FileManagement.FileManager.Refresh();
             }
             catch (Exception ex)
@@ -1338,6 +1428,7 @@ namespace VPB
             {
                 LogUtil.Log("[VPB OnDemand] Running forced FileManager.Refresh (pending_requests="
                     + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "forced" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
                 MVR.FileManagement.FileManager.Refresh();
             }
             catch (Exception ex)

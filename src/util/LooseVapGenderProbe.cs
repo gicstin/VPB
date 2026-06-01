@@ -23,11 +23,14 @@ namespace VPB.src.util
             new Dictionary<string, Gender>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_MemCacheLock = new object();
 
-        /// <summary>
-        /// Returns the gender for <paramref name="filePath"/>. Hits the in-process cache first, then the SQLite
-        /// cache, then parses the file. Never throws.
-        /// </summary>
+        /// <summary>Gender for <paramref name="filePath"/>: in-process cache, then SQLite, then file parse. Never throws.</summary>
         public static Gender Classify(string filePath)
+        {
+            return Classify(filePath, null);
+        }
+
+        // bulk != null routes the SQLite read/write through a preloaded table snapshot + batched flush so a scan over many files doesn't open a connection (and run EnsureSchema) per file.
+        public static Gender Classify(string filePath, LooseVapGenderBulkCache bulk)
         {
             if (string.IsNullOrEmpty(filePath)) return Gender.Unknown;
 
@@ -57,7 +60,10 @@ namespace VPB.src.util
             try { mapReady = JSONExtensions.IsCharacterGenderMapInitComplete(); } catch { mapReady = false; }
 
             int dbGender;
-            if (VpbLocalDatabase.TryReadLooseVapGender(filePath, wtBin, sz, out dbGender))
+            bool haveDbRow;
+            if (bulk != null) haveDbRow = bulk.TryGet(filePath, wtBin, sz, out dbGender);
+            else haveDbRow = VpbLocalDatabase.TryReadLooseVapGender(filePath, wtBin, sz, out dbGender);
+            if (haveDbRow)
             {
                 Gender g = (Gender)dbGender;
                 // An Unknown verdict cached before the DAZ character map finished loading is provisional — the file
@@ -84,7 +90,8 @@ namespace VPB.src.util
             bool persist = (resolved != Gender.Unknown) || mapReady;
             if (persist)
             {
-                try { VpbLocalDatabase.WriteLooseVapGender(filePath, wtBin, sz, (int)resolved); } catch { }
+                if (bulk != null) bulk.Enqueue(filePath, wtBin, sz, (int)resolved);
+                else { try { VpbLocalDatabase.WriteLooseVapGender(filePath, wtBin, sz, (int)resolved); } catch { } }
             }
             lock (s_MemCacheLock) { s_MemCache[filePath] = resolved; }
             return FoldFutaForUi(resolved);
@@ -178,6 +185,50 @@ namespace VPB.src.util
         public static void InvalidateMemoryCache()
         {
             lock (s_MemCacheLock) { s_MemCache.Clear(); }
+        }
+    }
+
+    // Scan-scoped snapshot of loose_vap_gender: one bulk read up front, (wtime,size)-validated lookups in memory,
+    // freshly-probed verdicts batched and flushed once. Replaces per-file connection + EnsureSchema churn.
+    public sealed class LooseVapGenderBulkCache
+    {
+        private readonly Dictionary<string, VpbLocalDatabase.LooseVapGenderRow> _rows =
+            new Dictionary<string, VpbLocalDatabase.LooseVapGenderRow>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<KeyValuePair<string, VpbLocalDatabase.LooseVapGenderRow>> _pending =
+            new List<KeyValuePair<string, VpbLocalDatabase.LooseVapGenderRow>>();
+
+        public LooseVapGenderBulkCache()
+        {
+            try { VpbLocalDatabase.TryLoadAllLooseVapGender(_rows); } catch { }
+        }
+
+        public bool TryGet(string path, long wtBin, long size, out int gender)
+        {
+            gender = 0;
+            if (string.IsNullOrEmpty(path)) return false;
+            VpbLocalDatabase.LooseVapGenderRow r;
+            if (!_rows.TryGetValue(path, out r)) return false;
+            if (r.Wtime != wtBin || r.Size != size) return false;
+            gender = r.Gender;
+            return true;
+        }
+
+        public void Enqueue(string path, long wtBin, long size, int gender)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            VpbLocalDatabase.LooseVapGenderRow r;
+            r.Wtime = wtBin;
+            r.Size = size;
+            r.Gender = gender;
+            _rows[path] = r;
+            _pending.Add(new KeyValuePair<string, VpbLocalDatabase.LooseVapGenderRow>(path, r));
+        }
+
+        public void Flush()
+        {
+            if (_pending.Count == 0) return;
+            try { VpbLocalDatabase.WriteLooseVapGenderBatch(_pending); } catch { }
+            _pending.Clear();
         }
     }
 }

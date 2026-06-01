@@ -783,6 +783,7 @@ namespace VPB
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
             VamOnDemandLoader.DrainMainThreadQueue();
+            VamOnDemandLoader.TickRefreshSimHold();
             Gallery.DrainPendingSqlIndexUpdate();
             LogUtil.DrainPostReadyQueue();
             CacheCleanupManager.CheckAutoFlush();

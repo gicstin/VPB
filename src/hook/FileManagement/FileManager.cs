@@ -3213,6 +3213,7 @@ namespace VPB
 					yield return new WaitForSeconds(0.5f);
 				var sw = Stopwatch.StartNew();
 				VamStartupProfiler.Milestone("mvr_native_FileManager.Refresh_invoke_begin");
+				VamOnDemandLoader.PausePhysicsForCatalogRefresh();
 				MVR.FileManagement.FileManager.Refresh();
 				sw.Stop();
 				VamStartupProfiler.AddPhaseMs("mvr_delayed_native_refresh", sw.Elapsed.TotalMilliseconds);
