@@ -456,6 +456,7 @@ namespace VPB
             m_Harmony.PatchAll(typeof(AtomHook));
             m_Harmony.PatchAll(typeof(HubResourcePackageHook));
             m_Harmony.PatchAll(typeof(SuperControllerHook));
+            m_Harmony.PatchAll(typeof(MVRPluginManagerHook));
             VamStartupProfilerPatches.ApplySafe(m_Harmony);
             VamStartupOptimizationPatches.Apply(m_Harmony);
             m_Harmony.PatchAll(typeof(PatchAssetLoader));

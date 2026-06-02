@@ -7032,6 +7032,37 @@ namespace VPB
             }
         }
 
+        // Direct pkg_dep read with NO scan-freshness gate: an installed package's declared deps are
+        // immutable, so the gate TryReadRecursiveDependencyUids applies is irrelevant for this lookup.
+        internal static bool TryReadDeclaredDependencyUidsDirect(string srcUid, HashSet<string> outUids)
+        {
+            if (outUids == null) return false;
+            outUids.Clear();
+            if (string.IsNullOrEmpty(srcUid)) return true;
+            if (!VpbSqlite3.IsAvailable) return false;
+
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                using (var st = conn.Prepare("SELECT dep_uid FROM pkg_dep WHERE src_uid = ?"))
+                {
+                    st.BindText(1, srcUid);
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string d = st.ColumnText(0) ?? "";
+                        if (!string.IsNullOrEmpty(d))
+                            outUids.Add(d);
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                outUids.Clear();
+                return false;
+            }
+        }
+
         internal static bool TryCountDependentUids(string targetUid, string targetShort, out int count)
         {
             count = 0;

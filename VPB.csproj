@@ -298,6 +298,7 @@
     <Compile Include="src\VpbImport.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
+    <Compile Include="src\hook\MVRPluginManagerHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
     <Compile Include="src\hook\JSONOptimization.cs" />
     <Compile Include="src\hook\ImageProcessingOptimization.cs" />

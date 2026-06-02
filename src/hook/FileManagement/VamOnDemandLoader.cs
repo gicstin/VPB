@@ -874,6 +874,41 @@ namespace VPB
             return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
         }
 
+        // Plugins resolve dependency morphs by display name (not by file path), so the reactive
+        // file-request hook never fires; register the parent's declared deps up front instead.
+        public static bool EnsureDeclaredDependenciesActivatedForParent(string parentUid)
+        {
+            if (string.IsNullOrEmpty(parentUid)) return false;
+            if (!ScanWhitelistManager.Instance.IsEnabled) return false;
+
+            // pkg_dep is keyed by concrete version; a plugin URL may carry ".latest".
+            string resolved = parentUid;
+            if (parentUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            {
+                string r = ResolveLatestUid(parentUid);
+                if (!string.IsNullOrEmpty(r)) resolved = r;
+            }
+
+            // Gated read is freshest when the index is ready; during scene/plugin load it bails on a
+            // stale scan, so only then fall back to a direct read (declared deps are immutable).
+            var deps = new HashSet<string>();
+            if (!VpbLocalDatabase.TryReadRecursiveDependencyUids(resolved, deps))
+                VpbLocalDatabase.TryReadDeclaredDependencyUidsDirect(resolved, deps);
+            if (deps.Count == 0) return false;
+
+            int registered = 0;
+            foreach (string dep in deps)
+            {
+                if (string.IsNullOrEmpty(dep)) continue;
+                // Resolves ".latest", dedupes, skips already-registered, defers when VaM not ready;
+                // non-null return means it registered the package this call.
+                if (!string.IsNullOrEmpty(TryRegisterPackageOnDemand(dep))) registered++;
+            }
+            if (registered > 0)
+                LogUtil.Log("[VPB PluginDep] " + resolved + ": registered " + registered + "/" + deps.Count + " declared dep(s)");
+            return registered > 0;
+        }
+
         /// <summary>
         /// Called from VamScanFilter.MarkVamRefreshed once VaM's first Refresh completes.
         /// Promotes deferred requests into the normal main-thread drain queue.
