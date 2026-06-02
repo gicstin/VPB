@@ -2296,6 +2296,9 @@ namespace VPB
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
             if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
+            // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
+            // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
+            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return false;
             // nameFilterTerms and activeTags are now handled by SQL
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
             // LoadedOnly/UnloadedOnly is applied in the SQLite query via loadedState.
