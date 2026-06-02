@@ -915,6 +915,12 @@ namespace VPB
             onRegistryReadyHandlers = (OnRefresh)Delegate.Remove(onRegistryReadyHandlers, readyHandler);
         }
 
+        /// <summary>Re-arm the one-shot registry-ready notifier so it fires again after a scene reload (Hard Reset) re-runs the init refresh.</summary>
+        public static void ResetRegistryReadyNotifiedForSceneReload()
+        {
+            System.Threading.Interlocked.Exchange(ref s_RegistryReadyNotified, 0);
+        }
+
         public static void UnregisterRefreshHandler(OnRefresh refreshHandler)
         {
             onRefreshHandlers = (OnRefresh)Delegate.Remove(onRefreshHandlers, refreshHandler);

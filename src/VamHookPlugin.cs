@@ -565,15 +565,19 @@ namespace VPB
             catch { }
 
             // Auto-create gallery pane on startup if enabled
-            if (VPBConfig.Instance != null && VPBConfig.Instance.EnableAutoFixedGallery)
-            {
-                if (!m_Inited) { Init(); m_Inited = true; }
-                if (Gallery.singleton != null && Gallery.singleton.PanelCount == 0)
-                {
-                    if (!m_GalleryCatsInited) InitGalleryCategories();
+            TryCreateAutoFixedGalleryPane();
+        }
 
-                    Gallery.singleton.CreatePane();
-                }
+        // Start() runs once per process and does not re-run on scene reload (Hard Reset). Driven again from
+        // Update() via m_AutoFixedGalleryPanePending so the fixed gallery pane is re-created after a reload.
+        void TryCreateAutoFixedGalleryPane()
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.EnableAutoFixedGallery) return;
+            if (!m_Inited) { Init(); m_Inited = true; }
+            if (Gallery.singleton != null && Gallery.singleton.PanelCount == 0)
+            {
+                if (!m_GalleryCatsInited) InitGalleryCategories();
+                Gallery.singleton.CreatePane();
             }
         }
 
@@ -680,6 +684,16 @@ namespace VPB
                 m_Inited = false;
                 IsFileManagerInited = false;
                 m_UIInited = false;
+                // Scene reload (Hard Reset) destroys VaM's FileManager and skips Start()/Awake() (plugin GameObject survives), so re-arm every cold-start one-shot below to replay the plugin session: native registry, registry-ready callback, READY latches, fixed gallery pane, return-to-scene-view, on-demand cache, vamX UI.
+                s_FileManagerInitialRefreshCompleted = false;
+                s_UiPendingWarnLogged = false;
+                m_GalleryCatsInited = false;
+                m_AutoFixedGalleryPanePending = true;
+                LogUtil.ResetPluginSession();
+                FileManager.ResetRegistryReadyNotifiedForSceneReload();
+                SuperControllerHook.ResetReturnToSceneViewOnStartupForSceneReload();
+                VamOnDemandLoader.ClearCache();
+                VamStartupOptimizations.InvalidateVamXAbsentCache();
                 try { VpbSaveCacheSupport.RegisterPluginSaveWritePathsNoConfirm(); } catch { }
             }
         }
@@ -921,6 +935,13 @@ namespace VPB
                 }
             }
 
+            if (m_AutoFixedGalleryPanePending && m_UIInited && Gallery.singleton != null)
+            {
+                m_AutoFixedGalleryPanePending = false;
+                try { TryCreateAutoFixedGalleryPane(); }
+                catch (Exception ex) { try { LogUtil.LogWarning("[VPB.Startup] auto gallery pane re-create skipped: " + ex.Message); } catch { } }
+            }
+
             if (!m_QuickMenuButtonInited)
             {
                 CreateQuickMenuButton();
@@ -1015,6 +1036,7 @@ namespace VPB
 
         bool m_Inited = false;
         bool m_UIInited = false;
+        bool m_AutoFixedGalleryPanePending = false;
         bool m_QuickMenuButtonInited = false;
         void Init()
         {

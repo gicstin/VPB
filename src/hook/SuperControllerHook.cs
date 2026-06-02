@@ -779,6 +779,12 @@ namespace VPB
             catch { return false; }
         }
 
+        /// <summary>Re-arm so return-to-scene-view applies again after a scene reload (Hard Reset) re-shows the world UI.</summary>
+        public static void ResetReturnToSceneViewOnStartupForSceneReload()
+        {
+            s_ReturnToSceneViewOnStartupApplied = false;
+        }
+
         static void TryReturnToSceneViewOnStartup(SuperController sc)
         {
             if (s_ReturnToSceneViewOnStartupApplied || sc == null) return;
