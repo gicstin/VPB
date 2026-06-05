@@ -1727,7 +1727,7 @@ namespace VPB
             return false;
         }
 
-        private static void BulkZstdWriteMeta(string targetPath, string sourceMetaPath, JSONNode metaJson, int compressionLevel, byte[] rawForMipMeta = null)
+        private static void BulkZstdWriteMeta(string targetPath, string sourceMetaPath, JSONNode metaJson, int compressionLevel, long rawByteLength = -1)
         {
             if (metaJson != null)
             {
@@ -1737,7 +1737,7 @@ namespace VPB
                     metaJson["width"] = metaJson["width"].Value;
                     metaJson["height"] = metaJson["height"].Value;
                     metaJson["zstdLevel"].AsInt = compressionLevel;
-                    if (rawForMipMeta != null && rawForMipMeta.Length > 0)
+                    if (rawByteLength > 0)
                     {
                         int w = metaJson["width"].AsInt;
                         int h = metaJson["height"].AsInt;
@@ -1758,7 +1758,7 @@ namespace VPB
                         catch { }
                         if (!hadMipFields && !queueMip && (fmt == TextureFormat.DXT1 || fmt == TextureFormat.DXT5))
                             queueMip = true;
-                        TextureUtil.WriteMipFieldsToMeta(metaJson, w, h, fmt, rawForMipMeta.Length, queueMip);
+                        TextureUtil.WriteMipFieldsToMeta(metaJson, w, h, fmt, (int)rawByteLength, queueMip);
                     }
                     File.WriteAllText(targetPath + "meta", VPB.src.util.JsonSerializationUtil.Serialize(metaJson, 1024));
                     return;
@@ -1778,10 +1778,12 @@ namespace VPB
 
         private static void BulkZstdCompressNativeToZstd(string nativePath, string targetPath, int compressionLevel, JSONNode metaJson)
         {
-            byte[] nativeRaw = null;
-            try { nativeRaw = File.ReadAllBytes(nativePath); } catch { }
+            // mip-meta needs only the raw .vamcache byte length, not the bytes; SaveCacheFromFile streams via
+            // external zstd. Reading the whole 64MB+ file into managed memory per file churned the Boehm heap.
+            long rawByteLength = -1;
+            try { rawByteLength = new FileInfo(nativePath).Length; } catch { }
             ZstdCompressor.SaveCacheFromFile(targetPath, nativePath, compressionLevel);
-            BulkZstdWriteMeta(targetPath, nativePath + "meta", metaJson, compressionLevel, nativeRaw);
+            BulkZstdWriteMeta(targetPath, nativePath + "meta", metaJson, compressionLevel, rawByteLength);
         }
 
         private static void BulkZstdRecompressZstdInPlace(string zstdPath, int compressionLevel, JSONNode metaJson)
@@ -1794,7 +1796,17 @@ namespace VPB
             }
 
             ZstdCompressor.SaveCache(zstdPath, raw, compressionLevel);
-            BulkZstdWriteMeta(zstdPath, zstdPath + "meta", metaJson, compressionLevel, raw);
+            BulkZstdWriteMeta(zstdPath, zstdPath + "meta", metaJson, compressionLevel, raw.LongLength);
+        }
+
+        private static void LogBulkZstdMemSample(int fileIndex, long fileBytes, bool recompressPath)
+        {
+            // recompress decompresses in-memory, so its real pending alloc is larger than the on-disk fileBytes.
+            long liveBytes = GC.GetTotalMemory(false);
+            int gcCount = GC.CollectionCount(GC.MaxGeneration);
+            LogUtil.Log(string.Format(
+                "[VPB][zstd-mem] file#{0} liveBytes={1} fileBytes={2} gcCount={3} path={4}",
+                fileIndex, liveBytes, fileBytes, gcCount, recompressPath ? "recompress" : "native"));
         }
 
         private void BulkZstdWorker(string nativeCacheDir, string vpbCacheDir)
@@ -1896,6 +1908,11 @@ namespace VPB
                 LogUtil.Log("[VPB] Bulk compress: nothing to compress (native=" + files.Length + " zstd=" + zstdFiles.Length + ") in " + nativeCacheDir);
             }
 
+            // Diagnostic: every N processed files sample heap live-bytes, this file's on-disk size, and GC count.
+            // Rising live = leak; flat live but death on a big file + high GC count = Boehm fragmentation; clean sawtooth = peak.
+            int zstdMemSampleCounter = 0;
+            const int ZstdMemSampleEveryN = 10;
+
             foreach (var file in files)
             {
                 if (CurrentZstdStats.CancelRequested)
@@ -1931,6 +1948,9 @@ namespace VPB
                         CurrentZstdStats.CurrentFile = fileName;
                         long originalSize = new FileInfo(file).Length;
                         CurrentZstdStats.TotalOriginalSize += originalSize;
+                        if (zstdMemSampleCounter % ZstdMemSampleEveryN == 0)
+                            LogBulkZstdMemSample(zstdMemSampleCounter, originalSize, false);
+                        zstdMemSampleCounter++;
                         BulkZstdCompressNativeToZstd(file, targetPath, compressionLevel, metaJson);
                         if (File.Exists(targetPath))
                             CurrentZstdStats.TotalCompressedSize += new FileInfo(targetPath).Length;
@@ -1989,6 +2009,9 @@ namespace VPB
                         CurrentZstdStats.CurrentFile = Path.GetFileName(zstdPath);
                         long originalSize = new FileInfo(zstdPath).Length;
                         CurrentZstdStats.TotalOriginalSize += originalSize;
+                        if (zstdMemSampleCounter % ZstdMemSampleEveryN == 0)
+                            LogBulkZstdMemSample(zstdMemSampleCounter, originalSize, true);
+                        zstdMemSampleCounter++;
                         BulkZstdRecompressZstdInPlace(zstdPath, compressionLevel, metaJson);
                         if (File.Exists(zstdPath))
                             CurrentZstdStats.TotalCompressedSize += new FileInfo(zstdPath).Length;
