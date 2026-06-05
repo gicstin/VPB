@@ -1888,12 +1888,9 @@ namespace VPB
             // List mode: badge strip below Size/Date row (horizontal layout; not over thumbnail)
             GameObject listBadgesGO = new GameObject("ListBadges");
             listBadgesGO.transform.SetParent(listRowGO.transform, false);
-            RectTransform listBadgesRT = listBadgesGO.AddComponent<RectTransform>();
-            listBadgesRT.anchorMin = new Vector2(0f, 0f);
-            listBadgesRT.anchorMax = new Vector2(1f, 0f);
-            listBadgesRT.pivot = new Vector2(0.5f, 0f);
-            listBadgesRT.anchoredPosition = Vector2.zero;
-            listBadgesRT.sizeDelta = new Vector2(0f, 32f);
+            // Plain VerticalLayoutGroup child like Name/Details: let the group drive position/size.
+            // Custom bottom-stretch anchors here fight the group and mis-place the strip.
+            listBadgesGO.AddComponent<RectTransform>();
             HorizontalLayoutGroup listBadgesHLG = listBadgesGO.AddComponent<HorizontalLayoutGroup>();
             listBadgesHLG.childAlignment = TextAnchor.MiddleLeft;
             listBadgesHLG.spacing = 4f;
@@ -2401,6 +2398,66 @@ namespace VPB
             }
         }
 
+        // Scale list-row fonts + sub-row heights off row height (ref 100) so the stacked content stays
+        // proportional and fits the cell at any zoom; bases are constants so repeated binds don't compound.
+        private void ApplyListRowScale(Transform listRowTr, float rowHeight)
+        {
+            if (listRowTr == null) return;
+            float s = Mathf.Clamp(rowHeight / 100f, 0.6f, 2.0f);
+
+            VerticalLayoutGroup vlg = listRowTr.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+            {
+                int p = Mathf.RoundToInt(5f * s);
+                vlg.padding = new RectOffset(p, p, p, p);
+            }
+
+            Transform nameTr = listRowTr.Find("Name");
+            if (nameTr != null)
+            {
+                Text t = nameTr.GetComponent<Text>();
+                if (t != null) t.fontSize = Mathf.RoundToInt(28f * s);
+                LayoutElement le = nameTr.GetComponent<LayoutElement>();
+                if (le != null) le.minHeight = 32f * s;
+            }
+
+            Transform detailsTr = listRowTr.Find("Details");
+            if (detailsTr != null)
+            {
+                LayoutElement le = detailsTr.GetComponent<LayoutElement>();
+                if (le != null) le.minHeight = 24f * s;
+                int detailFont = Mathf.RoundToInt(22f * s);
+                int dn = detailsTr.childCount;
+                for (int i = 0; i < dn; i++)
+                {
+                    Text ct = detailsTr.GetChild(i).GetComponent<Text>();
+                    if (ct != null) ct.fontSize = detailFont;
+                }
+            }
+
+            Transform badgesTr = listRowTr.Find("ListBadges");
+            if (badgesTr != null)
+            {
+                LayoutElement le = badgesTr.GetComponent<LayoutElement>();
+                if (le != null) { le.minHeight = 32f * s; le.preferredHeight = 32f * s; }
+                int badgeFont = Mathf.RoundToInt(22f * s);
+                float badgeSize = 32f * s;
+                int bn = badgesTr.childCount;
+                for (int i = 0; i < bn; i++)
+                {
+                    Transform b = badgesTr.GetChild(i);
+                    LayoutElement ble = b.GetComponent<LayoutElement>();
+                    if (ble != null)
+                    {
+                        ble.preferredWidth = badgeSize; ble.minWidth = badgeSize;
+                        ble.preferredHeight = badgeSize; ble.minHeight = badgeSize;
+                    }
+                    Text bt = b.GetComponentInChildren<Text>();
+                    if (bt != null) bt.fontSize = badgeFont;
+                }
+            }
+        }
+
         public void UpdateFileButtonVisuals(GameObject btnGO, FileEntry file)
         {
             if (btnGO == null)
@@ -2663,6 +2720,9 @@ namespace VPB
                         }
                         ch.gameObject.SetActive(true);
                     }
+                    // Settings rows deactivate the Details root; the loop only reactivates children, so
+                    // re-enable the root or a normal row recycled from a settings row shows a blank Details line.
+                    if (!detailsTrReset.gameObject.activeSelf) detailsTrReset.gameObject.SetActive(true);
                 }
             }
 
@@ -2913,6 +2973,16 @@ namespace VPB
                     userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
 
                 ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge, showUserTagsBadge);
+
+                // An empty strip still reserves its row height in the VLG and pushes the Details line
+                // out of a compact row; deactivate it so the group ignores it when no badge shows.
+                bool anyListBadge = showAutoInstallBadge || showHideBadge || showScanExcludedBadge || showUserTagsBadge;
+                if (listRowTr != null)
+                {
+                    Transform listBadgesRowTr = listRowTr.Find("ListBadges");
+                    if (listBadgesRowTr != null && listBadgesRowTr.gameObject.activeSelf != anyListBadge)
+                        listBadgesRowTr.gameObject.SetActive(anyListBadge);
+                }
             }
             else
             {
@@ -2930,6 +3000,8 @@ namespace VPB
             if (isListMode)
             {
                 if (listRowTr != null && !listRowTr.gameObject.activeSelf) listRowTr.gameObject.SetActive(true);
+
+                ApplyListRowScale(listRowTr, EffectiveListRowHeightForGallery());
 
                 Transform nameTr = btnGO.transform.Find("ListRow/Name");
                 if (nameTr != null)
