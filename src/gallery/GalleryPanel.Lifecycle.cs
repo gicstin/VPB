@@ -161,6 +161,8 @@ namespace VPB
 
             UnsubscribeGalleryPanelFromVpBConfigChanged();
 
+            UnsubscribeFromAtomEvents();
+
             if (canvas != null)
             {
                 if (SuperController.singleton != null)

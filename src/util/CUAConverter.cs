@@ -14,6 +14,7 @@ namespace VPB.src.util
 {
     public class CUAConverter
     {
+        // DEAD CODE (+ ConvertCUAToCUAClothingMutable below): CUA-to-clothing has no live caller; CUA import is native atoms.
         /// <param name="fileEntry">When set, <see cref="VPB.UI.LoadJSONWithFallback"/> can read the JSON from the .var via VPB when native LoadJSON fails.</param>
         public static JSONClass GetConvertedScene(string sceneJsonPath, bool onlyPersonAtoms = true, global::VPB.FileEntry fileEntry = null)
         {
@@ -57,11 +58,8 @@ namespace VPB.src.util
             return json;
         }
 
-        /// <summary>
-        /// Convert CUAs linked to Person atoms to CUAClothing items
-        /// </summary>
-        /// <param name="sceneJson"></param>
-        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null)
+        // DEAD CODE: no live caller (see GetConvertedScene above). forcedGender chose Female/Male over the unscanned Neutral folder.
+        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null, string forcedGender = null)
         {
             if (sceneJson == null) return;
 
@@ -91,10 +89,17 @@ namespace VPB.src.util
                 }
             }
 
+            LogUtil.Log($"[VPB][CUA] convert start: {persons.Count} person(s), {cuas.Count} CUA(s); sourcePkg={sourcePackageId ?? "(none)"}");
+            int converted = 0;
             int i = 0;
             foreach (var cua in cuas)
             {
+              // Isolate each CUA: a malformed one (missing asset, unmapped bone, null transform) must not abort the
+              // whole conversion, the rest still convert and the import proceeds with whatever succeeded.
+              try
+              {
                 string linkTo = cua.GetStorable("control")?["linkTo"];
+                LogUtil.Log($"[VPB][CUA] {cua.GetId()}: linkTo={linkTo ?? "(null)"}");
                 if (linkTo == null) continue;
 
                 var parts = linkTo.Split(':');
@@ -136,7 +141,9 @@ namespace VPB.src.util
                     continue;
                 }
 
-                string gender = JSONExtensions.GetGenderForCharacter(charNode.Value);
+                string gender = !string.IsNullOrEmpty(forcedGender)
+                    ? forcedGender
+                    : JSONExtensions.GetGenderForCharacter(charNode.Value);
 
                 var needRefresh = CUAClothing.CreateAndSaveCUAClothing(out JSONClass clothingItem, cua, i, sourcePackageId, gender);
 
@@ -154,8 +161,16 @@ namespace VPB.src.util
                     linkedPerson["storables"] = new JSONArray();
                 linkedPerson["storables"].AsArray.Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
 
+                LogUtil.Log($"[VPB][CUA] {cua.GetId()}: converted to clothing '{(clothingItem["internalId"] != null ? clothingItem["internalId"].Value : "?")}' on {linkedAtomId} bone {linkedAtomBone} (created={needRefresh}).");
+                converted++;
                 i++;
+              }
+              catch (Exception ex)
+              {
+                LogUtil.LogWarning($"[VPB][CUA] {cua.GetId()}: conversion failed, skipping this CUA: {ex.Message}");
+              }
             }
+            LogUtil.Log($"[VPB][CUA] convert done: {converted}/{cuas.Count} CUA(s) converted to clothing.");
         }
 
         public class BoneMeta
@@ -272,6 +287,22 @@ namespace VPB.src.util
             return path;
         }
 
+
+        // Bone-relative offset of a source CUA control: lets a re-spawned CUA atom sit at the same place on a target
+        // person of a different scale/pose. Reuses the same bone-walk transform math the clothing conversion used.
+        public static bool TryComputeCuaBoneOffset(JSONClass sourcePerson, SimpleTransform cuaWorld, string bone, out SimpleTransform offset)
+        {
+            offset = new SimpleTransform();
+            if (sourcePerson == null || cuaWorld == null || string.IsNullOrEmpty(bone)) return false;
+            if (!TryGetBoneTransform(sourcePerson, bone, out SimpleTransform boneRelToRoot)) return false;
+            // Compose the source person root so the bone is in world space; else a non-origin person offsets the CUA.
+            SimpleTransform personRoot = new SimpleTransform();
+            JSONClass control = sourcePerson.GetStorable("control");
+            if (control != null) personRoot = control.GetTransform();
+            SimpleTransform boneWorld = personRoot.TransformPoint(boneRelToRoot);
+            offset = boneWorld.InverseTransformPoint(cuaWorld);
+            return true;
+        }
 
         private static bool TryGetBoneTransform(JSONClass person, string offsetBone, out SimpleTransform boneOffset)
         {

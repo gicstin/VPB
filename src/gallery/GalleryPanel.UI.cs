@@ -1115,6 +1115,8 @@ namespace VPB
             footerShowHiddenOnSprite  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     UI.BarIconGlyphTint);
             { Sprite init = footerShowHiddenOffSprite ?? footerShowHiddenOnSprite; if (init != null) { UI.AddIconToButton(footerShowHiddenPackagesBtn, init); footerShowHiddenIconImage = footerShowHiddenPackagesBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
+            // Sidebar toggle lives on the toolbox "Scene Import" button (Tbox_SceneImport); no footer button.
+
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
@@ -3231,6 +3233,14 @@ namespace VPB
 
         private void ToggleRight(ContentType type)
         {
+            // Sidebar occupies one side column; opening that side's panel closes Import first. Clear intent
+            // (user chose this pane over the sidebar) and reconcile via the gate, else next Show reopens it.
+            if (importSidebarActive && !importSidebarOnLeft)
+            {
+                importSidebarOpenIntent = false;
+                RefreshImportSidebarCategoryGate();
+                PersistImportSidebarOpenIntent();
+            }
             if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
@@ -3318,6 +3328,13 @@ namespace VPB
 
         private void ToggleLeft(ContentType type)
         {
+            // Mirror of ToggleRight: clear intent so the gate doesn't reopen the sidebar over the chosen pane.
+            if (importSidebarActive && importSidebarOnLeft)
+            {
+                importSidebarOpenIntent = false;
+                RefreshImportSidebarCategoryGate();
+                PersistImportSidebarOpenIntent();
+            }
             if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;

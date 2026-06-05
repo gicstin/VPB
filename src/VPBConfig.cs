@@ -222,6 +222,8 @@ namespace VPB
         }
         /// <summary>True keeps target atom's current scale when an Appearance preset is applied (both toolbox and drag-drop). Default false.</summary>
         public bool SuppressAppearanceScaleChange { get; set; } = false;
+        /// <summary>Persisted import-sidebar toggle state (suppress-clothing, only-suppress-real, sub-toggles, last type). See GalleryPanel.ImportSidebar.cs Load/SaveImportSidebarPrefs.</summary>
+        public JSONClass ImportSidebarPrefs = new JSONClass();
         /// <summary>When true, suppresses CheesyFX NullReferenceException spam in Unity/BepInEx logs (broken Update loops).</summary>
         public bool SuppressCheesyFxNullReferenceLogs = true;
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
@@ -884,6 +886,7 @@ namespace VPB
             DragDropReplaceMode = false;
             AppearanceClothingApplyMode = "replace";
             SuppressAppearanceScaleChange = false;
+            ImportSidebarPrefs = new JSONClass();
             SuppressCheesyFxNullReferenceLogs = true;
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
@@ -1059,6 +1062,7 @@ namespace VPB
                         else if (node["KeepClothingWhenApplyingAppearance"] != null)
                             AppearanceClothingApplyMode = node["KeepClothingWhenApplyingAppearance"].AsBool ? "keep" : "replace";
                         if (node["SuppressAppearanceScaleChange"] != null) SuppressAppearanceScaleChange = node["SuppressAppearanceScaleChange"].AsBool;
+                        if (node["ImportSidebarPrefs"] != null) ImportSidebarPrefs = node["ImportSidebarPrefs"].AsObject;
                         if (node["SuppressCheesyFxNullReferenceLogs"] != null) SuppressCheesyFxNullReferenceLogs = node["SuppressCheesyFxNullReferenceLogs"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
@@ -1424,6 +1428,7 @@ namespace VPB
                 node["DragDropReplaceMode"].AsBool = DragDropReplaceMode;
                 node["AppearanceClothingApplyMode"] = AppearanceClothingApplyMode;
                 node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
+                if (ImportSidebarPrefs != null) node["ImportSidebarPrefs"] = ImportSidebarPrefs;
                 node["SuppressCheesyFxNullReferenceLogs"].AsBool = SuppressCheesyFxNullReferenceLogs;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;

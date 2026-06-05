@@ -73,6 +73,22 @@ namespace VPB
             return inner;
         }
 
+        // The toolbox "Scene Import" button is the sidebar toggle: open (preselecting the picked scene + target)
+        // when closed, close on a second click. UpdateImportToggleBtnVisual highlights it while open.
+        private void TboxOpenImportSidebar()
+        {
+            if (IsImportSidebarActive)
+            {
+                ToggleImportSidebar();
+                return;
+            }
+            if (selectedFiles != null && selectedFiles.Count == 1)
+                OpenImportSidebarWith(selectedFiles[0], SelectedTargetAtom);
+            else
+                ToggleImportSidebar();
+        }
+
+        // DEAD CODE: no caller. The toolbox button now routes to TboxOpenImportSidebar; CUA import is native atoms.
         private void TboxSceneImportSelectedPackage()
         {
             try
@@ -242,6 +258,7 @@ namespace VPB
                 !VPBConfig.Instance.SuppressAppearanceScaleChange;
             try { VPBConfig.Instance.Save(true, true); } catch { }
             RefreshSuppressScaleBtnVisual();
+            RefreshImportSidebarOptionToggles();
             ShowTemporaryStatus(
                 VPBConfig.Instance.SuppressAppearanceScaleChange
                     ? "Scale change on Appearance Import: SUPPRESSED"

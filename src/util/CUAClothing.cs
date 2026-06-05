@@ -7,6 +7,7 @@ using System.Text;
 
 namespace VPB.src.util
 {
+    // DEAD CODE: only ConvertCUAToCUAClothingMutable (itself dead) called this. CUA import is native atoms now.
     public partial class CUAClothing
     {
         /// <summary>
@@ -22,7 +23,11 @@ namespace VPB.src.util
         public static bool CreateAndSaveCUAClothing(out JSONClass clothingItem, JSONClass cua, int index, string packageName = "Local", string gender = "Neutral", bool replaceExisting = false)
         {
             var cuaId = cua.GetId();
-            var assetName = cua.GetStorable("asset")["assetUrl"].Value.Split('/').Last().Split('.')[0];
+            var assetStorable = cua.GetStorable("asset");
+            string assetUrl = (assetStorable != null && assetStorable["assetUrl"] != null) ? assetStorable["assetUrl"].Value : null;
+            if (string.IsNullOrEmpty(assetUrl))
+                throw new InvalidOperationException($"CUA {cuaId} has no asset/assetUrl");
+            var assetName = assetUrl.Split('/').Last().Split('.')[0];
             var path = $"Custom/Clothing/{gender}/VPB/{packageName}/{assetName}/{cuaId}";
             var uid = $"VPB:{packageName} - {cuaId}";
 

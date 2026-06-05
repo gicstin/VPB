@@ -542,26 +542,32 @@ namespace VPB
 
         public static void RemoveRealGarmentClothing(Atom target)
         {
+            RemoveClothingByWearClass(target, ClothingWearClass.RealGarment);
+        }
+
+        // Disable the target's worn clothing whose wear class matches classToRemove (live geometry
+        // clothing:<uid> bools); other classes, including Unknown, stay on.
+        public static void RemoveClothingByWearClass(Atom target, ClothingWearClass classToRemove)
+        {
             if (target == null)
             {
-                LogUtil.LogWarning("[VPB] RemoveRealGarmentClothing: target is null");
+                LogUtil.LogWarning("[VPB] RemoveClothingByWearClass: target is null");
                 return;
             }
 
-            LogUtil.Log($"[VPB] RemoveRealGarmentClothing: target={target.uid} ({target.type})");
+            LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
 
             try
             {
                 JSONStorable geometry = target.GetStorableByID("geometry");
                 if (geometry == null)
                 {
-                    LogUtil.LogWarning("[VPB] RemoveRealGarmentClothing: geometry storable NOT found");
+                    LogUtil.LogWarning("[VPB] RemoveClothingByWearClass: geometry storable NOT found");
                     return;
                 }
 
                 int disabledCount = 0;
-                int skippedCosmetic = 0;
-                int skippedUnknown = 0;
+                int skipped = 0;
                 foreach (var name in geometry.GetBoolParamNames())
                 {
                     if (string.IsNullOrEmpty(name)) continue;
@@ -569,10 +575,9 @@ namespace VPB
 
                     string itemUid = name.Substring("clothing:".Length);
                     ClothingWearClass wearClass = ClassifyClothingWearClass(itemUid, null, target);
-                    if (wearClass != ClothingWearClass.RealGarment)
+                    if (wearClass != classToRemove)
                     {
-                        if (wearClass == ClothingWearClass.Cosmetic) skippedCosmetic++;
-                        else skippedUnknown++;
+                        skipped++;
                         continue;
                     }
 
@@ -584,11 +589,11 @@ namespace VPB
                     disabledCount++;
                 }
 
-                LogUtil.Log($"[VPB] RemoveRealGarmentClothing: disabled {disabledCount} garments (skipped cosmetic={skippedCosmetic}, unknown={skippedUnknown})");
+                LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): disabled {disabledCount} (skipped {skipped})");
             }
             catch (Exception ex)
             {
-                LogUtil.LogError("[VPB] RemoveRealGarmentClothing: exception: " + ex);
+                LogUtil.LogError("[VPB] RemoveClothingByWearClass: exception: " + ex);
             }
         }
 

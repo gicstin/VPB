@@ -662,6 +662,77 @@ namespace VPB
             return uidCandidates.Count;
         }
 
+        // Scoped dependency prep for one import-sidebar slice: register only the slice's refs (plus the
+        // source host package for SELF:) and their transitive deps, not the source scene's full closure.
+        public static int PrewarmAndEnsureForPresetSlice(string sliceJson, string hostUid)
+        {
+            if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
+            if (string.IsNullOrEmpty(sliceJson)) return 0;
+
+            HashSet<string> directDeps;
+            try { directDeps = VarNameParser.Parse(sliceJson) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+            catch { directDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+
+            if (!string.IsNullOrEmpty(hostUid)) directDeps.Add(hostUid.Trim());
+            if (directDeps.Count == 0) return 0;
+
+            // Install only the slice's own refs. InstallRecursive on the source scene package re-walks
+            // the whole closure, which is the multi-minute cost this scoped path exists to avoid.
+            try { FileButton.EnsureInstalledBySet(directDeps); }
+            catch (Exception ex) { LogUtil.LogWarning($"[VPB import] Slice EnsureInstalledBySet failed: {ex.Message}"); }
+
+            var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string dep in directDeps)
+            {
+                if (string.IsNullOrEmpty(dep)) continue;
+                uidCandidates.Add(dep.Trim());
+                try
+                {
+                    VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
+                    if (pkg != null && !string.IsNullOrEmpty(pkg.Uid)) uidCandidates.Add(pkg.Uid);
+                }
+                catch { }
+            }
+
+            // A clothing/morph package the slice names declares its own deps (textures, resource packs)
+            // in meta.json that the scene JSON never mentions; pull them or the apply hits the one-shot
+            // missing-item failure the prewarm prevents.
+            foreach (string host in new List<string>(uidCandidates))
+            {
+                try
+                {
+                    var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (VpbLocalDatabase.TryReadRecursiveDependencyUids(host, sqlDeps))
+                        foreach (string dep in sqlDeps) uidCandidates.Add(dep);
+                }
+                catch { }
+            }
+
+            int newlyRegistered = 0;
+            foreach (string uid in uidCandidates)
+            {
+                try { if (VamOnDemandLoader.TryRegisterPackageOnDemand(uid) != null) newlyRegistered++; }
+                catch { }
+            }
+
+            try
+            {
+                string sample = string.Join(", ", uidCandidates.Take(5).ToArray());
+                LogUtil.Log($"[VPB import] Slice prewarm attempted {uidCandidates.Count} package(s) ({newlyRegistered} new). Sample: {sample}");
+            }
+            catch { }
+
+            // Same gate as the entry path: refresh VaM's clothing catalog only when the slice actually
+            // registers clothing-bearing packages, so a morphs/plugins slice triggers no clothing sim work.
+            if (VamOnDemandLoader.ShouldRequestCoalescedNativeRefreshForUids(uidCandidates, newlyRegistered))
+            {
+                try { VamOnDemandLoader.RequestCoalescedVamRefresh("vpb_import_slice_prewarm"); }
+                catch { }
+            }
+
+            return uidCandidates.Count;
+        }
+
         /// <summary>
         /// Copies the preset file's host .var from AllPackages to AddonPackages (if applicable) without scanning file contents for dependency VARs.
         /// Used for appearance "clothes only", where dependency install runs on garment-filtered JSON only (not the full .vap text).

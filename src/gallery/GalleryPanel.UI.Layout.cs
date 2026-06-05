@@ -221,6 +221,35 @@ namespace VPB
                 if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
             }
             
+            // Import sidebar hides its own side's tab column and pushes the grid edge in by 230,
+            // so the sidebar replaces (not overlaps) the Category / Creator slot it occupies.
+            if (importSidebarActive)
+            {
+                if (importSidebarOnLeft)
+                {
+                    if (leftTabScrollGO != null) leftTabScrollGO.SetActive(false);
+                    if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
+                    if (leftSearchInput != null) leftSearchInput.gameObject.SetActive(false);
+                    if (leftSortBtn != null) leftSortBtn.SetActive(false);
+                    if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                    if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+                    if (leftOffset < 230f) leftOffset = 230f;
+                }
+                else
+                {
+                    if (rightTabScrollGO != null) rightTabScrollGO.SetActive(false);
+                    if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
+                    if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
+                    if (rightSortBtn != null) rightSortBtn.SetActive(false);
+                    if (rightRefreshBtn != null) rightRefreshBtn.SetActive(false);
+                    if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
+                    if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                    if (rightOffset > -230f) rightOffset = -230f;
+                }
+                if (importSidebarRoot != null) importSidebarRoot.transform.SetAsLastSibling();
+            }
+
             float topOffset = -65f * paneScale;
             float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top (65*s)
             ApplySideTabFilterRowVerticalLayout(paneScale);

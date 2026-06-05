@@ -835,11 +835,11 @@ namespace VPB
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
-                TboxSceneImportSelectedPackage
+                TboxOpenImportSidebar
             );
             tboxSceneImportBtn.name = "Tbox_SceneImport";
             TboxConfigureActionButtonFlex(tboxSceneImportBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Import presets from a scene");
+            AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
             try
             {
                 var s = UI.LoadIconSprite("vpb_icons/import.png", Color.white);
@@ -2110,6 +2110,10 @@ namespace VPB
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+                // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
+                // button doesn't overlap the toolbox when it expands to two rows.
+                if (importSidebarActive && importSidebarRT != null)
+                    importSidebarRT.offsetMin = new Vector2(importSidebarRT.offsetMin.x, SideTabScrollBottomInsetY());
             }
 
             // Label is suppressed when path/status is actually visible, or buttons are expanded

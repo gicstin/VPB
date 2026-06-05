@@ -18,7 +18,11 @@ namespace VPB
         ClothingItem,
         HairItem,
         Morphs,
-        General
+        General,
+        Skin,
+        BreastPhysics,
+        Glute,
+        Plugins
     }
 
     internal enum ClothingApplyMode
@@ -40,7 +44,8 @@ namespace VPB
             bool suppressRoot = false,
             string storableNameOverride = null,
             bool skipDependencyPrewarm = false,
-            bool updateLastRestoredData = true)
+            bool updateLastRestoredData = true,
+            bool? suppressScaleChange = null)
         {
             if (targetAtom == null)
             {
@@ -139,7 +144,9 @@ namespace VPB
                 {
                     try
                     {
-                        if (VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange)
+                        // Caller (e.g. import sidebar) can override the global config flag per-apply via suppressScaleChange.
+                        bool doSuppressScale = suppressScaleChange ?? (VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange);
+                        if (doSuppressScale)
                         {
                             bool patched = AppearancePresetSuppress.PatchScaleToTargetCurrent(preset, targetAtom);
                             LogUtil.Log($"[VPB Scale] core suppress=ON patched={patched}");
@@ -738,6 +745,93 @@ namespace VPB
             JSONClass slice = new JSONClass();
             slice["storables"] = filtered;
             return slice;
+        }
+
+        // Filter a wrapped appearance slice to the source's non-real (Cosmetic) clothing only, for the
+        // only-suppress-real reinject. Returns null when there is none. Fed to the Clothing dispatch.
+        internal static JSONClass BuildNonRealClothingSlice(JSONClass preset)
+        {
+            if (preset == null || preset["storables"] == null) return null;
+            JSONClass clone = CloneJsonClassStatic(preset);
+            JSONArray storables = (clone != null && clone["storables"] != null) ? clone["storables"].AsArray : null;
+            if (storables == null) return null;
+
+            bool anyNonReal = false;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                if (!string.Equals(s["id"] != null ? s["id"].Value : "", "geometry", StringComparison.OrdinalIgnoreCase)) continue;
+
+                JSONArray clothing = s["clothing"] != null ? s["clothing"].AsArray : null;
+                if (clothing == null) break;
+
+                JSONArray filtered = new JSONArray();
+                foreach (JSONNode cn in clothing)
+                {
+                    JSONClass item = cn as JSONClass;
+                    if (item == null) continue;
+                    string uid = item["id"] != null ? item["id"].Value : null;
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    if (ClothingLoadingUtils.ClassifyClothingWearClass(uid) == ClothingLoadingUtils.ClothingWearClass.Cosmetic)
+                    {
+                        filtered.Add(item);
+                        anyNonReal = true;
+                    }
+                }
+                s["clothing"] = filtered;
+                break;
+            }
+            return anyNonReal ? clone : null;
+        }
+
+        // PluginPresets slice for a chosen subset: PluginManager "plugins" pruned to selected plugin#N keys + each
+        // selected plugin's "plugin#N_*" param storable kept verbatim (RestoreFromLast binds settings via the pre-merge id).
+        internal static JSONClass BuildSelectedPluginsSlice(JSONClass preset, ICollection<string> selectedPluginKeys)
+        {
+            if (preset == null || preset["storables"] == null) return null;
+            if (selectedPluginKeys == null || selectedPluginKeys.Count == 0) return null;
+            JSONClass clone = CloneJsonClassStatic(preset);
+            JSONArray storables = (clone != null && clone["storables"] != null) ? clone["storables"].AsArray : null;
+            if (storables == null) return null;
+
+            JSONArray kept = new JSONArray();
+            bool anyPlugin = false;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                string id = s["id"] != null ? s["id"].Value : "";
+                if (string.IsNullOrEmpty(id)) continue;
+
+                if (string.Equals(id, "PluginManager", StringComparison.Ordinal))
+                {
+                    JSONClass plugins = s["plugins"] != null ? s["plugins"].AsObject : null;
+                    if (plugins == null) continue;
+                    JSONClass filtered = new JSONClass();
+                    foreach (string key in plugins.Keys)
+                        if (selectedPluginKeys.Contains(key)) filtered[key] = plugins[key];
+                    if (filtered.Count == 0) continue;
+                    s["plugins"] = filtered;
+                    kept.Add(s);
+                    anyPlugin = true;
+                }
+                else if (IsSelectedPluginParamStorable(id, selectedPluginKeys))
+                {
+                    kept.Add(s);
+                }
+            }
+            if (!anyPlugin) return null;
+            clone["storables"] = kept;
+            return clone;
+        }
+
+        // A plugin's param storable id is "<plugin#N>_<ClassName>"; keep it when plugin#N is selected.
+        private static bool IsSelectedPluginParamStorable(string id, ICollection<string> selectedPluginKeys)
+        {
+            foreach (string key in selectedPluginKeys)
+                if (!string.IsNullOrEmpty(key) && id.StartsWith(key + "_", StringComparison.Ordinal)) return true;
+            return false;
         }
 
         private static bool IsClothingRelatedStorableId(string id)

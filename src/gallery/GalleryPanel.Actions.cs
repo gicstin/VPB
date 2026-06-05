@@ -569,6 +569,7 @@ namespace VPB
             LogGalleryCategoryTypeNavPhase("Show_after_UpdateTabs");
             UpdateLayout(!sameViewReopen && refreshCoroutine == null);
             LogGalleryCategoryTypeNavPhase("Show_after_UpdateLayout_2");
+            RefreshImportSidebarCategoryGate();
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned)
@@ -1319,6 +1320,32 @@ namespace VPB
                 GUIUtility.systemCopyBuffer = copyName;
                 ShowTemporaryStatus("Copied to clipboard: " + copyName, 2f);
                 return;
+            }
+
+            // Import sidebar active: a single click sets the import source (instead of launching the scene),
+            // but a double click still opens/launches the scene (falls through to the normal handling below).
+            if (importSidebarActive)
+            {
+                float importClickTime = Time.realtimeSinceStartup;
+                string importFileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
+                bool importDoubleClick = (importClickTime - lastClickTime < 0.3f)
+                    && string.Equals(selectedPath, importFileKey, StringComparison.OrdinalIgnoreCase);
+                lastClickTime = importClickTime;
+                if (!importDoubleClick)
+                {
+                    selectedFiles.Clear();
+                    selectedFilePaths.Clear();
+                    selectedFiles.Add(file);
+                    if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
+                    selectionAnchorPath = file.Path;
+                    selectedPath = importFileKey;
+                    selectedHubItem = null;
+                    SetHoverPath("");
+                    RefreshSelectionVisuals();
+                    OpenImportSidebarWith(file, importSidebarTargetAtom);
+                    return;
+                }
+                // double click: continue to the normal launch path below.
             }
 
             float time = Time.realtimeSinceStartup;

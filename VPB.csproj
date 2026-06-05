@@ -296,6 +296,8 @@
     <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />
     <Compile Include="src\VpbImport.cs" />
+    <Compile Include="src\VpbImport.SubToggleFilter.cs" />
+    <Compile Include="src\VpbImport.IsolationGuard.cs" />
     <Compile Include="src\VdsLauncher.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />
@@ -384,6 +386,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.VarPathInventory.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.GalleryUserTags.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
@@ -455,10 +458,15 @@
     <Compile Include="src\gallery\GalleryPanel.ScanWhitelistGestures.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.LoadUnloadCache.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.UI.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Atoms.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Options.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />
     <Compile Include="src\util\JSONExtensions.cs" />
     <Compile Include="src\util\JsonSerializationUtil.cs" />
     <Compile Include="src\util\CUAConverter.cs" />
+    <Compile Include="src\util\CUAAtomImporter.cs" />
     <Compile Include="src\util\CUAClothing.cs" />
     <Compile Include="src\util\CUAClothing.Data.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
