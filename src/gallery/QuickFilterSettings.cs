@@ -11,10 +11,36 @@ namespace VPB
     {
         public string Name;
         public string CategoryPath;
+        public string CategoryTitle;
         public string SearchText;
         public string Creator;
         public List<string> Tags = new List<string>();
+        public List<string> UserTags = new List<string>();
+        /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only).</summary>
+        public int UserTagAvailFilterMode = 0;
+        public int UserTagInheritVarToChildren = 0;
+        public string SceneSourceFilter = "";
+        public string AppearanceSourceFilter = "";
+        public string PackagePathFilter = "";
+        public int ClothingSubfilter = 0;
+        public int HairSubfilter = 0;
+        public int AppearanceSubfilter = 0;
+        public int PosePeopleFilter = 0;
         public SortState SortState;
+
+        /// <summary>True when side-tab layout was captured with this preset (distinguishes legacy presets).</summary>
+        public bool HasSideTabState = false;
+        /// <summary><see cref="ContentType"/> as int, or -1 when that side panel was closed.</summary>
+        public int LeftActiveContent = -1;
+        public int RightActiveContent = -1;
+        public string CategorySideFilter = "";
+        public string CreatorSideFilter = "";
+        public string UserTagSideFilter = "";
+        public string PathSideFilter = "";
+        public string HistoryTabFilter = "";
+        public string TagSubPaneFilter = "";
+        public int HistoryFilterMode = 0;
+        public List<QuickFilterSideTabSortEntry> SideTabSortStates = new List<QuickFilterSideTabSortEntry>();
         
         // Visual customization
         public Color ButtonColor = new Color(0.2f, 0.2f, 0.2f, 1f);
@@ -27,12 +53,28 @@ namespace VPB
             var node = new JSONClass();
             node["Name"] = Name;
             node["CategoryPath"] = CategoryPath;
+            node["CategoryTitle"] = CategoryTitle ?? "";
             node["SearchText"] = SearchText;
             node["Creator"] = Creator;
             
             var tagsArr = new JSONArray();
             foreach (var t in Tags) tagsArr.Add(t);
             node["Tags"] = tagsArr;
+
+            var userTagsArr = new JSONArray();
+            if (UserTags != null)
+                foreach (var t in UserTags) userTagsArr.Add(t);
+            node["UserTags"] = userTagsArr;
+
+            node["UserTagAvailFilterMode"].AsInt = UserTagAvailFilterMode;
+            node["UserTagInheritVarToChildren"].AsInt = UserTagInheritVarToChildren;
+            node["SceneSourceFilter"] = SceneSourceFilter ?? "";
+            node["AppearanceSourceFilter"] = AppearanceSourceFilter ?? "";
+            node["PackagePathFilter"] = PackagePathFilter ?? "";
+            node["ClothingSubfilter"].AsInt = ClothingSubfilter;
+            node["HairSubfilter"].AsInt = HairSubfilter;
+            node["AppearanceSubfilter"].AsInt = AppearanceSubfilter;
+            node["PosePeopleFilter"].AsInt = PosePeopleFilter;
 
             if (SortState != null)
             {
@@ -41,6 +83,32 @@ namespace VPB
                 sortNode["Direction"].AsInt = (int)SortState.Direction;
                 node["SortState"] = sortNode;
             }
+
+            node["HasSideTabState"].AsBool = HasSideTabState;
+            node["LeftActiveContent"].AsInt = LeftActiveContent;
+            node["RightActiveContent"].AsInt = RightActiveContent;
+            node["CategorySideFilter"] = CategorySideFilter ?? "";
+            node["CreatorSideFilter"] = CreatorSideFilter ?? "";
+            node["UserTagSideFilter"] = UserTagSideFilter ?? "";
+            node["PathSideFilter"] = PathSideFilter ?? "";
+            node["HistoryTabFilter"] = HistoryTabFilter ?? "";
+            node["TagSubPaneFilter"] = TagSubPaneFilter ?? "";
+            node["HistoryFilterMode"].AsInt = HistoryFilterMode;
+
+            var sideSortArr = new JSONArray();
+            if (SideTabSortStates != null)
+            {
+                foreach (var s in SideTabSortStates)
+                {
+                    if (s == null || string.IsNullOrEmpty(s.Context) || s.SortState == null) continue;
+                    var sn = new JSONClass();
+                    sn["Context"] = s.Context;
+                    sn["Type"].AsInt = (int)s.SortState.Type;
+                    sn["Direction"].AsInt = (int)s.SortState.Direction;
+                    sideSortArr.Add(sn);
+                }
+            }
+            node["SideTabSortStates"] = sideSortArr;
 
             // Colors
             node["ButtonColor"] = ColorToHex(ButtonColor);
@@ -54,6 +122,7 @@ namespace VPB
             var entry = new QuickFilterEntry();
             entry.Name = node["Name"] ?? "New Filter";
             entry.CategoryPath = node["CategoryPath"] ?? "";
+            entry.CategoryTitle = node["CategoryTitle"] ?? "";
             entry.SearchText = node["SearchText"] ?? "";
             entry.Creator = node["Creator"] ?? "";
 
@@ -63,6 +132,23 @@ namespace VPB
                 foreach (JSONNode t in tagsArr) entry.Tags.Add(t);
             }
 
+            var userTagsArr = node["UserTags"].AsArray;
+            if (userTagsArr != null)
+            {
+                foreach (JSONNode t in userTagsArr)
+                    if (!string.IsNullOrEmpty(t)) entry.UserTags.Add(t);
+            }
+
+            entry.UserTagAvailFilterMode = node["UserTagAvailFilterMode"] != null ? node["UserTagAvailFilterMode"].AsInt : 0;
+            entry.UserTagInheritVarToChildren = node["UserTagInheritVarToChildren"] != null ? node["UserTagInheritVarToChildren"].AsInt : 0;
+            entry.SceneSourceFilter = node["SceneSourceFilter"] ?? "";
+            entry.AppearanceSourceFilter = node["AppearanceSourceFilter"] ?? "";
+            entry.PackagePathFilter = node["PackagePathFilter"] ?? "";
+            entry.ClothingSubfilter = node["ClothingSubfilter"] != null ? node["ClothingSubfilter"].AsInt : 0;
+            entry.HairSubfilter = node["HairSubfilter"] != null ? node["HairSubfilter"].AsInt : 0;
+            entry.AppearanceSubfilter = node["AppearanceSubfilter"] != null ? node["AppearanceSubfilter"].AsInt : 0;
+            entry.PosePeopleFilter = node["PosePeopleFilter"] != null ? node["PosePeopleFilter"].AsInt : 0;
+
             var sortNode = node["SortState"];
             if (sortNode != null)
             {
@@ -70,6 +156,36 @@ namespace VPB
                 int di = sortNode["Direction"].AsInt;
                 if (Enum.IsDefined(typeof(SortType), ti) && Enum.IsDefined(typeof(SortDirection), di))
                     entry.SortState = new SortState((SortType)ti, (SortDirection)di);
+            }
+
+            entry.HasSideTabState = node["HasSideTabState"] != null && node["HasSideTabState"].AsBool;
+            entry.LeftActiveContent = node["LeftActiveContent"] != null ? node["LeftActiveContent"].AsInt : -1;
+            entry.RightActiveContent = node["RightActiveContent"] != null ? node["RightActiveContent"].AsInt : -1;
+            entry.CategorySideFilter = node["CategorySideFilter"] ?? "";
+            entry.CreatorSideFilter = node["CreatorSideFilter"] ?? "";
+            entry.UserTagSideFilter = node["UserTagSideFilter"] ?? "";
+            entry.PathSideFilter = node["PathSideFilter"] ?? "";
+            entry.HistoryTabFilter = node["HistoryTabFilter"] ?? "";
+            entry.TagSubPaneFilter = node["TagSubPaneFilter"] ?? "";
+            entry.HistoryFilterMode = node["HistoryFilterMode"] != null ? node["HistoryFilterMode"].AsInt : 0;
+
+            var sideSortArr = node["SideTabSortStates"].AsArray;
+            if (sideSortArr != null)
+            {
+                foreach (JSONNode sn in sideSortArr)
+                {
+                    if (sn == null) continue;
+                    string ctx = sn["Context"] ?? "";
+                    if (string.IsNullOrEmpty(ctx)) continue;
+                    int ti = sn["Type"].AsInt;
+                    int di = sn["Direction"].AsInt;
+                    if (!Enum.IsDefined(typeof(SortType), ti) || !Enum.IsDefined(typeof(SortDirection), di)) continue;
+                    entry.SideTabSortStates.Add(new QuickFilterSideTabSortEntry
+                    {
+                        Context = ctx,
+                        SortState = new SortState((SortType)ti, (SortDirection)di)
+                    });
+                }
             }
 
             if (node["ButtonColor"] != null) entry.ButtonColor = HexToColor(node["ButtonColor"]);
@@ -89,6 +205,13 @@ namespace VPB
             if (ColorUtility.TryParseHtmlString(hex, out c)) return c;
             return Color.white;
         }
+    }
+
+    [Serializable]
+    public class QuickFilterSideTabSortEntry
+    {
+        public string Context;
+        public SortState SortState;
     }
 
     public class QuickFilterSettings
