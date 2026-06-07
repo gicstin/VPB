@@ -1549,6 +1549,60 @@ namespace VPB
             catch { }
         }
 
+        // Single-connection stale scan + package join. Replaces the per-row TryGetCacheUsagePackages N+1
+        // (a fresh connection + EnsureSchema per cache file) that dominated the cleanup scan.
+        internal static void TryGetStaleCacheItemsWithPackages(long olderThanBinary, List<CacheUsageRow> outRows, Dictionary<string, List<string>> outPkgsByPath)
+        {
+            if (outRows == null) return;
+            outRows.Clear();
+            if (outPkgsByPath != null) outPkgsByPath.Clear();
+            if (!VpbSqlite3.IsAvailable) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    using (var st = conn.Prepare(
+                        "SELECT cu.cache_path, cu.hit_count, cu.last_accessed, cup.pkg_uid " +
+                        "FROM cache_usage cu LEFT JOIN cache_usage_pkg cup ON cup.cache_path = cu.cache_path " +
+                        "WHERE cu.last_accessed < ?"))
+                    {
+                        st.BindInt64(1, olderThanBinary);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string cachePath = st.ColumnText(0);
+                            if (string.IsNullOrEmpty(cachePath)) continue;
+                            if (seen.Add(cachePath))
+                            {
+                                outRows.Add(new CacheUsageRow
+                                {
+                                    CachePath = cachePath,
+                                    HitCount = (int)st.ColumnInt64(1),
+                                    LastAccessedBinary = st.ColumnInt64(2)
+                                });
+                            }
+                            if (outPkgsByPath != null)
+                            {
+                                string uid = st.ColumnText(3);
+                                if (!string.IsNullOrEmpty(uid))
+                                {
+                                    List<string> lst;
+                                    if (!outPkgsByPath.TryGetValue(cachePath, out lst))
+                                    {
+                                        lst = new List<string>(2);
+                                        outPkgsByPath[cachePath] = lst;
+                                    }
+                                    lst.Add(uid);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
         internal static void TryDeleteCacheUsage(string cachePath)
         {
             if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(cachePath)) return;

@@ -113,6 +113,132 @@ namespace VPB
         private readonly Dictionary<string, CleanupHashCacheEntry> cleanupHashCacheByPath =
             new Dictionary<string, CleanupHashCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
+        // Splits the previously-aggregated "var=" scan timer into stale-cache vs var vs hash so one run
+        // pinpoints the bottleneck. Stopwatch ticks accumulated here, converted to ms at report time.
+        private long _clDiagStaleQueryTicks;
+        private int _clDiagStaleRows;
+        private long _clDiagStaleFileExistsTicks;
+        private int _clDiagStaleFileExistsCalls;
+        private long _clDiagStaleUsagePkgTicks;
+        private int _clDiagStaleUsagePkgCalls;
+        private long _clDiagStaleRatingTicks;
+        private int _clDiagStaleExempt;
+        private int _clDiagStaleCandidates;
+        private long _clDiagStaleTotalTicks;
+
+        private long _clDiagVarEnumTicks;
+        private int _clDiagVarFilesAddon;
+        private int _clDiagVarFilesAll;
+        private long _clDiagVarParseTicks;
+        private int _clDiagVarUidGroups;
+        private int _clDiagVarUidGroupsDup;
+        private long _clDiagVarDupHashGroupTicks;
+        private long _clDiagVarOldVerTicks;
+        private long _clDiagVarInvalidUnionTicks;
+        private int _clDiagVarInvalidPkgs;
+        private long _clDiagVarTotalTicks;
+
+        private int _clDiagHashCacheHits;
+        private int _clDiagHashFilesRead;
+        private long _clDiagHashBytesRead;
+        private long _clDiagHashComputeTicks;
+        private long _clDiagExcludeRefreshTicks;
+        private long _clDiagPostTicks;
+        private readonly List<CleanupHashSample> _clDiagHashTopFiles = new List<CleanupHashSample>();
+
+        private sealed class CleanupHashSample
+        {
+            public string Path;
+            public long Bytes;
+            public double Ms;
+        }
+
+        private static double SwTicksToMs(long ticks)
+        {
+            try { return ticks * 1000.0 / Stopwatch.Frequency; }
+            catch { return 0.0; }
+        }
+
+        private void ResetCleanupScanDiag()
+        {
+            _clDiagStaleQueryTicks = 0; _clDiagStaleRows = 0;
+            _clDiagStaleFileExistsTicks = 0; _clDiagStaleFileExistsCalls = 0;
+            _clDiagStaleUsagePkgTicks = 0; _clDiagStaleUsagePkgCalls = 0;
+            _clDiagStaleRatingTicks = 0; _clDiagStaleExempt = 0; _clDiagStaleCandidates = 0;
+            _clDiagStaleTotalTicks = 0;
+            _clDiagVarEnumTicks = 0; _clDiagVarFilesAddon = 0; _clDiagVarFilesAll = 0;
+            _clDiagVarParseTicks = 0; _clDiagVarUidGroups = 0; _clDiagVarUidGroupsDup = 0;
+            _clDiagVarDupHashGroupTicks = 0; _clDiagVarOldVerTicks = 0;
+            _clDiagVarInvalidUnionTicks = 0; _clDiagVarInvalidPkgs = 0;
+            _clDiagVarTotalTicks = 0;
+            _clDiagHashCacheHits = 0; _clDiagHashFilesRead = 0; _clDiagHashBytesRead = 0;
+            _clDiagHashComputeTicks = 0; _clDiagExcludeRefreshTicks = 0; _clDiagPostTicks = 0;
+            _clDiagHashTopFiles.Clear();
+        }
+
+        private void RecordCleanupHashSample(string path, long bytes, double ms)
+        {
+            // Keep the most expensive hashed files so the report names exactly which large VARs cost.
+            const int Cap = 15;
+            try
+            {
+                if (_clDiagHashTopFiles.Count < Cap)
+                {
+                    _clDiagHashTopFiles.Add(new CleanupHashSample { Path = path, Bytes = bytes, Ms = ms });
+                    _clDiagHashTopFiles.Sort((a, b) => b.Ms.CompareTo(a.Ms));
+                    return;
+                }
+                var worst = _clDiagHashTopFiles[_clDiagHashTopFiles.Count - 1];
+                if (worst != null && ms > worst.Ms)
+                {
+                    worst.Path = path; worst.Bytes = bytes; worst.Ms = ms;
+                    _clDiagHashTopFiles.Sort((a, b) => b.Ms.CompareTo(a.Ms));
+                }
+            }
+            catch { }
+        }
+
+        private void LogCleanupScanDiag()
+        {
+            try
+            {
+                LogUtil.LogWarning("[VPB] Cleanup(diag) STALE | total=" + SwTicksToMs(_clDiagStaleTotalTicks).ToString("F0")
+                    + "ms | query=" + SwTicksToMs(_clDiagStaleQueryTicks).ToString("F0") + "ms rows=" + _clDiagStaleRows
+                    + " | fileExists=" + SwTicksToMs(_clDiagStaleFileExistsTicks).ToString("F0") + "ms x" + _clDiagStaleFileExistsCalls
+                    + " | pkgLookup=" + SwTicksToMs(_clDiagStaleUsagePkgTicks).ToString("F0") + "ms x" + _clDiagStaleUsagePkgCalls
+                    + " | ratings=" + SwTicksToMs(_clDiagStaleRatingTicks).ToString("F0") + "ms"
+                    + " | exempt=" + _clDiagStaleExempt + " candidates=" + _clDiagStaleCandidates);
+
+                LogUtil.LogWarning("[VPB] Cleanup(diag) VAR | total=" + SwTicksToMs(_clDiagVarTotalTicks).ToString("F0")
+                    + "ms | enum=" + SwTicksToMs(_clDiagVarEnumTicks).ToString("F0") + "ms all=" + _clDiagVarFilesAll + " addon=" + _clDiagVarFilesAddon
+                    + " | parse=" + SwTicksToMs(_clDiagVarParseTicks).ToString("F0") + "ms"
+                    + " | uidGroups=" + _clDiagVarUidGroups + " dupGroups=" + _clDiagVarUidGroupsDup
+                    + " dupHash=" + SwTicksToMs(_clDiagVarDupHashGroupTicks).ToString("F0") + "ms"
+                    + " | oldVer=" + SwTicksToMs(_clDiagVarOldVerTicks).ToString("F0") + "ms"
+                    + " | invalidUnion=" + SwTicksToMs(_clDiagVarInvalidUnionTicks).ToString("F0") + "ms invalidPkgs=" + _clDiagVarInvalidPkgs);
+
+                LogUtil.LogWarning("[VPB] Cleanup(diag) HASH | filesRead=" + _clDiagHashFilesRead
+                    + " cacheHits=" + _clDiagHashCacheHits
+                    + " bytesRead=" + _clDiagHashBytesRead + " (" + (_clDiagHashBytesRead / (1024.0 * 1024.0)).ToString("F1") + "MB)"
+                    + " computeTime=" + SwTicksToMs(_clDiagHashComputeTicks).ToString("F0") + "ms");
+
+                LogUtil.LogWarning("[VPB] Cleanup(diag) MISC | excludeRefresh=" + SwTicksToMs(_clDiagExcludeRefreshTicks).ToString("F0")
+                    + "ms postFilterSort=" + SwTicksToMs(_clDiagPostTicks).ToString("F0") + "ms");
+
+                for (int i = 0; i < _clDiagHashTopFiles.Count; i++)
+                {
+                    var s = _clDiagHashTopFiles[i];
+                    if (s == null) continue;
+                    LogUtil.LogWarning("[VPB] Cleanup(diag) HASH top#" + (i + 1) + " | " + s.Ms.ToString("F0") + "ms "
+                        + (s.Bytes / (1024.0 * 1024.0)).ToString("F1") + "MB | " + s.Path);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] Cleanup(diag) report failed: " + ex.Message);
+            }
+        }
+
         private sealed class CleanupHashCacheEntry
         {
             public long Size;
@@ -261,16 +387,23 @@ namespace VPB
                         && !string.IsNullOrEmpty(cached.Sha256Hex))
                     {
                         sha256Hex = cached.Sha256Hex;
+                        _clDiagHashCacheHits++;
                         return true;
                     }
                 }
 
+                long hashT0 = Stopwatch.GetTimestamp();
                 using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 64 * 1024, FileOptions.SequentialScan))
                 using (var sha = SHA256.Create())
                 {
                     byte[] hashBytes = sha.ComputeHash(stream);
                     sha256Hex = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
                 }
+                long hashTicks = Stopwatch.GetTimestamp() - hashT0;
+                _clDiagHashComputeTicks += hashTicks;
+                _clDiagHashFilesRead++;
+                _clDiagHashBytesRead += size;
+                RecordCleanupHashSample(norm, size, SwTicksToMs(hashTicks));
 
                 cleanupHashCacheByPath[norm] = new CleanupHashCacheEntry
                 {
@@ -291,12 +424,21 @@ namespace VPB
             var result = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
             if (candidates == null || candidates.Count <= 1) return result;
 
+            // Bucket by on-disk length (a stat, no read); only same-size files can be byte-identical, so
+            // unique-size files never get hashed in the second pass.
             var bySize = new Dictionary<long, List<CleanupCandidate>>();
             for (int i = 0; i < candidates.Count; i++)
             {
                 var c = candidates[i];
                 if (c == null || string.IsNullOrEmpty(c.SourcePath)) continue;
-                if (!TryGetFileSha256Cached(c.SourcePath, out long size, out string _)) continue;
+                long size;
+                try
+                {
+                    var fi = new FileInfo(c.SourcePath);
+                    if (!fi.Exists) continue;
+                    size = fi.Length;
+                }
+                catch { continue; }
 
                 if (!bySize.TryGetValue(size, out var sameSize))
                 {
@@ -411,15 +553,23 @@ namespace VPB
 
         private List<CleanupCandidate> BuildCleanupCandidatesGlobal(bool testMode = false)
         {
+            ResetCleanupScanDiag();
             var totalSw = Stopwatch.StartNew();
             var byPath = new Dictionary<string, CleanupCandidate>(StringComparer.OrdinalIgnoreCase);
 
-            var varSw = Stopwatch.StartNew();
+            long staleT0 = Stopwatch.GetTimestamp();
             BuildStaleCacheCleanupCandidates(byPath, testMode);
-            BuildVarCleanupCandidates(byPath);
-            varSw.Stop();
-            RefreshCleanupExcludedKeyCache();
+            _clDiagStaleTotalTicks = Stopwatch.GetTimestamp() - staleT0;
 
+            long varT0 = Stopwatch.GetTimestamp();
+            BuildVarCleanupCandidates(byPath);
+            _clDiagVarTotalTicks = Stopwatch.GetTimestamp() - varT0;
+
+            long excludeT0 = Stopwatch.GetTimestamp();
+            RefreshCleanupExcludedKeyCache();
+            _clDiagExcludeRefreshTicks = Stopwatch.GetTimestamp() - excludeT0;
+
+            long postT0 = Stopwatch.GetTimestamp();
             var list = byPath.Values.ToList();
             for (int i = 0; i < list.Count; i++)
                 list[i].IsExcluded = IsCleanupCandidateExcluded(list[i]);
@@ -431,8 +581,12 @@ namespace VPB
                 if (t != 0) return t;
                 return string.Compare(a.NormalizedPath, b.NormalizedPath, StringComparison.OrdinalIgnoreCase);
             });
+            _clDiagPostTicks = Stopwatch.GetTimestamp() - postT0;
             totalSw.Stop();
-            LogUtil.LogWarning("[VPB] Cleanup(list) scan done | var=" + varSw.ElapsedMilliseconds + " ms | local=disabled | total=" + totalSw.ElapsedMilliseconds + " ms | candidates=" + list.Count);
+            LogUtil.LogWarning("[VPB] Cleanup(list) scan done | stale=" + SwTicksToMs(_clDiagStaleTotalTicks).ToString("F0")
+                + "ms var=" + SwTicksToMs(_clDiagVarTotalTicks).ToString("F0") + "ms | local=disabled | total="
+                + totalSw.ElapsedMilliseconds + " ms | candidates=" + list.Count);
+            LogCleanupScanDiag();
             return list;
         }
 
@@ -475,23 +629,32 @@ namespace VPB
                 // Logic: older than 1 week (unless testMode). Hit count is tracked but not used for staleness.
                 // UI can further bucket-filter (1w/2w/1m/2m/6m) without rescanning.
                 int days = testMode ? 0 : 7;
-                int hits = testMode ? 999 : 2; // retained for UI text/back-compat; DB query ignores it.
 
                 long olderThanBinary = DateTime.UtcNow.AddDays(-days).ToBinary();
                 var staleRows = new List<VpbLocalDatabase.CacheUsageRow>();
-                VpbLocalDatabase.TryGetStaleCacheItems(olderThanBinary, hits, staleRows);
-
-                var cacheUids = new List<string>(4);
+                var pkgsByPath = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+                long staleQueryT0 = Stopwatch.GetTimestamp();
+                VpbLocalDatabase.TryGetStaleCacheItemsWithPackages(olderThanBinary, staleRows, pkgsByPath);
+                _clDiagStaleQueryTicks += Stopwatch.GetTimestamp() - staleQueryT0;
+                _clDiagStaleRows = staleRows.Count;
 
                 foreach (var row in staleRows)
                 {
-                    if (string.IsNullOrEmpty(row.CachePath) || !File.Exists(row.CachePath)) continue;
+                    if (string.IsNullOrEmpty(row.CachePath)) continue;
+                    long feT0 = Stopwatch.GetTimestamp();
+                    bool exists = File.Exists(row.CachePath);
+                    _clDiagStaleFileExistsTicks += Stopwatch.GetTimestamp() - feT0;
+                    _clDiagStaleFileExistsCalls++;
+                    if (!exists) continue;
 
                     bool exempt = false;
-                    try
                     {
-                        VpbLocalDatabase.TryGetCacheUsagePackages(row.CachePath, cacheUids);
-                        if (cacheUids.Count > 0)
+                        long upT0 = Stopwatch.GetTimestamp();
+                        List<string> cacheUids;
+                        pkgsByPath.TryGetValue(row.CachePath, out cacheUids);
+                        _clDiagStaleUsagePkgTicks += Stopwatch.GetTimestamp() - upT0;
+                        _clDiagStaleUsagePkgCalls++;
+                        if (cacheUids != null && cacheUids.Count > 0)
                         {
                             for (int i = 0; i < cacheUids.Count; i++)
                             {
@@ -507,7 +670,9 @@ namespace VPB
 
                                 // Exempt if package has star rating > 3
                                 int r = 0;
+                                long rtT0 = Stopwatch.GetTimestamp();
                                 try { r = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(uid) : 0; } catch { r = 0; }
+                                _clDiagStaleRatingTicks += Stopwatch.GetTimestamp() - rtT0;
                                 if (r > 3)
                                 {
                                     exempt = true;
@@ -516,10 +681,8 @@ namespace VPB
                             }
                         }
                     }
-                    catch { }
-                    finally { cacheUids.Clear(); }
 
-                    if (exempt) continue;
+                    if (exempt) { _clDiagStaleExempt++; continue; }
 
                     var c = GetOrCreateCleanupCandidate(byPath, row.CachePath, CleanupCandidateSourceKind.StaleCache);
                     if (c == null) continue;
@@ -528,6 +691,7 @@ namespace VPB
                     c.StaleCacheLastAccessedBinary = row.LastAccessedBinary;
                     DateTime lastAccess = DateTime.FromBinary(row.LastAccessedBinary);
                     c.Reasons.Add($"Stale Texture Cache (Last: {lastAccess:yyyy-MM-dd})");
+                    _clDiagStaleCandidates++;
                 }
             }
             catch (Exception ex)
@@ -541,8 +705,12 @@ namespace VPB
             var allVarPaths = new List<string>();
             try
             {
+                long enumT0 = Stopwatch.GetTimestamp();
                 if (Directory.Exists("AllPackages")) FileManager.SafeGetFiles("AllPackages", "*.var", allVarPaths);
+                _clDiagVarFilesAll = allVarPaths.Count;
                 if (Directory.Exists("AddonPackages")) FileManager.SafeGetFiles("AddonPackages", "*.var", allVarPaths);
+                _clDiagVarFilesAddon = allVarPaths.Count - _clDiagVarFilesAll;
+                _clDiagVarEnumTicks += Stopwatch.GetTimestamp() - enumT0;
             }
             catch (Exception ex)
             {
@@ -552,6 +720,7 @@ namespace VPB
             var byUidVersion = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
             var byGroup = new Dictionary<string, List<CleanupCandidate>>(StringComparer.OrdinalIgnoreCase);
 
+            long parseT0 = Stopwatch.GetTimestamp();
             for (int i = 0; i < allVarPaths.Count; i++)
             {
                 string raw = allVarPaths[i];
@@ -594,10 +763,15 @@ namespace VPB
                 }
             }
 
+            _clDiagVarParseTicks += Stopwatch.GetTimestamp() - parseT0;
+
+            _clDiagVarUidGroups = byUidVersion.Count;
+            long dupT0 = Stopwatch.GetTimestamp();
             foreach (var kvp in byUidVersion)
             {
                 var arr = kvp.Value;
                 if (arr == null || arr.Count <= 1) continue;
+                _clDiagVarUidGroupsDup++;
                 var byHash = BuildDuplicateHashGroups(arr);
                 var hashMatched = new HashSet<CleanupCandidate>();
                 foreach (var hashKvp in byHash)
@@ -628,6 +802,9 @@ namespace VPB
                 }
             }
 
+            _clDiagVarDupHashGroupTicks += Stopwatch.GetTimestamp() - dupT0;
+
+            long oldVerT0 = Stopwatch.GetTimestamp();
             foreach (var kvp in byGroup)
             {
                 var arr = kvp.Value;
@@ -647,8 +824,10 @@ namespace VPB
                     }
                 }
             }
+            _clDiagVarOldVerTicks += Stopwatch.GetTimestamp() - oldVerT0;
 
             // DB + scan invalid union (conservative to avoid false positives)
+            long invalidT0 = Stopwatch.GetTimestamp();
             try
             {
                 var invalidByPath = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -660,16 +839,6 @@ namespace VPB
                         if (pkg == null || !pkg.invalid || string.IsNullOrEmpty(pkg.Path)) continue;
                         invalidByPath.Add(NormalizePathSafe(pkg.Path));
                     }
-
-                    // Keep SQL touch lightweight for this path: it is used as accelerator metadata,
-                    // but damaged classification only trusts explicit invalid markers to prevent noise.
-                    try
-                    {
-                        var allUids = new HashSet<string>(pkgs.Keys, StringComparer.OrdinalIgnoreCase);
-                        var rows = new List<VpbLocalDatabase.PackageRow>();
-                        VpbLocalDatabase.TryQueryPackageRowsForUids(allUids, rows);
-                    }
-                    catch { }
                 }
 
                 foreach (string p in invalidByPath)
@@ -681,12 +850,14 @@ namespace VPB
                     if (c == null) continue;
                     c.Flags.Add(CleanupCandidateType.Damaged);
                     c.Reasons.Add("Marked invalid by scan/DB");
+                    _clDiagVarInvalidPkgs++;
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB] Cleanup: invalid package union failed: " + ex.Message);
             }
+            _clDiagVarInvalidUnionTicks += Stopwatch.GetTimestamp() - invalidT0;
         }
 
         private void BuildLocalCleanupCandidates(Dictionary<string, CleanupCandidate> byPath)
