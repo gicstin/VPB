@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using MVR.FileManagement;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -41,7 +42,9 @@ namespace VPB
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData == null) return;
+            bool isVR = XrUtils.IsVrActive();
+            if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
             TryStartHold();
         }
 

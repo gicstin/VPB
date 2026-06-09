@@ -232,10 +232,10 @@ namespace VPB
         public bool GalleryAutoGenderFilter = true;
         /// <summary>When true (default), visible gallery panes collapse (fixed dock) or hide (floating) when a scene is launched.</summary>
         public bool GalleryCollapseOnSceneLaunch = true;
-        /// <summary>Effective drag-and-drop state at runtime; mirrors <see cref="EnableDragDrop"/>.</summary>
+        /// <summary>Effective drag-and-drop state at runtime; off while <see cref="HoldToLaunchEnabled"/> (same pointer hold as drag start).</summary>
         public bool EffectiveEnableDragDrop
         {
-            get { return EnableDragDrop; }
+            get { return EnableDragDrop && !HoldToLaunchEnabled; }
         }
         /// <summary>Legacy persisted flag; ignored for behavior when <see cref="EnableDragDrop"/> is on — hold is always required then. Serialized for forward compatibility.</summary>
         public bool RequireDragHoldBeforeMove = false;

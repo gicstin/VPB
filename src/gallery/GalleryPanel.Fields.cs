@@ -854,8 +854,6 @@ namespace VPB
         private UIDraggable dragger;
         private GameObject pointerDotGO;
         private PointerEventData currentPointerData;
-        private GameObject targetMarkerGO;
-        private string targetMarkerAtomUid;
 
         private RectTransform previewBorderRT;
         private float fpsTimer = 0f;

@@ -177,69 +177,7 @@ namespace VPB
                 Gallery.singleton.RemovePanel(this);
             }
 
-            if (targetMarkerGO != null)
-            {
-                Destroy(targetMarkerGO);
-                targetMarkerGO = null;
-                targetMarkerAtomUid = null;
-            }
         }
-
-        private void EnsureTargetMarker()
-        {
-            if (targetMarkerGO != null) return;
-            
-            targetMarkerGO = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            targetMarkerGO.name = "VPB_TargetMarker";
-            
-            Collider c = targetMarkerGO.GetComponent<Collider>();
-            if (c != null) Destroy(c);
-
-            targetMarkerGO.transform.localScale = Vector3.one * 0.08f;
-
-            Renderer r = targetMarkerGO.GetComponent<Renderer>();
-            if (r != null)
-            {
-                Shader unlit = Shader.Find("Unlit/Color");
-                if (unlit == null) unlit = Shader.Find("Transparent/Diffuse");
-                
-                if (unlit != null)
-                {
-                    Material m = new Material(unlit);
-                    m.color = Color.magenta;
-                    r.material = m;
-                }
-            }
-
-            targetMarkerGO.SetActive(false);
-        }
-
-        private void UpdateTargetMarker()
-        {
-            bool shouldShow = hoverCount > 0 && (canvas != null && canvas.gameObject.activeInHierarchy);
-            Atom target = SelectedTargetAtom;
-            if (!shouldShow || target == null || !SceneUtils.IsPersonLikeAtom(target))
-            {
-                if (targetMarkerGO != null) targetMarkerGO.SetActive(false);
-                return;
-            }
-
-            EnsureTargetMarker();
-            if (targetMarkerGO == null) return;
-
-            Transform desiredParent = (target.mainController != null) ? target.mainController.transform : target.transform;
-
-            if (targetMarkerAtomUid != target.uid || targetMarkerGO.transform.parent != desiredParent)
-            {
-                targetMarkerAtomUid = target.uid;
-                targetMarkerGO.transform.SetParent(desiredParent, false);
-                targetMarkerGO.transform.localPosition = Vector3.zero;
-                targetMarkerGO.transform.localRotation = Quaternion.identity;
-            }
-
-            if (!targetMarkerGO.activeSelf) targetMarkerGO.SetActive(true);
-        }
-
 
     }
 

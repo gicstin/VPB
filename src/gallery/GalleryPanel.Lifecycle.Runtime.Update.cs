@@ -81,8 +81,6 @@ namespace VPB
             {
                 HandleKeyboardInput();
 
-                UpdateTargetMarker();
-
                 try
                 {
                     if (Time.unscaledTime - sideContextLastUpdateTime >= SideContextUpdateInterval)
