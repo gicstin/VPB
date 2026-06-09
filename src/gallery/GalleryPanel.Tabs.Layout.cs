@@ -15,7 +15,11 @@ namespace VPB
         {
             float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             float rowTop = 65f * s;
-            return -(rowTop + 35f * s + 5f * s);
+            float headerExtra = 0f;
+            try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
+            float filterExtra = 0f;
+            try { filterExtra = ActiveFilterChromeTopInsetPx(s); } catch { }
+            return -(rowTop + headerExtra + filterExtra + 35f * s + 5f * s);
         }
 
         private static bool CategoryNeedsSplitView(string title)
@@ -69,6 +73,10 @@ namespace VPB
             }
             catch { }
             UpdateSideButtonsVisibility();
+            float paneScale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
+            try { SuppressImportOccupiedSideColumnChrome(); } catch { }
+            try { SyncImportSidebarHeaderLabel(); } catch { }
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
         }
 
@@ -390,6 +398,9 @@ namespace VPB
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
+
+            float paneScale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
 
             // UpdateLayout runs before UpdateTabs in ToggleLeft/Right; UpdateTabsImpl mutates tab ScrollRect geometry
             // after that — viewport stretch resets unless sticky chrome is reapplied here.

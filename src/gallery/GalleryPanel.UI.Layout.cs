@@ -129,32 +129,38 @@ namespace VPB
             if ((forceBoth || leftActiveContent.HasValue) && leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(true);
-                leftOffset = 230; 
-                
-                if (leftSortBtn != null) leftSortBtn.SetActive(true);
+                leftOffset = 230;
+
+                ContentType leftType = leftActiveContent.HasValue ? leftActiveContent.Value : ContentType.Hub;
+                bool leftCleanupSide = leftType == ContentType.CleanupCategories;
+
+                if (leftSortBtn != null) leftSortBtn.SetActive(!leftCleanupSide);
 
                 if (leftSearchInput != null) 
                 {
-                    leftSearchInput.gameObject.SetActive(true);
+                    leftSearchInput.gameObject.SetActive(!leftCleanupSide);
+                    if (leftCleanupSide) { /* filter tabs only — no side search */ }
+                    else
+                    {
                     string target = "";
-                    ContentType type = leftActiveContent.HasValue ? leftActiveContent.Value : ContentType.Hub;
 
-                    if (type == ContentType.Category) target = categoryFilter;
-                    else if (type == ContentType.Creator) target = creatorFilter;
-                    else if (type == ContentType.UserTags) target = userTagFilter;
-                    else if (type == ContentType.Path) target = pathFilter;
-                    else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
-                    else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
-                    else if (type == ContentType.RemoveHair) target = removeHairFilter;
-                    else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
+                    if (leftType == ContentType.Category) target = categoryFilter;
+                    else if (leftType == ContentType.Creator) target = creatorFilter;
+                    else if (leftType == ContentType.UserTags) target = userTagFilter;
+                    else if (leftType == ContentType.Path) target = pathFilter;
+                    else if (leftType == ContentType.History) target = historyTabFilter;
+                    else if (leftType == ContentType.Settings) target = CanonicalSettingsSideSearchText();
+                    else if (leftType == ContentType.RemoveClothing) target = removeClothingFilter;
+                    else if (leftType == ContentType.RemoveHair) target = removeHairFilter;
+                    else if (leftType == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = ""; // Status filter?
 
                     SetSideSearchInputTextWithoutNotify(leftSearchInput, target, _leftMainSideSearchOnValueChanged);
                     
                     if (leftSearchInput.placeholder is Text ph)
                     {
-                        ph.text = GetContentTypePlaceholder(type);
+                        ph.text = GetContentTypePlaceholder(leftType);
+                    }
                     }
                 }
             }
@@ -178,31 +184,37 @@ namespace VPB
                 rightTabScrollGO.SetActive(true);
                 rightOffset = -230;
 
-                if (rightSortBtn != null) rightSortBtn.SetActive(true);
-                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(true);
+                ContentType rightType = rightActiveContent.HasValue ? rightActiveContent.Value : ContentType.Hub;
+                bool rightCleanupSide = rightType == ContentType.CleanupCategories;
+
+                if (rightSortBtn != null) rightSortBtn.SetActive(!rightCleanupSide);
+                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(!rightCleanupSide);
 
                 if (rightSearchInput != null) 
                 {
-                    rightSearchInput.gameObject.SetActive(true);
+                    rightSearchInput.gameObject.SetActive(!rightCleanupSide);
+                    if (rightCleanupSide) { /* filter tabs only — no side search */ }
+                    else
+                    {
                     string target = "";
-                    ContentType type = rightActiveContent.HasValue ? rightActiveContent.Value : ContentType.Hub;
 
-                    if (type == ContentType.Category) target = categoryFilter;
-                    else if (type == ContentType.Creator) target = creatorFilter;
-                    else if (type == ContentType.UserTags) target = userTagFilter;
-                    else if (type == ContentType.Path) target = pathFilter;
-                    else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
-                    else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
-                    else if (type == ContentType.RemoveHair) target = removeHairFilter;
-                    else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
+                    if (rightType == ContentType.Category) target = categoryFilter;
+                    else if (rightType == ContentType.Creator) target = creatorFilter;
+                    else if (rightType == ContentType.UserTags) target = userTagFilter;
+                    else if (rightType == ContentType.Path) target = pathFilter;
+                    else if (rightType == ContentType.History) target = historyTabFilter;
+                    else if (rightType == ContentType.Settings) target = CanonicalSettingsSideSearchText();
+                    else if (rightType == ContentType.RemoveClothing) target = removeClothingFilter;
+                    else if (rightType == ContentType.RemoveHair) target = removeHairFilter;
+                    else if (rightType == ContentType.RemoveAtom) target = removeAtomFilter;
                     else target = "";
 
                     SetSideSearchInputTextWithoutNotify(rightSearchInput, target, _rightMainSideSearchOnValueChanged);
 
                     if (rightSearchInput.placeholder is Text ph)
                     {
-                        ph.text = GetContentTypePlaceholder(type);
+                        ph.text = GetContentTypePlaceholder(rightType);
+                    }
                     }
                 }
             }
@@ -250,7 +262,12 @@ namespace VPB
                 if (importSidebarRoot != null) importSidebarRoot.transform.SetAsLastSibling();
             }
 
-            float topOffset = -65f * paneScale;
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
+            try { SuppressImportOccupiedSideColumnChrome(); } catch { }
+
+            float filterTopInset = 0f;
+            try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
+            float topOffset = -65f * paneScale - filterTopInset;
             float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top (65*s)
             ApplySideTabFilterRowVerticalLayout(paneScale);
 
@@ -316,34 +333,35 @@ namespace VPB
             RestorePreservedUserTagAvailScroll();
         }
 
-        /// <summary>Places side-pane sort/refresh/search row so top edge matches <see cref="contentScrollRT"/> top (not title bar).</summary>
+        /// <summary>Places side-pane sort/refresh/search row below optional collapse header strip.</summary>
         private void ApplySideTabFilterRowVerticalLayout(float paneScale)
         {
-            float y = -65f * paneScale;
+            float leftY = SidePanelFilterRowYForSide(true, paneScale);
+            float rightY = SidePanelFilterRowYForSide(false, paneScale);
             if (leftSearchInput != null)
             {
                 RectTransform rt = leftSearchInput.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, leftY);
             }
             if (rightSearchInput != null)
             {
                 RectTransform rt = rightSearchInput.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, rightY);
             }
             if (leftSortBtn != null)
             {
                 RectTransform rt = leftSortBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, leftY);
             }
             if (rightSortBtn != null)
             {
                 RectTransform rt = rightSortBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, rightY);
             }
             if (rightRefreshBtn != null)
             {
                 RectTransform rt = rightRefreshBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, rightY);
             }
         }
 

@@ -2195,7 +2195,10 @@ namespace VPB
                         break;
                     }
                 }
-                if (!anyCleanupEntry) cleanupModeActive = false;
+                if (!anyCleanupEntry)
+                {
+                    try { ExitCleanupModeForSidePanelNavigation(); } catch { }
+                }
             }
             bool isCleanup = cleanupModeActive;
             bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;

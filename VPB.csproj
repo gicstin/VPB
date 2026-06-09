@@ -435,6 +435,7 @@
     <Compile Include="src\gallery\GalleryPanel.Tabs.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Helpers.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Layout.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SidePanelHeader.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Core.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.Tags.cs" />
     <Compile Include="src\gallery\GalleryPanel.Tabs.Builders.UserTags.cs" />

@@ -391,6 +391,12 @@ namespace VPB
 
             titleText.text = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
+            bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
+            if (cleanupModeActive && (paramsChanged || categoryTitleChanged))
+            {
+                try { ExitCleanupModeForSidePanelNavigation(restoreGalleryCategory: false, refreshGalleryFiles: false); } catch { }
+            }
+
             if (paramsChanged)
             {
                 // Save current category's filters before switching away

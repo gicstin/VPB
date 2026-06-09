@@ -3231,6 +3231,11 @@ namespace VPB
             titleText.text = VPBTranslation.T("gallery.history.title", "History");
         }
 
+        private static bool SidePanelToggleExitsCleanupMode(ContentType type)
+        {
+            return type != ContentType.CleanupCategories && type != ContentType.CleanupStaleBuckets;
+        }
+
         private void ToggleRight(ContentType type)
         {
             // Sidebar occupies one side column; opening that side's panel closes Import first. Clear intent
@@ -3253,7 +3258,7 @@ namespace VPB
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History))
+            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
@@ -3262,9 +3267,9 @@ namespace VPB
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("right");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History))
+            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
             {
-                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                // After leaving cleanup, explicit side click should open the requested list.
                 rightActiveContent = type;
                 if (leftActiveContent == type) leftActiveContent = null;
             }
@@ -3347,7 +3352,7 @@ namespace VPB
                 ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History))
+            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
                 ExitCleanupModeForSidePanelNavigation();
 
             if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
@@ -3356,9 +3361,9 @@ namespace VPB
             if (timeCategoryCreatorSwitch)
                 BeginSideTabCategoryCreatorTiming("left");
 
-            if (wasCleanup && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History))
+            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
             {
-                // After leaving cleanup, explicit Category/Creator click should open the requested list.
+                // After leaving cleanup, explicit side click should open the requested list.
                 leftActiveContent = type;
                 if (rightActiveContent == type) rightActiveContent = null;
             }

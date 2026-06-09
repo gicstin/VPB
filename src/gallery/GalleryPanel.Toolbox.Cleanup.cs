@@ -103,6 +103,9 @@ namespace VPB
         private bool cleanupScanInProgress;
         private bool cleanupSideHostIsLeft;
         private ContentType? cleanupPrevHostContent;
+        private string cleanupPrevCategoryTitle;
+        private string cleanupPrevExtension;
+        private string cleanupPrevPath;
         private const string CleanupExcludeTag = "Exclude";
         private readonly HashSet<string> cleanupExcludedKeyCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<CleanupCandidate> cleanupCandidatesAll = new List<CleanupCandidate>();
@@ -1223,19 +1226,35 @@ namespace VPB
             ApplyCleanupFilterToList(clearSelection);
         }
 
+        private void CloseImportSidebarForCleanup()
+        {
+            if (!importSidebarOpenIntent && !importSidebarActive) return;
+            importSidebarOpenIntent = false;
+            importSidebarOpenIntentLoaded = true;
+            try { PersistImportSidebarOpenIntent(); } catch { }
+            try { RefreshImportSidebarCategoryGate(); } catch { }
+        }
+
         private void ActivateCleanupSideTabs()
         {
+            CloseImportSidebarForCleanup();
             cleanupSideHostIsLeft = isFixedLocally;
             if (cleanupSideHostIsLeft)
             {
                 cleanupPrevHostContent = leftActiveContent;
                 leftActiveContent = ContentType.CleanupCategories;
+                if (rightActiveContent == ContentType.CleanupCategories || rightActiveContent == ContentType.CleanupStaleBuckets)
+                    rightActiveContent = null;
             }
             else
             {
                 cleanupPrevHostContent = rightActiveContent;
                 rightActiveContent = ContentType.CleanupCategories;
+                if (leftActiveContent == ContentType.CleanupCategories || leftActiveContent == ContentType.CleanupStaleBuckets)
+                    leftActiveContent = null;
             }
+            SyncActiveContentTypeFromSidePanels();
+            try { UpdateLayout(); } catch { }
             try { UpdateTabs(); } catch { }
         }
 
@@ -1368,7 +1387,11 @@ namespace VPB
 
                 try { EnsureTemporaryTaskListLayoutSession(); } catch { }
 
+                cleanupPrevCategoryTitle = currentCategoryTitle;
+                cleanupPrevExtension = currentExtension;
+                cleanupPrevPath = currentPath;
                 currentCategoryTitle = VPBTranslation.T("gallery.tbox.cleanup", "Cleanup");
+                if (titleText != null) titleText.text = currentCategoryTitle;
                 ActivateCleanupSideTabs();
                 
                 bool testMode = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
@@ -1382,6 +1405,7 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] Cleanup view open failed: " + ex);
                 ShowTemporaryStatus(VPBTranslation.T("gallery.cleanup.scan_failed", "Cleanup scan failed. See log."), 2f);
+                try { ExitCleanupModeForSidePanelNavigation(); } catch { }
             }
             finally
             {
@@ -1389,13 +1413,14 @@ namespace VPB
             }
         }
 
-        private void ExitCleanupModeForSidePanelNavigation()
+        private void ExitCleanupModeForSidePanelNavigation(bool restoreGalleryCategory = true, bool refreshGalleryFiles = true)
         {
             if (!cleanupModeActive) return;
 
             cleanupModeActive = false;
             cleanupScanInProgress = false;
             cleanupFilterMode = 0;
+            cleanupStaleBucketMode = 0;
             cleanupCandidatesAll.Clear();
             cleanupCandidateByPath.Clear();
 
@@ -1419,12 +1444,26 @@ namespace VPB
                 rightActiveContent = null;
 
             cleanupPrevHostContent = null;
+            SyncActiveContentTypeFromSidePanels();
+
+            if (restoreGalleryCategory && !string.IsNullOrEmpty(cleanupPrevCategoryTitle))
+            {
+                currentCategoryTitle = cleanupPrevCategoryTitle;
+                if (!string.IsNullOrEmpty(cleanupPrevExtension)) currentExtension = cleanupPrevExtension;
+                if (!string.IsNullOrEmpty(cleanupPrevPath)) currentPath = cleanupPrevPath;
+                if (titleText != null) titleText.text = currentCategoryTitle;
+            }
+            cleanupPrevCategoryTitle = null;
+            cleanupPrevExtension = null;
+            cleanupPrevPath = null;
 
             TryRestoreLayoutAfterTemporaryTaskExit();
 
-            // Return to the normal gallery dataset after leaving cleanup mode.
-            try { RefreshFiles(); } catch { }
+            if (refreshGalleryFiles)
+                try { RefreshFiles(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { UpdateLayout(); } catch { }
+            try { UpdateTabs(); } catch { }
         }
 
         private void TboxSelectAllVisibleCleanup()

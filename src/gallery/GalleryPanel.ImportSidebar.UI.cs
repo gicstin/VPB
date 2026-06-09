@@ -6,13 +6,13 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Geometry mirrors the tab columns in GalleryPanel.Lifecycle.Init.cs (220 width, 10 side margin, -95 top).
-        // Bottom inset comes from SideTabScrollBottomInsetY() so the Apply button clears the full footer chrome.
+        // Geometry mirrors the tab columns in GalleryPanel.Lifecycle.Init.cs (220 width, 10 side margin).
+        // Top aligns with side-panel collapse headers (-65*s); bottom clears full footer chrome.
         private const float ImportSidebarBaseWidth = 220f;
         private const float ImportSidebarBaseHeaderHeight = 32f;
         private const float ImportSidebarBaseApplyHeight = 30f;
         private const float ImportSidebarBaseSideMargin = 10f;
-        private const float ImportSidebarBaseTopOffset = -95f;
+        private const float ImportSidebarBaseTopRowRef = 65f;
 
         // Match Creator/Category row sizing in GalleryPanel.Tabs.cs (preferredHeight = 35*s,
         // fontSize 18) so the Import sidebar reads as part of the same UI family.
@@ -24,6 +24,7 @@ namespace VPB
         private Transform importSidebarHeaderRoot;
         private RectTransform importSidebarHeaderRT;
         private Text importSidebarHeaderLabel;
+        private Button importSidebarHeaderBtn;
         // Single scroll body: header pinned top, Apply pinned bottom, everything else scrolls between them.
         private RectTransform importSidebarBodyScrollRT;     // CreateVScrollableContent root (the scroll viewport host)
         private RectTransform importSidebarScrollContentRT;  // VLG content node holding all rows (target of ForceRebuild)
@@ -96,12 +97,15 @@ namespace VPB
 
         // Vertical-stretch rect (anchored to panel top AND bottom) with raw-px insets, mirroring leftTabRT/rightTabRT
         // so it tracks the panel at any UI scale instead of a fixed-height box that overflows the column.
+        private float ImportSidebarTopOffsetY(float s) => -ImportSidebarBaseTopRowRef * s;
+
         private void ApplyImportSidebarBaseRect(float s)
         {
             if (importSidebarRT == null) return;
             float w = ImportSidebarBaseWidth;
-            float margin = ImportSidebarBaseSideMargin;
-            float top = ImportSidebarBaseTopOffset;          // negative: inset down from panel top
+            float leftMargin = SideTabColumnLeftInsetX(s);
+            float rightMargin = -SideTabColumnRightInsetX(s);
+            float top = ImportSidebarTopOffsetY(s);          // negative: inset down from panel top
             // Clear the full footer chrome (the tab-column container uses 68, but its visible content stops at this
             // larger inset; the sidebar's Apply button is visible at the bottom, so it must clear the whole footer).
             float bottom = SideTabScrollBottomInsetY();
@@ -111,15 +115,15 @@ namespace VPB
             {
                 importSidebarRT.anchorMin = new Vector2(0f, 0f);
                 importSidebarRT.anchorMax = new Vector2(0f, 1f);
-                importSidebarRT.offsetMin = new Vector2(margin, bottom);
-                importSidebarRT.offsetMax = new Vector2(margin + w, top);
+                importSidebarRT.offsetMin = new Vector2(leftMargin, bottom);
+                importSidebarRT.offsetMax = new Vector2(leftMargin + w, top);
             }
             else
             {
                 importSidebarRT.anchorMin = new Vector2(1f, 0f);
                 importSidebarRT.anchorMax = new Vector2(1f, 1f);
-                importSidebarRT.offsetMin = new Vector2(-margin - w, bottom);
-                importSidebarRT.offsetMax = new Vector2(-margin, top);
+                importSidebarRT.offsetMin = new Vector2(-rightMargin - w, bottom);
+                importSidebarRT.offsetMax = new Vector2(-rightMargin, top);
             }
 
             float headerH = ImportSidebarBaseHeaderHeight * s;
@@ -134,7 +138,61 @@ namespace VPB
                 importSidebarBodyScrollRT.offsetMin = new Vector2(0f, applyH);
                 importSidebarBodyScrollRT.offsetMax = new Vector2(0f, -headerH);
             }
-            ApplyScaledFont(importSidebarHeaderLabel, ImportSidebarBaseFontSize, s);
+            EnsureImportSidebarHeaderClickable();
+            SyncImportSidebarHeaderLabel();
+            SyncImportSidebarHeaderTypography(s);
+            SyncImportSidebarHeaderGateVisual();
+        }
+
+        private void SyncImportSidebarHeaderTypography(float s)
+        {
+            if (importSidebarHeaderLabel == null) return;
+            importSidebarHeaderLabel.fontSize = Mathf.Max(12, Mathf.RoundToInt(SidePanelHeaderFontRef * s));
+            importSidebarHeaderLabel.transform.localScale = Vector3.one;
+        }
+
+        private void SyncImportSidebarHeaderGateVisual()
+        {
+            if (importSidebarHeaderRT == null) return;
+            bool gated = importSidebarOpenIntent && !ImportSidebarCategoryAllowed();
+            Image bg = importSidebarHeaderRT.GetComponent<Image>();
+            if (bg != null)
+                bg.color = gated ? new Color(ColorCategory.r * 0.55f, ColorCategory.g * 0.55f, ColorCategory.b * 0.55f, 0.75f) : ColorCategory;
+            if (importSidebarHeaderLabel != null)
+                importSidebarHeaderLabel.color = gated ? new Color(0.82f, 0.82f, 0.82f, 0.9f) : Color.white;
+            if (importSidebarHeaderBtn != null)
+                importSidebarHeaderBtn.interactable = !gated;
+        }
+
+        private void EnsureImportSidebarHeaderClickable()
+        {
+            if (importSidebarHeaderRT == null) return;
+            GameObject headerGo = importSidebarHeaderRT.gameObject;
+            if (importSidebarHeaderBtn == null)
+                importSidebarHeaderBtn = headerGo.GetComponent<Button>();
+            if (importSidebarHeaderBtn != null) return;
+
+            Image bg = headerGo.GetComponent<Image>();
+            if (bg == null) return;
+            importSidebarHeaderBtn = headerGo.AddComponent<Button>();
+            importSidebarHeaderBtn.targetGraphic = bg;
+            importSidebarHeaderBtn.onClick.AddListener(() => ToggleImportSidebar());
+            AddTooltip(headerGo, "gallery.side.collapse_tip", "Collapse side list");
+        }
+
+        private void SyncImportSidebarHeaderLabel()
+        {
+            if (importSidebarHeaderLabel == null) return;
+            string title = SidePanelHeaderTranslation("gallery.import.sidebar_header", "Import");
+            importSidebarHeaderLabel.text = FormatSidePanelHeaderLabel(importSidebarOnLeft, title);
+        }
+
+        /// <summary>Hide shared side-column chrome on edge replaced by import sidebar.</summary>
+        private void SuppressImportOccupiedSideColumnChrome()
+        {
+            if (!importSidebarActive) return;
+            GameObject headerGo = importSidebarOnLeft ? _leftSidePanelHeaderGO : _rightSidePanelHeaderGO;
+            if (headerGo != null) headerGo.SetActive(false);
         }
 
         // Same clamp-and-localScale technique GalleryPanel.Tabs.cs uses to keep text legible
@@ -179,10 +237,16 @@ namespace VPB
 
             importSidebarHeaderLabel = CreateImportSidebarLabel(
                 header.transform,
-                VPBTranslation.T("gallery.import.sidebar_header", "Import"),
-                ImportSidebarBaseFontSize);
+                FormatSidePanelHeaderLabel(importSidebarOnLeft, SidePanelHeaderTranslation("gallery.import.sidebar_header", "Import")),
+                SidePanelHeaderFontRef);
             importSidebarHeaderLabel.color = Color.white;
+            importSidebarHeaderLabel.fontStyle = FontStyle.Bold;
             importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
+
+            importSidebarHeaderBtn = header.AddComponent<Button>();
+            importSidebarHeaderBtn.targetGraphic = bg;
+            importSidebarHeaderBtn.onClick.AddListener(() => ToggleImportSidebar());
+            AddTooltip(header, "gallery.side.collapse_tip", "Collapse side list");
         }
 
         // One scroll for the whole body (between the pinned header and pinned Apply): all rows live in its VLG content
@@ -269,18 +333,31 @@ namespace VPB
         partial void UpdateImportToggleBtnVisual()
         {
             Color active = new Color(0.2f, 0.45f, 0.75f, 0.9f);
+            Color gated = new Color(0.22f, 0.34f, 0.5f, 0.55f);
             Color idle = UI.IconButtonBackdrop;
-            void Apply(GameObject go, bool highlighted)
+            void Apply(GameObject go, bool highlighted, bool gatedSide)
             {
                 if (go == null) return;
                 Image img = go.GetComponent<Image>();
                 if (img == null) return;
-                img.color = highlighted ? active : idle;
+                if (highlighted) img.color = active;
+                else if (gatedSide) img.color = gated;
+                else img.color = idle;
             }
-            bool onLeft = importSidebarActive && importSidebarOnLeft;
-            bool onRight = importSidebarActive && !importSidebarOnLeft;
-            Apply(leftSceneImportSideBtn, onLeft);
-            Apply(rightSceneImportSideBtn, onRight);
+            bool categoryGated = importSidebarOpenIntent && !ImportSidebarCategoryAllowed();
+            Apply(leftSceneImportSideBtn, importSidebarActive && importSidebarOnLeft, categoryGated && importSidebarOnLeft);
+            Apply(rightSceneImportSideBtn, importSidebarActive && !importSidebarOnLeft, categoryGated && !importSidebarOnLeft);
+
+            void ApplyTooltip(GameObject go, bool gatedSide)
+            {
+                if (go == null) return;
+                if (gatedSide)
+                    AddTooltip(go, "gallery.import.sidebar_gated_tip", "Import sidebar opens in Scenes category only");
+                else
+                    AddTooltip(go, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
+            }
+            ApplyTooltip(leftSceneImportSideBtn, categoryGated && importSidebarOnLeft);
+            ApplyTooltip(rightSceneImportSideBtn, categoryGated && !importSidebarOnLeft);
         }
 
     }

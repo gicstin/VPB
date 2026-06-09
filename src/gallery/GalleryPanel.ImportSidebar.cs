@@ -100,6 +100,11 @@ namespace VPB
                 SubscribeToAtomEvents();
             }
 
+            if (active && cleanupModeActive)
+            {
+                try { ExitCleanupModeForSidePanelNavigation(); } catch { }
+            }
+
             importSidebarActive = active;
             if (importSidebarRoot != null)
             {
@@ -162,6 +167,8 @@ namespace VPB
             bool shouldBeActive = allowed && importSidebarOpenIntent;
             if (shouldBeActive != importSidebarActive)
                 SetImportSidebarActive(shouldBeActive);
+            try { SyncImportSidebarHeaderGateVisual(); } catch { }
+            try { UpdateImportToggleBtnVisual(); } catch { }
         }
 
         /// <summary>Primary pane only: restore persisted open flag once at init (not per Show, not clones/extra panes).</summary>
