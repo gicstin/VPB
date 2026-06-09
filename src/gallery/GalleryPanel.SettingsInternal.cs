@@ -620,8 +620,8 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultLeft", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_left_panel", "Left side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list opens on the left for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list or Import sidebar opens on the left for new panes."),
+                ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultLeftSidePanel = v;
@@ -632,8 +632,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultRight", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list opens on the right for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list or Import sidebar opens on the right for new panes."),
+                ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultRightSidePanel = v;
@@ -2168,6 +2168,8 @@ namespace VPB
                 rightActiveContent = null;
                 changed = true;
             }
+
+            try { ApplySidePanelDefaultsFromConfig(); } catch { }
 
             if (!changed) return;
             UpdateLayout();

@@ -568,9 +568,9 @@ namespace VPB
             return n;
         }
 
-        /// <summary>Which list opens on the left when a gallery pane is created: None, Category, Creator, or Tags.</summary>
+        /// <summary>Which list opens on the left when a gallery pane is created (see <see cref="GallerySidePanelOptions"/>).</summary>
         public string GalleryDefaultLeftSidePanel = "None";
-        /// <summary>Which list opens on the right when a gallery pane is created: None, Category, Creator, or Tags.</summary>
+        /// <summary>Which list opens on the right when a gallery pane is created (see <see cref="GallerySidePanelOptions"/>).</summary>
         public string GalleryDefaultRightSidePanel = "None";
         /// <summary>Default User Tags side panel mode when opening tags: FilterByTags (default), Tag, or FilterUntagged.</summary>
         public string GalleryDefaultUserTagAvailMode = "FilterByTags";
@@ -591,9 +591,12 @@ namespace VPB
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
         public bool BaMigrationPromptDismissed = false;
 
-        private static readonly string[] s_GallerySidePanelCanonical = { "None", "Category", "Creator", "Tags" };
+        /// <summary>Settings cycle options for <see cref="GalleryDefaultLeftSidePanel"/> / <see cref="GalleryDefaultRightSidePanel"/>.</summary>
+        public static readonly string[] GallerySidePanelOptions = { "None", "Import", "Tags", "Category", "Creator", "Path", "History" };
 
-        /// <summary>Maps user/config values to None, Category, Creator, or Tags.</summary>
+        private static readonly string[] s_GallerySidePanelCanonical = GallerySidePanelOptions;
+
+        /// <summary>Maps user/config values to a canonical side-panel default (see <see cref="GallerySidePanelOptions"/>).</summary>
         public static string NormalizeGallerySidePanel(string value)
         {
             if (string.IsNullOrEmpty(value)) return "None";

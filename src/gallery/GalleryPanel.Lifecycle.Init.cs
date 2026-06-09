@@ -1378,6 +1378,35 @@ namespace VPB
                     AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Open category list.");
                 }
 
+                // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
+                {
+                    Color colorSceneImportRail = new Color(0.2f, 0.45f, 0.75f, 1f);
+                    float impW = sideIconBtn;
+                    float impH = sideIconBtn;
+                    Sprite impSpr = null;
+                    try { impSpr = UI.LoadIconSprite("vpb_icons/import.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject rightSceneImportBtn = UI.CreateUIButton(rightSideContainer, impW, impH, " ", 8, 0, startY - spacing * 3 - groupGap * 3, AnchorPresets.centre, () => OpenImportSidebarFromSideButton(false, false));
+                    rightSceneImportSideBtn = rightSceneImportBtn;
+                    rightSceneImportBtn.SetActive(false);
+                    Image impImg = rightSceneImportBtn.GetComponent<Image>();
+                    Text impTxt = rightSceneImportBtn.GetComponentInChildren<Text>(true);
+                    if (impSpr != null)
+                        UI.AddIconToButton(rightSceneImportBtn, impSpr, sideIconPad, colorSceneImportRail);
+                    else if (impImg != null)
+                    {
+                        impImg.color = colorSceneImportRail;
+                        if (impTxt != null)
+                        {
+                            impTxt.text = VPBTranslation.T("gallery.side.scene_import_short", "Import");
+                            impTxt.fontSize = btnFontSize;
+                            impTxt.gameObject.SetActive(true);
+                        }
+                    }
+                    rightSideButtons.Add(rightSceneImportBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightSceneImportBtn, () => OpenImportSidebarFromSideButton(false, true));
+                    AddTooltip(rightSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
+                }
+
                 // User-defined tags (SQLite) — above Category
                 {
                     Color colorUserTagRail = new Color(0.14f, 0.42f, 0.48f, 1f);
@@ -1859,6 +1888,35 @@ namespace VPB
                     leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
                     AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Open category list.");
+                }
+
+                // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
+                {
+                    Color colorSceneImportRailL = new Color(0.2f, 0.45f, 0.75f, 1f);
+                    float impW = sideIconBtn;
+                    float impH = sideIconBtn;
+                    Sprite impSprL = null;
+                    try { impSprL = UI.LoadIconSprite("vpb_icons/import.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject leftSceneImportBtn = UI.CreateUIButton(leftSideContainer, impW, impH, " ", 8, 0, startY - spacing * 3 - groupGap * 3, AnchorPresets.centre, () => OpenImportSidebarFromSideButton(true, false));
+                    leftSceneImportSideBtn = leftSceneImportBtn;
+                    leftSceneImportBtn.SetActive(false);
+                    Image impImgL = leftSceneImportBtn.GetComponent<Image>();
+                    Text impTxtL = leftSceneImportBtn.GetComponentInChildren<Text>(true);
+                    if (impSprL != null)
+                        UI.AddIconToButton(leftSceneImportBtn, impSprL, sideIconPad, colorSceneImportRailL);
+                    else if (impImgL != null)
+                    {
+                        impImgL.color = colorSceneImportRailL;
+                        if (impTxtL != null)
+                        {
+                            impTxtL.text = VPBTranslation.T("gallery.side.scene_import_short", "Import");
+                            impTxtL.fontSize = btnFontSize;
+                            impTxtL.gameObject.SetActive(true);
+                        }
+                    }
+                    leftSideButtons.Add(leftSceneImportBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftSceneImportBtn, () => OpenImportSidebarFromSideButton(true, true));
+                    AddTooltip(leftSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
                 }
 
                 // User-defined tags (SQLite) — above Category
@@ -2395,6 +2453,11 @@ namespace VPB
             ApplyInnerPaneScale();
             ApplySideButtonScale();
             ApplySidePanelDefaultsFromConfig();
+            bool restoreGlobalImportOpen = !importSidebarInitAsClone
+                && Gallery.singleton != null
+                && Gallery.singleton.PanelCount == 1;
+            TryRestoreImportSidebarOpenFromGlobalPref(restoreGlobalImportOpen);
+            importSidebarInitAsClone = false;
             UpdateSideButtonsVisibility();
             UpdateLayout();
             SubscribeLocaleChanged();

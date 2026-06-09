@@ -42,8 +42,14 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             string ls = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
             string rs = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
-            ContentType? l = SidePanelStringToContentType(ls);
-            ContentType? r = SidePanelStringToContentType(rs);
+
+            bool leftImport = string.Equals(ls, "Import", StringComparison.OrdinalIgnoreCase);
+            bool rightImport = string.Equals(rs, "Import", StringComparison.OrdinalIgnoreCase);
+            if (leftImport && rightImport)
+                rightImport = false;
+
+            ContentType? l = leftImport ? null : SidePanelStringToContentType(ls);
+            ContentType? r = rightImport ? null : SidePanelStringToContentType(rs);
             if (VPBConfig.Instance.GalleryHideCreatorSideButtons)
             {
                 if (l == ContentType.Creator) l = null;
@@ -59,18 +65,42 @@ namespace VPB
             // opening a filter panel by default is surprising for VR users.
             bool isVR = XrUtils.IsVrActive();
             bool vrAnchorMode = isVR && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu;
-            if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue)
+            bool wantImport = !importSidebarInitAsClone && (leftImport || rightImport);
+            if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue && !wantImport)
                 targetR = ContentType.Category;
 
-            if (NullableContentTypeEqual(leftActiveContent, targetL) && NullableContentTypeEqual(rightActiveContent, targetR))
+            bool contentSame = NullableContentTypeEqual(leftActiveContent, targetL)
+                && NullableContentTypeEqual(rightActiveContent, targetR);
+            bool importSame = !wantImport
+                || (importSidebarOpenIntent && importSidebarOnLeft == leftImport);
+            if (contentSame && importSame)
                 return;
 
             leftActiveContent = targetL;
             rightActiveContent = targetR;
+
+            if (wantImport)
+            {
+                importSidebarOpenIntent = true;
+                importSidebarOpenIntentLoaded = true;
+                importSidebarForceOnLeft = leftImport;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+                try { PersistImportSidebarOpenIntent(); } catch { }
+            }
+            else if (!importSidebarInitAsClone && importSidebarOpenIntent)
+            {
+                importSidebarOpenIntent = false;
+                importSidebarOpenIntentLoaded = true;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+                try { PersistImportSidebarOpenIntent(); } catch { }
+            }
+
             UpdateLayout();
             UpdateTabs();
             if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
                 try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
+            try { RefreshSceneImportSideButtonVisibility(); } catch { }
+            try { UpdateSideButtonPositions(); } catch { }
         }
 
         private static bool NullableContentTypeEqual(ContentType? a, ContentType? b)
@@ -86,8 +116,13 @@ namespace VPB
                 return ContentType.Category;
             if (string.Equals(normalized, "Creator", StringComparison.OrdinalIgnoreCase))
                 return ContentType.Creator;
-            if (string.Equals(normalized, "Tags", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(normalized, "Tags", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "UserTags", StringComparison.OrdinalIgnoreCase))
                 return ContentType.UserTags;
+            if (string.Equals(normalized, "Path", StringComparison.OrdinalIgnoreCase))
+                return ContentType.Path;
+            if (string.Equals(normalized, "History", StringComparison.OrdinalIgnoreCase))
+                return ContentType.History;
             return null;
         }
 

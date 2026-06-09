@@ -45,7 +45,6 @@ namespace VPB
         // Debug-only: dumps the selected row's thumbnail pipeline to Cache/VPB/_thumbdebug/. Visible when TextureLogLevel >= 2.
         private GameObject tboxThumbDebugBtn;
         private GameObject tboxOpenHubBtn;
-        private GameObject tboxSceneImportBtn;
         private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
         private GameObject tboxSelectAllBtn;
@@ -176,7 +175,6 @@ namespace VPB
             one(tboxCacheTexturesBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
-            one(tboxSceneImportBtn);
             one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
             one(tboxSelectAllBtn);
@@ -220,7 +218,6 @@ namespace VPB
             d(tboxCacheTexturesBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
-            d(tboxSceneImportBtn);
             d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
             d(tboxSelectAllBtn);
@@ -343,7 +340,6 @@ namespace VPB
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
                 if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
-                if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
                 if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
@@ -828,22 +824,6 @@ namespace VPB
                 var saveSpr = gallerySaveSprite ?? UI.LoadIconSprite("vpb_icons/gallery_save.png", Color.white);
                 if (saveSpr != null)
                     UI.AddIconToButton(tboxOverwriteSceneBtn, saveSpr, padding: 6f, backdropOverride: new Color(0.18f, 0.42f, 0.28f, 0.96f));
-            }
-            catch { }
-
-            tboxSceneImportBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                "", tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxOpenImportSidebar
-            );
-            tboxSceneImportBtn.name = "Tbox_SceneImport";
-            TboxConfigureActionButtonFlex(tboxSceneImportBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Open the Import sidebar for the selected scene");
-            try
-            {
-                var s = UI.LoadIconSprite("vpb_icons/import.png", Color.white);
-                if (s != null) UI.AddIconToButton(tboxSceneImportBtn, s, padding: 6f);
             }
             catch { }
 
@@ -2262,7 +2242,6 @@ namespace VPB
                 show(tboxThumbDebugBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
-                show(tboxSceneImportBtn, false);
                 show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
                 show(tboxDeleteBtn, false);
@@ -2270,6 +2249,8 @@ namespace VPB
                 show(tboxSelectAllBtn, false);
                 show(tboxClearSelectionBtn, false);
 
+                try { RefreshSceneImportSideButtonVisibility(); } catch { }
+                try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 try { RefreshTboxFlexButtonLayout(); } catch { }
                 return;
@@ -2315,7 +2296,6 @@ namespace VPB
             // Otherwise, once Settings hides them, they stay inactive forever.
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
-            show(tboxSceneImportBtn, !isCleanup);
             show(tboxOverwriteSceneBtn, !isCleanup && !IsHubMode);
             show(tboxSuppressScaleBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
@@ -2352,6 +2332,8 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
                 show(tboxOverwriteSceneBtn, false);
 
+                try { RefreshSceneImportSideButtonVisibility(); } catch { }
+                try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 RefreshTboxFlexButtonLayout();
                 return;
@@ -2513,6 +2495,8 @@ namespace VPB
             if (tboxOverwriteSceneBtn != null)
                 SetTboxButtonEnabledVisual(tboxOverwriteSceneBtn, canOverwriteScene);
 
+            try { RefreshSceneImportSideButtonVisibility(); } catch { }
+            try { UpdateSideButtonPositions(); } catch { }
             try { RefreshTboxGridRateControlState(); } catch { }
             RefreshTboxFlexButtonLayout();
         }

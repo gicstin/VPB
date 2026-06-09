@@ -950,6 +950,11 @@ namespace VPB
         /// <summary>Side-rail Tags (UserTags) buttons — for layout / edge-align.</summary>
         private GameObject leftUserTagsSideBtn;
         private GameObject rightUserTagsSideBtn;
+        /// <summary>Side-rail Scene Import buttons — above Tags; toggle Import sidebar.</summary>
+        private GameObject leftSceneImportSideBtn;
+        private GameObject rightSceneImportSideBtn;
+        /// <summary>True during <see cref="Gallery.ClonePanel"/> init — skip global import-open restore and config import defaults.</summary>
+        internal bool importSidebarInitAsClone;
 
         private Sprite galleryCreatorOffSprite;
 

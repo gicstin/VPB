@@ -1069,14 +1069,9 @@ namespace VPB
             float rightEdge = bRight.min.x - gap;
             float spaceW = Mathf.Max(0f, rightEdge - leftEdge);
 
-            // Build single row from visible buttons (never remove buttons in Top dock).
+            // Build single row from visible buttons in layout order (matches vertical side-rail stack).
             List<RectTransform> buttons = new List<RectTransform>(leftSideButtons.Count);
-            for (int i = 0; i < leftSideButtons.Count; i++)
-            {
-                RectTransform rt = leftSideButtons[i];
-                if (rt == null || !rt.gameObject.activeSelf) continue;
-                buttons.Add(rt);
-            }
+            CollectLayoutOrderedVisibleSideButtons(buttons, leftSideButtons);
 
             float GetWidth(RectTransform rt)
             {
@@ -1178,6 +1173,21 @@ namespace VPB
             }
         }
 
+        private void CollectLayoutOrderedVisibleSideButtons(List<RectTransform> dest, List<RectTransform> buttonList)
+        {
+            if (dest == null || buttonList == null) return;
+            dest.Clear();
+            SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            for (int i = 0; i < layout.Length; i++)
+            {
+                int idx = layout[i].buttonIndex;
+                if (idx < 0 || idx >= buttonList.Count) continue;
+                RectTransform rt = buttonList[idx];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                dest.Add(rt);
+            }
+        }
+
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
         {
             string title = currentCategoryTitle ?? "";
@@ -1194,6 +1204,7 @@ namespace VPB
             int idxPath = -1;
             int idxHistory = -1;
             int idxUserTags = -1;
+            int idxSceneImport = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxKeepOutfit = -1;
@@ -1234,6 +1245,13 @@ namespace VPB
                         if (i >= 0) idxUserTags = i;
                     }
 
+                    GameObject impGo = rightSceneImportSideBtn != null ? rightSceneImportSideBtn : leftSceneImportSideBtn;
+                    if (impGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == impGo);
+                        if (i >= 0) idxSceneImport = i;
+                    }
+
                     if (rightRemoveAllHairBtn != null)
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == rightRemoveAllHairBtn);
@@ -1271,13 +1289,16 @@ namespace VPB
             }
             catch { }
 
+            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+
             var layout = new List<SideButtonLayoutEntry>()
             {
                 new SideButtonLayoutEntry(idxFloating, 0, 2), // Floating
                 new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
                 new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
 
-                new SideButtonLayoutEntry(idxUserTags, 0, 2), // Tags (UserTags) — above Category
+                new SideButtonLayoutEntry(idxSceneImport, 0, 2), // Scene Import — above Tags (hidden outside Scenes)
+                new SideButtonLayoutEntry(idxUserTags, 0, showSceneImport ? 0 : 2), // Tags — keep group gap when Import hidden
                 new SideButtonLayoutEntry(idxCategory, 0, 0), // Category
                 new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
                 new SideButtonLayoutEntry(idxPath, 0, 0), // Path
@@ -1681,8 +1702,19 @@ namespace VPB
             previewRemoveHairAllPrevVals.Clear();
         }
 
+        private void RefreshSceneImportSideButtonVisibility()
+        {
+            bool show = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            if (rightSceneImportSideBtn != null && rightSceneImportSideBtn.activeSelf != show)
+                rightSceneImportSideBtn.SetActive(show);
+            if (leftSceneImportSideBtn != null && leftSceneImportSideBtn.activeSelf != show)
+                leftSceneImportSideBtn.SetActive(show);
+        }
+
         private void UpdateSideContextActions()
         {
+            RefreshSceneImportSideButtonVisibility();
+
             string title = currentCategoryTitle ?? "";
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1884,6 +1916,7 @@ namespace VPB
             if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
             if (isRight)
             {
+                if (rightSceneImportSideBtn != null && go == rightSceneImportSideBtn) return true;
                 if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
@@ -1906,6 +1939,7 @@ namespace VPB
             }
             else
             {
+                if (leftSceneImportSideBtn != null && go == leftSceneImportSideBtn) return true;
                 if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;

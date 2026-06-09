@@ -268,13 +268,19 @@ namespace VPB
 
         partial void UpdateImportToggleBtnVisual()
         {
-            // Highlight the toolbox "Scene Import" button (the sidebar toggle) with a filled accent while open.
-            if (tboxSceneImportBtn == null) return;
-            Image img = tboxSceneImportBtn.GetComponent<Image>();
-            if (img == null) return;
-            img.color = importSidebarActive
-                ? new Color(0.2f, 0.45f, 0.75f, 0.9f)
-                : UI.IconButtonBackdrop;
+            Color active = new Color(0.2f, 0.45f, 0.75f, 0.9f);
+            Color idle = UI.IconButtonBackdrop;
+            void Apply(GameObject go, bool highlighted)
+            {
+                if (go == null) return;
+                Image img = go.GetComponent<Image>();
+                if (img == null) return;
+                img.color = highlighted ? active : idle;
+            }
+            bool onLeft = importSidebarActive && importSidebarOnLeft;
+            bool onRight = importSidebarActive && !importSidebarOnLeft;
+            Apply(leftSceneImportSideBtn, onLeft);
+            Apply(rightSceneImportSideBtn, onRight);
         }
 
     }

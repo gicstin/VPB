@@ -576,7 +576,8 @@ namespace VPB
 
             GameObject go = new GameObject("GalleryPanel_Clone");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
-            
+            p.importSidebarInitAsClone = true;
+
             p.Init();
             // Force floating mode for clones
             p.SetFixedLocally(false);
@@ -591,6 +592,7 @@ namespace VPB
             if (cloneRight == ContentType.Settings) cloneRight = null;
             p.SetLeftActiveContent(cloneLeft);
             p.SetRightActiveContent(cloneRight);
+            p.CopyImportSidebarStateFrom(original);
             p.SetFollowMode(original.GetFollowMode());
             
             // Sync size

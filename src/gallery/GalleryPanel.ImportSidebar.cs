@@ -20,6 +20,8 @@ namespace VPB
         // from leftActiveContent / rightActiveContent so the sidebar replaces whichever
         // Category / Creator / etc. column is currently open. Default right.
         private bool importSidebarOnLeft;
+        /// <summary>One-shot side lock when applying GalleryDefault*SidePanel = Import from config.</summary>
+        private bool? importSidebarForceOnLeft;
 
         // Current selection
         private FileEntry importSidebarSourceScene;
@@ -79,9 +81,15 @@ namespace VPB
         {
             if (active)
             {
-                // Lock the side at toggle-on time. Prefer the side already showing a panel
-                // (Category/Creator/etc.), default right when both or neither are open.
-                importSidebarOnLeft = leftActiveContent.HasValue && !rightActiveContent.HasValue;
+                // Lock the side at toggle-on time. Config default Import uses importSidebarForceOnLeft;
+                // otherwise prefer the side already showing a panel, default right when both or neither are open.
+                if (importSidebarForceOnLeft.HasValue)
+                {
+                    importSidebarOnLeft = importSidebarForceOnLeft.Value;
+                    importSidebarForceOnLeft = null;
+                }
+                else
+                    importSidebarOnLeft = leftActiveContent.HasValue && !rightActiveContent.HasValue;
             }
 
             if (active && !importSidebarBuilt)
@@ -150,18 +158,41 @@ namespace VPB
         // intent change and category nav (end of Show), so leaving Scenes hides it and returning restores it.
         internal void RefreshImportSidebarCategoryGate()
         {
-            // Seed intent from persisted prefs before the sidebar is ever built, so a restart with it left
-            // open re-opens on the first Scenes view (the full LoadImportSidebarPrefs only runs at build time).
-            if (!importSidebarOpenIntentLoaded)
-            {
-                JSONClass pp = VPBConfig.Instance != null ? VPBConfig.Instance.ImportSidebarPrefs : null;
-                importSidebarOpenIntent = PrefBool(pp, "open", false);
-                importSidebarOpenIntentLoaded = true;
-            }
             bool allowed = ImportSidebarCategoryAllowed();
             bool shouldBeActive = allowed && importSidebarOpenIntent;
             if (shouldBeActive != importSidebarActive)
                 SetImportSidebarActive(shouldBeActive);
+        }
+
+        /// <summary>Primary pane only: restore persisted open flag once at init (not per Show, not clones/extra panes).</summary>
+        private void TryRestoreImportSidebarOpenFromGlobalPref(bool allowRestore)
+        {
+            if (!allowRestore || importSidebarOpenIntent || importSidebarOpenIntentLoaded) return;
+            JSONClass pp = VPBConfig.Instance != null ? VPBConfig.Instance.ImportSidebarPrefs : null;
+            importSidebarOpenIntent = PrefBool(pp, "open", false);
+            importSidebarOpenIntentLoaded = true;
+            if (importSidebarOpenIntent)
+            {
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+            }
+        }
+
+        internal void CopyImportSidebarStateFrom(GalleryPanel source)
+        {
+            if (source == null) return;
+            importSidebarOpenIntent = source.importSidebarOpenIntent;
+            importSidebarOnLeft = source.importSidebarOnLeft;
+            importSidebarOpenIntentLoaded = true;
+            if (importSidebarOpenIntent)
+            {
+                importSidebarForceOnLeft = importSidebarOnLeft;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+            }
+            else if (importSidebarActive)
+            {
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+            }
+            try { UpdateImportToggleBtnVisual(); } catch { }
         }
 
         // Reflect the scene already highlighted in the grid into the source list on open, so the user doesn't
@@ -188,8 +219,7 @@ namespace VPB
             importSidebarImportLinkedCUAs         = PrefBool(p, "importLinkedCUAs", importSidebarImportLinkedCUAs);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
             importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
-            importSidebarOpenIntent               = PrefBool(p, "open", importSidebarOpenIntent);
-            importSidebarOpenIntentLoaded         = true;
+            // Open intent is per-pane; global "open" is restored only on the primary pane at init.
             importSidebarSubToggles.IncludeAppearanceMorphs   = PrefBool(p, "incAppearanceMorphs", importSidebarSubToggles.IncludeAppearanceMorphs);
             importSidebarSubToggles.IncludePhysicalPoseMorphs = PrefBool(p, "incPhysicalPoseMorphs", importSidebarSubToggles.IncludePhysicalPoseMorphs);
             importSidebarSubToggles.SuppressMorphLoad         = PrefBool(p, "suppressMorphLoad", importSidebarSubToggles.SuppressMorphLoad);

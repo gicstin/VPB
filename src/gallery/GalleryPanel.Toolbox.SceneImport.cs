@@ -73,22 +73,30 @@ namespace VPB
             return inner;
         }
 
-        // The toolbox "Scene Import" button is the sidebar toggle: open (preselecting the picked scene + target)
-        // when closed, close on a second click. UpdateImportToggleBtnVisual highlights it while open.
-        private void TboxOpenImportSidebar()
+        // Side-rail Scene Import button is the sidebar toggle: open (preselecting the picked scene + target)
+        // when closed, close on a second click. Docked: LMB=left column, RMB=right column. Floating: LMB follows clicked rail.
+        private void OpenImportSidebarFromSideButton(bool fromLeftRailButton, bool rightClick)
         {
             if (IsImportSidebarActive)
             {
                 ToggleImportSidebar();
                 return;
             }
+            bool preferLeftRail;
+            if (isFixedLocally)
+                preferLeftRail = !rightClick;
+            else if (rightClick)
+                preferLeftRail = !fromLeftRailButton;
+            else
+                preferLeftRail = fromLeftRailButton;
+            importSidebarForceOnLeft = preferLeftRail;
             if (selectedFiles != null && selectedFiles.Count == 1)
                 OpenImportSidebarWith(selectedFiles[0], SelectedTargetAtom);
             else
                 ToggleImportSidebar();
         }
 
-        // DEAD CODE: no caller. The toolbox button now routes to TboxOpenImportSidebar; CUA import is native atoms.
+        // DEAD CODE: no caller. Side-rail Scene Import routes to OpenImportSidebarFromSideButton; CUA import is native atoms.
         private void TboxSceneImportSelectedPackage()
         {
             try
