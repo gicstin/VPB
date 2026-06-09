@@ -2454,6 +2454,13 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
+            try
+            {
+                var vrTip = go.GetComponent<UIVrDwellTooltip>();
+                if (vrTip == null) vrTip = go.AddComponent<UIVrDwellTooltip>();
+                vrTip.Bind(tooltipKey, englishDefault);
+            }
+            catch { }
         }
 
         private void AddTooltipPlain(GameObject go, string tooltip)
@@ -2484,6 +2491,13 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
+            try
+            {
+                var vrTip = go.GetComponent<UIVrDwellTooltip>();
+                if (vrTip == null) vrTip = go.AddComponent<UIVrDwellTooltip>();
+                vrTip.Bind("", tooltip);
+            }
+            catch { }
         }
 
         private void UpdateDesktopModeButton()
@@ -2863,6 +2877,7 @@ namespace VPB
                 try { UpdateSpringScrollButtonToggleUI(); } catch { }
                 UpdateLayout();
                 try { SyncCategoryQuickSwitchChrome(); } catch { }
+                try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
                 return;
             }
 
@@ -2901,6 +2916,7 @@ namespace VPB
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
+            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         private void CycleDesktopFixedDockSide()
@@ -2938,6 +2954,7 @@ namespace VPB
             UpdateSideButtonsVisibility();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
+            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         public bool IsCollapsed => isCollapsed;
@@ -3299,6 +3316,8 @@ namespace VPB
             if (type == ContentType.Settings)
                 SyncInternalSettingsListView();
 
+            try { SyncTitleSearchChromeForActiveMode(); } catch { }
+
             UpdateLayout();
             UpdateTabs();
 
@@ -3392,6 +3411,8 @@ namespace VPB
             // Ensure settings list view active before layout pass so first click opens list immediately.
             if (type == ContentType.Settings)
                 SyncInternalSettingsListView();
+
+            try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
             UpdateLayout();
             UpdateTabs();

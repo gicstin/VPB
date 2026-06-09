@@ -163,6 +163,16 @@ namespace VPB
 
         // Settings
         public bool EnableButtonGaps = true;
+        /// <summary>When true, first-run hint strip under title bar is hidden permanently.</summary>
+        public bool FirstRunHintsDismissed = false;
+        /// <summary>When true (default), VR hover dwell shows a local tooltip label on controls.</summary>
+        public bool VrHoverTooltipEnabled = true;
+        /// <summary>Mode setup wizard completed for desktop fixed dock.</summary>
+        public bool ModeSetupWizardDoneDesktopFixed = false;
+        /// <summary>Mode setup wizard completed for desktop floating gallery.</summary>
+        public bool ModeSetupWizardDoneDesktopFloating = false;
+        /// <summary>Mode setup wizard completed for VR gallery sessions.</summary>
+        public bool ModeSetupWizardDoneVR = false;
         public string ShowSideButtons = "Both"; // "Both", "Left", "Right"
         public string _followAngle = "Both"; // "Off", "Desktop", "VR", "Both"
         public string FollowAngle
@@ -871,6 +881,11 @@ namespace VPB
             VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
+            FirstRunHintsDismissed = false;
+            VrHoverTooltipEnabled = true;
+            ModeSetupWizardDoneDesktopFixed = false;
+            ModeSetupWizardDoneDesktopFloating = false;
+            ModeSetupWizardDoneVR = false;
             ShowSideButtons = "Both";
             _followAngle = "Both";
             _followDistance = "VR";
@@ -1012,6 +1027,20 @@ namespace VPB
                     if (node != null)
                     {
                         if (node["EnableButtonGaps"] != null) EnableButtonGaps = node["EnableButtonGaps"].AsBool;
+                        if (node["FirstRunHintsDismissed"] != null) FirstRunHintsDismissed = node["FirstRunHintsDismissed"].AsBool;
+                        if (node["VrHoverTooltipEnabled"] != null) VrHoverTooltipEnabled = node["VrHoverTooltipEnabled"].AsBool;
+                        if (node["ModeSetupWizardDoneDesktopFixed"] != null) ModeSetupWizardDoneDesktopFixed = node["ModeSetupWizardDoneDesktopFixed"].AsBool;
+                        if (node["ModeSetupWizardDoneDesktopFloating"] != null) ModeSetupWizardDoneDesktopFloating = node["ModeSetupWizardDoneDesktopFloating"].AsBool;
+                        if (node["ModeSetupWizardDoneVR"] != null) ModeSetupWizardDoneVR = node["ModeSetupWizardDoneVR"].AsBool;
+                        if (cfgExistedAtStart
+                            && node["ModeSetupWizardDoneDesktopFixed"] == null
+                            && node["ModeSetupWizardDoneDesktopFloating"] == null
+                            && node["ModeSetupWizardDoneVR"] == null)
+                        {
+                            ModeSetupWizardDoneDesktopFixed = true;
+                            ModeSetupWizardDoneDesktopFloating = true;
+                            ModeSetupWizardDoneVR = true;
+                        }
                         if (node["ShowSideButtons"] != null) ShowSideButtons = node["ShowSideButtons"].Value;
                         
                         // Handle legacy bools if they exist, or just use string
@@ -1413,6 +1442,11 @@ namespace VPB
                 Stopwatch sw = Stopwatch.StartNew();
                 JSONClass node = new JSONClass();
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
+                node["FirstRunHintsDismissed"].AsBool = FirstRunHintsDismissed;
+                node["VrHoverTooltipEnabled"].AsBool = VrHoverTooltipEnabled;
+                node["ModeSetupWizardDoneDesktopFixed"].AsBool = ModeSetupWizardDoneDesktopFixed;
+                node["ModeSetupWizardDoneDesktopFloating"].AsBool = ModeSetupWizardDoneDesktopFloating;
+                node["ModeSetupWizardDoneVR"].AsBool = ModeSetupWizardDoneVR;
                 node["ShowSideButtons"] = ShowSideButtons;
                 node["FollowAngle"] = _followAngle;
                 node["FollowDistance"] = _followDistance;

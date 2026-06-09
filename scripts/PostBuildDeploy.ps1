@@ -132,7 +132,7 @@ if (Test-Path -LiteralPath $turboSrc) {
     }
 }
 
-$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_icons', 'vpb_themes')
+$assetDirs = @('vpb_translations', 'vpb_fonts', 'vpb_icons', 'vpb_themes', 'vpb_help')
 foreach ($name in $assetDirs) {
     if (-not $vamPathOk) { break }
     $srcDir = Join-Path $patchPlugins $name

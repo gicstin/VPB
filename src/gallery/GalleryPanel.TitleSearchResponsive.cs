@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
 namespace VPB
@@ -7,13 +7,13 @@ namespace VPB
     {
         /// <remarks>Reserved above category / around centre strip.</remarks>
         private const float TitleBarResponsiveGap = 6f;
-        /// <summary>Gaps between neighbouring title-bar controls (± scale).</summary>
+        /// <summary>Gaps between neighbouring title-bar controls (┬▒ scale).</summary>
         private const float TitleBarChromeElementGapRef = 8f;
-        /// <summary>Gap category↔controls and controls↔fps pack.</summary>
+        /// <summary>Gap categoryΓåöcontrols and controlsΓåöfps pack.</summary>
         private const float TitleBarChromeSectionGapRef = 12f;
         /// <summary>Padding before close button hits window edge.</summary>
         private const float TitleBarChromeEndMarginRef = 10f;
-        /// <summary>Usable inner width below this (× inner pane scale) switches to compact search icon.</summary>
+        /// <summary>Usable inner width below this (├ù inner pane scale) switches to compact search icon.</summary>
         private const float TitleSearchCollapseWidthPx = 128f;
         private const float TitleBarCategoryClampMaxRef = 260f;
         private const float TitleBarCategoryClampMinRef = 120f;
@@ -22,7 +22,7 @@ namespace VPB
         private const float TitleSearchPopupVicinityInflateScreenPx = 18f;
 
         /// <summary>
-        /// Order: category — sectionGap — settings, language, presets, creator — search — sort type, sort dir, ★, ⟳ — sectionGap — FPS, minimise, close.
+        /// Order: category ΓÇö sectionGap ΓÇö settings, language, presets, creator ΓÇö search ΓÇö sort type, sort dir, Γÿà, Γƒ│ ΓÇö sectionGap ΓÇö FPS, minimise, close.
         /// Sizes scale with inner pane factor <paramref name="paneScale"/>.
         /// </summary>
         private void ApplyTitleBarResponsiveLayout(float paneScale)
@@ -60,15 +60,18 @@ namespace VPB
 
             float fpsWRead = (_titleBarFpsRT != null) ? Mathf.Max(_titleBarFpsRT.rect.width, 72f * s) : 100f * s;
 
-            // Right pack widths: close … min … FPS (+ end inset)
-            float rp = endM + chip + g + chip + g + fpsWRead;
+            bool overflowMode = TitleBarUsesOverflowMenu(hasSourceFilter, W, s);
 
-            // Left pack after section: settings, lang, presets, creator (four 40-squares, three gaps inside),
-            // plus the wider global source filter button + its trailing gap when present.
-            float lpSpan = chip * 4f + g * 3f + (hasSourceFilter ? sourceW + g : 0f);
+            // Right pack widths: close ΓÇª help ΓÇª min ΓÇª FPS (+ end inset)
+            float rp = endM + chip + g + chip + g + chip + (overflowMode ? 0f : (g + fpsWRead));
 
-            // Compact search worst-case: chip + gaps into sort type + sort dir + ★ + ⟳
-            float midMin = chip * 5f + g * 4f;
+            // Left pack after section: settings + (overflow OR lang/presets/creator/source cluster).
+            float lpSpan = TitleBarLeftPackWidthEstimate(overflowMode, hasSourceFilter, sourceW, chip, g);
+
+            // Compact search worst-case: search + sort cluster (+ Γÿà when not overflow).
+            float midMin = overflowMode
+                ? (chip * 4f + g * 3f)
+                : (chip * 5f + g * 4f);
 
             bool flushLeftInset = CategoryQuickSwitchFlushLeftEdge();
             float leftInset = flushLeftInset ? 0f : 60f * s;
@@ -95,7 +98,7 @@ namespace VPB
             if (languageSwitcherBtnGO != null)
                 langRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
 
-            // —— Right anchors: FPS, minimise, close (already listed user order left-to-right toward centre); place from RIGHT edge inward
+            // ΓÇöΓÇö Right anchors: FPS, help, minimise, close ΓÇö place from RIGHT edge inward
             float xRight = halfW - endM;
             float xc = xRight - halfChip;
             if (_titleBarCloseBtnRT != null)
@@ -107,6 +110,11 @@ namespace VPB
                 _titleBarMinimizeBtnRT.anchoredPosition = new Vector2(xc, 0f);
             xRight = xc - halfChip;
             xRight -= g;
+            xc = xRight - halfChip;
+            if (_titleBarHelpBtnRT != null)
+                _titleBarHelpBtnRT.anchoredPosition = new Vector2(xc, 0f);
+            xRight = xc - halfChip;
+            xRight -= g;
 
             xc = xRight - fpsWRead * 0.5f;
             if (_titleBarFpsRT != null)
@@ -115,14 +123,18 @@ namespace VPB
             float rightPackLeftFace = xc - fpsWRead * 0.5f;
             float boundaryRefreshRight = rightPackLeftFace - sec;
 
-            // —— Refresh, ★, sort dir, sort type: coords from FPS boundary (apply center shift later).
+            // ΓÇöΓÇö Refresh, Γÿà, sort dir, sort type: coords from FPS boundary (apply center shift later).
             float rSweep = boundaryRefreshRight;
             xc = rSweep - halfChip;
             float xfRefresh = xc;
             rSweep = xc - halfChip - g;
-            xc = rSweep - halfChip;
-            float xfStar = xc;
-            rSweep = xc - halfChip - g;
+            float xfStar = 0f;
+            if (!overflowMode)
+            {
+                xc = rSweep - halfChip;
+                xfStar = xc;
+                rSweep = xc - halfChip - g;
+            }
             xc = rSweep - halfChip;
             float xfSortDir = xc;
             rSweep = xc - halfChip - g;
@@ -142,20 +154,9 @@ namespace VPB
             float LminAfterCat = catTrailingX + sec;
             float R = searchAvailRightBoundary;
 
-            int nLeftPack = 0;
-            if (hasSourceFilter) nLeftPack++;
-            if (_titleBarSettingsBtnRT != null) nLeftPack++;
-            if (langRT != null) nLeftPack++;
-            if (_titleBarQfToggleBtnRT != null) nLeftPack++;
-            if (titleCreatorBtn != null)
-            {
-                RectTransform crt0 = titleCreatorBtn.GetComponent<RectTransform>();
-                if (crt0 != null) nLeftPack++;
-            }
-
             // Uniform chip-and-gap baseline, plus the extra width the source filter contributes over a standard chip.
-            float leftPackSpan = nLeftPack * (chip + g) + (hasSourceFilter ? (sourceW - chip) : 0f);
-            float availForSearchFloor = Mathf.Max(0f, R - LminAfterCat - leftPackSpan);
+            float leftPackSpan = TitleBarLeftPackWidthEstimate(overflowMode, hasSourceFilter, sourceW, chip, g);
+            float availForSearchFloor = Mathf.Max(0f, R - LminAfterCat - leftPackSpan - g);
             float iconW = chip;
             bool useCompact =
                 availForSearchFloor < TitleSearchCollapseWidthPx * s - 0.5f ||
@@ -197,39 +198,12 @@ namespace VPB
 
             xfSortType -= stripCenterShift;
             xfSortDir -= stripCenterShift;
-            xfStar -= stripCenterShift;
+            if (!overflowMode) xfStar -= stripCenterShift;
             xfRefresh -= stripCenterShift;
-
-            if (useCompact)
-            {
-                if (titleSearchInput.gameObject.activeSelf)
-                    titleSearchInput.gameObject.SetActive(false);
-                if (_titleSearchCompactGO != null)
-                {
-                    _titleSearchCompactGO.SetActive(true);
-                    if (_titleSearchCompactRT != null)
-                    {
-                        cxSearch = xlPackStart + leftPackSpan + iconW * 0.5f;
-                        _titleSearchCompactRT.anchoredPosition = new Vector2(cxSearch, 0f);
-                        _titleSearchCompactRT.sizeDelta = new Vector2(iconW, 40f * s);
-                    }
-                }
-            }
-            else
-            {
-                CloseTitleSearchPopup();
-                if (_titleSearchCompactGO != null)
-                    _titleSearchCompactGO.SetActive(false);
-                titleSearchInput.gameObject.SetActive(true);
-
-                cxSearch = xlPackStart + leftPackSpan + wSearch * 0.5f;
-                searchRT.sizeDelta = new Vector2(wSearch, 40f * s);
-                searchRT.anchoredPosition = new Vector2(cxSearch, 0f);
-            }
 
             if (_titleBarRefreshBtnRT != null)
                 _titleBarRefreshBtnRT.anchoredPosition = new Vector2(xfRefresh, 0f);
-            if (_titleBarRatingSortToggleBtnRT != null)
+            if (!overflowMode && _titleBarRatingSortToggleBtnRT != null)
                 _titleBarRatingSortToggleBtnRT.anchoredPosition = new Vector2(xfStar, 0f);
             if (_titleBarFileSortTypeBtnRT != null)
                 _titleBarFileSortTypeBtnRT.anchoredPosition = new Vector2(xfSortType, 0f);
@@ -237,7 +211,7 @@ namespace VPB
                 _titleBarFileSortDirBtnRT.anchoredPosition = new Vector2(xfSortDir, 0f);
 
             float xl = xlPackStart;
-            if (hasSourceFilter)
+            if (!overflowMode && hasSourceFilter)
             {
                 RectTransform sourceRT = globalSourceFilterBtn.GetComponent<RectTransform>();
                 if (sourceRT != null)
@@ -251,24 +225,78 @@ namespace VPB
                 _titleBarSettingsBtnRT.anchoredPosition = new Vector2(xl + halfChip, 0f);
                 xl += chip + g;
             }
-            if (langRT != null)
+            try { overflowMode = ApplyTitleBarOverflowLayout(s, W, xlPackStart, chip, g, ref xl); } catch { }
+            if (!overflowMode)
             {
-                langRT.anchoredPosition = new Vector2(xl + halfChip, 0f);
-                xl += chip + g;
-            }
-            if (_titleBarQfToggleBtnRT != null)
-            {
-                _titleBarQfToggleBtnRT.anchoredPosition = new Vector2(xl + halfChip, 0f);
-                xl += chip + g;
-            }
-            if (titleCreatorBtn != null)
-            {
-                RectTransform crt = titleCreatorBtn.GetComponent<RectTransform>();
-                if (crt != null)
+                if (langRT != null)
                 {
-                    crt.anchoredPosition = new Vector2(xl + halfChip, 0f);
+                    langRT.anchoredPosition = new Vector2(xl + halfChip, 0f);
                     xl += chip + g;
                 }
+                if (_titleBarQfToggleBtnRT != null)
+                {
+                    _titleBarQfToggleBtnRT.anchoredPosition = new Vector2(xl + halfChip, 0f);
+                    xl += chip + g;
+                }
+                if (titleCreatorBtn != null)
+                {
+                    RectTransform crt = titleCreatorBtn.GetComponent<RectTransform>();
+                    if (crt != null)
+                    {
+                        crt.anchoredPosition = new Vector2(xl + halfChip, 0f);
+                        xl += chip + g;
+                    }
+                }
+            }
+
+            // Place search after left pack using measured end + sort-type left boundary (prevents chip overlap).
+            float searchZoneLeft = xl;
+            float searchZoneRight = xfSortType - halfChip - g;
+            float availSearch = Mathf.Max(0f, searchZoneRight - searchZoneLeft);
+            useCompact = availSearch < TitleSearchCollapseWidthPx * s - 0.5f || availSearch + 0.5f < iconW;
+            if (useCompact)
+            {
+                wSearch = Mathf.Min(iconW, Mathf.Max(0f, availSearch));
+                if (wSearch < iconW * 0.75f) wSearch = Mathf.Max(wSearch, Mathf.Min(iconW, availSearch));
+            }
+            else
+            {
+                wSearch = Mathf.Clamp(availSearch, iconW, TitleSearchFieldMaxWidthRef * s);
+                if (wSearch < iconW)
+                {
+                    useCompact = true;
+                    wSearch = Mathf.Min(iconW, Mathf.Max(0f, availSearch));
+                }
+            }
+
+            cxSearch = searchZoneLeft + wSearch * 0.5f;
+            float searchHalf = wSearch * 0.5f;
+            if (cxSearch + searchHalf > searchZoneRight)
+                cxSearch = searchZoneRight - searchHalf;
+            if (cxSearch - searchHalf < searchZoneLeft)
+                cxSearch = searchZoneLeft + searchHalf;
+            if (useCompact)
+            {
+                if (titleSearchInput.gameObject.activeSelf)
+                    titleSearchInput.gameObject.SetActive(false);
+                if (_titleSearchCompactGO != null)
+                {
+                    _titleSearchCompactGO.SetActive(true);
+                    if (_titleSearchCompactRT != null)
+                    {
+                        _titleSearchCompactRT.anchoredPosition = new Vector2(cxSearch, 0f);
+                        _titleSearchCompactRT.sizeDelta = new Vector2(Mathf.Max(wSearch, iconW * 0.85f), 40f * s);
+                    }
+                }
+            }
+            else
+            {
+                CloseTitleSearchPopup();
+                if (_titleSearchCompactGO != null)
+                    _titleSearchCompactGO.SetActive(false);
+                titleSearchInput.gameObject.SetActive(true);
+                searchRT.sizeDelta = new Vector2(wSearch, 40f * s);
+                searchRT.anchoredPosition = new Vector2(cxSearch, 0f);
             }
 
             try { SyncTitleBarSearchBackdrop(); } catch { }
@@ -277,6 +305,11 @@ namespace VPB
         /// <summary>Title search field + compact icon: grey when empty; blue when query non-empty.</summary>
         private void SyncTitleBarSearchBackdrop()
         {
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                try { SyncTitleSearchChromeForActiveMode(); } catch { }
+                return;
+            }
             if (titleSearchInput == null) return;
             string tSearch = titleSearchInput.text ?? "";
             bool hasTerm = tSearch.Trim().Length > 0;

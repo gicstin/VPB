@@ -295,6 +295,8 @@ namespace VPB
 
             SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTopOffset);
 
+            try { ApplyFirstRunHintStripLayout(leftOffset, rightOffset, paneScale); } catch { }
+
             // Side button stacks stay vertically fixed (do not ride the footer inset).
             if (leftSideContainer != null)
             {

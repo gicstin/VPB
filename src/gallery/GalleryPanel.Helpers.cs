@@ -39,6 +39,56 @@ namespace VPB
         }
     }
 
+    internal sealed class InAppHelpIconPreviewFollower : MonoBehaviour
+    {
+        public RectTransform ParentRect;
+        public float LiftPx = 12f;
+        private bool _active;
+        private RectTransform _self;
+
+        private void Awake()
+        {
+            _self = transform as RectTransform;
+        }
+
+        public void SetFollowActive(bool active)
+        {
+            _active = active;
+            if (_active)
+                UpdatePosition();
+        }
+
+        private void Update()
+        {
+            if (!_active) return;
+            UpdatePosition();
+        }
+
+        private void UpdatePosition()
+        {
+            if (_self == null || ParentRect == null) return;
+
+            Camera cam = null;
+            try
+            {
+                Canvas canvas = ParentRect.GetComponentInParent<Canvas>();
+                if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = canvas.worldCamera;
+            }
+            catch { }
+
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                ParentRect, Input.mousePosition, cam, out local))
+                return;
+
+            _self.anchorMin = new Vector2(0.5f, 0.5f);
+            _self.anchorMax = new Vector2(0.5f, 0.5f);
+            _self.pivot = new Vector2(0.5f, 0f);
+            _self.anchoredPosition = local + new Vector2(0f, LiftPx + _self.sizeDelta.y * 0.5f);
+        }
+    }
+
     public class UIRightClickDelegate : MonoBehaviour, IPointerClickHandler
     {
         public Action OnRightClick;

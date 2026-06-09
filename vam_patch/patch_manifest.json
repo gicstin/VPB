@@ -140,6 +140,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_help",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_help/en.md",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons",
         "IsDirectory":  true
     },

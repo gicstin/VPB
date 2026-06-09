@@ -13,6 +13,21 @@ namespace VPB
         private const float ImportSidebarBaseApplyHeight = 30f;
         private const float ImportSidebarBaseSideMargin = 10f;
         private const float ImportSidebarBaseTopRowRef = 65f;
+        private const float ImportSidebarScrollBarWidthRef = 10f;
+        private const float ImportSidebarInnerPadHRef = 6f;
+
+        private static readonly string[] ImportWizardStepTitleKeys =
+        {
+            "gallery.import.wizard.step_package",
+            "gallery.import.wizard.step_atoms",
+            "gallery.import.wizard.step_type",
+            "gallery.import.wizard.step_options"
+        };
+
+        private static readonly string[] ImportWizardStepTitleDefaults =
+        {
+            "Package", "Atoms", "Resource type", "Options"
+        };
 
         // Match Creator/Category row sizing in GalleryPanel.Tabs.cs (preferredHeight = 35*s,
         // fontSize 18) so the Import sidebar reads as part of the same UI family.
@@ -68,10 +83,8 @@ namespace VPB
                 BuildImportSidebarBodyScroll();
                 LogUtil.Log("[VPB import][diag] build: pinned apply");
                 BuildImportSidebarPinnedApply();
-                LogUtil.Log("[VPB import][diag] build: atom rows");
-                BuildImportSidebarAtomRows(importSidebarScrollContentRT);
-                LogUtil.Log("[VPB import][diag] build: options rows");
-                BuildImportSidebarOptionsRows(importSidebarScrollContentRT);
+                LogUtil.Log("[VPB import][diag] build: wizard body");
+                BuildImportSidebarWizardBody();
 
                 // Re-run rect/font scaling whenever VPB's inner-pane scale changes (Settings UI scale slider).
                 innerPaneScaleActions.Add(ApplyImportSidebarBaseRect);
@@ -128,20 +141,55 @@ namespace VPB
 
             float headerH = ImportSidebarBaseHeaderHeight * s;
             float applyH = ImportSidebarBaseApplyHeight * s;
+            float scrollW = ImportSidebarScrollBarWidthPx(s);
+
             if (importSidebarHeaderRT != null)
-                importSidebarHeaderRT.sizeDelta = new Vector2(0f, headerH);
-            // Apply pinned to the bottom; body scroll fills between the header and the Apply button.
+            {
+                importSidebarHeaderRT.anchorMin = new Vector2(0f, 1f);
+                importSidebarHeaderRT.anchorMax = new Vector2(1f, 1f);
+                importSidebarHeaderRT.pivot = new Vector2(0.5f, 1f);
+                importSidebarHeaderRT.anchoredPosition = Vector2.zero;
+                importSidebarHeaderRT.offsetMin = new Vector2(0f, -headerH);
+                importSidebarHeaderRT.offsetMax = new Vector2(-scrollW, 0f);
+            }
+
             if (importSidebarApplyRT != null)
-                importSidebarApplyRT.sizeDelta = new Vector2(0f, applyH);
+            {
+                importSidebarApplyRT.offsetMin = new Vector2(0f, 0f);
+                importSidebarApplyRT.offsetMax = new Vector2(-scrollW, applyH);
+            }
+
             if (importSidebarBodyScrollRT != null)
             {
                 importSidebarBodyScrollRT.offsetMin = new Vector2(0f, applyH);
                 importSidebarBodyScrollRT.offsetMax = new Vector2(0f, -headerH);
             }
+
+            try { AlignImportSidebarScrollViewport(s); } catch { }
+            try { SyncImportSidebarTypeRadioGridWidth(s); } catch { }
+            try { StyleImportSidebarHeader(s); } catch { }
             EnsureImportSidebarHeaderClickable();
             SyncImportSidebarHeaderLabel();
             SyncImportSidebarHeaderTypography(s);
             SyncImportSidebarHeaderGateVisual();
+            try { RefreshImportSidebarWizardHeader(); } catch { }
+        }
+
+        private static float ImportSidebarScrollBarWidthPx(float s) => ImportSidebarScrollBarWidthRef * s;
+
+        private void SyncImportSidebarTypeRadioGridWidth(float s)
+        {
+            if (importSidebarTypeRadioContainer == null) return;
+            GridLayoutGroup g = importSidebarTypeRadioContainer.GetComponent<GridLayoutGroup>();
+            LayoutElement le = importSidebarTypeRadioContainer.GetComponent<LayoutElement>();
+            if (g == null) return;
+            float scrollW = ImportSidebarScrollBarWidthPx(s);
+            float padH = ImportSidebarInnerPadHRef * s;
+            float cellW = (ImportSidebarBaseWidth - scrollW - 2f * padH) / 2f;
+            const int typeRadioRows = 5;
+            g.cellSize = new Vector2(cellW, 26f * s);
+            g.spacing = new Vector2(2f * s, 2f * s);
+            if (le != null) le.preferredHeight = (typeRadioRows * 26f + (typeRadioRows - 1) * 2f) * s;
         }
 
         private void SyncImportSidebarHeaderTypography(float s)
@@ -187,14 +235,6 @@ namespace VPB
             importSidebarHeaderLabel.text = FormatSidePanelHeaderLabel(importSidebarOnLeft, title);
         }
 
-        /// <summary>Hide shared side-column chrome on edge replaced by import sidebar.</summary>
-        private void SuppressImportOccupiedSideColumnChrome()
-        {
-            if (!importSidebarActive) return;
-            GameObject headerGo = importSidebarOnLeft ? _leftSidePanelHeaderGO : _rightSidePanelHeaderGO;
-            if (headerGo != null) headerGo.SetActive(false);
-        }
-
         // Same clamp-and-localScale technique GalleryPanel.Tabs.cs uses to keep text legible
         // at low scales (Unity Text.fontSize is int and visually clamps below ~10).
         public static void ApplyScaledFont(Text txt, int baseFont, float s)
@@ -233,7 +273,7 @@ namespace VPB
             // Header tone matches the selected-Category row color so users recognize it as
             // a side-column header rather than a generic popup chrome.
             Image bg = header.AddComponent<Image>();
-            bg.color = ColorCategory;
+            bg.color = ImportSidebarHeaderBg;
 
             importSidebarHeaderLabel = CreateImportSidebarLabel(
                 header.transform,
@@ -242,6 +282,9 @@ namespace VPB
             importSidebarHeaderLabel.color = Color.white;
             importSidebarHeaderLabel.fontStyle = FontStyle.Bold;
             importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
+            importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            importSidebarHeaderLabel.verticalOverflow = VerticalWrapMode.Truncate;
+            StyleImportSidebarHeader();
 
             importSidebarHeaderBtn = header.AddComponent<Button>();
             importSidebarHeaderBtn.targetGraphic = bg;
@@ -255,7 +298,7 @@ namespace VPB
         {
             GameObject scroll = UI.CreateVScrollableContent(
                 importSidebarRoot, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
-                0f, 0f, Vector2.zero, scrollBarWidth: 10f, spacing: 2f, addBottomFlexSpacer: false);
+                0f, 0f, Vector2.zero, scrollBarWidth: ImportSidebarScrollBarWidthRef, spacing: 2f, addBottomFlexSpacer: false);
             importSidebarBodyScrollRT = scroll.GetComponent<RectTransform>();
             importSidebarScrollContentRT = scroll.GetComponent<ScrollRect>().content.GetComponent<RectTransform>();
         }
@@ -283,8 +326,8 @@ namespace VPB
             RectTransform rt = go.AddComponent<RectTransform>();
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(4f, 0f);
-            rt.offsetMax = new Vector2(-4f, 0f);
+            rt.offsetMin = new Vector2(ImportSidebarInnerPadHRef, 0f);
+            rt.offsetMax = new Vector2(-ImportSidebarInnerPadHRef, 0f);
 
             Text t = go.AddComponent<Text>();
             t.text = text;

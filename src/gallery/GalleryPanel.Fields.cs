@@ -897,6 +897,7 @@ namespace VPB
         private RectTransform _titleBarRatingSortToggleBtnRT;
         private RectTransform _titleBarRefreshBtnRT;
         private RectTransform _titleBarFpsRT;
+        private RectTransform _titleBarHelpBtnRT;
         private RectTransform _titleBarMinimizeBtnRT;
         private RectTransform _titleBarCloseBtnRT;
 

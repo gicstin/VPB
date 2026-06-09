@@ -30,6 +30,7 @@ namespace VPB
                 RefreshLocalizedUi();
                 try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
+                try { ReloadInAppHelpContent(); } catch { }
             }
             catch { }
         }
@@ -203,8 +204,7 @@ namespace VPB
             try { UpdateUndoRedoButtonLabels(); } catch { }
 
             // Main search bar placeholder
-            if (titleSearchInput != null && titleSearchInput.placeholder is Text searchPh)
-                searchPh.text = VPBTranslation.T("gallery.search.main", "Search...");
+            try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
             // Pagination text
             try { UpdatePaginationText(); } catch { }
@@ -227,6 +227,7 @@ namespace VPB
             SyncRatingSortToggleState();
 
             try { RebuildLanguageMenuOptions(); } catch { }
+            try { RefreshFirstRunHintStrip(); } catch { }
         }
 
         // ── Language switcher setup ──────────────────────────────────────────────

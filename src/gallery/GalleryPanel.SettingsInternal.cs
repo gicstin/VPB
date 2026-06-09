@@ -471,6 +471,14 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.EnableButtonGaps = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "vr.hoverTooltip", GroupKey = "vr",
+                Label = VPBTranslation.T("settings.vr_hover_tooltip", "VR hover tooltips"),
+                Tooltip = VPBTranslation.T("settings.tip.vr_hover_tooltip", "After a short hover in VR, show a local label on controls (footer tooltips still apply on desktop)."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.VrHoverTooltipEnabled,
+                SetBool = v => { VPBConfig.Instance.VrHoverTooltipEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "visuals.showSideButtons", GroupKey = "visuals", Label = VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"),
                 Tooltip = VPBTranslation.T("settings.tip.show_side_buttons", "Choose which sides of the gallery show the action buttons."),
                 ControlType = InternalSettingControlType.Cycle, Options = new [] { "Both", "Left", "Right" },

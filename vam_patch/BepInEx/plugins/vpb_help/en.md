@@ -1,0 +1,224 @@
+# VBP Gallery Help
+
+Tip: open this panel with **?** on the title bar. Use the search box to find topics. Colored icon links in the text show a preview when you hover them.
+
+## Filtering
+
+### Pick what you are browsing
+1. Click the **category name** at the top-left of the title bar (Scenes, Looks, Clothing, and so on).
+2. Pick a category from the menu.
+
+Or tap the red **Category** side button — {{icon:category|Category}} grid icon on the left or right rail. The blue folder icon is {{icon:path|Path}}, not Category.
+
+Some categories use two columns:
+- **Main list** — packages or presets in that category.
+- **Sub-list** — extra filters (tags in Clothing/Hair, scene sources in Scenes, etc.).
+
+### Side lists
+Open a side column, then search or sort inside it:
+
+- {{icon:creator|Creator}} — green icon; filter by package author.
+- {{icon:path|Path}} — blue folder; browse by file path.
+- {{icon:history|History}} — purple clock; recently used items.
+
+**Right-click** any side-rail button to open the same panel on the **opposite** edge.
+
+Tap the **colored header bar** at the top of a side column to collapse that list.
+
+### Title bar search and filters
+- **Search** (center) — filters the current grid. Compact mode shows a {{icon:search|search icon}}; click to type.
+- {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset.
+- **Creator filter** — limit grid to one or more creators (title bar, or **…** overflow when narrow).
+- **Source filter** — All, Local, or VAR packages.
+- {{icon:star|Rated only (★)}} — show only starred items.
+- **Sort** — **Az** opens sort type; arrow toggles ascending/descending.
+- {{icon:refresh|Refresh}} — reload the list.
+
+When filters are active, the **footer** shows **Back** (undo one step) and **Clear filters** (reset all). If nothing matches, the grid may offer **Clear search** or **Clear filters**.
+
+### Narrow title bar
+On small widths, language, presets, creator, source, ★, and FPS move into the **…** overflow menu next to Settings.
+
+### Language
+The language button on the title bar (e.g. EN) switches UI text. Help content loads from `vpb_help/{language}.md` when that file exists, otherwise English.
+
+## Tags
+
+Open {{icon:tags|Tags}} on the side rail — **teal** button **above** Category.
+
+At the top of the Tags column, pick a mode:
+
+- **Tag** — assign your tags to packages (Applied / Available lists).
+- **Filter** — filter the grid by selected tags (AND/OR in Settings → Gallery side lists).
+- **Filter untagged** — show only items with no user tags.
+
+Use **Edit** in the Tags column header to rename, merge, or delete tags.
+
+## Import
+
+**Scenes category only.**
+
+{{icon:import|Import}} on the side rail — blue icon **above Tags**.
+
+- **Left-click** — open import sidebar on the same side as the button.
+- **Right-click** — open it on the **opposite** side.
+
+### Import sidebar steps
+1. Select **exactly one scene** in the grid (multi-select blocks import).
+2. **Package** — which scene file to use (follows grid selection).
+3. **Atoms** — source person from the file and target person in the scene.
+4. **Resource type** — Appearance, Clothing, Hair, Plugins, etc.
+5. **Options** — merge/replace, clothing and plugin toggles, CUA cleanup.
+6. **Apply** — pinned button at the bottom runs the import.
+
+Tap a step header to collapse or expand that block. The sidebar header summarizes your current choices.
+
+## Cleanup
+
+Open **Cleanup** from the title-bar category menu.
+
+The side column lists cleanup views: all, duplicates, old versions, damaged, stale cache, excluded.
+
+Select rows, then use the **toolbox** at the bottom for cleanup actions: filter tabs, select visible/duplicates/old/damaged, add or remove exclude list, delete, and more. Normal toolbox buttons are replaced while Cleanup is active.
+
+## Selection
+
+### Select items in the grid
+- **Click** — select one row (clears others unless Ctrl or Shift is held).
+- **Ctrl+click** — add or remove a row from selection.
+- **Shift+click** — select a range from the last anchor.
+- **Ctrl+A** — select all visible rows.
+- **Escape** — clear selection when no menu is open.
+
+Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
+
+### Common toolbox actions
+Availability depends on category and selection:
+
+- {{icon:delete|Delete}} — remove eligible items.
+- {{icon:load|Load}} / **Unload** — load or unload `.var` packages from memory.
+- **Load deps** — load dependency packages for the selection.
+- {{icon:select_all|Select all visible}} — select every row on the current page/filter.
+- **Copy package names** — copy selected `.var` names to the clipboard.
+- **Hide / Unhide** — hide from normal browse; footer **H** shows hidden packages again.
+- **Autoinstall / Clear autoinstall** — mark packages for VaM autoinstall or clear it.
+- **Scan whitelist (temp)** — temporary access when scan whitelist blocks a package.
+- {{icon:cache_texture|Cache Textures}} — build zstd texture cache (see Advanced).
+- {{icon:hub|Open on Hub}} — open selected item in Hub when available.
+- **Overwrite scene** — Scenes only; save over an existing scene file.
+- **Star rating** — rate packages (works with ★ filter on title bar).
+- **Remove from History** — removes History entries only; does not delete files.
+
+The **Target** dropdown in the toolbox picks which **Person** atom receives presets, clothing, hair, and imports.
+
+### Scene helper side lists
+Lower side-rail buttons help edit the open scene (not the package grid):
+
+- **Remove clothing** — find and remove clothing on persons.
+- **Remove hair** — remove hair items.
+- **Remove atom** — remove atoms from the scene.
+- **Target** — pick or filter target persons for apply operations.
+
+## Layout
+
+### First-time setup
+A short **setup wizard** may appear on first use: dock edge (fixed desktop), default side lists, grid density. **Skip** anytime. Change later in {{icon:settings|Settings}}.
+
+A **tip strip** under the title bar shows basics until you dismiss it (×).
+
+### Grid vs list
+- {{icon:layout_grid|Grid}} / {{icon:layout_list|List}} (footer) — thumbnails vs compact rows.
+- **+ / −** (footer) or **Ctrl + mouse wheel** over the gallery — change column count.
+
+### Panel position and size
+- **Floating** — drag the panel; corner handles resize. Footer mode button toggles fixed dock.
+- **Fixed dock** — pins to Left, Right, or Top (footer dock button cycles edge).
+- **Height** (fixed dock) — footer ↕ toggles full height vs adjustable strip.
+- **Auto-hide** — side rails and footer can hide when the pointer leaves the panel.
+- **Follow** (footer) — angle, distance, and eye height keep the panel facing you.
+
+### Side rails and Settings
+- Side lists open from colored rail buttons. **Pin** keeps a column open.
+- **Right-click** a rail button to open that panel on the opposite edge.
+- {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options.
+
+### Footer utilities
+- **U / R** — Undo / Redo
+- **Rdm** — load random item
+- {{icon:hub|Hub}} — Hub browse panel
+- **M** — VaM menu gate; hide gallery when VaM menu is closed
+- **H** — show hidden packages
+- **Spring scroll** — large scroll drag button on the scrollbar
+- {{icon:hold|Hold-to-launch}} — hold click on a thumbnail to apply (see Save and Apply)
+
+Pagination sits at the bottom-left when the list has multiple pages.
+
+## Save and Apply
+
+### Target person
+The **Target** menu in the toolbox chooses which **Person** atom gets appearances, clothing, hair, poses, and scene imports.
+
+### Applying from the grid
+- **Single-click** or **double-click** — set in Settings → Browse → Interaction.
+- {{icon:hold|Hold-to-launch}} (footer) — hold mouse or controller on a thumbnail to apply.
+- **Replace vs merge** (side rail in appearance categories) — toggles whether clothing/hair replaces or merges.
+
+### Drag and drop
+Settings → Browse → **Enable drag & drop** (off by default). Drag thumbnails onto persons or the scene. The replace/merge side button affects drop behavior.
+
+### Saving
+**Save** on the side rail — preset and scene save flows for the active category.
+
+Use {{icon:undo|Undo}} / **Redo** in the footer after supported edits.
+
+## Hotkeys
+
+Change defaults in **Settings → Hotkeys**:
+
+- **Ctrl+V** — show / hide gallery
+- **Arrow keys** — move selection in the grid
+- **Ctrl+A** — select all visible items
+- **Delete / Backspace** — delete eligible selection
+- **Ctrl+Z / Ctrl+R** — undo / redo
+- **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
+- **Escape** — close menus, search popup, help panel
+- **?** (title bar) — open this help
+
+### VR
+- **VR hover tooltips** (Settings) — short hover shows control labels.
+- Hover the toolbox to expand it when items are selected.
+
+## Advanced
+
+### On-demand texture cache
+Select `.var` packages and/or **local scene JSON**, then {{icon:cache_texture|Cache Textures}} in the toolbox.
+
+VPB scans preset references and builds **Zstd** cache (`.zvamcache`). Progress shows in the overlay.
+
+- **Ctrl+click** — rebuild zstd even if cache already exists
+- **Ctrl+Shift+click** — purge VPB texture cache for the selection
+
+With **Enable Zstd compression** (BepInEx / Settings), runtime loads prefer zstd over legacy `.vamcache`.
+
+### Bulk Zstd migration
+{{icon:settings|Settings}} → **Plugin** → {{icon:compress|Compress Cache}} — convert legacy `.vamcache` to zstd in bulk.
+
+Plugin options include compression level, delete original after success, and optional 8K→4K downscale before caching.
+
+### Package on-demand registration
+When a preset references a `.var` VaM has not scanned, VPB can **register that package on demand** (common with scan whitelist). Happens during preset load, import, or missing-path fix — batched to avoid repeated full scans.
+
+### Scan whitelist
+{{icon:settings|Settings}} → **Plugin** → **Enable VaM scan whitelist** limits VaM startup scan folders. VPB's index still sees local `.var` files. **Manage Scan Whitelist** adds folders or per-package overrides. Other packages load when first referenced.
+
+### Performance quality
+{{icon:settings|Settings}} → **Performance** — optional quality steps adjust physics, hair, mirrors, MSAA, and related options. Native runtime patches can be toggled per category.
+
+### Hub mode
+Footer {{icon:hub|Hub}} or toolbox **Open on Hub** opens Hub browsing. Grid and toolbox adapt in Hub context.
+
+### Refresh and cache tips
+- One on-demand cache job at a time — wait for the overlay to finish.
+- Scene import may prewarm cache for source packages.
+- Click {{icon:refresh|Refresh}} after large cache or whitelist changes if the grid looks stale.
+- **Manual refresh only** (Settings) — grid updates only when you press Refresh.

@@ -363,6 +363,7 @@
     <Compile Include="src\Settings.cs" />
     <Compile Include="src\BaImporter.cs" />
     <Compile Include="src\VPBConfig.cs" />
+    <Compile Include="src\VPBHelpContent.cs" />
     <Compile Include="src\VPBTranslation.cs" />
     <Compile Include="src\VPBUiFont.cs" />
     <Compile Include="src\unity-object-pool\ObjectPool.cs" />
@@ -446,6 +447,12 @@
     <Compile Include="src\gallery\PluginThumbPlaceholderRefs.cs" />
     <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Onboarding.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleBarOverflow.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Chrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Wizard.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ModeSetupWizard.cs" />
+    <Compile Include="src\gallery\GalleryPanel.InAppHelp.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
     <Compile Include="src\gallery\GalleryPanel.SceneOverwriteSave.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />

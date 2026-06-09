@@ -358,6 +358,7 @@ namespace VPB
             if (recyclingGrid == null) return;
             try { recyclingGrid.Refresh(); } catch { }
             try { RefreshSelectionVisuals(); } catch { }
+            try { UpdateEmptyGridState(); } catch { }
         }
 
         /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
@@ -4166,6 +4167,7 @@ namespace VPB
                 if (swDeep != null) deepGbSetItemMs = swDeep.ElapsedMilliseconds;
             }
             if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
+            try { UpdateEmptyGridState(); } catch { }
 
             // Legacy nav/file buttons (non-recycling): destroy in slices so main thread yields between batches (VaM stays responsive).
             int legacyBtnCount = activeButtons.Count;

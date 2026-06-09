@@ -329,6 +329,8 @@ namespace VPB
             // Creator filter dropdown button (between Filter Presets and Search)
             SetupTitleCreatorFilterDropdown(titleBarGO, backgroundBoxGO);
             SetupGlobalSourceFilterDropdown(titleBarGO, backgroundBoxGO);
+            try { EnsureTitleBarOverflowChrome(titleBarGO); } catch { }
+            try { EnsureInAppHelpChrome(titleBarGO); } catch { }
 
             fileSortDirAscSprite = UI.LoadIconSprite("vpb_icons/sort_asc.png", UI.BarIconGlyphTint);
             fileSortDirDescSprite = UI.LoadIconSprite("vpb_icons/sort_desc.png", UI.BarIconGlyphTint);
@@ -2356,6 +2358,7 @@ namespace VPB
             
             contentGO = scrollRect.content.gameObject;
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
+            CreateEmptyGridStateOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             CreateThumbnailCacheProgressPanel(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
 
             // Clean up legacy layout components that interfere with virtualization
@@ -2378,6 +2381,7 @@ namespace VPB
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
+            try { CreateFirstRunHintStrip(); } catch { }
             try { RefreshFooterPerfChrome(); } catch { }
 
             // Status Bar (Now shares the hoverPathRT container)
@@ -2477,6 +2481,10 @@ namespace VPB
             // FileManager baseline so only real refreshes invalidate caches (RefreshFilesRoutine already
             // rebuilds counts on a worker thread when needed).
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+
+            try { CreateFirstRunHintStrip(); } catch { }
+            try { RefreshFirstRunHintStrip(); } catch { }
+            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         private void AddSubmenuSideHoverTrigger(GameObject go, bool isLeft)

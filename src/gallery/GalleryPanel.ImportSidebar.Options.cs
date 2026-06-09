@@ -619,10 +619,11 @@ namespace VPB
                 // Active = ColorCategory (red), inactive = ColorInactiveRow (grey). Same exact
                 // pair Creator/Category tab rows use for their active/inactive states.
                 if (img != null)
-                    img.color = kv.Key == t ? ColorCategory : ColorInactiveRow;
+                    img.color = kv.Key == t ? ImportSidebarSelectedAccent : ColorInactiveRow;
             }
             RefreshPluginChecklist();
             RefreshApplyButtonEnabled();
+            try { RefreshImportSidebarWizardHeader(); } catch { }
             // Swapping the active panel changes the scroll content's total height; force the VLG/CSF to recompute.
             RebuildImportSidebarContent();
             // Guard: skip the build-time call (importSidebarBuilt set after BuildImportSidebar); persist user picks only.
@@ -637,9 +638,12 @@ namespace VPB
             bool sourceOk = !needSourceAtom || !string.IsNullOrEmpty(importSidebarSourceAtomId);
             bool targetOk = importSidebarTargetAtom != null;
             bool sceneOk = importSidebarSourceScene != null;
+            bool multiBlock = ImportSidebarMultiSelectBlocked();
 
             if (importSidebarApplyButton != null)
-                importSidebarApplyButton.interactable = sourceOk && targetOk && sceneOk;
+                importSidebarApplyButton.interactable = !multiBlock && sourceOk && targetOk && sceneOk;
+
+            try { RefreshImportSidebarWizardHeader(); } catch { }
         }
 
         private void OnImportSidebarApplyClicked()

@@ -52,6 +52,7 @@ namespace VPB
             }
             SyncCategoryQuickSwitchChrome();
             try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
+            try { ApplyInAppHelpPanelLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
             UpdateSideContextActions();
 
             // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).

@@ -131,6 +131,7 @@ namespace VPB
             try { UpdateLayout(); }
             catch (System.Exception ex) { LogUtil.LogWarning("[VPB import] UpdateLayout failed: " + ex.Message); }
 
+            try { RefreshImportSidebarWizardHeader(); } catch { }
             UpdateImportToggleBtnVisual();
         }
 
@@ -208,6 +209,7 @@ namespace VPB
         {
             if (!ImportSidebarCategoryAllowed()) return;
             if (selectedFiles == null || selectedFiles.Count == 0) return;
+            if (ImportSidebarMultiSelectBlocked()) return;
             FileEntry sel = selectedFiles[selectedFiles.Count - 1];
             if (sel == null || importSidebarSourceScene == sel) return;
             LoadSourceScene(sel);
