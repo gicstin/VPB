@@ -226,6 +226,7 @@ namespace VPB
 
             try { RebuildLanguageMenuOptions(); } catch { }
             try { RefreshFirstRunHintStrip(); } catch { }
+            try { RefreshActiveFilterChips(); } catch { }
         }
 
         // ── Language switcher setup ──────────────────────────────────────────────

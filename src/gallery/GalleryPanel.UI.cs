@@ -3215,11 +3215,16 @@ namespace VPB
             return type != ContentType.CleanupCategories && type != ContentType.CleanupStaleBuckets;
         }
 
-        private void ToggleRight(ContentType type)
+        private void ToggleRight(ContentType type) => ToggleSide(isLeft: false, type);
+
+        private void ToggleLeft(ContentType type) => ToggleSide(isLeft: true, type);
+
+        /// <summary>Single side-panel toggle path — left/right differ only in which rail is primary.</summary>
+        private void ToggleSide(bool isLeft, ContentType type)
         {
             // Sidebar occupies one side column; opening that side's panel closes Import first. Clear intent
             // (user chose this pane over the sidebar) and reconcile via the gate, else next Show reopens it.
-            if (importSidebarActive && !importSidebarOnLeft)
+            if (importSidebarActive && importSidebarOnLeft == isLeft)
             {
                 importSidebarOpenIntent = false;
                 RefreshImportSidebarCategoryGate();
@@ -3240,27 +3245,41 @@ namespace VPB
             if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
                 ExitCleanupModeForSidePanelNavigation();
 
-            if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(false);
+            if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(isLeft);
             bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
                 && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History);
             if (timeCategoryCreatorSwitch)
-                BeginSideTabCategoryCreatorTiming("right");
+                BeginSideTabCategoryCreatorTiming(isLeft ? "left" : "right");
 
-            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
+            if (isLeft)
             {
-                // After leaving cleanup, explicit side click should open the requested list.
-                rightActiveContent = type;
-                if (leftActiveContent == type) leftActiveContent = null;
+                if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
+                {
+                    leftActiveContent = type;
+                    if (rightActiveContent == type) rightActiveContent = null;
+                }
+                else if (leftActiveContent == type)
+                    leftActiveContent = null;
+                else
+                {
+                    leftActiveContent = type;
+                    if (rightActiveContent == type) rightActiveContent = null;
+                }
             }
-            else if (rightActiveContent == type) 
+            else
             {
-                rightActiveContent = null;
-            }
-            else 
-            {
-                rightActiveContent = type;
-                // Collapse Left IF it is the SAME type
-                if (leftActiveContent == type) leftActiveContent = null;
+                if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
+                {
+                    rightActiveContent = type;
+                    if (leftActiveContent == type) leftActiveContent = null;
+                }
+                else if (rightActiveContent == type)
+                    rightActiveContent = null;
+                else
+                {
+                    rightActiveContent = type;
+                    if (leftActiveContent == type) leftActiveContent = null;
+                }
             }
 
             SyncActiveContentTypeFromSidePanels();
@@ -3309,102 +3328,6 @@ namespace VPB
 
             bool userTagsNowOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
             if (!userTagsWasOpen && userTagsNowOpen)
-                try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
-        }
-
-        private void ToggleLeft(ContentType type)
-        {
-            // Mirror of ToggleRight: clear intent so the gate doesn't reopen the sidebar over the chosen pane.
-            if (importSidebarActive && importSidebarOnLeft)
-            {
-                importSidebarOpenIntent = false;
-                RefreshImportSidebarCategoryGate();
-                PersistImportSidebarOpenIntent();
-            }
-            if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
-            bool hadSettingsPanel = IsSettingsPanelOpen();
-            bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
-            if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
-                ExitInternalSettingsMode(true);
-            if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
-                && leftActiveContent != ContentType.Creator && rightActiveContent != ContentType.Creator)
-                return;
-            if (type == ContentType.UserTags)
-                ForceCloseSettingsSidePanels();
-            bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            bool wasCleanup = cleanupModeActive;
-            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
-                ExitCleanupModeForSidePanelNavigation();
-
-            if (IsSubmenuContentType(type)) CloseOtherSideIfSubmenu(true);
-            bool timeCategoryCreatorSwitch = LogCategoryCreatorSideTabSwitchTiming
-                && (type == ContentType.Category || type == ContentType.Creator || type == ContentType.UserTags || type == ContentType.Path || type == ContentType.History);
-            if (timeCategoryCreatorSwitch)
-                BeginSideTabCategoryCreatorTiming("left");
-
-            if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
-            {
-                // After leaving cleanup, explicit side click should open the requested list.
-                leftActiveContent = type;
-                if (rightActiveContent == type) rightActiveContent = null;
-            }
-            else if (leftActiveContent == type)
-            {
-                leftActiveContent = null;
-            }
-            else
-            {
-                leftActiveContent = type;
-                // Collapse Right IF it is the SAME type
-                if (rightActiveContent == type) rightActiveContent = null;
-            }
-
-            SyncActiveContentTypeFromSidePanels();
-            bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
-            if (!hasHistorySide && hadHistorySide && titleText != null)
-                titleText.text = currentCategoryTitle;
-
-            bool hasSettingsPanel = IsSettingsPanelOpen();
-            if (!hadSettingsPanel && hasSettingsPanel)
-                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
-            else if (hadSettingsPanel && !hasSettingsPanel)
-                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
-
-            // Ensure settings list view active before layout pass so first click opens list immediately.
-            if (type == ContentType.Settings)
-                SyncInternalSettingsListView();
-
-            try { SyncTitleSearchChromeForActiveMode(); } catch { }
-
-            UpdateLayout();
-            UpdateTabs();
-
-            // Leaving Settings via re-toggling Settings button or switching side panes must restore toolbox actions.
-            if (hadSettingsPanel && !IsSettingsPanelOpen())
-                try { RefreshTboxConditionalActionButtons(); } catch { }
-
-            // BA prompt: only show when user enters Settings page.
-            if (!hadSettingsPanel && IsSettingsPanelOpen())
-                try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
-
-            if (hadHistorySide != hasHistorySide || (hasHistorySide && type == ContentType.History))
-            {
-                if (hasHistorySide)
-                    ApplyHistoryBrowseTitle();
-                if (hadHistorySide && !hasHistorySide)
-                    RefreshFiles(true);
-                else if (hasHistorySide)
-                {
-                    ApplyHistorySortPresetForMode(galleryHistoryFilterMode);
-                    RefreshHistoryBrowsePreferLight(true);
-                }
-            }
-
-            if (timeCategoryCreatorSwitch)
-                EndSideTabCategoryCreatorTiming();
-
-            bool userTagsNowOpenLeft = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
-            if (!userTagsWasOpen && userTagsNowOpenLeft)
                 try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
         }
 

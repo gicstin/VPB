@@ -20,64 +20,29 @@ namespace VPB
         /// </summary>
         private void RebuildSubPaneSideTabListsOnly()
         {
-            if (leftActiveContent.HasValue)
-            {
-                bool splitView = false;
-                if (leftActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                        splitView = true;
-                }
-                if (splitView && leftActiveContent == ContentType.Category &&
-                    leftSubTabScrollGO != null && leftSubTabContainerGO != null)
-                {
-                    ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Category)
-                    {
-                        string titleSub = titleText != null ? titleText.text : "";
-                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.SceneSource;
-                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.AppearanceSource;
-                    }
-                    UpdateTabs(subType, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-            }
-
-            if (rightActiveContent.HasValue)
-            {
-                bool splitView = false;
-                if (rightActiveContent == ContentType.Category)
-                {
-                    string title = titleText != null ? titleText.text : "";
-                    if (title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                        splitView = true;
-                }
-                if (splitView && rightActiveContent == ContentType.Category &&
-                    rightSubTabScrollGO != null && rightSubTabContainerGO != null)
-                {
-                    ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Category)
-                    {
-                        string titleSub = titleText != null ? titleText.text : "";
-                        if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.SceneSource;
-                        else if (titleSub.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
-                            subType = ContentType.AppearanceSource;
-                    }
-                    UpdateTabs(subType, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
-            }
+            RebuildSubPaneSideTabListForSide(isLeft: true);
+            RebuildSubPaneSideTabListForSide(isLeft: false);
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+        }
+
+        private void RebuildSubPaneSideTabListForSide(bool isLeft)
+        {
+            ContentType? activeContent = isLeft ? leftActiveContent : rightActiveContent;
+            if (!activeContent.HasValue || activeContent.Value != ContentType.Category)
+                return;
+
+            string title = titleText != null ? titleText.text : "";
+            if (!CategoryNeedsSplitView(title))
+                return;
+
+            GameObject subScroll = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
+            GameObject subContainer = isLeft ? leftSubTabContainerGO : rightSubTabContainerGO;
+            if (subScroll == null || subContainer == null)
+                return;
+
+            ContentType subType = InferCategorySubPaneTypeFromTitle(title);
+            List<GameObject> activeButtons = isLeft ? leftSubActiveTabButtons : rightSubActiveTabButtons;
+            UpdateTabs(subType, subContainer, activeButtons, isLeft);
         }
 
         private void TeardownCategoryCreatorDualBufferOneSide(bool isLeft)

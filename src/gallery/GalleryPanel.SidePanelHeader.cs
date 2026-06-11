@@ -16,9 +16,6 @@ namespace VPB
         private GameObject _rightSidePanelHeaderGO;
         private Text _rightSidePanelHeaderTitle;
 
-        /// <summary>Reserved for filter chip bar; returns 0 until that chrome exists.</summary>
-        public float ActiveFilterChromeTopInsetPx(float paneScale) => 0f;
-
         private string ResolveDesktopFixedDockSide()
         {
             if (VPBConfig.Instance == null) return "Right";

@@ -263,6 +263,8 @@ namespace VPB
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
             try { SuppressImportOccupiedSideColumnChrome(); } catch { }
 
+            try { RefreshActiveFilterChips(); } catch { }
+
             float filterTopInset = 0f;
             try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
             float topOffset = -65f * paneScale - filterTopInset;
@@ -292,8 +294,11 @@ namespace VPB
             }
 
             SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTopOffset);
+            _lastBrowseGridLeftInset = leftOffset;
+            _lastBrowseGridRightInset = rightOffset;
 
             try { ApplyFirstRunHintStripLayout(leftOffset, rightOffset, paneScale); } catch { }
+            try { ApplyActiveFilterChipBarLayout(leftOffset, rightOffset, paneScale); } catch { }
 
             // Side button stacks stay vertically fixed (do not ride the footer inset).
             if (leftSideContainer != null)

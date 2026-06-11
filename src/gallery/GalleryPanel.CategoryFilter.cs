@@ -128,6 +128,7 @@ namespace VPB
             }
 
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+            SyncBrowseFilterChipChrome();
         }
 
         private void ClearFiltersForNewCategory()
@@ -157,6 +158,7 @@ namespace VPB
             _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
+            SyncBrowseFilterChipChrome();
         }
     }
 }

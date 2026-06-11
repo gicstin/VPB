@@ -1076,6 +1076,8 @@ namespace VPB
             nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
             nameFilterTerms = SplitSearchTerms(f);
 
+            try
+            {
             // In package filter mode, keep search scoped to the current filtered list
             // (do not refresh the whole gallery, which would clear filter mode).
             if (IsFilterActive)
@@ -1222,6 +1224,11 @@ namespace VPB
                                || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
             if (creatorTabOpen)
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
+            }
+            finally
+            {
+                SyncBrowseFilterChipChrome();
+            }
         }
 
         private bool PrepareFileEntryGestureSelection(FileEntry file)

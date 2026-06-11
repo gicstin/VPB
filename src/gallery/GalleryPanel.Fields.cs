@@ -1196,6 +1196,11 @@ namespace VPB
         // Content-type accent colors (side tabs / title chrome).
         public static readonly Color ColorCategory = new Color(0.60f, 0.15f, 0.15f, 1f);
         public static readonly Color ColorCreator = new Color(0.60f, 0.45f, 0.15f, 1f);
+        public static readonly Color ColorTagFilter = new Color(0.50f, 0.20f, 0.50f, 1f);
+        public static readonly Color ColorRatingFilter = new Color(0.70f, 0.60f, 0.20f, 1f);
+        public static readonly Color ColorSourceFilter = new Color(0.20f, 0.40f, 0.70f, 1f);
+        public static readonly Color ColorSubfilterFilter = new Color(0.35f, 0.35f, 0.60f, 1f);
+        public static readonly Color ColorUserTagFilter = new Color(0.55f, 0.28f, 0.55f, 1f);
         public static readonly Color ColorTitleSearchBackdropIdle = new Color(0.07f, 0.07f, 0.09f, 1f);
         public static readonly Color ColorTitleSearchFilterActive = new Color(0.18f, 0.38f, 0.62f, 1f);
         public static readonly Color ColorPath = new Color(0.15f, 0.15f, 0.45f, 1f);

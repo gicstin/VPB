@@ -455,6 +455,7 @@
     <Compile Include="src\gallery\GalleryPanel.ThumbnailDebug.cs" />
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.Onboarding.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FilterChips.cs" />
     <Compile Include="src\gallery\GalleryPanel.TitleBarOverflow.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Chrome.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Wizard.cs" />

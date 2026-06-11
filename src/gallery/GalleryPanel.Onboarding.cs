@@ -101,19 +101,56 @@ namespace VPB
                 if (!string.IsNullOrEmpty(currentRatingFilter)) return true;
                 if (HasCreatorFilter()) return true;
                 if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return true;
+                if (activeTags != null && activeTags.Count > 0) return true;
+                if (HasActiveSubPaneOrExtraBrowseFilters()) return true;
             }
             catch { }
             return false;
         }
 
+        private void ClearSubPaneAndExtraBrowseFilters()
+        {
+            currentSceneSourceFilter = "";
+            currentAppearanceSourceFilter = "";
+            clothingSubfilter = 0;
+            hairSubfilter = 0;
+            appearanceSubfilter = 0;
+            posePeopleFilter = PosePeopleFilter.All;
+            _clothingGenderUserOverride = false;
+            _hairGenderUserOverride = false;
+            if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+            {
+                try { activeUserTags?.Clear(); } catch { }
+            }
+            else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+                try { ClearUntaggedTaggedPinKeys(); } catch { }
+            }
+            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+        }
+
         private void ClearGalleryFiltersKeepCategory()
         {
             currentRatingFilter = "";
+            try { activeTags?.Clear(); } catch { }
             try { ClearTitleBarSearch(); } catch { }
             try { ClearCreatorFilters(); } catch { }
-            try { OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue.All); } catch { }
+            ClearSubPaneAndExtraBrowseFilters();
+            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
+            {
+                currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+                if (VPBConfig.Instance != null)
+                {
+                    VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
+                    try { VPBConfig.Instance.Save(); } catch { }
+                }
+            }
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             try { UpdateTabs(); } catch { }
             RefreshFiles(true);
+            SyncBrowseFilterChipChrome();
         }
 
         public void UpdateEmptyGridState()
@@ -237,7 +274,14 @@ namespace VPB
             if (_firstRunHintGO == null) return;
             bool dismissed = false;
             try { dismissed = VPBConfig.Instance != null && VPBConfig.Instance.FirstRunHintsDismissed; } catch { }
-            bool show = IsVisible && !dismissed && !isCollapsed;
+            bool wizardBlocksHint = false;
+            try
+            {
+                wizardBlocksHint = IsModeSetupPending()
+                    || (_modeSetupWizardGO != null && _modeSetupWizardGO.activeSelf);
+            }
+            catch { }
+            bool show = IsVisible && !dismissed && !isCollapsed && !wizardBlocksHint;
             _firstRunHintGO.SetActive(show);
             if (show)
             {

@@ -73,6 +73,7 @@ namespace VPB
                             }
                             tagsCached = false;
                             RefreshFilesAndTabs();
+                            SyncBrowseFilterChipChrome();
                         }, trackedButtons);
                         if (isActive) CaptureActiveSubfilterChip(chipGO, opt);
                     }
@@ -129,6 +130,7 @@ namespace VPB
                             }
                             tagsCached = false;
                             RefreshFilesAndTabs();
+                            SyncBrowseFilterChipChrome();
                         }, trackedButtons);
                         if (isActive) CaptureActiveSubfilterChip(chipGO, opt);
                     }
@@ -247,6 +249,7 @@ namespace VPB
                     else activeTags.Add(tag);
 
                     RefreshFilesAndTabs();
+                    SyncBrowseFilterChipChrome();
                 }, trackedButtons);
             }
 

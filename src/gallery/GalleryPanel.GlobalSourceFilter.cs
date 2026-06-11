@@ -311,12 +311,14 @@ namespace VPB
             if (value == VPBConfig.GlobalSourceFilterValue.Local && HasCreatorFilter())
             {
                 ClearCreatorFilters();
+                try { UpdateTitleCreatorButtonVisual(); } catch { }
                 LogUtil.Log("[VPB] Global source filter set to Local; cleared creator filter.");
             }
 
             UpdateGlobalSourceFilterButtonLabel();
             HideGlobalSourceFilterDropdown();
             RefreshFilesAndTabs();
+            SyncBrowseFilterChipChrome();
         }
 
         private void UpdateGlobalSourceFilterButtonLabel()

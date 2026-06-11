@@ -184,6 +184,7 @@ namespace VPB
                     else currentRatingFilter = rating;
 
                     RefreshFilesAndTabs();
+                    SyncBrowseFilterChipChrome();
                 }, trackedButtons);
             }
         }
@@ -210,6 +211,7 @@ namespace VPB
                 currentAppearanceSourceFilter = localOnly ? "" : "local";
                 InvalidateTags();
                 RefreshFilesAndTabs();
+                SyncBrowseFilterChipChrome();
             }, trackedButtons);
 
             {
@@ -373,6 +375,7 @@ namespace VPB
             {
                 currentSceneSourceFilter = localOnly ? "" : "local";
                 RefreshFilesAndTabs();
+                SyncBrowseFilterChipChrome();
             }, trackedButtons);
         }
     }

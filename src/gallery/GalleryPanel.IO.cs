@@ -4272,16 +4272,7 @@ namespace VPB
             bool rightCat = rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Category;
             if (!leftCat && !rightCat) return false;
 
-            bool thickSplit =
-                title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (!thickSplit) return false;
-
-            if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                return false;
+            if (!CategoryNeedsTagCountCachePass(title)) return false;
 
             if (leftCat && leftSubTabScrollGO != null && leftSubTabContainerGO != null) return true;
             if (rightCat && rightSubTabScrollGO != null && rightSubTabContainerGO != null) return true;

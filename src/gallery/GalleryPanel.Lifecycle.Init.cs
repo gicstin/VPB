@@ -2378,6 +2378,7 @@ namespace VPB
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
             try { CreateFirstRunHintStrip(); } catch { }
+            try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFooterPerfChrome(); } catch { }
 
             // Status Bar (Now shares the hoverPathRT container)
@@ -2479,6 +2480,7 @@ namespace VPB
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             try { CreateFirstRunHintStrip(); } catch { }
+            try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFirstRunHintStrip(); } catch { }
             try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }

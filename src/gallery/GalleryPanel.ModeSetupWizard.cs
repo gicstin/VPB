@@ -52,6 +52,7 @@ namespace VPB
             }
             try { VPBConfig.Instance.Save(true, true); } catch { }
             if (_modeSetupWizardGO != null) _modeSetupWizardGO.SetActive(false);
+            try { RefreshFirstRunHintStrip(); } catch { }
         }
 
         public void TryShowModeSetupWizard()
@@ -69,6 +70,7 @@ namespace VPB
             RefreshModeSetupWizardStep();
             _modeSetupWizardGO.SetActive(true);
             try { _modeSetupWizardGO.transform.SetAsLastSibling(); } catch { }
+            try { RefreshFirstRunHintStrip(); } catch { }
         }
 
         private System.Collections.IEnumerator ShowModeSetupWizardDeferred()

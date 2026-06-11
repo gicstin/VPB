@@ -10,16 +10,15 @@ namespace VPB
         private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
         private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
 
-        // Top inset for main tab scroll: clears sort + search row (same top as contentScrollRT: 65*s, row height 35*s, gap 5*s)
+        // Top inset for side tab scroll: clears sort + search row (65*s + row 35*s + gap 5*s).
+        // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
             float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
             float rowTop = 65f * s;
             float headerExtra = 0f;
             try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
-            float filterExtra = 0f;
-            try { filterExtra = ActiveFilterChromeTopInsetPx(s); } catch { }
-            return -(rowTop + headerExtra + filterExtra + 35f * s + 5f * s);
+            return -(rowTop + headerExtra + 35f * s + 5f * s);
         }
 
         private static bool CategoryNeedsSplitView(string title)
@@ -30,6 +29,13 @@ namespace VPB
                 || title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
                 || title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0
                 || title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Split sub-panes that need tag-count cache priming (excludes Scene — uses SceneSource only).</summary>
+        private static bool CategoryNeedsTagCountCachePass(string title)
+        {
+            if (!CategoryNeedsSplitView(title)) return false;
+            return title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
         private static ContentType InferCategorySubPaneTypeFromTitle(string title)
