@@ -2126,6 +2126,8 @@ namespace VPB
                         btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
                     else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
                         btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
+                    else if (string.Equals(def.Key, "plugin.bench.configure", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.configure", "CONFIGURE");
                     CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
                         def.OnAction?.Invoke();
                         RefreshInternalSettingsListRows(true);

@@ -134,6 +134,7 @@ namespace VPB
             AddGroupRow("plugin_zstd", VPBTranslation.T("settings.group.plugin_zstd", "Texture cache"));
             AddGroupRow("plugin_scan_whitelist", VPBTranslation.T("settings.group.plugin_scan_whitelist", "VaM scan whitelist"));
             AddGroupRow("plugin_quickmenu", VPBTranslation.T("settings.group.plugin_quickmenu", "Quick Menu"));
+            AddGroupRow("plugin_bench", VPBTranslation.T("settings.group.plugin_bench", "Scene Load Test"));
 
             BuildSettingsCategoriesSubTabs(container, trackedButtons, groupTabScale, groupActive, groupInactive, MatchFilter);
         }

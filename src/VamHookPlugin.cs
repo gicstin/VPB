@@ -414,6 +414,7 @@ namespace VPB
             }
             catch { }
             try { GlobalInfo.EnsurePluginDataInitialized(); } catch { }
+            try { VpbBenchRunner.InitializeOnce(); } catch { }
             try
             {
                 VPBConfig.ReloadFromDisk();
@@ -760,6 +761,11 @@ namespace VPB
             return ShouldSuppressBareKeyHotkey(ku);
         }
 
+        internal static bool ShouldSuppressBenchHotkey(KeyUtil ku)
+        {
+            return ShouldSuppressPluginHotkey(ku);
+        }
+
         private static bool IsTypingInTextInput()
         {
             try
@@ -820,6 +826,8 @@ namespace VPB
             }
 
             VdsLauncher.TryExecuteOnce();
+
+            try { VpbBenchRunner.Tick(this, IsFileManagerInited); } catch { }
 
             if (m_PendingAutoLoadRefresh)
             {

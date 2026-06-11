@@ -15,6 +15,11 @@ namespace VPB
 {
     public partial class UIDraggableItem : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
+        public IEnumerator RunTeleportMergedAtomsToPlayer(HashSet<string> atomsBefore)
+        {
+            yield return TeleportNewAtomsToPlayer(atomsBefore);
+        }
+
         private System.Collections.IEnumerator TeleportNewAtomsToPlayer(HashSet<string> atomsBefore)
         {
             // Wait for merge to finish (usually synchronous for the structure, but some components might take a frame)

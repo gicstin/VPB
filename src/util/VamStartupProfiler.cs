@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
+using SimpleJSON;
 
 namespace VPB
 {
@@ -489,6 +490,40 @@ namespace VPB
                 LogUtil.LogWarning(sb.ToString());
             }
             catch { }
+        }
+
+        internal static JSONClass ExportBenchSnapshot(string context)
+        {
+            var root = new JSONClass();
+            root["context"] = context ?? "";
+            root["processSeconds"] = LogUtil.GetSecondsSinceProcessStart().ToString("0.000");
+            root["generatedAt"] = DateTime.Now.ToString("o");
+
+            lock (s_Lock)
+            {
+                if (s_PhasesMs.Count > 0)
+                {
+                    var phases = new JSONClass();
+                    foreach (var kv in s_PhasesMs)
+                        phases[kv.Key] = kv.Value.ToString("0.00");
+                    root["phasesMs"] = phases;
+                }
+
+                if (s_Timeline.Count > 0)
+                {
+                    var timeline = new JSONArray();
+                    for (int i = 0; i < s_Timeline.Count; i++)
+                        timeline.Add(s_Timeline[i]);
+                    root["timeline"] = timeline;
+                }
+
+                root["nativeScanCount"] = s_NativeScanCount.ToString();
+                root["nativeScanTotalMs"] = s_NativeScanTotalMs.ToString("0.00");
+                if (s_VpbRefreshReason != null && s_VpbRefreshReason.Length > 0)
+                    root["vpbRefreshReason"] = s_VpbRefreshReason;
+            }
+
+            return root;
         }
     }
 }

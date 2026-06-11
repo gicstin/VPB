@@ -102,6 +102,11 @@ $patchPlugins = Join-Path $ProjectDir 'vam_patch\BepInEx\plugins'
 if ($vamPathOk) { [void](Copy-FileWithRetry $TargetPath $vamPlugins) }
 [void](Copy-FileWithRetry $TargetPath $patchPlugins)
 
+$benchExample = Join-Path $patchPlugins 'bench_run.example.cfg'
+if (Test-Path -LiteralPath $benchExample) {
+    if ($vamPathOk) { [void](Copy-FileWithRetry $benchExample $vamPlugins) }
+}
+
 if ($vamPathOk) {
     $legacySqlite = Join-Path $VaMPath 'BepInEx\scripts\sqlite3.dll'
     if (Test-Path -LiteralPath $legacySqlite) {

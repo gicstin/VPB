@@ -219,6 +219,20 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition
             {
+                Key = "plugin.bench.configure",
+                GroupKey = "plugin_bench",
+                Label = VPBTranslation.T("bench.settings.open", "Scene Load Test..."),
+                Tooltip = VPBTranslation.T("bench.settings.tip", "Set up timed scene load tests from gallery selection. Saves to BepInEx/plugins/bench_run.cfg."),
+                ControlType = InternalSettingControlType.Button,
+                OnAction = () =>
+                {
+                    try { VamHookPlugin.singleton?.OpenBenchEditorFromGallery(); }
+                    catch (Exception ex) { LogUtil.LogError("[VPB] OpenBenchEditor: " + ex.Message); }
+                }
+            });
+
+            defs.Add(new InternalSettingDefinition
+            {
                 Key = "plugin.qm_positions",
                 GroupKey = "plugin_quickmenu",
                 Label = VPBTranslation.T("hook.settings.adjust_position", "Adjust Position"),

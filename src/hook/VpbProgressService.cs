@@ -55,6 +55,13 @@ namespace VPB
         private static volatile int s_BulkZstdTotal;
         private static volatile string s_BulkZstdCurrentFile;
 
+        private static volatile bool s_SceneLoadActive;
+        private static volatile bool s_SceneLoadNativePhase;
+        private static volatile string s_SceneLoadTitle;
+        private static volatile string s_SceneLoadSubtitle;
+        private static volatile int s_SceneLoadDepDone;
+        private static volatile int s_SceneLoadDepTotal;
+
         internal static bool IsDeepScanActive => s_DeepScanActive;
 
         internal static bool IsGalleryProgressActive =>
@@ -84,9 +91,102 @@ namespace VPB
 
         internal static bool TryGetActiveDisplaySnapshot(out DisplaySnapshot snapshot)
         {
+            if (TryGetSceneLoadDisplaySnapshot(out snapshot))
+                return true;
             if (TryGetStartupDisplaySnapshot(out snapshot))
                 return true;
             return TryGetBulkZstdDisplaySnapshot(out snapshot);
+        }
+
+        internal static void BeginSceneLoadPrep(string displayName, string actionVerb = "Loading")
+        {
+            s_SceneLoadActive = true;
+            s_SceneLoadNativePhase = false;
+            string verb = string.IsNullOrEmpty(actionVerb) ? "Loading" : actionVerb;
+            s_SceneLoadTitle = string.IsNullOrEmpty(displayName)
+                ? verb + " scene"
+                : (verb + " " + displayName);
+            s_SceneLoadSubtitle = "Preparing — please wait";
+            s_SceneLoadDepDone = 0;
+            s_SceneLoadDepTotal = 0;
+            EnsureOverlay();
+        }
+
+        internal static void ReportSceneLoadPrepPhase(string subtitle)
+        {
+            if (!s_SceneLoadActive || s_SceneLoadNativePhase) return;
+            s_SceneLoadSubtitle = string.IsNullOrEmpty(subtitle) ? "Preparing — please wait" : subtitle;
+        }
+
+        internal static void ReportSceneLoadDepProgress(int done, int total)
+        {
+            if (!s_SceneLoadActive || s_SceneLoadNativePhase) return;
+            s_SceneLoadDepDone = Math.Max(0, done);
+            s_SceneLoadDepTotal = Math.Max(0, total);
+            if (total > 0)
+                s_SceneLoadSubtitle = "Installing packages " + done + "/" + total;
+        }
+
+        internal static void HandoffSceneLoadNative(bool merge = false)
+        {
+            if (!s_SceneLoadActive) return;
+            s_SceneLoadNativePhase = true;
+            s_SceneLoadSubtitle = merge
+                ? "Merging scene — please wait"
+                : "Restoring scene — please wait";
+            s_SceneLoadDepDone = 0;
+            s_SceneLoadDepTotal = 0;
+
+            string nativeStatus = merge ? "Merging scene..." : "Loading scene...";
+            try { SceneLoadNativeUiBridge.ShowForSceneLoad(merge, nativeStatus); } catch { }
+
+            // VaM native HUD owns the rest of load UX; hide VPB top banner to avoid double overlay.
+            EndSceneLoad();
+        }
+
+        internal static void EndSceneLoad()
+        {
+            s_SceneLoadActive = false;
+            s_SceneLoadNativePhase = false;
+            s_SceneLoadTitle = null;
+            s_SceneLoadSubtitle = null;
+            s_SceneLoadDepDone = 0;
+            s_SceneLoadDepTotal = 0;
+        }
+
+        internal static bool IsSceneLoadBannerActive => s_SceneLoadActive;
+
+        internal static bool TryGetSceneLoadDisplaySnapshot(out DisplaySnapshot snapshot)
+        {
+            snapshot = default(DisplaySnapshot);
+            if (!s_SceneLoadActive) return false;
+
+            string title = s_SceneLoadTitle;
+            string subtitle = s_SceneLoadSubtitle;
+            bool native = s_SceneLoadNativePhase;
+            int depDone = s_SceneLoadDepDone;
+            int depTotal = s_SceneLoadDepTotal;
+
+            snapshot.Visible = true;
+            snapshot.Cancellable = false;
+            snapshot.Title = string.IsNullOrEmpty(title)
+                ? (native ? "Loading scene" : "Preparing scene")
+                : title;
+            snapshot.Subtitle = string.IsNullOrEmpty(subtitle)
+                ? (native ? "Restoring scene — please wait" : "Preparing — please wait")
+                : subtitle;
+
+            if (!native && depTotal > 0)
+            {
+                snapshot.Progress01 = Mathf.Clamp01((float)depDone / depTotal);
+                snapshot.ShowMovingStrip = true;
+            }
+            else
+            {
+                snapshot.Progress01 = -1f;
+                snapshot.ShowMovingStrip = true;
+            }
+            return true;
         }
 
         internal static void RequestCancelActiveJob()

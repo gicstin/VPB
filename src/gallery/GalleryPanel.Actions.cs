@@ -337,6 +337,13 @@ namespace VPB
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
 
+            if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(title))
+            {
+                ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
+                    "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
+                return;
+            }
+
             // Otherwise the next-frame yield path immediately hides us again.
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
                   && VPBConfig.Instance.AnchorYieldsToVamPanels && XrUtils.IsVrActive())
@@ -1463,6 +1470,12 @@ namespace VPB
                 return;
             }
 
+            if (_benchPickModeActive)
+            {
+                BenchOnGallerySelectionChangedInPickMode();
+                return;
+            }
+
             // Apply Logic
             // Hold-to-launch overrides 1-click apply: clicks should still select, but only 2-click applies while hold mode is on.
             bool shouldApply = holdToLaunchEnabled
@@ -1478,12 +1491,14 @@ namespace VPB
         internal void ApplyFileFromHold(FileEntry file)
         {
             if (file == null) return;
+            if (_benchPickModeActive) return;
             ApplyFileEntryNow(file);
         }
 
         private void ApplyFileEntryNow(FileEntry file)
         {
             if (file == null) return;
+            if (_benchPickModeActive) return;
 
             FileEntry applyFile = file;
             FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);

@@ -312,181 +312,458 @@ namespace VPB
             if (entry == null) return;
 
             // Guard against duplicate triggers in the same click/frame burst.
-            // This can happen via UI event duplication and causes visible "default Person" flashes.
-            float now = Time.unscaledTime;
-            if (now - _lastLoadSceneStartTime < 0.75f)
+            if (!TryBeginSceneLoadThrottle())
             {
                 LogUtil.LogWarning("[VPB] UI.LoadSceneFile ignored (throttled)");
                 return;
             }
-            _lastLoadSceneStartTime = now;
 
             // History: record only this scene entry (not EnsureInstalled / dependency work below).
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "scene"); } catch { }
 
-            List<string> temporaryUidOverrides = null;
-            SceneLoadCleanupState cleanupState = null;
+            if (Messager.singleton == null)
+            {
+                LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start scene load coroutine");
+                return;
+            }
+
+            Messager.singleton.StartCoroutine(LoadSceneFileRoutine(entry, panel));
+        }
+
+        private static string SceneLoadBannerName(FileEntry entry)
+        {
             try
             {
-                string path = entry.Uid;
-                LogUtil.Log($"[VPB] UI.LoadSceneFile started for: {path}");
-                
-                bool depsChanged = false;
-                SceneLoadingUtils.EnsureInstalledResult ensureResult = default(SceneLoadingUtils.EnsureInstalledResult);
-                List<string> movedUids = null;
-                
-                // Suppress gallery auto-refresh to preserve scroll position and state
-                // Must activate BEFORE EnsureInstalled since it may trigger FileManager.Refresh internally
-                // Suppression is disabled by explicit cleanup paths and a scene-load completion coroutine.
-                try
+                if (entry != null && !string.IsNullOrEmpty(entry.Name))
+                    return entry.Name;
+            }
+            catch { }
+            return "scene";
+        }
+
+        private static void EndSceneLoadBanner()
+        {
+            try { VpbProgressService.EndSceneLoad(); } catch { }
+        }
+
+        private static bool TryBeginSceneLoadThrottle()
+        {
+            float now = Time.unscaledTime;
+            if (now - _lastLoadSceneStartTime < 0.75f)
+                return false;
+            _lastLoadSceneStartTime = now;
+            return true;
+        }
+
+        private sealed class SceneLoadPrepOutcome
+        {
+            public bool Success;
+            public bool DepsChanged;
+            public SceneLoadingUtils.EnsureInstalledResult EnsureResult;
+            public List<string> MovedUids;
+            public string NormalizedPath;
+            public SceneLoadCleanupState CleanupState;
+        }
+
+        /// <summary>
+        /// Shared ensure / whitelist / refresh / rewrite path for gallery scene load and merge.
+        /// </summary>
+        private static IEnumerator PrepareSceneEntryCoroutine(
+            FileEntry entry,
+            GalleryPanel panel,
+            string path,
+            bool suppressGalleryRefresh,
+            RefreshScope depsChangedRefreshScope,
+            string refreshReasonInstalled,
+            string refreshReasonAllowlist,
+            SceneLoadPrepOutcome outcome)
+        {
+            outcome.Success = false;
+            outcome.DepsChanged = false;
+            outcome.EnsureResult = default(SceneLoadingUtils.EnsureInstalledResult);
+            outcome.MovedUids = null;
+            outcome.NormalizedPath = null;
+            outcome.CleanupState = null;
+
+            if (suppressGalleryRefresh)
+            {
+                Gallery.SuppressAutoRefresh(true);
+                outcome.CleanupState = new SceneLoadCleanupState
                 {
-                    Gallery.SuppressAutoRefresh(true);
-                    cleanupState = new SceneLoadCleanupState
+                    SuppressionStartRealtime = Time.realtimeSinceStartup,
+                    SceneLoadTotalSerialAtStart = LogUtil.GetSceneLoadTotalSerial()
+                };
+            }
+
+            try { VpbProgressService.ReportSceneLoadPrepPhase("Checking dependencies"); } catch { }
+            yield return null;
+
+            outcome.MovedUids = new List<string>(32);
+            bool ensureDone = false;
+            yield return SceneLoadingUtils.EnsureInstalledDetailedCoroutine(entry, outcome.MovedUids, r =>
+            {
+                outcome.EnsureResult = r;
+                ensureDone = true;
+            });
+            if (!ensureDone)
+                outcome.EnsureResult = default(SceneLoadingUtils.EnsureInstalledResult);
+
+            outcome.DepsChanged = outcome.EnsureResult.DepsChanged;
+            yield return null;
+
+            List<string> temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, outcome.MovedUids);
+            if (outcome.CleanupState != null)
+                outcome.CleanupState.TemporaryUidOverrides = temporaryUidOverrides;
+            bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
+            bool packageStateChanged = outcome.DepsChanged || hasTemporaryAllowList;
+
+            LogUtil.Log("[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:" + outcome.DepsChanged
+                + " missing:" + outcome.EnsureResult.MissingCount + "/" + outcome.EnsureResult.ReferencedCount
+                + " whitelistChanged:" + hasTemporaryAllowList
+                + " packageStateChanged:" + packageStateChanged);
+            if (outcome.EnsureResult.IsDegraded)
+                LogUtil.LogWarning("[VPB] Scene load will continue in DEGRADED mode: missing "
+                    + outcome.EnsureResult.MissingCount + "/" + outcome.EnsureResult.ReferencedCount + " referenced package(s)");
+            else if (!outcome.DepsChanged)
+                LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected.");
+
+            if (packageStateChanged)
+            {
+                if (outcome.DepsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
+                else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
+
+                try { VpbProgressService.ReportSceneLoadPrepPhase("Refreshing package catalog"); } catch { }
+                yield return null;
+
+                RefreshScope refreshScope;
+                List<string> refreshUids = outcome.MovedUids;
+                if (refreshUids == null || refreshUids.Count == 0)
+                {
+                    string hostUid = null;
+                    try
                     {
-                        SuppressionStartRealtime = Time.realtimeSinceStartup,
-                        SceneLoadTotalSerialAtStart = LogUtil.GetSceneLoadTotalSerial()
-                    };
-                    
-                    movedUids = new List<string>(32);
-                    ensureResult = SceneLoadingUtils.EnsureInstalledDetailed(entry, movedUids);
-                    depsChanged = ensureResult.DepsChanged;
-
-                    temporaryUidOverrides = ApplyTemporarySceneLoadWhitelist(entry, movedUids);
-                    if (cleanupState != null) cleanupState.TemporaryUidOverrides = temporaryUidOverrides;
-                    bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
-                    bool packageStateChanged = depsChanged || hasTemporaryAllowList;
-
-                    LogUtil.Log($"[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:{depsChanged} missing:{ensureResult.MissingCount}/{ensureResult.ReferencedCount} whitelistChanged:{hasTemporaryAllowList} packageStateChanged:{packageStateChanged}");
-                    if (ensureResult.IsDegraded)
-                        LogUtil.LogWarning($"[VPB] Scene load will continue in DEGRADED mode: missing {ensureResult.MissingCount}/{ensureResult.ReferencedCount} referenced package(s)");
-                    else if (!depsChanged)
-                        LogUtil.Log("[VPB] UI.EnsureInstalled: no package moves detected.");
-
-                    if (packageStateChanged)
-                    {
-                        if (depsChanged) LogUtil.Log("[VPB] Refreshing FileManagers...");
-                        else LogUtil.Log("[VPB] Refreshing VaM FileManager for temporary scene-load allow-list...");
-
-                        try
-                        {
-                            // EnsureInstalled reports depsChanged=true when host/deps were installed (moved).
-                            // Some entry types / edge cases may not populate movedUids even though the host .var moved,
-                            // so fall back to refreshing by host package UID to keep the hover path accurate.
-                            List<string> refreshUids = movedUids;
-                            if (refreshUids == null || refreshUids.Count == 0)
-                            {
-                                string hostUid = null;
-                                try
-                                {
-                                    if (entry is VarFileEntry vfe)
-                                        hostUid = vfe.GetRowPackageUid();
-                                    else if (entry is PackageListEntry ple && ple.Package != null)
-                                        hostUid = ple.Package.Uid;
-                                    else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null)
-                                        hostUid = sfe.package.Uid;
-                                }
-                                catch { hostUid = null; }
-
-                                if (!string.IsNullOrEmpty(hostUid))
-                                {
-                                    refreshUids = new List<string>(1) { hostUid };
-                                }
-                            }
-
-                            if (depsChanged)
-                            {
-                                RefreshScope scope = (refreshUids != null && refreshUids.Count > 0)
-                                    ? RefreshScope.InstallOnly
-                                    : RefreshScope.Both;
-                                FileManagerBridge.Refresh("gallery_ensure_installed", scope, refreshUids, flushNativeImmediately: true);
-                            }
-                            else
-                            {
-                                FileManagerBridge.Refresh("gallery_scene_allowlist", RefreshScope.NativeOnly, flushNativeImmediately: true);
-                            }
-                        }
-                        catch { }
-
-                        // The .var may have moved (AllPackages -> AddonPackages) so refresh this row's display path.
-                        TryRefreshEntryDisplayPathAfterVarMoves(entry);
-                        try { if (panel != null) panel.SetHoverPath(entry); } catch { }
+                        if (entry is VarFileEntry vfe)
+                            hostUid = vfe.GetRowPackageUid();
+                        else if (entry is PackageListEntry ple && ple.Package != null)
+                            hostUid = ple.Package.Uid;
+                        else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null)
+                            hostUid = sfe.package.Uid;
                     }
-                }
-                catch (Exception installEx)
-                {
-                    LogUtil.LogError($"[VPB] EnsureInstalled or FileManager refresh error: {installEx.Message}");
-                    FinalizeSceneLoadCleanup(cleanupState, "install/refresh error");
-                    return;
+                    catch { hostUid = null; }
+
+                    if (!string.IsNullOrEmpty(hostUid))
+                        refreshUids = new List<string>(1) { hostUid };
                 }
 
-                string normalizedPath = UI.NormalizePath(path);
-                try
+                if (outcome.DepsChanged)
                 {
-                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entry, out string rewritten))
-                    {
-                        normalizedPath = UI.NormalizePath(rewritten);
-                        LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
-                }
-
-                LogUtil.Log($"[VPB] Normalized path: {normalizedPath}");
-
-                if (Messager.singleton == null)
-                {
-                    LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start load coroutines");
-                    FinalizeSceneLoadCleanup(cleanupState, "messager unavailable");
-                }
-                else if (depsChanged)
-                {
-                    // Packages were just moved from AllPackages to AddonPackages.
-                    // Yield one frame so MVR FileManager.Refresh can finish processing
-                    // before LoadInternal runs, preventing atom-list race exceptions.
-                    LogUtil.Log("[VPB] Packages installed; deferring sc.Load by one frame");
-                    Messager.singleton.StartCoroutine(LoadSceneAfterRefresh(normalizedPath, cleanupState));
+                    refreshScope = (refreshUids != null && refreshUids.Count > 0)
+                        ? depsChangedRefreshScope
+                        : RefreshScope.Both;
                 }
                 else
                 {
-                    SuperController sc = SuperController.singleton;
-                    if (sc != null)
+                    refreshScope = RefreshScope.NativeOnly;
+                }
+
+                string refreshReason = outcome.DepsChanged ? refreshReasonInstalled : refreshReasonAllowlist;
+                string refreshError = null;
+                IEnumerator refreshCo = FileManagerBridge.RefreshForSceneLoadCoroutine(
+                    refreshReason,
+                    refreshScope,
+                    refreshUids);
+                while (true)
+                {
+                    bool hasNext;
+                    try
                     {
-                        Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
-                        try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
-                        LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath})");
-                        sc.Load(normalizedPath);
+                        hasNext = refreshCo.MoveNext();
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        LogUtil.LogError("[VPB] SuperController.singleton is null!");
-                        FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable");
+                        refreshError = ex.Message;
+                        break;
                     }
+
+                    if (!hasNext)
+                        break;
+
+                    yield return refreshCo.Current;
+                }
+
+                if (refreshError != null)
+                {
+                    LogUtil.LogError("[VPB] EnsureInstalled or FileManager refresh error: " + refreshError);
+                    if (outcome.CleanupState != null)
+                        FinalizeSceneLoadCleanup(outcome.CleanupState, "install/refresh error");
+                    yield break;
+                }
+
+                yield return null;
+
+                TryRefreshEntryDisplayPathAfterVarMoves(entry);
+                try { if (panel != null) panel.SetHoverPath(entry); } catch { }
+            }
+
+            try { VpbProgressService.ReportSceneLoadPrepPhase("Preparing scene file"); } catch { }
+            yield return null;
+
+            string normalizedPath = UI.NormalizePath(path);
+            try
+            {
+                if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entry, out string rewritten))
+                {
+                    normalizedPath = UI.NormalizePath(rewritten);
+                    LogUtil.Log("[VPB] Using rewritten scene: " + normalizedPath);
                 }
             }
             catch (Exception ex)
             {
-                LogUtil.LogError($"[VPB] UI.LoadSceneFile crash: {ex.Message}\n{ex.StackTrace}");
-                FinalizeSceneLoadCleanup(cleanupState, "load crash");
+                LogUtil.LogWarning("[VPB] Scene rewrite skipped due to error: " + ex.Message);
             }
+
+            LogUtil.Log("[VPB] Normalized path: " + normalizedPath);
+            outcome.NormalizedPath = normalizedPath;
+            outcome.Success = true;
         }
 
-        private static IEnumerator LoadSceneAfterRefresh(string normalizedPath, SceneLoadCleanupState cleanupState)
+        private static void ScheduleSceneLoadBannerFallback()
         {
-            yield return null; // one frame for MVR refresh operations to settle
+            if (Messager.singleton == null) return;
+            try
+            {
+                Messager.singleton.StartCoroutine(SceneLoadBannerFallbackRoutine(LogUtil.GetSceneLoadTotalSerial()));
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Clears scene banner when merge loads skip WorldUI.Activate / EndSceneLoadTotal.
+        /// </summary>
+        private static IEnumerator SceneLoadBannerFallbackRoutine(int serialAtStart, float timeoutSec = 180f)
+        {
+            yield return null;
+            yield return null;
+
+            float elapsed = 0f;
+            int quietFrames = 0;
+            while (elapsed < timeoutSec)
+            {
+                try
+                {
+                    if (!VpbProgressService.IsSceneLoadBannerActive)
+                        yield break;
+                    if (LogUtil.GetSceneLoadTotalSerial() != serialAtStart)
+                        yield break;
+                }
+                catch { yield break; }
+
+                bool busy = false;
+                try { busy = LogUtil.IsSceneLoading(); } catch { busy = false; }
+                if (!busy)
+                {
+                    quietFrames++;
+                    if (quietFrames >= 8)
+                    {
+                        EndSceneLoadBanner();
+                        yield break;
+                    }
+                }
+                else
+                {
+                    quietFrames = 0;
+                }
+
+                yield return new WaitForSeconds(0.12f);
+                elapsed += 0.12f;
+            }
+
+            EndSceneLoadBanner();
+        }
+
+        private static IEnumerator InvokeSceneLoadCoroutine(
+            string normalizedPath,
+            bool merge,
+            SceneLoadCleanupState cleanupState,
+            bool collapseGalleryPanels,
+            bool deferOneFrameBeforeLoad)
+        {
+            if (deferOneFrameBeforeLoad)
+                yield return null;
+
             SuperController sc = SuperController.singleton;
             if (sc == null)
             {
-                LogUtil.LogError("[VPB] SuperController.singleton is null in LoadSceneAfterRefresh!");
-                FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable after refresh");
+                LogUtil.LogError("[VPB] SuperController.singleton is null!");
+                if (cleanupState != null)
+                    FinalizeSceneLoadCleanup(cleanupState, "supercontroller unavailable");
+                EndSceneLoadBanner();
                 yield break;
             }
-            if (Messager.singleton != null)
+
+            if (cleanupState != null && Messager.singleton != null)
                 Messager.singleton.StartCoroutine(DisableSuppressionAfterSceneLoad(cleanupState));
-            try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
-            LogUtil.Log($"[VPB] Calling sc.Load({normalizedPath}) (after install+refresh)");
-            sc.Load(normalizedPath);
+            if (collapseGalleryPanels)
+            {
+                try { Gallery.CollapsePanelsOnSceneLaunch(); } catch { }
+            }
+
+            try { VpbProgressService.HandoffSceneLoadNative(merge); } catch { }
+            ScheduleSceneLoadBannerFallback();
+            yield return null;
+
+            int serialBefore = LogUtil.GetSceneLoadTotalSerial();
+            LogUtil.Log("[VPB] Calling scene load: " + normalizedPath + (merge ? " (merge)" : ""));
+            bool ok = false;
+            if (merge)
+                ok = SceneLoadingUtils.LoadScene(normalizedPath, true);
+            else
+                sc.Load(normalizedPath);
+
+            if (merge && !ok)
+            {
+                LogUtil.LogError("[VPB] Scene merge load returned false");
+                if (cleanupState != null)
+                    FinalizeSceneLoadCleanup(cleanupState, "merge load failed");
+                EndSceneLoadBanner();
+                yield break;
+            }
+
+            if (!merge && LogUtil.GetSceneLoadTotalSerial() == serialBefore && !LogUtil.IsSceneLoading())
+            {
+                yield return null;
+                if (LogUtil.GetSceneLoadTotalSerial() == serialBefore && !LogUtil.IsSceneLoading())
+                {
+                    LogUtil.LogWarning("[VPB] sc.Load did not start scene load — clearing banner");
+                    EndSceneLoadBanner();
+                }
+            }
+        }
+
+        public static void MergeSceneFile(FileEntry entry, string path, GalleryPanel panel, bool atPlayer, UIDraggableItem dragger = null)
+        {
+            if (entry == null && string.IsNullOrEmpty(path)) return;
+            if (!TryBeginSceneLoadThrottle())
+            {
+                LogUtil.LogWarning("[VPB] UI.MergeSceneFile ignored (throttled)");
+                return;
+            }
+            if (Messager.singleton == null)
+            {
+                LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start merge scene coroutine");
+                return;
+            }
+            Messager.singleton.StartCoroutine(MergeSceneFileRoutine(entry, path, panel, atPlayer, dragger));
+        }
+
+        private static IEnumerator MergeSceneFileRoutine(FileEntry entry, string path, GalleryPanel panel, bool atPlayer, UIDraggableItem dragger)
+        {
+            if (entry == null && !string.IsNullOrEmpty(path))
+            {
+                try { entry = FileManager.GetFileEntry(path); } catch { entry = null; }
+            }
+            if (entry == null)
+            {
+                LogUtil.LogError("[VPB] MergeSceneFile: no FileEntry for " + path);
+                yield break;
+            }
+
+            LogUtil.Log("[VPB] MergeSceneFile started: " + path + " (atPlayer: " + atPlayer + ")");
+            try
+            {
+                if (!LogUtil.IsSceneClickActive())
+                    LogUtil.BeginSceneClick(path);
+            }
+            catch { }
+
+            try { VpbProgressService.BeginSceneLoadPrep(SceneLoadBannerName(entry), "Merging"); } catch { }
+            yield return null;
+
+            var prep = new SceneLoadPrepOutcome();
+            yield return PrepareSceneEntryCoroutine(
+                entry,
+                panel,
+                path,
+                suppressGalleryRefresh: false,
+                depsChangedRefreshScope: RefreshScope.Both,
+                refreshReasonInstalled: "dragdrop_merge_scene",
+                refreshReasonAllowlist: "dragdrop_merge_scene",
+                prep);
+
+            if (!prep.Success || string.IsNullOrEmpty(prep.NormalizedPath))
+            {
+                EndSceneLoadBanner();
+                yield break;
+            }
+
+            HashSet<string> atomsBefore = null;
+            if (atPlayer)
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    atomsBefore = new HashSet<string>();
+                    foreach (Atom a in sc.GetAtoms())
+                    {
+                        if (a != null) atomsBefore.Add(a.uid);
+                    }
+                }
+            }
+
+            yield return InvokeSceneLoadCoroutine(
+                prep.NormalizedPath,
+                merge: true,
+                cleanupState: null,
+                collapseGalleryPanels: false,
+                deferOneFrameBeforeLoad: prep.DepsChanged);
+
+            if (atPlayer && atomsBefore != null && dragger != null)
+            {
+                if (panel != null)
+                    panel.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
+                else
+                    dragger.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
+            }
+        }
+
+        private static IEnumerator LoadSceneFileRoutine(FileEntry entry, GalleryPanel panel)
+        {
+            string path = entry.Uid;
+            LogUtil.Log("[VPB] UI.LoadSceneFile started for: " + path);
+
+            try
+            {
+                if (!LogUtil.IsSceneClickActive())
+                    LogUtil.BeginSceneClick(path);
+            }
+            catch { }
+
+            try { VpbProgressService.BeginSceneLoadPrep(SceneLoadBannerName(entry)); } catch { }
+            yield return null;
+
+            var prep = new SceneLoadPrepOutcome();
+            yield return PrepareSceneEntryCoroutine(
+                entry,
+                panel,
+                path,
+                suppressGalleryRefresh: true,
+                depsChangedRefreshScope: RefreshScope.InstallOnly,
+                refreshReasonInstalled: "gallery_ensure_installed",
+                refreshReasonAllowlist: "gallery_scene_allowlist",
+                prep);
+
+            if (!prep.Success || string.IsNullOrEmpty(prep.NormalizedPath))
+            {
+                EndSceneLoadBanner();
+                yield break;
+            }
+
+            yield return InvokeSceneLoadCoroutine(
+                prep.NormalizedPath,
+                merge: false,
+                cleanupState: prep.CleanupState,
+                collapseGalleryPanels: true,
+                deferOneFrameBeforeLoad: prep.DepsChanged);
         }
 
         public static string NormalizePath(string path)

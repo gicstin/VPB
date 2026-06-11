@@ -327,6 +327,12 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(name)) yield break;
+                if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(name))
+                {
+                    ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
+                        "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
+                    yield break;
+                }
                 if (LogGalleryCategoryTypeSwitchTiming)
                     BeginGalleryCategoryTypeNavigationTiming(name);
                 Show(name, extension, path);

@@ -23,6 +23,7 @@ namespace VPB
         private GameObject loadingOverlayGO;
         private RectTransform loadingBarContainerRT;
         private RectTransform loadingBarFillRT;
+        private float _loadingOverlayPulseStart = -1f;
         private float lastScrollTime;
         private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
         private Coroutine thumbnailCacheCoroutine;

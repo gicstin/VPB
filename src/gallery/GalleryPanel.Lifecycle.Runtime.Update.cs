@@ -74,6 +74,7 @@ namespace VPB
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { FooterPluginInfoPollHoverTooltip(); } catch { }
+            try { BenchModalRuntimeTick(); } catch { }
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 
@@ -108,6 +109,7 @@ namespace VPB
 
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 try { ApplyVamMenuAnchoring(); } catch { }
+                try { UpdateLoadingOverlayPulse(); } catch { }
 
                 // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
                 // While active we pause all disk saves — background threads must not contend on

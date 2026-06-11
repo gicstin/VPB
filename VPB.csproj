@@ -299,6 +299,17 @@
     <Compile Include="src\VpbImport.SubToggleFilter.cs" />
     <Compile Include="src\VpbImport.IsolationGuard.cs" />
     <Compile Include="src\VdsLauncher.cs" />
+    <Compile Include="src\bench\VpbBenchUtils.cs" />
+    <Compile Include="src\bench\VpbBenchConfig.cs" />
+    <Compile Include="src\bench\VpbBenchConfigParser.cs" />
+    <Compile Include="src\bench\VpbBenchRunner.cs" />
+    <Compile Include="src\bench\VpbBenchRunSummary.cs" />
+    <Compile Include="src\bench\VpbBenchComparer.cs" />
+    <Compile Include="src\bench\VpbBenchConfigWriter.cs" />
+    <Compile Include="src\bench\VpbBenchConfigStore.cs" />
+    <Compile Include="src\bench\SceneLoadBenchSnapshot.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.Bench.cs" />
+    <Compile Include="src\gallery\GalleryPanel.BenchPickMode.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />
     <Compile Include="src\hook\BoneViewMode.cs" />
@@ -313,6 +324,7 @@
     <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
     <Compile Include="src\hook\VpbProgressService.cs" />
+    <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
     <Compile Include="src\hook\TurboJpegNative.cs" />
     <Compile Include="src\hook\TurboJpegStats.cs" />

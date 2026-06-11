@@ -3046,6 +3046,27 @@ namespace VPB
             var list = currentFilteredFiles;
             if (list == null || list.Count == 0) return false;
 
+            if (_benchPickModeActive)
+            {
+                selectedFiles.Clear();
+                selectedFilePaths.Clear();
+                selectionAnchorPath = null;
+                int max = BenchPickMaxPerSession;
+                for (int i = 0; i < list.Count && selectedFiles.Count < max; i++)
+                {
+                    var f = list[i];
+                    if (f == null) continue;
+                    string k = f.Path;
+                    if (string.IsNullOrEmpty(k)) k = f.Uid;
+                    if (string.IsNullOrEmpty(k)) continue;
+                    if (selectedFilePaths.Add(k)) selectedFiles.Add(f);
+                }
+                BenchOnGallerySelectionChangedInPickMode();
+                ShowTemporaryStatus(VPBTranslation.T("bench.pick.select_all_capped",
+                        "Selected first {0} items (bench pick limit).").Replace("{0}", max.ToString()), 3f);
+                return selectedFiles.Count > 0;
+            }
+
             if (list.Count > SelectAllSafetyMaxItemCount)
             {
                 string msg = string.Format(

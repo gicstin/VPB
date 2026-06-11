@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using MVR.FileManagement;
 using SimpleJSON;
 using UnityEngine;
@@ -441,6 +442,138 @@ namespace VPB
                 LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
                 return result;
             }
+        }
+
+        /// <summary>
+        /// Time-sliced variant of <see cref="EnsureInstalledDetailed"/> for gallery scene-load coroutines.
+        /// Dependency JSON parse runs on a thread-pool worker; installs stay on the main thread.
+        /// </summary>
+        public static IEnumerator EnsureInstalledDetailedCoroutine(FileEntry entry, List<string> outMovedPackageUids, Action<EnsureInstalledResult> onComplete)
+        {
+            EnsureInstalledResult result = default(EnsureInstalledResult);
+            if (entry == null)
+            {
+                if (onComplete != null) onComplete(result);
+                yield break;
+            }
+
+            bool flag = false;
+            bool failed = false;
+            try
+            {
+                if (entry is VarFileEntry varEntry && varEntry.Package != null)
+                {
+                    flag = outMovedPackageUids != null
+                        ? varEntry.Package.InstallRecursive(outMovedPackageUids)
+                        : varEntry.Package.InstallRecursive();
+                }
+                else if (entry is SystemFileEntry sysEntry && sysEntry.package != null)
+                {
+                    flag = outMovedPackageUids != null
+                        ? sysEntry.package.InstallRecursive(outMovedPackageUids)
+                        : sysEntry.package.InstallRecursive();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
+                if (onComplete != null) onComplete(result);
+                failed = true;
+            }
+
+            if (failed)
+                yield break;
+
+            yield return null;
+
+            if (!string.IsNullOrEmpty(entry.Path))
+            {
+                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
+                if (ext == ".json" || ext == ".vap" || ext == ".cslist")
+                {
+                    string content = null;
+                    try
+                    {
+                        using (var reader = entry.OpenStreamReader())
+                        {
+                            content = reader.ReadToEnd();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError($"[VPB] EnsureInstalled error: {ex.Message}\n{ex.StackTrace}");
+                        if (onComplete != null) onComplete(result);
+                        failed = true;
+                    }
+
+                    if (failed)
+                        yield break;
+
+                    yield return null;
+
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        HashSet<string> deps = null;
+                        Exception parseEx = null;
+                        int parseDone = 0;
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            try { deps = VarNameParser.Parse(content); }
+                            catch (Exception ex) { parseEx = ex; }
+                            finally { Interlocked.Exchange(ref parseDone, 1); }
+                        });
+                        while (Interlocked.CompareExchange(ref parseDone, 0, 0) == 0)
+                            yield return null;
+
+                        if (parseEx != null)
+                            LogUtil.LogWarning($"[VPB] EnsureInstalled: dependency parse failed for {entry.Path}: {parseEx.Message}");
+
+                        if (deps != null)
+                        {
+                            PopulateEnsureInstalledMissingCounts(entry, deps, ref result);
+
+                            bool depsChanged = false;
+                            yield return FileButton.EnsureInstalledBySetCoroutine(deps, outMovedPackageUids, 4, changed => depsChanged = changed);
+                            if (depsChanged) flag = true;
+                        }
+                    }
+                }
+            }
+
+            result.DepsChanged = flag;
+            if (onComplete != null) onComplete(result);
+        }
+
+        static void PopulateEnsureInstalledMissingCounts(FileEntry entry, HashSet<string> deps, ref EnsureInstalledResult result)
+        {
+            try
+            {
+                int depCount = deps.Count;
+                result.ReferencedCount = depCount;
+                if (depCount > 0)
+                {
+                    string sample = string.Join(", ", deps.Take(5).ToArray());
+                    LogUtil.Log($"[VPB] EnsureInstalled: Parsed {depCount} package refs from {entry.Name}. Sample: {sample}");
+                }
+
+                int missing = 0;
+                List<string> missingKeys = null;
+                foreach (string key in deps)
+                {
+                    VarPackage pkg = FileManager.GetPackageForDependency(key, false);
+                    if (pkg != null) continue;
+                    missing++;
+                    if (missingKeys == null) missingKeys = new List<string>(8);
+                    missingKeys.Add(key);
+                }
+                if (missing > 0)
+                {
+                    string list = missingKeys != null ? string.Join("; ", missingKeys.ToArray()) : "";
+                    LogUtil.LogWarning($"[VPB] EnsureInstalled: Missing {missing}/{deps.Count} referenced packages for {entry.Name}: {list}");
+                }
+                result.MissingCount = missing;
+            }
+            catch { }
         }
 
         /// <summary>

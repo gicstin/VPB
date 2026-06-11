@@ -1806,6 +1806,7 @@ namespace VPB
             }
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
             _refreshFilesDebugSource = refreshDebugSource;
+            try { ShowLoadingOverlay(null); } catch { }
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 

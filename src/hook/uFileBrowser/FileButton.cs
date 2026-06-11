@@ -248,26 +248,58 @@ namespace VPB
             bool flag = false;
             foreach (var key in set)
             {
-                VarPackage package = FileManager.GetPackageForDependency(key, false);
-                if (package != null)
+                if (TryInstallDependencyKey(key, outMovedPackageUids, ref flag))
+                    continue;
+            }
+            return flag;
+        }
+
+        /// <summary>Install dependency set on main thread, yielding every <paramref name="yieldEvery"/> keys.</summary>
+        public static System.Collections.IEnumerator EnsureInstalledBySetCoroutine(
+            HashSet<string> set, List<string> outMovedPackageUids, int yieldEvery, System.Action<bool> onComplete)
+        {
+            bool flag = false;
+            if (set == null || set.Count == 0)
+            {
+                if (onComplete != null) onComplete(flag);
+                yield break;
+            }
+
+            int total = set.Count;
+            int idx = 0;
+            foreach (var key in set)
+            {
+                TryInstallDependencyKey(key, outMovedPackageUids, ref flag);
+                idx++;
+                if (yieldEvery > 0 && (idx % yieldEvery) == 0)
                 {
-                    string path = package.Path;
-                    bool dirty = outMovedPackageUids != null
-                        ? package.InstallRecursive(outMovedPackageUids)
-                        : package.InstallRecursive();
-                    if (dirty)
-                    {
-                        LogUtil.Log("Installed " + key + " path=" + path);
-                        flag = true;
-                    }
-                }
-                else
-                {
-                    LogUtil.LogError("Install Failed (package not found) " + key);
+                    try { VpbProgressService.ReportSceneLoadDepProgress(idx, total); } catch { }
+                    yield return null;
                 }
             }
-            if (flag)
+
+            try { VpbProgressService.ReportSceneLoadDepProgress(total, total); } catch { }
+            if (onComplete != null) onComplete(flag);
+        }
+
+        static bool TryInstallDependencyKey(string key, List<string> outMovedPackageUids, ref bool flag)
+        {
+            VarPackage package = FileManager.GetPackageForDependency(key, false);
+            if (package != null)
+            {
+                string path = package.Path;
+                bool dirty = outMovedPackageUids != null
+                    ? package.InstallRecursive(outMovedPackageUids)
+                    : package.InstallRecursive();
+                if (dirty)
+                {
+                    LogUtil.Log("Installed " + key + " path=" + path);
+                    flag = true;
+                }
                 return true;
+            }
+
+            LogUtil.LogError("Install Failed (package not found) " + key);
             return false;
         }
 

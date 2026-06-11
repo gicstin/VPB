@@ -72,11 +72,28 @@ namespace VPB
         private void ShowLoadingOverlay(string message)
         {
             if (loadingOverlayGO == null) return;
+            _loadingOverlayPulseStart = Time.unscaledTime;
             loadingOverlayGO.SetActive(true);
+        }
+
+        private void UpdateLoadingOverlayPulse()
+        {
+            if (loadingOverlayGO == null || !loadingOverlayGO.activeSelf || loadingBarFillRT == null || loadingBarContainerRT == null)
+                return;
+            if (_loadingOverlayPulseStart < 0f) _loadingOverlayPulseStart = Time.unscaledTime;
+            float trackW = loadingBarContainerRT.sizeDelta.x;
+            if (trackW <= 1f) trackW = 420f;
+            float fillW = Mathf.Max(48f, trackW * 0.28f);
+            float cycle = 1.35f;
+            float t = ((Time.unscaledTime - _loadingOverlayPulseStart) % cycle) / cycle;
+            float travel = trackW - fillW;
+            loadingBarFillRT.sizeDelta = new Vector2(fillW, loadingBarFillRT.sizeDelta.y);
+            loadingBarFillRT.anchoredPosition = new Vector2(-travel * 0.5f + travel * t, 0f);
         }
 
         private void HideLoadingOverlay()
         {
+            _loadingOverlayPulseStart = -1f;
             if (loadingOverlayGO != null) loadingOverlayGO.SetActive(false);
         }
 

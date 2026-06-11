@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using VPB.src.util;
 
@@ -48,6 +49,18 @@ namespace VPB
             var panel = ResolveGalleryPanelForModal();
             if (panel == null) return;
             try { panel.ShowScanWhitelistDisableConfirmModal(); } catch { }
+        }
+
+        public void OpenBenchEditorFromGallery()
+        {
+            var panel = ResolveGalleryPanelForModal();
+            if (panel == null) return;
+            try { panel.ShowBenchEditorModal(); } catch { }
+        }
+
+        public void RequestBenchRunFromGallery()
+        {
+            try { VpbBenchRunner.RequestRunNow(this); } catch (Exception ex) { LogUtil.LogError("[VPB.Bench] Run: " + ex.Message); }
         }
 
         public void GalleryPreviewQuickMenuGrid(float relCreateX, float relCreateY)

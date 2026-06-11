@@ -1756,59 +1756,14 @@ namespace VPB
         {
             try
             {
-                LogUtil.Log($"[VPB] MergeSceneFile started: {path} (atPlayer: {atPlayer})");
                 FileEntry entryForPath = null;
                 try { entryForPath = VPB.FileManager.GetFileEntry(path); } catch { }
                 if (entryForPath == null) entryForPath = FileEntry;
-
-                bool installed = false;
-                try { installed = UI.EnsureInstalled(entryForPath); } catch { installed = false; }
-
-                if (installed)
-                {
-                    LogUtil.Log("[VPB] Refreshing FileManagers...");
-                    FileManagerBridge.Refresh("dragdrop_merge_scene", RefreshScope.Both, flushNativeImmediately: true);
-                }
-
-                string normalizedPath = UI.NormalizePath(path);
-                try
-                {
-                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entryForPath, out string rewritten))
-                    {
-                        normalizedPath = UI.NormalizePath(rewritten);
-                        LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
-                }
-                SuperController sc = SuperController.singleton;
-                if (sc != null)
-                {
-                    // Track atoms before merge to identify new ones if atPlayer is requested
-                    HashSet<string> atomsBefore = null;
-                    if (atPlayer)
-                    {
-                        atomsBefore = new HashSet<string>();
-                        foreach (Atom a in sc.GetAtoms()) atomsBefore.Add(a.uid);
-                    }
-
-                    if (!SceneLoadingUtils.LoadScene(normalizedPath, true))
-                    {
-                        LogUtil.LogError("[VPB] MergeSceneFile failed: scene load returned false");
-                    }
-
-                    if (atPlayer)
-                    {
-                        if (Panel != null) Panel.StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
-                        else StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
-                    }
-                }
+                UI.MergeSceneFile(entryForPath, path, Panel, atPlayer, this);
             }
             catch (Exception ex)
             {
-                LogUtil.LogError($"[VPB] MergeSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+                LogUtil.LogError("[VPB] MergeSceneFile error: " + ex.Message);
             }
         }
 
