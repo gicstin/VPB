@@ -212,7 +212,7 @@ namespace VPB
                     return;
                 }
 
-                if (ok > 0 && !IsHubMode)
+                if (ok > 0)
                 {
                     try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
                 }

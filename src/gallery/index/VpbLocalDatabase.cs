@@ -600,7 +600,6 @@ namespace VPB
             catch { }
         }
 
-
         /// <summary>All indexed gallery rows (category + internal_path) for given package UID.</summary>
         internal static bool TryReadCatMemRowsForPackage(string pkgUid, List<KeyValuePair<string, string>> categoryAndInternalPathOut)
         {

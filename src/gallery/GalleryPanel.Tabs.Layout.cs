@@ -109,7 +109,7 @@ namespace VPB
             // of this method — layout rebuilds would leave toolbars hidden until a full UpdateLayout.
             bool userTagsSideOpen = leftActiveContent == ContentType.UserTags
                 || rightActiveContent == ContentType.UserTags;
-            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
+            if ((leftTabContainerGO != null || rightTabContainerGO != null)
                 && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot()
                 && !userTagsSideOpen)
             {
@@ -134,7 +134,6 @@ namespace VPB
                 {
                     if (IsSettingsPanelOpen())
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
-                    else if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
                     else titleText.text = currentCategoryTitle;
                 }
             }
@@ -142,14 +141,6 @@ namespace VPB
             SyncCategoryQuickSwitchChrome();
 
             UpdateSideContextActions();
-
-            if (IsHubMode)
-            {
-                TeardownCategoryCreatorDualBufferForHub();
-                UpdateHubLayout(rebuildSideTabLists);
-                UpdateSideButtonsVisibility();
-                return;
-            }
 
             if (leftActiveContent.HasValue)
             {
@@ -160,25 +151,20 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     splitView = CategoryNeedsSplitView(title);
                 }
-                else if (leftActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
                 else if (leftActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories))
+                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.CleanupCategories))
                     && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
+                    if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (leftActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
 
@@ -279,25 +265,20 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     splitView = CategoryNeedsSplitView(title);
                 }
-                else if (rightActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
                 else if (rightActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories))
+                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.CleanupCategories))
                     && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
+                    if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (rightActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
 
@@ -456,99 +437,6 @@ namespace VPB
             return true;
         }
 
-        private void UpdateHubLayout(bool populateSideTabLists = true)
-        {
-            // Left Side: Category (Top) / Tags (Bottom)
-            if (leftTabScrollGO != null && leftSubTabScrollGO != null)
-            {
-                leftTabScrollGO.SetActive(true);
-                leftSubTabScrollGO.SetActive(true);
-
-                // Left Search Top (Category)
-                if (leftSearchInput != null)
-                {
-                    leftSearchInput.gameObject.SetActive(true);
-                    // For now, no separate search for categories on left, but let's clear it
-                    if (leftSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.categories", "Categories...");
-                }
-
-                // Left Search Bottom (Tags)
-                if (leftSubSearchInput != null)
-                {
-                    leftSubSearchInput.gameObject.SetActive(true);
-                    if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
-                    if (leftSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.tags", "Search Tags...");
-                }
-
-                RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                leftRT.anchorMin = new Vector2(0, 0.5f);
-                leftRT.anchorMax = new Vector2(0, 1);
-                leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
-                leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(0, 0);
-                subRT.anchorMax = new Vector2(0, 0.5f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
-                    UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-            }
-
-            // Right Side: Pay Type (Top 20%) / Creator (Bottom 80%)
-            if (rightTabScrollGO != null && rightSubTabScrollGO != null)
-            {
-                rightTabScrollGO.SetActive(true);
-                rightSubTabScrollGO.SetActive(true);
-
-                // Right Search Top (Pay Type) - Hide search
-                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
-
-                // Right Search Bottom (Creators)
-                if (rightSubSearchInput != null)
-                {
-                    rightSubSearchInput.gameObject.SetActive(true);
-                    if (rightSubSearchInput.text != creatorFilter) rightSubSearchInput.text = creatorFilter;
-                    if (rightSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.creators", "Search Creators...");
-
-                    // Adjust anchor for 70/30 split
-                    RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                if (rightSubSortBtn != null)
-                {
-                    RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                rightRT.anchorMin = new Vector2(1, 0.7f);
-                rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
-                rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(1, 0);
-                subRT.anchorMax = new Vector2(1, 0.7f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
-                    UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
-            }
-
-            SyncSidePaneTopSortButtonVisuals();
-        }
     }
 }
 

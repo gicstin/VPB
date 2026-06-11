@@ -24,7 +24,6 @@ namespace VPB
         }
 
         public FileEntry FileEntry;
-        public Hub.GalleryHubItem HubItem;
         public RawImage ThumbnailImage;
         public GalleryPanel Panel;
         
@@ -339,14 +338,6 @@ namespace VPB
                     Panel.SetStatus("");
                 }
 
-                if (HubItem != null)
-                {
-                    LogUtil.Log("Dropped Hub Item: " + HubItem.Title);
-                    // Handle Hub Item drop (e.g. Download)
-                    dragCam = null;
-                    return;
-                }
-
                 ItemType itemType = GetItemType(FileEntry);
                 
                 // Handle subscenes differently - load directly without requiring atom
@@ -496,12 +487,6 @@ namespace VPB
             
             statusMsg = hitMsg;
             distance = (hit.collider != null) ? hit.distance : planeDistance;
-
-            if (HubItem != null)
-            {
-                statusMsg = $"Drop to download/view {HubItem.Title}";
-                return atom;
-            }
 
             ItemType itemType = GetItemType(FileEntry);
             

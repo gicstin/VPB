@@ -1245,11 +1245,7 @@ namespace VPB
         private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool preserveScroll)
         {
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
-            if (_userTagVirtLayoutCo != null)
-            {
-                try { StopCoroutine(_userTagVirtLayoutCo); } catch { }
-                _userTagVirtLayoutCo = null;
-            }
+            StopCo(ref _userTagVirtLayoutCo);
             float offsetPx = preserveScroll ? (TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f) : 0f;
             bool resetTop = !preserveScroll;
             _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer, resetTop, offsetPx));
@@ -1366,11 +1362,7 @@ namespace VPB
             VPBConfig.Instance.GalleryUserTagPinnedOrder = EncodeUserTagPinOrder(_userTagPinOrderRuntime);
             if (immediate)
             {
-                if (_userTagPinSaveCo != null)
-                {
-                    try { StopCoroutine(_userTagPinSaveCo); } catch { }
-                    _userTagPinSaveCo = null;
-                }
+                StopCo(ref _userTagPinSaveCo);
                 try { VPBConfig.Instance.Save(false); } catch { }
                 return;
             }
@@ -1380,10 +1372,7 @@ namespace VPB
         private void ScheduleUserTagPinOrderSave()
         {
             if (!isActiveAndEnabled) return;
-            if (_userTagPinSaveCo != null)
-            {
-                try { StopCoroutine(_userTagPinSaveCo); } catch { }
-            }
+            StopCo(ref _userTagPinSaveCo);
             _userTagPinSaveCo = StartCoroutine(CoDeferredUserTagPinOrderSave());
         }
 
@@ -3415,11 +3404,7 @@ namespace VPB
 
         private void UserTagEditorStopNewTagChromeFlash()
         {
-            if (_userTagEditorNewTagFlashCo != null)
-            {
-                try { StopCoroutine(_userTagEditorNewTagFlashCo); } catch { }
-                _userTagEditorNewTagFlashCo = null;
-            }
+            StopCo(ref _userTagEditorNewTagFlashCo);
         }
 
         private IEnumerator UserTagEditorNewTagChromeFlashRoutine(Color flashCol, float holdSec, float fadeSec)

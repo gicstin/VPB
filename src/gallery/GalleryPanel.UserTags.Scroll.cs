@@ -133,20 +133,12 @@ namespace VPB
         {
             if (isLeft)
             {
-                if (_leftUserTagAvailScrollRestoreCo != null)
-                {
-                    try { StopCoroutine(_leftUserTagAvailScrollRestoreCo); } catch { }
-                    _leftUserTagAvailScrollRestoreCo = null;
-                }
+                StopCo(ref _leftUserTagAvailScrollRestoreCo);
                 _leftUserTagAvailScrollRestoreCo = StartCoroutine(CoRestoreUserTagAvailScroll(isLeft, offsetPx));
             }
             else
             {
-                if (_rightUserTagAvailScrollRestoreCo != null)
-                {
-                    try { StopCoroutine(_rightUserTagAvailScrollRestoreCo); } catch { }
-                    _rightUserTagAvailScrollRestoreCo = null;
-                }
+                StopCo(ref _rightUserTagAvailScrollRestoreCo);
                 _rightUserTagAvailScrollRestoreCo = StartCoroutine(CoRestoreUserTagAvailScroll(isLeft, offsetPx));
             }
         }

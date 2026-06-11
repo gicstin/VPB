@@ -59,13 +59,11 @@ namespace VPB
             switch (type)
             {
                 case ContentType.Category:     return VPBTranslation.T("gallery.search.categories", "Categories...");
-                case ContentType.Creator:
-                case ContentType.HubCreators:  return VPBTranslation.T("gallery.search.creators", "Search Creators...");
+                case ContentType.Creator:      return VPBTranslation.T("gallery.search.creators", "Search Creators...");
                 case ContentType.UserTags:     return VPBTranslation.T("gallery.search.user_tags", "Search your tags...");
                 case ContentType.UserTagsApplied: return VPBTranslation.T("gallery.search.user_tags_applied", "Search applied tags...");
                 case ContentType.Path:         return VPBTranslation.T("gallery.search.paths", "Search Paths...");
-                case ContentType.Tags:
-                case ContentType.HubTags:      return VPBTranslation.T("gallery.search.tags", "Search Tags...");
+                case ContentType.Tags:         return VPBTranslation.T("gallery.search.tags", "Search Tags...");
                 case ContentType.RemoveClothing: return VPBTranslation.T("gallery.search.clothing", "Filter Clothing...");
                 case ContentType.RemoveHair:     return VPBTranslation.T("gallery.search.hair", "Filter Hair...");
                 case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");

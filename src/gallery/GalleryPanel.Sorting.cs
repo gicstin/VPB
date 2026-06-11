@@ -195,7 +195,6 @@ namespace VPB
         /// </summary>
         private bool TryReapplyFilesSortWithoutFullRefresh()
         {
-            if (IsHubMode) return false;
             if (!hasLoadedContent || currentFilteredFiles == null || recyclingGrid == null) return false;
             if (refreshCoroutine != null) return false;
 
@@ -659,7 +658,7 @@ namespace VPB
                     || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -668,7 +667,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub";
+            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>

@@ -687,7 +687,6 @@ namespace VPB
                     else
                     {
                         tagFilter = val;
-                        hubTagPage = 0;
                     }
                     UpdateTabs();
                 }, () => {
@@ -699,7 +698,6 @@ namespace VPB
                         return;
                     }
                     tagFilter = "";
-                    hubTagPage = 0;
                     UpdateTabs();
                 });
                 RectTransform rSubSearchRT = rightSubSearchInput.GetComponent<RectTransform>();
@@ -1023,7 +1021,6 @@ namespace VPB
                     else
                     {
                         tagFilter = val;
-                        hubTagPage = 0;
                     }
                     UpdateTabs();
                 }, () => {
@@ -1035,7 +1032,6 @@ namespace VPB
                         return;
                     }
                     tagFilter = "";
-                    hubTagPage = 0;
                     UpdateTabs();
                 });
                 RectTransform lSubSearchRT = leftSubSearchInput.GetComponent<RectTransform>();

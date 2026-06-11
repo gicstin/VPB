@@ -584,8 +584,6 @@ namespace VPB
             }
             catch { }
             sceneLoadActive = true;
-            try { SceneLoadDiag.Reset(); } catch { }
-            try { SceneLoadClothingPacer.ResetForSceneLoad(); } catch { }
             sceneLoadStopwatch.Reset();
             sceneLoadStopwatch.Start();
 
@@ -654,7 +652,6 @@ namespace VPB
                 VPBConfig.Instance.StartSceneLoad();
             }
 
-            try { SceneLoadCompat.EnsureClothingPaceForSceneLoad(); } catch { }
         }
 
         public static bool IsSceneLoadActive()
@@ -766,8 +763,6 @@ namespace VPB
             {
                 return;
             }
-
-            try { SceneLoadDiag.SceneLoadHeartbeat(); } catch { }
 
             SampleSceneSettleWindow();
 
@@ -1189,12 +1184,6 @@ namespace VPB
             sceneLoadInternalStopwatch.Stop();
             var ms = sceneLoadInternalStopwatch.Elapsed.TotalMilliseconds;
             LogWarning("SCENE_LOAD_INTERNAL " + context + " | " + sceneLoadName + " | " + ms.ToString("0.00") + "ms");
-            try
-            {
-                SceneLoadDiag.Milestone("LoadInternal returned — async atom/person restore may continue");
-                SceneLoadDiag.SceneLoadHeartbeat();
-            }
-            catch { }
         }
 
         public static void EndSceneLoadTotal(string context)
@@ -1222,7 +1211,6 @@ namespace VPB
             CaptureMemoryEnd();
 
             LogWarning("SCENE_LOAD_TOTAL " + context + " | " + name + " | " + ms.ToString("0.00") + "ms");
-            try { SceneLoadDiag.LogSummary("SCENE_LOAD_TOTAL " + context); } catch { }
 
             if (sceneClickActive)
             {

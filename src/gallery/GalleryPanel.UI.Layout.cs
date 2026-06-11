@@ -123,15 +123,13 @@ namespace VPB
             float leftOffset = 20;
             float rightOffset = -20;
             
-            bool forceBoth = IsHubMode;
-            
             // Left Side
-            if ((forceBoth || leftActiveContent.HasValue) && leftTabScrollGO != null)
+            if (leftActiveContent.HasValue && leftTabScrollGO != null)
             {
                 leftTabScrollGO.SetActive(true);
                 leftOffset = 230;
 
-                ContentType leftType = leftActiveContent.HasValue ? leftActiveContent.Value : ContentType.Hub;
+                ContentType leftType = leftActiveContent.Value;
                 bool leftCleanupSide = leftType == ContentType.CleanupCategories;
 
                 if (leftSortBtn != null) leftSortBtn.SetActive(!leftCleanupSide);
@@ -179,12 +177,12 @@ namespace VPB
             }
             
             // Right Side
-            if ((forceBoth || rightActiveContent.HasValue) && rightTabScrollGO != null)
+            if (rightActiveContent.HasValue && rightTabScrollGO != null)
             {
                 rightTabScrollGO.SetActive(true);
                 rightOffset = -230;
 
-                ContentType rightType = rightActiveContent.HasValue ? rightActiveContent.Value : ContentType.Hub;
+                ContentType rightType = rightActiveContent.Value;
                 bool rightCleanupSide = rightType == ContentType.CleanupCategories;
 
                 if (rightSortBtn != null) rightSortBtn.SetActive(!rightCleanupSide);
@@ -1741,7 +1739,7 @@ namespace VPB
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool showSave = !IsHubMode;
+            bool showSave = true;
 
             if (rightKeepClothingBtnGO != null) rightKeepClothingBtnGO.SetActive(isAppearance);
             if (leftKeepClothingBtnGO != null) leftKeepClothingBtnGO.SetActive(isAppearance);

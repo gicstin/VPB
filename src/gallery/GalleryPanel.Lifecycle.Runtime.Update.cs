@@ -648,7 +648,7 @@ namespace VPB
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (ctrl && Input.GetKeyDown(KeyCode.R))
             {
-                if (!IsHubMode && activeContentType == ContentType.History)
+                if (activeContentType == ContentType.History)
                 {
                     try { RefreshHistoryBrowsePreferLight(true); } catch { }
                     return;
@@ -656,7 +656,7 @@ namespace VPB
             }
             if (ctrl && Input.GetKeyDown(KeyCode.Z))
             {
-                if (!IsHubMode && activeContentType == ContentType.History)
+                if (activeContentType == ContentType.History)
                 {
                     if (TryUndoRecentHistoryRemoval())
                         return;
@@ -667,7 +667,6 @@ namespace VPB
 
             if (ctrl && a)
             {
-                if (IsHubMode) return;
                 TrySelectAllCurrentGalleryView("ctrl+a");
                 return;
             }
@@ -676,7 +675,7 @@ namespace VPB
             {
                 if (selectedFiles != null && selectedFiles.Count > 0)
                 {
-                    if (!IsHubMode && activeContentType == ContentType.History)
+                    if (activeContentType == ContentType.History)
                     {
                         try { TboxRemoveSelectedFromHistory(); } catch { }
                     }
@@ -730,7 +729,7 @@ namespace VPB
             int currentIndex = -1;
             
             // Prefer anchor path if available for navigation continuity
-            bool historyBrowseForNav = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowseForNav = activeContentType == ContentType.History;
             string navPath = GetCurrentSelectionAnchorIdentityKey(historyBrowseForNav);
             
             if (!string.IsNullOrEmpty(navPath))
@@ -769,7 +768,7 @@ namespace VPB
                 
                 if (shift)
                 {
-                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+                    bool historyBrowse = activeContentType == ContentType.History;
                     // Range Select
                     string anchor = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                     int anchorIndex = -1;
@@ -804,7 +803,7 @@ namespace VPB
                 else
                 {
                     // Single Select (or Toggle with Ctrl)
-                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+                    bool historyBrowse = activeContentType == ContentType.History;
                     if (!ctrl)
                     {
                         selectedFiles.Clear();
@@ -816,7 +815,6 @@ namespace VPB
                 }
 
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
-                selectedHubItem = null;
                 SetHoverPath(newFile);
                 if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
                 RefreshSelectionVisuals();

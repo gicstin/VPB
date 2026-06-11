@@ -1191,7 +1191,6 @@ namespace VPB
         }
 
         #pragma warning disable CS0414
-        private Hub.GalleryHubItem selectedHubItem;
         #pragma warning restore CS0414
         
         // Content-type accent colors (side tabs / title chrome).

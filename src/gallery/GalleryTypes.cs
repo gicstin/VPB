@@ -4,7 +4,30 @@ using MeshVR;
 
 namespace VPB
 {
-    public enum ContentType { Category, Creator, License, Tags, Hub, HubTags, HubPayTypes, HubCreators, Ratings, Size, SceneSource, AppearanceSource, RemoveClothing, RemoveHair, RemoveAtom, SavePresets, Target, CleanupCategories, CleanupStaleBuckets, UserTags, UserTagsApplied, Path, History, Settings }
+    // Values 4–7 reserved (removed in-gallery hub); explicit assignments keep stored ints stable.
+    public enum ContentType
+    {
+        Category = 0,
+        Creator = 1,
+        License = 2,
+        Tags = 3,
+        Ratings = 8,
+        Size = 9,
+        SceneSource = 10,
+        AppearanceSource = 11,
+        RemoveClothing = 12,
+        RemoveHair = 13,
+        RemoveAtom = 14,
+        SavePresets = 15,
+        Target = 16,
+        CleanupCategories = 17,
+        CleanupStaleBuckets = 18,
+        UserTags = 19,
+        UserTagsApplied = 20,
+        Path = 21,
+        History = 22,
+        Settings = 23,
+    }
     public enum ApplyMode { SingleClick, DoubleClick }
     public enum TabSide { Hidden, Left, Right }
     public enum GalleryLayoutMode { Grid, List }

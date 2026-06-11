@@ -123,7 +123,6 @@ namespace VPB
             bool show = hasLoadedContent
                 && !IsSettingsPanelOpen()
                 && !settingsListViewActive
-                && !IsHubMode
                 && (currentFilteredFiles == null || currentFilteredFiles.Count == 0)
                 && (loadingOverlayGO == null || !loadingOverlayGO.activeSelf);
 

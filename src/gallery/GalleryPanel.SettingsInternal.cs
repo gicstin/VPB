@@ -732,7 +732,7 @@ namespace VPB
                     VPBConfig.Instance.GalleryConsolidateCreatorNames = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
                     try { ClearCreatorFilters(); } catch { }
-                    try { GalleryFileListSnapshotCache.Clear(); } catch { }
+                    GalleryFileListSnapshotCache.Clear();
                     PushCreatorFilterSqlModeForDatabase();
                     InvalidateDisplayCreatorsCache();
                     unchecked { creatorSideTabDataRevision++; }
@@ -1557,11 +1557,7 @@ namespace VPB
         private void RefreshInternalSettingsListRows(bool keepScroll = false)
         {
             if (!IsSettingsPanelOpen()) return;
-            if (refreshCoroutine != null)
-            {
-                try { StopCoroutine(refreshCoroutine); } catch { }
-                refreshCoroutine = null;
-            }
+            StopCo(ref refreshCoroutine);
             try
             {
                 string c = CanonicalSettingsSideSearchText();

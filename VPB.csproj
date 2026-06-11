@@ -276,7 +276,6 @@
     <Compile Include="src\ByteArrayPool.cs" />
     <Compile Include="src\ClothingLoadingUtils.cs" />
     <Compile Include="src\SceneUtils.cs" />
-    <Compile Include="src\SceneLoadInstrumentation.cs" />
     <Compile Include="src\GlobalInfo.cs" />
     <Compile Include="src\util\VPBLogger.cs" />
     <Compile Include="src\util\XrUtils.cs" />
@@ -368,9 +367,7 @@
     <Compile Include="src\KeyUtil.cs" />
     <Compile Include="src\LogUtil.cs" />
     <Compile Include="src\MessageDef.cs" />
-    <Compile Include="src\MessageKit\LocatorKit.cs" />
     <Compile Include="src\MessageKit\MessageKit.cs" />
-    <Compile Include="src\MessageKit\MessageKitLite.cs" />
     <Compile Include="src\Messager.cs" />
     <Compile Include="src\Settings.cs" />
     <Compile Include="src\BaImporter.cs" />
@@ -385,7 +382,6 @@
     <Compile Include="src\VamHookPlugin.cs" />
     <Compile Include="src\VamHookPlugin.I18n.cs" />
     <Compile Include="src\VamHookPlugin.Settings.cs" />
-    <Compile Include="src\VamHookPlugin.State.cs" />
     <Compile Include="src\quickmenu\VamHookPlugin.QuickMenuAssignableButtons.cs" />
     <Compile Include="src\ContextMenuPanel.cs" />
     <Compile Include="src\gallery\Gallery.cs" />
@@ -412,7 +408,6 @@
     <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitch.cs" />
     <Compile Include="src\gallery\GalleryPanel.CategoryQuickSwitchEditor.cs" />
     <Compile Include="src\gallery\GalleryPanel.TitleSearchResponsive.cs" />
-    <Compile Include="src\gallery\GalleryPanel.ActiveItems.cs" />
     <Compile Include="src\GalleryPanel.cs" />
     <Compile Include="src\gallery\AppearanceGenderClassifier.cs" />
     <Compile Include="src\gallery\GalleryPanel.AppearanceGenderFacetCounts.cs" />
@@ -487,8 +482,6 @@
     <Compile Include="src\util\JsonSerializationUtil.cs" />
     <Compile Include="src\util\CUAConverter.cs" />
     <Compile Include="src\util\CUAAtomImporter.cs" />
-    <Compile Include="src\util\CUAClothing.cs" />
-    <Compile Include="src\util\CUAClothing.Data.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />
@@ -517,8 +510,6 @@
     <Compile Include="src\gallery\QuickFiltersUI.cs" />
     <Compile Include="src\gallery\UIColorPicker.cs" />
     <Compile Include="src\gallery\VPBUiPickers.cs" />
-    <Compile Include="src\gallery\GalleryPanel.HubCompat.cs" />
-    <Compile Include="src\gallery\HubStubs.cs" />
     <Compile Include="src\RatingsManager.cs" />
     <Compile Include="src\LocalSceneGallerySupport.cs" />
     <Compile Include="src\PackageHidePrefs.cs" />

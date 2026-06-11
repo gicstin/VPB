@@ -43,5 +43,7 @@ namespace VPB
                 s_ByKey[key] = new List<FileEntry>(files);
             }
         }
+
+        internal static void InvalidateAll() { Clear(); GalleryTagCountSnapshotCache.Clear(); }
     }
 }

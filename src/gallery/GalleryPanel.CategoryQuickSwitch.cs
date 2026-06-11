@@ -223,7 +223,7 @@ namespace VPB
         private void SyncCategoryQuickSwitchChrome()
         {
             if (_categoryQuickChromeRootGO == null) return;
-            bool show = !IsHubMode && !IsFilterActive;
+            bool show = !IsFilterActive;
             if (_categoryQuickChromeRootGO.activeSelf != show)
                 _categoryQuickChromeRootGO.SetActive(show);
             if (!show && _categoryQuickMenuOpen)
@@ -310,11 +310,7 @@ namespace VPB
             string ext = c.extension ?? "";
             string p = c.path ?? "";
             if (string.IsNullOrEmpty(n)) return;
-            if (_categoryQuickApplyCoroutine != null)
-            {
-                try { StopCoroutine(_categoryQuickApplyCoroutine); } catch { }
-                _categoryQuickApplyCoroutine = null;
-            }
+            StopCo(ref _categoryQuickApplyCoroutine);
             _categoryQuickApplyCoroutine = StartCoroutine(CoDeferredCategoryQuickPick(n, ext, p));
         }
 
@@ -600,7 +596,7 @@ namespace VPB
 
         private bool TryConsumeCategoryQuickNumberKey()
         {
-            if (!IsVisible || IsHubMode) return false;
+            if (!IsVisible) return false;
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);

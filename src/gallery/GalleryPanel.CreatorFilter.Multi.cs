@@ -152,7 +152,7 @@ namespace VPB
             tagsCached = false;
             creatorsCached = false;
             InvalidateDisplayCreatorsCache();
-            try { GalleryFileListSnapshotCache.Clear(); } catch { }
+            GalleryFileListSnapshotCache.Clear();
             try { UpdateTitleCreatorButtonVisual(); } catch { }
 
             if (refreshFilesAndTabs) RefreshFilesAndTabs();

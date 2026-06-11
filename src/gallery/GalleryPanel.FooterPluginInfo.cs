@@ -87,11 +87,7 @@ namespace VPB
         private void FooterPluginInfoUpdateHoverTooltip()
         {
             if (!_footerPluginInfoHovering || footerPluginInfoBtn == null) return;
-            if (temporaryStatusCoroutine != null)
-            {
-                try { StopCoroutine(temporaryStatusCoroutine); } catch { }
-                temporaryStatusCoroutine = null;
-            }
+            StopCo(ref temporaryStatusCoroutine);
             temporaryStatusMsg = BuildFooterPluginInfoHoverText();
             temporaryStatusOwner = footerPluginInfoBtn;
         }

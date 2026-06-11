@@ -2118,7 +2118,7 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            bool needsTboxActions = sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History) || IsSettingsPanelOpen();
+            bool needsTboxActions = sel > 0 || cleanupModeActive || activeContentType == ContentType.History || IsSettingsPanelOpen();
             if (needsTboxActions)
             {
                 string tboxKey = BuildTboxConditionalRefreshCacheKey();
@@ -2154,13 +2154,13 @@ namespace VPB
             var sb = new StringBuilder(256);
             sb.Append(cleanupModeActive ? 'C' : 'c');
             sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
-            sb.Append((!IsHubMode && activeContentType == ContentType.History) ? 'H' : 'h');
+            sb.Append(activeContentType == ContentType.History ? 'H' : 'h');
             try { sb.Append(ScanWhitelistManager.Instance.IsEnabled ? 'W' : 'w'); }
             catch { sb.Append('w'); }
 
             if (selectedFiles == null || selectedFiles.Count == 0) return sb.ToString();
 
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowse = activeContentType == ContentType.History;
             var keys = new List<string>(selectedFiles.Count);
             for (int i = 0; i < selectedFiles.Count; i++)
             {
@@ -2201,7 +2201,7 @@ namespace VPB
                 }
             }
             bool isCleanup = cleanupModeActive;
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowse = activeContentType == ContentType.History;
             bool isSettings = IsSettingsPanelOpen();
             void show(GameObject go, bool on)
             {
@@ -2299,7 +2299,7 @@ namespace VPB
             // Otherwise, once Settings hides them, they stay inactive forever.
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
-            show(tboxOverwriteSceneBtn, !isCleanup && !IsHubMode);
+            show(tboxOverwriteSceneBtn, !isCleanup);
             show(tboxSuppressScaleBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
             show(tboxClearSelectionBtn, !isCleanup);
@@ -2690,7 +2690,6 @@ namespace VPB
                 selectionAnchorPath = null;
                 selectionAnchorIdentityKey = null;
                 selectedPath = null;
-                selectedHubItem = null;
                 RefreshSelectionVisuals();
             }
             catch { }

@@ -86,11 +86,7 @@ namespace VPB
         private void FooterCompressCacheUpdateHoverTooltip()
         {
             if (!_footerCompressCacheHovering || footerCompressCacheBtn == null) return;
-            if (temporaryStatusCoroutine != null)
-            {
-                try { StopCoroutine(temporaryStatusCoroutine); } catch { }
-                temporaryStatusCoroutine = null;
-            }
+            StopCo(ref temporaryStatusCoroutine);
             temporaryStatusMsg = FooterCompressCacheTooltipText();
             temporaryStatusOwner = footerCompressCacheBtn;
         }

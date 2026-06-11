@@ -60,51 +60,6 @@ namespace VPB
             LogUtil.Log("[VPBConfig.Perf] Load total=" + totalMs + "ms path=" + pathForLog);
         }
 
-        private static string DescribeConfigChangedHandler(Delegate d)
-        {
-            if (d == null)
-                return "?";
-            var m = d.Method;
-            string typeName = m.DeclaringType != null ? m.DeclaringType.Name : "?";
-            string s = typeName + "." + m.Name;
-            UnityEngine.Object uo = d.Target as UnityEngine.Object;
-            if (uo != null)
-                s += " (inst=" + uo.GetInstanceID() + ")";
-            else if (d.Target != null)
-                s += " (tgt=" + d.Target.GetHashCode() + ")";
-            return s;
-        }
-
-        /// <summary>Runs <see cref="ConfigChanged"/> subscribers one-by-one with per-handler timing (same order as +=).</summary>
-        /// <returns>Wall time for all handlers (ms).</returns>
-        private long InvokeConfigChangedWithPerfLogging(string context)
-        {
-            Delegate[] list = ConfigChanged != null ? ConfigChanged.GetInvocationList() : null;
-            if (list == null || list.Length == 0)
-                return 0;
-
-            ConfigChangedInvocationDepth++;
-            try
-            {
-                foreach (Delegate d in list)
-                {
-                    try
-                    {
-                        ((OnConfigChanged)d).Invoke();
-                    }
-                    catch (Exception ex)
-                    {
-                        UnityEngine.Debug.LogError("[VPB] ConfigChanged handler threw | " + ex.Message);
-                    }
-                }
-                return 0;
-            }
-            finally
-            {
-                ConfigChangedInvocationDepth--;
-            }
-        }
-
         public static void ReloadFromDisk()
         {
             _instance = null;

@@ -233,7 +233,7 @@ namespace VPB
             for (int i = 0; i < ps.Count; i++)
             {
                 var p = ps[i];
-                if (p == null || p.IsHubMode) continue;
+                if (p == null) continue;
                 try { p.RefreshHistoryBrowseIfActive(true); } catch { }
             }
         }
@@ -292,14 +292,9 @@ namespace VPB
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
             if (pendingPackageDelta)
-            {
-                try { GalleryFileListSnapshotCache.Clear(); } catch { }
-            }
-            else
-            {
                 GalleryFileListSnapshotCache.Clear();
-                GalleryTagCountSnapshotCache.Clear();
-            }
+            else
+                GalleryFileListSnapshotCache.InvalidateAll();
 
             // VAR scan rewrote per-uid cslist-referenced rows; drop the in-memory set so the
             // next read sees the fresh SQLite state.
@@ -413,7 +408,6 @@ namespace VPB
                     foreach (var p in panels)
                     {
                         if (p == null) continue;
-                        if (p.IsHubMode) continue;
 
                         if (!hasPackageDelta)
                         {
@@ -1009,7 +1003,7 @@ namespace VPB
             for (int i = 0; i < ps.Count; i++)
             {
                 var p = ps[i];
-                if (p == null || p.IsHubMode) continue;
+                if (p == null) continue;
                 try { p.OnGallerySqlIndexUpdated(); } catch { }
             }
         }

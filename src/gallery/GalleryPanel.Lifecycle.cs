@@ -27,6 +27,13 @@ namespace VPB
             Destroy(this.gameObject);
         }
 
+        private void StopCo(ref Coroutine co)
+        {
+            if (co == null) return;
+            StopCoroutine(co);
+            co = null;
+        }
+
         private void UpdateSideButtonsVisibility()
         {
             if (VPBConfig.Instance == null) return;
@@ -147,11 +154,7 @@ namespace VPB
 
         void OnDestroy()
         {
-            if (_categoryQuickApplyCoroutine != null)
-            {
-                try { StopCoroutine(_categoryQuickApplyCoroutine); } catch { }
-                _categoryQuickApplyCoroutine = null;
-            }
+            StopCo(ref _categoryQuickApplyCoroutine);
 
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)

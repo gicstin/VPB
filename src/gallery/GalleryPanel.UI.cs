@@ -117,8 +117,6 @@ namespace VPB
         {
             var options = new List<SaveMenuOption>();
 
-            if (IsHubMode) return options;
-
             Atom target = GetBestTargetAtom();
             bool hasTarget = target != null && SceneUtils.IsPersonLikeAtom(target);
             string targetUid = target != null ? target.uid : "None";
@@ -2008,60 +2006,6 @@ namespace VPB
         {
             if (paginationText == null) return;
 
-            if (IsHubMode)
-            {
-                if (footerBackBtn != null) footerBackBtn.SetActive(false);
-                if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
-                if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
-                if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
-                if (paginationText != null) paginationText.gameObject.SetActive(true);
-
-                // Hub still uses pagination (server-side)
-                paginationText.text = string.Format(VPBTranslation.T("gallery.page", "Page {0}"), currentPage + 1);
-
-                bool canGoPrev = (currentPage > 0);
-                // For Hub we assume Next is always possible unless we implement total count
-                bool canGoNext = true;
-
-                if (paginationPrevBtn != null) 
-                {
-                    paginationPrevBtn.SetActive(true);
-                    paginationPrevBtn.GetComponent<Button>().interactable = canGoPrev;
-                }
-                if (paginationPrev10Btn != null) 
-                {
-                    paginationPrev10Btn.SetActive(true);
-                    paginationPrev10Btn.GetComponent<Button>().interactable = canGoPrev;
-                }
-                if (paginationFirstBtn != null) 
-                {
-                    paginationFirstBtn.SetActive(true);
-                    paginationFirstBtn.GetComponent<Button>().interactable = canGoPrev;
-                }
-
-                if (paginationNextBtn != null) 
-                {
-                    paginationNextBtn.SetActive(true);
-                    paginationNextBtn.GetComponent<Button>().interactable = canGoNext;
-                }
-                if (paginationNext10Btn != null) 
-                {
-                    paginationNext10Btn.SetActive(true);
-                    paginationNext10Btn.GetComponent<Button>().interactable = canGoNext;
-                }
-                if (paginationLastBtn != null) 
-                {
-                    paginationLastBtn.SetActive(true);
-                    paginationLastBtn.GetComponent<Button>().interactable = canGoNext;
-                }
-
-                if (tboxSelectAllBtn != null)
-                {
-                    Button sab = tboxSelectAllBtn.GetComponent<Button>();
-                    if (sab != null) sab.interactable = false;
-                }
-            }
-            else
             {
                 bool showClearFilter = IsFilterActive;
                 bool showBackBtn = IsFilterActive;
@@ -3041,8 +2985,6 @@ namespace VPB
         /// <returns>True if selection was applied.</returns>
         private bool TrySelectAllCurrentGalleryView(string source)
         {
-            if (IsHubMode) return false;
-
             var list = currentFilteredFiles;
             if (list == null || list.Count == 0) return false;
 
@@ -3118,7 +3060,6 @@ namespace VPB
             selectedFilePaths.Clear();
             selectionAnchorPath = null;
             selectedPath = null;
-            selectedHubItem = null;
             SetHoverPath("");
             RefreshSelectionVisuals();
             UpdatePaginationText();

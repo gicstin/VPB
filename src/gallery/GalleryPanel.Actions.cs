@@ -81,7 +81,7 @@ namespace VPB
             return null;
         }
 
-        private bool ExecuteAutoActionForFile(FileEntry file, Hub.GalleryHubItem hubItem = null)
+        private bool ExecuteAutoActionForFile(FileEntry file)
         {
             if (file == null) return false;
 
@@ -95,7 +95,6 @@ namespace VPB
                 {
                     var dragger = go.AddComponent<UIDraggableItem>();
                     dragger.FileEntry = file;
-                    dragger.HubItem = hubItem;
                     dragger.Panel = this;
 
                     string pathLower = (file.Path ?? "").ToLowerInvariant();
@@ -243,8 +242,6 @@ namespace VPB
                 selectedFiles.Add(file);
                 if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
                 selectedPath = file.Path;
-                selectedHubItem = null;
-
                 // Selection should not "stick" the hover path. Hover-only content comes from pointer enter.
                 SetHoverPath("");
                 RefreshSelectionVisuals();
@@ -280,8 +277,7 @@ namespace VPB
         {
             try
             {
-                if (!IsHubMode)
-                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
 
                 if (cleanupModeActive)
                 {
@@ -290,8 +286,7 @@ namespace VPB
                 }
 
                 try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
-                GalleryFileListSnapshotCache.Clear();
-                GalleryTagCountSnapshotCache.Clear();
+                GalleryFileListSnapshotCache.InvalidateAll();
                 creatorsCached = false;
                 categoriesCached = false;
                 tagsCached = false;
@@ -318,8 +313,7 @@ namespace VPB
             try
             {
                 LogUtil.Log("[VPB] Gallery refresh right-click: native VaM FileManager.Refresh");
-                if (!IsHubMode)
-                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_vam_files", "Refreshing VaM file list..."), 1.5f);
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_vam_files", "Refreshing VaM file list..."), 1.5f);
 
                 FileManagerBridge.Refresh("gallery_native", RefreshScope.NativeOnly, flushNativeImmediately: true);
             }
@@ -680,11 +674,7 @@ namespace VPB
             if (!visible)
             {
                 _pendingVisibleAfterStartupReady = false;
-                if (_deferredSetVisibleCoroutine != null)
-                {
-                    try { StopCoroutine(_deferredSetVisibleCoroutine); } catch { }
-                    _deferredSetVisibleCoroutine = null;
-                }
+                StopCo(ref _deferredSetVisibleCoroutine);
                 ApplyImmediateVisibility(false);
                 _queuedRaycastRefreshOnVisible = false;
                 return;
@@ -1031,7 +1021,6 @@ namespace VPB
         {
             if (!hoverPathIsCountMode) return;
             if (hoverPathText == null) return;
-            if (IsHubMode) return;
             hoverPathText.text = GetFilteredVisibleItemsCountText();
         }
 
@@ -1237,7 +1226,7 @@ namespace VPB
 
         private bool PrepareFileEntryGestureSelection(FileEntry file)
         {
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowse = activeContentType == ContentType.History;
             string idKey = GetSelectionIdentityKey(file, historyBrowse);
             bool applyToSelection = selectedFiles != null && selectedFiles.Count > 0
                 && !string.IsNullOrEmpty(idKey)
@@ -1252,7 +1241,6 @@ namespace VPB
                 selectedFilePaths.Clear();
                 AddFileToSelection(file, historyBrowse);
                 selectedPath = !string.IsNullOrEmpty(file.Path) ? file.Path : idKey;
-                selectedHubItem = null;
                 SetSelectionAnchor(file, historyBrowse);
 
                 if (untaggedSelBefore != null)
@@ -1352,7 +1340,6 @@ namespace VPB
                     if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
                     selectionAnchorPath = file.Path;
                     selectedPath = importFileKey;
-                    selectedHubItem = null;
                     SetHoverPath("");
                     RefreshSelectionVisuals();
                     OpenImportSidebarWith(file, importSidebarTargetAtom);
@@ -1459,7 +1446,6 @@ namespace VPB
                     catch { }
                 }
                 selectedPath = fileKey;
-                selectedHubItem = null;
                 // Selection should not "stick" the hover path.
                 SetHoverPath("");
                 RefreshSelectionVisuals();
@@ -1725,7 +1711,7 @@ namespace VPB
         /// <summary>When manual-refresh-only blocked FileManager observer, apply hub/download delta on next Show.</summary>
         private void TryApplyPendingPackageDeltaOnShow()
         {
-            if (IsHubMode || IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (IsSettingsPanelOpen() || settingsListViewActive) return;
             if (!hasLoadedContent || recyclingGrid == null) return;
             bool hasPending = false;
             try { hasPending = FileManager.HasPendingGalleryPackageDelta(); } catch { }
@@ -1757,7 +1743,7 @@ namespace VPB
 
         internal void OnGallerySqlIndexUpdated()
         {
-            if (IsHubMode || IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (IsSettingsPanelOpen() || settingsListViewActive) return;
             if (!IsVisible && !hasLoadedContent) return;
             if (activeContentType != ContentType.Category && activeContentType != ContentType.History) return;
 
@@ -1789,8 +1775,7 @@ namespace VPB
                 return;
             }
 
-            try { GalleryFileListSnapshotCache.Clear(); } catch { }
-            try { GalleryTagCountSnapshotCache.Clear(); } catch { }
+            GalleryFileListSnapshotCache.InvalidateAll();
 
             List<VarPackage> added = null;
             List<VarPackage> removed = null;

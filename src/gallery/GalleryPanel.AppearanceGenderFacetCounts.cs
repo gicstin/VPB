@@ -339,12 +339,8 @@ namespace VPB
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) return;
             if (IsAppearanceLooseScopedBrowsing()) return;
-            if (_appearanceLooseMergeCo != null)
-            {
-                try { StopCoroutine(_appearanceLooseMergeCo); } catch { }
-                _appearanceLooseMergeCo = null;
-            }
-            try { _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseMergeRefresh()); } catch { }
+            StopCo(ref _appearanceLooseMergeCo);
+            _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseMergeRefresh());
         }
 
         private IEnumerator CoAppearanceLooseMergeRefresh()

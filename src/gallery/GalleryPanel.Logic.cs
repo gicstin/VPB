@@ -1137,7 +1137,7 @@ namespace VPB
             ClearAppearanceGenderRefreshCaches();
             tagsCached = false;
             userTagsCached = false;
-            try { GalleryTagCountSnapshotCache.Clear(); } catch { }
+            GalleryTagCountSnapshotCache.Clear();
         }
 
         /// <summary>When max slice ms is below this, <see cref="CoCacheTagCountsInternal"/> yields so the UI thread stays responsive.</summary>

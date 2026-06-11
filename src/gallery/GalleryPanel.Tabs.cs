@@ -20,8 +20,6 @@ namespace VPB
         /// </summary>
         private void RebuildSubPaneSideTabListsOnly()
         {
-            if (IsHubMode) return;
-
             if (leftActiveContent.HasValue)
             {
                 bool splitView = false;
@@ -35,15 +33,11 @@ namespace VPB
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                         splitView = true;
                 }
-                else if (leftActiveContent == ContentType.Hub)
-                    splitView = true;
-
-                if (splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub) &&
+                if (splitView && leftActiveContent == ContentType.Category &&
                     leftSubTabScrollGO != null && leftSubTabContainerGO != null)
                 {
                     ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.Category)
+                    if (leftActiveContent == ContentType.Category)
                     {
                         string titleSub = titleText != null ? titleText.text : "";
                         if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -68,15 +62,11 @@ namespace VPB
                         title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
                         splitView = true;
                 }
-                else if (rightActiveContent == ContentType.Hub)
-                    splitView = true;
-
-                if (splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub) &&
+                if (splitView && rightActiveContent == ContentType.Category &&
                     rightSubTabScrollGO != null && rightSubTabContainerGO != null)
                 {
                     ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.Category)
+                    if (rightActiveContent == ContentType.Category)
                     {
                         string titleSub = titleText != null ? titleText.text : "";
                         if (titleSub.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -88,12 +78,6 @@ namespace VPB
                 }
             }
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
-        }
-
-        private void TeardownCategoryCreatorDualBufferForHub()
-        {
-            TeardownCategoryCreatorDualBufferOneSide(true);
-            TeardownCategoryCreatorDualBufferOneSide(false);
         }
 
         private void TeardownCategoryCreatorDualBufferOneSide(bool isLeft)
@@ -1048,22 +1032,6 @@ namespace VPB
             else if (contentType == ContentType.SceneSource)
             {
                 BuildSceneSourceTabs(container, trackedButtons);
-            }
-            else if (contentType == ContentType.Hub)
-            {
-                 UpdateHubCategories(container, trackedButtons, isLeft);
-            }
-            else if (contentType == ContentType.HubTags)
-            {
-                 UpdateHubTags(container, trackedButtons, isLeft);
-            }
-            else if (contentType == ContentType.HubPayTypes)
-            {
-                 UpdateHubPayTypes(container, trackedButtons, isLeft);
-            }
-            else if (contentType == ContentType.HubCreators)
-            {
-                 UpdateHubCreators(container, trackedButtons, isLeft);
             }
             else if (contentType == ContentType.Tags)
             {

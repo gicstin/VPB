@@ -47,8 +47,7 @@ namespace VPB
 
         private static void InvalidateSharedSideMetaIfPackageScanAdvanced()
         {
-            DateTime t = DateTime.MinValue;
-            try { t = FileManager.lastPackageRefreshTime; } catch { }
+            DateTime t = FileManager.lastPackageRefreshTime;
             if (t != s_SharedSideMetaPackageStamp)
             {
                 s_SharedSideMetaPackageStamp = t;
@@ -354,7 +353,7 @@ namespace VPB
         /// </summary>
         internal void RefreshVisibleGridVisualsOnly()
         {
-            if (!HasLoadedContent || !IsVisible || IsHubMode) return;
+            if (!HasLoadedContent || !IsVisible) return;
             if (recyclingGrid == null) return;
             try { recyclingGrid.Refresh(); } catch { }
             try { RefreshSelectionVisuals(); } catch { }
@@ -681,12 +680,8 @@ namespace VPB
         private void ScheduleFilterScrollRestore(string anchorKey)
         {
             filterRestoreAnchorKey = anchorKey;
-            if (filterRestoreCoroutine != null)
-            {
-                try { StopCoroutine(filterRestoreCoroutine); } catch { }
-                filterRestoreCoroutine = null;
-            }
-            try { filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame()); } catch { }
+            StopCo(ref filterRestoreCoroutine);
+            filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame());
         }
 
         private List<FileEntry> BuildCategoryEntriesForPackageUids(HashSet<string> uids)
@@ -949,11 +944,7 @@ namespace VPB
         private void StartPosePeopleIndexCoroutine(string groupId)
         {
             posePeopleIndexGroupId = groupId ?? "";
-            if (posePeopleIndexCoroutine != null)
-            {
-                StopCoroutine(posePeopleIndexCoroutine);
-                posePeopleIndexCoroutine = null;
-            }
+            StopCo(ref posePeopleIndexCoroutine);
             posePeopleIndexCoroutine = StartCoroutine(PosePeopleIndexRoutine(groupId));
         }
 
@@ -1681,7 +1672,7 @@ namespace VPB
             float start = Time.realtimeSinceStartup;
             float nextWait = 0.05f;
             int polls = 0;
-            while (!Gallery.IsSuppressed() && !IsHubMode)
+            while (!Gallery.IsSuppressed())
             {
                 polls++;
                 bool scanning = false;
@@ -1698,7 +1689,7 @@ namespace VPB
                 yield return new WaitForSecondsRealtime(wait);
             }
 
-            if (!Gallery.IsSuppressed() && !IsHubMode)
+            if (!Gallery.IsSuppressed())
             {
                 if (LogGalleryRefreshDeepTiming)
                 {
@@ -1739,12 +1730,6 @@ namespace VPB
                 return;
             }
             
-            if (IsHubMode)
-            {
-                RefreshHubItems();
-                return;
-            }
-
             if (IsSettingsPanelOpen() || settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(keepScroll);
@@ -1757,39 +1742,18 @@ namespace VPB
             if (!isRetry)
                 _cacheRetryPending = false;
 
-            if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
-            thumbnailCacheCoroutine = null;
+            StopCo(ref thumbnailCacheCoroutine);
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
             _thumbCacheTotalEnqueued = 0;
             _thumbCacheSaved = 0;
             _thumbCacheFinishTime = -1f;
             _nextThumbPriority = 0;
             HideThumbnailCacheProgress();
-            if (_deferredGallerySideTabsCoroutine != null)
-            {
-                try { StopCoroutine(_deferredGallerySideTabsCoroutine); } catch { }
-                _deferredGallerySideTabsCoroutine = null;
-            }
-            if (_sideTabsTagCountSliceCo != null)
-            {
-                try { StopCoroutine(_sideTabsTagCountSliceCo); } catch { }
-                _sideTabsTagCountSliceCo = null;
-            }
-            if (_appearanceLooseMergeCo != null)
-            {
-                try { StopCoroutine(_appearanceLooseMergeCo); } catch { }
-                _appearanceLooseMergeCo = null;
-            }
-            if (_historyModeCountsCo != null)
-            {
-                try { StopCoroutine(_historyModeCountsCo); } catch { }
-                _historyModeCountsCo = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
+            StopCo(ref _deferredGallerySideTabsCoroutine);
+            StopCo(ref _sideTabsTagCountSliceCo);
+            StopCo(ref _appearanceLooseMergeCo);
+            StopCo(ref _historyModeCountsCo);
+            StopCo(ref _earlyMetaApplyCoroutine);
             // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
             // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
             // don't pollute the new session. The coroutine's yield-return-null would be too late.
@@ -1798,15 +1762,11 @@ namespace VPB
             currentLoadingGroupId = Guid.NewGuid().ToString();
             unchecked { _deferredSubPaneSessionId++; }
             System.Threading.Interlocked.Increment(ref galleryFileRefreshSequence);
-            if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
-            if (_refreshHistoryLightCo != null)
-            {
-                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
-                _refreshHistoryLightCo = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _refreshHistoryLightCo);
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
             _refreshFilesDebugSource = refreshDebugSource;
-            try { ShowLoadingOverlay(null); } catch { }
+            ShowLoadingOverlay(null);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
@@ -1831,11 +1791,6 @@ namespace VPB
             if (Gallery.IsSuppressed())
             {
                 LogPackageDeltaSkip("suppressed");
-                return false;
-            }
-            if (IsHubMode)
-            {
-                LogPackageDeltaSkip("hub_mode");
                 return false;
             }
             if (IsSettingsPanelOpen() || settingsListViewActive)
@@ -1884,16 +1839,8 @@ namespace VPB
 
             // If the refresh coroutine is still running (shouldn't normally happen after the
             // !init||flag gate, but be defensive) cancel it so we work on a stable list.
-            if (refreshCoroutine != null)
-            {
-                StopCoroutine(refreshCoroutine);
-                refreshCoroutine = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _earlyMetaApplyCoroutine);
 
             // ── Scroll anchor ─────────────────────────────────────────────────────────────
             // Save the UID of the item currently centred in the viewport so we can scroll
@@ -2100,7 +2047,7 @@ namespace VPB
             if (skippedForNoCache && !changed && !Gallery.IsSuppressed() && !_cacheRetryPending)
             {
                 _cacheRetryPending = true;
-                try { StartCoroutine(RetryRefreshAfterNoCacheDelay()); } catch { }
+                StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }
 
             if (!changed)
@@ -2154,7 +2101,7 @@ namespace VPB
                 tagsCached = false;
             userTagsCached = false;
             pathsCached = false;
-            try { RefreshSideTabsAfterPackageDelta(); } catch { }
+            RefreshSideTabsAfterPackageDelta();
 
             try
             {
@@ -2179,22 +2126,20 @@ namespace VPB
         /// <summary>Rebuild category/creator side-tab counts after an in-memory package delta.</summary>
         private void RefreshSideTabsAfterPackageDelta()
         {
-            if (IsHubMode) return;
             if (!VamOnDemandLoader.IsMainThread()) return;
-            try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+            InvalidateSharedSideMetaIfPackageScanAdvanced();
             categoriesCached = false;
             creatorsCached = false;
             _deferSideTabCountsForceRefresh = true;
             if (!IsVisible && !hasLoadedContent) return;
             if (_packageDeltaSideTabsCoroutine != null) return;
-            try { _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta()); } catch { }
+            _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta());
         }
 
         private IEnumerator CoRefreshSideTabsAfterPackageDelta()
         {
             yield return null;
             _packageDeltaSideTabsCoroutine = null;
-            if (IsHubMode) yield break;
             try { CacheCategoryCounts(); } catch { }
             try { CacheCreators(); } catch { }
             if (!IsVisible && !hasLoadedContent) yield break;
@@ -2205,7 +2150,6 @@ namespace VPB
         private bool TryBuildFileListSnapshotCacheKey(out string key)
         {
             key = null;
-            if (IsHubMode) return false;
             if (IsFilterActive) return false;
 
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
@@ -2448,7 +2392,6 @@ namespace VPB
         public void RefreshHistoryListInPlace(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
             if (activeContentType != ContentType.History)
             {
                 RefreshFiles(keepScroll);
@@ -2461,21 +2404,9 @@ namespace VPB
                 return;
             }
 
-            if (refreshCoroutine != null)
-            {
-                try { StopCoroutine(refreshCoroutine); } catch { }
-                refreshCoroutine = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
-            if (_refreshHistoryLightCo != null)
-            {
-                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
-                _refreshHistoryLightCo = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _earlyMetaApplyCoroutine);
+            StopCo(ref _refreshHistoryLightCo);
 
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
@@ -2495,7 +2426,6 @@ namespace VPB
         public void RefreshHistoryBrowsePreferLight(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
             if (activeContentType != ContentType.History)
             {
                 lastHistoryQueryFailed = false;
@@ -2514,7 +2444,7 @@ namespace VPB
 
         public void RetryHistoryBrowseQuery()
         {
-            if (IsHubMode || activeContentType != ContentType.History) return;
+            if (activeContentType != ContentType.History) return;
             lastHistoryQueryFailed = false;
             lastHistoryQueryRejectReason = null;
             RefreshHistoryBrowsePreferLight(true);
@@ -2764,10 +2694,9 @@ namespace VPB
             if (swDeep != null) syncCpuBeforeFirstYieldMs = swDeep.ElapsedMilliseconds;
 
             float packageWaitStart = Time.realtimeSinceStartup;
-            while (!Gallery.IsSuppressed() && !IsHubMode)
+            while (!Gallery.IsSuppressed())
             {
-                long scanBin = 0;
-                try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+                long scanBin = FileManager.lastPackageRefreshTime.ToBinary();
                 if (scanBin != 0 && scanBin != DateTime.MinValue.ToBinary()) break;
 
                 bool inventoryBusy = false;
@@ -2888,11 +2817,7 @@ namespace VPB
             {
                 // Cancel any outstanding pose indexing work when leaving Pose category.
                 posePeopleIndexGroupId = "";
-                if (posePeopleIndexCoroutine != null)
-                {
-                    try { StopCoroutine(posePeopleIndexCoroutine); } catch { }
-                    posePeopleIndexCoroutine = null;
-                }
+                StopCo(ref posePeopleIndexCoroutine);
                 lock (posePeopleIndexLock)
                 {
                     posePeopleIndexQueue.Clear();
@@ -4268,7 +4193,7 @@ namespace VPB
             {
                 categoriesCached = false;
                 creatorsCached = false;
-                try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+                InvalidateSharedSideMetaIfPackageScanAdvanced();
                 _sideTabsNeedFullRebuildAfterFirstRefresh = false;
             }
 
@@ -4294,18 +4219,12 @@ namespace VPB
 
             // Show() used UpdateTabsImpl(false) while this coroutine ran, so category/creator/tag side lists stay stale until here.
             // Defer one frame (same as first-load / Pose) so we do not block overlay hide; covers every category switch.
-            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null))
+            if (leftTabContainerGO != null || rightTabContainerGO != null)
                 _deferredGallerySideTabsCoroutine = StartCoroutine(DeferredGallerySideTabsAfterGridReady(navSessionForThisRun, _deferredSubPaneSessionId, tagParallelWaiterForThisRun, tagScanRefreshSeq));
 
             // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
             // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
-            try
-            {
-                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
-            }
-            catch { }
-
-            // If packages were skipped because their content cache wasn't ready yet
+            StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
             // (FileManager scan still in progress), schedule a single retry — but only
             // if no retry is already pending/running. This prevents an infinite refresh
             // loop where each retry finds uncached packages and spawns yet another retry.
@@ -4348,7 +4267,6 @@ namespace VPB
         /// <summary>Scene split sub-pane uses <see cref="ContentType.SceneSource"/> only — no <see cref="GalleryPanel.CacheTagCounts"/> pass.</summary>
         private bool DeferredSubPaneNeedsTagCountCachePass()
         {
-            if (IsHubMode) return false;
             string title = titleText != null ? titleText.text : "";
             bool leftCat = leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Category;
             bool rightCat = rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Category;
@@ -4662,7 +4580,6 @@ namespace VPB
         /// <summary>Rebuilds file list for show-hidden toggle from last full drain snapshot — skips package scan, sort on worker, and <see cref="UpdateLayout"/>.</summary>
         private bool TryFastApplyGalleryShowHiddenToggle(bool keepScroll)
         {
-            if (IsHubMode) return false;
             try { if (Gallery.IsSuppressed()) return false; } catch { return false; }
             if (refreshCoroutine != null) return false;
             try { if (_refreshHistoryLightCo != null) return false; } catch { }

@@ -1167,18 +1167,6 @@ namespace VPB
              
              bool isValidTarget = (atom != null && SceneUtils.IsPersonLikeAtom(atom));
 
-             if (HubItem != null)
-             {
-                 UpdateGhostPosition(eventData, false, distance);
-                 if (ghostBorder != null) ghostBorder.color = new Color(1f, 0.5f, 0f, 0.4f); // Orange
-                 if (ghostText != null)
-                 {
-                     ghostText.text = $"Release to download/view\n{HubItem.Title}";
-                     ghostText.color = new Color(1f, 0.8f, 0.4f);
-                 }
-                 return;
-             }
-
              ItemType itemType = GetItemType(FileEntry);
              bool isHair = (itemType == ItemType.Hair || itemType == ItemType.HairItem);
              bool isClothing = (itemType == ItemType.Clothing || itemType == ItemType.ClothingItem);
