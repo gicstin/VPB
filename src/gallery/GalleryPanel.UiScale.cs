@@ -279,6 +279,9 @@ namespace VPB
             ScaleButtonIconPadding(footerLayoutBtn != null ? footerLayoutBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerPerfMinusBtn != null ? footerPerfMinusBtn.GetComponent<RectTransform>() : null, s);
             ScaleButtonIconPadding(footerPerfPlusBtn != null ? footerPerfPlusBtn.GetComponent<RectTransform>() : null, s);
+
+            if (paginationRT != null && paginationRT.gameObject.activeInHierarchy)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(paginationRT);
         }
 
         private static void ScaleButtonIconPadding(RectTransform btnRT, float scale)
@@ -462,6 +465,7 @@ namespace VPB
                 Text t = rt.GetComponentInChildren<Text>(true);
                 if (t != null)
                     GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
+                ScaleButtonIconPadding(rt, scale);
             }
             for (int i = 0; i < leftSideButtons.Count; i++)
             {
@@ -472,6 +476,7 @@ namespace VPB
                 Text t = rt.GetComponentInChildren<Text>(true);
                 if (t != null)
                     GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
+                ScaleButtonIconPadding(rt, scale);
             }
 
             if (rightSideContainer != null)

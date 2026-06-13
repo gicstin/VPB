@@ -98,6 +98,9 @@ namespace VPB
         private GameObject _categoryQuickMenuScrollGO;
         private GameObject _categoryQuickMenuContentGO;
         private bool _categoryQuickMenuOpen;
+        private bool _categoryQuickMenuDirty = true;
+        private string _categoryQuickMenuLastPath;
+        private string _categoryQuickMenuLastExtension;
         private Coroutine _categoryQuickApplyCoroutine;
         private Text _categoryQuickArrowText;
         private LayoutElement _categoryQuickArrowLE;

@@ -10,12 +10,12 @@ namespace VPB
         private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
         private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
 
-        // Top inset for side tab scroll: clears sort + search row (65*s + row 35*s + gap 5*s).
+        // Top inset for side tab scroll: clears sort + search row (SideTabTopOffsetRef*s + row 35*s + gap 5*s).
         // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
             float s = ChromeScale;
-            float rowTop = 65f * s;
+            float rowTop = GalleryUiDesignTokens.SideTabTopOffsetRef * s;
             float headerExtra = 0f;
             try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
             return -(rowTop + headerExtra + 35f * s + 5f * s);

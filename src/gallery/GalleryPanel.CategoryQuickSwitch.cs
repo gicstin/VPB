@@ -265,12 +265,7 @@ namespace VPB
                     if (child == null) continue;
                     Text t = child.GetComponent<Text>();
                     if (t != null)
-                    {
-                        int fontRef = child.name == "Idx"
-                            ? GalleryUiDesignTokens.PopupMenuRowFontLargeRef
-                            : GalleryUiDesignTokens.PopupMenuRowFontLargeRef;
-                        GalleryUiMetrics.ApplyFont(t, fontRef, s, 12);
-                    }
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, 12);
                     LayoutElement childLe = child.GetComponent<LayoutElement>();
                     if (childLe != null && child.name == "Idx")
                     {
@@ -284,7 +279,7 @@ namespace VPB
         private void SyncCategoryQuickSwitchChrome()
         {
             if (_categoryQuickChromeRootGO == null) return;
-            bool show = !IsFilterActive;
+            bool show = !IsFilterActive && !importSidebarActive;
             if (_categoryQuickChromeRootGO.activeSelf != show)
                 _categoryQuickChromeRootGO.SetActive(show);
             if (!show && _categoryQuickMenuOpen)
@@ -295,6 +290,7 @@ namespace VPB
 
         private void RefreshCategoryQuickSwitchOnConfigChanged()
         {
+            _categoryQuickMenuDirty = true;
             if (_categoryQuickMenuOpen)
                 RebuildCategoryQuickSwitchMenuRows();
         }
@@ -311,8 +307,8 @@ namespace VPB
             {
                 if (eventData != null && TryPickCategoryQuickSwitchFromRaycast(eventData, out Gallery.Category cat))
                     QueueDeferredCategoryQuickPick(cat);
-                else
-                    SetCategoryQuickMenuVisible(false);
+                // Released on empty space during hold-browse: leave the menu open so the user can
+                // make a deliberate tap selection rather than forcing a full reopen cycle.
                 return;
             }
             if (!openedByHoldGesture && durationSeconds < CategoryQuickHoldOpenSeconds)
@@ -421,7 +417,14 @@ namespace VPB
                 _categoryQuickMenuOuterGO.SetActive(visible);
             if (visible)
             {
-                RebuildCategoryQuickSwitchMenuRows();
+                bool needsRebuild = _categoryQuickMenuDirty
+                    || _categoryQuickMenuContentGO == null
+                    || _categoryQuickMenuContentGO.transform.childCount == 0
+                    || !categoriesCached
+                    || _categoryQuickMenuLastPath != currentPath
+                    || _categoryQuickMenuLastExtension != currentExtension;
+                if (needsRebuild)
+                    RebuildCategoryQuickSwitchMenuRows();
                 if (_categoryQuickBlockerGO != null)
                     _categoryQuickBlockerGO.transform.SetAsLastSibling();
                 if (_categoryQuickMenuOuterGO != null)
@@ -586,6 +589,10 @@ namespace VPB
                     var le = empty.AddComponent<LayoutElement>();
                     le.preferredHeight = 28;
                 }
+
+                _categoryQuickMenuDirty = false;
+                _categoryQuickMenuLastPath = currentPath;
+                _categoryQuickMenuLastExtension = currentExtension;
             }
             catch (Exception ex)
             {
@@ -643,9 +650,10 @@ namespace VPB
             var nameT = nameGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(nameT);
             nameT.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            nameT.color = UI.PopupText;
+            nameT.color = isActive ? UI.PopupText : UI.PopupMutedText;
             nameT.alignment = TextAnchor.MiddleLeft;
-            nameT.text = cat.name ?? "";
+            int cnt = categoryCounts != null && categoryCounts.ContainsKey(cat.name ?? "") ? categoryCounts[cat.name] : 0;
+            nameT.text = (cat.name ?? "") + " (" + cnt + ")";
             var nameLe = nameGO.AddComponent<LayoutElement>();
             nameLe.flexibleWidth = 1;
             nameLe.minWidth = 40;
@@ -684,6 +692,7 @@ namespace VPB
             if (idx >= list.Count) return false;
 
             ApplyCategoryQuickPick(list[idx]);
+            try { ShowTemporaryStatus("\u2192 " + (list[idx].name ?? ""), 1.2f); } catch { }
             return true;
         }
     }

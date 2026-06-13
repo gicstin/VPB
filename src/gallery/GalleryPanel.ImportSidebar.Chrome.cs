@@ -8,6 +8,9 @@ namespace VPB
         private static readonly Color ImportSidebarHeaderBg = new Color(0.10f, 0.26f, 0.44f, 1f);
         private static readonly Color ImportSidebarStepHeaderBg = new Color(0.18f, 0.24f, 0.32f, 0.98f);
         internal static readonly Color ImportSidebarSelectedAccent = new Color(0.14f, 0.40f, 0.62f, 1f);
+        // Mid-tone between ColorInactiveRow and ImportSidebarSelectedAccent: marks rows whose ID
+        // name-matches a counterpart on the opposite list without stealing the selected-state color.
+        private static readonly Color ImportSidebarMatchHintColor = new Color(0.20f, 0.30f, 0.40f, 1f);
 
         /// <summary>Hide side-column filter/sort chrome on the edge replaced by the import sidebar.</summary>
         private void SuppressImportOccupiedSideColumnChrome()

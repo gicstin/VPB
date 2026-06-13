@@ -8,9 +8,7 @@ namespace VPB
     public partial class GalleryPanel
     {
         private const int ImportWizardStepCount = 4;
-        private readonly bool[] _importWizardStepOpen = { true, true, true, true };
         private readonly GameObject[] _importWizardStepHeaders = new GameObject[ImportWizardStepCount];
-        private readonly Transform[] _importWizardStepContents = new Transform[ImportWizardStepCount];
         private Text _importWizardPackageLabel;
         private Text _importWizardMultiSelectHint;
 
@@ -30,28 +28,28 @@ namespace VPB
             blockVlg.childForceExpandWidth = true;
             blockVlg.childForceExpandHeight = false;
 
-            GameObject header = UI.CreateUIButton(
-                block, 0f, ImportSidebarBaseRowHeight * 0.85f,
-                "", ImportSidebarBaseFontSize, 0f, 0f, AnchorPresets.stretchAll,
-                () => ToggleImportWizardStep(stepIndex));
-            header.name = "StepHeader";
-            Image hdrBg = header.GetComponent<Image>();
-            if (hdrBg != null) hdrBg.color = ImportSidebarStepHeaderBg;
-            Text hdrTxt = header.GetComponentInChildren<Text>();
-            if (hdrTxt != null)
-            {
-                hdrTxt.alignment = TextAnchor.MiddleLeft;
-                hdrTxt.color = new Color(0.92f, 0.94f, 0.98f, 1f);
-                hdrTxt.text = (stepIndex + 1) + ". " + VPBTranslation.T(ImportWizardStepTitleKeys[stepIndex], ImportWizardStepTitleDefaults[stepIndex]);
-                RectTransform hdrTxtRt = hdrTxt.GetComponent<RectTransform>();
-                if (hdrTxtRt != null)
-                {
-                    hdrTxtRt.offsetMin = new Vector2(ImportSidebarInnerPadHRef, 0f);
-                    hdrTxtRt.offsetMax = new Vector2(-ImportSidebarInnerPadHRef, 0f);
-                }
-            }
-            LayoutElement hdrLe = header.GetComponent<LayoutElement>();
-            if (hdrLe == null) hdrLe = header.AddComponent<LayoutElement>();
+            GameObject header = new GameObject("StepHeader");
+            header.transform.SetParent(block.transform, false);
+            Image hdrBg = header.AddComponent<Image>();
+            hdrBg.color = ImportSidebarStepHeaderBg;
+            hdrBg.raycastTarget = false;
+
+            GameObject hdrLabelGO = new GameObject("Label");
+            hdrLabelGO.transform.SetParent(header.transform, false);
+            RectTransform hdrLabelRT = hdrLabelGO.AddComponent<RectTransform>();
+            hdrLabelRT.anchorMin = Vector2.zero;
+            hdrLabelRT.anchorMax = Vector2.one;
+            hdrLabelRT.offsetMin = new Vector2(ImportSidebarInnerPadHRef, 0f);
+            hdrLabelRT.offsetMax = new Vector2(-ImportSidebarInnerPadHRef, 0f);
+            Text hdrTxt = hdrLabelGO.AddComponent<Text>();
+            hdrTxt.alignment = TextAnchor.MiddleLeft;
+            hdrTxt.color = new Color(0.92f, 0.94f, 0.98f, 1f);
+            hdrTxt.fontSize = ImportSidebarBaseFontSize;
+            hdrTxt.text = (stepIndex + 1) + ". " + VPBTranslation.T(ImportWizardStepTitleKeys[stepIndex], ImportWizardStepTitleDefaults[stepIndex]);
+            hdrTxt.raycastTarget = false;
+            VPBUiFont.ApplyTo(hdrTxt);
+
+            LayoutElement hdrLe = header.AddComponent<LayoutElement>();
             hdrLe.preferredHeight = ImportSidebarBaseRowHeight * 0.85f;
             hdrLe.flexibleWidth = 1f;
             _importWizardStepHeaders[stepIndex] = header;
@@ -69,19 +67,8 @@ namespace VPB
             contentVlg.childForceExpandHeight = false;
             LayoutElement contentLe = content.AddComponent<LayoutElement>();
             contentLe.flexibleWidth = 1f;
-            _importWizardStepContents[stepIndex] = content.transform;
-            content.SetActive(_importWizardStepOpen[stepIndex]);
+            content.SetActive(true);
             return content.transform;
-        }
-
-        private void ToggleImportWizardStep(int stepIndex)
-        {
-            if (stepIndex < 0 || stepIndex >= ImportWizardStepCount) return;
-            _importWizardStepOpen[stepIndex] = !_importWizardStepOpen[stepIndex];
-            if (_importWizardStepContents[stepIndex] != null)
-                _importWizardStepContents[stepIndex].gameObject.SetActive(_importWizardStepOpen[stepIndex]);
-            RefreshImportWizardStepHeaderGlyphs();
-            try { RebuildImportSidebarContent(); } catch { }
         }
 
         private void RefreshImportWizardStepHeaderGlyphs()
@@ -93,8 +80,7 @@ namespace VPB
                 Text t = hdr.GetComponentInChildren<Text>();
                 if (t == null) continue;
                 string title = VPBTranslation.T(ImportWizardStepTitleKeys[i], ImportWizardStepTitleDefaults[i]);
-                string glyph = _importWizardStepOpen[i] ? "\u25BC " : "\u25B6 ";
-                t.text = glyph + (i + 1) + ". " + title;
+                t.text = (i + 1) + ". " + title;
             }
         }
 
@@ -125,11 +111,17 @@ namespace VPB
             _importWizardMultiSelectHint = hintRow.AddComponent<Text>();
             _importWizardMultiSelectHint.text = "";
             _importWizardMultiSelectHint.color = new Color(1f, 0.75f, 0.45f, 1f);
-            _importWizardMultiSelectHint.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            _importWizardMultiSelectHint.fontSize = ImportSidebarBaseFontSize;
             _importWizardMultiSelectHint.alignment = TextAnchor.MiddleLeft;
             try { VPBUiFont.ApplyTo(_importWizardMultiSelectHint); } catch { }
             _importWizardMultiSelectHint.raycastTarget = false;
             hintRow.SetActive(false);
+            LayoutElement hintLeCaptured = hintLe;
+            Text hintTxtCaptured = _importWizardMultiSelectHint;
+            innerPaneScaleActions.Add(s => {
+                if (hintLeCaptured != null) hintLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * 0.75f * s;
+                ApplyScaledFont(hintTxtCaptured, ImportSidebarBaseFontSize, s);
+            });
         }
 
         internal void BuildImportSidebarWizardBody()
@@ -165,15 +157,14 @@ namespace VPB
         {
             if (importSidebarHeaderLabel == null) return;
 
-            string typeName = ShortNameForType(importSidebarPresetType);
-            string targetName = importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "?";
-            string sourceName = !string.IsNullOrEmpty(importSidebarSourceAtomId)
-                ? importSidebarSourceAtomId
-                : (importSidebarSourceScene != null ? (importSidebarSourceScene.Uid ?? importSidebarSourceScene.Path ?? "?") : "?");
+            string typeName = importSidebarMultiTypeMode
+                ? VPBTranslation.T("gallery.import.wizard.multi_type", "Multi")
+                : ShortNameForType(importSidebarPresetType);
+            string targetName = importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "\u2014";
 
             importSidebarHeaderLabel.text = string.Format(
-                VPBTranslation.T("gallery.import.wizard.header_summary", "{0} \u2192 {1} from {2}"),
-                typeName, targetName, sourceName);
+                VPBTranslation.T("gallery.import.wizard.header_summary", "Import  {0} \u2192 {1}"),
+                typeName, targetName);
 
             if (_importWizardPackageLabel != null)
             {

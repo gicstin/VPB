@@ -12,7 +12,7 @@ namespace VPB
         private Transform importSidebarSourceListContainer;
         private Transform importSidebarTargetListContainer;
 
-        private const int ImportSidebarMaxRowsPerList = 16;
+        private const int ImportSidebarMaxRowsPerList = 32;
         private readonly List<GameObject> importSidebarSourceRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
         private readonly List<GameObject> importSidebarTargetRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
 
@@ -182,9 +182,28 @@ namespace VPB
             RenderTargetList();
         }
 
+        // Auto-select a target when none is chosen: prefer a name-matched candidate, else the sole candidate.
+        private void TryAutoSelectTargetIfUnset()
+        {
+            if (importSidebarTargetAtom != null) return;
+            if (!string.IsNullOrEmpty(importSidebarSourceAtomId))
+            {
+                foreach (Atom a in importSidebarTargetCandidates)
+                {
+                    if (a != null && string.Equals(a.uid, importSidebarSourceAtomId, StringComparison.Ordinal))
+                    { importSidebarTargetAtom = a; return; }
+                }
+            }
+            if (importSidebarTargetCandidates.Count == 1)
+                importSidebarTargetAtom = importSidebarTargetCandidates[0];
+        }
+
         private void RenderTargetList()
         {
             int n = importSidebarTargetCandidates.Count;
+
+            TryAutoSelectTargetIfUnset();
+
             int pool = importSidebarTargetRowPool.Count;
             for (int i = 0; i < pool; i++)
             {
@@ -210,10 +229,13 @@ namespace VPB
 
         partial void RefreshTargetSelectionVisual()
         {
+            var sourceIds = new HashSet<string>(importSidebarSourcePersonIds, StringComparer.Ordinal);
             for (int i = 0; i < importSidebarTargetCandidates.Count && i < importSidebarTargetRowPool.Count; i++)
             {
-                bool selected = importSidebarTargetAtom == importSidebarTargetCandidates[i];
-                SetImportSidebarRowSelected(importSidebarTargetRowPool[i], selected);
+                Atom a = importSidebarTargetCandidates[i];
+                bool selected = importSidebarTargetAtom == a;
+                bool matchHint = !selected && a != null && sourceIds.Contains(a.uid);
+                SetImportSidebarRowSelected(importSidebarTargetRowPool[i], selected, matchHint);
             }
         }
 
@@ -225,6 +247,8 @@ namespace VPB
                 {
                     importSidebarSourceAtomId = importSidebarSourcePersonIds[index];
                     RenderSourceList();
+                    TryAutoSelectTargetIfUnset();
+                    RefreshTargetSelectionVisual();
                 }
             }
             else
@@ -247,14 +271,26 @@ namespace VPB
         private void RenderSourceList()
         {
             int n = importSidebarSourcePersonIds.Count;
+
+            // Auto-select: when there is exactly one source atom and nothing is chosen yet, pick it.
+            if (n == 1 && string.IsNullOrEmpty(importSidebarSourceAtomId))
+                importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
+
+            // Match set: source IDs that share a name with a live target atom uid.
+            var targetUids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Atom a in importSidebarTargetCandidates)
+                if (a != null) targetUids.Add(a.uid);
+
             int pool = importSidebarSourceRowPool.Count;
             for (int i = 0; i < pool; i++)
             {
                 GameObject row = importSidebarSourceRowPool[i];
                 if (i < n)
                 {
-                    SetImportSidebarRowText(row, importSidebarSourcePersonIds[i]);
-                    SetImportSidebarRowSelected(row, importSidebarSourceAtomId == importSidebarSourcePersonIds[i]);
+                    string pid = importSidebarSourcePersonIds[i];
+                    SetImportSidebarRowText(row, pid);
+                    bool sel = importSidebarSourceAtomId == pid;
+                    SetImportSidebarRowSelected(row, sel, !sel && targetUids.Contains(pid));
                     row.SetActive(true);
                 }
                 else row.SetActive(false);
@@ -284,6 +320,8 @@ namespace VPB
                 if (importSidebarSourcePersonIds.Count > 0)
                     importSidebarSourceAtomId = importSidebarSourcePersonIds[0];
                 RenderSourceList();
+                TryAutoSelectTargetIfUnset();
+                RefreshTargetSelectionVisual();
                 RefreshApplyButtonEnabled();
                 RefreshPluginChecklist();
                 return;
@@ -331,6 +369,8 @@ namespace VPB
                 }
             }
             RenderSourceList();
+            TryAutoSelectTargetIfUnset();
+            RefreshTargetSelectionVisual();
             RefreshApplyButtonEnabled();
             RefreshPluginChecklist();
         }
@@ -370,12 +410,11 @@ namespace VPB
             if (t != null) t.text = text;
         }
 
-        private void SetImportSidebarRowSelected(GameObject row, bool selected)
+        private void SetImportSidebarRowSelected(GameObject row, bool selected, bool matchHint = false)
         {
             Image bg = row.GetComponent<Image>();
-            // Active row uses ColorCategory (the same red Creator/Category rows use when selected),
-            // so the user reads the active selection at a glance with no new visual vocabulary.
-            if (bg != null) bg.color = selected ? ColorCategory : ColorInactiveRow;
+            if (bg != null)
+                bg.color = selected ? ColorCategory : (matchHint ? ImportSidebarMatchHintColor : ColorInactiveRow);
         }
 
         private void UnsubscribeFromAtomEvents()

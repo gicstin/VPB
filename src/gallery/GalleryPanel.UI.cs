@@ -893,7 +893,7 @@ namespace VPB
             paginationRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
             paginationRT.pivot = new Vector2(0.5f, 0);
             paginationRT.anchoredPosition = new Vector2(0, 0);
-            paginationRT.sizeDelta = new Vector2(0, 40); // Footer bar height for buttons
+            paginationRT.sizeDelta = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef); // Footer bar height for buttons
             
             footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
             footerHLG.padding = new RectOffset(10, 10, 0, 0); // resize handles are real layout children now (no manual reservation)
@@ -917,7 +917,7 @@ namespace VPB
             _footerSideButtonsGroupRT.anchorMax = new Vector2(0.5f, 0.5f);
             _footerSideButtonsGroupRT.pivot = new Vector2(0.5f, 0.5f);
             _footerSideButtonsGroupRT.anchoredPosition = Vector2.zero;
-            _footerSideButtonsGroupRT.sizeDelta = new Vector2(0f, 40f);
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef);
             _footerSideButtonsGroupGO.SetActive(false);
 
             // --- Left Section (Follow Controls) ---
@@ -939,17 +939,17 @@ namespace VPB
             }
 
             // Undo / Redo / Random (footer left; compact labels U/R/Rdm)
-            footerUndoBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
+            footerUndoBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
             footerUndoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/undo.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerUndoBtnGO, s); }
-            footerRedoBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
+            footerRedoBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
             footerRedoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/redo.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerRedoBtnGO, s); }
-            footerLoadRandomBtn = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
+            footerLoadRandomBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
             footerLoadRandomBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/random.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerLoadRandomBtn, s); }
 
-            footerHubBtnGO = UI.CreateUIButton(leftSection, 40, 40, VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
+            footerHubBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
                 VamHookPlugin.singleton?.OpenHubBrowse();
                 Hide();
             });
@@ -965,17 +965,17 @@ namespace VPB
             CreateFooterPerfControls(leftSection);
 
             // Follow Quick Toggles
-            footerFollowAngleBtn = UI.CreateUIButton(leftSection, 40, 40, "∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
+            footerFollowAngleBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/eye_angle.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowAngleBtn, s); }
             AddTooltip(footerFollowAngleBtn, "gallery.tooltip.follow_angle", "Follow Angle");
             
-            footerFollowDistanceBtn = UI.CreateUIButton(leftSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Distance"));
+            footerFollowDistanceBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"↕", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Distance"));
             footerFollowDistanceImage = footerFollowDistanceBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/eye_distance.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowDistanceBtn, s); }
             AddTooltip(footerFollowDistanceBtn, "gallery.tooltip.follow_distance", "Follow Distance");
             
-            footerFollowHeightBtn = UI.CreateUIButton(leftSection, 40, 40, "⊙", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Height"));
+            footerFollowHeightBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"⊙", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Height"));
             footerFollowHeightImage = footerFollowHeightBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/eye_height.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowHeightBtn, s); }
             AddTooltip(footerFollowHeightBtn, "gallery.tooltip.follow_eye_height", "Follow Eye Height");
@@ -1013,7 +1013,7 @@ namespace VPB
                 footerFilterModeText.verticalOverflow = VerticalWrapMode.Truncate;
                 footerFilterModeText.raycastTarget = false;
                 RectTransform modeRT = modeGO.GetComponent<RectTransform>();
-                modeRT.sizeDelta = new Vector2(180, 40);
+                modeRT.sizeDelta = new Vector2(180, GalleryUiDesignTokens.ButtonSizeRef);
                 modeGO.SetActive(false);
             }
 
@@ -1029,14 +1029,14 @@ namespace VPB
             }
 
             // Back Button — icon-only, shown whenever filter mode is active
-            footerBackBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, NavigateBack);
+            footerBackBtn = UI.CreateUIButton(centerSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"", 18, 0, 0, AnchorPresets.middleCenter, NavigateBack);
             footerBackBtn.name = "BackButton";
             footerBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
             { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", Color.white); if (s != null) UI.AddIconToButton(footerBackBtn, s); }
             footerBackBtn.SetActive(false);
 
             // Clear Filter Button — icon-only, clears all filter levels
-            footerClearFilterBtn = UI.CreateUIButton(centerSection, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
+            footerClearFilterBtn = UI.CreateUIButton(centerSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"", 18, 0, 0, AnchorPresets.middleCenter, ClearPackageFilter);
             footerClearFilterBtn.name = "ClearFilterButton";
             footerClearFilterBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
             { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s); }
@@ -1061,14 +1061,14 @@ namespace VPB
             }
 
             // VaM Menu Gate (show gallery only when VaM menu is visible) — placed left of Select All
-            footerMenuGateBtn = UI.CreateUIButton(rightSection, 40, 40, "M", 20, 0, 0, AnchorPresets.middleCenter, ToggleVamMenuGateMode);
+            footerMenuGateBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"M", 20, 0, 0, AnchorPresets.middleCenter, ToggleVamMenuGateMode);
             footerMenuGateBtnImage = footerMenuGateBtn.GetComponent<Image>();
             footerMenuGateOffSprite = UI.LoadIconSprite("vpb_icons/visibility_independent.png", Color.white);
             footerMenuGateOnSprite  = UI.LoadIconSprite("vpb_icons/visibility_linked.png",      Color.white);
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 
-            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
+            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
             footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
             footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
             footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
@@ -1078,19 +1078,19 @@ namespace VPB
 
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
-            gridSizeMinusBtn = UI.CreateUIButton(rightSection, 40, 40, "-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
+            gridSizeMinusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
-            gridSizePlusBtn = UI.CreateUIButton(rightSection, 40, 40, "+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
+            gridSizePlusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_in.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizePlusBtn, s); }
 
             // Toggle big spring-scroll drag button (floating panes only; default ON)
-            footerSpringScrollToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "S", 20, 0, 0, AnchorPresets.middleCenter, ToggleSpringScrollButton);
+            footerSpringScrollToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"S", 20, 0, 0, AnchorPresets.middleCenter, ToggleSpringScrollButton);
             footerSpringScrollToggleBtnImage = footerSpringScrollToggleBtn.GetComponent<Image>();
             { var s = UI.LoadIconSprite("vpb_icons/scroll.png", UI.BarIconGlyphTint); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
 
             // Toggle hold-to-launch/apply (hold trigger/button on item; duration in Settings)
-            footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, 40, 40, "H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
+            footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
             footerHoldToLaunchToggleBtnImage = footerHoldToLaunchToggleBtn.GetComponent<Image>();
             footerHoldToLaunchOnSprite  = UI.LoadIconSprite("vpb_icons/hold.png",     UI.BarIconGlyphTint);
             footerHoldToLaunchOffSprite = UI.LoadIconSprite("vpb_icons/hold_off.png", UI.BarIconGlyphTint);
@@ -1106,14 +1106,14 @@ namespace VPB
             }
             AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold trigger/button on item to apply/launch (see Settings for duration)");
 
-            footerLayoutBtn = UI.CreateUIButton(rightSection, 40, 40, "▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
+            footerLayoutBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
             footerLayoutBtnText = footerLayoutBtn.GetComponentInChildren<Text>();
             footerLayoutGridSprite = UI.LoadIconSprite("vpb_icons/layout_grid.png", UI.BarIconGlyphTint);
             footerLayoutListSprite = UI.LoadIconSprite("vpb_icons/layout_list.png", UI.BarIconGlyphTint);
             { Sprite init = footerLayoutListSprite ?? footerLayoutGridSprite; if (init != null) { UI.AddIconToButton(footerLayoutBtn, init); footerLayoutIconImage = footerLayoutBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
-            footerDockBtn = UI.CreateUIButton(rightSection, 40, 40, "", 20, 0, 0, AnchorPresets.middleCenter, CycleDesktopFixedDockSide);
+            footerDockBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"", 20, 0, 0, AnchorPresets.middleCenter, CycleDesktopFixedDockSide);
             footerDockBtnImage = footerDockBtn.GetComponent<Image>();
             footerDockRightSprite = UI.LoadIconSprite("vpb_icons/anchor_right.png", UI.BarIconGlyphTint);
             footerDockLeftSprite  = UI.LoadIconSprite("vpb_icons/anchor_left.png",  UI.BarIconGlyphTint);
@@ -1121,14 +1121,14 @@ namespace VPB
             { Sprite init = footerDockRightSprite ?? footerDockLeftSprite ?? footerDockTopSprite; if (init != null) { UI.AddIconToButton(footerDockBtn, init); footerDockIconImage = footerDockBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltipPlain(footerDockBtn, VPBTranslation.T("gallery.tooltip.dock_side", "Dock side (Left/Right/Top)"));
 
-            footerHeightBtn = UI.CreateUIButton(rightSection, 40, 40, "↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
+            footerHeightBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"↕", 20, 0, 0, AnchorPresets.middleCenter, ToggleFixedHeightMode);
             footerHeightBtnImage = footerHeightBtn.GetComponent<Image>();
             footerHeightBtnText = footerHeightBtn.GetComponentInChildren<Text>();
             footerHeightFreeSprite  = UI.LoadIconSprite("vpb_icons/height_free.png",  UI.BarIconGlyphTint);
             footerHeightFixedSprite = UI.LoadIconSprite("vpb_icons/height_fixed.png", UI.BarIconGlyphTint);
             { Sprite init = footerHeightFixedSprite ?? footerHeightFreeSprite; if (init != null) { UI.AddIconToButton(footerHeightBtn, init); footerHeightIconImage = footerHeightBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
 
-            footerAutoHideBtn = UI.CreateUIButton(rightSection, 40, 40, "A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
+            footerAutoHideBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"A", 20, 0, 0, AnchorPresets.middleCenter, ToggleAutoHideMode);
             footerAutoHideBtnImage = footerAutoHideBtn.GetComponent<Image>();
             footerAutoHideBtnText = footerAutoHideBtn.GetComponentInChildren<Text>();
             footerAutoHideLeftOffSprite  = UI.LoadIconSprite("vpb_icons/auto_hide_left_off.png",  UI.BarIconGlyphTint);
@@ -1176,8 +1176,8 @@ namespace VPB
             AddHoverDelegate(footerAutoHideBtn);
 
             // Register inner pane button scale actions (footer)
-            { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
-            { var rt = _footerSideButtonsGroupRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
+            { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * s); }); }
+            { var rt = _footerSideButtonsGroupRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
             {
                 var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
                 var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;
@@ -1188,10 +1188,10 @@ namespace VPB
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
                 innerPaneScaleActions.Add(s => {
-                    if (uRT != null) uRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
+                    if (uRT != null) uRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (rRT != null) rRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (rndRT != null) rndRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (hRT != null) hRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     GalleryUiMetrics.ApplyFont(uT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(rT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(rndT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
@@ -1212,8 +1212,8 @@ namespace VPB
                 var t = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponentInChildren<Text>() : null;
                 innerPaneScaleActions.Add(s =>
                 {
-                    if (rt) rt.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (t) GalleryUiMetrics.ApplyGlyphFont(t, 40f, s, GalleryUiDesignTokens.FontMinRef);
+                    if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
+                    if (t) GalleryUiMetrics.ApplyGlyphFont(t, GalleryUiDesignTokens.ButtonSizeRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
 
@@ -1225,12 +1225,12 @@ namespace VPB
             // Scale the back button
             {
                 var rt = footerBackBtn != null ? footerBackBtn.GetComponent<RectTransform>() : null;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); });
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); });
             }
             // Scale the clear filter button
             {
                 var rt = footerClearFilterBtn != null ? footerClearFilterBtn.GetComponent<RectTransform>() : null;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(40f*s, 40f*s); });
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); });
             }
 
             // Scale the filter mode label
@@ -1239,7 +1239,7 @@ namespace VPB
                 var rt = t != null ? t.GetComponent<RectTransform>() : null;
                 innerPaneScaleActions.Add(s =>
                 {
-                    if (rt) rt.sizeDelta = new Vector2(180f * s, 40f * s);
+                    if (rt) rt.sizeDelta = new Vector2(180f * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (t)
                     {
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
@@ -1252,7 +1252,7 @@ namespace VPB
                 var go = footerFilterModeSpacerGO;
                 var rt = go != null ? go.GetComponent<RectTransform>() : null;
                 var le = go != null ? go.GetComponent<LayoutElement>() : null;
-                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(12f*s, 40f*s); if (le != null) { le.preferredWidth = 12f*s; le.minWidth = 12f*s; } });
+                innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(12f*s, GalleryUiDesignTokens.ButtonSizeRef * s); if (le != null) { le.preferredWidth = 12f*s; le.minWidth = 12f*s; } });
             }
 
             // Unified info bar — always visible; hosts hover path, status messages, and tbox label/buttons.
@@ -1360,7 +1360,7 @@ namespace VPB
 
             if (footerScrollTopBtn == null)
             {
-                footerScrollTopBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
+                footerScrollTopBtn = UI.CreateUIButton(sb.gameObject, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"↑", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToTop);
                 footerScrollTopBtn.name = "ScrollbarScrollTop";
                 { var s = UI.LoadIconSprite("vpb_icons/scroll_top.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollTopBtn, s); }
                 AddHoverDelegate(footerScrollTopBtn);
@@ -1368,7 +1368,7 @@ namespace VPB
             }
             if (footerScrollBottomBtn == null)
             {
-                footerScrollBottomBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
+                footerScrollBottomBtn = UI.CreateUIButton(sb.gameObject, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"↓", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryToBottom);
                 footerScrollBottomBtn.name = "ScrollbarScrollBottom";
                 { var s = UI.LoadIconSprite("vpb_icons/scroll_bottom.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollBottomBtn, s); }
                 AddHoverDelegate(footerScrollBottomBtn);
@@ -1376,7 +1376,7 @@ namespace VPB
             }
             if (footerScrollStepUpBtn == null)
             {
-                footerScrollStepUpBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepUp);
+                footerScrollStepUpBtn = UI.CreateUIButton(sb.gameObject, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"▲", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepUp);
                 footerScrollStepUpBtn.name = "ScrollbarScrollStepUp";
                 { var s = UI.LoadIconSprite("vpb_icons/chevron_up.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollStepUpBtn, s); }
                 AddHoverDelegate(footerScrollStepUpBtn);
@@ -1384,7 +1384,7 @@ namespace VPB
             }
             if (footerScrollStepDownBtn == null)
             {
-                footerScrollStepDownBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepDown);
+                footerScrollStepDownBtn = UI.CreateUIButton(sb.gameObject, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"▼", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepDown);
                 footerScrollStepDownBtn.name = "ScrollbarScrollStepDown";
                 { var s = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollStepDownBtn, s); }
                 AddHoverDelegate(footerScrollStepDownBtn);
@@ -1531,7 +1531,7 @@ namespace VPB
 
             if (footerScrollTopBtn == null || footerScrollBottomBtn == null) return;
 
-            float btnSz = Mathf.Round(Mathf.Clamp(40f * paneS, 24f, 56f));
+            float btnSz = Mathf.Round(GalleryUiDesignTokens.ButtonSizeRef * paneS);
             const float gap = 6f;
 
             var topRt = footerScrollTopBtn.GetComponent<RectTransform>();

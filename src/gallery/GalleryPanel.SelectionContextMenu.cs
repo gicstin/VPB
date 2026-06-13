@@ -131,17 +131,12 @@ namespace VPB
         }
 
         /// <summary>
-        /// Uniform toolbox action-button height: scales the design ref proportionally to the
-        /// info-row height so it tracks the same chrome scale as side-rail buttons / title chips,
-        /// instead of nearly filling the info row (which made the buttons look oversized).
+        /// Uniform toolbox action-button height: ButtonSizeRef × ChromeScale, matching title chips
+        /// and side-rail buttons for a globally consistent 2× font ratio.
         /// </summary>
         private float TboxActionButtonInnerHeight()
         {
-            float rowH = tboxInfoRowHeight > 0f ? tboxInfoRowHeight : GalleryUiDesignTokens.FooterInfoRowHeightRef;
-            float h = GalleryUiDesignTokens.TboxActionButtonSizeRef
-                      * (rowH / GalleryUiDesignTokens.FooterInfoRowHeightRef);
-            float maxH = Mathf.Max(34f, rowH - 8f);
-            return Mathf.Clamp(h, 28f, maxH);
+            return GalleryUiDesignTokens.ButtonSizeRef * ChromeScale;
         }
 
         private void TboxSetAllFlexActionButtonHeights(float innerRowH)
@@ -179,6 +174,20 @@ namespace VPB
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
             one(tboxGridRateBtn);
+            foreach (var go in tboxPersonAtomBtns)
+            {
+                one(go);
+                // Also update inner children (e.g. the dropdown button inside the container row).
+                // minHeight on the inner button is a hard floor that prevents it from shrinking
+                // unless explicitly updated here.
+                if (go == null) continue;
+                foreach (Transform child in go.transform)
+                {
+                    if (child == null) continue;
+                    var cle = child.GetComponent<LayoutElement>();
+                    if (cle != null) { cle.minHeight = innerRowH; cle.preferredHeight = innerRowH; }
+                }
+            }
         }
 
         private void TboxDetachAllActionButtonsForLayout()
@@ -246,13 +255,12 @@ namespace VPB
         {
             if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null || tboxBtnRow2HLG == null) return;
 
-            // Rows fill the full info-row slot (band has no gap); buttons are centered at the
-            // smaller uniform height so they match the side-rail / title-chip family.
-            float rowSlotH = tboxInfoRowHeight > 0f ? tboxInfoRowHeight : GalleryUiDesignTokens.FooterInfoRowHeightRef;
+            // Button rows use the button height as their slot height so no blank space appears
+            // when multiple rows are active.
             float innerH = TboxActionButtonInnerHeight();
-            if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = rowSlotH; tboxBtnRow0LE.preferredHeight = rowSlotH; }
-            if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = rowSlotH; tboxBtnRow1LE.preferredHeight = rowSlotH; }
-            if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = rowSlotH; tboxBtnRow2LE.preferredHeight = rowSlotH; }
+            if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
+            if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = innerH; tboxBtnRow1LE.preferredHeight = innerH; }
+            if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = innerH; tboxBtnRow2LE.preferredHeight = innerH; }
             TboxSetAllFlexActionButtonHeights(innerH);
 
             Canvas.ForceUpdateCanvases();
@@ -509,7 +517,7 @@ namespace VPB
                 TboxPopulateRowFromRtlPack(tboxBtnRow2HLG, row2rtl);
             }
 
-            float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
+            float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
             // Add filter row height when active
             if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + tboxBtnRowGap;
@@ -533,7 +541,7 @@ namespace VPB
 
         // Row height: matches the collapsed bar height set by the layout system.
         // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
-        private float tboxInfoRowHeight = 60f;   // single row height (= collapsed bar height)
+        private float tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef;   // single row height (= collapsed bar height)
         private float tboxTopOffsetBase = 120f;   // bar's top offset (offsetMax.y) when fully collapsed
 
         private RectTransform tboxLabelLayerRT;   // reference for scale updates
@@ -1472,6 +1480,12 @@ namespace VPB
                     try { RescaleFooterInfoBarInternal(s); } catch { }
                     try { TboxSetAllFlexActionButtonHeights(TboxActionButtonInnerHeight()); } catch { }
                     try { RefreshTboxFlexButtonLayout(); } catch { }
+                    try
+                    {
+                        if (tboxTargetDropdownBtnText != null)
+                            GalleryUiMetrics.ApplyFont(tboxTargetDropdownBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    }
+                    catch { }
                 });
             }
 
@@ -1628,7 +1642,7 @@ namespace VPB
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
             float sScale = ChromeScale;
-            int dropdownFont = Mathf.RoundToInt(Mathf.Max(18f, 18f * sScale));
+            int dropdownFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, sScale, GalleryUiDesignTokens.FontMinRef);
 
             string activeLabel = IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target", "SubScene")
@@ -1994,8 +2008,9 @@ namespace VPB
                     }
                 }
 
-                float btnBand = tboxInfoRowHeight * Mathf.Max(1, tboxButtonLayoutRows)
-                    + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
+                float innerH = TboxActionButtonInnerHeight();
+                float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
+                    + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap * (tboxButtonLayoutRows - 1) : 0f);
                 // Add filter row height when active
                 if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;

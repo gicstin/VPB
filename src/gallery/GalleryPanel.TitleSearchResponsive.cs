@@ -18,7 +18,7 @@ namespace VPB
         private const float TitleBarCategoryClampMaxRef = 260f;
         private const float TitleBarCategoryClampMinRef = 120f;
         private const float TitleSearchFieldMaxWidthRef = 240f;
-        private const float TitleSearchPopupDismissAfterAwaySeconds = 0.42f;
+        private const float TitleSearchPopupDismissAfterAwaySeconds = 0.72f;
         private const float TitleSearchPopupVicinityInflateScreenPx = 18f;
 
         /// <summary>
@@ -430,7 +430,13 @@ namespace VPB
 
             _titleSearchPopupProximityAwayTimer = 0f;
             _titleSearchPopupPanelRT.sizeDelta = new Vector2(pw, 44f * s + 10f);
-            _titleSearchPopupPanelRT.anchoredPosition = new Vector2(0f, -70f * s - 6f);
+            float popupX = (_titleSearchCompactRT != null && _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf)
+                ? _titleSearchCompactRT.anchoredPosition.x
+                : 0f;
+            float halfPw = pw * 0.5f;
+            float halfBw = bw * 0.5f;
+            popupX = Mathf.Clamp(popupX, -halfBw + halfPw + 4f * s, halfBw - halfPw - 4f * s);
+            _titleSearchPopupPanelRT.anchoredPosition = new Vector2(popupX, -70f * s - 6f);
 
             RectTransform ifrt = _titleSearchPopupField.GetComponent<RectTransform>();
             ifrt.sizeDelta = new Vector2(pw - 12f * s, 40f * s);

@@ -222,7 +222,7 @@ namespace VPB
                 AddHoverDelegate(handleGO);
                 AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
                 handleGO.transform.SetAsFirstSibling();
-                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ResizeHandleFixedHitRef * s, GalleryUiDesignTokens.ResizeHandleFixedHitRef * s); }); }
+                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
                 handleGO.SetActive(false);
                 _resizeHandleFixedBottomGO = handleGO;
             }
@@ -279,7 +279,7 @@ namespace VPB
                 AddHoverDelegate(handleGO);
                 AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
                 handleGO.transform.SetAsLastSibling();
-                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ResizeHandleFixedHitRef * s, GalleryUiDesignTokens.ResizeHandleFixedHitRef * s); }); }
+                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
                 handleGO.SetActive(false);
                 _resizeHandleFixedBottomRightGO = handleGO;
             }
@@ -318,7 +318,7 @@ namespace VPB
             else handleGO.transform.SetAsLastSibling();
 
             // Match the bar buttons: 40px square scaled by chrome scale.
-            { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ResizeHandleCornerHitRef * s, GalleryUiDesignTokens.ResizeHandleCornerHitRef * s); }); }
+            { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
 
             return handleGO;
         }
@@ -328,7 +328,7 @@ namespace VPB
         {
             const int anchor = AnchorPresets.topLeft;
             GameObject handleGO = UI.AddChildGOImage(titleBar, UI.IconButtonBackdrop, AnchorPresets.topLeft,
-                GalleryUiDesignTokens.ResizeHandleCornerHitRef, GalleryUiDesignTokens.ResizeHandleCornerHitRef, Vector2.zero);
+                GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef, Vector2.zero);
             handleGO.name = "ResizeHandle_" + anchor;
             handleGO.GetComponent<Image>().raycastTarget = true;
             handleGO.AddComponent<UIHoverBorder>();
@@ -336,7 +336,7 @@ namespace VPB
             // Far-left of the title bar, vertically centred on the bar like the title-bar buttons.
             RectTransform handleRT = handleGO.GetComponent<RectTransform>();
             handleRT.pivot = new Vector2(0.5f, 0.5f);
-            float xInset = GalleryUiDesignTokens.ResizeHandleEdgeMarginRef + GalleryUiDesignTokens.ResizeHandleCornerHitRef * 0.5f;
+            float xInset = GalleryUiDesignTokens.ResizeHandleEdgeMarginRef + GalleryUiDesignTokens.ButtonSizeRef * 0.5f;
             float yInset = GalleryUiDesignTokens.ResizeHandleTitleCenterYRef;
             handleRT.anchoredPosition = new Vector2(xInset, -yInset);
 
@@ -352,7 +352,7 @@ namespace VPB
             AddHoverDelegate(handleGO);
             AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
 
-            { var rt = handleRT; innerPaneScaleActions.Add(s => { if (rt) { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ResizeHandleCornerHitRef * s, GalleryUiDesignTokens.ResizeHandleCornerHitRef * s); rt.anchoredPosition = new Vector2(xInset * s, -yInset * s); } }); }
+            { var rt = handleRT; innerPaneScaleActions.Add(s => { if (rt) { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); rt.anchoredPosition = new Vector2(xInset * s, -yInset * s); } }); }
 
             return handleGO;
         }

@@ -232,14 +232,25 @@ namespace VPB
             RectTransform ddRT = titleCreatorDropdown.GetComponent<RectTransform>();
             if (ddRT != null)
             {
-                ddRT.sizeDelta = new Vector2(
+                float bgW = backgroundBoxGO != null
+                    ? (backgroundBoxGO.GetComponent<RectTransform>()?.rect.width ?? 600f)
+                    : 600f;
+                float ddW = Mathf.Min(
                     GalleryUiDesignTokens.TitleCreatorDropdownWidthRef * s,
-                    GalleryUiDesignTokens.TitleCreatorDropdownHeightRef * s);
+                    Mathf.Max(160f * s, bgW - 20f * s));
+                float ddH = GalleryUiDesignTokens.TitleCreatorDropdownHeightRef * s;
+                ddRT.sizeDelta = new Vector2(ddW, ddH);
+
                 if (titleCreatorBtn != null)
                 {
                     RectTransform btnRT = titleCreatorBtn.GetComponent<RectTransform>();
                     if (btnRT != null)
-                        ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -GalleryUiDesignTokens.TitleBarHeightRef * s);
+                    {
+                        float halfDdW = ddW * 0.5f;
+                        float halfBgW = bgW * 0.5f;
+                        float clampedX = Mathf.Clamp(btnRT.anchoredPosition.x, -halfBgW + halfDdW + 4f * s, halfBgW - halfDdW - 4f * s);
+                        ddRT.anchoredPosition = new Vector2(clampedX, -GalleryUiDesignTokens.TitleBarHeightRef * s);
+                    }
                 }
             }
             if (titleCreatorDropdownSearchInput != null)
@@ -247,8 +258,11 @@ namespace VPB
                 RectTransform srt = titleCreatorDropdownSearchInput.GetComponent<RectTransform>();
                 if (srt != null)
                 {
+                    // Keep search 20px narrower than dropdown, matching the reference proportions.
+                    float ddWNow = ddRT != null ? ddRT.sizeDelta.x : GalleryUiDesignTokens.TitleCreatorDropdownSearchWidthRef * s + 20f * s;
+                    float searchW = Mathf.Max(100f * s, ddWNow - 20f * s);
                     srt.anchoredPosition = new Vector2(0f, -10f * s);
-                    srt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleCreatorDropdownSearchWidthRef * s, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+                    srt.sizeDelta = new Vector2(searchW, GalleryUiDesignTokens.SearchFieldHeightRef * s);
                 }
                 RescaleSearchInput(titleCreatorDropdownSearchInput, s);
             }

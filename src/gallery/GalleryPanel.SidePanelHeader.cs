@@ -6,7 +6,7 @@ namespace VPB
     public partial class GalleryPanel
     {
         private const float SidePanelHeaderHeightRef = 32f;
-        private const float SidePanelFilterRowTopRef = 65f;
+        private const float SidePanelFilterRowTopRef = 44f;
         private const float SidePanelHeaderGapRef = 4f;
         private const float SidePanelHeaderColumnWidthRef = 210f;
         private const int SidePanelHeaderFontRef = GalleryUiDesignTokens.FontCaptionRef;
@@ -186,11 +186,29 @@ namespace VPB
             }
         }
 
+        private static Color ResolveSidePanelHeaderColor(ContentType content)
+        {
+            switch (content)
+            {
+                case ContentType.Creator:         return ColorCreator;
+                case ContentType.UserTags:        return ColorUserTagFilter;
+                case ContentType.Path:            return ColorSourceFilter;
+                case ContentType.History:         return ColorSubfilterFilter;
+                case ContentType.Settings:        return ColorSubfilterFilter;
+                case ContentType.SavePresets:     return ColorSourceFilter;
+                case ContentType.RemoveClothing:  return ColorSubfilterFilter;
+                case ContentType.RemoveHair:      return ColorSubfilterFilter;
+                case ContentType.RemoveAtom:      return ColorSubfilterFilter;
+                case ContentType.CleanupCategories: return ColorSubfilterFilter;
+                default:                          return ColorCategory;
+            }
+        }
+
         private static string FormatSidePanelHeaderLabel(bool isLeft, string title)
         {
             if (string.IsNullOrEmpty(title))
-                return isLeft ? "\u2190" : "\u2192";
-            return isLeft ? ("\u2190 " + title) : (title + " \u2192");
+                return "\u00d7";
+            return isLeft ? ("\u00d7 " + title) : (title + " \u00d7");
         }
 
         private void EnsureSidePanelHeaderChrome(bool isLeft)
@@ -234,7 +252,7 @@ namespace VPB
                 titleTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
                 titleTxt.verticalOverflow = VerticalWrapMode.Truncate;
             }
-            AddTooltip(headerGo, "gallery.side.collapse_tip", "Collapse side list");
+            AddTooltip(headerGo, "gallery.side.collapse_tip", "Close this panel");
             headerGo.SetActive(false);
 
             if (isLeft)
@@ -306,8 +324,16 @@ namespace VPB
             if (headerGo != null) headerGo.SetActive(show);
             if (titleTxt != null)
                 GalleryUiMetrics.ApplyFont(titleTxt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (show && titleTxt != null && ct.HasValue)
-                titleTxt.text = FormatSidePanelHeaderLabel(isLeft, ResolveSidePanelHeaderTitle(ct.Value));
+            if (show && ct.HasValue)
+            {
+                if (titleTxt != null)
+                    titleTxt.text = FormatSidePanelHeaderLabel(isLeft, ResolveSidePanelHeaderTitle(ct.Value));
+                if (headerGo != null)
+                {
+                    Image hdrBg = headerGo.GetComponent<Image>();
+                    if (hdrBg != null) hdrBg.color = ResolveSidePanelHeaderColor(ct.Value);
+                }
+            }
 
             if (headerGo != null)
             {

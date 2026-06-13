@@ -112,7 +112,7 @@ namespace VPB
         private void ApplyImportSidebarBaseRect(float s)
         {
             if (importSidebarRT == null) return;
-            float w = ImportSidebarBaseWidth;
+            float w = ImportSidebarBaseWidth * s;
             float leftMargin = SideTabColumnLeftInsetX(s);
             float rightMargin = -SideTabColumnRightInsetX(s);
             float top = ImportSidebarTopOffsetY(s);          // negative: inset down from panel top
@@ -182,7 +182,7 @@ namespace VPB
             if (g == null) return;
             float scrollW = ImportSidebarScrollBarWidthPx(s);
             float padH = ImportSidebarInnerPadHRef * s;
-            float cellW = (ImportSidebarBaseWidth - scrollW - 2f * padH) / 2f;
+            float cellW = (ImportSidebarBaseWidth * s - scrollW - 2f * padH) / 2f;
             const int typeRadioRows = 5;
             g.cellSize = new Vector2(cellW, 26f * s);
             g.spacing = new Vector2(2f * s, 2f * s);

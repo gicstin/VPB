@@ -13,6 +13,7 @@ namespace VPB
         private Transform importSidebarOptionsPanelHost;
         private readonly Dictionary<VpbResourceType, GameObject> importSidebarTypeRadioButtons
             = new Dictionary<VpbResourceType, GameObject>();
+        private Image _importSidebarMultiToggleBtnBg;
         private Button importSidebarApplyButton;
         private Text importSidebarApplyButtonLabel;
 
@@ -68,6 +69,31 @@ namespace VPB
 
         private void BuildImportSidebarTypeRadio(Transform parent)
         {
+            // Multi-type toggle: a compact row above the grid that enables selecting more than one type at once.
+            GameObject multiRow = new GameObject("MultiTypeToggle");
+            multiRow.transform.SetParent(parent, false);
+            LayoutElement multiLe = multiRow.AddComponent<LayoutElement>();
+            multiLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            multiLe.flexibleWidth = 1f;
+            Image multiBg = multiRow.AddComponent<Image>();
+            multiBg.color = ColorInactiveRow;
+            _importSidebarMultiToggleBtnBg = multiBg;
+            Button multiBtn = multiRow.AddComponent<Button>();
+            multiBtn.targetGraphic = multiBg;
+            UI.NeutralizeSelectableColorTint(multiBtn);
+            Text multiLabel = CreateImportSidebarLabel(multiRow.transform,
+                VPBTranslation.T("gallery.import.multi_type_toggle", "Multi-select"), ImportSidebarBaseFontSize);
+            multiLabel.alignment = TextAnchor.MiddleCenter;
+            multiBtn.onClick.AddListener(ToggleImportSidebarMultiMode);
+            AddTooltip(multiRow, "gallery.import.multi_type_tip",
+                "Select multiple resource types to apply all together in one click");
+            LayoutElement multiLeC = multiLe;
+            Text multiLabelC = multiLabel;
+            innerPaneScaleActions.Add(s => {
+                if (multiLeC != null) multiLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                ApplyScaledFont(multiLabelC, ImportSidebarBaseFontSize, s);
+            });
+
             GameObject grid = new GameObject("TypeRadio");
             grid.transform.SetParent(parent, false);
 
@@ -156,15 +182,17 @@ namespace VPB
 
             RectTransform rt = host.AddComponent<RectTransform>();
             importSidebarOptionsPanelHost = rt;
-            // Fixed (scaled) preferred height inside the body scroll, sized for ~6 toggle rows. Not flexibleHeight:
-            // the active panel must sit directly under the type radio, and the body scroll absorbs any overflow.
-            const float optionsHostRows = 6f;
             LayoutElement le = host.AddComponent<LayoutElement>();
-            le.preferredHeight = optionsHostRows * ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
-
-            LayoutElement leCaptured = le;
-            innerPaneScaleActions.Add(s => { if (leCaptured != null) leCaptured.preferredHeight = optionsHostRows * ImportSidebarBaseRowHeight * s; });
+            // Stack active panels vertically; ContentSizeFitter drives the host height to match content.
+            VerticalLayoutGroup hostVlg = host.AddComponent<VerticalLayoutGroup>();
+            hostVlg.childForceExpandWidth = true;
+            hostVlg.childForceExpandHeight = false;
+            hostVlg.childControlWidth = true;
+            hostVlg.childControlHeight = true;
+            hostVlg.spacing = 0f;
+            ContentSizeFitter hostCsf = host.AddComponent<ContentSizeFitter>();
+            hostCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             foreach (VpbResourceType t in ImportSidebarTypeOrder)
             {
@@ -180,10 +208,14 @@ namespace VPB
             panel.transform.SetParent(parent, false);
 
             RectTransform rt = panel.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
+
+            ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
             vlg.spacing = 2f;
@@ -601,32 +633,85 @@ namespace VPB
             UI.NeutralizeSelectableColorTint(b);
 
             importSidebarApplyButton = b;
-            importSidebarApplyButtonLabel = AddSimpleLabelText(btn.transform, "Apply", 18, UI.PopupText);
+            importSidebarApplyButtonLabel = AddSimpleLabelText(btn.transform, "Apply", ImportSidebarBaseFontSize, UI.PopupText);
             importSidebarApplyButtonLabel.alignment = TextAnchor.MiddleCenter;
 
             Text labelCaptured = importSidebarApplyButtonLabel;
-            innerPaneScaleActions.Add(s => ApplyScaledFont(labelCaptured, 18, s));
+            innerPaneScaleActions.Add(s => ApplyScaledFont(labelCaptured, ImportSidebarBaseFontSize, s));
         }
 
         private void OnImportSidebarTypeChosen(VpbResourceType t)
         {
-            foreach (var kv in importSidebarOptionPanels)
-                kv.Value.SetActive(kv.Key == t);
-            importSidebarPresetType = t;
-            foreach (var kv in importSidebarTypeRadioButtons)
+            if (importSidebarMultiTypeMode)
             {
-                Image img = kv.Value.GetComponent<Image>();
-                // Active = ColorCategory (red), inactive = ColorInactiveRow (grey). Same exact
-                // pair Creator/Category tab rows use for their active/inactive states.
-                if (img != null)
-                    img.color = kv.Key == t ? ImportSidebarSelectedAccent : ColorInactiveRow;
+                // Toggle: can't deselect the last remaining type.
+                if (importSidebarMultiSelectedTypes.Contains(t))
+                {
+                    if (importSidebarMultiSelectedTypes.Count > 1)
+                        importSidebarMultiSelectedTypes.Remove(t);
+                }
+                else
+                {
+                    importSidebarMultiSelectedTypes.Add(t);
+                }
+                // Primary type drives which option panel shows (still useful in multi mode).
+                importSidebarPresetType = t;
             }
+            else
+            {
+                importSidebarPresetType = t;
+            }
+
+            // Show option panel(s): all selected types in multi-mode, primary type only otherwise.
+            foreach (var kv in importSidebarOptionPanels)
+                kv.Value.SetActive(importSidebarMultiTypeMode
+                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
+                    : kv.Key == importSidebarPresetType);
+
+            RefreshTypeRadioButtonColors();
             RefreshPluginChecklist();
             RefreshApplyButtonEnabled();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             // Swapping the active panel changes the scroll content's total height; force the VLG/CSF to recompute.
             RebuildImportSidebarContent();
             // Guard: skip the build-time call (importSidebarBuilt set after BuildImportSidebar); persist user picks only.
+            if (importSidebarBuilt) SaveImportSidebarPrefs();
+        }
+
+        private void RefreshTypeRadioButtonColors()
+        {
+            foreach (var kv in importSidebarTypeRadioButtons)
+            {
+                Image img = kv.Value.GetComponent<Image>();
+                if (img == null) continue;
+                bool active = importSidebarMultiTypeMode
+                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
+                    : kv.Key == importSidebarPresetType;
+                img.color = active ? ImportSidebarSelectedAccent : ColorInactiveRow;
+            }
+            if (_importSidebarMultiToggleBtnBg != null)
+                _importSidebarMultiToggleBtnBg.color = importSidebarMultiTypeMode
+                    ? ImportSidebarSelectedAccent : ColorInactiveRow;
+        }
+
+        private void ToggleImportSidebarMultiMode()
+        {
+            importSidebarMultiTypeMode = !importSidebarMultiTypeMode;
+            if (importSidebarMultiTypeMode)
+            {
+                // Seed the multi set with whichever type is currently primary.
+                importSidebarMultiSelectedTypes.Clear();
+                importSidebarMultiSelectedTypes.Add(importSidebarPresetType);
+            }
+            RefreshTypeRadioButtonColors();
+            // Sync option panel visibility to the new mode.
+            foreach (var kv in importSidebarOptionPanels)
+                kv.Value.SetActive(importSidebarMultiTypeMode
+                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
+                    : kv.Key == importSidebarPresetType);
+            try { RefreshImportSidebarWizardHeader(); } catch { }
+            RebuildImportSidebarContent();
+            RefreshApplyButtonEnabled();
             if (importSidebarBuilt) SaveImportSidebarPrefs();
         }
 
@@ -659,44 +744,69 @@ namespace VPB
                 return;
             }
 
-            // CUAs import as native CustomUnityAsset atoms (after the appearance apply), independent of clothing mode.
-            bool importCUAs = importSidebarPresetType == VpbResourceType.Appearance && importSidebarImportLinkedCUAs;
+            // Snapshot the target atom BEFORE any changes so the user can undo the entire import.
+            try
+            {
+                Action undoAction = CaptureAtomSnapshotAction(importSidebarTargetAtom);
+                if (undoAction != null) PushUndo(undoAction);
+            }
+            catch { }
 
+            string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
+                ? sceneVar.Package.Uid : null;
+
+            if (importSidebarMultiTypeMode && importSidebarMultiSelectedTypes.Count > 0)
+            {
+                // Multi-type: apply each selected type in sequence; CUA import is skipped (Appearance-specific).
+                foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
+                    ApplyOneTypeImport(t, sourceHostUid);
+            }
+            else
+            {
+                bool importCUAs = importSidebarPresetType == VpbResourceType.Appearance && importSidebarImportLinkedCUAs;
+                ApplyOneTypeImport(importSidebarPresetType, sourceHostUid);
+                if (importCUAs)
+                    StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
+            }
+        }
+
+        private void ApplyOneTypeImport(VpbResourceType type, string sourceHostUid)
+        {
             JSONClass presetJSON = BuildPresetJSONForCurrentSelection();
             if (presetJSON == null)
             {
-                LogUtil.LogWarning("[VPB import] Could not build preset JSON.");
+                LogUtil.LogWarning("[VPB import] Could not build preset JSON for type " + type);
                 return;
             }
 
-            string storableOverride = ResolveOptionalStorableOverrideForCurrentType();
+            string storableOverride = ResolveStorableOverrideForType(type);
 
             // Appearance: suppress-clothing maps to Keep (locks ClothingPresets so source clothing is skipped),
             // else Replace. Clothing/Hair use the merge toggle. Other types ignore the mode.
             ClothingApplyMode mode;
-            if (importSidebarPresetType == VpbResourceType.Appearance)
+            if (type == VpbResourceType.Appearance)
                 mode = importSidebarSuppressClothingLoad ? ClothingApplyMode.Keep : ClothingApplyMode.Replace;
             else
                 mode = importSidebarMergeClothingOrHair ? ClothingApplyMode.Merge : ClothingApplyMode.Replace;
 
             // LoadPreset has no subToggles param: prune opted-out sub-trees here, on the fresh deep copy
             // from BuildPresetJSONForCurrentSelection (never the cached scene JSON).
-            presetJSON = VpbImportSubToggleFilter.FilterForType(presetJSON, importSidebarPresetType, importSidebarSubToggles);
+            presetJSON = VpbImportSubToggleFilter.FilterForType(presetJSON, type, importSidebarSubToggles);
             // A null here would make LoadPreset fall through to reading the whole scene file and applying every atom.
             if (presetJSON == null)
             {
-                LogUtil.LogWarning("[VPB import] Sub-toggle doesn't exist; nothing to apply.");
+                LogUtil.LogWarning("[VPB import] Sub-toggle filter returned null for type " + type + "; skipping.");
                 return;
             }
 
             // Plugins subset: prune to the checked plugins and force Merge so they add to the target (new UIDs)
             // without dropping its existing plugins; off = import all (the whole PluginPresets storable).
-            if (importSidebarPresetType == VpbResourceType.Plugins && importSidebarPluginsMergeSingle)
+            if (type == VpbResourceType.Plugins && importSidebarPluginsMergeSingle)
             {
                 JSONClass pluginSlice = VpbImport.BuildSelectedPluginsSlice(presetJSON, importSidebarSelectedPluginKeys);
                 if (pluginSlice == null)
                 {
-                    LogUtil.LogWarning("[VPB import] No plugins selected; nothing to import.");
+                    LogUtil.LogWarning("[VPB import] No plugins selected for type Plugins; skipping.");
                     return;
                 }
                 presetJSON = pluginSlice;
@@ -705,7 +815,7 @@ namespace VPB
 
             // BreastPhysics / Glute / Plugins / Skin lack a dedicated dispatch case: route them through General
             // by their storable name (General aborts loud if the storable is missing).
-            VpbResourceType dispatchType = importSidebarPresetType;
+            VpbResourceType dispatchType = type;
             if (storableOverride != null
                 && (dispatchType == VpbResourceType.BreastPhysics
                     || dispatchType == VpbResourceType.Glute
@@ -715,9 +825,6 @@ namespace VPB
             {
                 dispatchType = VpbResourceType.General;
             }
-
-            string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
-                ? sceneVar.Package.Uid : null;
 
             // Rewrite SELF: refs (e.g. clothing material customTexture_*Tex) to the source package uid: untouched,
             // VaM resolves SELF: against the loaded (target) scene's package and the texture fails as "not valid".
@@ -776,11 +883,8 @@ namespace VPB
 
             // Delete-then-import = replace: removing the target's existing CUAs before spawning the new ones means
             // delete only catches pre-existing atoms, and import + delete compose into "replace".
-            if (importSidebarPresetType == VpbResourceType.Appearance && importSidebarDeleteTargetCUAs)
+            if (type == VpbResourceType.Appearance && importSidebarDeleteTargetCUAs)
                 DeleteTargetLinkedCUAs(importSidebarTargetAtom);
-
-            if (importCUAs)
-                StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
 
         // Reads the whole source scene (CUAs are separate atoms) and spawns each person-linked CUA as a native atom.
@@ -937,7 +1041,12 @@ namespace VPB
 
         private string ResolveOptionalStorableOverrideForCurrentType()
         {
-            switch (importSidebarPresetType)
+            return ResolveStorableOverrideForType(importSidebarPresetType);
+        }
+
+        private static string ResolveStorableOverrideForType(VpbResourceType type)
+        {
+            switch (type)
             {
                 case VpbResourceType.BreastPhysics: return "FemaleBreastPhysicsPresets";
                 case VpbResourceType.Glute:         return "FemaleGlutePhysicsPresets";

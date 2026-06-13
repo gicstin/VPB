@@ -75,21 +75,24 @@ namespace VPB
             for (int i = panel.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
 
+            bool ratingActive = !string.IsNullOrEmpty(currentRatingFilter);
+            bool fpsActive = fpsText != null && fpsText.gameObject != null && fpsText.gameObject.activeSelf;
+
             AddOverflowMenuRow(panel, VPBTranslation.T("i18n.switcher.tooltip", "Language"), () => { CloseTitleBarOverflowMenu(); ToggleLanguageMenu(); });
             AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.filter_presets", "Filter presets"), () => { CloseTitleBarOverflowMenu(); ToggleQuickFilters(); });
             AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.creator_filter", "Creator filter"), () => { CloseTitleBarOverflowMenu(); ToggleTitleCreatorDropdown(); });
             AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.source_filter", "Source filter"), () => { CloseTitleBarOverflowMenu(); ToggleGlobalSourceFilterDropdown(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.rated_only", "Rated only"), () => { CloseTitleBarOverflowMenu(); ToggleRatingSort(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.fps_counter", "FPS counter"), () => { CloseTitleBarOverflowMenu(); QuickMenu_ToggleFpsCounter(); });
+            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.rated_only", "Rated only"), () => { CloseTitleBarOverflowMenu(); ToggleRatingSort(); }, ratingActive);
+            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.fps_counter", "FPS counter"), () => { CloseTitleBarOverflowMenu(); QuickMenu_ToggleFpsCounter(); }, fpsActive);
         }
 
-        private static void AddOverflowMenuRow(Transform panel, string label, UnityAction onClick)
+        private static void AddOverflowMenuRow(Transform panel, string label, UnityAction onClick, bool active = false)
         {
             if (panel == null || onClick == null) return;
             GameObject row = UI.CreateUIButton(panel.gameObject, 0f, 36f, label, 15, 0f, 0f, AnchorPresets.stretchAll, onClick);
             if (row == null) return;
             Image img = row.GetComponent<Image>();
-            if (img != null) img.color = new Color(0.22f, 0.22f, 0.24f, 1f);
+            if (img != null) img.color = active ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
             Text t = row.GetComponentInChildren<Text>();
             if (t != null)
             {
@@ -115,7 +118,9 @@ namespace VPB
                     var panelRT = panel as RectTransform;
                     if (panelRT != null && _titleBarOverflowBtnRT != null)
                     {
-                        panelRT.anchoredPosition = new Vector2(_titleBarOverflowBtnRT.anchoredPosition.x, -72f);
+                        float cs = ChromeScale;
+                        float yOff = -(GalleryUiDesignTokens.TitleBarHeightRef + GalleryUiDesignTokens.PopupMenuAnchorGapRef * cs) * cs;
+                        panelRT.anchoredPosition = new Vector2(_titleBarOverflowBtnRT.anchoredPosition.x, yOff);
                     }
                 }
                 catch { }

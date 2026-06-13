@@ -1210,9 +1210,10 @@ namespace VPB
             le.preferredHeight = 35f * s;
             le.flexibleWidth = 1;
 
-            RectTransform btnRt = btnGO.GetComponent<RectTransform>();
             float pad = 10f * s;
-            float inner = (btnRt != null ? btnRt.rect.width : 0f) - pad - insetL - insetR;
+            // Use le.preferredWidth (already set to current scale) instead of btnRt.rect.width,
+            // which can be stale after scale changes and cause text to stay over-truncated.
+            float inner = le.preferredWidth - pad - insetL - insetR;
             if (inner <= 2f) inner = 125f * s;
             string shown = EllipsizeTextPreferredWidth(txt, label, inner);
             txt.text = shown;

@@ -2412,10 +2412,10 @@ namespace VPB
             statusRT.anchorMax        = new Vector2(1f, 0f);
             statusRT.pivot            = new Vector2(0.5f, 0f);
             statusRT.anchoredPosition = Vector2.zero;
-            statusRT.sizeDelta        = new Vector2(0f, 60f);
+            statusRT.sizeDelta        = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef);
             {
                 var sRT = statusRT;
-                innerPaneScaleActions.Add(s => { if (sRT != null) sRT.sizeDelta = new Vector2(0f, 60f * s); });
+                innerPaneScaleActions.Add(s => { if (sRT != null) sRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s); });
             }
 
             // Pointer Dot

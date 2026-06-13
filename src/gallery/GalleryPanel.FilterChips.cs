@@ -93,6 +93,7 @@ namespace VPB
             if (!IsVisible || isCollapsed) return false;
             if (IsSettingsPanelOpen() || settingsListViewActive) return false;
             if (cleanupModeActive) return false;
+            if (importSidebarActive) return false;
             if (!IsBrowseFilterChipContextActive()) return false;
             return HasActiveBrowseFilters();
         }
@@ -130,6 +131,7 @@ namespace VPB
         {
             if (_activeFilterChipBarGO == null) return;
 
+            bool wasVisible = _activeFilterChipBarVisible;
             _activeFilterChipBarVisible = ShouldShowActiveFilterChipBar();
             _activeFilterChipBarGO.SetActive(_activeFilterChipBarVisible);
             if (!_activeFilterChipBarVisible)
@@ -137,6 +139,12 @@ namespace VPB
                 ClearActiveFilterChipButtons();
                 return;
             }
+
+            // Preserve horizontal scroll when incrementally updating (e.g. chip dismiss).
+            // Reset to 0 only when the bar transitions from hidden → visible.
+            float prevScrollPos = (wasVisible && _activeFilterChipScroll != null)
+                ? _activeFilterChipScroll.horizontalNormalizedPosition
+                : 0f;
 
             var specs = new List<ActiveFilterChipSpec>(12);
             CollectActiveFilterChipSpecs(specs);
@@ -155,7 +163,7 @@ namespace VPB
             for (int i = 0; i < specs.Count; i++)
             {
                 ActiveFilterChipSpec spec = specs[i];
-                GameObject chip = CreateFilterChipControl(_activeFilterChipScrollContentRT, spec, chipH, fontSize);
+                GameObject chip = CreateFilterChipControl(_activeFilterChipScrollContentRT, spec, chipH, fontSize, s);
                 if (chip != null) _activeFilterChipButtons.Add(chip);
             }
 
@@ -163,7 +171,7 @@ namespace VPB
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(_activeFilterChipScrollContentRT);
                 if (_activeFilterChipScroll != null)
-                    _activeFilterChipScroll.horizontalNormalizedPosition = 0f;
+                    _activeFilterChipScroll.horizontalNormalizedPosition = prevScrollPos;
             }
             catch { }
         }
@@ -210,9 +218,10 @@ namespace VPB
             return new Color(accent.r * 0.55f, accent.g * 0.55f, accent.b * 0.55f, 0.9f);
         }
 
-        private GameObject CreateFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize)
+        private GameObject CreateFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize, float s = 1f)
         {
             if (parent == null || spec.OnDismiss == null) return null;
+            if (s <= 0f) s = 1f;
 
             bool isClearAll = spec.Kind == FilterChipKind.ClearAll;
             Color accent = ResolveFilterChipAccent(spec.Kind);
@@ -225,7 +234,7 @@ namespace VPB
             bg.color = new Color(accent.r, accent.g, accent.b, isClearAll ? 0.94f : 0.96f);
 
             HorizontalLayoutGroup row = chip.AddComponent<HorizontalLayoutGroup>();
-            row.padding = new RectOffset(10, 4, 2, 2);
+            row.padding = new RectOffset(Mathf.RoundToInt(10 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(2 * s), Mathf.RoundToInt(2 * s));
             row.spacing = 2f;
             row.childAlignment = TextAnchor.MiddleCenter;
             row.childControlWidth = true;
@@ -255,8 +264,15 @@ namespace VPB
             ContentSizeFitter labelCsf = labelGO.AddComponent<ContentSizeFitter>();
             labelCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+            UnityAction dismiss = spec.OnDismiss;
             if (!isClearAll)
             {
+                // Clicking anywhere on the chip (label area) dismisses it — child dismiss button
+                // consumes its own click so the parent only fires when the label area is hit.
+                Button chipBodyBtn = chip.AddComponent<Button>();
+                UI.NeutralizeSelectableColorTint(chipBodyBtn);
+                chipBodyBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
+
                 float dismissSize = Mathf.Max(18f, chipH - 4f);
                 GameObject dismissGO = new GameObject("Dismiss");
                 dismissGO.transform.SetParent(chip.transform, false);
@@ -265,7 +281,6 @@ namespace VPB
                 dismissBg.raycastTarget = true;
                 Button dismissBtn = dismissGO.AddComponent<Button>();
                 UI.NeutralizeSelectableColorTint(dismissBtn);
-                UnityAction dismiss = spec.OnDismiss;
                 dismissBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
 
                 GameObject xGO = new GameObject("X");
@@ -291,13 +306,12 @@ namespace VPB
                 dismissLE.preferredHeight = dismissSize;
                 dismissLE.minHeight = dismissSize;
 
-                try { AddTooltip(dismissGO, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
+                try { AddTooltip(chip, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
             }
             else
             {
                 Button chipBtn = chip.AddComponent<Button>();
                 UI.NeutralizeSelectableColorTint(chipBtn);
-                UnityAction dismiss = spec.OnDismiss;
                 chipBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
                 try { AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters"); } catch { }
             }
@@ -581,37 +595,40 @@ namespace VPB
 
         private static string DescribeClothingSubfilter(ClothingSubfilter f)
         {
-            if ((f & ClothingSubfilter.RealClothing) != 0) return "Real Clothing";
-            if ((f & ClothingSubfilter.Presets) != 0) return "Presets";
-            if ((f & ClothingSubfilter.Custom) != 0) return "Custom";
-            if ((f & ClothingSubfilter.CustomPreset) != 0) return "Custom Preset";
-            if ((f & ClothingSubfilter.Items) != 0) return "Base Clothing";
-            if ((f & ClothingSubfilter.Male) != 0) return "Male";
-            if ((f & ClothingSubfilter.Female) != 0) return "Female";
-            if ((f & ClothingSubfilter.Decals) != 0) return "Decals";
-            return "Active";
+            var parts = new System.Collections.Generic.List<string>(4);
+            if ((f & ClothingSubfilter.RealClothing) != 0) parts.Add("Real Clothing");
+            if ((f & ClothingSubfilter.Presets) != 0) parts.Add("Presets");
+            if ((f & ClothingSubfilter.Custom) != 0) parts.Add("Custom");
+            if ((f & ClothingSubfilter.CustomPreset) != 0) parts.Add("Custom Preset");
+            if ((f & ClothingSubfilter.Items) != 0) parts.Add("Base Clothing");
+            if ((f & ClothingSubfilter.Male) != 0) parts.Add("Male");
+            if ((f & ClothingSubfilter.Female) != 0) parts.Add("Female");
+            if ((f & ClothingSubfilter.Decals) != 0) parts.Add("Decals");
+            return parts.Count > 0 ? string.Join("+", parts.ToArray()) : "Active";
         }
 
         private static string DescribeHairSubfilter(HairSubfilter f)
         {
-            if ((f & HairSubfilter.Presets) != 0) return "Presets";
-            if ((f & HairSubfilter.Custom) != 0) return "Custom";
-            if ((f & HairSubfilter.CustomPreset) != 0) return "Custom Preset";
-            if ((f & HairSubfilter.Items) != 0) return "Base Hair";
-            if ((f & HairSubfilter.Male) != 0) return "Male";
-            if ((f & HairSubfilter.Female) != 0) return "Female";
-            return "Active";
+            var parts = new System.Collections.Generic.List<string>(4);
+            if ((f & HairSubfilter.Presets) != 0) parts.Add("Presets");
+            if ((f & HairSubfilter.Custom) != 0) parts.Add("Custom");
+            if ((f & HairSubfilter.CustomPreset) != 0) parts.Add("Custom Preset");
+            if ((f & HairSubfilter.Items) != 0) parts.Add("Base Hair");
+            if ((f & HairSubfilter.Male) != 0) parts.Add("Male");
+            if ((f & HairSubfilter.Female) != 0) parts.Add("Female");
+            return parts.Count > 0 ? string.Join("+", parts.ToArray()) : "Active";
         }
 
         private static string DescribeAppearanceSubfilter(AppearanceSubfilter f)
         {
-            if ((f & AppearanceSubfilter.Presets) != 0) return "Presets";
-            if ((f & AppearanceSubfilter.Custom) != 0) return "Custom";
-            if ((f & AppearanceSubfilter.Male) != 0) return "Male";
-            if ((f & AppearanceSubfilter.Female) != 0) return "Female";
-            if ((f & AppearanceSubfilter.Futa) != 0) return "Futa";
-            if ((f & AppearanceSubfilter.Unknown) != 0) return "Unknown";
-            return "Active";
+            var parts = new System.Collections.Generic.List<string>(4);
+            if ((f & AppearanceSubfilter.Presets) != 0) parts.Add("Presets");
+            if ((f & AppearanceSubfilter.Custom) != 0) parts.Add("Custom");
+            if ((f & AppearanceSubfilter.Male) != 0) parts.Add("Male");
+            if ((f & AppearanceSubfilter.Female) != 0) parts.Add("Female");
+            if ((f & AppearanceSubfilter.Futa) != 0) parts.Add("Futa");
+            if ((f & AppearanceSubfilter.Unknown) != 0) parts.Add("Unknown");
+            return parts.Count > 0 ? string.Join("+", parts.ToArray()) : "Active";
         }
 
         private void DismissCreatorFilterChip(string creator)
