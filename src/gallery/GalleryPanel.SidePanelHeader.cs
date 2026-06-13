@@ -9,7 +9,7 @@ namespace VPB
         private const float SidePanelFilterRowTopRef = 65f;
         private const float SidePanelHeaderGapRef = 4f;
         private const float SidePanelHeaderColumnWidthRef = 210f;
-        private const int SidePanelHeaderFontRef = 14;
+        private const int SidePanelHeaderFontRef = GalleryUiDesignTokens.FontCaptionRef;
 
         private GameObject _leftSidePanelHeaderGO;
         private Text _leftSidePanelHeaderTitle;
@@ -76,14 +76,15 @@ namespace VPB
         internal float SidePanelFilterRowYForSide(bool isLeft, float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;
-            float rowTop = IsFixedTopDockMode() ? 0f : SidePanelFilterRowTopRef * s;
+            // Side-rail chrome always sits below the full-width title bar (top dock included);
+            // TabScrollTopOffset reserves the same SideTabTopOffsetRef, so they must stay aligned.
+            float rowTop = SidePanelFilterRowTopRef * s;
             return -(rowTop + SidePanelHeaderInsetForSide(isLeft, s));
         }
 
         private float SidePanelHeaderAnchorY(float s)
         {
             if (s <= 0f) s = 1f;
-            if (IsFixedTopDockMode()) return 0f;
             return -SidePanelFilterRowTopRef * s;
         }
 
@@ -94,7 +95,7 @@ namespace VPB
         private void ApplySideTabColumnHorizontalInset(RectTransform rt, bool isLeft, float s)
         {
             if (rt == null) return;
-            const float tabW = 220f;
+            float tabW = GalleryUiDesignTokens.SideTabColumnWidthRef * s;
             if (isLeft)
             {
                 float m = SideTabColumnLeftMarginPx(s);
@@ -135,7 +136,7 @@ namespace VPB
 
         private float SidePanelHeaderExtraTopInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float extra = 0f;
             if (SidePanelHeaderVisibleForSide(true)) extra = Mathf.Max(extra, SidePanelHeaderInsetForSide(true, s));
             if (SidePanelHeaderVisibleForSide(false)) extra = Mathf.Max(extra, SidePanelHeaderInsetForSide(false, s));
@@ -204,10 +205,10 @@ namespace VPB
                 else { _rightSidePanelHeaderGO = null; _rightSidePanelHeaderTitle = null; }
             }
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float headerH = SidePanelHeaderHeightRef * s;
             float colW = SidePanelHeaderColumnWidthRef * s;
-            int font = Mathf.Max(12, Mathf.RoundToInt(SidePanelHeaderFontRef * s));
+            int font = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             float sideInsetX = isLeft ? SideTabColumnLeftInsetX(s) : SideTabColumnRightInsetX(s);
 
             GameObject headerGo = UI.CreateUIButton(
@@ -227,7 +228,7 @@ namespace VPB
             Text titleTxt = headerGo.GetComponentInChildren<Text>();
             if (titleTxt != null)
             {
-                titleTxt.fontStyle = FontStyle.Bold;
+                titleTxt.fontStyle = FontStyle.Normal;
                 titleTxt.color = Color.white;
                 titleTxt.alignment = TextAnchor.MiddleCenter;
                 titleTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -303,6 +304,8 @@ namespace VPB
             ContentType? ct = isLeft ? leftActiveContent : rightActiveContent;
             bool show = SidePanelHeaderVisibleForSide(isLeft);
             if (headerGo != null) headerGo.SetActive(show);
+            if (titleTxt != null)
+                GalleryUiMetrics.ApplyFont(titleTxt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (show && titleTxt != null && ct.HasValue)
                 titleTxt.text = FormatSidePanelHeaderLabel(isLeft, ResolveSidePanelHeaderTitle(ct.Value));
 

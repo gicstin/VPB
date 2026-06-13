@@ -52,30 +52,6 @@ namespace VPB
             }
         }
 
-        // ── Content-type search placeholder ─────────────────────────────────────
-
-        internal static string GetContentTypePlaceholder(ContentType type)
-        {
-            switch (type)
-            {
-                case ContentType.Category:     return VPBTranslation.T("gallery.search.categories", "Categories...");
-                case ContentType.Creator:      return VPBTranslation.T("gallery.search.creators", "Search Creators...");
-                case ContentType.UserTags:     return VPBTranslation.T("gallery.search.user_tags", "Search your tags...");
-                case ContentType.UserTagsApplied: return VPBTranslation.T("gallery.search.user_tags_applied", "Search applied tags...");
-                case ContentType.Path:         return VPBTranslation.T("gallery.search.paths", "Search Paths...");
-                case ContentType.Tags:         return VPBTranslation.T("gallery.search.tags", "Search Tags...");
-                case ContentType.RemoveClothing: return VPBTranslation.T("gallery.search.clothing", "Filter Clothing...");
-                case ContentType.RemoveHair:     return VPBTranslation.T("gallery.search.hair", "Filter Hair...");
-                case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");
-                case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
-                case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
-                case ContentType.CleanupStaleBuckets: return VPBTranslation.T("gallery.search.cleanup_stale", "Filter Stale Cache Buckets...");
-                case ContentType.History:      return VPBTranslation.T("gallery.search.history_tabs", "Filter history tabs...");
-                case ContentType.Settings:     return VPBTranslation.T("gallery.search.settings", "Filter settings...");
-                default:                       return VPBTranslation.T("gallery.search.main", "Search...");
-            }
-        }
-
         internal static string GetGalleryHistoryFilterRowLabel(GalleryHistoryFilterMode mode)
         {
             switch (mode)
@@ -168,7 +144,12 @@ namespace VPB
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly
-            if (titleBarSettingsBtnText != null) titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
+            if (titleBarSettingsBtnText != null)
+            {
+                bool hasIcon = _titleBarSettingsBtnRT != null && _titleBarSettingsBtnRT.Find("Icon") != null;
+                if (!hasIcon)
+                    titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
+            }
             if (rightCloneBtnIconImage == null && rightCloneBtnText != null)
                 rightCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
             if (leftCloneBtnIconImage == null && leftCloneBtnText != null)
@@ -262,8 +243,8 @@ namespace VPB
                 _langBtnText.color = Color.white;
                 _langBtnText.alignment = TextAnchor.MiddleCenter;
                 _langBtnText.resizeTextForBestFit = true;
-                _langBtnText.resizeTextMinSize = 10;
-                _langBtnText.resizeTextMaxSize = 16;
+                _langBtnText.resizeTextMinSize = GalleryUiDesignTokens.FontMinRef;
+                _langBtnText.resizeTextMaxSize = GalleryUiDesignTokens.FontBodyRef;
                 VPBUiFont.ApplyTo(_langBtnText);
             }
 
@@ -372,8 +353,8 @@ namespace VPB
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color     = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.color     = isCurrent ? UI.PopupText : UI.PopupMutedText;
+                    rowT.fontStyle = FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
                 }

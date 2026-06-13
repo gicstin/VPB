@@ -14,7 +14,7 @@ namespace VPB
         // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowTop = 65f * s;
             float headerExtra = 0f;
             try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
@@ -57,8 +57,8 @@ namespace VPB
                     titleText.text = currentCategoryTitle;
             }
             SyncCategoryQuickSwitchChrome();
-            try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
-            try { ApplyInAppHelpPanelLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
+            try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
+            try { ApplyInAppHelpPanelLayout(ChromeScale); } catch { }
             UpdateSideContextActions();
 
             // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).
@@ -80,7 +80,7 @@ namespace VPB
             }
             catch { }
             UpdateSideButtonsVisibility();
-            float paneScale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float paneScale = ChromeScale;
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
             try { SuppressImportOccupiedSideColumnChrome(); } catch { }
             try { SyncImportSidebarHeaderLabel(); } catch { }
@@ -193,7 +193,7 @@ namespace VPB
                             if (leftSubSearchInput.placeholder is Text phT)
                                 phT.text = GetContentTypePlaceholder(ContentType.Tags);
                         }
-                        ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                        ApplyLeftSubSearchLayoutScaled(ChromeScale);
                     }
                     if (sceneSourceLeft) SyncSceneSourceSortButtonHighlights();
 
@@ -315,7 +315,7 @@ namespace VPB
                             rt.anchorMin = new Vector2(1, 0.5f);
                             rt.anchorMax = new Vector2(1, 0.5f);
                         }
-                        ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
+                        ApplyRightSubSearchLayoutScaled(ChromeScale);
                     }
                     if (sceneSourceRight) SyncSceneSourceSortButtonHighlights();
 
@@ -387,7 +387,7 @@ namespace VPB
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
 
-            float paneScale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float paneScale = ChromeScale;
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
 
             // UpdateLayout runs before UpdateTabs in ToggleLeft/Right; UpdateTabsImpl mutates tab ScrollRect geometry

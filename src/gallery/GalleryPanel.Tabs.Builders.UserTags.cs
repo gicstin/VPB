@@ -19,8 +19,6 @@ namespace VPB
             EnsureUserTagSideTabBulkBlock(container.transform, isLeft);
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
-            if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock_v2");
-            if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock");
             if (utBulk == null && isLeft && leftUserTagsAvailStickyGO != null)
                 utBulk = leftUserTagsAvailStickyGO.transform.Find("VPB_UserTagBulkBlock_v3");
             if (utBulk == null && !isLeft && rightUserTagsAvailStickyGO != null)
@@ -69,16 +67,10 @@ namespace VPB
             try { EnsureUserTagPinOrderRuntimeLoaded(); } catch { }
             EnsureUserTagsAppliedToolbar(container.transform, isLeft);
             Transform utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v2");
-            if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v1");
             if (utAppTb == null && isLeft && leftUserTagsAppliedStickyGO != null)
                 utAppTb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null && isLeft && leftUserTagsAppliedStickyGO != null)
-                utAppTb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (utAppTb == null && !isLeft && rightUserTagsAppliedStickyGO != null)
                 utAppTb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null && !isLeft && rightUserTagsAppliedStickyGO != null)
-                utAppTb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (utAppTb != null) utAppTb.SetAsFirstSibling();
 
             CacheAppliedUserTagsForSelection();
@@ -126,7 +118,7 @@ namespace VPB
             visibleApplied.Clear();
             visibleApplied.AddRange(normalApplied);
 
-            float sApp = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float sApp = ChromeScale;
             float pinInsetApp = 34f * sApp;
             SyncUserTagAppliedPinnedStickyRows(isLeft, pinnedApplied, utAppAccent, sApp);
             int appliedVisibleCount = pinnedApplied.Count + visibleApplied.Count;

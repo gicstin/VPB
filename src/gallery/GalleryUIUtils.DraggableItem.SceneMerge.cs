@@ -1053,7 +1053,8 @@ namespace VPB
                 textGO.transform.SetParent(ghostObject.transform, false);
                 ghostText = textGO.AddComponent<Text>();
                 ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                ghostText.fontSize = 24;
+                ghostText.fontSize = GalleryUiDesignTokens.FontRef;
+                ghostText.fontStyle = FontStyle.Normal;
                 ghostText.color = Color.white;
                 ghostText.alignment = TextAnchor.UpperCenter;
                 ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;

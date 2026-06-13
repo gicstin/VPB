@@ -8,26 +8,14 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private const float InAppHelpPanelWidthRef = 460f;
-        private const float InAppHelpHeaderHeightRef = 44f;
-        private const float InAppHelpSearchHeightRef = 40f;
-        private const float InAppHelpNavBtnHeightRef = 38f;
         private const int InAppHelpNavColumns = 2;
-        private const int InAppHelpHeaderFontRef = 22;
-        private const int InAppHelpNavFontRef = 17;
-        private const int InAppHelpSearchFontRef = 17;
-        private const int InAppHelpSectionTitleFontRef = 22;
-        private const int InAppHelpBodyFontRef = 21;
-        private const int InAppHelpBodyFontMin = 15;
-        private const float InAppHelpBodyLineSpacingRef = 3f;
-        private const float InAppHelpIconPreviewDockSizeRef = 82f;
-        private const float InAppHelpIconPreviewGlyphSizeRef = 64f;
         private static readonly Color InAppHelpIconLinkColor = new Color(0.53f, 0.80f, 1f, 1f);
         private static readonly Color InAppHelpIconLinkBgColor = new Color(0.20f, 0.35f, 0.50f, 0.22f);
 
         private GameObject _inAppHelpPanelGO;
         private RectTransform _inAppHelpPanelRT;
         private RectTransform _inAppHelpHeaderRT;
+        private RectTransform _inAppHelpCloseBtnRT;
         private RectTransform _inAppHelpNavRT;
         private GridLayoutGroup _inAppHelpNavGrid;
         private RectTransform _inAppHelpBodyScrollRT;
@@ -62,26 +50,11 @@ namespace VPB
             "Save and Apply", "Hotkeys", "Advanced"
         };
 
-        private static float InAppHelpPaneScale()
-        {
-            try
-            {
-                if (VPBConfig.Instance != null)
-                    return Mathf.Max(0.85f, VPBConfig.Instance.CurrentInnerPaneScale);
-            }
-            catch { }
-            return 1f;
-        }
-
         private void ApplyInAppHelpTextScale(Text txt, int baseFont)
         {
             if (txt == null) return;
-            float s = InAppHelpPaneScale();
-            if (baseFont <= 0) baseFont = 1;
-            int size = Mathf.RoundToInt(baseFont * s);
-            size = Mathf.Max(InAppHelpBodyFontMin, size);
-            txt.fontSize = size;
-            txt.transform.localScale = Vector3.one;
+            GalleryUiMetrics.ApplyFont(txt, baseFont, InAppHelpChromeScale, GalleryUiDesignTokens.FontMinRef);
+            txt.fontStyle = FontStyle.Normal;
         }
 
         private void EnsureInAppHelpChrome(GameObject titleBarGO)
@@ -99,6 +72,7 @@ namespace VPB
             helpBtn.GetComponent<Image>().color = new Color(0.12f, 0.28f, 0.42f, 0.92f);
             Text ht = helpBtn.GetComponentInChildren<Text>();
             if (ht != null) ht.color = Color.white;
+            { var s = UI.LoadIconSprite("vpb_icons/book.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(helpBtn, s, 6f, new Color(0.12f, 0.28f, 0.42f, 0.92f)); }
             _titleBarHelpBtnRT = helpBtn.GetComponent<RectTransform>();
             _titleBarHelpBtnRT.anchorMin = new Vector2(0.5f, 0.5f);
             _titleBarHelpBtnRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -136,7 +110,7 @@ namespace VPB
             _inAppHelpHeaderRT.anchorMin = new Vector2(0f, 1f);
             _inAppHelpHeaderRT.anchorMax = new Vector2(1f, 1f);
             _inAppHelpHeaderRT.pivot = new Vector2(0.5f, 1f);
-            _inAppHelpHeaderRT.sizeDelta = new Vector2(0f, InAppHelpHeaderHeightRef);
+            _inAppHelpHeaderRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.InAppHelpHeaderHeightRef);
             _inAppHelpHeaderRT.anchoredPosition = Vector2.zero;
             Image headerBg = header.AddComponent<Image>();
             headerBg.color = new Color(0.10f, 0.26f, 0.44f, 1f);
@@ -156,17 +130,21 @@ namespace VPB
 
             GameObject closeBtn = UI.CreateUIButton(header, 36, 36, "\u00d7", 22, 0, 0, AnchorPresets.vStretchRight,
                 () => SetInAppHelpOpen(false));
-            RectTransform closeRT = closeBtn.GetComponent<RectTransform>();
-            closeRT.offsetMin = new Vector2(-40f, 4f);
-            closeRT.offsetMax = new Vector2(-6f, -4f);
+            _inAppHelpCloseBtnRT = closeBtn.GetComponent<RectTransform>();
+            if (_inAppHelpCloseBtnRT != null)
+            {
+                _inAppHelpCloseBtnRT.offsetMin = new Vector2(-40f, 4f);
+                _inAppHelpCloseBtnRT.offsetMax = new Vector2(-6f, -4f);
+            }
+            { var s = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s, 6f, new Color(0.10f, 0.26f, 0.44f, 1f)); }
 
-            _inAppHelpSearchInput = CreateSearchInput(_inAppHelpPanelGO, InAppHelpPanelWidthRef - 24f, _ => OnInAppHelpSearchChanged());
+            _inAppHelpSearchInput = CreateSearchInput(_inAppHelpPanelGO, GalleryUiDesignTokens.InAppHelpPanelWidthRef - 24f, _ => OnInAppHelpSearchChanged());
             RectTransform searchRT = _inAppHelpSearchInput.GetComponent<RectTransform>();
             searchRT.anchorMin = new Vector2(0f, 1f);
             searchRT.anchorMax = new Vector2(1f, 1f);
             searchRT.pivot = new Vector2(0.5f, 1f);
-            searchRT.anchoredPosition = new Vector2(0f, -InAppHelpHeaderHeightRef - 4f);
-            searchRT.sizeDelta = new Vector2(-16f, InAppHelpSearchHeightRef);
+            searchRT.anchoredPosition = new Vector2(0f, -GalleryUiDesignTokens.InAppHelpHeaderHeightRef - 4f);
+            searchRT.sizeDelta = new Vector2(-16f, GalleryUiDesignTokens.InAppHelpSearchHeightRef);
             try
             {
                 Text ph = _inAppHelpSearchInput.placeholder as Text;
@@ -188,7 +166,7 @@ namespace VPB
             _inAppHelpNavGrid.childAlignment = TextAnchor.UpperCenter;
             _inAppHelpNavGrid.padding = new RectOffset(10, 10, 4, 6);
             _inAppHelpNavGrid.spacing = new Vector2(6f, 5f);
-            _inAppHelpNavGrid.cellSize = new Vector2(210f, InAppHelpNavBtnHeightRef);
+            _inAppHelpNavGrid.cellSize = new Vector2(210f, GalleryUiDesignTokens.InAppHelpNavBtnHeightRef);
 
             _inAppHelpNavBtns.Clear();
             for (int i = 0; i < InAppHelpAnchorIds.Length; i++)
@@ -196,8 +174,8 @@ namespace VPB
                 string id = InAppHelpAnchorIds[i];
                 string label = VPBTranslation.T("gallery.help.section." + id, InAppHelpAnchorDefaults[i]);
                 string captured = id;
-                GameObject row = UI.CreateUIButton(navCol, InAppHelpNavBtnHeightRef, InAppHelpNavBtnHeightRef, label,
-                    InAppHelpNavFontRef, 0f, 0f, AnchorPresets.stretchAll, () => SelectInAppHelpSection(captured));
+                GameObject row = UI.CreateUIButton(navCol, GalleryUiDesignTokens.InAppHelpNavBtnHeightRef, GalleryUiDesignTokens.InAppHelpNavBtnHeightRef, label,
+                    GalleryUiDesignTokens.InAppHelpNavFontRef, 0f, 0f, AnchorPresets.stretchAll, () => SelectInAppHelpSection(captured));
                 row.name = "Nav_" + id;
                 Text rowTxt = row.GetComponentInChildren<Text>(true);
                 if (rowTxt != null)
@@ -236,7 +214,7 @@ namespace VPB
             GameObject sectionTitleGO = new GameObject("SectionTitle");
             sectionTitleGO.transform.SetParent(content, false);
             _inAppHelpSectionTitleText = sectionTitleGO.AddComponent<Text>();
-            _inAppHelpSectionTitleText.fontStyle = FontStyle.Bold;
+            _inAppHelpSectionTitleText.fontStyle = FontStyle.Normal;
             _inAppHelpSectionTitleText.color = new Color(0.62f, 0.86f, 1f, 1f);
             _inAppHelpSectionTitleText.alignment = TextAnchor.UpperLeft;
             _inAppHelpSectionTitleText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -248,7 +226,7 @@ namespace VPB
             bodyHostGO.transform.SetParent(content, false);
             _inAppHelpBodyHost = bodyHostGO.transform;
             VerticalLayoutGroup bodyHostVlg = bodyHostGO.AddComponent<VerticalLayoutGroup>();
-            bodyHostVlg.spacing = InAppHelpBodyLineSpacingRef;
+            bodyHostVlg.spacing = GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef;
             bodyHostVlg.childControlWidth = true;
             bodyHostVlg.childForceExpandWidth = true;
             bodyHostVlg.childControlHeight = true;
@@ -271,7 +249,7 @@ namespace VPB
             }
 
             _inAppHelpPanelGO.SetActive(false);
-            ApplyInAppHelpPanelLayout(InAppHelpPaneScale());
+            ApplyInAppHelpPanelLayout(InAppHelpChromeScale);
             ReloadInAppHelpContent();
         }
 
@@ -342,7 +320,7 @@ namespace VPB
                     _inAppHelpIconPreviewFollower.ParentRect = _inAppHelpIconPreviewParentRT;
             }
 
-            ApplyInAppHelpIconPreviewLayout(InAppHelpPaneScale());
+            ApplyInAppHelpIconPreviewLayout(InAppHelpChromeScale);
         }
 
         private void ApplyInAppHelpIconPreviewLayout(float s)
@@ -350,7 +328,7 @@ namespace VPB
             if (_inAppHelpIconPreviewRT == null) return;
             if (s <= 0f) s = 1f;
 
-            float dockSz = InAppHelpIconPreviewDockSizeRef * s;
+            float dockSz = GalleryUiDesignTokens.InAppHelpIconPreviewDockSizeRef * s;
             _inAppHelpIconPreviewRT.sizeDelta = new Vector2(dockSz, dockSz);
 
             if (_inAppHelpIconPreviewFollower != null)
@@ -363,7 +341,7 @@ namespace VPB
                 RectTransform backdropRT = backdropT as RectTransform;
                 if (backdropRT != null)
                 {
-                    float glyphSz = InAppHelpIconPreviewGlyphSizeRef * s;
+                    float glyphSz = GalleryUiDesignTokens.InAppHelpIconPreviewGlyphSizeRef * s;
                     backdropRT.sizeDelta = new Vector2(glyphSz, glyphSz);
                 }
             }
@@ -399,7 +377,7 @@ namespace VPB
             if (_inAppHelpIconPreviewLabel != null)
                 _inAppHelpIconPreviewLabel.text = "";
 
-            float s = InAppHelpPaneScale();
+            float s = InAppHelpChromeScale;
             ApplyInAppHelpIconPreviewLayout(s);
             _inAppHelpIconPreviewGO.transform.SetAsLastSibling();
             _inAppHelpIconPreviewGO.SetActive(true);
@@ -464,7 +442,7 @@ namespace VPB
             bodyHostGO.transform.SetParent(content, false);
             _inAppHelpBodyHost = bodyHostGO.transform;
             VerticalLayoutGroup bodyHostVlg = bodyHostGO.AddComponent<VerticalLayoutGroup>();
-            bodyHostVlg.spacing = InAppHelpBodyLineSpacingRef;
+            bodyHostVlg.spacing = GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef;
             bodyHostVlg.childControlWidth = true;
             bodyHostVlg.childForceExpandWidth = true;
             bodyHostVlg.childControlHeight = true;
@@ -486,8 +464,8 @@ namespace VPB
                 if (_inAppHelpNavBtns.ContainsKey(id) && _inAppHelpNavBtns[id] != null) continue;
                 string label = VPBTranslation.T("gallery.help.section." + id, InAppHelpAnchorDefaults[i]);
                 string captured = id;
-                GameObject row = UI.CreateUIButton(_inAppHelpNavRT.gameObject, InAppHelpNavBtnHeightRef, InAppHelpNavBtnHeightRef, label,
-                    InAppHelpNavFontRef, 0f, 0f, AnchorPresets.stretchAll, () => SelectInAppHelpSection(captured));
+                GameObject row = UI.CreateUIButton(_inAppHelpNavRT.gameObject, GalleryUiDesignTokens.InAppHelpNavBtnHeightRef, GalleryUiDesignTokens.InAppHelpNavBtnHeightRef, label,
+                    GalleryUiDesignTokens.InAppHelpNavFontRef, 0f, 0f, AnchorPresets.stretchAll, () => SelectInAppHelpSection(captured));
                 row.name = "Nav_" + id;
                 Text rowTxt = row.GetComponentInChildren<Text>(true);
                 if (rowTxt != null)
@@ -727,7 +705,6 @@ namespace VPB
             txt.horizontalOverflow = HorizontalWrapMode.Wrap;
             txt.verticalOverflow = VerticalWrapMode.Overflow;
             txt.resizeTextForBestFit = false;
-            if (subheading) txt.fontStyle = FontStyle.Bold;
             string body = richText ?? "";
             if (bullet) body = (string.IsNullOrEmpty(prefix) ? "  \u2022 " : prefix + " ") + body;
             txt.text = body;
@@ -763,6 +740,13 @@ namespace VPB
             SetInAppHelpOpen(!_inAppHelpOpen);
         }
 
+        public void OpenInAppHelpToSection(string sectionId)
+        {
+            if (string.IsNullOrEmpty(sectionId)) sectionId = "filtering";
+            _inAppHelpActiveSectionId = sectionId;
+            SetInAppHelpOpen(true);
+        }
+
         private void SetInAppHelpOpen(bool open)
         {
             _inAppHelpOpen = open;
@@ -774,7 +758,7 @@ namespace VPB
                 {
                     try { _inAppHelpPanelGO.transform.SetAsLastSibling(); } catch { }
                     try { EnsureInAppHelpIconPreviewChrome(); } catch { }
-                    try { ApplyInAppHelpPanelLayout(InAppHelpPaneScale()); } catch { }
+                    try { ApplyInAppHelpPanelLayout(InAppHelpChromeScale); } catch { }
                     ReloadInAppHelpContent();
                 }
             }
@@ -932,21 +916,21 @@ namespace VPB
 
         private void ApplyInAppHelpTypography()
         {
-            ApplyInAppHelpTextScale(_inAppHelpHeaderTitleText, InAppHelpHeaderFontRef);
-            ApplyInAppHelpTextScale(_inAppHelpSectionTitleText, InAppHelpSectionTitleFontRef);
+            ApplyInAppHelpTextScale(_inAppHelpHeaderTitleText, GalleryUiDesignTokens.FontRef);
+            ApplyInAppHelpTextScale(_inAppHelpSectionTitleText, GalleryUiDesignTokens.FontRef);
             for (int i = 0; i < _inAppHelpBodyTexts.Count; i++)
             {
                 if (_inAppHelpBodyTexts[i] != null)
-                    ApplyInAppHelpTextScale(_inAppHelpBodyTexts[i], InAppHelpBodyFontRef);
+                    ApplyInAppHelpTextScale(_inAppHelpBodyTexts[i], GalleryUiDesignTokens.FontRef);
             }
             try
             {
                 if (_inAppHelpSearchInput != null)
                 {
                     Text st = _inAppHelpSearchInput.textComponent;
-                    if (st != null) ApplyInAppHelpTextScale(st, InAppHelpSearchFontRef);
+                    if (st != null) ApplyInAppHelpTextScale(st, GalleryUiDesignTokens.FontRef);
                     Text ph = _inAppHelpSearchInput.placeholder as Text;
-                    if (ph != null) ApplyInAppHelpTextScale(ph, InAppHelpSearchFontRef);
+                    if (ph != null) ApplyInAppHelpTextScale(ph, GalleryUiDesignTokens.FontRef);
                 }
             }
             catch { }
@@ -954,7 +938,7 @@ namespace VPB
             {
                 if (kv.Value == null) continue;
                 Text t = kv.Value.GetComponentInChildren<Text>(true);
-                if (t != null) ApplyInAppHelpTextScale(t, InAppHelpNavFontRef);
+                if (t != null) ApplyInAppHelpTextScale(t, GalleryUiDesignTokens.FontRef);
             }
             FinalizeInAppHelpFlowLayout();
         }
@@ -969,32 +953,42 @@ namespace VPB
             int rows = InAppHelpNavRows();
             float pad = 10f * s;
             float rowSpacing = 5f * s;
-            float navH = pad + rows * (InAppHelpNavBtnHeightRef * s)
+            float navH = pad + rows * (GalleryUiDesignTokens.InAppHelpNavBtnHeightRef * s)
                 + (rows > 1 ? (rows - 1) * rowSpacing : 0f) + pad;
-            return (InAppHelpHeaderHeightRef + 4f + InAppHelpSearchHeightRef + 4f) * s + navH;
+            return (GalleryUiDesignTokens.InAppHelpHeaderHeightRef + 4f + GalleryUiDesignTokens.InAppHelpSearchHeightRef + 4f) * s + navH;
         }
 
         private void ApplyInAppHelpPanelLayout(float paneScale)
         {
             if (_inAppHelpPanelRT == null) return;
             float s = paneScale <= 0f ? 1f : paneScale;
-            float w = InAppHelpPanelWidthRef * s;
+            float w = GalleryUiDesignTokens.InAppHelpPanelWidthRef * s;
             float top = 65f * s;
             float bottom = 68f * s;
             _inAppHelpPanelRT.offsetMin = new Vector2(-w, bottom);
             _inAppHelpPanelRT.offsetMax = new Vector2(0f, -top);
 
             if (_inAppHelpHeaderRT != null)
-                _inAppHelpHeaderRT.sizeDelta = new Vector2(0f, InAppHelpHeaderHeightRef * s);
+                _inAppHelpHeaderRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.InAppHelpHeaderHeightRef * s);
+
+            if (_inAppHelpCloseBtnRT != null)
+            {
+                _inAppHelpCloseBtnRT.offsetMin = new Vector2(-GalleryUiDesignTokens.InAppHelpCloseBtnLeftInsetRef * s, 4f * s);
+                _inAppHelpCloseBtnRT.offsetMax = new Vector2(-GalleryUiDesignTokens.InAppHelpCloseBtnRightInsetRef * s, -4f * s);
+                Text closeTxt = _inAppHelpCloseBtnRT.GetComponentInChildren<Text>();
+                if (closeTxt != null)
+                    GalleryUiMetrics.ApplyGlyphFont(closeTxt, GalleryUiDesignTokens.InAppHelpCloseBtnSizeRef, s, GalleryUiDesignTokens.FontMinRef);
+            }
 
             if (_inAppHelpSearchInput != null)
             {
                 RectTransform searchRT = _inAppHelpSearchInput.GetComponent<RectTransform>();
                 if (searchRT != null)
                 {
-                    searchRT.anchoredPosition = new Vector2(0f, -(InAppHelpHeaderHeightRef + 4f) * s);
-                    searchRT.sizeDelta = new Vector2(-16f * s, InAppHelpSearchHeightRef * s);
+                    searchRT.anchoredPosition = new Vector2(0f, -(GalleryUiDesignTokens.InAppHelpHeaderHeightRef + 4f) * s);
+                    searchRT.sizeDelta = new Vector2(-16f * s, GalleryUiDesignTokens.InAppHelpSearchHeightRef * s);
                 }
+                RescaleSearchInput(_inAppHelpSearchInput, s);
             }
 
             float chromeTop = InAppHelpTopChromeHeight(s);
@@ -1002,9 +996,9 @@ namespace VPB
             {
                 float pad = 10f * s;
                 float spacing = 6f * s;
-                float innerW = InAppHelpPanelWidthRef * s - pad * 2f;
+                float innerW = GalleryUiDesignTokens.InAppHelpPanelWidthRef * s - pad * 2f;
                 float cellW = (innerW - spacing * (InAppHelpNavColumns - 1)) / InAppHelpNavColumns;
-                float cellH = InAppHelpNavBtnHeightRef * s;
+                float cellH = GalleryUiDesignTokens.InAppHelpNavBtnHeightRef * s;
                 int rows = InAppHelpNavRows();
 
                 _inAppHelpNavGrid.padding = new RectOffset(
@@ -1016,7 +1010,7 @@ namespace VPB
                 float navH = _inAppHelpNavGrid.padding.top + rows * cellH
                     + (rows > 1 ? (rows - 1) * (5f * s) : 0f) + _inAppHelpNavGrid.padding.bottom;
                 _inAppHelpNavRT.sizeDelta = new Vector2(0f, navH);
-                _inAppHelpNavRT.anchoredPosition = new Vector2(0f, -(InAppHelpHeaderHeightRef + 4f + InAppHelpSearchHeightRef) * s);
+                _inAppHelpNavRT.anchoredPosition = new Vector2(0f, -(GalleryUiDesignTokens.InAppHelpHeaderHeightRef + 4f + GalleryUiDesignTokens.InAppHelpSearchHeightRef) * s);
             }
 
             Transform bodyCard = _inAppHelpPanelGO != null ? _inAppHelpPanelGO.transform.Find("BodyCard") : null;

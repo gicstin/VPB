@@ -387,13 +387,13 @@ namespace VPB
 
             if (s_IsPurgeJob)
             {
-                s_UiSummary = "<b>Elapsed:</b> " + elapsedStr + "\n"
-                    + "<b>Packages:</b> " + s_PackagesProcessed + "/" + s_PackagesPlanned
-                    + "    <b>Resolved:</b> " + s_PackagesResolved + "\n"
-                    + "<b>Textures:</b> " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
-                    + "<b>Purged</b>\n"
+                s_UiSummary = "Elapsed: " + elapsedStr + "\n"
+                    + "Packages: " + s_PackagesProcessed + "/" + s_PackagesPlanned
+                    + "    Resolved: " + s_PackagesResolved + "\n"
+                    + "Textures: " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
+                    + "Purged\n"
                     + "Packages: " + s_PurgePackagesDeleted + "    Textures: " + s_PurgeTexturesDeleted + "\n"
-                    + "<b>Deleted</b>\n"
+                    + "Deleted\n"
                     + "Native: " + s_NativeDeletes + "    Zstd: " + s_ZstdDeletes;
 
                 s_OnDemandBusy = false;
@@ -448,13 +448,13 @@ namespace VPB
                 totalPct = savedPct.ToString("0");
             }
 
-            s_UiSummary = "<b>Elapsed:</b> " + elapsedStr + "\n"
-                + "<b>Packages:</b> " + s_PackagesProcessed + "/" + s_PackagesPlanned + "    <b>Textures:</b> " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
-                + "<b>Size</b>\n"
+            s_UiSummary = "Elapsed: " + elapsedStr + "\n"
+                + "Packages: " + s_PackagesProcessed + "/" + s_PackagesPlanned + "    Textures: " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
+                + "Size\n"
                 + "Native Cache Size: " + totalBase + "\n"
                 + "Zstd Compressed Size: " + totalFinal + "\n"
                 + "Saved Space: " + totalSaved + " (" + totalPct + "%)\n\n"
-                + "<b>Zstd Cache</b>\n"
+                + "Zstd Cache\n"
                 + "Wrote: " + s_ZstdWrites + "    Skipped: " + s_ZstdSkips + "    Failed: " + s_ZstdFails;
 
             if (s_ZstdRewrites > 0)
@@ -467,7 +467,7 @@ namespace VPB
                 s_UiSummary += "\nResize 8k→4k: " + s_ZstdDownscaleWrites + "    Saved: " + resizeSaved + " (" + resizePct + "%)";
             }
 
-            s_UiSummary += "\n\n<b>Native</b> Wrote: " + s_CacheWrites + "    Skipped: " + s_CacheSkips + "    Failed: " + s_CacheFails;
+            s_UiSummary += "\n\nNative Wrote: " + s_CacheWrites + "    Skipped: " + s_CacheSkips + "    Failed: " + s_CacheFails;
 
             FlushOnDemandIssueLogToDebug();
 

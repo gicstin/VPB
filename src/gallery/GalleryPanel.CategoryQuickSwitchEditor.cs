@@ -204,8 +204,9 @@ namespace VPB
             Action onToggleHidden,
             string toggleHiddenLabel)
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int font = Mathf.RoundToInt(20f * s);
+            float s = ChromeScale;
+            GalleryModalTypography rowType = new GalleryModalTypography(s);
+            int font = rowType.Body;
             float rowH = 42f * s;
 
             GameObject row = new GameObject("CatQuickRow");
@@ -227,7 +228,7 @@ namespace VPB
                 idxGo.transform.SetParent(row.transform, false);
                 Text it = idxGo.AddComponent<Text>();
                 it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                it.fontSize = Mathf.RoundToInt(18f * s);
+                it.fontSize = rowType.Body;
                 it.color = new Color(0.75f, 0.78f, 0.82f, 1f);
                 it.alignment = TextAnchor.MiddleRight;
                 it.text = displayIndex.Value.ToString();
@@ -255,7 +256,7 @@ namespace VPB
                 UnityAction upAct = onUp != null ? (UnityAction)(() => onUp()) : null;
                 Sprite upIcon = UI.LoadIconSprite("vpb_icons/up.png", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject up = UI.CreateSideTabSquareIconButton(row, rowH, upIcon, upAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
-                if (upIcon == null) AddButtonOverlayGlyph(up, "▲", Mathf.RoundToInt(18f * s));
+                if (upIcon == null) AddButtonOverlayGlyph(up, "▲", GalleryUiMetrics.GlyphFontFromControlHeight(34f, s, GalleryUiDesignTokens.FontMinRef));
                 AddTooltipPlain(up, VPBTranslation.T("settings.category_quick.editor.move_up_tip", "Move up"));
             }
             if (showDown)
@@ -263,7 +264,7 @@ namespace VPB
                 UnityAction dnAct = onDown != null ? (UnityAction)(() => onDown()) : null;
                 Sprite dnIcon = UI.LoadIconSprite("vpb_icons/down.png", new Color(0.9f, 0.9f, 0.9f, 1f));
                 GameObject dn = UI.CreateSideTabSquareIconButton(row, rowH, dnIcon, dnAct, new Color(0.22f, 0.42f, 0.58f, 1f), 4f * s);
-                if (dnIcon == null) AddButtonOverlayGlyph(dn, "▼", Mathf.RoundToInt(18f * s));
+                if (dnIcon == null) AddButtonOverlayGlyph(dn, "▼", GalleryUiMetrics.GlyphFontFromControlHeight(34f, s, GalleryUiDesignTokens.FontMinRef));
                 AddTooltipPlain(dn, VPBTranslation.T("settings.category_quick.editor.move_down_tip", "Move down"));
             }
 
@@ -286,7 +287,7 @@ namespace VPB
             tt.transform.SetParent(tog.transform, false);
             Text bt = tt.AddComponent<Text>();
             bt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            bt.fontSize = Mathf.RoundToInt(18f * s);
+            bt.fontSize = rowType.Body;
             bt.color = Color.white;
             bt.alignment = TextAnchor.MiddleCenter;
             bt.text = toggleHiddenLabel ?? "";
@@ -359,9 +360,10 @@ namespace VPB
 
             LoadCategoryQuickEditorDraftFromConfig();
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int headerFont = Mathf.RoundToInt(26f * s);
-            int bodyFont = Mathf.RoundToInt(18f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int headerFont = type.Title;
+            int bodyFont = type.Body;
 
             _catQuickEditorRoot = new GameObject("CategoryQuickEditorRoot");
             _catQuickEditorRoot.transform.SetParent(backgroundBoxGO.transform, false);
@@ -416,7 +418,7 @@ namespace VPB
             titleGo.transform.SetParent(header.transform, false);
             Text title = titleGo.AddComponent<Text>();
             title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.fontSize = headerFont;
+            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
             title.color = Color.white;
             title.alignment = TextAnchor.MiddleLeft;
             title.text = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown");
@@ -460,7 +462,7 @@ namespace VPB
             visHeader.transform.SetParent(content, false);
             Text vh = visHeader.AddComponent<Text>();
             vh.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            vh.fontSize = Mathf.RoundToInt(22f * s);
+            GalleryUiMetrics.ApplyEmphasisTitle(vh, type.Body);
             vh.color = new Color(0.85f, 0.9f, 1f, 1f);
             vh.alignment = TextAnchor.MiddleLeft;
             vh.text = VPBTranslation.T("settings.category_quick.editor.visible_header", "Shown in header menu (ordered)");
@@ -483,7 +485,7 @@ namespace VPB
             hidHeader.transform.SetParent(content, false);
             Text hhT = hidHeader.AddComponent<Text>();
             hhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hhT.fontSize = Mathf.RoundToInt(22f * s);
+            GalleryUiMetrics.ApplyEmphasisTitle(hhT, type.Body);
             hhT.color = new Color(1f, 0.88f, 0.82f, 1f);
             hhT.alignment = TextAnchor.MiddleLeft;
             hhT.text = VPBTranslation.T("settings.category_quick.editor.hidden_header", "Hidden from header menu");

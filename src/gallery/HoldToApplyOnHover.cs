@@ -160,7 +160,8 @@ namespace VPB
 
             _text = textGO.AddComponent<Text>();
             _text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _text.fontSize = 22;
+            _text.fontSize = GalleryUiDesignTokens.FontRef;
+            _text.fontStyle = FontStyle.Normal;
             _text.alignment = TextAnchor.MiddleCenter;
             _text.color = Color.white;
             _text.raycastTarget = false;

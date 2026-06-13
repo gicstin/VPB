@@ -114,7 +114,7 @@ namespace VPB
             if (active)
             {
                 // Re-anchor in case the side differs from the previous open.
-                float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+                float s = ChromeScale;
                 ApplyImportSidebarBaseRect(s);
                 // Re-ensure the scene/atom subscriptions are live (idempotent) in case they were dropped since build.
                 SubscribeToAtomEvents();

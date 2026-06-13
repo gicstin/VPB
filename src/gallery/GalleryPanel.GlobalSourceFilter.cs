@@ -84,15 +84,12 @@ namespace VPB
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.global_source_filter",
                 "Source filter (All / Local / .var). Applies to every category. (Right-click to reset to All)");
 
-            // Matches the pattern used by settings/lang/qf/creator chips: scale action handles sizeDelta + fontSize only.
-            // Anchored position is set every frame by ApplyTitleBarResponsiveLayout as part of the left-pack sweep.
+            // Matches settings/lang/qf/creator chips: layout only — fonts via RescaleTitleBarChromeInternal.
             {
                 var rt = btnRT;
-                var txt = globalSourceFilterBtnText;
                 innerPaneScaleActions.Add(s =>
                 {
                     if (rt != null) rt.sizeDelta = new Vector2(GlobalSourceFilterButtonWidth * s, GlobalSourceFilterButtonHeight * s);
-                    if (txt != null) txt.fontSize = Mathf.RoundToInt(16 * s);
                 });
             }
         }
@@ -194,7 +191,7 @@ namespace VPB
             Text labelText = labelGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(labelText);
             labelText.text = label;
-            labelText.fontSize = 16;
+            labelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             labelText.color = Color.white;
             labelText.alignment = TextAnchor.MiddleLeft;
             labelText.raycastTarget = false;
@@ -210,7 +207,7 @@ namespace VPB
             Text countText = countGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(countText);
             countText.text = "";
-            countText.fontSize = 14;
+            countText.fontSize = GalleryUiDesignTokens.FontCaptionRef;
             countText.color = new Color(1f, 1f, 1f, 0.75f);
             countText.alignment = TextAnchor.MiddleRight;
             countText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -238,9 +235,9 @@ namespace VPB
                         rRT.sizeDelta = new Vector2(-GlobalSourceFilterDropdownPadding * 2 * s, GlobalSourceFilterDropdownRowHeight * s);
                     }
                     if (lRT != null) lRT.offsetMin = new Vector2(8f * s, 0f);
-                    if (lT != null) lT.fontSize = Mathf.RoundToInt(16 * s);
+                    if (lT != null) GalleryUiMetrics.ApplyFont(lT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     if (cRT != null) cRT.offsetMax = new Vector2(-8f * s, 0f);
-                    if (cT != null) cT.fontSize = Mathf.RoundToInt(14 * s);
+                    if (cT != null) GalleryUiMetrics.ApplyFont(cT, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
 
@@ -278,8 +275,7 @@ namespace VPB
             RectTransform btnRT = globalSourceFilterBtn.GetComponent<RectTransform>();
             RectTransform ddRT = globalSourceFilterDropdown.GetComponent<RectTransform>();
             if (btnRT == null || ddRT == null) return;
-            float s = 1f;
-            try { if (VPBConfig.Instance != null) s = VPBConfig.Instance.CurrentInnerPaneScale; } catch { }
+            float s = ChromeScale;
             if (s <= 0f) s = 1f;
             ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -70f * s);
         }

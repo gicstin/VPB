@@ -6,15 +6,14 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        // Geometry mirrors the tab columns in GalleryPanel.Lifecycle.Init.cs (220 width, 10 side margin).
-        // Top aligns with side-panel collapse headers (-65*s); bottom clears full footer chrome.
-        private const float ImportSidebarBaseWidth = 220f;
-        private const float ImportSidebarBaseHeaderHeight = 32f;
-        private const float ImportSidebarBaseApplyHeight = 30f;
-        private const float ImportSidebarBaseSideMargin = 10f;
-        private const float ImportSidebarBaseTopRowRef = 65f;
-        private const float ImportSidebarScrollBarWidthRef = 10f;
-        private const float ImportSidebarInnerPadHRef = 6f;
+        // Geometry mirrors side tab column tokens; aliases keep import module call sites stable.
+        private const float ImportSidebarBaseWidth = GalleryUiDesignTokens.ImportSidebarWidthRef;
+        private const float ImportSidebarBaseHeaderHeight = GalleryUiDesignTokens.ImportSidebarHeaderHeightRef;
+        private const float ImportSidebarBaseApplyHeight = GalleryUiDesignTokens.ImportSidebarApplyHeightRef;
+        private const float ImportSidebarBaseSideMargin = GalleryUiDesignTokens.ImportSidebarSideMarginRef;
+        private const float ImportSidebarBaseTopRowRef = GalleryUiDesignTokens.ImportSidebarTopRowRef;
+        private const float ImportSidebarScrollBarWidthRef = GalleryUiDesignTokens.ImportSidebarScrollBarWidthRef;
+        private const float ImportSidebarInnerPadHRef = GalleryUiDesignTokens.ImportSidebarInnerPadHRef;
 
         private static readonly string[] ImportWizardStepTitleKeys =
         {
@@ -29,11 +28,9 @@ namespace VPB
             "Package", "Atoms", "Resource type", "Options"
         };
 
-        // Match Creator/Category row sizing in GalleryPanel.Tabs.cs (preferredHeight = 35*s,
-        // fontSize 18) so the Import sidebar reads as part of the same UI family.
-        public const float ImportSidebarBaseRowHeight = 35f;
-        public const int ImportSidebarBaseFontSize = 18;
-        public const int ImportSidebarBaseFontSizeMin = 10;
+        public const float ImportSidebarBaseRowHeight = GalleryUiDesignTokens.ImportSidebarRowHeightRef;
+        public const int ImportSidebarBaseFontSize = GalleryUiDesignTokens.ImportSidebarFontRef;
+        public const int ImportSidebarBaseFontSizeMin = GalleryUiDesignTokens.ImportSidebarFontMin;
 
         private RectTransform importSidebarRT;
         private Transform importSidebarHeaderRoot;
@@ -92,7 +89,7 @@ namespace VPB
                 // change so row heights / the type-radio grid settle to the new scale.
                 innerPaneScaleActions.Add(s => RebuildImportSidebarContent());
 
-                ApplyImportSidebarBaseRect(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                ApplyImportSidebarBaseRect(ChromeScale);
                 RebuildImportSidebarContent();
                 importSidebarRoot.SetActive(false);
                 LogUtil.Log("[VPB import][diag] build: complete OK");
@@ -195,8 +192,7 @@ namespace VPB
         private void SyncImportSidebarHeaderTypography(float s)
         {
             if (importSidebarHeaderLabel == null) return;
-            importSidebarHeaderLabel.fontSize = Mathf.Max(12, Mathf.RoundToInt(SidePanelHeaderFontRef * s));
-            importSidebarHeaderLabel.transform.localScale = Vector3.one;
+            GalleryUiMetrics.ApplyFont(importSidebarHeaderLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
         }
 
         private void SyncImportSidebarHeaderGateVisual()
@@ -239,13 +235,7 @@ namespace VPB
         // at low scales (Unity Text.fontSize is int and visually clamps below ~10).
         public static void ApplyScaledFont(Text txt, int baseFont, float s)
         {
-            if (txt == null) return;
-            if (baseFont <= 0) baseFont = 1;
-            int minFont = ImportSidebarBaseFontSizeMin;
-            float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-            txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-            float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-            txt.transform.localScale = new Vector3(extra, extra, 1f);
+            GalleryUiMetrics.ApplyFont(txt, baseFont, s, ImportSidebarBaseFontSizeMin);
         }
 
         private Transform ResolveImportSidebarParent()
@@ -280,7 +270,7 @@ namespace VPB
                 FormatSidePanelHeaderLabel(importSidebarOnLeft, SidePanelHeaderTranslation("gallery.import.sidebar_header", "Import")),
                 SidePanelHeaderFontRef);
             importSidebarHeaderLabel.color = Color.white;
-            importSidebarHeaderLabel.fontStyle = FontStyle.Bold;
+            importSidebarHeaderLabel.fontStyle = FontStyle.Normal;
             importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
             importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
             importSidebarHeaderLabel.verticalOverflow = VerticalWrapMode.Truncate;

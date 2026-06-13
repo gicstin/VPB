@@ -885,7 +885,7 @@ namespace VPB
         }
         private void CreatePaginationControls()
         {
-            // Pagination Container (Footer Bar)
+            // Footer Bar
             GameObject pageContainer = new GameObject("PaginationContainer");
             pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
             paginationRT = pageContainer.AddComponent<RectTransform>();
@@ -896,15 +896,14 @@ namespace VPB
             paginationRT.sizeDelta = new Vector2(0, 40); // Footer bar height for buttons
             
             footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
-            footerHLG.padding = new RectOffset(60, 10, 0, 0); // left reserved space (existing behavior)
+            footerHLG.padding = new RectOffset(10, 10, 0, 0); // resize handles are real layout children now (no manual reservation)
             {
                 var hlg = footerHLG;
-                innerPaneScaleActions.Add(s => { if (hlg) { hlg.padding = new RectOffset(Mathf.RoundToInt(60 * s), Mathf.RoundToInt(10 * s), 0, 0); } });
+                innerPaneScaleActions.Add(s => { if (hlg) { hlg.padding = new RectOffset(Mathf.RoundToInt(10 * s), Mathf.RoundToInt(10 * s), 0, 0); } });
             }
             footerHLG.childControlWidth = true;
             footerHLG.childControlHeight = true;
             footerHLG.childForceExpandWidth = true;
-            _footerHLGLastRightPadding = footerHLG.padding != null ? footerHLG.padding.right : -1;
 
             // Fixed dock "Top": side rail buttons group (overlays footer, centered in free space).
             _footerSideButtonsGroupGO = new GameObject("SideButtonsGroup");
@@ -999,46 +998,14 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
             }
 
-            paginationFirstBtn = UI.CreateUIButton(centerSection, 40, 40, "|<", 18, 0, 0, AnchorPresets.middleCenter, FirstPage);
-            paginationPrev10Btn = UI.CreateUIButton(centerSection, 40, 40, "<<", 18, 0, 0, AnchorPresets.middleCenter, Prev10Page);
-            paginationPrevBtn = UI.CreateUIButton(centerSection, 40, 40, "<", 20, 0, 0, AnchorPresets.middleCenter, PrevPage);
-
-            GameObject textGO = new GameObject("PageText");
-            textGO.transform.SetParent(centerSection.transform, false);
-            paginationText = textGO.AddComponent<Text>();
-            paginationText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            paginationText.fontSize = 18;
-            paginationText.color = Color.white;
-            paginationText.alignment = TextAnchor.MiddleCenter;
-            paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
-            paginationText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            paginationText.verticalOverflow = VerticalWrapMode.Overflow;
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.sizeDelta = new Vector2(200, 40);
-            {
-                var rt = textRT;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (rt) rt.sizeDelta = new Vector2(200f * s, 40f * s);
-                    if (paginationText)
-                    {
-                        const int baseFont = 18;
-                        const int minFont = 10;
-                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                        paginationText.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                        paginationText.transform.localScale = new Vector3(extra, extra, 1f);
-                    }
-                });
-            }
-
             // Filter Mode Label (shown in filter mode, left of clear button)
             {
                 GameObject modeGO = new GameObject("FilterModeLabel");
                 modeGO.transform.SetParent(centerSection.transform, false);
                 footerFilterModeText = modeGO.AddComponent<Text>();
                 footerFilterModeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                footerFilterModeText.fontSize = 22;
+                footerFilterModeText.fontSize = GalleryUiDesignTokens.FontRef;
+                footerFilterModeText.fontStyle = FontStyle.Normal;
                 footerFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);
                 footerFilterModeText.alignment = TextAnchor.MiddleRight;
                 footerFilterModeText.text = "";
@@ -1074,10 +1041,6 @@ namespace VPB
             footerClearFilterBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
             { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(footerClearFilterBtn, s); }
             footerClearFilterBtn.SetActive(false);
-
-            paginationNextBtn = UI.CreateUIButton(centerSection, 40, 40, ">", 20, 0, 0, AnchorPresets.middleCenter, NextPage);
-            paginationNext10Btn = UI.CreateUIButton(centerSection, 40, 40, ">>", 18, 0, 0, AnchorPresets.middleCenter, Next10Page);
-            paginationLastBtn = UI.CreateUIButton(centerSection, 40, 40, ">|", 18, 0, 0, AnchorPresets.middleCenter, LastPage);
 
             // --- Right Section (Utility Controls) ---
             GameObject rightSection = new GameObject("RightSection");
@@ -1184,20 +1147,6 @@ namespace VPB
 
             // --- Context Actions (Category-aware) ---
 
-            // Hover support for pagination (Hub mode)
-            AddHoverDelegate(paginationFirstBtn);
-            AddTooltip(paginationFirstBtn, "gallery.tooltip.page_first", "First Page");
-            AddHoverDelegate(paginationPrev10Btn);
-            AddTooltip(paginationPrev10Btn, "gallery.tooltip.page_back_10", "Back 10 Pages");
-            AddHoverDelegate(paginationPrevBtn);
-            AddTooltip(paginationPrevBtn, "gallery.tooltip.page_prev", "Previous Page");
-            AddHoverDelegate(paginationNextBtn);
-            AddTooltip(paginationNextBtn, "gallery.tooltip.page_next", "Next Page");
-            AddHoverDelegate(paginationNext10Btn);
-            AddTooltip(paginationNext10Btn, "gallery.tooltip.page_forward_10", "Forward 10 Pages");
-            AddHoverDelegate(paginationLastBtn);
-            AddTooltip(paginationLastBtn, "gallery.tooltip.page_last", "Last Page");
-
             AddHoverDelegate(gridSizeMinusBtn);
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(gridSizePlusBtn);
@@ -1226,7 +1175,7 @@ namespace VPB
             AddHoverDelegate(footerShowHiddenPackagesBtn);
             AddHoverDelegate(footerAutoHideBtn);
 
-            // Register inner pane button scale actions (footer/pagination)
+            // Register inner pane button scale actions (footer)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, 40f*s); }); }
             { var rt = _footerSideButtonsGroupRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
             {
@@ -1243,53 +1192,28 @@ namespace VPB
                     if (rRT != null) rRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (rndRT != null) rndRT.sizeDelta = new Vector2(40f * s, 40f * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(40f * s, 40f * s);
-                    const int baseFont = 14;
-                    const int minFont = 9;
-                    float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                    float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                    if (uT != null) { uT.fontSize = Mathf.RoundToInt(baseFont * fontScale); uT.transform.localScale = new Vector3(extra, extra, 1f); }
-                    if (rT != null) { rT.fontSize = Mathf.RoundToInt(baseFont * fontScale); rT.transform.localScale = new Vector3(extra, extra, 1f); }
-                    if (rndT != null) { rndT.fontSize = Mathf.RoundToInt(baseFont * fontScale); rndT.transform.localScale = new Vector3(extra, extra, 1f); }
-                    if (hT != null) { hT.fontSize = Mathf.RoundToInt(baseFont * fontScale); hT.transform.localScale = new Vector3(extra, extra, 1f); }
+                    GalleryUiMetrics.ApplyFont(uT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(rT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(rndT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(hT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
-                paginationFirstBtn, paginationPrev10Btn, paginationPrevBtn,
-                paginationNextBtn, paginationNext10Btn, paginationLastBtn,
                 footerMenuGateBtn, footerShowHiddenPackagesBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerSpringScrollToggleBtn,
                 footerHoldToLaunchToggleBtn,
-                footerLayoutBtn, footerHeightBtn, footerAutoHideBtn,
-            };
-            var footerBtnFonts = new int[] {
-                20, 20, 20,
-                18, 18, 20,
-                20, 18, 18,
-                20, 20,
-                24, 24,
-                20,
-                20,
-                20, 20, 20,
+                footerLayoutBtn, footerHeightBtn, footerAutoHideBtn, footerDockBtn,
             };
             for (int i = 0; i < footerBtnGOs.Length; i++)
             {
                 var rt = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponent<RectTransform>() : null;
                 var t = footerBtnGOs[i] != null ? footerBtnGOs[i].GetComponentInChildren<Text>() : null;
-                int f = footerBtnFonts[i];
                 innerPaneScaleActions.Add(s =>
                 {
                     if (rt) rt.sizeDelta = new Vector2(40f * s, 40f * s);
-                    if (t)
-                    {
-                        int baseFont = f;
-                        int minFont = Mathf.Max(8, Mathf.RoundToInt(f * 0.6f));
-                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                        t.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                        t.transform.localScale = new Vector3(extra, extra, 1f);
-                    }
+                    if (t) GalleryUiMetrics.ApplyGlyphFont(t, 40f, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
 
@@ -1318,12 +1242,8 @@ namespace VPB
                     if (rt) rt.sizeDelta = new Vector2(180f * s, 40f * s);
                     if (t)
                     {
-                        const int baseFont = 22;
-                        const int minFont = 12;
-                        float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                        t.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                        float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                        t.transform.localScale = new Vector3(extra, extra, 1f);
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+                        t.fontStyle = FontStyle.Normal;
                     }
                 });
             }
@@ -1362,12 +1282,18 @@ namespace VPB
             // Scale action keeps text wrapper in sync with row height
             {
                 var hpRT = hoverPathTextRT2;
-                innerPaneScaleActions.Add(s => { if (hpRT != null) hpRT.sizeDelta = new Vector2(0f, 60f * s); });
+                var hpText = hoverPathText;
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (hpRT != null) hpRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s);
+                    if (hpText != null)
+                        GalleryUiMetrics.ApplyFont(hpText, GalleryUiDesignTokens.FooterHoverPathFontRef, s, 12);
+                });
             }
 
             hoverPathText = hoverPathTextGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hoverPathText.fontSize = 20; // Slightly smaller to ensure 2 rows fit comfortably in 60px
+            hoverPathText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             hoverPathText.color = Color.white;
             var shadow = hoverPathTextGO.AddComponent<Shadow>();
             shadow.effectColor = new Color(0, 0, 0, 0.8f);
@@ -1452,6 +1378,7 @@ namespace VPB
             {
                 footerScrollStepUpBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepUp);
                 footerScrollStepUpBtn.name = "ScrollbarScrollStepUp";
+                { var s = UI.LoadIconSprite("vpb_icons/chevron_up.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollStepUpBtn, s); }
                 AddHoverDelegate(footerScrollStepUpBtn);
                 AddTooltip(footerScrollStepUpBtn, "gallery.tooltip.scroll_step_up", "Scroll up");
             }
@@ -1459,6 +1386,7 @@ namespace VPB
             {
                 footerScrollStepDownBtn = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, ScrollGalleryStepDown);
                 footerScrollStepDownBtn.name = "ScrollbarScrollStepDown";
+                { var s = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerScrollStepDownBtn, s); }
                 AddHoverDelegate(footerScrollStepDownBtn);
                 AddTooltip(footerScrollStepDownBtn, "gallery.tooltip.scroll_step_down", "Scroll down");
             }
@@ -1594,9 +1522,14 @@ namespace VPB
         /// <summary>Place jump top / spring drag / jump bottom in a vertical stack on the scrollbar.</summary>
         private void LayoutScrollbarJumpButtons(float? innerPaneScaleOverride = null)
         {
-            if (footerScrollTopBtn == null || footerScrollBottomBtn == null || springScrollButtonGO == null) return;
+            float paneS = innerPaneScaleOverride ?? (ChromeScale);
 
-            float paneS = innerPaneScaleOverride ?? (VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+            // The spring scroll button toggles independently of the jump/step buttons, so resize it
+            // first and never gate it behind their existence (otherwise it ignores UI-scale changes
+            // whenever the jump buttons are disabled).
+            ApplySpringScrollButtonScale(paneS);
+
+            if (footerScrollTopBtn == null || footerScrollBottomBtn == null) return;
 
             float btnSz = Mathf.Round(Mathf.Clamp(40f * paneS, 24f, 56f));
             const float gap = 6f;
@@ -1630,7 +1563,7 @@ namespace VPB
                 downRt.anchoredPosition = new Vector2(0f, btnSz + gap * 2f);
             }
 
-            int fs = Mathf.RoundToInt(22f * paneS);
+            int fs = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * paneS);
             foreach (var go in new[] { footerScrollTopBtn, footerScrollBottomBtn, footerScrollStepUpBtn, footerScrollStepDownBtn })
             {
                 if (go == null) continue;
@@ -1643,13 +1576,48 @@ namespace VPB
             SyncScrollbarJumpButtonCollider(footerScrollStepUpBtn);
             SyncScrollbarJumpButtonCollider(footerScrollStepDownBtn);
 
-            int si = springScrollButtonGO.transform.GetSiblingIndex();
-            footerScrollTopBtn.transform.SetSiblingIndex(si);
-            if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.transform.SetSiblingIndex(si + 1);
-            if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.transform.SetSiblingIndex(si + 3);
-            footerScrollBottomBtn.transform.SetSiblingIndex(si + 4);
+            if (springScrollButtonGO != null)
+            {
+                int si = springScrollButtonGO.transform.GetSiblingIndex();
+                footerScrollTopBtn.transform.SetSiblingIndex(si);
+                if (footerScrollStepUpBtn != null) footerScrollStepUpBtn.transform.SetSiblingIndex(si + 1);
+                if (footerScrollStepDownBtn != null) footerScrollStepDownBtn.transform.SetSiblingIndex(si + 3);
+                footerScrollBottomBtn.transform.SetSiblingIndex(si + 4);
+            }
 
             UpdateScrollbarJumpButtonsVisibility();
+        }
+
+        /// <summary>Sizes the spring scroll drag button + icon for the given chrome scale. Safe when no spring button exists.</summary>
+        private void ApplySpringScrollButtonScale(float paneS)
+        {
+            if (springScrollButtonGO == null) return;
+            if (paneS <= 0f) paneS = 1f;
+
+            float baseW = isFixedLocally
+                ? GalleryUiDesignTokens.SpringScrollBtnWidthFixedRef
+                : GalleryUiDesignTokens.SpringScrollBtnWidthFloatRef;
+            float springW = baseW * paneS;
+            float springH = springW * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
+            SpringScrollButton ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
+            if (ssb != null)
+                ssb.SetSize(springW, springH);
+            else
+            {
+                RectTransform springRt = springScrollButtonGO.GetComponent<RectTransform>();
+                if (springRt != null)
+                    springRt.sizeDelta = new Vector2(springW, springH);
+            }
+            Transform iconT = springScrollButtonGO.transform.Find("Icon");
+            if (iconT != null)
+            {
+                RectTransform irt = iconT as RectTransform;
+                if (irt != null)
+                {
+                    float inset = GalleryUiDesignTokens.SpringScrollBtnIconInsetRef * paneS;
+                    irt.sizeDelta = new Vector2(-inset, -inset);
+                }
+            }
         }
 
         private void EnsureSpringScrollButtonExists()
@@ -1662,8 +1630,10 @@ namespace VPB
 
             if (sb == null) return;
 
-            float w = isFixedLocally ? 50f : 100f;
-            float h = w * 1.618f;
+            float w = isFixedLocally
+                ? GalleryUiDesignTokens.SpringScrollBtnWidthFixedRef
+                : GalleryUiDesignTokens.SpringScrollBtnWidthFloatRef;
+            float h = w * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
             GameObject springBtn = SpringScrollButton.Create(sb.gameObject, scrollRect, w, h);
             springBtn.transform.SetAsLastSibling();
 
@@ -1969,7 +1939,7 @@ namespace VPB
                     return;
                 }
             }
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
 
             float size = 300f;
             if (VPBConfig.Instance != null) size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, 200f, 600f);
@@ -2004,8 +1974,6 @@ namespace VPB
 
         public void UpdatePaginationText()
         {
-            if (paginationText == null) return;
-
             {
                 bool showClearFilter = IsFilterActive;
                 bool showBackBtn = IsFilterActive;
@@ -2014,8 +1982,6 @@ namespace VPB
                 if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
                 if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
                 if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
-                // Item count moved to tbox bar — hide it from the bottom bar in gallery mode
-                if (paginationText != null) paginationText.gameObject.SetActive(false);
 
                 // Show toolbox filter controls when in dependency filter mode
                 if (tboxFilterModeRowGO != null) tboxFilterModeRowGO.SetActive(showClearFilter);
@@ -2047,50 +2013,6 @@ namespace VPB
                 // Keep the hover-path count fallback in sync with filter/search refreshes.
                 try { RefreshHoverPathCountTextIfNeeded(); } catch { }
 
-                // With RecyclingGridView, we no longer have "pages".
-                // Just show total count.
-                if (currentFilteredFiles != null)
-                {
-                    int total = currentFilteredFiles.Count;
-                    int selected = selectedFiles.Count;
-                    bool historyBrowse = activeContentType == ContentType.History;
-                    if (historyBrowse && total == 0)
-                    {
-                        bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
-                        if (lastHistoryQueryFailed || !VpbSqlite3.IsAvailable)
-                        {
-                            paginationText.text = VPBTranslation.T(
-                                "gallery.history.unavailable_retry",
-                                "History unavailable (SQLite/index). Click Refresh/Ctrl+R to retry.");
-                        }
-                        else if (hasNameFilter)
-                        {
-                            paginationText.text = VPBTranslation.T(
-                                "gallery.history.empty_filtered",
-                                "No History matches current filter. Clear search/filter.");
-                        }
-                        else
-                        {
-                            paginationText.text = VPBTranslation.T(
-                                "gallery.history.empty",
-                                "History is empty.");
-                        }
-                    }
-                    else if (selected > 0)
-                    {
-                        if (historyBrowse)
-                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected_unique", "{0} unique / {1} Items"), selected, total);
-                        else
-                            paginationText.text = string.Format(VPBTranslation.T("gallery.items.selected", "{0} / {1} Items"), selected, total);
-                    }
-                    else
-                        paginationText.text = string.Format(VPBTranslation.T("gallery.items.count", "{0} Items"), total);
-                }
-                else
-                {
-                    paginationText.text = VPBTranslation.T("gallery.items.zero", "0 Items");
-                }
-
                 if (tboxSelectAllBtn != null)
                 {
                     Button sab = tboxSelectAllBtn.GetComponent<Button>();
@@ -2100,13 +2022,6 @@ namespace VPB
                         sab.interactable = totalForSelectAll > 0 && totalForSelectAll <= SelectAllSafetyMaxItemCount;
                     }
                 }
-
-                if (paginationFirstBtn != null) paginationFirstBtn.SetActive(false);
-                if (paginationPrev10Btn != null) paginationPrev10Btn.SetActive(false);
-                if (paginationPrevBtn != null) paginationPrevBtn.SetActive(false);
-                if (paginationNextBtn != null) paginationNextBtn.SetActive(false);
-                if (paginationNext10Btn != null) paginationNext10Btn.SetActive(false);
-                if (paginationLastBtn != null) paginationLastBtn.SetActive(false);
             }
         }
 
@@ -2942,45 +2857,6 @@ namespace VPB
             UpdateLayout();
         }
 
-        private void NextPage()
-        {
-            currentPage++;
-            RefreshFiles();
-        }
-
-        private void Next10Page()
-        {
-            currentPage += 10;
-            RefreshFiles();
-        }
-
-        private void FirstPage()
-        {
-            currentPage = 0;
-            RefreshFiles(false, true);
-        }
-
-        private void LastPage()
-        {
-            currentPage = Mathf.Max(0, lastTotalPages - 1);
-            RefreshFiles();
-        }
-
-        private void PrevPage()
-        {
-            currentPage = Mathf.Max(0, currentPage - 1);
-            RefreshFiles(false, true);
-        }
-
-        private void Prev10Page()
-        {
-            if (currentPage > 0)
-            {
-                currentPage = Mathf.Max(0, currentPage - 10);
-                RefreshFiles(false, true);
-            }
-        }
-
         /// <summary>Select every item in <see cref="currentFilteredFiles"/> when within <see cref="SelectAllSafetyMaxItemCount"/>.</summary>
         /// <returns>True if selection was applied.</returns>
         private bool TrySelectAllCurrentGalleryView(string source)
@@ -3256,14 +3132,14 @@ namespace VPB
                 if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
                 {
                     leftActiveContent = type;
-                    if (rightActiveContent == type) rightActiveContent = null;
+                    if (type == ContentType.Settings || rightActiveContent == type) rightActiveContent = null;
                 }
                 else if (leftActiveContent == type)
                     leftActiveContent = null;
                 else
                 {
                     leftActiveContent = type;
-                    if (rightActiveContent == type) rightActiveContent = null;
+                    if (type == ContentType.Settings || rightActiveContent == type) rightActiveContent = null;
                 }
             }
             else
@@ -3271,14 +3147,14 @@ namespace VPB
                 if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
                 {
                     rightActiveContent = type;
-                    if (leftActiveContent == type) leftActiveContent = null;
+                    if (type == ContentType.Settings || leftActiveContent == type) leftActiveContent = null;
                 }
                 else if (rightActiveContent == type)
                     rightActiveContent = null;
                 else
                 {
                     rightActiveContent = type;
-                    if (leftActiveContent == type) leftActiveContent = null;
+                    if (type == ContentType.Settings || leftActiveContent == type) leftActiveContent = null;
                 }
             }
 

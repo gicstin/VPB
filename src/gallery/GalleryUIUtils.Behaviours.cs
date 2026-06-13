@@ -337,7 +337,9 @@ namespace VPB
                 if (onResized != null && resizeY)
                     onResized(resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y);
                 if (onResizedVec2 != null)
-                    onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? currentAnchorsMax : currentAnchorsMin);
+                    onResizedVec2(new Vector2(
+                        resizeAnchorMaxX ? currentAnchorsMax.x : currentAnchorsMin.x,
+                        resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y));
             }
 
             if (previewTarget != null) previewTarget.gameObject.SetActive(false);
@@ -418,7 +420,9 @@ namespace VPB
                         if (onResized != null && resizeY)
                             onResized(resizeAnchorMaxY ? newMax.y : newMin.y);
                         if (onResizedVec2 != null)
-                            onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? newMax : newMin);
+                            onResizedVec2(new Vector2(
+                                resizeAnchorMaxX ? newMax.x : newMin.x,
+                                resizeAnchorMaxY ? newMax.y : newMin.y));
                     }
                 }
             }

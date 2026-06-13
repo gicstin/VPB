@@ -194,7 +194,8 @@ namespace VPB
             Text titleText = titleGO.AddComponent<Text>();
             titleText.text = title;
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 24;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -227,7 +228,7 @@ namespace VPB
             textGO.transform.SetParent(textArea.transform, false);
             Text t = textGO.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 20;
+            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleLeft;
             RectTransform tRT = textGO.GetComponent<RectTransform>();
@@ -302,7 +303,8 @@ namespace VPB
             titleGO.transform.SetParent(panelGO.transform, false);
             Text titleTxt = titleGO.AddComponent<Text>();
             titleTxt.font = arial;
-            titleTxt.fontSize = 22;
+            titleTxt.fontSize = GalleryUiDesignTokens.FontRef;
+            titleTxt.fontStyle = FontStyle.Normal;
             titleTxt.color = Color.white;
             titleTxt.alignment = TextAnchor.MiddleCenter;
             titleTxt.text = VPBTranslation.T("gallery.rename.title", "Rename Person Atom");
@@ -317,7 +319,7 @@ namespace VPB
             oldLabelGO.transform.SetParent(panelGO.transform, false);
             Text oldLabelTxt = oldLabelGO.AddComponent<Text>();
             oldLabelTxt.font = arial;
-            oldLabelTxt.fontSize = 16;
+            oldLabelTxt.fontSize = GalleryUiDesignTokens.FontBodyRef;
             oldLabelTxt.color = new Color(0.85f, 0.85f, 0.85f);
             oldLabelTxt.alignment = TextAnchor.MiddleLeft;
             oldLabelTxt.text = VPBTranslation.T("gallery.rename.old_name_label", "Old name");
@@ -336,7 +338,7 @@ namespace VPB
             oldValTextGO.transform.SetParent(oldValGO.transform, false);
             Text oldValTxt = oldValTextGO.AddComponent<Text>();
             oldValTxt.font = arial;
-            oldValTxt.fontSize = 17;
+            oldValTxt.fontSize = GalleryUiDesignTokens.FontBodyRef;
             oldValTxt.color = Color.white;
             oldValTxt.alignment = TextAnchor.MiddleLeft;
             oldValTxt.text = oldUid;
@@ -356,7 +358,7 @@ namespace VPB
             renameLabelGO.transform.SetParent(panelGO.transform, false);
             Text renameLabelTxt = renameLabelGO.AddComponent<Text>();
             renameLabelTxt.font = arial;
-            renameLabelTxt.fontSize = 16;
+            renameLabelTxt.fontSize = GalleryUiDesignTokens.FontBodyRef;
             renameLabelTxt.color = new Color(0.85f, 0.85f, 0.85f);
             renameLabelTxt.alignment = TextAnchor.MiddleLeft;
             renameLabelTxt.text = VPBTranslation.T("gallery.rename.rename_to_label", "Rename to");
@@ -391,7 +393,7 @@ namespace VPB
             textGO.transform.SetParent(textArea.transform, false);
             Text tComp = textGO.AddComponent<Text>();
             tComp.font = arial;
-            tComp.fontSize = 18;
+            tComp.fontSize = GalleryUiDesignTokens.FontBodyRef;
             tComp.color = Color.white;
             tComp.alignment = TextAnchor.MiddleLeft;
             RectTransform tRt = textGO.GetComponent<RectTransform>();
@@ -495,7 +497,8 @@ namespace VPB
             Text titleText = titleGO.AddComponent<Text>();
             titleText.text = title;
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 24;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -511,7 +514,7 @@ namespace VPB
             Text msgText = msgGO.AddComponent<Text>();
             msgText.text = message;
             msgText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            msgText.fontSize = 18;
+            msgText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             msgText.color = new Color(0.8f, 0.8f, 0.8f, 1f);
             msgText.alignment = TextAnchor.MiddleCenter;
             RectTransform msgRT = msgGO.GetComponent<RectTransform>();
@@ -762,7 +765,8 @@ namespace VPB
             Text titleText = titleGO.AddComponent<Text>();
             titleText.text = title;
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 18;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -983,7 +987,8 @@ namespace VPB
             Text titleText = titleGO.AddComponent<Text>();
             titleText.text = title;
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 18;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -1209,7 +1214,8 @@ namespace VPB
             Text titleText = titleGO.AddComponent<Text>();
             titleText.text = title;
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = 18;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleCenter;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();

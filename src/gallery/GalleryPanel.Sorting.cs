@@ -451,8 +451,8 @@ namespace VPB
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.color = isCurrent ? UI.PopupText : UI.PopupMutedText;
+                    rowT.fontStyle = FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
                 }
@@ -481,7 +481,7 @@ namespace VPB
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
             float gapY = 6f;
-            float sc = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float sc = ChromeScale;
             Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -65f * sc);
             Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
 
@@ -505,6 +505,7 @@ namespace VPB
             }
 
             RebuildFileSortTypeMenuOptions();
+            SyncFileSortTypeMenuLayout(ChromeScale);
             fileSortTypeMenuRoot.SetActive(true);
             fileSortTypeMenuRoot.transform.SetAsLastSibling();
         }
@@ -548,8 +549,8 @@ namespace VPB
                 Text rowT = row.GetComponentInChildren<Text>();
                 if (rowT != null)
                 {
-                    rowT.color = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.color = isCurrent ? UI.PopupText : UI.PopupMutedText;
+                    rowT.fontStyle = FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
                 }
@@ -560,6 +561,26 @@ namespace VPB
             }
 
             AppendHideOldVersionsMenuRow();
+            SyncFileSortTypeMenuLayout(ChromeScale);
+        }
+
+        private void SyncFileSortTypeMenuLayout(float s)
+        {
+            if (fileSortTypeMenuPanelGO == null) return;
+            if (s <= 0f) s = 1f;
+            RectTransform panelRT = fileSortTypeMenuPanelGO.GetComponent<RectTransform>();
+            if (panelRT == null) return;
+            float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+            if (_titleBarFileSortTypeBtnRT != null)
+            {
+                panelRT.anchoredPosition = _titleBarFileSortTypeBtnRT.anchoredPosition
+                    + new Vector2(0f, -(_titleBarFileSortTypeBtnRT.sizeDelta.y + gap));
+            }
+            else
+            {
+                panelRT.anchoredPosition = new Vector2(108f * s, -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            }
+            panelRT.sizeDelta = new Vector2(GalleryUiDesignTokens.FileSortMenuPanelWidthRef * s, panelRT.sizeDelta.y);
         }
 
         // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
@@ -590,8 +611,8 @@ namespace VPB
             Text rowT = row.GetComponentInChildren<Text>();
             if (rowT != null)
             {
-                rowT.color = UI.PopupText;
-                rowT.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
+                rowT.color = on ? UI.PopupText : UI.PopupMutedText;
+                rowT.fontStyle = FontStyle.Normal;
                 rowT.alignment = TextAnchor.MiddleLeft;
                 VPBUiFont.ApplyTo(rowT);
             }

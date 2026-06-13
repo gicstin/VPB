@@ -1484,7 +1484,7 @@ namespace VPB
             Text t = labelGO.AddComponent<Text>();
             t.text = label;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 16;
+            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleLeft;
 
@@ -1506,7 +1506,7 @@ namespace VPB
             Text t = labelGO.AddComponent<Text>();
             t.text = label + ": " + currentVal.ToString("F2");
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 14;
+            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleLeft;
 

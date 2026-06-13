@@ -2,9 +2,19 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace VPB
 {
+    /// <summary>Commits a deferred settings slider's value when the drag/click is released.
+    /// Lives on the slider host alongside the Slider so it receives the same pointer-up/end-drag events.</summary>
+    internal sealed class SettingsSliderReleaseCommit : MonoBehaviour, IPointerUpHandler, IEndDragHandler
+    {
+        public Action OnRelease;
+        public void OnPointerUp(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
+        public void OnEndDrag(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
+    }
+
     public partial class GalleryPanel
     {
         private enum InternalSettingControlType
@@ -38,6 +48,12 @@ namespace VPB
             public float Step;
             public int Decimals;
             public bool AllowNegative;
+
+            /// <summary>Slider only: when true, the live value is shown while dragging but
+            /// <see cref="SetFloat"/> is committed on pointer/drag release. Used by settings whose
+            /// change rebuilds the settings list rows (UI scale) — applying live would destroy the
+            /// slider mid-drag and drop the gesture.</summary>
+            public bool DeferLiveApply;
 
             public string[] Options;
             public Func<string> GetString;
@@ -433,35 +449,21 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryManualRefreshOnly = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.sideScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_scale_vr", "Side Button Scale (VR)"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_scale_vr", "Scales the size of the side buttons in VR mode. 1.0 = default size."),
-                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.SideButtonScaleVR,
-                SetFloat = v => { VPBConfig.Instance.SideButtonScaleVR = v; ApplySideButtonScale(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "visuals.sideScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_scale_desktop", "Side Button Scale (Desktop)"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_scale_desktop", "Scales the size of the side buttons in Desktop mode. 1.0 = default size."),
-                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.SideButtonScaleDesktop,
-                SetFloat = v => { VPBConfig.Instance.SideButtonScaleDesktop = v; ApplySideButtonScale(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "visuals.innerScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_vr", "Inner Pane Scale (VR)"),
-                Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_vr", "Scales all UI elements inside the gallery pane in VR mode. 1.0 = default size."),
+                Key = "visuals.galleryUiScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_vr", "Gallery UI Scale (VR)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_vr", "Scales gallery chrome, side buttons, and in-pane controls in VR. 1.0 = default size."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleVR,
                 SetFloat = v => { VPBConfig.Instance.InnerPaneScaleVR = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
                 Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
+                DeferLiveApply = true,
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.innerScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_desktop", "Inner Pane Scale (Desktop)"),
-                Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_desktop", "Scales all UI elements inside the gallery pane in Desktop mode. 1.0 = default size."),
+                Key = "visuals.galleryUiScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_desktop", "Gallery UI Scale (Desktop)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_desktop", "Scales gallery chrome, side buttons, and in-pane controls on desktop. Also follows VaM's UI Scale setting."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleDesktop,
                 SetFloat = v => { VPBConfig.Instance.InnerPaneScaleDesktop = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
                 Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
+                DeferLiveApply = true,
                 RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
@@ -1456,6 +1458,17 @@ namespace VPB
                 RefreshInternalSettingsListRows(true);
         }
 
+        /// <summary>Open gallery Settings side tab (title bar gear / shortcuts).</summary>
+        public void OpenSettingsSideTab()
+        {
+            if (IsSettingsPanelOpen()) return;
+            try { CancelPluginHotkeyCapture(false); } catch { }
+            if (isFixedLocally)
+                ToggleLeft(ContentType.Settings);
+            else
+                ToggleRight(ContentType.Settings);
+        }
+
         /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
         public void OpenSettingsGroup(string groupKey)
         {
@@ -1471,12 +1484,7 @@ namespace VPB
             }
             try { CancelPluginHotkeyCapture(false); } catch { }
             if (!IsSettingsPanelOpen())
-            {
-                if (isFixedLocally)
-                    ToggleLeft(ContentType.Settings);
-                else
-                    ToggleRight(ContentType.Settings);
-            }
+                OpenSettingsSideTab();
             else
             {
                 try { UpdateTabs(); } catch { }
@@ -1568,9 +1576,8 @@ namespace VPB
             settingsListViewActive = true;
             EnsureInternalSettingsSession();
             // Settings list view: always minimum row height (no +/- scaling),
-            // but still respect InnerPaneScale so text/controls remain readable.
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
+            // but still respect chrome scale so text/controls remain readable.
+            float paneScale = ChromeScale;
             internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
 
             if (titleText != null)
@@ -1727,7 +1734,7 @@ namespace VPB
             }
         }
 
-        private static GameObject CreateMiniButton(Transform parent, string label, float width, Color bg, Action onClick)
+        private GameObject CreateMiniButton(Transform parent, string label, float width, Color bg, Action onClick)
         {
             GameObject go = new GameObject("SettingsControlBtn");
             go.transform.SetParent(parent, false);
@@ -1743,22 +1750,20 @@ namespace VPB
             b.transition = Selectable.Transition.None;
             b.navigation = new Navigation { mode = Navigation.Mode.None };
 
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
-            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+            float rowScale = Mathf.Clamp(EffectiveListRowHeightForGallery() / 100f, 0.6f, 2f);
 
             LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width * paneScale;
-            le.minWidth = width * paneScale;
-            le.preferredHeight = 32f * paneScale;
-            le.minHeight = 32f * paneScale;
+            le.preferredWidth = width * rowScale;
+            le.minWidth = width * rowScale;
+            le.preferredHeight = 32f * rowScale;
+            le.minHeight = 32f * rowScale;
             le.flexibleWidth = 0f;
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(go.transform, false);
             Text t = tgo.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
+            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.text = label;
@@ -1773,9 +1778,9 @@ namespace VPB
 
             AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
 
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
-            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+            float rowH = EffectiveListRowHeightForGallery();
+            float rowScale = Mathf.Clamp(rowH / 100f, 0.6f, 2f);
+            float paneScale = rowScale;
 
             Transform listRowTr = btnGO.transform.Find("ListRow");
             if (listRowTr == null) return;
@@ -1791,13 +1796,12 @@ namespace VPB
                 if (nameText != null)
                 {
                     nameText.resizeTextForBestFit = false;
-                    nameText.fontSize = Mathf.Max(12, Mathf.RoundToInt(28f * paneScale));
+                    GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.FontRef, rowScale, GalleryUiDesignTokens.FontMinRef);
+                    nameText.fontStyle = FontStyle.Normal;
                 }
                 LayoutElement nameLe = nameTr != null ? nameTr.GetComponent<LayoutElement>() : null;
                 if (nameLe != null)
-                {
-                    nameLe.minHeight = 32f * paneScale;
-                }
+                    nameLe.minHeight = 32f * rowScale;
             }
             catch { }
 
@@ -1819,10 +1823,10 @@ namespace VPB
             hlg.childControlWidth = true;
             hlg.childForceExpandHeight = false;
             hlg.childForceExpandWidth = false;
-            hlg.spacing = 6f * paneScale;
+            hlg.spacing = 6f * rowScale;
             LayoutElement cle = controls.AddComponent<LayoutElement>();
             cle.flexibleWidth = 1f;
-            cle.minHeight = 32f * paneScale;
+            cle.minHeight = 32f * rowScale;
 
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
@@ -1926,17 +1930,29 @@ namespace VPB
                 slider.value = Mathf.Clamp(cur, def.Min, def.Max);
                 slider.wholeNumbers = def.Decimals <= 0;
 
+                // Full-height transparent raycast target so the whole control row area (not just the
+                // thin bar) receives hover, click, and drag events. Pointer events bubble up to the
+                // Slider on sliderHost, which fixes click-drag being swallowed by the parent scroll view.
+                GameObject hitbox = new GameObject("Hitbox");
+                hitbox.transform.SetParent(sliderHost.transform, false);
+                var hitImg = hitbox.AddComponent<Image>();
+                hitImg.color = new Color(1f, 1f, 1f, 0f);
+                hitImg.raycastTarget = true;
+                RectTransform hitRT = hitbox.GetComponent<RectTransform>();
+                hitRT.anchorMin = Vector2.zero; hitRT.anchorMax = Vector2.one; hitRT.sizeDelta = Vector2.zero;
+
                 GameObject bg = new GameObject("Background");
                 bg.transform.SetParent(sliderHost.transform, false);
                 var bgImg = bg.AddComponent<Image>();
                 bgImg.color = new Color(0.2f, 0.2f, 0.2f);
+                bgImg.raycastTarget = false;
                 RectTransform bgRT = bg.GetComponent<RectTransform>();
-                bgRT.anchorMin = new Vector2(0, 0.4f); bgRT.anchorMax = new Vector2(1, 0.6f); bgRT.sizeDelta = Vector2.zero;
+                bgRT.anchorMin = new Vector2(0, 0.28f); bgRT.anchorMax = new Vector2(1, 0.72f); bgRT.sizeDelta = Vector2.zero;
 
                 GameObject fillArea = new GameObject("Fill Area");
                 fillArea.transform.SetParent(sliderHost.transform, false);
                 RectTransform faRT = fillArea.AddComponent<RectTransform>();
-                faRT.anchorMin = new Vector2(0, 0.4f); faRT.anchorMax = new Vector2(1, 0.6f); faRT.sizeDelta = Vector2.zero;
+                faRT.anchorMin = new Vector2(0, 0.28f); faRT.anchorMax = new Vector2(1, 0.72f); faRT.sizeDelta = Vector2.zero;
 
                 GameObject fill = new GameObject("Fill");
                 fill.transform.SetParent(fillArea.transform, false);
@@ -1977,7 +1993,7 @@ namespace VPB
                 tgo.transform.SetParent(inputGO.transform, false);
                 Text it = tgo.AddComponent<Text>();
                 it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                it.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
+                GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
                 it.color = Color.white;
                 it.alignment = TextAnchor.MiddleCenter;
                 RectTransform itRT = tgo.GetComponent<RectTransform>();
@@ -1985,13 +2001,32 @@ namespace VPB
                 input.textComponent = it;
                 input.text = slider.value.ToString("F" + Math.Max(0, def.Decimals));
 
+                bool deferLive = def.DeferLiveApply;
                 slider.onValueChanged.AddListener(v =>
                 {
                     input.text = v.ToString("F" + Math.Max(0, def.Decimals));
+                    // Deferred sliders (e.g. UI scale) only show the live value while dragging; applying
+                    // would rebuild the settings list rows and destroy this slider mid-drag. Commit on release.
+                    if (deferLive) return;
                     def.SetFloat(v);
                     if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                 });
+                if (deferLive)
+                {
+                    var commit = sliderHost.AddComponent<SettingsSliderReleaseCommit>();
+                    commit.OnRelease = () =>
+                    {
+                        def.SetFloat(slider.value);
+                        if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                            NotifyInternalSettingsHoverPreviewChanged();
+                        // UI-scale sliders defer until release; now that the gesture is over it is safe
+                        // to rescale the gallery chrome and rebuild the settings rows so the new scale
+                        // shows immediately without saving and re-opening Settings.
+                        try { ApplyInnerPaneScale(); } catch { }
+                        try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
+                    };
+                }
                 input.onEndEdit.AddListener(s =>
                 {
                     float parsed;
@@ -2065,7 +2100,7 @@ namespace VPB
                 textGo.transform.SetParent(taHost.transform, false);
                 Text taTxt = textGo.AddComponent<Text>();
                 taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                taTxt.fontSize = Mathf.Max(11, Mathf.RoundToInt(16f * paneScale));
+                GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
                 taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
                 taTxt.alignment = TextAnchor.UpperLeft;
                 taTxt.supportRichText = false;
@@ -2107,7 +2142,7 @@ namespace VPB
                     wle.preferredHeight = 32f * paneScale;
                     Text wt = warn.AddComponent<Text>();
                     wt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    wt.fontSize = Mathf.Max(10, Mathf.RoundToInt(14f * paneScale));
+                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.PopupMenuRowFontRef, rowScale, 10);
                     wt.color = new Color(1f, 0.75f, 0.2f, 1f);
                     wt.alignment = TextAnchor.MiddleRight;
                     wt.supportRichText = false;
@@ -2285,7 +2320,7 @@ namespace VPB
 
             if (this != null)
             {
-                ApplySideButtonScale();
+                ApplyInnerPaneScale();
                 categoriesCached = false;
                 RebuildGridLayout();
                 RefreshFiles(true);
@@ -2345,7 +2380,8 @@ namespace VPB
                 textGo.transform.SetParent(box.transform, false);
                 UnityEngine.UI.Text msg = textGo.AddComponent<UnityEngine.UI.Text>();
                 msg.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                msg.fontSize = 22;
+                msg.fontSize = GalleryUiDesignTokens.FontRef;
+                msg.fontStyle = FontStyle.Normal;
                 msg.alignment = TextAnchor.MiddleCenter;
                 msg.color = Color.white;
                 msg.text = VPBTranslation.T("ba.prompt.msg",

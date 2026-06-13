@@ -17,7 +17,7 @@ namespace VPB
             Var
         }
 
-        public const float MinUiScale = 0.72f;
+        public const float MinUiScale = 0.5f;
         public const float MaxUiScale = 1.5f;
 
         private static float ClampUiScale(float v)
@@ -679,17 +679,29 @@ namespace VPB
         public float SideButtonScaleDesktop = 0.8f;
         private float _innerPaneScaleVR = 1.0f;
         private float _innerPaneScaleDesktop = 0.8f;
+        /// <summary>One-time migration: merged separate inner/side scale sliders into unified gallery UI scale.</summary>
+        public bool GalleryUiScaleUnifiedMigrated = false;
         public float InnerPaneScaleVR
         {
             get { return ClampUiScale(_innerPaneScaleVR); }
-            set { _innerPaneScaleVR = ClampUiScale(value); }
+            set
+            {
+                _innerPaneScaleVR = ClampUiScale(value);
+                SideButtonScaleVR = InnerPaneScaleVR;
+            }
         }
         public float InnerPaneScaleDesktop
         {
             get { return ClampUiScale(_innerPaneScaleDesktop); }
-            set { _innerPaneScaleDesktop = ClampUiScale(value); }
+            set
+            {
+                _innerPaneScaleDesktop = ClampUiScale(value);
+                SideButtonScaleDesktop = InnerPaneScaleDesktop;
+            }
         }
-        public float CurrentSideButtonScale => ClampUiScale(IsVR ? SideButtonScaleVR : SideButtonScaleDesktop);
+        /// <summary>Unified gallery UI scale (inner chrome + side buttons). Side scale fields mirror this value.</summary>
+        public float CurrentGalleryUiScale => CurrentInnerPaneScale;
+        public float CurrentSideButtonScale => CurrentGalleryUiScale;
         public float CurrentInnerPaneScale => IsVR ? InnerPaneScaleVR : InnerPaneScaleDesktop;
         public float InnerPaneScale
         {
@@ -721,8 +733,25 @@ namespace VPB
                         return Settings.Instance.UIScale.Value;
                 }
                 catch { }
-                return 1f;
+                return GalleryUiDesignTokens.VamUiScaleDesignBaseline;
             }
+        }
+
+        private void MigrateGalleryUiScaleUnified()
+        {
+            if (GalleryUiScaleUnifiedMigrated) return;
+            try
+            {
+                float vr = ClampUiScale(Mathf.Sqrt(InnerPaneScaleVR * SideButtonScaleVR));
+                float desk = ClampUiScale(Mathf.Sqrt(InnerPaneScaleDesktop * SideButtonScaleDesktop));
+                _innerPaneScaleVR = vr;
+                _innerPaneScaleDesktop = desk;
+                SideButtonScaleVR = vr;
+                SideButtonScaleDesktop = desk;
+                SideButtonScale = IsVR ? vr : desk;
+                GalleryUiScaleUnifiedMigrated = true;
+            }
+            catch { GalleryUiScaleUnifiedMigrated = true; }
         }
 
         /// <summary>UI language id: en, zh_cn, etc. Matches vpb_translations/&lt;id&gt;.json. Empty string means auto-detect on first run.</summary>
@@ -1215,6 +1244,8 @@ namespace VPB
                         else InnerPaneScaleVR = InnerPaneScale;
                         if (node["InnerPaneScaleDesktop"] != null) InnerPaneScaleDesktop = node["InnerPaneScaleDesktop"].AsFloat;
                         else InnerPaneScaleDesktop = InnerPaneScale;
+                        if (node["GalleryUiScaleUnifiedMigrated"] != null) GalleryUiScaleUnifiedMigrated = node["GalleryUiScaleUnifiedMigrated"].AsBool;
+                        MigrateGalleryUiScaleUnified();
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
@@ -1541,6 +1572,7 @@ namespace VPB
                 node["InnerPaneScale"].AsFloat = InnerPaneScale;
                 node["InnerPaneScaleVR"].AsFloat = InnerPaneScaleVR;
                 node["InnerPaneScaleDesktop"].AsFloat = InnerPaneScaleDesktop;
+                node["GalleryUiScaleUnifiedMigrated"].AsBool = GalleryUiScaleUnifiedMigrated;
                 node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;

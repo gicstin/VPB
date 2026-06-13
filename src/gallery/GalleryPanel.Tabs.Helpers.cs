@@ -842,7 +842,7 @@ namespace VPB
 
             Text label = textGO.AddComponent<Text>();
             label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            label.fontSize = 16;
+            label.fontSize = GalleryUiDesignTokens.FontBodyRef;
             label.lineSpacing = 1f;
             label.color = new Color(0.88f, 0.88f, 0.92f, 1f);
             label.alignment = TextAnchor.MiddleCenter;

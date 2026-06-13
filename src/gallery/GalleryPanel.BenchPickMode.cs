@@ -254,8 +254,8 @@ namespace VPB
         {
             if (_benchPickBannerRoot != null || backgroundBoxGO == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int font = Mathf.RoundToInt(18f * s);
+            float s = ChromeScale;
+            int font = new GalleryModalTypography(s).Body;
 
             _benchPickBannerRoot = new GameObject("VPB_BenchPickBanner");
             _benchPickBannerRoot.transform.SetParent(backgroundBoxGO.transform, false);

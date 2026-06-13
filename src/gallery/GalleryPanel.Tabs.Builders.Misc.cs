@@ -91,7 +91,7 @@ namespace VPB
             string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
             bool MatchFilter(string label) =>
                 string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
-            float groupTabScale = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float groupTabScale = ChromeScale;
             void AddGroupRow(string key, string label)
             {
                 if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;

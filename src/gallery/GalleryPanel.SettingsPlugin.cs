@@ -429,7 +429,7 @@ namespace VPB
             tgo.transform.SetParent(host.transform, false);
             Text it = tgo.AddComponent<Text>();
             it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            it.fontSize = Mathf.Max(11, Mathf.RoundToInt(16f * paneScale));
+            it.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, paneScale, GalleryUiDesignTokens.FontMinRef);
             it.color = capturing ? new Color(1f, 0.95f, 0.6f, 1f) : Color.white;
             it.alignment = TextAnchor.MiddleCenter;
             it.supportRichText = false;

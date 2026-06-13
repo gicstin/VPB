@@ -29,38 +29,6 @@ namespace VPB
             catch { return false; }
         }
 
-        private void UpdateFooterPaddingForFloatingResizeHandles(bool isFloating)
-        {
-            if (footerHLG == null) return;
-            if (footerHLG.padding == null) footerHLG.padding = new RectOffset(0, 0, 0, 0);
-
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int defaultRight = Mathf.RoundToInt(10f * s);
-            // Floating mode has bottom resize handles on both sides; mirror the existing left reservation
-            // so the bottom-right handle does not sit over the right-side footer buttons.
-            int desiredRight = defaultRight;
-            if (isFloating) desiredRight = footerHLG.padding.left;
-            else
-            {
-                // Fixed + Left dock uses a bottom-right resize handle; reserve footer right side like floating.
-                try
-                {
-                    if (VPBConfig.Instance != null)
-                    {
-                        string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
-                            desiredRight = footerHLG.padding.left;
-                    }
-                }
-                catch { }
-            }
-
-            if (_footerHLGLastRightPadding == desiredRight && footerHLG.padding.right == desiredRight) return;
-
-            footerHLG.padding = new RectOffset(footerHLG.padding.left, desiredRight, footerHLG.padding.top, footerHLG.padding.bottom);
-            _footerHLGLastRightPadding = desiredRight;
-        }
-
         private void Update()
         {
             if (canvas != null && !canvas.enabled)
@@ -145,7 +113,6 @@ namespace VPB
 
                 if (isFixedLocally && backgroundBoxGO != null)
                 {
-                    UpdateFooterPaddingForFloatingResizeHandles(false);
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
                     string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
 
@@ -222,10 +189,11 @@ namespace VPB
                         canvas.transform.localScale = Vector3.one;
                         
                         if (dragger != null) dragger.enabled = false;
-                        foreach (Transform child in backgroundBoxGO.transform)
-                        {
-                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(false);
-                        }
+                        if (_resizeHandleBottomLeftGO != null) _resizeHandleBottomLeftGO.SetActive(false);
+                        if (_resizeHandleBottomRightGO != null) _resizeHandleBottomRightGO.SetActive(false);
+                        if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(false);
+                        if (_resizeHandleFixedBottomGO != null) _resizeHandleFixedBottomGO.SetActive(false);
+                        if (_resizeHandleFixedBottomRightGO != null) _resizeHandleFixedBottomRightGO.SetActive(false);
                     }
 
                     // Always update anchors in Fixed mode to support height toggles and screen resizing
@@ -246,56 +214,59 @@ namespace VPB
                         }
                     }
 
-                    // Show/Hide bottom resize handle based on mode
-                    Transform customHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
-                    if (customHandle != null)
+                    // Show/Hide bottom resize handles based on dock mode (handles seated in footer slots).
+                    // Right dock → bottom-left grip; Left dock → bottom-right grip; Top dock → both grips (height only),
+                    // both using the straight-down chevron.
+                    bool isTopDock = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+                    if (_resizeHandleFixedBottomGO != null)
                     {
-                        // Fixed-bottom-left handle: only for Right dock (avoid collisions in Left/Top)
-                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
-                        if (customHandle.gameObject.activeSelf != shouldShow)
-                            customHandle.gameObject.SetActive(shouldShow);
+                        // Fixed-bottom-left handle: Right or Top dock.
+                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
+                        if (_resizeHandleFixedBottomGO.activeSelf != shouldShow)
+                            _resizeHandleFixedBottomGO.SetActive(shouldShow);
 
                         // Top dock uses this handle for height only (no width change).
                         try
                         {
-                            UIAnchorResizer rz = customHandle.GetComponent<UIAnchorResizer>();
+                            UIAnchorResizer rz = _resizeHandleFixedBottomGO.GetComponent<UIAnchorResizer>();
                             if (rz != null)
                             {
-                                bool top = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
-                                rz.resizeX = !top;
+                                rz.resizeX = !isTopDock;
                                 rz.resizeY = true;
                             }
                         }
                         catch { }
+
+                        if (shouldShow)
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_left.png"); } catch { }
                     }
-                    Transform customHandleRight = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottomRight");
-                    if (customHandleRight != null)
+                    if (_resizeHandleFixedBottomRightGO != null)
                     {
-                        // Fixed-bottom-right handle: only for Left dock
-                        bool shouldShow = isFixedLocally && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase);
-                        if (customHandleRight.gameObject.activeSelf != shouldShow)
-                            customHandleRight.gameObject.SetActive(shouldShow);
+                        // Fixed-bottom-right handle: Left or Top dock.
+                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
+                        if (_resizeHandleFixedBottomRightGO.activeSelf != shouldShow)
+                            _resizeHandleFixedBottomRightGO.SetActive(shouldShow);
+
+                        // Top dock uses this handle for height only (no width change).
+                        try
+                        {
+                            UIAnchorResizer rz = _resizeHandleFixedBottomRightGO.GetComponent<UIAnchorResizer>();
+                            if (rz != null)
+                            {
+                                rz.resizeX = !isTopDock;
+                                rz.resizeY = true;
+                            }
+                        }
+                        catch { }
+
+                        if (shouldShow)
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_right.png"); } catch { }
                     }
 
-                    // Show/Hide generic resize handles based on mode
-                    Transform handleBL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomLeft);
-                    if (handleBL != null)
-                    {
-                        bool shouldShow = false;
-                        if (handleBL.gameObject.activeSelf != shouldShow) handleBL.gameObject.SetActive(shouldShow);
-                    }
-                    Transform handleBR = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomRight);
-                    if (handleBR != null)
-                    {
-                        bool shouldShow = !isFixedLocally;
-                        if (handleBR.gameObject.activeSelf != shouldShow) handleBR.gameObject.SetActive(shouldShow);
-                    }
-                    Transform handleTL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.topLeft);
-                    if (handleTL != null)
-                    {
-                        bool shouldShow = !isFixedLocally;
-                        if (handleTL.gameObject.activeSelf != shouldShow) handleTL.gameObject.SetActive(shouldShow);
-                    }
+                    // Floating corner handles are hidden in fixed mode.
+                    if (_resizeHandleBottomLeftGO != null && _resizeHandleBottomLeftGO.activeSelf) _resizeHandleBottomLeftGO.SetActive(false);
+                    if (_resizeHandleBottomRightGO != null && _resizeHandleBottomRightGO.activeSelf) _resizeHandleBottomRightGO.SetActive(false);
+                    if (_resizeHandleTopLeftGO != null && _resizeHandleTopLeftGO.activeSelf) _resizeHandleTopLeftGO.SetActive(false);
 
                     Vector2 desiredMin, desiredMax;
                     if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
@@ -345,7 +316,6 @@ namespace VPB
                 }
                 else if (backgroundBoxGO != null)
                 {
-                    UpdateFooterPaddingForFloatingResizeHandles(true);
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
                     if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(false);
                     if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(false);
@@ -367,14 +337,12 @@ namespace VPB
                         UpdateSideButtonsVisibility();
 
                         if (dragger != null) dragger.enabled = true;
-                        foreach (Transform child in backgroundBoxGO.transform)
-                        {
-                            // Floating mode uses corner resize handles; do not enable the fixed-mode handle.
-                            if (child.name.StartsWith("ResizeHandle_") && child.name != "ResizeHandle_FixedBottom")
-                                child.gameObject.SetActive(true);
-                        }
-                        Transform fixedHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
-                        if (fixedHandle != null && fixedHandle.gameObject.activeSelf) fixedHandle.gameObject.SetActive(false);
+                        // Floating mode uses the corner handles; the fixed-dock handles stay hidden.
+                        if (_resizeHandleBottomLeftGO != null) _resizeHandleBottomLeftGO.SetActive(true);
+                        if (_resizeHandleBottomRightGO != null) _resizeHandleBottomRightGO.SetActive(true);
+                        if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(true);
+                        if (_resizeHandleFixedBottomGO != null && _resizeHandleFixedBottomGO.activeSelf) _resizeHandleFixedBottomGO.SetActive(false);
+                        if (_resizeHandleFixedBottomRightGO != null && _resizeHandleFixedBottomRightGO.activeSelf) _resizeHandleFixedBottomRightGO.SetActive(false);
 
                         RepositionInFront();
                     }
@@ -566,14 +534,14 @@ namespace VPB
             {
                 try
                 {
-                    ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                    ApplyCategoryQuickChromeLayout(ChromeScale);
                 }
                 catch { }
             }
 
             if (IsVisible && titleSearchInput != null)
             {
-                float iscale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+                float iscale = ChromeScale;
                 try { ApplyTitleBarResponsiveLayout(iscale); } catch { }
                 try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
             }

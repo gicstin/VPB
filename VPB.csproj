@@ -466,6 +466,13 @@
     <Compile Include="src\gallery\GalleryPanel.UI.Overlays.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.Layout.cs" />
     <Compile Include="src\gallery\GalleryPanel.SelectionContextMenu.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ContentTypeDescriptor.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SideRail.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UiScale.cs" />
+    <Compile Include="src\gallery\GalleryUiDesignTokens.cs" />
+    <Compile Include="src\gallery\GalleryUiMetrics.cs" />
+    <Compile Include="src\gallery\GalleryModalTypography.cs" />
+    <Compile Include="src\gallery\GalleryPanel.BrowseFilters.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />

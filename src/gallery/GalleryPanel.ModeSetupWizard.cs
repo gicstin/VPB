@@ -52,6 +52,7 @@ namespace VPB
             }
             try { VPBConfig.Instance.Save(true, true); } catch { }
             if (_modeSetupWizardGO != null) _modeSetupWizardGO.SetActive(false);
+            _showPostWizardFirstRunHint = true;
             try { RefreshFirstRunHintStrip(); } catch { }
         }
 
@@ -117,25 +118,26 @@ namespace VPB
                 }
             });
 
-            _modeSetupTitleText = CreateWizardLabel(panel.transform, "", 20, TextAnchor.UpperCenter,
+            _modeSetupTitleText = CreateWizardLabel(panel.transform, "", GalleryUiDesignTokens.FontRef, TextAnchor.UpperCenter,
                 new Vector2(12f, -12f), new Vector2(-12f, -44f));
-            _modeSetupStepText = CreateWizardLabel(panel.transform, "", 13, TextAnchor.UpperLeft,
+            _modeSetupTitleText.fontStyle = FontStyle.Normal;
+            _modeSetupStepText = CreateWizardLabel(panel.transform, "", GalleryUiDesignTokens.FontRef, TextAnchor.UpperLeft,
                 new Vector2(16f, -48f), new Vector2(-16f, -68f));
             _modeSetupStepText.color = new Color(0.75f, 0.8f, 0.88f, 1f);
-            _modeSetupBodyText = CreateWizardLabel(panel.transform, "", 16, TextAnchor.UpperLeft,
+            _modeSetupBodyText = CreateWizardLabel(panel.transform, "", GalleryUiDesignTokens.FontRef, TextAnchor.UpperLeft,
                 new Vector2(16f, -72f), new Vector2(-16f, -200f));
             _modeSetupBodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
             _modeSetupBodyText.verticalOverflow = VerticalWrapMode.Overflow;
 
             float btnY = -248f;
             UI.CreateUIButton(panel, 90f, 34f,
-                VPBTranslation.T("gallery.mode_setup.skip", "Skip"), 15, 0f, btnY, AnchorPresets.centre,
+                VPBTranslation.T("gallery.mode_setup.skip", "Skip"), GalleryUiDesignTokens.FontRef, 0f, btnY, AnchorPresets.centre,
                 () => MarkModeSetupDone());
             UI.CreateUIButton(panel, 90f, 34f,
-                VPBTranslation.T("gallery.mode_setup.back", "Back"), 15, -100f, btnY, AnchorPresets.centre,
+                VPBTranslation.T("gallery.mode_setup.back", "Back"), GalleryUiDesignTokens.FontRef, -100f, btnY, AnchorPresets.centre,
                 () => { if (_modeSetupStep > 0) { _modeSetupStep--; RefreshModeSetupWizardStep(); } });
             UI.CreateUIButton(panel, 110f, 34f,
-                VPBTranslation.T("gallery.mode_setup.next", "Next"), 15, 100f, btnY, AnchorPresets.centre,
+                VPBTranslation.T("gallery.mode_setup.next", "Next"), GalleryUiDesignTokens.FontRef, 100f, btnY, AnchorPresets.centre,
                 () => ModeSetupWizardAdvance());
 
             _modeSetupWizardGO.SetActive(false);
@@ -213,7 +215,7 @@ namespace VPB
                         : VPBTranslation.T("gallery.mode_setup.density_comfortable", "Comfortable"));
                 _modeSetupBodyText.text = string.Format(
                     VPBTranslation.T("gallery.mode_setup.panels_body",
-                        "Preset: left {0}, right {1}, density {2}.\n\nTap the panel background to cycle presets, then Next to apply."),
+                        "Preset: left {0}, right {1}, density {2}.\n\nTap the panel background to cycle presets, then Next to apply.\n\nA tip strip appears under the title bar — use ? for in-app help."),
                     _modeSetupLeftPanel, _modeSetupRightPanel, densityName);
             }
         }
@@ -283,30 +285,28 @@ namespace VPB
             if (_modeSetupDensity == 0)
             {
                 cfg.GridColumnCount = vr ? 4 : 5;
-                if (vr) { cfg.InnerPaneScaleVR = 1.0f; cfg.SideButtonScaleVR = 1.0f; }
-                else { cfg.InnerPaneScaleDesktop = 0.9f; cfg.SideButtonScaleDesktop = 0.75f; }
+                if (vr) cfg.InnerPaneScaleVR = 1.0f;
+                else cfg.InnerPaneScaleDesktop = 0.85f;
             }
             else if (_modeSetupDensity == 2)
             {
                 cfg.GridColumnCount = vr ? 3 : 4;
                 if (vr)
                 {
-                    cfg.InnerPaneScaleVR = 1.25f;
-                    cfg.SideButtonScaleVR = 1.15f;
+                    cfg.InnerPaneScaleVR = 1.2f;
                     cfg.VrHoverTooltipEnabled = true;
                 }
-                else { cfg.InnerPaneScaleDesktop = 1.15f; cfg.SideButtonScaleDesktop = 0.95f; }
+                else cfg.InnerPaneScaleDesktop = 1.05f;
             }
             else
             {
                 cfg.GridColumnCount = 4;
-                if (vr) { cfg.InnerPaneScaleVR = 1.1f; cfg.SideButtonScaleVR = 1.05f; }
-                else { cfg.InnerPaneScaleDesktop = 1.0f; cfg.SideButtonScaleDesktop = 0.8f; }
+                if (vr) cfg.InnerPaneScaleVR = 1.05f;
+                else cfg.InnerPaneScaleDesktop = 0.9f;
             }
 
             try { cfg.TriggerChange(); } catch { }
             try { ApplyInnerPaneScale(); } catch { }
-            try { ApplySideButtonScale(); } catch { }
             try { ApplySidePanelDefaultsFromConfig(); } catch { }
             try
             {

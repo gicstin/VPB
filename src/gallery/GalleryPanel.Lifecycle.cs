@@ -120,7 +120,6 @@ namespace VPB
         private void SubscribeGalleryPanelToVpBConfigChanged()
         {
             if (VPBConfig.Instance == null) return;
-            VPBConfig.Instance.ConfigChanged += ApplySideButtonScale;
             VPBConfig.Instance.ConfigChanged += ApplyInnerPaneScale;
             VPBConfig.Instance.ConfigChanged += UpdateSideButtonsVisibility;
             VPBConfig.Instance.ConfigChanged += UpdateFooterFollowStates;
@@ -135,7 +134,6 @@ namespace VPB
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
         {
             if (VPBConfig.Instance == null) return;
-            VPBConfig.Instance.ConfigChanged -= ApplySideButtonScale;
             VPBConfig.Instance.ConfigChanged -= ApplyInnerPaneScale;
             VPBConfig.Instance.ConfigChanged -= UpdateSideButtonsVisibility;
             VPBConfig.Instance.ConfigChanged -= UpdateFooterFollowStates;

@@ -38,7 +38,7 @@ namespace VPB
             colRT.anchorMin = new Vector2(0.5f, 0.5f);
             colRT.anchorMax = new Vector2(0.5f, 0.5f);
             colRT.pivot = new Vector2(0.5f, 0.5f);
-            colRT.sizeDelta = new Vector2(420f, 120f);
+            colRT.sizeDelta = new Vector2(460f, 140f);
 
             var vlg = colGO.AddComponent<VerticalLayoutGroup>();
             vlg.childAlignment = TextAnchor.MiddleCenter;
@@ -52,13 +52,15 @@ namespace VPB
             msgGO.transform.SetParent(colGO.transform, false);
             _emptyGridStateMessage = msgGO.AddComponent<Text>();
             try { VPBUiFont.ApplyTo(_emptyGridStateMessage); } catch { _emptyGridStateMessage.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            _emptyGridStateMessage.fontSize = 20;
-            _emptyGridStateMessage.fontStyle = FontStyle.Bold;
+            _emptyGridStateMessage.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            _emptyGridStateMessage.fontStyle = FontStyle.Normal;
             _emptyGridStateMessage.alignment = TextAnchor.MiddleCenter;
             _emptyGridStateMessage.color = new Color(0.75f, 0.75f, 0.78f, 1f);
+            _emptyGridStateMessage.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _emptyGridStateMessage.verticalOverflow = VerticalWrapMode.Overflow;
             _emptyGridStateMessage.raycastTarget = false;
             var msgLE = msgGO.AddComponent<LayoutElement>();
-            msgLE.preferredHeight = 28f;
+            msgLE.preferredHeight = 52f;
 
             _emptyGridStateActionBtn = UI.CreateUIButton(
                 colGO, 200, 36,
@@ -84,28 +86,14 @@ namespace VPB
                     ClearTitleBarSearch();
                     return;
                 }
-                if (HasActiveNonSearchFilters())
+                if (HasActiveBrowseFiltersExcludingTitleSearch())
                 {
-                    try { ClearGalleryFiltersKeepCategory(); } catch { RefreshFiles(true); }
+                    try { ClearAllBrowseFiltersKeepCategory(); } catch { RefreshFiles(true); }
                     return;
                 }
                 RefreshFiles(true);
             }
             catch { RefreshFiles(true); }
-        }
-
-        private bool HasActiveNonSearchFilters()
-        {
-            try
-            {
-                if (!string.IsNullOrEmpty(currentRatingFilter)) return true;
-                if (HasCreatorFilter()) return true;
-                if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return true;
-                if (activeTags != null && activeTags.Count > 0) return true;
-                if (HasActiveSubPaneOrExtraBrowseFilters()) return true;
-            }
-            catch { }
-            return false;
         }
 
         private void ClearSubPaneAndExtraBrowseFilters()
@@ -130,29 +118,6 @@ namespace VPB
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }
 
-        private void ClearGalleryFiltersKeepCategory()
-        {
-            currentRatingFilter = "";
-            try { activeTags?.Clear(); } catch { }
-            try { ClearTitleBarSearch(); } catch { }
-            try { ClearCreatorFilters(); } catch { }
-            ClearSubPaneAndExtraBrowseFilters();
-            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
-            {
-                currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
-                if (VPBConfig.Instance != null)
-                {
-                    VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
-                    try { VPBConfig.Instance.Save(); } catch { }
-                }
-            }
-            try { UpdateTitleCreatorButtonVisual(); } catch { }
-            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
-            try { UpdateTabs(); } catch { }
-            RefreshFiles(true);
-            SyncBrowseFilterChipChrome();
-        }
-
         public void UpdateEmptyGridState()
         {
             if (_emptyGridStateGO == null) return;
@@ -167,7 +132,7 @@ namespace VPB
             if (!show) return;
 
             bool hasSearch = !string.IsNullOrEmpty(nameFilter) && nameFilter.Trim().Length > 0;
-            bool hasOtherFilters = HasActiveNonSearchFilters();
+            bool hasOtherFilters = HasActiveBrowseFiltersExcludingTitleSearch();
 
             if (hasSearch)
             {
@@ -177,7 +142,10 @@ namespace VPB
             }
             else if (hasOtherFilters)
             {
-                _emptyGridStateMessage.text = VPBTranslation.T("gallery.empty.no_match_filters", "No items match the current filters.");
+                _emptyGridStateMessage.text = hasSearch
+                    ? VPBTranslation.T("gallery.empty.no_match_search_and_filters",
+                        "No items match. Title bar search filters the grid; side panel search filters that list.")
+                    : VPBTranslation.T("gallery.empty.no_match_filters", "No items match the current filters.");
                 if (_emptyGridStateActionText != null)
                     _emptyGridStateActionText.text = VPBTranslation.T("gallery.empty.clear_filters", "Clear filters");
             }
@@ -191,6 +159,7 @@ namespace VPB
 
         // First-run hint strip under the title bar.
 
+        private bool _showPostWizardFirstRunHint;
         private GameObject _firstRunHintGO;
         private Text _firstRunHintText;
 
@@ -218,16 +187,24 @@ namespace VPB
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
             textRT.offsetMin = new Vector2(10f, 0f);
-            textRT.offsetMax = new Vector2(-40f, 0f);
+            textRT.offsetMax = new Vector2(-76f, 0f);
             _firstRunHintText = textGO.AddComponent<Text>();
             try { VPBUiFont.ApplyTo(_firstRunHintText); } catch { _firstRunHintText.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            _firstRunHintText.fontSize = 14;
+            _firstRunHintText.fontSize = GalleryUiDesignTokens.FontCaptionRef;
             _firstRunHintText.alignment = TextAnchor.MiddleLeft;
             _firstRunHintText.color = new Color(0.92f, 0.94f, 0.98f, 1f);
             _firstRunHintText.raycastTarget = false;
             _firstRunHintText.text = VPBTranslation.T(
                 "gallery.first_run.hint",
                 "Tip: Ctrl+V toggles gallery · Side buttons open filters · Select items for actions in the bar below");
+
+            var helpBtn = UI.CreateUIButton(_firstRunHintGO, 32, 32, "?", 18, 0, 0, AnchorPresets.vStretchRight, OpenFirstRunHintHelp);
+            helpBtn.name = "Help";
+            RectTransform hrt = helpBtn.GetComponent<RectTransform>();
+            hrt.sizeDelta = new Vector2(32f, 0f);
+            hrt.anchoredPosition = new Vector2(-36f, 0f);
+            helpBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.5f, 0.85f);
+            AddTooltip(helpBtn, "gallery.first_run.open_help", "Open gallery help");
 
             var dismissBtn = UI.CreateUIButton(_firstRunHintGO, 32, 32, "×", 20, 0, 0, AnchorPresets.vStretchRight, DismissFirstRunHintStrip);
             dismissBtn.name = "Dismiss";
@@ -254,8 +231,14 @@ namespace VPB
             rt.offsetMax = new Vector2(rightOffset, gridTop);
         }
 
+        private void OpenFirstRunHintHelp()
+        {
+            try { OpenInAppHelpToSection("filtering"); } catch { }
+        }
+
         private void DismissFirstRunHintStrip()
         {
+            _showPostWizardFirstRunHint = false;
             try
             {
                 if (VPBConfig.Instance != null)
@@ -289,9 +272,18 @@ namespace VPB
             }
             if (show && _firstRunHintText != null)
             {
-                _firstRunHintText.text = VPBTranslation.T(
-                    "gallery.first_run.hint",
-                    "Tip: Ctrl+V toggles gallery · Side buttons open filters · Select items for actions in the bar below");
+                if (_showPostWizardFirstRunHint)
+                {
+                    _firstRunHintText.text = VPBTranslation.T(
+                        "gallery.first_run.hint_post_wizard",
+                        "Side buttons filter the grid · Title search filters item names · Select rows for the action bar below · ? opens help");
+                }
+                else
+                {
+                    _firstRunHintText.text = VPBTranslation.T(
+                        "gallery.first_run.hint",
+                        "Tip: Ctrl+V toggles gallery · Side buttons open filters · Select items for actions in the bar below");
+                }
             }
         }
 
@@ -412,7 +404,7 @@ namespace VPB
             trt.offsetMax = new Vector2(-6f, -2f);
             _popupText = textGO.AddComponent<Text>();
             try { VPBUiFont.ApplyTo(_popupText); } catch { _popupText.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            _popupText.fontSize = 14;
+            _popupText.fontSize = GalleryUiDesignTokens.FontCaptionRef;
             _popupText.alignment = TextAnchor.MiddleCenter;
             _popupText.color = Color.white;
             _popupText.horizontalOverflow = HorizontalWrapMode.Wrap;

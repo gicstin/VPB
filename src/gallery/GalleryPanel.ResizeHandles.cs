@@ -46,45 +46,60 @@ namespace VPB
                 resizeHandleGO = null;
             }
 
-            // Create resize handle in bottom-right corner
-            resizeHandleGO = new GameObject("ResizeHandle");
+            // Create container for all resize handles
+            resizeHandleGO = new GameObject("ResizeHandles");
             resizeHandleGO.transform.SetParent(backgroundBoxGO.transform, false);
 
-            RectTransform handleRT = resizeHandleGO.AddComponent<RectTransform>();
-            handleRT.anchorMin = new Vector2(1, 0);
-            handleRT.anchorMax = new Vector2(1, 0);
-            handleRT.pivot = new Vector2(1, 0);
-            handleRT.anchoredPosition = Vector2.zero;
-            handleRT.sizeDelta = new Vector2(30, 30);
-
-            // Add visual triangle image
-            Image handleImg = resizeHandleGO.AddComponent<Image>();
-            handleImg.color = new Color(0.7f, 0.7f, 0.7f, 0.8f);
-
-            // Create triangle sprite procedurally
-            Texture2D triangleTex = new Texture2D(32, 32, TextureFormat.RGBA32, false);
-            for (int y = 0; y < 32; y++)
+            // Corner handle definitions: (name, anchorMin, anchorMax, pivot, icon path)
+            (string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, string iconPath)[] corners = new[]
             {
-                for (int x = 0; x < 32; x++)
+                ("ResizeHandle-TopLeft", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                    "BepInEx/plugins/vpb_icons/chevrons_up_left.png"),
+                ("ResizeHandle-TopRight", new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1),
+                    "BepInEx/plugins/vpb_icons/chevrons_up_right.png"),
+                ("ResizeHandle-BottomLeft", new Vector2(0, 0), new Vector2(0, 0), new Vector2(0, 0),
+                    "BepInEx/plugins/vpb_icons/chevrons_down_left.png"),
+                ("ResizeHandle-BottomRight", new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+                    "BepInEx/plugins/vpb_icons/chevrons_down_right.png"),
+            };
+
+            foreach (var (name, anchorMin, anchorMax, pivot, iconPath) in corners)
+            {
+                GameObject handleGO = new GameObject(name);
+                handleGO.transform.SetParent(resizeHandleGO.transform, false);
+
+                RectTransform handleRT = handleGO.AddComponent<RectTransform>();
+                handleRT.anchorMin = anchorMin;
+                handleRT.anchorMax = anchorMax;
+                handleRT.pivot = pivot;
+                handleRT.anchoredPosition = Vector2.zero;
+                handleRT.sizeDelta = new Vector2(30, 30);
+
+                // Load icon from file
+                Image handleImg = handleGO.AddComponent<Image>();
+                Sprite iconSprite = Resources.Load<Sprite>(iconPath);
+                if (iconSprite != null)
                 {
-                    // Draw triangle in bottom-right corner
-                    bool isTriangle = (32 - x) + (32 - y) > 32;
-                    triangleTex.SetPixel(x, y, isTriangle ? Color.white : Color.clear);
+                    handleImg.sprite = iconSprite;
+                    handleImg.color = new Color(0.7f, 0.7f, 0.7f, 0.8f);
                 }
+                else
+                {
+                    // Fallback: colored rectangle if icon not found
+                    handleImg.color = new Color(0.7f, 0.7f, 0.7f, 0.8f);
+                }
+
+                // Add drag handler
+                ResizeDragHandler dragHandler = handleGO.AddComponent<ResizeDragHandler>();
+                dragHandler.Target = bgRT;
+                dragHandler.MinSize = new Vector2(800, 600);
+                dragHandler.MaxSize = new Vector2(1920, 1200);
+
+                // Border-only hover
+                UIHoverBorder hb = handleGO.AddComponent<UIHoverBorder>();
+                hb.hoverColor = new Color(1f, 1f, 0f, 1f);
+                hb.borderSize = 2f;
             }
-            triangleTex.Apply();
-            handleImg.sprite = Sprite.Create(triangleTex, new Rect(0, 0, 32, 32), new Vector2(0.5f, 0.5f));
-
-            // Add drag handler
-            ResizeDragHandler dragHandler = resizeHandleGO.AddComponent<ResizeDragHandler>();
-            dragHandler.Target = bgRT;
-            dragHandler.MinSize = new Vector2(800, 600);
-            dragHandler.MaxSize = new Vector2(1920, 1200);
-
-            // Border-only hover
-            UIHoverBorder hb = resizeHandleGO.AddComponent<UIHoverBorder>();
-            hb.hoverColor = new Color(1f, 1f, 0f, 1f);
-            hb.borderSize = 2f;
         }
     }
 }

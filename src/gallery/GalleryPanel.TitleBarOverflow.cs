@@ -130,6 +130,25 @@ namespace VPB
             if (_titleBarOverflowMenuGO != null) _titleBarOverflowMenuGO.SetActive(false);
         }
 
+        private void RescaleTitleBarOverflowMenuInternal(float s)
+        {
+            if (_titleBarOverflowMenuGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform panel = _titleBarOverflowMenuGO.transform.Find("OverflowMenuPanel");
+            if (panel == null) return;
+            ScaleVerticalPopupMenuRows(panel.gameObject, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuOverflowFontRef);
+            RectTransform panelRT = panel as RectTransform;
+            if (panelRT != null && _titleBarOverflowBtnRT != null)
+            {
+                float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                panelRT.anchoredPosition = new Vector2(
+                    _titleBarOverflowBtnRT.anchoredPosition.x,
+                    -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            }
+        }
+
         private bool TitleBarUsesOverflowMenu(bool hasSourceFilter, float titleBarWidth, float paneScale)
         {
             float s = paneScale <= 0f ? 1f : paneScale;

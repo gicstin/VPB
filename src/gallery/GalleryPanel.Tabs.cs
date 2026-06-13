@@ -188,7 +188,7 @@ namespace VPB
         private string ComputeCreatorVirtViewSignature()
         {
             SortState st = GetSortState("Creator");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             // Include cache revision + filter + sort + scale so we rebuild view list only when needed.
             return "v1|" + creatorSideTabDataRevision
                 + "|" + (creatorFilter ?? "")
@@ -231,7 +231,7 @@ namespace VPB
 
         private float CreatorVirtRowHeight()
         {
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             // Match CreateTabButton size (35*s) plus the scaled VerticalLayoutGroup spacing (2*s).
             return (35f * s) + (2f * s);
         }
@@ -265,7 +265,7 @@ namespace VPB
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    float s = ChromeScale;
                     rt.anchorMin = new Vector2(0, 1);
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
@@ -312,19 +312,12 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = btnColor;
 
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
             Text txt = btnGO.GetComponentInChildren<Text>();
             if (txt != null)
             {
                 txt.text = label;
-                // Unity UI Text.fontSize is int and clamps visually at tiny sizes; keep readable floor,
-                // then use localScale to continue shrinking below that floor.
-                const int baseFont = 18;
-                const int minFont = 10;
-                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                txt.transform.localScale = new Vector3(extra, extra, 1f);
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             }
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -396,7 +389,7 @@ namespace VPB
                     RectTransform rt = btnGO.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        float s = ChromeScale;
                         rt.sizeDelta = new Vector2(-10f, 35f * s);
                         float y = -idx * rowH;
                         rt.anchoredPosition = new Vector2(0f, y);
@@ -412,7 +405,7 @@ namespace VPB
         private string ComputeUserTagVirtDataSignature()
         {
             SortState st = GetSortState("UserTags");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             string cat = currentCategoryTitle ?? "";
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
             return "v1|" + userTagSideTabDataRevision
@@ -557,6 +550,7 @@ namespace VPB
             {
                 up = UI.CreateUIButton(sb.gameObject, 40, 40, "▲", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, 1f));
                 up.name = isLeft ? "LeftUserTagScrollStepUp" : "RightUserTagScrollStepUp";
+                { var s = UI.LoadIconSprite("vpb_icons/chevron_up.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(up, s); }
                 AddHoverDelegate(up);
                 AddTooltip(up, "gallery.tooltip.usertags_scroll_up", "Scroll tags up");
                 if (isLeft) leftUserTagScrollStepUpBtn = up; else rightUserTagScrollStepUpBtn = up;
@@ -565,6 +559,7 @@ namespace VPB
             {
                 down = UI.CreateUIButton(sb.gameObject, 40, 40, "▼", 22, 0, 0, AnchorPresets.middleCenter, () => ScrollUserTagPanelStep(isLeft, -1f));
                 down.name = isLeft ? "LeftUserTagScrollStepDown" : "RightUserTagScrollStepDown";
+                { var s = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(down, s); }
                 AddHoverDelegate(down);
                 AddTooltip(down, "gallery.tooltip.usertags_scroll_down", "Scroll tags down");
                 if (isLeft) leftUserTagScrollStepDownBtn = down; else rightUserTagScrollStepDownBtn = down;
@@ -584,7 +579,7 @@ namespace VPB
 
         private void LayoutUserTagScrollStepButtons(GameObject up, GameObject down)
         {
-            float paneS = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float paneS = ChromeScale;
             float btnSz = Mathf.Round(Mathf.Clamp(40f * paneS, 28f, 56f));
             const float gap = 6f;
             GameObject[] gos = { up, down };
@@ -658,7 +653,7 @@ namespace VPB
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    float s = ChromeScale;
                     rt.anchorMin = new Vector2(0, 1);
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
@@ -745,16 +740,11 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = btnColor;
 
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
             Text txt = btnGO.GetComponentInChildren<Text>();
             if (txt != null)
             {
-                const int baseFont = 18;
-                const int minFont = 10;
-                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                txt.transform.localScale = new Vector3(extra, extra, 1f);
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 txt.horizontalOverflow = HorizontalWrapMode.Overflow;
                 txt.verticalOverflow = VerticalWrapMode.Truncate;
                 txt.resizeTextForBestFit = false;
@@ -879,7 +869,7 @@ namespace VPB
                     RectTransform rt = btnGO.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        float s = ChromeScale;
                         rt.sizeDelta = new Vector2(-10f, 35f * s);
                         float y = -idx * rowH;
                         rt.anchoredPosition = new Vector2(0f, y);
@@ -902,14 +892,14 @@ namespace VPB
         private string ComputeCategorySideTabSignature()
         {
             SortState st = GetSortState("Category");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             return categorySideTabDataRevision + "|" + (categoryFilter ?? "") + "|" + (currentPath ?? "") + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|" + (categories != null ? categories.Count : 0);
         }
 
         private string ComputeCreatorSideTabSignature()
         {
             SortState st = GetSortState("Creator");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
         }
 
@@ -1191,19 +1181,12 @@ namespace VPB
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = color;
 
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
             float insetL = Mathf.Max(0f, labelInsetLeft);
             float insetR = Mathf.Max(0f, labelInsetRight);
 
             Text txt = btnGO.GetComponentInChildren<Text>();
-            {
-                const int baseFont = 18;
-                const int minFont = 10;
-                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                txt.transform.localScale = new Vector3(extra, extra, 1f);
-            }
+            GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             txt.alignment = labelAnchor;
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             txt.verticalOverflow = VerticalWrapMode.Truncate;
@@ -1313,7 +1296,7 @@ namespace VPB
             Text placeholderText = placeholder.AddComponent<Text>();
             placeholderText.text = VPBTranslation.T("gallery.search.main", "Search...");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            placeholderText.fontSize = 18; // Increased from 14
+            placeholderText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             placeholderText.color = UI.InputFieldPlaceholderColor;
             placeholderText.fontStyle = FontStyle.Italic;
             placeholderText.alignment = TextAnchor.MiddleLeft; // Vertically centered
@@ -1327,7 +1310,7 @@ namespace VPB
             text.transform.SetParent(textArea.transform, false);
             Text textComponent = text.AddComponent<Text>();
             textComponent.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            textComponent.fontSize = 18; // Increased from 14
+            textComponent.fontSize = GalleryUiDesignTokens.FontBodyRef;
             textComponent.color = UI.InputFieldTextColor;
             textComponent.supportRichText = false;
             textComponent.alignment = TextAnchor.MiddleLeft; // Vertically centered
@@ -1353,9 +1336,7 @@ namespace VPB
             clearRT.pivot = new Vector2(1, 0.5f);
             clearRT.anchoredPosition = new Vector2(-5, 0);
             clearBtn.GetComponent<Image>().color = new Color(0,0,0,0); // Transparent bg
-            
-            Text clearText = clearBtn.GetComponentInChildren<Text>();
-            clearText.color = new Color(0.6f, 0.6f, 0.6f);
+            { var s = UI.LoadIconSprite("vpb_icons/backspace.png", new Color(0.6f, 0.6f, 0.6f)); if (s != null) UI.AddIconToButton(clearBtn, s, 6f, new Color(0, 0, 0, 0)); }
 
             // Border-only hover (avoid text color fill)
             var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
@@ -1446,7 +1427,8 @@ namespace VPB
             navTextGO.transform.SetParent(btnGO.transform, false);
             Text t = navTextGO.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 24;
+            t.fontSize = GalleryUiDesignTokens.FontRef;
+            t.fontStyle = FontStyle.Normal;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.raycastTarget = false;
@@ -1678,7 +1660,7 @@ namespace VPB
 
             Text gridLabelText = gridLabelTextGO.AddComponent<Text>();
             gridLabelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            gridLabelText.fontSize = 18;
+            gridLabelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             gridLabelText.color = Color.white;
             gridLabelText.alignment = TextAnchor.MiddleCenter;
             gridLabelText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1723,7 +1705,7 @@ namespace VPB
             labelGO.transform.SetParent(cardGO.transform, false);
             Text labelText = labelGO.AddComponent<Text>();
             labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            labelText.fontSize = 18;
+            labelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             labelText.color = Color.white;
             labelText.alignment = TextAnchor.MiddleCenter;
             labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -1765,8 +1747,8 @@ namespace VPB
             listNameGO.transform.SetParent(listRowGO.transform, false);
             Text listNameText = listNameGO.AddComponent<Text>();
             listNameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            listNameText.fontSize = 28;
-            listNameText.fontStyle = FontStyle.Bold;
+            listNameText.fontSize = GalleryUiDesignTokens.FontRef;
+            listNameText.fontStyle = FontStyle.Normal;
             listNameText.color = Color.white;
             listNameText.alignment = TextAnchor.LowerLeft;
             listNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1798,7 +1780,7 @@ namespace VPB
                 go.transform.SetParent(detailsRowGO.transform, false);
                 Text t = go.AddComponent<Text>();
                 t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                t.fontSize = 22;
+                t.fontSize = GalleryUiDesignTokens.FontBodyRef;
                 t.color = new Color(0.75f, 0.75f, 0.75f, 1f);
                 t.alignment = TextAnchor.MiddleLeft;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1936,8 +1918,8 @@ namespace VPB
             aiBadgeTextGO.transform.SetParent(aiBadgeGO.transform, false);
             Text aiBadgeText = aiBadgeTextGO.AddComponent<Text>();
             aiBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            aiBadgeText.fontSize = 22;
-            aiBadgeText.fontStyle = FontStyle.Bold;
+            aiBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            aiBadgeText.fontStyle = FontStyle.Normal;
             aiBadgeText.color = Color.white;
             aiBadgeText.alignment = TextAnchor.MiddleCenter;
             aiBadgeText.text = "A";
@@ -1970,8 +1952,8 @@ namespace VPB
             hideBadgeTextGO.transform.SetParent(hideBadgeGO.transform, false);
             Text hideBadgeText = hideBadgeTextGO.AddComponent<Text>();
             hideBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hideBadgeText.fontSize = 22;
-            hideBadgeText.fontStyle = FontStyle.Bold;
+            hideBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            hideBadgeText.fontStyle = FontStyle.Normal;
             hideBadgeText.color = Color.white;
             hideBadgeText.alignment = TextAnchor.MiddleCenter;
             hideBadgeText.text = "H";
@@ -2005,8 +1987,8 @@ namespace VPB
             scanExBadgeTextGO.transform.SetParent(scanExBadgeGO.transform, false);
             Text scanExBadgeText = scanExBadgeTextGO.AddComponent<Text>();
             scanExBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            scanExBadgeText.fontSize = 22;
-            scanExBadgeText.fontStyle = FontStyle.Bold;
+            scanExBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            scanExBadgeText.fontStyle = FontStyle.Normal;
             scanExBadgeText.color = Color.white;
             scanExBadgeText.alignment = TextAnchor.MiddleCenter;
             scanExBadgeText.text = "W";
@@ -2039,8 +2021,8 @@ namespace VPB
             userTagsBadgeTextGO.transform.SetParent(userTagsBadgeGO.transform, false);
             Text userTagsBadgeText = userTagsBadgeTextGO.AddComponent<Text>();
             userTagsBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            userTagsBadgeText.fontSize = 22;
-            userTagsBadgeText.fontStyle = FontStyle.Bold;
+            userTagsBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            userTagsBadgeText.fontStyle = FontStyle.Normal;
             userTagsBadgeText.color = Color.white;
             userTagsBadgeText.alignment = TextAnchor.MiddleCenter;
             userTagsBadgeText.text = "T";
@@ -2349,7 +2331,11 @@ namespace VPB
             if (nameTr != null)
             {
                 Text t = nameTr.GetComponent<Text>();
-                if (t != null) t.fontSize = Mathf.RoundToInt(28f * s);
+                if (t != null)
+                {
+                    t.fontSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontRef * s);
+                    t.fontStyle = FontStyle.Normal;
+                }
                 LayoutElement le = nameTr.GetComponent<LayoutElement>();
                 if (le != null) le.minHeight = 32f * s;
             }
@@ -2359,7 +2345,7 @@ namespace VPB
             {
                 LayoutElement le = detailsTr.GetComponent<LayoutElement>();
                 if (le != null) le.minHeight = 24f * s;
-                int detailFont = Mathf.RoundToInt(22f * s);
+                int detailFont = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s);
                 int dn = detailsTr.childCount;
                 for (int i = 0; i < dn; i++)
                 {
@@ -2373,7 +2359,7 @@ namespace VPB
             {
                 LayoutElement le = badgesTr.GetComponent<LayoutElement>();
                 if (le != null) { le.minHeight = 32f * s; le.preferredHeight = 32f * s; }
-                int badgeFont = Mathf.RoundToInt(22f * s);
+                int badgeFont = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s);
                 float badgeSize = 32f * s;
                 int bn = badgesTr.childCount;
                 for (int i = 0; i < bn; i++)
@@ -2477,6 +2463,8 @@ namespace VPB
             ApplyUserTagDropVisual(btnGO, file);
             ApplyScanWhitelistIncludedBorderVisual(btnGO, file, isListRow);
             ApplyScanWhitelistTemporaryBorderVisual(btnGO, file, isListRow);
+            if (!isListRow)
+                try { ApplyGridCellChromeScale(btnGO); } catch { }
         }
 
         public void BindFileButton(GameObject btnGO, FileEntry file)
@@ -2584,7 +2572,6 @@ namespace VPB
                         if (t != null)
                         {
                             t.text = file.Name ?? "";
-                            t.fontSize = 24;
                             t.alignment = TextAnchor.MiddleLeft;
                         }
                     }
@@ -2741,9 +2728,6 @@ namespace VPB
                 }
                 else
                 {
-                    bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
-                    float labelFrac = showGridLabels ? GetGridLabelFraction() : 0f;
-
                     thumbRT.anchorMin = Vector2.zero;
                     thumbRT.anchorMax = Vector2.one;
                     thumbRT.pivot = new Vector2(0.5f, 0.5f);
@@ -2752,37 +2736,7 @@ namespace VPB
                     try { if (VPBConfig.Instance != null) pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f); } catch { pad = 3f; }
                     thumbRT.offsetMin = new Vector2(pad, pad);
                     thumbRT.offsetMax = new Vector2(-pad, -pad);
-                    Transform gridLabelTr = btnGO.transform.Find("GridLabel");
-                    if (gridLabelTr != null)
-                    {
-                        gridLabelTr.gameObject.SetActive(showGridLabels);
-                        if (showGridLabels)
-                        {
-                            RectTransform glRT = gridLabelTr as RectTransform;
-                            if (glRT != null)
-                            {
-                                glRT.anchorMin = new Vector2(0f, 0f);
-                                glRT.anchorMax = new Vector2(1f, labelFrac);
-                                glRT.offsetMin = Vector2.zero;
-                                glRT.offsetMax = Vector2.zero;
-                            }
-                            Transform glTextTr = gridLabelTr.Find("Text");
-                            if (glTextTr != null)
-                            {
-                                Text t = glTextTr.GetComponent<Text>();
-                                RectTransform glTextRT = glTextTr as RectTransform;
-                                if (t != null && glTextRT != null)
-                                {
-                                    int fs = Mathf.RoundToInt(VPBConfig.Instance.GalleryGridLabelFontSize);
-                                    t.fontSize = fs;
-                                    string labelText = GetGridItemLabelText(file);
-                                    RectTransform labelRT = gridLabelTr as RectTransform;
-                                    float availWidth = labelRT != null ? labelRT.rect.width : 94f;
-                                    t.text = TruncateGridLabelTextByWidth(t, labelText, availWidth);
-                                }
-                            }
-                        }
-                    }
+                    ApplyGridLabelStripLayout(btnGO, file);
                 }
 
                 RawImage thumbImg = thumbTr.GetComponent<RawImage>();
@@ -3368,8 +3322,8 @@ namespace VPB
             descGO.transform.SetParent(indicatorGO.transform, false);
             Text descText = descGO.AddComponent<Text>();
             descText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            descText.fontSize = 12;
-            descText.fontStyle = FontStyle.Bold;
+            descText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            descText.fontStyle = FontStyle.Normal;
             descText.color = Color.white;
             descText.text = "Filtered";
             descText.raycastTarget = false;
@@ -3386,8 +3340,8 @@ namespace VPB
             Text clearBtnText = new GameObject("Text").AddComponent<Text>();
             clearBtnText.transform.SetParent(clearBtnGO.transform, false);
             clearBtnText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            clearBtnText.fontSize = 12;
-            clearBtnText.fontStyle = FontStyle.Bold;
+            clearBtnText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            clearBtnText.fontStyle = FontStyle.Normal;
             clearBtnText.color = Color.white;
             clearBtnText.text = "Clear Filter";
             clearBtnText.alignment = TextAnchor.MiddleCenter;

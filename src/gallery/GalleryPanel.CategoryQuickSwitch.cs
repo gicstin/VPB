@@ -65,16 +65,18 @@ namespace VPB
                 arrowGO.transform.SetParent(cqRoot.transform, false);
                 var arrowT = arrowGO.AddComponent<Text>();
                 arrowT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                arrowT.fontSize = 32;
-                arrowT.fontStyle = FontStyle.Bold;
+                arrowT.fontSize = GalleryUiDesignTokens.FontBodyRef;
+                arrowT.fontStyle = FontStyle.Normal;
                 arrowT.color = Color.white;
                 arrowT.alignment = TextAnchor.MiddleLeft;
                 arrowT.raycastTarget = false;
                 arrowT.text = "▾";
+                _categoryQuickArrowText = arrowT;
                 var arrowLE = arrowGO.AddComponent<LayoutElement>();
+                _categoryQuickArrowLE = arrowLE;
                 arrowLE.preferredWidth = 28f;
                 arrowLE.minWidth = 28f;
-                arrowLE.preferredHeight = 44f;
+                arrowLE.preferredHeight = GalleryUiDesignTokens.TitleBarCategoryRowHeightRef;
             }
 
             titleGO.transform.SetParent(cqRoot.transform, false);
@@ -206,17 +208,76 @@ namespace VPB
             if (_categoryQuickChromeRootRT == null) return;
             if (paneScale <= 0f) paneScale = 1f;
             bool flushLeft = CategoryQuickSwitchFlushLeftEdge();
-            float leftInset = flushLeft ? 0f : 60f * paneScale;
-            // Same vertical center as Language / Settings / sort row (title bar middleCenter, y=0)
-            float y = 0f;
-            _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, y);
-            _categoryQuickChromeRootRT.localScale = new Vector3(paneScale, paneScale, 1f);
-            _categoryQuickChromeRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44f);
+            float leftInset = flushLeft ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
+            _categoryQuickChromeRootRT.localScale = Vector3.one;
+            _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, 0f);
+            _categoryQuickChromeRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef * paneScale, GalleryUiDesignTokens.TitleBarCategoryRowHeightRef * paneScale);
             if (_categoryQuickMenuOuterRT != null)
             {
-                _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(leftInset, -((44f * paneScale) + (24f * paneScale)));
-                _categoryQuickMenuOuterRT.localScale = new Vector3(paneScale, paneScale, 1f);
-                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
+                _categoryQuickMenuOuterRT.localScale = Vector3.one;
+                _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(
+                    leftInset,
+                    -((GalleryUiDesignTokens.TitleBarCategoryRowHeightRef + 24f) * paneScale));
+                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef * paneScale, 340f * paneScale);
+            }
+            if (_categoryQuickArrowText != null)
+            {
+                GalleryUiMetrics.ApplyGlyphFont(_categoryQuickArrowText, GalleryUiDesignTokens.TitleBarCategoryRowHeightRef, paneScale, GalleryUiDesignTokens.FontMinRef);
+                if (_categoryQuickArrowLE != null)
+                {
+                    _categoryQuickArrowLE.preferredWidth = 28f * paneScale;
+                    _categoryQuickArrowLE.minWidth = 28f * paneScale;
+                    _categoryQuickArrowLE.preferredHeight = GalleryUiDesignTokens.TitleBarCategoryRowHeightRef * paneScale;
+                }
+            }
+            ApplyCategoryQuickMenuRowsLayout(paneScale);
+        }
+
+        /// <summary>Scale category quick-switch dropdown row fonts/heights without full rebuild.</summary>
+        private void ApplyCategoryQuickMenuRowsLayout(float s)
+        {
+            if (_categoryQuickMenuContentGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform parent = _categoryQuickMenuContentGO.transform;
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            int padH = Mathf.RoundToInt(10f * s);
+            int padV = Mathf.RoundToInt(6f * s);
+            int gap = Mathf.RoundToInt(10f * s);
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform row = parent.GetChild(i);
+                if (row == null) continue;
+                HorizontalLayoutGroup hlg = row.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null)
+                {
+                    hlg.padding = new RectOffset(padH, padH, padV, padV);
+                    hlg.spacing = gap;
+                }
+                LayoutElement le = row.GetComponent<LayoutElement>();
+                if (le != null)
+                {
+                    le.preferredHeight = rowH;
+                    le.minHeight = rowH;
+                }
+                for (int c = 0; c < row.childCount; c++)
+                {
+                    Transform child = row.GetChild(c);
+                    if (child == null) continue;
+                    Text t = child.GetComponent<Text>();
+                    if (t != null)
+                    {
+                        int fontRef = child.name == "Idx"
+                            ? GalleryUiDesignTokens.PopupMenuRowFontLargeRef
+                            : GalleryUiDesignTokens.PopupMenuRowFontLargeRef;
+                        GalleryUiMetrics.ApplyFont(t, fontRef, s, 12);
+                    }
+                    LayoutElement childLe = child.GetComponent<LayoutElement>();
+                    if (childLe != null && child.name == "Idx")
+                    {
+                        childLe.preferredWidth = 34f * s;
+                        childLe.minWidth = 34f * s;
+                    }
+                }
             }
         }
 
@@ -229,7 +290,7 @@ namespace VPB
             if (!show && _categoryQuickMenuOpen)
                 SetCategoryQuickMenuVisible(false);
             if (!show) HideGlobalSourceFilterDropdownIfOpen();
-            ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+            ApplyCategoryQuickChromeLayout(ChromeScale);
         }
 
         private void RefreshCategoryQuickSwitchOnConfigChanged()
@@ -511,13 +572,15 @@ namespace VPB
                     CreateCategoryQuickMenuRow(_categoryQuickMenuContentGO.transform, i, c, i + 1, keyNum, isActive);
                 }
 
+                ApplyCategoryQuickMenuRowsLayout(ChromeScale);
+
                 if (_categoryQuickMenuOuterGO != null && ordered.Count == 0)
                 {
                     var empty = new GameObject("EmptyHint");
                     empty.transform.SetParent(_categoryQuickMenuContentGO.transform, false);
                     var t = empty.AddComponent<Text>();
                     VPBUiFont.ApplyTo(t);
-                    t.fontSize = 14;
+                    t.fontSize = GalleryUiDesignTokens.FontBodyRef;
                     t.color = new Color(0.7f, 0.7f, 0.75f);
                     t.text = VPBTranslation.T("gallery.category_quick.empty", "No categories available.");
                     var le = empty.AddComponent<LayoutElement>();
@@ -566,8 +629,8 @@ namespace VPB
             numGO.transform.SetParent(row.transform, false);
             var numT = numGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(numT);
-            numT.fontSize = 17;
-            numT.fontStyle = FontStyle.Bold;
+            numT.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            numT.fontStyle = FontStyle.Normal;
             numT.color = UI.PopupMutedText;
             numT.alignment = TextAnchor.MiddleLeft;
             numT.text = numPrefix;
@@ -579,7 +642,7 @@ namespace VPB
             nameGO.transform.SetParent(row.transform, false);
             var nameT = nameGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(nameT);
-            nameT.fontSize = 17;
+            nameT.fontSize = GalleryUiDesignTokens.FontBodyRef;
             nameT.color = UI.PopupText;
             nameT.alignment = TextAnchor.MiddleLeft;
             nameT.text = cat.name ?? "";

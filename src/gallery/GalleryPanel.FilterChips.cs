@@ -97,7 +97,7 @@ namespace VPB
             return HasActiveBrowseFilters();
         }
 
-        private static bool IsBrowseFilterChipContextActive()
+        private bool IsBrowseFilterChipContextActive()
         {
             // History browse uses its own side panel; title-bar chips would disagree with that mode.
             if (activeContentType == ContentType.History) return false;
@@ -109,7 +109,7 @@ namespace VPB
         {
             if (!string.IsNullOrEmpty(nameFilter) && nameFilter.Trim().Length > 0) return true;
             if (activeTags != null && activeTags.Count > 0) return true;
-            return HasActiveNonSearchFilters();
+            return HasActiveBrowseFiltersExcludingTitleSearch();
         }
 
         private bool HasActiveSubPaneOrExtraBrowseFilters()
@@ -144,9 +144,9 @@ namespace VPB
             ClearActiveFilterChipButtons();
             if (_activeFilterChipScrollContentRT == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            int fontSize = Mathf.Max(14, Mathf.RoundToInt(16f * s));
+            int fontSize = UiMetrics.FontBody();
             float chipH = FilterChipRowHeightRef * s;
 
             HorizontalLayoutGroup hlg = _activeFilterChipScrollContentRT.GetComponent<HorizontalLayoutGroup>();
@@ -247,7 +247,7 @@ namespace VPB
             labelTxt.text = spec.Label;
             try { VPBUiFont.ApplyTo(labelTxt); } catch { labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
             labelTxt.fontSize = fontSize;
-            labelTxt.fontStyle = isClearAll ? FontStyle.Bold : FontStyle.Normal;
+            labelTxt.fontStyle = FontStyle.Normal;
             labelTxt.alignment = TextAnchor.MiddleLeft;
             labelTxt.color = Color.white;
             labelTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -273,8 +273,9 @@ namespace VPB
                 Text xTxt = xGO.AddComponent<Text>();
                 xTxt.text = "\u00d7";
                 try { VPBUiFont.ApplyTo(xTxt); } catch { xTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-                xTxt.fontSize = Mathf.Max(16, fontSize + 2);
-                xTxt.fontStyle = FontStyle.Bold;
+                xTxt.fontSize = GalleryUiMetrics.GlyphFontFromControlHeight(
+                    GalleryUiDesignTokens.FilterChipRowHeightRef - 4f, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+                xTxt.fontStyle = FontStyle.Normal;
                 xTxt.alignment = TextAnchor.MiddleCenter;
                 xTxt.color = Color.white;
                 xTxt.raycastTarget = false;
@@ -318,7 +319,7 @@ namespace VPB
                     Kind = FilterChipKind.Search,
                     OnDismiss = () =>
                     {
-                        try { ClearTitleBarSearch(); } catch { }
+                        try { ClearTitleBarSearchAndSyncChrome(); } catch { }
                     }
                 });
             }
@@ -474,7 +475,7 @@ namespace VPB
                     Kind = FilterChipKind.ClearAll,
                     OnDismiss = () =>
                     {
-                        try { ClearGalleryFiltersKeepCategory(); } catch { RefreshFiles(true); }
+                        try { ClearAllBrowseFiltersKeepCategory(); } catch { RefreshFiles(true); }
                     }
                 });
             }
@@ -632,7 +633,7 @@ namespace VPB
                     UpdateLayout();
                 else if (_activeFilterChipBarVisible)
                     ApplyActiveFilterChipBarLayout(_lastBrowseGridLeftInset, _lastBrowseGridRightInset,
-                        VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                        ChromeScale);
             }
             catch { }
             try { UpdateEmptyGridState(); } catch { }

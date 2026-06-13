@@ -80,9 +80,10 @@ namespace VPB
 
         void BuildBenchEditorModal()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int titleFont = Mathf.RoundToInt(28f * s);
-            int bodyFont = Mathf.RoundToInt(19f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int titleFont = type.Title;
+            int bodyFont = type.Body;
 
             _benchModalRoot = new GameObject("VPB_BenchModal");
             _benchModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
@@ -139,8 +140,8 @@ namespace VPB
             titleGo.transform.SetParent(header.transform, false);
             Text title = titleGo.AddComponent<Text>();
             title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.fontSize = titleFont;
-            title.fontStyle = FontStyle.Bold;
+            GalleryUiMetrics.ApplyEmphasisTitle(title, titleFont);
+            title.fontStyle = FontStyle.Normal;
             title.color = Color.white;
             title.text = VPBTranslation.T("bench.simple.title", "Scene Load Test");
             try { VPBUiFont.ApplyTo(title); } catch { }
@@ -221,7 +222,7 @@ namespace VPB
 
             ScanWlCreateHeaderButton(panel.transform, 0f, 50f * s,
                 VPBTranslation.T("bench.simple.run", "Run Test"),
-                Mathf.RoundToInt(bodyFont * 1.1f),
+                titleFont,
                 new Color(0.22f, 0.52f, 0.30f, 1f), BenchModalRunTest);
 
             GameObject subRow = new GameObject("SubActions");
@@ -232,7 +233,7 @@ namespace VPB
             subH.childControlWidth = true;
             LayoutElement subLe = subRow.AddComponent<LayoutElement>();
             subLe.minHeight = 34f * s;
-            int subFont = Mathf.RoundToInt(bodyFont * 0.88f);
+            int subFont = bodyFont;
 
             ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.set_baseline", "Baseline"),
@@ -263,8 +264,8 @@ namespace VPB
             BenchHideConfirm();
             BenchDestroyChildren(_benchScrollContent);
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int bodyFont = Mathf.RoundToInt(19f * s);
+            float s = ChromeScale;
+            int bodyFont = new GalleryModalTypography(s).Body;
             VpbBenchConfig cfg = VpbBenchConfigStore.Working;
             if (cfg == null) return;
             BenchNormalizeConfigForUi(cfg);
@@ -767,7 +768,7 @@ namespace VPB
             rt.offsetMax = new Vector2(-8f * s, -2f);
             Text t = tgo.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = Mathf.RoundToInt(fontSize * 0.92f);
+            t.fontSize = fontSize;
             t.color = fg;
             t.alignment = TextAnchor.MiddleLeft;
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -909,7 +910,7 @@ namespace VPB
             lle.minWidth = 0f;
 
             ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, "×",
-                Mathf.RoundToInt(fontSize * 0.95f),
+                fontSize,
                 new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
         }
 
@@ -974,7 +975,7 @@ namespace VPB
             Text t = go.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             t.fontSize = fontSize;
-            t.fontStyle = FontStyle.Bold;
+            t.fontStyle = FontStyle.Normal;
             t.color = new Color(0.88f, 0.90f, 0.94f, 1f);
             t.text = text;
             try { VPBUiFont.ApplyTo(t); } catch { }
@@ -1014,7 +1015,7 @@ namespace VPB
 
         void BenchAddSceneActionRow(Transform parent, VpbBenchConfig cfg, int fontSize, float s)
         {
-            int actionFont = Mathf.RoundToInt(fontSize * 0.9f);
+            int actionFont = fontSize;
             int selCount = selectedFiles != null ? selectedFiles.Count : 0;
             GameObject row = new GameObject("SceneActions");
             row.transform.SetParent(parent, false);
@@ -1044,7 +1045,7 @@ namespace VPB
 
         void BenchAddPackageActionRow(Transform parent, VpbBenchCandidateConfig cand, int fontSize, float s)
         {
-            int actionFont = Mathf.RoundToInt(fontSize * 0.9f);
+            int actionFont = fontSize;
             GameObject row = new GameObject("PackageActions");
             row.transform.SetParent(parent, false);
             Image rowBg = row.AddComponent<Image>();
@@ -1136,9 +1137,10 @@ namespace VPB
             BenchHideConfirm();
             if (_benchModalRoot == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int titleFont = Mathf.RoundToInt(22f * s);
-            int bodyFont = Mathf.RoundToInt(17f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int titleFont = type.Title;
+            int bodyFont = type.Body;
 
             _benchConfirmRoot = new GameObject("VPB_BenchConfirm");
             _benchConfirmRoot.transform.SetParent(_benchModalRoot.transform, false);
@@ -1176,8 +1178,8 @@ namespace VPB
             titleGo.transform.SetParent(panel.transform, false);
             Text titleText = titleGo.AddComponent<Text>();
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = titleFont;
-            titleText.fontStyle = FontStyle.Bold;
+            GalleryUiMetrics.ApplyEmphasisTitle(titleText, titleFont);
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.text = title ?? "";
             try { VPBUiFont.ApplyTo(titleText); } catch { }
@@ -1312,7 +1314,7 @@ namespace VPB
             lblGo.transform.SetParent(block.transform, false);
             Text lbl = lblGo.AddComponent<Text>();
             lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lbl.fontSize = Mathf.RoundToInt(fontSize * 0.95f);
+            lbl.fontSize = fontSize;
             lbl.color = new Color(0.70f, 0.74f, 0.78f, 1f);
             lbl.text = label;
             try { VPBUiFont.ApplyTo(lbl); } catch { }

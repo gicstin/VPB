@@ -49,8 +49,8 @@ namespace VPB
             float sec = TitleBarChromeSectionGapRef * s;
             float endM = TitleBarChromeEndMarginRef * s;
 
-            float chip = 40f * s;
-            float halfChip = 20f * s;
+            float chip = GalleryUiDesignTokens.TitleBarChipRef * s;
+            float halfChip = chip * 0.5f;
 
             // Global source filter button is wider than the standard chip, so it's tracked separately in the
             // left-pack math instead of being lumped into the uniform chip-count formula.
@@ -74,7 +74,7 @@ namespace VPB
                 : (chip * 5f + g * 4f);
 
             bool flushLeftInset = CategoryQuickSwitchFlushLeftEdge();
-            float leftInset = flushLeftInset ? 0f : 60f * s;
+            float leftInset = flushLeftInset ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * s;
 
             float reservesNoCat = sec + lpSpan + g + midMin + sec + rp;
             float catSpaceEff = W - leftInset - reservesNoCat - TitleBarResponsiveGap * s;
@@ -83,8 +83,7 @@ namespace VPB
             if (_categoryQuickChromeRootRT != null && catShown)
             {
                 float effCatW = Mathf.Clamp(catSpaceEff, TitleBarCategoryClampMinRef * s, TitleBarCategoryClampMaxRef * s);
-                float sizeDeltaX = effCatW / Mathf.Max(s, 1e-6f);
-                _categoryQuickChromeRootRT.sizeDelta = new Vector2(sizeDeltaX, 44f);
+                _categoryQuickChromeRootRT.sizeDelta = new Vector2(effCatW, GalleryUiDesignTokens.TitleBarCategoryRowHeightRef * s);
 
                 try
                 {
@@ -295,8 +294,9 @@ namespace VPB
                 if (_titleSearchCompactGO != null)
                     _titleSearchCompactGO.SetActive(false);
                 titleSearchInput.gameObject.SetActive(true);
-                searchRT.sizeDelta = new Vector2(wSearch, 40f * s);
+                searchRT.sizeDelta = new Vector2(wSearch, GalleryUiDesignTokens.TitleBarChipRef * s);
                 searchRT.anchoredPosition = new Vector2(cxSearch, 0f);
+                RescaleSearchInput(titleSearchInput, s);
             }
 
             try { SyncTitleBarSearchBackdrop(); } catch { }
@@ -372,6 +372,8 @@ namespace VPB
             }
             try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged); } catch { }
             SetNameFilter("");
+            try { SyncBrowseFilterChipChrome(); } catch { }
+            try { UpdateEmptyGridState(); } catch { }
         }
 
         private void EnsureTitleSearchPopupBuilt()
@@ -421,7 +423,7 @@ namespace VPB
             if (_titleSearchPopupRootGO == null || _titleSearchPopupField == null || _titleSearchPopupPanelRT == null) return;
             if (_titleSearchPopupOpen && _titleSearchPopupRootGO.activeSelf) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
             float bw = bgRT != null ? bgRT.rect.width : 600f;
             float pw = Mathf.Clamp(Mathf.Min(288f * s, bw - 36f * s), 196f * s, 308f * s);

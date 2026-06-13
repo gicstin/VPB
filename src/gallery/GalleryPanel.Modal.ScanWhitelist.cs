@@ -87,9 +87,10 @@ namespace VPB
 
         private void BuildScanWhitelistEditorModal()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int headerFont = Mathf.RoundToInt(24f * s);
-            int bodyFont = Mathf.RoundToInt(17f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int headerFont = type.Title;
+            int bodyFont = type.Body;
 
             _scanWlModalRoot = new GameObject("VPB_ScanWhitelistModal");
             _scanWlModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
@@ -141,11 +142,11 @@ namespace VPB
             titleGo.transform.SetParent(header.transform, false);
             Text title = titleGo.AddComponent<Text>();
             title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.fontSize = headerFont;
             title.color = Color.white;
             title.alignment = TextAnchor.MiddleLeft;
             title.text = VPBTranslation.T("hook.settings.scan_whitelist.window_title", "VaM Scan Whitelist");
             try { VPBUiFont.ApplyTo(title); } catch { }
+            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
             LayoutElement tle = titleGo.AddComponent<LayoutElement>();
             tle.flexibleWidth = 1f;
 
@@ -314,9 +315,10 @@ namespace VPB
 
         private void BuildScanWhitelistDisableConfirmModal()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int headerFont = Mathf.RoundToInt(22f * s);
-            int bodyFont = Mathf.RoundToInt(16f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int headerFont = type.Title;
+            int bodyFont = type.Body;
 
             Transform parent = _scanWlModalRoot != null ? _scanWlModalRoot.transform : backgroundBoxGO.transform;
 
@@ -352,11 +354,10 @@ namespace VPB
             titleGo.transform.SetParent(panel.transform, false);
             Text title = titleGo.AddComponent<Text>();
             title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.fontSize = headerFont;
-            title.fontStyle = FontStyle.Bold;
             title.color = Color.white;
             title.text = VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.title", "Disable scan whitelist?");
             try { VPBUiFont.ApplyTo(title); } catch { }
+            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
 
             GameObject bodyGo = new GameObject("Body");
             bodyGo.transform.SetParent(panel.transform, false);
@@ -416,8 +417,8 @@ namespace VPB
             ScanWlDestroyChildren(_scanWlFoldersParent);
             ScanWlDestroyChildren(_scanWlUidsParent);
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int bodyFont = Mathf.RoundToInt(16f * s);
+            float s = ChromeScale;
+            int bodyFont = new GalleryModalTypography(s).Body;
 
             try
             {
@@ -502,8 +503,8 @@ namespace VPB
             go.transform.SetParent(parent, false);
             Text t = go.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = Mathf.RoundToInt(fontSize * 1.02f);
-            t.fontStyle = FontStyle.Bold;
+            t.fontSize = fontSize;
+            t.fontStyle = FontStyle.Normal;
             t.color = new Color(0.82f, 0.88f, 1f, 1f);
             t.alignment = TextAnchor.MiddleLeft;
             ScanWlUpdateSectionHeader(t, title, count);
@@ -537,7 +538,7 @@ namespace VPB
             lblGo.transform.SetParent(block.transform, false);
             Text lbl = lblGo.AddComponent<Text>();
             lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lbl.fontSize = Mathf.RoundToInt(fontSize * 0.95f);
+            lbl.fontSize = fontSize;
             lbl.color = new Color(0.78f, 0.8f, 0.84f, 1f);
             lbl.alignment = TextAnchor.MiddleLeft;
             lbl.text = label ?? "";
@@ -612,7 +613,8 @@ namespace VPB
             lle.flexibleWidth = 1f;
             lle.minWidth = 0f;
 
-            GameObject removeBtn = ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, VPBTranslation.T("hook.remove", "Remove"), Mathf.RoundToInt(fontSize * 0.92f), new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
+            GameObject removeBtn = ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, VPBTranslation.T("hook.remove", "Remove"),
+                fontSize, new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
             if (panel != null)
             {
                 try

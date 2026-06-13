@@ -221,6 +221,57 @@ namespace VPB
 
             titleCreatorDropdown.SetActive(false);
             try { UpdateTitleCreatorButtonVisual(); } catch { }
+
+            innerPaneScaleActions.Add(s => ApplyTitleCreatorDropdownLayout(s));
+        }
+
+        internal void ApplyTitleCreatorDropdownLayout(float s)
+        {
+            if (titleCreatorDropdown == null) return;
+            if (s <= 0f) s = 1f;
+            RectTransform ddRT = titleCreatorDropdown.GetComponent<RectTransform>();
+            if (ddRT != null)
+            {
+                ddRT.sizeDelta = new Vector2(
+                    GalleryUiDesignTokens.TitleCreatorDropdownWidthRef * s,
+                    GalleryUiDesignTokens.TitleCreatorDropdownHeightRef * s);
+                if (titleCreatorBtn != null)
+                {
+                    RectTransform btnRT = titleCreatorBtn.GetComponent<RectTransform>();
+                    if (btnRT != null)
+                        ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -GalleryUiDesignTokens.TitleBarHeightRef * s);
+                }
+            }
+            if (titleCreatorDropdownSearchInput != null)
+            {
+                RectTransform srt = titleCreatorDropdownSearchInput.GetComponent<RectTransform>();
+                if (srt != null)
+                {
+                    srt.anchoredPosition = new Vector2(0f, -10f * s);
+                    srt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleCreatorDropdownSearchWidthRef * s, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+                }
+                RescaleSearchInput(titleCreatorDropdownSearchInput, s);
+            }
+            Transform scrollGO = titleCreatorDropdown.transform.Find("Scroll");
+            if (scrollGO != null)
+            {
+                RectTransform scrollRT = scrollGO.GetComponent<RectTransform>();
+                if (scrollRT != null)
+                {
+                    float pad = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                    scrollRT.offsetMin = new Vector2(pad, pad);
+                    scrollRT.offsetMax = new Vector2(-pad, -(GalleryUiDesignTokens.SearchFieldHeightRef + 19f) * s);
+                }
+            }
+            for (int i = 0; i < _titleCreatorVirtButtons.Count; i++)
+            {
+                GameObject btn = _titleCreatorVirtButtons[i];
+                if (btn == null) continue;
+                RectTransform rt = btn.GetComponent<RectTransform>();
+                if (rt != null)
+                    rt.sizeDelta = new Vector2(-10f * s, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+            }
+            try { UpdateTitleCreatorVirtualVisible(); } catch { }
         }
 
         private void ToggleTitleCreatorDropdown()
@@ -254,7 +305,7 @@ namespace VPB
 
         private float TitleCreatorVirtRowHeight()
         {
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
             return (35f * s) + (2f * s);
         }
 
@@ -279,7 +330,7 @@ namespace VPB
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    float s = ChromeScale;
                     rt.anchorMin = new Vector2(0, 1);
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
@@ -319,13 +370,8 @@ namespace VPB
             var txt = btnGO.GetComponentInChildren<Text>(true);
             if (txt != null)
             {
-                float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
-                const int baseFont = 18;
-                const int minFont = 10;
-                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                txt.transform.localScale = new Vector3(extra, extra, 1f);
+                float s = ChromeScale;
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 txt.text = label;
                 txt.color = UI.PopupText;
             }
@@ -334,7 +380,7 @@ namespace VPB
         private string ComputeTitleCreatorVirtViewSignature()
         {
             SortState st = GetSortState("Creator");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             return "v1|" + creatorSideTabDataRevision
                 + CreatorConsolidationSignatureFragment()
                 + "|" + (titleCreatorDropdownFilter ?? "")
@@ -422,7 +468,7 @@ namespace VPB
                     var rt = btnGO.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        float s = ChromeScale;
                         rt.sizeDelta = new Vector2(-10f, 35f * s);
                         rt.anchoredPosition = new Vector2(0f, -idx * rowH);
                     }

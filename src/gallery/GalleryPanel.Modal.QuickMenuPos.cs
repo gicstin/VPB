@@ -124,9 +124,10 @@ namespace VPB
 
         private void BuildQuickMenuPositionEditorModal()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int headerFont = Mathf.RoundToInt(24f * s);
-            int bodyFont = Mathf.RoundToInt(17f * s);
+            float s = ChromeScale;
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int headerFont = type.Title;
+            int bodyFont = type.Body;
 
             _qmPosModalRoot = new GameObject("VPB_QuickMenuPosModal");
             _qmPosModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
@@ -165,8 +166,8 @@ namespace VPB
             header.transform.SetParent(panel.transform, false);
             Text ht = header.AddComponent<Text>();
             ht.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ht.fontSize = headerFont;
-            ht.fontStyle = FontStyle.Bold;
+            GalleryUiMetrics.ApplyEmphasisTitle(ht, headerFont);
+            ht.fontStyle = FontStyle.Normal;
             ht.color = Color.white;
             ht.text = VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)");
             try { VPBUiFont.ApplyTo(ht); } catch { }
@@ -309,7 +310,7 @@ namespace VPB
             Text st = sec.AddComponent<Text>();
             st.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             st.fontSize = bodyFont;
-            st.fontStyle = FontStyle.Bold;
+            st.fontStyle = FontStyle.Normal;
             st.color = new Color(0.85f, 0.9f, 1f, 1f);
             st.text = sectionTitle ?? "";
             try { VPBUiFont.ApplyTo(st); } catch { }

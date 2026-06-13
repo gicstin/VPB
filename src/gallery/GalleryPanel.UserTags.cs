@@ -396,11 +396,11 @@ namespace VPB
         }
 
         /// <summary>Must match EnsureUserTagSideTabBulkBlock padding, spacing, and title/font scale (u = s*1.38).</summary>
-        private static float UserTagsAvailStickyHeightPx()
+        private float UserTagsAvailStickyHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
-            int fs = Mathf.Max(15, Mathf.RoundToInt(19f * u));
+            int fs = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, u, GalleryUiDesignTokens.FontMinRef);
             float padTop = Mathf.RoundToInt(4f * s);
             float padBottom = Mathf.RoundToInt(10f * s);
             // LayoutElement preferred 34*s is short when font is ~19*u; keep viewport/shrink in sync.
@@ -408,18 +408,18 @@ namespace VPB
             return padTop + titleBand + 7f * s + 48f * s + padBottom;
         }
 
-        private static float UserTagsAvailFooterHeightPx()
+        private float UserTagsAvailFooterHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             // Match EnsureUserTagInheritVarToChildrenButtonInFooter row height + padding.
             float rowH = Mathf.Max(28f, 34f * s);
             float pad = Mathf.RoundToInt(4f * s);
             return rowH + pad * 2;
         }
 
-        private static float UserTagsAppliedStickyHeightPx()
+        private float UserTagsAppliedStickyHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = Mathf.Max(34f * s, Mathf.Max(32f, 42f * s));
             return 4f * s + rowH + 8f * s;
         }
@@ -632,7 +632,7 @@ namespace VPB
                 UnityEngine.Object.Destroy(sticky.Find("VPB_UserTagsAppliedToolbar_v2").gameObject);
             if (sticky.Find("VPB_UserTagsAppliedToolbar_v3") != null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
 
             GameObject root = new GameObject("VPB_UserTagsAppliedToolbar_v3");
@@ -680,8 +680,8 @@ namespace VPB
             titleGo.transform.SetParent(titleRow.transform, false);
             Text titleTxt = titleGo.AddComponent<Text>();
             titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleTxt.fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * u));
-            titleTxt.fontStyle = FontStyle.Bold;
+            titleTxt.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef);
+            titleTxt.fontStyle = FontStyle.Normal;
             titleTxt.color = new Color(0.88f, 0.88f, 0.92f, 1f);
             titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0);
             LayoutElement titleLe = titleGo.AddComponent<LayoutElement>();
@@ -700,15 +700,10 @@ namespace VPB
         {
             if (container == null) return;
             Transform tb = container.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null) tb = container.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null && leftUserTagsAppliedStickyGO != null)
                 tb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null && leftUserTagsAppliedStickyGO != null)
-                tb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null && rightUserTagsAppliedStickyGO != null)
                 tb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null && rightUserTagsAppliedStickyGO != null)
-                tb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null) return;
             GameObject rootGo = tb.gameObject;
             Image rayImg = rootGo.GetComponent<Image>();
@@ -739,7 +734,7 @@ namespace VPB
         {
             if (container == null) return;
             const string stripName = "VPB_UserTagApplyDropCatchStrip";
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             Transform stripT = container.Find(stripName);
             GameObject stripGo;
             if (stripT == null)
@@ -1061,7 +1056,7 @@ namespace VPB
 
         private float UserTagPinnedRowHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = 35f * s;
             try
             {
@@ -1076,7 +1071,7 @@ namespace VPB
         {
             int n = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
             if (n <= 0) return 0f;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
             return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
         }
@@ -1085,7 +1080,7 @@ namespace VPB
         {
             int n = _userTagAppliedPinnedRows != null ? _userTagAppliedPinnedRows.Count : 0;
             if (n <= 0) return 0f;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
             return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
         }
@@ -1105,7 +1100,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             vlg.spacing = 2f * s;
             vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
             vlg.childAlignment = TextAnchor.UpperCenter;
@@ -1134,7 +1129,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             vlg.spacing = 2f * s;
             vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
             vlg.childAlignment = TextAnchor.UpperCenter;
@@ -1168,7 +1163,7 @@ namespace VPB
                 ? GetUserTagPickRowTooltipFilter()
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
 
             for (int ri = 0; ri < count; ri++)
             {
@@ -2221,7 +2216,7 @@ namespace VPB
                 return;
             }
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
 
             GameObject root = new GameObject("VPB_UserTagBulkBlock_v3");
@@ -2251,10 +2246,10 @@ namespace VPB
             titleGo.transform.SetParent(root.transform, false);
             Text titleTxt = titleGo.AddComponent<Text>();
             titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            int titleFs = Mathf.Max(13, Mathf.RoundToInt(15f * u));
+            int titleFs = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef);
             float titleBand = Mathf.Max(30f * s, titleFs * 1.22f);
             titleTxt.fontSize = titleFs;
-            titleTxt.fontStyle = FontStyle.Bold;
+            titleTxt.fontStyle = FontStyle.Normal;
             titleTxt.color = Color.white;
             titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0);
             titleTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -2296,9 +2291,9 @@ namespace VPB
         {
             if (footerRoot == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
-            int font = Mathf.Max(12, Mathf.RoundToInt(14f * u));
+            int font = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, u, GalleryUiDesignTokens.FontMinRef);
 
             Transform existing = footerRoot.Find("VPB_UserTagInheritVarToggleRow_v1");
             GameObject rowGo;
@@ -2418,7 +2413,7 @@ namespace VPB
         private void SyncUserTagInheritVarToChildrenBtnVisual(GameObject btnGo)
         {
             if (btnGo == null) return;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             Image img = btnGo.GetComponent<Image>();
             if (img != null)
             {
@@ -2439,7 +2434,7 @@ namespace VPB
                     : VPBTranslation.T("gallery.usertags.inherit_off", "Inherit OFF");
                 t.alignment = TextAnchor.MiddleCenter;
                 // Slight extra padding via text margins not available; keep size readable via font scaling already applied.
-                t.fontSize = Mathf.Max(12, Mathf.RoundToInt(14f * (s * 1.38f)));
+                GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s * 1.38f, GalleryUiDesignTokens.FontMinRef);
             }
         }
 
@@ -2480,7 +2475,7 @@ namespace VPB
             Transform btnRow = bulkBlockV3.Find("BulkBtnRow");
             if (btnRow == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float sq = 44f * s;
 
             Transform filterT = btnRow.Find("VPB_UserTagFilterModeBtn");
@@ -2501,7 +2496,7 @@ namespace VPB
                 0f,
                 0f,
                 VPBTranslation.T("gallery.usertags.filter_button_label", "Filter"),
-                Mathf.Max(12, Mathf.RoundToInt(13f * (s * 1.38f))),
+                GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s * 1.38f, GalleryUiDesignTokens.FontMinRef),
                 0f,
                 0f,
                 AnchorPresets.stretchAll,
@@ -2797,10 +2792,11 @@ namespace VPB
             if (_userTagEditorRoot != null) return;
             if (backgroundBoxGO == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
-            int smallFont = Mathf.Max(11, Mathf.RoundToInt(13f * u));
-            int bodyFont = Mathf.Max(13, Mathf.RoundToInt(15f * u));
+            GalleryModalTypography editorType = new GalleryModalTypography(u);
+            int smallFont = editorType.Body;
+            int bodyFont = editorType.Body;
             float headerChromeSq = Mathf.Max(30f, 36f * s);
             float searchBarH = headerChromeSq;
 
@@ -2856,8 +2852,9 @@ namespace VPB
             titleGo.transform.SetParent(titleRow.transform, false);
             Text headerTitleTxt = titleGo.AddComponent<Text>();
             headerTitleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            headerTitleTxt.fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * u));
-            headerTitleTxt.fontStyle = FontStyle.Bold;
+            headerTitleTxt.fontSize = editorType.Prose;
+            headerTitleTxt.fontStyle = FontStyle.Normal;
+            headerTitleTxt.fontStyle = FontStyle.Normal;
             headerTitleTxt.color = new Color(0.92f, 0.92f, 0.95f, 1f);
             headerTitleTxt.alignment = TextAnchor.UpperLeft;
             _userTagEditorTitleText = headerTitleTxt;
@@ -3118,8 +3115,9 @@ namespace VPB
             mmTitleGo.transform.SetParent(mmPanel.transform, false);
             _userTagEditorMergeModalTitleText = mmTitleGo.AddComponent<Text>();
             _userTagEditorMergeModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorMergeModalTitleText.fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Bold;
+            _userTagEditorMergeModalTitleText.fontSize = editorType.Prose;
+            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Normal;
+            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Normal;
             _userTagEditorMergeModalTitleText.color = Color.white;
             _userTagEditorMergeModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…");
             LayoutElement mmTle = mmTitleGo.AddComponent<LayoutElement>();
@@ -3221,8 +3219,9 @@ namespace VPB
             rmTitleGo.transform.SetParent(rmPanel.transform, false);
             _userTagEditorRenameModalTitleText = rmTitleGo.AddComponent<Text>();
             _userTagEditorRenameModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorRenameModalTitleText.fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Bold;
+            _userTagEditorRenameModalTitleText.fontSize = editorType.Prose;
+            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Normal;
+            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Normal;
             _userTagEditorRenameModalTitleText.color = Color.white;
             _userTagEditorRenameModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…");
             LayoutElement rmTle = rmTitleGo.AddComponent<LayoutElement>();
@@ -4162,9 +4161,9 @@ namespace VPB
             if (!userTagsCached) CacheUserTagsSideTab();
             UserTagEditorSetTitleCount(cachedUserTagSideTab.Count);
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
-            int rowFont = Mathf.Max(12, Mathf.RoundToInt(14f * u));
+            int rowFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, u, GalleryUiDesignTokens.FontMinRef);
 
             var rows = new List<UserTagSideTabEntry>(cachedUserTagSideTab);
             string filt = _userTagEditorFilterInput != null ? _userTagEditorFilterInput.text : "";
@@ -4564,7 +4563,7 @@ namespace VPB
 
             _ghostText = tgo.AddComponent<Text>();
             _ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _ghostText.fontSize = 16;
+            _ghostText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             _ghostText.color = new Color(0.95f, 0.95f, 0.97f, 1f);
             _ghostText.alignment = TextAnchor.MiddleLeft;
             _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;

@@ -358,12 +358,12 @@ namespace VPB
                 string line = lines[i];
                 if (line.StartsWith("### ", StringComparison.Ordinal))
                 {
-                    sb.Append("\n<b>").Append(EscapeRichText(line.Substring(4).Trim())).Append("</b>\n");
+                    sb.Append("\n<color=#88CCFF>").Append(EscapeRichText(line.Substring(4).Trim())).Append("</color>\n");
                     continue;
                 }
                 if (line.StartsWith("# ", StringComparison.Ordinal))
                 {
-                    sb.Append("\n<b>").Append(EscapeRichText(line.Substring(2).Trim())).Append("</b>\n");
+                    sb.Append("\n<color=#88CCFF>").Append(EscapeRichText(line.Substring(2).Trim())).Append("</color>\n");
                     continue;
                 }
                 string trimmed = line.TrimEnd();
@@ -414,7 +414,7 @@ namespace VPB
             string s = EscapeRichText(line);
             try
             {
-                s = Regex.Replace(s, @"\*\*(.+?)\*\*", "<b>$1</b>");
+                s = Regex.Replace(s, @"\*\*(.+?)\*\*", "$1");
                 s = Regex.Replace(s, @"`(.+?)`", "<color=#A8D4FF>$1</color>");
             }
             catch { }

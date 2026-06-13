@@ -195,7 +195,7 @@ namespace VPB
                 GameObject pathBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
                 if (pathBtnGO != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    float s = ChromeScale;
                     float rowSingle = 35f * s;
                     LayoutElement le = pathBtnGO.GetComponent<LayoutElement>();
                     if (le == null) le = pathBtnGO.AddComponent<LayoutElement>();

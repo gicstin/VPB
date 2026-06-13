@@ -99,11 +99,13 @@ namespace VPB
         private GameObject _categoryQuickMenuContentGO;
         private bool _categoryQuickMenuOpen;
         private Coroutine _categoryQuickApplyCoroutine;
+        private Text _categoryQuickArrowText;
+        private LayoutElement _categoryQuickArrowLE;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, ThumbPlaceholderLabelParts> thumbPlaceholderLabelCache = new Dictionary<string, ThumbPlaceholderLabelParts>(StringComparer.OrdinalIgnoreCase);
-        private int _thumbPlaceholderFontSize = 14;
+        private int _thumbPlaceholderFontSize = GalleryUiDesignTokens.FontBodyRef;
         private int _thumbPlaceholderFontLayoutSig = int.MinValue;
 
         private List<GameObject> activeButtons = new List<GameObject>();
@@ -842,8 +844,8 @@ namespace VPB
         private GameObject leftSideHoverStrip;
         private GameObject rightSideHoverStrip;
         /// <summary>Full-height invisible hit targets beside side buttons (half legacy 130px width).</summary>
-        private const float GallerySideHoverStripWidth = 30f;
-        private const float GallerySideHoverStripOffset = 35f;
+        private const float GallerySideHoverStripWidth = GalleryUiDesignTokens.SideHoverStripWidthRef;
+        private const float GallerySideHoverStripOffset = GalleryUiDesignTokens.SideHoverStripOffsetRef;
         private Stack<GameObject> tabButtonPool = new Stack<GameObject>();
 
         private List<CanvasGroup> sideButtonGroups = new List<CanvasGroup>();
@@ -902,7 +904,7 @@ namespace VPB
         private RectTransform _titleBarMinimizeBtnRT;
         private RectTransform _titleBarCloseBtnRT;
 
-        // Fixed desktop dock "Top": side rail buttons live on footer bar (pagination).
+        // Fixed desktop dock "Top": side rail buttons live on footer bar.
         private GameObject _footerSideButtonsGroupGO;
         private RectTransform _footerSideButtonsGroupRT;
         private RectTransform _footerLeftSectionRT;
@@ -980,12 +982,16 @@ namespace VPB
         internal int GalleryFileRefreshSequence { get { return System.Threading.Thread.VolatileRead(ref galleryFileRefreshSequence); } }
         private TagParallelWaiter tagParallelWaiter;
 
-        // Pagination
-        private int currentPage = 0;
-        private Text paginationText;
+        // Footer bar
         private RectTransform paginationRT;
         private HorizontalLayoutGroup footerHLG;
-        private int _footerHLGLastRightPadding = -1;
+
+        // Resize handles (seated alongside the bar buttons; one corner slot, mode picks which is active)
+        private GameObject _resizeHandleBottomLeftGO;        // floating BL (footer left slot)
+        private GameObject _resizeHandleBottomRightGO;       // floating BR (footer right slot)
+        private GameObject _resizeHandleTopLeftGO;           // floating TL (title bar far-left)
+        private GameObject _resizeHandleFixedBottomGO;       // fixed Right/Top dock (footer left slot)
+        private GameObject _resizeHandleFixedBottomRightGO;  // fixed Left dock (footer right slot)
         private GameObject footerBackBtn;
         private GameObject footerClearFilterBtn;
         private Text footerFilterModeText;
@@ -1003,12 +1009,6 @@ namespace VPB
         private FileEntry hoverPreviewFile;
         private bool hoverPreviewDummyActive;
         private UIHoverPreviewTrigger hoverPreviewSource;
-        private GameObject paginationPrevBtn;
-        private GameObject paginationPrev10Btn;
-        private GameObject paginationNextBtn;
-        private GameObject paginationNext10Btn;
-        private GameObject paginationFirstBtn;
-        private GameObject paginationLastBtn;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;
@@ -1036,9 +1036,6 @@ namespace VPB
         private Image footerHoldToLaunchToggleIconImage;
         private Sprite footerHoldToLaunchOnSprite;
         private Sprite footerHoldToLaunchOffSprite;
-        // lastTotalItems removed
-        private int lastTotalPages = 1;
-        // lastShownCount removed
         public int GridColumnCount
         {
             get { return VPBConfig.Instance != null ? VPBConfig.Instance.GridColumnCount : 4; }
@@ -1219,7 +1216,7 @@ namespace VPB
         /// <summary>Fixed-mode dock collapse strip and &lt; &gt; bar (half legacy 60px).</summary>
         private const float FixedCollapseTriggerThickness = 30f;
         private const float FixedCollapseTriggerChamferSize = 50f;
-        private const int FixedCollapseTriggerArrowFontSize = 16;
+        private const int FixedCollapseTriggerArrowFontSize = GalleryUiDesignTokens.FontBodyRef;
         private GameObject collapseTriggerGO; // Right dock
         private Text collapseHandleText;
         private GameObject collapseTriggerLeftGO;

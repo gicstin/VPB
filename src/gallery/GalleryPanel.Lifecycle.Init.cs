@@ -266,7 +266,8 @@ namespace VPB
             titleGO.transform.SetParent(titleBarGO.transform, false);
             titleText = titleGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(titleText);
-            titleText.fontSize = 28;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleLeft;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -283,7 +284,7 @@ namespace VPB
             fpsGO.transform.SetParent(titleBarGO.transform, false);
             fpsText = fpsGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(fpsText);
-            fpsText.fontSize = 20;
+            fpsText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             fpsText.color = Color.white;
             fpsText.alignment = TextAnchor.MiddleRight;
             RectTransform fpsRT = fpsGO.GetComponent<RectTransform>();
@@ -474,14 +475,15 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/refresh.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(refreshBtn, s); }
 
             // Settings (title bar, left of filter presets; side rails no longer host Settings)
-            GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, VPBTranslation.T("gallery.title.settings_abbrev", "S"), 16, 0, 0, AnchorPresets.middleCenter, () => {
-                if (isFixedLocally) ToggleLeft(ContentType.Settings);
-                else ToggleRight(ContentType.Settings);
+            GameObject titleBarSettingsBtn = UI.CreateUIButton(titleBarGO, 40, 40, " ", 16, 0, 0, AnchorPresets.middleCenter, () => {
+                try { OpenSettingsSideTab(); } catch { }
             });
             titleBarSettingsBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             titleBarSettingsBtnText = titleBarSettingsBtn.GetComponentInChildren<Text>();
             titleBarSettingsBtnText.color = Color.white;
             { var s = UI.LoadIconSprite("vpb_icons/settings.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(titleBarSettingsBtn, s); }
+            if (titleBarSettingsBtnText != null && titleBarSettingsBtn.transform.Find("Icon") != null)
+                titleBarSettingsBtnText.text = " ";
             RectTransform titleBarSettingsRT = titleBarSettingsBtn.GetComponent<RectTransform>();
             titleBarSettingsRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleBarSettingsRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -527,14 +529,14 @@ namespace VPB
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, 70f*s); }); }
             { var rt = titleRT; innerPaneScaleActions.Add(s => { if (rt) rt.anchoredPosition = new Vector2(60f * s, 10f * s); rt.sizeDelta = new Vector2(300f * s, 40f * s); }); }
             { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(100f * s, 40f * s); }); }
-            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(40f * s, 40f * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(16 * s); t.resizeTextMinSize = Mathf.RoundToInt(10 * s); } }); }
+            { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(40f * s, 40f * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s); t.resizeTextMinSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontMinRef * s); } }); }
             { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 40f * s); }); }
             { var rt = fileSortTypeRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
             { var rt = fileSortDirRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
-            { var rt = ratingSortToggleRT; var t = ratingSortToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(18 * s); }); }
+            { var rt = ratingSortToggleRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
             { var rt = refreshRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
-            { var rt = titleBarSettingsRT; var t = titleBarSettingsBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
-            { var rt = qfToggleRT; var t = quickFiltersToggleBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(16 * s); }); }
+            { var rt = titleBarSettingsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
+            { var rt = qfToggleRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
             { var go = titleCreatorBtn; innerPaneScaleActions.Add(s => { if (go) go.GetComponent<RectTransform>().sizeDelta = new Vector2(40f * s, 40f * s); }); }
 
             // Tab Area - Create for all panels so undocked can clone/filter
@@ -717,10 +719,12 @@ namespace VPB
                     innerPaneScaleActions.Add(s =>
                     {
                         if (go == null) return;
-                        float sz = 35f * s;
+                        float sz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+                        float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                        float subRowY = -10f * s;
                         RectTransform brt = go.GetComponent<RectTransform>();
                         brt.sizeDelta = new Vector2(sz, sz);
-                        brt.anchoredPosition = new Vector2(-10f, -10f);
+                        brt.anchoredPosition = new Vector2(-margin, subRowY);
                     });
                 }
                 {
@@ -728,10 +732,12 @@ namespace VPB
                     innerPaneScaleActions.Add(s =>
                     {
                         if (go == null) return;
-                        float sz = 35f * s;
+                        float sz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+                        float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                        float subRowY = -10f * s;
                         RectTransform brt = go.GetComponent<RectTransform>();
                         brt.sizeDelta = new Vector2(sz, sz);
-                        brt.anchoredPosition = new Vector2(-10f, -10f);
+                        brt.anchoredPosition = new Vector2(-margin, subRowY);
                     });
                 }
                 
@@ -752,7 +758,7 @@ namespace VPB
                 rSubClearRT.anchorMax = new Vector2(1, 0);
                 rSubClearRT.pivot = new Vector2(1, 0);
                 rSubClearRT.anchoredPosition = new Vector2(-10, 68);
-                { var rt = rSubClearRT; var t = rightSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
+                { var rt = rSubClearRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); }); }
                 rightSubClearBtn.SetActive(false);
 
                 rightSubSortBtn.SetActive(false);
@@ -774,7 +780,6 @@ namespace VPB
                     rsRT.pivot = new Vector2(1, 1);
                     rsRT.anchoredPosition = new Vector2(-190, -65);
                     rsRT.sizeDelta = new Vector2(35f, 35f);
-                    { var rt = rsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button rightSortButton = rightSortBtn.GetComponent<Button>();
                     rightSortButton.onClick.RemoveAllListeners();
                     rightSortButton.onClick.AddListener(() =>
@@ -797,7 +802,6 @@ namespace VPB
                 rrRT.anchoredPosition = new Vector2(-145, -65); // Between Sort and Search
 
                 rightRefreshBtnText = rightRefreshBtn.GetComponentInChildren<Text>();
-                { var rt = rrRT; var t = rightRefreshBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(18*s); }); }
                 Button rightRefreshButton = rightRefreshBtn.GetComponent<Button>();
                 rightRefreshButton.onClick.RemoveAllListeners();
 
@@ -883,7 +887,7 @@ namespace VPB
                 rSearchRT.anchorMax = new Vector2(1, 1);
                 rSearchRT.pivot = new Vector2(1, 1);
                 rSearchRT.anchoredPosition = new Vector2(-10, -65);
-                { var rt = rSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
+                innerPaneScaleActions.Add(s => ApplyMainSideSearchRowLayout(false, s));
 
                 // 2. Left Tab Area
                 leftTabScrollGO = UI.CreateVScrollableContent(backgroundBoxGO, new Color(0, 0, 0, 0), AnchorPresets.vStretchLeft, tabAreaWidth, 0, Vector2.zero);
@@ -1052,10 +1056,12 @@ namespace VPB
                     innerPaneScaleActions.Add(s =>
                     {
                         if (go == null) return;
-                        float sz = 35f * s;
+                        float sz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+                        float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                        float subRowY = -10f * s;
                         RectTransform brt = go.GetComponent<RectTransform>();
                         brt.sizeDelta = new Vector2(sz, sz);
-                        brt.anchoredPosition = new Vector2(10f, -10f);
+                        brt.anchoredPosition = new Vector2(margin, subRowY);
                     });
                 }
                 {
@@ -1063,10 +1069,12 @@ namespace VPB
                     innerPaneScaleActions.Add(s =>
                     {
                         if (go == null) return;
-                        float sz = 35f * s;
+                        float sz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+                        float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                        float subRowY = -10f * s;
                         RectTransform brt = go.GetComponent<RectTransform>();
                         brt.sizeDelta = new Vector2(sz, sz);
-                        brt.anchoredPosition = new Vector2(10f, -10f);
+                        brt.anchoredPosition = new Vector2(margin, subRowY);
                     });
                 }
 
@@ -1087,7 +1095,7 @@ namespace VPB
                 lSubClearRT.anchorMax = new Vector2(0, 0);
                 lSubClearRT.pivot = new Vector2(0, 0);
                 lSubClearRT.anchoredPosition = new Vector2(10, 68);
-                { var rt = lSubClearRT; var t = leftSubClearBtnText; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); if (t) t.fontSize = Mathf.RoundToInt(14*s); }); }
+                { var rt = lSubClearRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(220f*s, 35f*s); }); }
                 leftSubClearBtn.SetActive(false);
 
                 leftSubSortBtn.SetActive(false);
@@ -1109,7 +1117,6 @@ namespace VPB
                     lsRT.pivot = new Vector2(0, 1);
                     lsRT.anchoredPosition = new Vector2(10, -65);
                     lsRT.sizeDelta = new Vector2(35f, 35f);
-                    { var rt = lsRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(35f * s, 35f * s); }); }
                     Button leftSortButton = leftSortBtn.GetComponent<Button>();
                     leftSortButton.onClick.RemoveAllListeners();
                     leftSortButton.onClick.AddListener(() =>
@@ -1188,7 +1195,7 @@ namespace VPB
                 lSearchRT.anchorMax = new Vector2(0, 1);
                 lSearchRT.pivot = new Vector2(0, 1);
                 lSearchRT.anchoredPosition = new Vector2(50, -65);
-                { var rt = lSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, 35f*s); }); }
+                innerPaneScaleActions.Add(s => ApplyMainSideSearchRowLayout(true, s));
 
                 // Right Button Container
                 rightSideContainer = UI.AddChildGOImage(backgroundBoxGO, new Color(0, 0, 0, 0f), AnchorPresets.middleRight, 130, 700, new Vector2(140, 0));
@@ -1208,7 +1215,7 @@ namespace VPB
                 catch { }
 
                 // Right Toggle Buttons
-                int btnFontSize = 16;
+                int btnFontSize = GalleryUiDesignTokens.FontBodyRef;
                 float btnWidth = 120;
                 float btnHeight = 50;
                 const float sideIconBtn = 50f;
@@ -1666,7 +1673,7 @@ namespace VPB
                         if (tx != null)
                         {
                             tx.text = VPBTranslation.T("gallery.side.remove", "Remove");
-                            tx.fontSize = 18;
+                            tx.fontSize = GalleryUiDesignTokens.FontBodyRef;
                             tx.gameObject.SetActive(true);
                         }
                         rightRemoveAtomBtnIconImage = null;
@@ -2163,7 +2170,7 @@ namespace VPB
                         if (tx != null)
                         {
                             tx.text = VPBTranslation.T("gallery.side.remove", "Remove");
-                            tx.fontSize = 18;
+                            tx.fontSize = GalleryUiDesignTokens.FontBodyRef;
                             tx.gameObject.SetActive(true);
                         }
                         leftRemoveAtomBtnIconImage = null;
@@ -2289,8 +2296,10 @@ namespace VPB
                     if (sb != null)
                     {
                         // Parent to the scrollbar so it follows layout/offsets.
-                        float w = isFixedLocally ? 50f : 100f;
-                        float h = w * 1.618f;
+                        float w = isFixedLocally
+                            ? GalleryUiDesignTokens.SpringScrollBtnWidthFixedRef
+                            : GalleryUiDesignTokens.SpringScrollBtnWidthFloatRef;
+                        float h = w * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
                         GameObject springBtn = SpringScrollButton.Create(sb.gameObject, scrollRect, w, h);
 
                         // Ensure it doesn't block other interactions outside its square.
@@ -2386,7 +2395,8 @@ namespace VPB
             statusBarGO.transform.SetParent(hoverPathRT.transform, false);
             statusBarText = statusBarGO.AddComponent<Text>();
             statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            statusBarText.fontSize = 22;
+            statusBarText.fontSize = GalleryUiDesignTokens.FontRef;
+            statusBarText.fontStyle = FontStyle.Normal;
             statusBarText.color = Color.white;
             var statusShadow = statusBarGO.AddComponent<Shadow>();
             statusShadow.effectColor = new Color(0, 0, 0, 0.8f);
@@ -2448,11 +2458,10 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/close.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(closeBtn, s); }
 
             // Register inner pane button scale actions (close/minimize — X anchored by ApplyTitleBarResponsiveLayout)
-            { var rt = minRT; var t = minimizeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(30 * s); }); }
-            { var rt = closeRT; var t = closeBtn.GetComponentInChildren<Text>(); innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); if (t) t.fontSize = Mathf.RoundToInt(30 * s); }); }
+            { var rt = minRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
+            { var rt = closeRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(40f * s, 40f * s); }); }
 
             ApplyInnerPaneScale();
-            ApplySideButtonScale();
             ApplySidePanelDefaultsFromConfig();
             bool restoreGlobalImportOpen = !importSidebarInitAsClone
                 && Gallery.singleton != null

@@ -125,7 +125,7 @@ namespace VPB
             _importWizardMultiSelectHint = hintRow.AddComponent<Text>();
             _importWizardMultiSelectHint.text = "";
             _importWizardMultiSelectHint.color = new Color(1f, 0.75f, 0.45f, 1f);
-            _importWizardMultiSelectHint.fontSize = ImportSidebarBaseFontSize - 2;
+            _importWizardMultiSelectHint.fontSize = GalleryUiDesignTokens.FontBodyRef;
             _importWizardMultiSelectHint.alignment = TextAnchor.MiddleLeft;
             try { VPBUiFont.ApplyTo(_importWizardMultiSelectHint); } catch { }
             _importWizardMultiSelectHint.raycastTarget = false;

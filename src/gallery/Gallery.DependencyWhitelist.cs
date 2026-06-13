@@ -239,7 +239,8 @@ namespace VPB
             var titleText = titleGo.AddComponent<Text>();
             titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             titleText.text = "Dependency Whitelist";
-            titleText.fontSize = 30;
+            titleText.fontSize = GalleryUiDesignTokens.FontRef;
+            titleText.fontStyle = FontStyle.Normal;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleLeft;
             var titleRt = titleGo.GetComponent<RectTransform>();
@@ -326,7 +327,7 @@ namespace VPB
             var helpText = helpGo.AddComponent<Text>();
             helpText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             helpText.text = "Checked = whitelisted (ignored by Force Latest).";
-            helpText.fontSize = 16;
+            helpText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             helpText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
             helpText.alignment = TextAnchor.MiddleLeft;
             var helpRt = helpGo.GetComponent<RectTransform>();
@@ -365,7 +366,7 @@ namespace VPB
             triText.raycastTarget = false;
             triText.text = "◢";
             triText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            triText.fontSize = 36;
+            triText.fontSize = GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef);
             triText.color = new Color(0.6f, 0.6f, 0.6f, 1f);
             triText.alignment = TextAnchor.MiddleCenter;
             var triRT = triGO.GetComponent<RectTransform>();

@@ -160,7 +160,7 @@ namespace VPB
             vlg.childForceExpandHeight = false;
             vlg.childForceExpandWidth = true;
 
-            GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Bold, Color.white, TextAnchor.UpperCenter, true);
+            GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Normal, Color.white, TextAnchor.UpperCenter, true);
             titleTextComponent = titleGo.GetComponent<Text>();
 
             GameObject hintGo = CreateWindowText(
@@ -290,7 +290,7 @@ namespace VPB
             Text t = textGO.AddComponent<Text>();
             t.text = label;
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 17;
+            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.raycastTarget = false;
@@ -319,8 +319,8 @@ namespace VPB
             Text lt = lab.AddComponent<Text>();
             lt.text = label;
             lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lt.fontSize = 16;
-            lt.fontStyle = FontStyle.Bold;
+            lt.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            lt.fontStyle = FontStyle.Normal;
             lt.color = Color.white;
             lt.alignment = TextAnchor.MiddleLeft;
             lt.raycastTarget = false;
@@ -416,7 +416,7 @@ namespace VPB
             textGo.transform.SetParent(textArea.transform, false);
             Text t = textGo.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 15;
+            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleLeft;
             try { VPBUiFont.ApplyTo(t); } catch { }
@@ -426,7 +426,7 @@ namespace VPB
             placeholder.transform.SetParent(textArea.transform, false);
             Text ph = placeholder.AddComponent<Text>();
             ph.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ph.fontSize = 14;
+            ph.fontSize = GalleryUiDesignTokens.FontBodyRef;
             ph.color = new Color(1f, 1f, 1f, 0.35f);
             ph.text = "#RRGGBB or R,G,B";
             try { VPBUiFont.ApplyTo(ph); } catch { }
