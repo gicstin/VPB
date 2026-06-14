@@ -1521,10 +1521,12 @@ namespace VPB
 
             if (!isScene)
             {
+                if (TryOnInterceptApply(applyFile)) return;
                 ExecuteAutoActionForFile(applyFile);
             }
             else
             {
+                TryOnAbandonForSceneLoad();
                 UI.LoadSceneFile(applyFile, this);
             }
         }

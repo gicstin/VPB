@@ -2014,8 +2014,12 @@ namespace VPB
                 // Add filter row height when active
                 if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;
+                // Reserve a row at the very top of the toolbox for the active Try-On bar so
+                // it becomes part of the toolbox layout instead of floating over the buttons.
+                btnBand += TryOnToolboxReservedHeight();
                 float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+                if (_tryOnActive) TryOnLayoutBar();
                 // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
                 // button doesn't overlap the toolbox when it expands to two rows.
                 if (importSidebarActive && importSidebarRT != null)

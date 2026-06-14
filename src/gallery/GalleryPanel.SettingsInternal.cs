@@ -546,6 +546,12 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryCollapseOnSceneLaunch = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "interaction.tryOnMode", GroupKey = "interaction", Label = VPBTranslation.T("settings.try_on_mode", "Try-On Mode"),
+                Tooltip = VPBTranslation.T("settings.tip.try_on_mode", "When ON, applying clothing/hair/skin/morphs/appearance/pose/plugin presets is non-destructive: a Keep / Compare (hold to peek) / Revert bar appears so you can preview before committing. Works in desktop and VR."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.TryOnModeEnabled,
+                SetBool = v => { VPBConfig.Instance.TryOnModeEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.drag_hold_threshold", "Hold duration (s)"),
                 Tooltip = VPBTranslation.T("settings.tip.drag_hold_threshold", "When drag-and-drop is on: how long pointer must stay held before drag starts (minimum " + VPBConfig.DragHoldThresholdMin.ToString(System.Globalization.CultureInfo.InvariantCulture) + " s)."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.DragHoldThreshold,
