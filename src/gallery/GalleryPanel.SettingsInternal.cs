@@ -1154,6 +1154,51 @@ namespace VPB
             });
 
             defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchVisible", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_visible", "Show VR wrist watch"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_visible", "Show the assignable quick-menu grid on a controller as a wrist watch."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchVisible,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchVisible = v; VPBConfig.Instance.TriggerChange(); UpdateFooterVrWatchState(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchMode", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_mode", "Watch hand"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_mode", "Which hand the watch rides on. 'Opposite to menu' uses the hand opposite the one that opened the VaM menu; 'Same hand' uses the hand that opened it."),
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "Off", "Left only", "Right only", "Opposite to menu", "Same hand" },
+                GetString = () => VPBConfig.Instance.QuickMenuVrWatchMode, SetString = v => { VPBConfig.Instance.QuickMenuVrWatchMode = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchOnlyWithMenu", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_only_with_menu", "Watch only when VaM menu open"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_only_with_menu", "When on, the watch only appears while the VaM menu is open; when off, it shows at all times in VR."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchOnlyWithMenu,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchOnlyWithMenu = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchFaceUser", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_face_user", "Watch faces player"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_face_user", "Watch face always points at the player's eye regardless of hand angle."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchFaceUser,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchFaceUser = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchScale", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_scale", "Watch scale"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_scale", "Size of the watch face (1.0 = default)."),
+                // Stored as a tiny world-space scale; present a friendly multiplier where 1.0 == default (0.0005).
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchScale / 0.0005f,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchScale = v * 0.0005f; VPBConfig.Instance.TriggerChange(); },
+                Min = 0.4f, Max = 3.0f, Step = 0.1f, Decimals = 1,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchToward", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_toward", "Watch pull toward you"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_toward", "Distance the watch is offset from the controller. Positive pulls it toward your eye (off the pointer ray); negative pushes it back behind the hand so you can reach it with the same hand."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchTowardUserDist,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchTowardUserDist = v; VPBConfig.Instance.TriggerChange(); },
+                Min = -0.5f, Max = 0.5f, Step = 0.01f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+
+            defs.Add(new InternalSettingDefinition {
                 Key = "quick.categoryEditor",
                 GroupKey = "categories",
                 SubGroupKey = "options",

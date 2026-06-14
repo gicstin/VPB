@@ -70,6 +70,9 @@ namespace VPB
             CoreSettingsButton,
             CorePageButton,
             TargetAtom,
+            PageNext,
+            PagePrev,
+            SwitchWatchHand,
         }
 
         private const int QuickMenuGridCols = 4;
@@ -164,6 +167,9 @@ namespace VPB
         private Sprite m_QmIconHexHair;
         private Sprite m_QmIconHexClothing;
         private Sprite m_QmIconTargetAtom;
+        private Sprite m_QmIconNavNext;
+        private Sprite m_QmIconNavPrev;
+        private Sprite m_QmIconSwitchHand;
 
         private GameObject m_QuickMenuAssignRandomPopupRoot;
         private RectTransform m_QuickMenuAssignRandomPopupRT;
@@ -429,6 +435,9 @@ namespace VPB
                     if (string.IsNullOrEmpty(cur)) cur = VPBTranslation.T("hook.qmtarget.none", "None");
                     return VPBTranslation.T("hook.qmbutton.target_atom_tip", "Target Atom\nLeft Click: cycle person\nDrag: point at person to target\n\nCurrent: ") + cur;
                 }
+                case QuickMenuAssignableAction.PageNext: return VPBTranslation.T("hook.qmbutton.page_next", "Page Forward");
+                case QuickMenuAssignableAction.PagePrev: return VPBTranslation.T("hook.qmbutton.page_prev", "Page Backward");
+                case QuickMenuAssignableAction.SwitchWatchHand: return VPBTranslation.T("hook.qmbutton.switch_watch_hand", "Switch Watch Hand");
                 case QuickMenuAssignableAction.None:
                 default:
                     if (idx >= 0 && idx <= 3)
@@ -480,6 +489,13 @@ namespace VPB
                 }
             }
             catch { }
+
+            // Watch mode overrides everything: center the grid on the controller palm.
+            if (m_QmWatchActive)
+            {
+                isVR = true;
+                center = QuickMenuWatchCenter;
+            }
 
             if (isVR == m_QmLastAnchorIsVR &&
                 Mathf.Abs(center.x - m_QmLastAnchorCenter.x) < 0.01f &&
@@ -548,6 +564,9 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryPlugins: return "open_category_plugins";
                 case QuickMenuAssignableAction.OpenCategoryAll: return "open_category_all";
                 case QuickMenuAssignableAction.TargetAtom: return "target_atom";
+                case QuickMenuAssignableAction.PageNext: return "page_next";
+                case QuickMenuAssignableAction.PagePrev: return "page_prev";
+                case QuickMenuAssignableAction.SwitchWatchHand: return "switch_watch_hand";
                 case QuickMenuAssignableAction.None:
                 default:
                     return "";
@@ -592,6 +611,9 @@ namespace VPB
                 case "open_category_plugins": return QuickMenuAssignableAction.OpenCategoryPlugins;
                 case "open_category_all": return QuickMenuAssignableAction.OpenCategoryAll;
                 case "target_atom": return QuickMenuAssignableAction.TargetAtom;
+                case "page_next": return QuickMenuAssignableAction.PageNext;
+                case "page_prev": return QuickMenuAssignableAction.PagePrev;
+                case "switch_watch_hand": return QuickMenuAssignableAction.SwitchWatchHand;
                 default: return QuickMenuAssignableAction.None;
             }
         }
@@ -613,8 +635,12 @@ namespace VPB
             if (slotIdx < 0 || slotIdx >= QuickMenuGridSlotCount) return;
             if (m_QuickMenuCurrentPage < 0) m_QuickMenuCurrentPage = 0;
             if (m_QuickMenuCurrentPage >= QuickMenuPageCount) m_QuickMenuCurrentPage = 0;
-            // First row shared across all pages.
-            if (slotIdx >= 0 && slotIdx <= 3)
+            // First row shared across all pages. Page-nav buttons are global too: once placed they
+            // occupy that slot on every page, replacing whatever per-page action was there.
+            bool global = (slotIdx >= 0 && slotIdx <= 3) ||
+                          action == QuickMenuAssignableAction.PageNext ||
+                          action == QuickMenuAssignableAction.PagePrev;
+            if (global)
             {
                 for (int p = 0; p < QuickMenuPageCount; p++)
                     m_QuickMenuPageAssignments[p][slotIdx] = action;
@@ -726,6 +752,11 @@ namespace VPB
             QuickMenuPersistAssignments();
         }
 
+        private void QuickMenuRefreshAllSlotVisuals()
+        {
+            for (int i = 0; i < QuickMenuGridSlotCount; i++) QuickMenuRefreshSlotVisual(i);
+        }
+
         private class QuickMenuRightClickHandler : MonoBehaviour, IPointerClickHandler
         {
             public System.Action onRightClick;
@@ -817,6 +848,30 @@ namespace VPB
             if (!QuickMenuCanPlaceActionInSlot(m_QmAssignDragAction, idx)) return false;
             QuickMenuSetAssignment(idx, m_QmAssignDragAction);
             return true;
+        }
+
+        // Resolve the drop-target slot under the pointer and assign to it. Needed because IDropHandler
+        // is not reliably invoked in VR; called from OnEndDrag while the drag is still active.
+        private bool QuickMenuTryAssignDraggedActionAtPointer(PointerEventData eventData)
+        {
+            if (!m_QmAssignDragActive || eventData == null) return false;
+            try
+            {
+                var es = EventSystem.current;
+                if (es == null) return false;
+                var results = new List<RaycastResult>();
+                es.RaycastAll(eventData, results);
+                for (int i = 0; i < results.Count; i++)
+                {
+                    var go = results[i].gameObject;
+                    if (go == null) continue;
+                    var h = go.GetComponentInParent<QuickMenuAssignDropTargetHandler>();
+                    if (h != null && h.owner == this)
+                        return QuickMenuTryAssignDraggedActionToSlot(h.slotIdx);
+                }
+            }
+            catch { }
+            return false;
         }
 
         private void QuickMenuMoveCoreButtonSlot(bool isSettings, int targetIdx)
@@ -1215,6 +1270,15 @@ namespace VPB
                 case QuickMenuAssignableAction.TargetAtom:
                     icon = m_QmIconTargetAtom;
                     break;
+                case QuickMenuAssignableAction.PageNext:
+                    icon = m_QmIconNavNext;
+                    break;
+                case QuickMenuAssignableAction.PagePrev:
+                    icon = m_QmIconNavPrev;
+                    break;
+                case QuickMenuAssignableAction.SwitchWatchHand:
+                    icon = m_QmIconSwitchHand;
+                    break;
                 case QuickMenuAssignableAction.None:
                 default:
                     if (m_QuickMenuEditMode) icon = m_QmIconAssignEmpty;
@@ -1422,6 +1486,26 @@ namespace VPB
                 case QuickMenuAssignableAction.TargetAtom:
                 {
                     QuickMenuCyclePersonTarget(+1);
+                    break;
+                }
+                case QuickMenuAssignableAction.PageNext:
+                {
+                    QuickMenuChangePage(+1);
+                    QuickMenuRefreshAllSlotVisuals();
+                    break;
+                }
+                case QuickMenuAssignableAction.PagePrev:
+                {
+                    QuickMenuChangePage(-1);
+                    QuickMenuRefreshAllSlotVisuals();
+                    break;
+                }
+                case QuickMenuAssignableAction.SwitchWatchHand:
+                {
+                    QuickMenuSwitchWatchHand();
+                    for (int i = 0; i < QuickMenuGridSlotCount; i++)
+                        if (QuickMenuGetSlotAction(i) == QuickMenuAssignableAction.SwitchWatchHand)
+                            QuickMenuRefreshSlotVisual(i);
                     break;
                 }
                 case QuickMenuAssignableAction.None:
@@ -1634,6 +1718,9 @@ namespace VPB
                 QuickMenuAssignableAction.None,
                 QuickMenuAssignableAction.CoreSettingsButton,
                 QuickMenuAssignableAction.CorePageButton,
+                QuickMenuAssignableAction.PageNext,
+                QuickMenuAssignableAction.PagePrev,
+                QuickMenuAssignableAction.SwitchWatchHand,
                 QuickMenuAssignableAction.CreateGallery,
                 QuickMenuAssignableAction.ShowHide,
                 QuickMenuAssignableAction.BringFront,
@@ -1655,6 +1742,9 @@ namespace VPB
                 VPBTranslation.T("hook.qmassign.none", "None"),
                 VPBTranslation.T("hook.qmbutton.core_settings", "Core: Settings"),
                 VPBTranslation.T("hook.qmbutton.core_page", "Core: Page"),
+                VPBTranslation.T("hook.qmbutton.page_next", "Page Forward"),
+                VPBTranslation.T("hook.qmbutton.page_prev", "Page Backward"),
+                VPBTranslation.T("hook.qmbutton.switch_watch_hand", "Switch Watch Hand"),
                 VPBTranslation.T("hook.qmbutton.create_gallery", "Create Gallery"),
                 VPBTranslation.T("hook.qmbutton.show_hide", "Show/Hide"),
                 VPBTranslation.T("hook.qmbutton.bring_front", "Bring Front"),
@@ -2086,6 +2176,9 @@ namespace VPB
                 case QuickMenuAssignableAction.CoreSettingsButton: return m_QmIconEditPlus ?? m_QmIconEditOff;
                 case QuickMenuAssignableAction.CorePageButton: return (m_QmIconPages != null && m_QmIconPages.Length > 0) ? m_QmIconPages[0] : m_QmIconAssignEmpty;
                 case QuickMenuAssignableAction.TargetAtom: return m_QmIconTargetAtom ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PageNext: return m_QmIconNavNext ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.PagePrev: return m_QmIconNavPrev ?? m_QmIconAssignEmpty;
+                case QuickMenuAssignableAction.SwitchWatchHand: return m_QmIconSwitchHand ?? m_QmIconAssignEmpty;
                 default: return m_QmIconAssignEmpty;
             }
         }
@@ -2470,6 +2563,9 @@ namespace VPB
             {
                 if (_cg != null) _cg.blocksRaycasts = true;
                 if (owner == null) return;
+                // Fallback: in VR the EventSystem doesn't reliably deliver IDropHandler.OnDrop, so the
+                // drop never lands. Resolve the slot under the pointer here and assign directly.
+                owner.QuickMenuTryAssignDraggedActionAtPointer(eventData);
                 owner.m_QmAssignDragActive = false;
                 owner.QuickMenuEndAssignDragGhost();
                 owner.QuickMenuClearAllDropTargetHighlights();

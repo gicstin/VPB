@@ -1006,6 +1006,9 @@ namespace VPB
                 catch { }
             }
 
+            // VR wrist watch: move the grid onto the opposite controller while the VAM menu is open.
+            try { QuickMenuUpdateVrWatch(); } catch { }
+
             // Live preview: reposition the quick-menu grid when the anchor setting changes.
             // (Do this every frame; the helper is internally throttled.)
             try { QuickMenuUpdateGridLayoutLive(); } catch { }
@@ -1386,6 +1389,9 @@ namespace VPB
                 m_QmIconReplace = UI.LoadIconSprite("vpb_icons/gallery_replace.png", tint);
                 m_QmIconAdd     = UI.LoadIconSprite("vpb_icons/gallery_add.png", tint);
                 m_QmIconTargetAtom = UI.LoadIconSprite("vpb_icons/gallery_target.png", tint);
+                m_QmIconNavNext = UI.LoadIconSprite("vpb_icons/nav_next.png", tint);
+                m_QmIconNavPrev = UI.LoadIconSprite("vpb_icons/nav_prev.png", tint);
+                m_QmIconSwitchHand = UI.LoadIconSprite("vpb_icons/switch_horizontal.png", tint);
                 m_QmIconCompressCache = GalleryPanel.LoadCompressCacheIconSprite(tint);
                 m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
@@ -1431,6 +1437,8 @@ namespace VPB
                 // Load persisted page configs (or seed defaults on first run).
                 QuickMenuEnsureDefaultsAndLoadFromConfig();
 
+                // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
+                QuickMenuEnsureTooltipUI();
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
 
                 // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().
@@ -1476,6 +1484,10 @@ namespace VPB
                     try { if (VPBConfig.Instance != null) qmBorderCol = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
                     qmHb.hoverColor = qmBorderCol;
                     qmHb.ApplyBorderSettings();
+
+                    var tip = go.AddComponent<QuickMenuTooltipHoverHandler>();
+                    tip.owner = this;
+                    tip.slotIdx = idxCopy;
 
                     var drop = go.AddComponent<QuickMenuAssignDropTargetHandler>();
                     drop.owner = this;

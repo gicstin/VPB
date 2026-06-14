@@ -467,6 +467,22 @@ namespace VPB
         /// <summary>When anchored to VaM menu, hide the gallery if a full-screen VaM panel becomes active (Settings, Hub, package managers) so they never overlap.</summary>
         public bool AnchorYieldsToVamPanels = true;
 
+        // VR quick-menu wrist watch (the assignable-button grid moved onto a controller).
+        /// <summary>Master show/hide for the VR wrist watch (toggled from the footer button).</summary>
+        public bool QuickMenuVrWatchVisible = true;
+        /// <summary>Which hand the watch rides on: "Off" / "Left only" / "Right only" / "Opposite to menu".</summary>
+        public string QuickMenuVrWatchMode = "Opposite to menu";
+        /// <summary>When true the watch only appears while the VaM menu is open; otherwise it shows at all times in VR.</summary>
+        public bool QuickMenuVrWatchOnlyWithMenu = true;
+        /// <summary>When true the watch face billboards to point at the player's eye; otherwise uses fixed local euler.</summary>
+        public bool QuickMenuVrWatchFaceUser = true;
+        /// <summary>World scale of the watch canvas.</summary>
+        public float QuickMenuVrWatchScale = 0.0005f;
+        /// <summary>Distance the panel is pulled from the controller toward the eye (off the controller's pointer ray).</summary>
+        public float QuickMenuVrWatchTowardUserDist = 0.12f;
+        /// <summary>Local position offset of the watch canvas on the controller.</summary>
+        public Vector3 QuickMenuVrWatchOffset = new Vector3(0f, 0.05f, 0.04f);
+
         // Interaction toggles (persisted)
         public bool SpringScrollButtonEnabled = true;
         public bool HoldToLaunchEnabled = false;
@@ -1237,6 +1253,20 @@ namespace VPB
                                 o["z"] != null ? o["z"].AsFloat : -0.1f);
                         }
                         if (node["AnchorYieldsToVamPanels"] != null) AnchorYieldsToVamPanels = node["AnchorYieldsToVamPanels"].AsBool;
+                        if (node["QuickMenuVrWatchVisible"] != null) QuickMenuVrWatchVisible = node["QuickMenuVrWatchVisible"].AsBool;
+                        if (node["QuickMenuVrWatchMode"] != null) QuickMenuVrWatchMode = node["QuickMenuVrWatchMode"].Value;
+                        if (node["QuickMenuVrWatchOnlyWithMenu"] != null) QuickMenuVrWatchOnlyWithMenu = node["QuickMenuVrWatchOnlyWithMenu"].AsBool;
+                        if (node["QuickMenuVrWatchFaceUser"] != null) QuickMenuVrWatchFaceUser = node["QuickMenuVrWatchFaceUser"].AsBool;
+                        if (node["QuickMenuVrWatchScale"] != null) QuickMenuVrWatchScale = Mathf.Clamp(node["QuickMenuVrWatchScale"].AsFloat, 0.0002f, 0.0015f);
+                        if (node["QuickMenuVrWatchTowardUserDist"] != null) QuickMenuVrWatchTowardUserDist = Mathf.Clamp(node["QuickMenuVrWatchTowardUserDist"].AsFloat, -0.5f, 0.5f);
+                        if (node["QuickMenuVrWatchOffset"] != null)
+                        {
+                            var w = node["QuickMenuVrWatchOffset"];
+                            QuickMenuVrWatchOffset = new Vector3(
+                                w["x"].AsFloat,
+                                w["y"] != null ? w["y"].AsFloat : 0.05f,
+                                w["z"] != null ? w["z"].AsFloat : 0.04f);
+                        }
                         if (node["SideButtonScale"] != null) SideButtonScale = node["SideButtonScale"].AsFloat;
                         if (node["SideButtonScaleVR"] != null) SideButtonScaleVR = node["SideButtonScaleVR"].AsFloat;
                         else SideButtonScaleVR = SideButtonScale;
@@ -1571,6 +1601,17 @@ namespace VPB
                 o["z"].AsFloat = GalleryAnchorOffset.z;
                 node["GalleryAnchorOffset"] = o;
                 node["AnchorYieldsToVamPanels"].AsBool = AnchorYieldsToVamPanels;
+                node["QuickMenuVrWatchVisible"].AsBool = QuickMenuVrWatchVisible;
+                node["QuickMenuVrWatchMode"] = QuickMenuVrWatchMode;
+                node["QuickMenuVrWatchOnlyWithMenu"].AsBool = QuickMenuVrWatchOnlyWithMenu;
+                node["QuickMenuVrWatchFaceUser"].AsBool = QuickMenuVrWatchFaceUser;
+                node["QuickMenuVrWatchScale"].AsFloat = QuickMenuVrWatchScale;
+                node["QuickMenuVrWatchTowardUserDist"].AsFloat = QuickMenuVrWatchTowardUserDist;
+                JSONClass w = new JSONClass();
+                w["x"].AsFloat = QuickMenuVrWatchOffset.x;
+                w["y"].AsFloat = QuickMenuVrWatchOffset.y;
+                w["z"].AsFloat = QuickMenuVrWatchOffset.z;
+                node["QuickMenuVrWatchOffset"] = w;
                 node["SideButtonScale"].AsFloat = SideButtonScale;
                 node["SideButtonScaleVR"].AsFloat = SideButtonScaleVR;
                 node["SideButtonScaleDesktop"].AsFloat = SideButtonScaleDesktop;

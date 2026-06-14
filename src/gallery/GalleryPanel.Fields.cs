@@ -1272,6 +1272,12 @@ namespace VPB
         private Sprite footerMenuGateOffSprite;
         private Sprite footerMenuGateOnSprite;
 
+        private GameObject footerWatchToggleBtn;
+        private Image footerWatchToggleBtnImage;
+        private Image footerWatchToggleIconImage;
+        private Sprite footerWatchToggleOnSprite;
+        private Sprite footerWatchToggleOffSprite;
+
         private GameObject footerShowHiddenPackagesBtn;
         private Text footerShowHiddenPackagesBtnText;
         private Image footerShowHiddenPackagesBtnImage;

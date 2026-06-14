@@ -308,6 +308,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/device_watch.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/device_watch_off.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/edit.png",
         "IsDirectory":  false
     },
@@ -524,6 +532,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/nav_next.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/nav_prev.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/page_0.png",
         "IsDirectory":  false
     },
@@ -669,6 +685,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/star_off.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/switch_horizontal.png",
         "IsDirectory":  false
     },
     {

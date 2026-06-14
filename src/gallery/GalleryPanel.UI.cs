@@ -1068,6 +1068,14 @@ namespace VPB
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 
+            // VR wrist watch show/hide toggle
+            footerWatchToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"W", 20, 0, 0, AnchorPresets.middleCenter, ToggleVrWatchVisible);
+            footerWatchToggleBtnImage = footerWatchToggleBtn.GetComponent<Image>();
+            footerWatchToggleOnSprite  = UI.LoadIconSprite("vpb_icons/device_watch.png",     Color.white);
+            footerWatchToggleOffSprite = UI.LoadIconSprite("vpb_icons/device_watch_off.png", Color.white);
+            { Sprite init = footerWatchToggleOnSprite ?? footerWatchToggleOffSprite; if (init != null) { UI.AddIconToButton(footerWatchToggleBtn, init); footerWatchToggleIconImage = footerWatchToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
+            AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide the VR wrist watch");
+
             footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
             footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
             footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
@@ -1314,6 +1322,7 @@ namespace VPB
             UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterVamMenuGateState();
+            UpdateFooterVrWatchState();
             UpdatePaginationText();
             try { UpdateUndoRedoButtonLabels(); } catch { }
         }
@@ -2183,6 +2192,29 @@ namespace VPB
             {
                 Sprite target = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible ? footerMenuGateOnSprite : footerMenuGateOffSprite;
                 if (target != null) footerMenuGateIconImage.sprite = target;
+            }
+        }
+
+        private void ToggleVrWatchVisible()
+        {
+            if (VPBConfig.Instance == null) return;
+            VPBConfig.Instance.QuickMenuVrWatchVisible = !VPBConfig.Instance.QuickMenuVrWatchVisible;
+            VPBConfig.Instance.Save();
+            UpdateFooterVrWatchState();
+        }
+
+        private void UpdateFooterVrWatchState()
+        {
+            if (VPBConfig.Instance == null) return;
+            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
+            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            bool on = VPBConfig.Instance.QuickMenuVrWatchVisible;
+            if (footerWatchToggleBtnImage != null)
+                footerWatchToggleBtnImage.color = on ? activeColor : inactiveColor;
+            if (footerWatchToggleIconImage != null)
+            {
+                Sprite target = on ? footerWatchToggleOnSprite : footerWatchToggleOffSprite;
+                if (target != null) footerWatchToggleIconImage.sprite = target;
             }
         }
 
