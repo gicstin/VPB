@@ -267,6 +267,7 @@ namespace VPB
                 }
             }
             catch { }
+            try { VamHookPlugin.singleton?.RefreshQuickMenuPerfModeSlots(); } catch { }
         }
 
         public static Color GetToggleBackdropColor()

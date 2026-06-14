@@ -1392,6 +1392,17 @@ namespace VPB
                 m_QmIconNavNext = UI.LoadIconSprite("vpb_icons/nav_next.png", tint);
                 m_QmIconNavPrev = UI.LoadIconSprite("vpb_icons/nav_prev.png", tint);
                 m_QmIconSwitchHand = UI.LoadIconSprite("vpb_icons/switch_horizontal.png", tint);
+                m_QmIconHistory     = UI.LoadIconSprite("vpb_icons/book.png", tint);
+                m_QmIconPerfModeOn  = UI.LoadIconSprite("vpb_icons/auto.png", tint);
+                m_QmIconPerfModeOff = UI.LoadIconSprite("vpb_icons/auto_off.png", tint);
+                m_QmIconRemoveClothing = UI.LoadIconSprite("vpb_icons/remove_clothing.png", tint);
+                m_QmIconRemoveHair     = UI.LoadIconSprite("vpb_icons/remove_hair.png", tint);
+                m_QmIconImportSidebar  = UI.LoadIconSprite("vpb_icons/arrow_merge.png", tint);
+                m_QmIconStarOn  = UI.LoadIconSprite("vpb_icons/star.png", tint);
+                m_QmIconStarOff = UI.LoadIconSprite("vpb_icons/star_off.png", tint);
+                m_QmIconCategorySkin = UI.LoadIconSprite("vpb_icons/c_skin.png", tint);
+                m_QmIconPerfStepUp   = UI.LoadIconSprite("vpb_icons/photo_up.png", tint);
+                m_QmIconPerfStepDown = UI.LoadIconSprite("vpb_icons/photo_down.png", tint);
                 m_QmIconCompressCache = GalleryPanel.LoadCompressCacheIconSprite(tint);
                 m_QmIconAutoHideOff = UI.LoadIconSprite("vpb_icons/auto_hide_off.png", tint);
                 m_QmIconAutoHideOn  = UI.LoadIconSprite("vpb_icons/auto_hide_on.png",  tint);
@@ -1418,6 +1429,19 @@ namespace VPB
                     UI.LoadIconSprite("vpb_icons/page_7.png", tint),
                     UI.LoadIconSprite("vpb_icons/page_8.png", tint),
                     UI.LoadIconSprite("vpb_icons/page_9.png", tint),
+                };
+                m_QmIconPerfLevels = new Sprite[]
+                {
+                    UI.LoadIconSprite("vpb_icons/level_0.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_1.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_2.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_3.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_4.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_5.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_6.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_7.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_8.png", tint),
+                    UI.LoadIconSprite("vpb_icons/level_9.png", tint),
                 };
 
                 // Anchor center used for layout; positions are kept live in Update().
@@ -1519,6 +1543,22 @@ namespace VPB
 
                         if (m_QuickMenuEditMode)
                         {
+                            // Page navigation slots stay functional in edit mode so the user
+                            // can flip pages while assigning buttons on other pages.
+                            var editAct = QuickMenuGetSlotAction(idxCopy);
+                            if (editAct == QuickMenuAssignableAction.PageNext)
+                            {
+                                QuickMenuChangePage(+1);
+                                for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                                return;
+                            }
+                            if (editAct == QuickMenuAssignableAction.PagePrev)
+                            {
+                                QuickMenuChangePage(-1);
+                                for (int k = 0; k < QuickMenuGridSlotCount; k++) QuickMenuRefreshSlotVisual(k);
+                                return;
+                            }
+
                             Vector2 pos = (m_QuickMenuGridButtonRTs != null && m_QuickMenuGridButtonRTs[idxCopy] != null)
                                 ? m_QuickMenuGridButtonRTs[idxCopy].anchoredPosition
                                 : createCenter;

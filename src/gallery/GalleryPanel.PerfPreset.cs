@@ -93,12 +93,40 @@ namespace VPB
 
         internal void RefreshFooterPerfChrome()
         {
+            Color backdropColor = VpbPerfController.GetToggleBackdropColor();
             if (footerPerfToggleBtnImage != null)
-                footerPerfToggleBtnImage.color = VpbPerfController.GetToggleBackdropColor();
-            if (footerPerfToggleBtnText != null)
+                footerPerfToggleBtnImage.color = backdropColor;
+
+            bool perfWanted = VpbPerfController.IsPerfModeWanted;
+            Transform iconTr = footerPerfToggleBtn != null ? footerPerfToggleBtn.transform.Find("Icon") : null;
+            if (perfWanted)
             {
-                footerPerfToggleBtnText.text = VpbPerfController.GetToggleLabel();
-                footerPerfToggleBtnText.color = VpbPerfController.GetToggleTextColor();
+                int step = VpbPerfController.StepIndex;
+                // Activate icon child if it was previously hidden
+                if (iconTr != null) iconTr.gameObject.SetActive(true);
+                UI.ApplyBarIconFromPath(footerPerfToggleBtn, "vpb_icons/level_" + step + ".png", backdropOverride: backdropColor);
+                // Restore backdrop (ApplyBarIconFromPath may overwrite it)
+                if (footerPerfToggleBtnImage != null) footerPerfToggleBtnImage.color = backdropColor;
+                // Tint the icon to match the perf state color
+                iconTr = footerPerfToggleBtn != null ? footerPerfToggleBtn.transform.Find("Icon") : null;
+                if (iconTr != null)
+                {
+                    Image iconImg = iconTr.GetComponent<Image>();
+                    if (iconImg != null) iconImg.color = VpbPerfController.GetToggleTextColor();
+                }
+                // Hide text label (icon replaces it)
+                if (footerPerfToggleBtnText != null) footerPerfToggleBtnText.gameObject.SetActive(false);
+            }
+            else
+            {
+                // Hide icon, show "Off" text
+                if (iconTr != null) iconTr.gameObject.SetActive(false);
+                if (footerPerfToggleBtnText != null)
+                {
+                    footerPerfToggleBtnText.gameObject.SetActive(true);
+                    footerPerfToggleBtnText.text = VpbPerfController.GetToggleLabel();
+                    footerPerfToggleBtnText.color = VpbPerfController.GetToggleTextColor();
+                }
             }
 
             bool showStep = VpbPerfController.IsPerfModeWanted;
