@@ -1431,8 +1431,6 @@ namespace VPB
                 // Load persisted page configs (or seed defaults on first run).
                 QuickMenuEnsureDefaultsAndLoadFromConfig();
 
-                // Tooltip UI (positioned by QuickMenuApplyGridLayoutFromAnchor / live updates)
-                QuickMenuEnsureTooltipUI();
                 try { QuickMenuApplyGridLayoutFromAnchor(createCenter); } catch { }
 
                 // Core slot indices are loaded from persisted config in QuickMenuEnsureDefaultsAndLoadFromConfig().
@@ -1478,10 +1476,6 @@ namespace VPB
                     try { if (VPBConfig.Instance != null) qmBorderCol = VPBConfig.Instance.GetGalleryGridBorderColor(); } catch { }
                     qmHb.hoverColor = qmBorderCol;
                     qmHb.ApplyBorderSettings();
-
-                    var tip = go.AddComponent<QuickMenuTooltipHoverHandler>();
-                    tip.owner = this;
-                    tip.slotIdx = idxCopy;
 
                     var drop = go.AddComponent<QuickMenuAssignDropTargetHandler>();
                     drop.owner = this;

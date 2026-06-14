@@ -42,7 +42,7 @@ namespace VPB
                     if (handler != null)
                     {
                         ScrollRect sr = handler.GetComponent<ScrollRect>();
-                        if (sr != null) return sr;
+                        if (sr != null && sr.vertical) return sr;
                     }
                 }
             }

@@ -2313,13 +2313,7 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
-            try
-            {
-                var vrTip = go.GetComponent<UIVrDwellTooltip>();
-                if (vrTip == null) vrTip = go.AddComponent<UIVrDwellTooltip>();
-                vrTip.Bind(tooltipKey, englishDefault);
-            }
-            catch { }
+            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
         }
 
         private void AddTooltipPlain(GameObject go, string tooltip)
@@ -2350,13 +2344,7 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
-            try
-            {
-                var vrTip = go.GetComponent<UIVrDwellTooltip>();
-                if (vrTip == null) vrTip = go.AddComponent<UIVrDwellTooltip>();
-                vrTip.Bind("", tooltip);
-            }
-            catch { }
+            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
         }
 
         private void UpdateDesktopModeButton()
@@ -2849,6 +2837,11 @@ namespace VPB
                         off = new Vector2(rt.rect.width, 0f);
                 }
                 rt.anchoredPosition = collapsed ? off : Vector2.zero;
+
+                // Stop the off-screen content from rendering/raycasting while collapsed (the FPS sink).
+                bool wantSubtree = ShouldContentSubtreeBeActive();
+                if (backgroundBoxGO.activeSelf != wantSubtree)
+                    backgroundBoxGO.SetActive(wantSubtree);
             }
 
             ApplyFixedCollapseTriggerVisuals();

@@ -177,8 +177,10 @@ namespace VPB
         public const int SettingsListRowNameFontRef = FontRef;
         public const int SettingsListRowDetailFontRef = FontRef;
 
-        // Layout anchors used throughout chrome math
-        public const float SideTabTopOffsetRef = 44f;
+        // Layout anchors used throughout chrome math.
+        // Content top reserve must equal the title bar height so grid/chips/side tabs clear it
+        // exactly (no overlap, no gap) regardless of scale.
+        public const float SideTabTopOffsetRef = TitleBarHeightRef;
         public const float SideTabSplitSeamRef = 5f;
         public const float SideTabScrollBottomPadRef = 8f;
         public const float GalleryMainBottomFallbackRef = 120f;

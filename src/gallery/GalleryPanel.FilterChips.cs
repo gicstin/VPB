@@ -12,12 +12,15 @@ namespace VPB
         private const float FilterChipRowHeightRef = 32f;
         private const float FilterChipRowVerticalMarginRef = 6f;
         private const float FilterChipHorizontalPaddingRef = 4f;
+        private const float FilterChipRowSpacingRef = 4f;
+        private const float FilterChipColumnSpacingRef = 6f;
 
         private GameObject _activeFilterChipBarGO;
         private RectTransform _activeFilterChipScrollContentRT;
-        private ScrollRect _activeFilterChipScroll;
         private readonly List<GameObject> _activeFilterChipButtons = new List<GameObject>(12);
         private bool _activeFilterChipBarVisible;
+        private int _activeFilterChipRowCount = 1;
+        private float _lastChipBarAvailWidth = -1f;
         private float _lastBrowseGridLeftInset = 20f;
         private float _lastBrowseGridRightInset = -20f;
 
@@ -36,46 +39,15 @@ namespace VPB
             barBg.color = new Color(0f, 0f, 0f, 0f);
             barBg.raycastTarget = false;
 
-            GameObject viewportGO = new GameObject("Viewport");
-            viewportGO.transform.SetParent(_activeFilterChipBarGO.transform, false);
-            RectTransform viewportRT = viewportGO.AddComponent<RectTransform>();
-            viewportRT.anchorMin = Vector2.zero;
-            viewportRT.anchorMax = Vector2.one;
-            viewportRT.offsetMin = Vector2.zero;
-            viewportRT.offsetMax = Vector2.zero;
-            Image viewportMask = viewportGO.AddComponent<Image>();
-            viewportMask.color = new Color(1f, 1f, 1f, 0.01f);
-            viewportGO.AddComponent<Mask>().showMaskGraphic = false;
-
+            // Manual flow-wrap host: chips are positioned by hand (top-left origin) so the row
+            // wraps to a new line whenever the next chip would exceed the available width.
             GameObject contentGO = new GameObject("Content");
-            contentGO.transform.SetParent(viewportGO.transform, false);
+            contentGO.transform.SetParent(_activeFilterChipBarGO.transform, false);
             _activeFilterChipScrollContentRT = contentGO.AddComponent<RectTransform>();
-            _activeFilterChipScrollContentRT.anchorMin = new Vector2(0f, 0f);
-            _activeFilterChipScrollContentRT.anchorMax = new Vector2(0f, 1f);
-            _activeFilterChipScrollContentRT.pivot = new Vector2(0f, 0.5f);
-            _activeFilterChipScrollContentRT.anchoredPosition = Vector2.zero;
-            _activeFilterChipScrollContentRT.sizeDelta = new Vector2(0f, 0f);
-
-            HorizontalLayoutGroup hlg = contentGO.AddComponent<HorizontalLayoutGroup>();
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.spacing = 6f;
-            hlg.padding = new RectOffset(0, 4, 0, 0);
-            hlg.childControlWidth = true;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandWidth = false;
-            hlg.childForceExpandHeight = false;
-
-            ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
-            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-            _activeFilterChipScroll = _activeFilterChipBarGO.AddComponent<ScrollRect>();
-            _activeFilterChipScroll.content = _activeFilterChipScrollContentRT;
-            _activeFilterChipScroll.viewport = viewportRT;
-            _activeFilterChipScroll.horizontal = true;
-            _activeFilterChipScroll.vertical = false;
-            _activeFilterChipScroll.movementType = ScrollRect.MovementType.Clamped;
-            _activeFilterChipScroll.scrollSensitivity = 24f;
+            _activeFilterChipScrollContentRT.anchorMin = Vector2.zero;
+            _activeFilterChipScrollContentRT.anchorMax = Vector2.one;
+            _activeFilterChipScrollContentRT.offsetMin = Vector2.zero;
+            _activeFilterChipScrollContentRT.offsetMax = Vector2.zero;
 
             _activeFilterChipBarGO.SetActive(false);
         }
@@ -85,7 +57,9 @@ namespace VPB
         {
             if (!_activeFilterChipBarVisible) return 0f;
             float s = paneScale <= 0f ? 1f : paneScale;
-            return (FilterChipRowHeightRef + FilterChipRowVerticalMarginRef) * s;
+            int rows = _activeFilterChipRowCount < 1 ? 1 : _activeFilterChipRowCount;
+            float rowsH = rows * FilterChipRowHeightRef + (rows - 1) * FilterChipRowSpacingRef;
+            return (rowsH + FilterChipRowVerticalMarginRef) * s;
         }
 
         private bool ShouldShowActiveFilterChipBar()
@@ -93,7 +67,6 @@ namespace VPB
             if (!IsVisible || isCollapsed) return false;
             if (IsSettingsPanelOpen() || settingsListViewActive) return false;
             if (cleanupModeActive) return false;
-            if (importSidebarActive) return false;
             if (!IsBrowseFilterChipContextActive()) return false;
             return HasActiveBrowseFilters();
         }
@@ -127,24 +100,20 @@ namespace VPB
             return false;
         }
 
-        private void RefreshActiveFilterChips()
+        private void RefreshActiveFilterChips(float availWidth = -1f)
         {
             if (_activeFilterChipBarGO == null) return;
 
-            bool wasVisible = _activeFilterChipBarVisible;
             _activeFilterChipBarVisible = ShouldShowActiveFilterChipBar();
             _activeFilterChipBarGO.SetActive(_activeFilterChipBarVisible);
             if (!_activeFilterChipBarVisible)
             {
                 ClearActiveFilterChipButtons();
+                _activeFilterChipRowCount = 1;
                 return;
             }
 
-            // Preserve horizontal scroll when incrementally updating (e.g. chip dismiss).
-            // Reset to 0 only when the bar transitions from hidden → visible.
-            float prevScrollPos = (wasVisible && _activeFilterChipScroll != null)
-                ? _activeFilterChipScroll.horizontalNormalizedPosition
-                : 0f;
+            if (availWidth > 1f) _lastChipBarAvailWidth = availWidth;
 
             var specs = new List<ActiveFilterChipSpec>(12);
             CollectActiveFilterChipSpecs(specs);
@@ -157,9 +126,6 @@ namespace VPB
             int fontSize = UiMetrics.FontBody();
             float chipH = FilterChipRowHeightRef * s;
 
-            HorizontalLayoutGroup hlg = _activeFilterChipScrollContentRT.GetComponent<HorizontalLayoutGroup>();
-            if (hlg != null) hlg.spacing = 6f * s;
-
             for (int i = 0; i < specs.Count; i++)
             {
                 ActiveFilterChipSpec spec = specs[i];
@@ -167,13 +133,54 @@ namespace VPB
                 if (chip != null) _activeFilterChipButtons.Add(chip);
             }
 
-            try
+            FlowActiveFilterChips(s);
+        }
+
+        /// <summary>Wrap chips into rows that fit <see cref="_lastChipBarAvailWidth"/>; updates row count for grid inset.</summary>
+        private void FlowActiveFilterChips(float s)
+        {
+            if (_activeFilterChipScrollContentRT == null) return;
+            if (s <= 0f) s = 1f;
+
+            float chipH = FilterChipRowHeightRef * s;
+            float rowSpacing = FilterChipRowSpacingRef * s;
+            float colSpacing = FilterChipColumnSpacingRef * s;
+
+            float availW = _lastChipBarAvailWidth;
+            if (availW <= 1f) availW = _activeFilterChipScrollContentRT.rect.width;
+            if (availW <= 1f) availW = float.MaxValue;
+
+            int n = _activeFilterChipButtons.Count;
+            float x = 0f, y = 0f;
+            int rows = 1;
+
+            for (int i = 0; i < n; i++)
             {
-                LayoutRebuilder.ForceRebuildLayoutImmediate(_activeFilterChipScrollContentRT);
-                if (_activeFilterChipScroll != null)
-                    _activeFilterChipScroll.horizontalNormalizedPosition = prevScrollPos;
+                GameObject chip = _activeFilterChipButtons[i];
+                if (chip == null) continue;
+                RectTransform rt = chip.GetComponent<RectTransform>();
+                if (rt == null) continue;
+
+                try { LayoutRebuilder.ForceRebuildLayoutImmediate(rt); } catch { }
+                float w = LayoutUtility.GetPreferredWidth(rt);
+                if (w <= 1f) w = rt.rect.width;
+
+                if (x > 0f && x + w > availW + 0.5f)
+                {
+                    x = 0f;
+                    y -= chipH + rowSpacing;
+                    rows++;
+                }
+
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.anchoredPosition = new Vector2(x, y);
+
+                x += w + colSpacing;
             }
-            catch { }
+
+            _activeFilterChipRowCount = rows < 1 ? 1 : rows;
         }
 
         private struct ActiveFilterChipSpec
@@ -248,7 +255,8 @@ namespace VPB
 
             ContentSizeFitter chipCsf = chip.AddComponent<ContentSizeFitter>();
             chipCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            chipCsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+            // Self-size height (chip is flow-positioned with no parent layout group driving it).
+            chipCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             GameObject labelGO = new GameObject("Label");
             labelGO.transform.SetParent(chip.transform, false);
@@ -682,7 +690,9 @@ namespace VPB
             if (_activeFilterChipBarGO == null || !_activeFilterChipBarVisible) return;
 
             float s = paneScale <= 0f ? 1f : paneScale;
-            float titleBottom = -65f * s;
+            // Align top edge with the grid reference (SideTabTopOffsetRef), so chips tuck directly
+            // under the title bar instead of leaving a scale-dependent gap.
+            float titleBottom = -GalleryUiDesignTokens.SideTabTopOffsetRef * s;
             float gridTop = titleBottom - ActiveFilterChromeTopInsetPx(s);
             float pad = FilterChipHorizontalPaddingRef * s;
             float margin = FilterChipRowVerticalMarginRef * 0.5f * s;
@@ -695,6 +705,19 @@ namespace VPB
             // Match grid column exactly (contentScrollRT offsetMin/Max X).
             rt.offsetMin = new Vector2(leftOffset + pad, gridTop + margin);
             rt.offsetMax = new Vector2(rightOffset - pad, titleBottom - margin);
+
+            // Re-flow against the resolved bar width (covers cases where the up-front estimate differs).
+            try
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+                float availW = rt.rect.width;
+                if (availW > 1f)
+                {
+                    _lastChipBarAvailWidth = availW;
+                    FlowActiveFilterChips(s);
+                }
+            }
+            catch { }
 
             try
             {

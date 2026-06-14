@@ -113,6 +113,12 @@ namespace VPB
 
                 if (isFixedLocally && backgroundBoxGO != null)
                 {
+                    // Self-correct the content subtree (e.g. first load completing while collapsed),
+                    // so a collapsed-and-loaded pane stops rendering/raycasting off-screen content.
+                    bool wantSubtree = ShouldContentSubtreeBeActive();
+                    if (backgroundBoxGO.activeSelf != wantSubtree)
+                        backgroundBoxGO.SetActive(wantSubtree);
+
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
                     string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
 

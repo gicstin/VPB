@@ -158,7 +158,17 @@ namespace VPB
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
             try { SuppressImportOccupiedSideColumnChrome(); } catch { }
 
-            try { RefreshActiveFilterChips(); } catch { }
+            try
+            {
+                float chipPad = FilterChipHorizontalPaddingRef * paneScale;
+                float panelW = backgroundBoxGO != null
+                    ? backgroundBoxGO.GetComponent<RectTransform>().rect.width
+                    : 0f;
+                // Bar spans [leftOffset+pad, panelW+rightOffset-pad] (rightOffset is negative).
+                float chipAvailW = panelW > 1f ? panelW + rightOffset - leftOffset - 2f * chipPad : -1f;
+                RefreshActiveFilterChips(chipAvailW);
+            }
+            catch { }
 
             float filterTopInset = 0f;
             try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }

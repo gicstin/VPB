@@ -436,7 +436,7 @@ namespace VPB
             float halfPw = pw * 0.5f;
             float halfBw = bw * 0.5f;
             popupX = Mathf.Clamp(popupX, -halfBw + halfPw + 4f * s, halfBw - halfPw - 4f * s);
-            _titleSearchPopupPanelRT.anchoredPosition = new Vector2(popupX, -70f * s - 6f);
+            _titleSearchPopupPanelRT.anchoredPosition = new Vector2(popupX, -GalleryUiDesignTokens.TitleBarHeightRef * s - 6f);
 
             RectTransform ifrt = _titleSearchPopupField.GetComponent<RectTransform>();
             ifrt.sizeDelta = new Vector2(pw - 12f * s, 40f * s);

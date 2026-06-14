@@ -526,7 +526,7 @@ namespace VPB
             AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
 
             // Register inner pane button scale actions (title bar)
-            { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, 70f*s); }); }
+            { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }
             { var rt = titleRT; innerPaneScaleActions.Add(s => { if (rt) rt.anchoredPosition = new Vector2(60f * s, 10f * s); rt.sizeDelta = new Vector2(300f * s, 40f * s); }); }
             { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(100f * s, 40f * s); }); }
             { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(40f * s, 40f * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s); t.resizeTextMinSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontMinRef * s); } }); }

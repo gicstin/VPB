@@ -264,6 +264,7 @@ namespace VPB
             public string PluginClearConsoleKey;
             public bool PluginDownscale8kTo4k;
             public bool PluginScanWhitelistEnabled;
+            public string BlockInGameMessages;
         }
 
         private static string NextOf(string cur, string[] options)
@@ -471,14 +472,6 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableButtonGaps,
                 SetBool = v => { VPBConfig.Instance.EnableButtonGaps = v; VPBConfig.Instance.TriggerChange(); }
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "vr.hoverTooltip", GroupKey = "vr",
-                Label = VPBTranslation.T("settings.vr_hover_tooltip", "VR hover tooltips"),
-                Tooltip = VPBTranslation.T("settings.tip.vr_hover_tooltip", "After a short hover in VR, show a local label on controls (footer tooltips still apply on desktop)."),
-                ControlType = InternalSettingControlType.Toggle,
-                GetBool = () => VPBConfig.Instance.VrHoverTooltipEnabled,
-                SetBool = v => { VPBConfig.Instance.VrHoverTooltipEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.showSideButtons", GroupKey = "visuals", Label = VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"),
@@ -782,6 +775,18 @@ namespace VPB
                             Settings.Instance.ReturnToSceneViewOnStartup.Value = v;
                         Settings.SaveConfig();
                     } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.blockInGameMessages", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_block_ingame_messages", "Block in-game messages"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_block_ingame_messages", "Suppress VaM in-game error and warning notification popups. Off = show all; VR Only = suppress in VR; Desktop Only = suppress on desktop; Both = always suppress."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Off", "VR Only", "Desktop Only", "Both" },
+                GetString = () => VPBConfig.Instance?.BlockInGameMessages ?? "Off",
+                SetString = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.BlockInGameMessages = v ?? "Off";
+                    try { VPBConfig.Instance?.Save(false); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -1427,7 +1432,8 @@ namespace VPB
                 GalleryCategoryQuickSwitchHidden = VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "",
                 HiddenCategories = VPBConfig.Instance.HiddenCategories != null
                     ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                BlockInGameMessages = VPBConfig.Instance.BlockInGameMessages ?? "Off"
             };
             CapturePluginSettingsIntoSnapshot(snap);
             return snap;
@@ -2315,6 +2321,7 @@ namespace VPB
             VPBConfig.Instance.HiddenCategories = b.HiddenCategories != null
                 ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            VPBConfig.Instance.BlockInGameMessages = b.BlockInGameMessages ?? "Off";
 
             RestorePluginSettingsFromSnapshot(b);
 

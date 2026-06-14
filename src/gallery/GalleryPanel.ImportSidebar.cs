@@ -93,6 +93,12 @@ namespace VPB
                 }
                 else
                     importSidebarOnLeft = leftActiveContent.HasValue && !rightActiveContent.HasValue;
+
+                // Act like a regular side panel: opening Import CLOSES whatever Category / Creator /
+                // History column occupied the same physical side, instead of layering on top of it.
+                if (importSidebarOnLeft) leftActiveContent = null;
+                else rightActiveContent = null;
+                SyncActiveContentTypeFromSidePanels();
             }
 
             if (active && !importSidebarBuilt)
@@ -126,6 +132,10 @@ namespace VPB
                 // The scroll content only lays out reliably once shown; force it now that the body is active.
                 RebuildImportSidebarContent();
                 StartCoroutine(DiagDumpImportSidebarRects());
+                // If no person atoms were found yet (e.g. sidebar restored from prefs before atoms are ready),
+                // start a deferred retry so the target list self-corrects without requiring a sidebar reopen.
+                if (CountLivePersonAtoms() == 0)
+                    StartCoroutine(DeferredTargetRefreshAfterSceneLoad());
             }
 
             // UpdateLayout reads importSidebarActive + importSidebarOnLeft to hide the

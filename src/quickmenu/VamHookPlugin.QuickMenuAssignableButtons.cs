@@ -49,6 +49,7 @@ namespace VPB
             RandomPose,
             RandomAppearance,
             RandomSkin,
+            RandomSceneImport,
             Undo,
             Redo,
             Hub,
@@ -402,6 +403,7 @@ namespace VPB
                 case QuickMenuAssignableAction.RandomPose: return VPBTranslation.T("hook.qmbutton.random_pose", "Random: Pose");
                 case QuickMenuAssignableAction.RandomAppearance: return VPBTranslation.T("hook.qmbutton.random_appearance", "Random: Appearance");
                 case QuickMenuAssignableAction.RandomSkin: return VPBTranslation.T("hook.qmbutton.random_skin", "Random: Skin");
+                case QuickMenuAssignableAction.RandomSceneImport: return VPBTranslation.T("hook.qmbutton.random_scene_import", "Random: Scene Import");
                 case QuickMenuAssignableAction.Undo: return VPBTranslation.T("hook.qmbutton.undo", "Undo");
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
@@ -527,6 +529,7 @@ namespace VPB
                 case QuickMenuAssignableAction.RandomPose: return "random_pose";
                 case QuickMenuAssignableAction.RandomAppearance: return "random_appearance";
                 case QuickMenuAssignableAction.RandomSkin: return "random_skin";
+                case QuickMenuAssignableAction.RandomSceneImport: return "random_scene_import";
                 case QuickMenuAssignableAction.Undo: return "undo";
                 case QuickMenuAssignableAction.Redo: return "redo";
                 case QuickMenuAssignableAction.Hub: return "hub";
@@ -570,6 +573,7 @@ namespace VPB
                 case "random_pose": return QuickMenuAssignableAction.RandomPose;
                 case "random_appearance": return QuickMenuAssignableAction.RandomAppearance;
                 case "random_skin": return QuickMenuAssignableAction.RandomSkin;
+                case "random_scene_import": return QuickMenuAssignableAction.RandomSceneImport;
                 case "undo": return QuickMenuAssignableAction.Undo;
                 case "redo": return QuickMenuAssignableAction.Redo;
                 case "hub": return QuickMenuAssignableAction.Hub;
@@ -1141,6 +1145,9 @@ namespace VPB
                 case QuickMenuAssignableAction.RandomSkin:
                     icon = m_QmIconHexSkin ?? m_QmIconRandom;
                     break;
+                case QuickMenuAssignableAction.RandomSceneImport:
+                    icon = m_QmIconHexScene ?? m_QmIconRandom;
+                    break;
                 case QuickMenuAssignableAction.Undo:
                     icon = m_QmIconUndo;
                     break;
@@ -1331,6 +1338,12 @@ namespace VPB
                 case QuickMenuAssignableAction.RandomPose: QuickMenuExecuteRandomInCategory("Pose", preservePersonTarget: true, preserveUi: true); break;
                 case QuickMenuAssignableAction.RandomAppearance: QuickMenuExecuteRandomInCategory("Appearance", preservePersonTarget: true, preserveUi: true); break;
                 case QuickMenuAssignableAction.RandomSkin: QuickMenuExecuteRandomInCategory("Skin", preservePersonTarget: true, preserveUi: true); break;
+                case QuickMenuAssignableAction.RandomSceneImport:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p != null) p.QuickMenu_RandomSceneImport();
+                    break;
+                }
                 case QuickMenuAssignableAction.Undo:
                 {
                     var p = QuickMenuGetTargetPanel();
@@ -1753,6 +1766,7 @@ namespace VPB
                 QuickMenuAssignableAction.RandomPose,
                 QuickMenuAssignableAction.RandomAppearance,
                 QuickMenuAssignableAction.RandomSkin,
+                QuickMenuAssignableAction.RandomSceneImport,
             };
             var labels = new List<string>
             {
@@ -1764,6 +1778,7 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.random_pose", "Random: Pose"),
                 VPBTranslation.T("hook.qmbutton.random_appearance", "Random: Appearance"),
                 VPBTranslation.T("hook.qmbutton.random_skin", "Random: Skin"),
+                VPBTranslation.T("hook.qmbutton.random_scene_import", "Random: Scene Import"),
             };
             var icons = new List<Sprite>
             {
@@ -1775,6 +1790,7 @@ namespace VPB
                 m_QmIconHexPose ?? m_QmIconRandom,
                 m_QmIconHexAppearance ?? m_QmIconRandom,
                 m_QmIconHexSkin ?? m_QmIconRandom,
+                m_QmIconHexScene ?? m_QmIconRandom,
             };
 
             float w = 300f;

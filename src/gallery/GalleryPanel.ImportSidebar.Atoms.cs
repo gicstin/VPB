@@ -22,6 +22,32 @@ namespace VPB
         {
             if (content == null) return;
 
+            // Random Scene button — same width/accent as Multi-select so it reads as a peer action.
+            GameObject rndRow = new GameObject("RandomSceneRow");
+            rndRow.transform.SetParent(content, false);
+            LayoutElement rndLe = rndRow.AddComponent<LayoutElement>();
+            rndLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            rndLe.flexibleWidth = 1f;
+            Image rndBg = rndRow.AddComponent<Image>();
+            rndBg.color = new Color(0.15f, 0.45f, 0.22f, 1f);
+            Button rndBtn = rndRow.AddComponent<Button>();
+            rndBtn.targetGraphic = rndBg;
+            UI.NeutralizeSelectableColorTint(rndBtn);
+            Text rndLabel = CreateImportSidebarLabel(
+                rndRow.transform,
+                VPBTranslation.T("gallery.import.wizard.random_scene", "\u21ba  Random Scene"),
+                ImportSidebarBaseFontSize);
+            rndLabel.alignment = TextAnchor.MiddleCenter;
+            rndBtn.onClick.AddListener(OnImportSidebarRandomSceneClicked);
+            AddTooltip(rndRow, "gallery.import.wizard.random_scene_tip",
+                "Pick a random scene from the Scenes grid and load it as the import source");
+            LayoutElement rndLeCaptured = rndLe;
+            Text rndLabelCaptured = rndLabel;
+            innerPaneScaleActions.Add(s => {
+                if (rndLeCaptured != null) rndLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                ApplyScaledFont(rndLabelCaptured, ImportSidebarBaseFontSize, s);
+            });
+
             AddImportListCaption(content, VPBTranslation.T("gallery.import.source_list_caption", "Source (from scene)"));
             importSidebarSourceListContainer = content;
             for (int i = 0; i < ImportSidebarMaxRowsPerList; i++)
@@ -131,12 +157,19 @@ namespace VPB
 
         private System.Collections.IEnumerator DeferredTargetRefreshAfterSceneLoad()
         {
-            for (int i = 0; i < 5; i++) yield return null;
-            if (!importSidebarBuilt) yield break;
-            int deferred = CountLivePersonAtoms();
-            LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh; persons now={deferred}");
-            RefreshTargetCandidates();
-            RefreshApplyButtonEnabled();
+            // VaM may not expose the new scene's atoms via GetAtoms() immediately after
+            // onSceneLoaded fires.  Retry every 5 frames until we find at least one person
+            // atom, giving up after ~3 s so we don't run indefinitely in empty scenes.
+            for (int attempt = 0; attempt < 36; attempt++)
+            {
+                for (int f = 0; f < 5; f++) yield return null;
+                if (!importSidebarBuilt) yield break;
+                int persons = CountLivePersonAtoms();
+                LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh attempt={attempt}; persons={persons}");
+                RefreshTargetCandidates();
+                RefreshApplyButtonEnabled();
+                if (persons > 0) yield break;
+            }
         }
 
         private static int CountLivePersonAtoms()
@@ -373,6 +406,34 @@ namespace VPB
             RefreshTargetSelectionVisual();
             RefreshApplyButtonEnabled();
             RefreshPluginChecklist();
+        }
+
+        // Random Scene button in step 1: sidebar is only active in Scenes category, so
+        // currentFilteredFiles / lastFilteredFiles already holds the scenes list — no navigation needed.
+        private void OnImportSidebarRandomSceneClicked()
+        {
+            var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                ? currentFilteredFiles : lastFilteredFiles;
+            if (pool == null || pool.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB import] Random Scene: no scenes in pool.");
+                return;
+            }
+            FileEntry pick = pool[UnityEngine.Random.Range(0, pool.Count)];
+            LoadSourceScene(pick);
+
+            // Sync sidebar selection to the picked scene (mirrors the grid single-click path).
+            selectedFiles.Clear();
+            selectedFilePaths.Clear();
+            selectionAnchorPath = null;
+            selectedFiles.Add(pick);
+            if (!string.IsNullOrEmpty(pick.Path)) selectedFilePaths.Add(pick.Path);
+            selectedPath = pick.Path;
+            SetHoverPath("");
+            try { RefreshSelectionVisuals(); } catch { }
+
+            // Auto-apply immediately — one-click random import.
+            OnImportSidebarApplyClicked();
         }
 
         private void SpawnNewPersonAndSelect()

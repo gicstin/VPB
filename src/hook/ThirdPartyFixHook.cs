@@ -108,33 +108,33 @@ namespace VPB
 
         private static void PatchSuperControllerInGameLogs(Harmony harmony)
         {
-            MethodInfo prefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_ErrorOrLogError_Prefix));
+            MethodInfo errorPrefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_ErrorOrLogError_Prefix));
+            MethodInfo messagePrefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_MessageOrLogMessage_Prefix));
             int patched = 0;
 
             foreach (MethodInfo method in typeof(SuperController).GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (method == null) continue;
-                if (method.Name != "Error" && method.Name != "LogError") continue;
                 if (method.ReturnType != typeof(void)) continue;
 
                 ParameterInfo[] parameters = method.GetParameters();
                 if (parameters == null || parameters.Length == 0 || parameters[0].ParameterType != typeof(string))
                     continue;
 
-                try
+                if (method.Name == "Error" || method.Name == "LogError")
                 {
-                    harmony.Patch(method, prefix: new HarmonyMethod(prefix));
-                    patched++;
+                    try { harmony.Patch(method, prefix: new HarmonyMethod(errorPrefix)); patched++; } catch { }
                 }
-                catch
+                else if (method.Name == "Message" || method.Name == "LogMessage")
                 {
+                    try { harmony.Patch(method, prefix: new HarmonyMethod(messagePrefix)); patched++; } catch { }
                 }
             }
 
             if (patched > 0)
             {
                 _superControllerInGameLogPatched = true;
-                LogUtil.Log("[VPB] Patched SuperController.Error/LogError x" + patched + " for CheesyFX in-game log suppression");
+                LogUtil.Log("[VPB] Patched SuperController.Error/LogError/Message/LogMessage x" + patched + " for in-game log suppression");
             }
         }
 
@@ -174,6 +174,23 @@ namespace VPB
             {
                 return false;
             }
+        }
+
+        internal static bool ShouldSuppressAllInGameMessages()
+        {
+            try
+            {
+                var c = VPBConfig.Instance;
+                if (c == null) return false;
+                string mode = c.BlockInGameMessages ?? "Off";
+                if (string.Equals(mode, "Off", StringComparison.OrdinalIgnoreCase)) return false;
+                if (string.Equals(mode, "Both", StringComparison.OrdinalIgnoreCase)) return true;
+                bool isVR = c.IsVR;
+                if (string.Equals(mode, "VR Only", StringComparison.OrdinalIgnoreCase)) return isVR;
+                if (string.Equals(mode, "Desktop Only", StringComparison.OrdinalIgnoreCase)) return !isVR;
+                return false;
+            }
+            catch { return false; }
         }
 
         private static void NoteCheesyFxErrorActivity()
@@ -272,8 +289,20 @@ namespace VPB
         {
             try
             {
-                if (ShouldSuppressCheesyFxInGameText(__0))
-                    return false;
+                if (ShouldSuppressAllInGameMessages()) return false;
+                if (ShouldSuppressCheesyFxInGameText(__0)) return false;
+            }
+            catch
+            {
+            }
+            return true;
+        }
+
+        private static bool SuperController_MessageOrLogMessage_Prefix()
+        {
+            try
+            {
+                if (ShouldSuppressAllInGameMessages()) return false;
             }
             catch
             {

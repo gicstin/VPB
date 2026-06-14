@@ -191,6 +191,8 @@ namespace VPB
         public JSONClass ImportSidebarPrefs = new JSONClass();
         /// <summary>When true, suppresses CheesyFX NullReferenceException spam in Unity/BepInEx logs (broken Update loops).</summary>
         public bool SuppressCheesyFxNullReferenceLogs = true;
+        /// <summary>Controls when in-game VaM notification messages (errors and warnings) are suppressed. "Off" = never; "VR Only" = suppressed in VR; "Desktop Only" = suppressed on desktop; "Both" = always suppressed.</summary>
+        public string BlockInGameMessages = "Off";
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
         /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
@@ -890,6 +892,7 @@ namespace VPB
             SuppressAppearanceScaleChange = false;
             ImportSidebarPrefs = new JSONClass();
             SuppressCheesyFxNullReferenceLogs = true;
+            BlockInGameMessages = "Off";
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
             GalleryCollapseOnSceneLaunch = true;
@@ -1080,6 +1083,7 @@ namespace VPB
                         if (node["SuppressAppearanceScaleChange"] != null) SuppressAppearanceScaleChange = node["SuppressAppearanceScaleChange"].AsBool;
                         if (node["ImportSidebarPrefs"] != null) ImportSidebarPrefs = node["ImportSidebarPrefs"].AsObject;
                         if (node["SuppressCheesyFxNullReferenceLogs"] != null) SuppressCheesyFxNullReferenceLogs = node["SuppressCheesyFxNullReferenceLogs"].AsBool;
+                        if (node["BlockInGameMessages"] != null) BlockInGameMessages = node["BlockInGameMessages"].Value;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["GalleryCollapseOnSceneLaunch"] != null) GalleryCollapseOnSceneLaunch = node["GalleryCollapseOnSceneLaunch"].AsBool;
@@ -1453,6 +1457,7 @@ namespace VPB
                 node["SuppressAppearanceScaleChange"].AsBool = SuppressAppearanceScaleChange;
                 if (ImportSidebarPrefs != null) node["ImportSidebarPrefs"] = ImportSidebarPrefs;
                 node["SuppressCheesyFxNullReferenceLogs"].AsBool = SuppressCheesyFxNullReferenceLogs;
+                node["BlockInGameMessages"] = BlockInGameMessages;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;

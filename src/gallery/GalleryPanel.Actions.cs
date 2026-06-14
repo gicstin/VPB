@@ -759,8 +759,21 @@ namespace VPB
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster != null) raycaster.enabled = v;
             // canvas.enabled=false halts rendering but every child MonoBehaviour keeps ticking; deactivate the subtree too.
-            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != v)
-                backgroundBoxGO.SetActive(v);
+            bool wantSubtree = ShouldContentSubtreeBeActive();
+            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != wantSubtree)
+                backgroundBoxGO.SetActive(wantSubtree);
+        }
+
+        // Desired active state for the gallery content subtree (backgroundBoxGO).
+        // A collapsed fixed pane parks its content off-screen, but off-screen UI is still fully
+        // drawn and raycast-walked by the canvas every frame, so a loaded-but-collapsed pane keeps
+        // halving FPS. Deactivate the subtree in that state. Keep it active until the first content
+        // build finishes though: an inactive parent can leave the recycling grid with a zero viewport.
+        private bool ShouldContentSubtreeBeActive()
+        {
+            if (canvas == null || !canvas.enabled) return false;
+            if (isCollapsed && hasLoadedContent) return false;
+            return true;
         }
 
         private IEnumerator DeferredSetVisibleAfterStartupReady()

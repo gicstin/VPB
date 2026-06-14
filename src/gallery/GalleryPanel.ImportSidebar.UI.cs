@@ -90,6 +90,10 @@ namespace VPB
                 innerPaneScaleActions.Add(s => RebuildImportSidebarContent());
 
                 ApplyImportSidebarBaseRect(ChromeScale);
+                // Row label fonts are scaled only by the innerPaneScaleActions closures (fired on a
+                // scale-slider change). Fire them once now so a sidebar built at a non-1 global UI
+                // scale renders at the correct text size instead of the unscaled design size.
+                try { ApplyInnerPaneScaleLegacyActions(ChromeScale); } catch { }
                 RebuildImportSidebarContent();
                 importSidebarRoot.SetActive(false);
                 LogUtil.Log("[VPB import][diag] build: complete OK");

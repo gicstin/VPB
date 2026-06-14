@@ -277,7 +277,7 @@ namespace VPB
             if (btnRT == null || ddRT == null) return;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -70f * s);
+            ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -GalleryUiDesignTokens.TitleBarHeightRef * s);
         }
 
         private void HideGlobalSourceFilterDropdown()
