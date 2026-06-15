@@ -33,6 +33,7 @@ namespace VPB
         {
             if (canvas != null && !canvas.enabled)
             {
+                try { RemoveModeHidePopup(); RemoveModeClearHelp(); } catch { }
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 return;
             }
@@ -43,6 +44,7 @@ namespace VPB
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
             try { FooterPluginInfoPollHoverTooltip(); } catch { }
             try { BenchModalRuntimeTick(); } catch { }
+            try { RemoveModeUpdate(); } catch { }
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 

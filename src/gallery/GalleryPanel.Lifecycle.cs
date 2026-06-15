@@ -154,6 +154,8 @@ namespace VPB
         {
             StopCo(ref _categoryQuickApplyCoroutine);
 
+            RemoveModeDestroyPopup();
+
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)
                 GalleryThumbnailCache.Instance.SavingPaused = false;

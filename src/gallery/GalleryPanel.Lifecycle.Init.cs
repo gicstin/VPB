@@ -1560,6 +1560,39 @@ namespace VPB
                     AddTooltip(rightApplyModeBtn, "gallery.tooltip.apply_mode", "Toggle 1-click vs 2-click apply.");
                 }
 
+                // Remove Item Mode (Right) — hover-to-remove tool: fades the pointed item to half
+                // opacity, click removes it (clothing/hair on a Person, or whole CUA/light/mirror/atom).
+                {
+                    Color colorRemoveModeRail = RemoveModeRailBackdrop;
+                    float rmW = sideIconBtn;
+                    float rmH = sideIconBtn;
+                    Sprite rmSpr = null;
+                    try { rmSpr = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleRemoveMode);
+                    rightRemoveModeSideBtn = rightRemoveModeBtn;
+                    Image rmImg = rightRemoveModeBtn.GetComponent<Image>();
+                    Text rmTxt = rightRemoveModeBtn.GetComponentInChildren<Text>(true);
+                    if (rmSpr != null)
+                    {
+                        UI.AddIconToButton(rightRemoveModeBtn, rmSpr, sideIconPad, colorRemoveModeRail);
+                        rightRemoveModeBtnIconImage = rightRemoveModeBtn.transform.Find("Icon") != null
+                            ? rightRemoveModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (rmImg != null)
+                    {
+                        rmImg.color = colorRemoveModeRail;
+                        if (rmTxt != null)
+                        {
+                            rmTxt.text = VPBTranslation.T("gallery.side.remove_mode_short", "Erase");
+                            rmTxt.fontSize = btnFontSize;
+                            rmTxt.gameObject.SetActive(true);
+                        }
+                    }
+                    rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
+                    rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
+                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
+                }
+
                 // Appearance outfit: keep current vs load from preset (Right)
                 rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
                 rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
@@ -2060,6 +2093,38 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftApplyModeBtn.GetComponent<RectTransform>());
                     AddTooltip(leftApplyModeBtn, "gallery.tooltip.apply_mode", "Toggle 1-click vs 2-click apply.");
+                }
+
+                // Remove Item Mode (Left) — hover-to-remove tool (mirror of the right rail button).
+                {
+                    Color colorRemoveModeRailL = RemoveModeRailBackdrop;
+                    float rmW = sideIconBtn;
+                    float rmH = sideIconBtn;
+                    Sprite rmSprL = null;
+                    try { rmSprL = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleRemoveMode);
+                    leftRemoveModeSideBtn = leftRemoveModeBtn;
+                    Image rmImgL = leftRemoveModeBtn.GetComponent<Image>();
+                    Text rmTxtL = leftRemoveModeBtn.GetComponentInChildren<Text>(true);
+                    if (rmSprL != null)
+                    {
+                        UI.AddIconToButton(leftRemoveModeBtn, rmSprL, sideIconPad, colorRemoveModeRailL);
+                        leftRemoveModeBtnIconImage = leftRemoveModeBtn.transform.Find("Icon") != null
+                            ? leftRemoveModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (rmImgL != null)
+                    {
+                        rmImgL.color = colorRemoveModeRailL;
+                        if (rmTxtL != null)
+                        {
+                            rmTxtL.text = VPBTranslation.T("gallery.side.remove_mode_short", "Erase");
+                            rmTxtL.fontSize = btnFontSize;
+                            rmTxtL.gameObject.SetActive(true);
+                        }
+                    }
+                    leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
+                    leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
+                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
                 }
 
                 // Appearance outfit: keep current vs load from preset (Left)

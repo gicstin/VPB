@@ -1095,6 +1095,7 @@ namespace VPB
             int idxSceneImport = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
+            int idxRemoveMode = -1;
             int idxKeepOutfit = -1;
             int idxReplace = -1;
             int idxRemoveHair = 15;
@@ -1159,6 +1160,13 @@ namespace VPB
                         if (i >= 0) idxRemoveAtom = i;
                     }
 
+                    GameObject removeModeGo = rightRemoveModeSideBtn != null ? rightRemoveModeSideBtn : leftRemoveModeSideBtn;
+                    if (removeModeGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == removeModeGo);
+                        if (i >= 0) idxRemoveMode = i;
+                    }
+
                     GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
                     if (saveGo != null)
                     {
@@ -1196,6 +1204,7 @@ namespace VPB
 
                 new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
                 new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
+                new SideButtonLayoutEntry(idxRemoveMode, 0, 2), // Remove Item Mode (hover-to-remove tool)
                 new SideButtonLayoutEntry(idxKeepOutfit, 0, 0), // Keep body clothes vs preset
                 new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
 
@@ -1266,9 +1275,20 @@ namespace VPB
                 if (string.IsNullOrEmpty(atomUid)) return;
 
                 JSONNode atomNode = null;
+
+                // Primary: Atom.Store serializes the atom into a JSONArray (same call Try-On uses).
+                // This is the reliable path; the reflection probes below are a version fallback.
                 try
                 {
-                    // Try common serialization methods (VaM versions differ)
+                    JSONArray storeArr = new JSONArray();
+                    atom.Store(storeArr, true, true);
+                    if (storeArr.Count > 0) atomNode = storeArr[0];
+                }
+                catch { }
+
+                try
+                {
+                    // Reflection fallback only if Store did not capture (loop is gated on atomNode == null).
                     string[] candidates = new[] { "GetSaveJSON", "GetJSON", "GetAtomJSON", "GetSceneJSON" };
                     for (int i = 0; i < candidates.Length && atomNode == null; i++)
                     {
@@ -1805,6 +1825,7 @@ namespace VPB
             if (isRight)
             {
                 if (rightSceneImportSideBtn != null && go == rightSceneImportSideBtn) return true;
+                if (rightRemoveModeSideBtn != null && go == rightRemoveModeSideBtn) return true;
                 if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
@@ -1828,6 +1849,7 @@ namespace VPB
             else
             {
                 if (leftSceneImportSideBtn != null && go == leftSceneImportSideBtn) return true;
+                if (leftRemoveModeSideBtn != null && go == leftRemoveModeSideBtn) return true;
                 if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
