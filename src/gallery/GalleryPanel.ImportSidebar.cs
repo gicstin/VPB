@@ -28,8 +28,7 @@ namespace VPB
         private string importSidebarSourceAtomId;
         private Atom importSidebarTargetAtom;
         private VpbResourceType importSidebarPresetType = VpbResourceType.Appearance;
-        // Multi-type mode: when active, Apply iterates all types in this set rather than just the primary one.
-        private bool importSidebarMultiTypeMode;
+        // Selected resource types. Type cells toggle in/out freely; Apply iterates every type in this set.
         private readonly HashSet<VpbResourceType> importSidebarMultiSelectedTypes = new HashSet<VpbResourceType>();
 
         // Per-type option panels keyed by VpbResourceType. Populated in Task 8 (Options.cs).
@@ -255,7 +254,6 @@ namespace VPB
                 try { importSidebarPresetType = (VpbResourceType)p["presetType"].AsInt; }
                 catch { }
             }
-            importSidebarMultiTypeMode = PrefBool(p, "multiTypeMode", importSidebarMultiTypeMode);
         }
 
         private void SaveImportSidebarPrefs()
@@ -281,7 +279,6 @@ namespace VPB
             p["incAppearance"].AsBool = importSidebarSubToggles.IncludeAppearance;
             p["incMocap"].AsBool = importSidebarSubToggles.IncludeMocap;
             p["presetType"].AsInt = (int)importSidebarPresetType;
-            p["multiTypeMode"].AsBool = importSidebarMultiTypeMode;
             try { cfg.Save(false); } catch { }
         }
 

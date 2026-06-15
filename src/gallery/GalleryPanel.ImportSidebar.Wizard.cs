@@ -151,15 +151,14 @@ namespace VPB
             RefreshImportWizardStepHeaderGlyphs();
             RefreshTypeRadioVisibility();
             OnImportSidebarTypeChosen(importSidebarPresetType);
+            RefreshSourceTypeAvailability();
         }
 
         private void RefreshImportSidebarWizardHeader()
         {
             if (importSidebarHeaderLabel == null) return;
 
-            string typeName = importSidebarMultiTypeMode
-                ? VPBTranslation.T("gallery.import.wizard.multi_type", "Multi")
-                : ShortNameForType(importSidebarPresetType);
+            string typeName = ImportSidebarSelectedTypesSummary();
             string targetName = importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "\u2014";
 
             importSidebarHeaderLabel.text = string.Format(

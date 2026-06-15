@@ -139,9 +139,7 @@ namespace VPB
                 string sceneName = !string.IsNullOrEmpty(sceneFile.Path)
                     ? System.IO.Path.GetFileName(sceneFile.Path)
                     : (sceneFile.Uid ?? "?");
-                string typeName = importSidebarMultiTypeMode
-                    ? "Multi"
-                    : ShortNameForType(importSidebarPresetType);
+                string typeName = ImportSidebarSelectedTypesSummary();
                 ShowTemporaryStatus(
                     "Rnd Import: " + typeName + " \u2190 " + importSidebarSourceAtomId + " in " + sceneName,
                     2.5f);

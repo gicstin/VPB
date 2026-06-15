@@ -13,7 +13,12 @@ namespace VPB
         private Transform importSidebarOptionsPanelHost;
         private readonly Dictionary<VpbResourceType, GameObject> importSidebarTypeRadioButtons
             = new Dictionary<VpbResourceType, GameObject>();
-        private Image _importSidebarMultiToggleBtnBg;
+        private readonly Dictionary<VpbResourceType, Text> importSidebarTypeRadioLabels
+            = new Dictionary<VpbResourceType, Text>();
+        // Per-type item count parsed from the selected source atom (only for introspectable types:
+        // Clothing/Hair/Morphs/Plugins). Absence of a key = "always available, count unknown".
+        private readonly Dictionary<VpbResourceType, int> importSidebarSourceTypeCounts
+            = new Dictionary<VpbResourceType, int>();
         private Button importSidebarApplyButton;
         private Text importSidebarApplyButtonLabel;
 
@@ -69,29 +74,32 @@ namespace VPB
 
         private void BuildImportSidebarTypeRadio(Transform parent)
         {
-            // Multi-type toggle: a compact row above the grid that enables selecting more than one type at once.
-            GameObject multiRow = new GameObject("MultiTypeToggle");
-            multiRow.transform.SetParent(parent, false);
-            LayoutElement multiLe = multiRow.AddComponent<LayoutElement>();
-            multiLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
-            multiLe.flexibleWidth = 1f;
-            Image multiBg = multiRow.AddComponent<Image>();
-            multiBg.color = ColorInactiveRow;
-            _importSidebarMultiToggleBtnBg = multiBg;
-            Button multiBtn = multiRow.AddComponent<Button>();
-            multiBtn.targetGraphic = multiBg;
-            UI.NeutralizeSelectableColorTint(multiBtn);
-            Text multiLabel = CreateImportSidebarLabel(multiRow.transform,
-                VPBTranslation.T("gallery.import.multi_type_toggle", "Multi-select"), ImportSidebarBaseFontSize);
-            multiLabel.alignment = TextAnchor.MiddleCenter;
-            multiBtn.onClick.AddListener(ToggleImportSidebarMultiMode);
-            AddTooltip(multiRow, "gallery.import.multi_type_tip",
-                "Select multiple resource types to apply all together in one click");
-            LayoutElement multiLeC = multiLe;
-            Text multiLabelC = multiLabel;
+            // Bulk-select controls: Select All / Clear All. Type cells always toggle, so any number of
+            // resource types can be picked at once without a separate "multi" mode.
+            GameObject bulkRow = new GameObject("BulkSelectRow");
+            bulkRow.transform.SetParent(parent, false);
+            LayoutElement bulkLe = bulkRow.AddComponent<LayoutElement>();
+            bulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            bulkLe.flexibleWidth = 1f;
+            HorizontalLayoutGroup bulkHlg = bulkRow.AddComponent<HorizontalLayoutGroup>();
+            bulkHlg.childForceExpandWidth = true;
+            bulkHlg.childForceExpandHeight = true;
+            bulkHlg.childControlWidth = true;
+            bulkHlg.childControlHeight = true;
+            bulkHlg.spacing = 2f;
+
+            BuildImportSidebarBulkButton(bulkRow.transform,
+                VPBTranslation.T("gallery.import.select_all_types", "Select All"),
+                "gallery.import.select_all_tip", "Select every resource type",
+                ImportSidebarSelectAllBg, ImportSidebarSelectAllTypes);
+            BuildImportSidebarBulkButton(bulkRow.transform,
+                VPBTranslation.T("gallery.import.clear_all_types", "Clear All"),
+                "gallery.import.clear_all_tip", "Deselect every resource type",
+                ImportSidebarClearAllBg, ImportSidebarClearAllTypes);
+
+            LayoutElement bulkLeC = bulkLe;
             innerPaneScaleActions.Add(s => {
-                if (multiLeC != null) multiLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
-                ApplyScaledFont(multiLabelC, ImportSidebarBaseFontSize, s);
+                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
             });
 
             GameObject grid = new GameObject("TypeRadio");
@@ -147,7 +155,40 @@ namespace VPB
                 b.onClick.AddListener(() => OnImportSidebarTypeChosen(captured));
 
                 importSidebarTypeRadioButtons[t] = row;
+                importSidebarTypeRadioLabels[t] = typeLabel;
             }
+        }
+
+        private void BuildImportSidebarBulkButton(Transform parent, string label,
+            string tipKey, string tipDefault, Color bgColor, UnityEngine.Events.UnityAction onClick)
+        {
+            GameObject btnGO = new GameObject("BulkBtn_" + label);
+            btnGO.transform.SetParent(parent, false);
+            Image bg = btnGO.AddComponent<Image>();
+            bg.color = bgColor;
+            Button btn = btnGO.AddComponent<Button>();
+            btn.targetGraphic = bg;
+            UI.NeutralizeSelectableColorTint(btn);
+            Text txt = CreateImportSidebarLabel(btnGO.transform, label, ImportSidebarBaseFontSize);
+            txt.alignment = TextAnchor.MiddleCenter;
+            btn.onClick.AddListener(onClick);
+            AddTooltip(btnGO, tipKey, tipDefault);
+            Text txtCaptured = txt;
+            innerPaneScaleActions.Add(s => ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s));
+        }
+
+        // Short label for the current type selection: the single type's name, an "N types" count for several,
+        // or a dash for none.
+        private string ImportSidebarSelectedTypesSummary()
+        {
+            int n = importSidebarMultiSelectedTypes.Count;
+            if (n == 0) return "\u2014";
+            if (n == 1)
+            {
+                foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
+                    return ShortNameForType(t);
+            }
+            return n + " " + VPBTranslation.T("gallery.import.wizard.multi_type_count", "types");
         }
 
         private static string ShortNameForType(VpbResourceType t)
@@ -227,6 +268,9 @@ namespace VPB
             VerticalLayoutGroup vlgCaptured = vlg;
             innerPaneScaleActions.Add(s => { if (vlgCaptured != null) vlgCaptured.spacing = 2f * s; });
 
+            // Caption so stacked panels read as distinct groups (which options belong to which type).
+            AddOptionGroupHeader(panel.transform, DisplayNameForType(t));
+
             switch (t)
             {
                 case VpbResourceType.Appearance:
@@ -303,9 +347,66 @@ namespace VPB
                 case VpbResourceType.Skin:
                 case VpbResourceType.BreastPhysics:
                 case VpbResourceType.Glute:
+                    AddOptionGroupNote(panel.transform, "No extra options \u2014 imported as-is.");
                     break;
             }
             return panel;
+        }
+
+        private void AddOptionGroupHeader(Transform parent, string label)
+        {
+            GameObject row = new GameObject("GroupHeader_" + label);
+            row.transform.SetParent(parent, false);
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = ImportSidebarBaseRowHeight * 0.82f;
+            le.flexibleWidth = 1f;
+            Image bg = row.AddComponent<Image>();
+            bg.color = ImportSidebarGroupHeaderBg;
+            bg.raycastTarget = false;
+            Text t = CreateImportSidebarLabel(row.transform, label, ImportSidebarBaseFontSize);
+            t.alignment = TextAnchor.MiddleLeft;
+            t.color = new Color(0.92f, 0.95f, 1f, 1f);
+            LayoutElement leC = le;
+            Text tC = t;
+            innerPaneScaleActions.Add(s => {
+                if (leC != null) leC.preferredHeight = ImportSidebarBaseRowHeight * 0.82f * s;
+                ApplyScaledFont(tC, ImportSidebarBaseFontSize, s);
+            });
+        }
+
+        private void AddOptionGroupNote(Transform parent, string note)
+        {
+            GameObject row = new GameObject("GroupNote");
+            row.transform.SetParent(parent, false);
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = ImportSidebarBaseRowHeight * 0.85f;
+            le.flexibleWidth = 1f;
+            Text t = AddSimpleLabelText(row.transform, note, ImportSidebarBaseFontSize, new Color(0.62f, 0.64f, 0.68f, 1f));
+            t.fontStyle = FontStyle.Italic;
+            LayoutElement leC = le;
+            Text tC = t;
+            innerPaneScaleActions.Add(s => {
+                if (leC != null) leC.preferredHeight = ImportSidebarBaseRowHeight * 0.85f * s;
+                ApplyScaledFont(tC, ImportSidebarBaseFontSize, s);
+            });
+        }
+
+        private static string DisplayNameForType(VpbResourceType t)
+        {
+            switch (t)
+            {
+                case VpbResourceType.Appearance:    return "Appearance";
+                case VpbResourceType.Clothing:      return "Clothing";
+                case VpbResourceType.Hair:          return "Hair";
+                case VpbResourceType.Pose:          return "Pose";
+                case VpbResourceType.Skin:          return "Skin";
+                case VpbResourceType.Morphs:        return "Morphs";
+                case VpbResourceType.BreastPhysics: return "Breast Physics";
+                case VpbResourceType.Glute:         return "Glute";
+                case VpbResourceType.Plugins:       return "Plugins";
+                case VpbResourceType.General:       return "General";
+                default: return t.ToString();
+            }
         }
 
         private GameObject AddOptionToggle(Transform parent, string label, System.Func<bool> get, System.Action<bool> set, Color? labelColor)
@@ -439,7 +540,7 @@ namespace VPB
         // Switching source atom resets the checks to "all" (sig change); within the same atom, checks are preserved.
         private void RefreshPluginChecklist()
         {
-            bool show = importSidebarPresetType == VpbResourceType.Plugins && importSidebarPluginsMergeSingle;
+            bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Plugins) && importSidebarPluginsMergeSingle;
             if (importSidebarPluginChecklistRoot != null) importSidebarPluginChecklistRoot.SetActive(show);
             if (!show || importSidebarPluginRowPool.Count == 0) return;
 
@@ -549,6 +650,25 @@ namespace VPB
             return result;
         }
 
+        // Every plugin#N key in the source preset's PluginManager storable (used when "Pick plugins" is off).
+        private static List<string> AllSourcePluginKeys(JSONClass preset)
+        {
+            var keys = new List<string>();
+            JSONArray storables = (preset != null && preset["storables"] != null) ? preset["storables"].AsArray : null;
+            if (storables == null) return keys;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                if (s["id"] == null || s["id"].Value != "PluginManager") continue;
+                JSONClass plugins = s["plugins"] != null ? s["plugins"].AsObject : null;
+                if (plugins != null)
+                    foreach (string k in plugins.Keys) keys.Add(k);
+                break;
+            }
+            return keys;
+        }
+
         private HashSet<string> GetTargetPluginUrls()
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -642,31 +762,17 @@ namespace VPB
 
         private void OnImportSidebarTypeChosen(VpbResourceType t)
         {
-            if (importSidebarMultiTypeMode)
-            {
-                // Toggle: can't deselect the last remaining type.
-                if (importSidebarMultiSelectedTypes.Contains(t))
-                {
-                    if (importSidebarMultiSelectedTypes.Count > 1)
-                        importSidebarMultiSelectedTypes.Remove(t);
-                }
-                else
-                {
-                    importSidebarMultiSelectedTypes.Add(t);
-                }
-                // Primary type drives which option panel shows (still useful in multi mode).
-                importSidebarPresetType = t;
-            }
+            // Clicking a type cell always toggles it in/out of the selection.
+            if (importSidebarMultiSelectedTypes.Contains(t))
+                importSidebarMultiSelectedTypes.Remove(t);
             else
-            {
-                importSidebarPresetType = t;
-            }
+                importSidebarMultiSelectedTypes.Add(t);
+            // Last-clicked type drives which option panel is highlighted/scrolled to.
+            importSidebarPresetType = t;
 
-            // Show option panel(s): all selected types in multi-mode, primary type only otherwise.
+            // Show an option panel for each selected type.
             foreach (var kv in importSidebarOptionPanels)
-                kv.Value.SetActive(importSidebarMultiTypeMode
-                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
-                    : kv.Key == importSidebarPresetType);
+                kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
 
             RefreshTypeRadioButtonColors();
             RefreshPluginChecklist();
@@ -682,33 +788,128 @@ namespace VPB
         {
             foreach (var kv in importSidebarTypeRadioButtons)
             {
+                bool available = IsImportTypeAvailable(kv.Key);
+                bool active = importSidebarMultiSelectedTypes.Contains(kv.Key);
+
                 Image img = kv.Value.GetComponent<Image>();
-                if (img == null) continue;
-                bool active = importSidebarMultiTypeMode
-                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
-                    : kv.Key == importSidebarPresetType;
-                img.color = active ? ImportSidebarSelectedAccent : ColorInactiveRow;
+                if (img != null)
+                    img.color = !available ? ImportSidebarUnavailableRow
+                              : (active ? ImportSidebarSelectedAccent : ColorInactiveRow);
+
+                Button btn = kv.Value.GetComponent<Button>();
+                if (btn != null) btn.interactable = available;
+
+                Text lbl;
+                if (importSidebarTypeRadioLabels.TryGetValue(kv.Key, out lbl) && lbl != null)
+                {
+                    lbl.text = TypeChipLabel(kv.Key);
+                    lbl.color = available ? UI.TextPrimary : ImportSidebarUnavailableText;
+                }
             }
-            if (_importSidebarMultiToggleBtnBg != null)
-                _importSidebarMultiToggleBtnBg.color = importSidebarMultiTypeMode
-                    ? ImportSidebarSelectedAccent : ColorInactiveRow;
         }
 
-        private void ToggleImportSidebarMultiMode()
+        // Chip caption with a count badge for introspectable types ("Plugins (2)"); bare name otherwise.
+        private string TypeChipLabel(VpbResourceType t)
         {
-            importSidebarMultiTypeMode = !importSidebarMultiTypeMode;
-            if (importSidebarMultiTypeMode)
+            int c;
+            if (importSidebarSourceTypeCounts.TryGetValue(t, out c))
+                return ShortNameForType(t) + " (" + c + ")";
+            return ShortNameForType(t);
+        }
+
+        // A type is selectable unless the source is known to carry zero of it.
+        private bool IsImportTypeAvailable(VpbResourceType t)
+        {
+            int c;
+            return !importSidebarSourceTypeCounts.TryGetValue(t, out c) || c > 0;
+        }
+
+        // Recompute per-type counts from the selected source atom and re-skin the chips. Empty types are
+        // greyed/disabled and dropped from the current selection so Apply never runs a no-op type.
+        private void RefreshSourceTypeAvailability()
+        {
+            importSidebarSourceTypeCounts.Clear();
+
+            if (!string.IsNullOrEmpty(importSidebarSourceAtomId))
             {
-                // Seed the multi set with whichever type is currently primary.
-                importSidebarMultiSelectedTypes.Clear();
-                importSidebarMultiSelectedTypes.Add(importSidebarPresetType);
+                JSONClass preset = null;
+                try { preset = BuildPresetJSONForCurrentSelection(); } catch { }
+                JSONArray storables = (preset != null && preset["storables"] != null) ? preset["storables"].AsArray : null;
+                if (storables != null)
+                {
+                    int clothing = 0, hair = 0, morphs = 0, plugins = 0;
+                    foreach (JSONNode node in storables)
+                    {
+                        JSONClass s = node as JSONClass;
+                        if (s == null || s["id"] == null) continue;
+                        string id = s["id"].Value;
+                        if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase))
+                        {
+                            clothing = CountEnabledArray(s["clothing"]);
+                            hair = CountEnabledArray(s["hair"]);
+                            morphs = (s["morphs"] != null && s["morphs"].AsArray != null) ? s["morphs"].AsArray.Count : 0;
+                        }
+                        else if (string.Equals(id, "PluginManager", StringComparison.Ordinal))
+                        {
+                            JSONClass p = s["plugins"] != null ? s["plugins"].AsObject : null;
+                            plugins = p != null ? p.Count : 0;
+                        }
+                    }
+                    importSidebarSourceTypeCounts[VpbResourceType.Clothing] = clothing;
+                    importSidebarSourceTypeCounts[VpbResourceType.Hair] = hair;
+                    importSidebarSourceTypeCounts[VpbResourceType.Morphs] = morphs;
+                    importSidebarSourceTypeCounts[VpbResourceType.Plugins] = plugins;
+                }
             }
+
+            // Prune now-unavailable types from the selection.
+            var stale = new List<VpbResourceType>();
+            foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
+                if (!IsImportTypeAvailable(t)) stale.Add(t);
+            foreach (VpbResourceType t in stale) importSidebarMultiSelectedTypes.Remove(t);
+
             RefreshTypeRadioButtonColors();
-            // Sync option panel visibility to the new mode.
             foreach (var kv in importSidebarOptionPanels)
-                kv.Value.SetActive(importSidebarMultiTypeMode
-                    ? importSidebarMultiSelectedTypes.Contains(kv.Key)
-                    : kv.Key == importSidebarPresetType);
+                kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
+            RefreshApplyButtonEnabled();
+        }
+
+        private static int CountEnabledArray(JSONNode arrNode)
+        {
+            JSONArray arr = arrNode != null ? arrNode.AsArray : null;
+            if (arr == null) return 0;
+            int n = 0;
+            foreach (JSONNode item in arr)
+            {
+                JSONClass o = item as JSONClass;
+                // Items stored with enabled:"false" are inactive and would import nothing visible.
+                if (o != null && o["enabled"] != null
+                    && string.Equals(o["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                n++;
+            }
+            return n;
+        }
+
+        private void ImportSidebarSelectAllTypes()
+        {
+            foreach (VpbResourceType t in ImportSidebarTypeOrder)
+                if (IsImportTypeAvailable(t)) importSidebarMultiSelectedTypes.Add(t);
+            ApplyImportSidebarTypeSelectionChange();
+        }
+
+        private void ImportSidebarClearAllTypes()
+        {
+            importSidebarMultiSelectedTypes.Clear();
+            ApplyImportSidebarTypeSelectionChange();
+        }
+
+        private void ApplyImportSidebarTypeSelectionChange()
+        {
+            RefreshTypeRadioButtonColors();
+            foreach (var kv in importSidebarOptionPanels)
+                kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
+            RefreshPluginChecklist();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             RebuildImportSidebarContent();
             RefreshApplyButtonEnabled();
@@ -723,10 +924,11 @@ namespace VPB
             bool sourceOk = !needSourceAtom || !string.IsNullOrEmpty(importSidebarSourceAtomId);
             bool targetOk = importSidebarTargetAtom != null;
             bool sceneOk = importSidebarSourceScene != null;
+            bool typeOk = importSidebarMultiSelectedTypes.Count > 0;
             bool multiBlock = ImportSidebarMultiSelectBlocked();
 
             if (importSidebarApplyButton != null)
-                importSidebarApplyButton.interactable = !multiBlock && sourceOk && targetOk && sceneOk;
+                importSidebarApplyButton.interactable = !multiBlock && sourceOk && targetOk && sceneOk && typeOk;
 
             try { RefreshImportSidebarWizardHeader(); } catch { }
         }
@@ -755,19 +957,15 @@ namespace VPB
             string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
                 ? sceneVar.Package.Uid : null;
 
-            if (importSidebarMultiTypeMode && importSidebarMultiSelectedTypes.Count > 0)
-            {
-                // Multi-type: apply each selected type in sequence; CUA import is skipped (Appearance-specific).
-                foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
-                    ApplyOneTypeImport(t, sourceHostUid);
-            }
-            else
-            {
-                bool importCUAs = importSidebarPresetType == VpbResourceType.Appearance && importSidebarImportLinkedCUAs;
-                ApplyOneTypeImport(importSidebarPresetType, sourceHostUid);
-                if (importCUAs)
-                    StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
-            }
+            // Apply each selected type in sequence.
+            foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
+                ApplyOneTypeImport(t, sourceHostUid);
+
+            // CUA import is Appearance-specific; run it when Appearance is among the selected types.
+            bool importCUAs = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
+                && importSidebarImportLinkedCUAs;
+            if (importCUAs)
+                StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
 
         private void ApplyOneTypeImport(VpbResourceType type, string sourceHostUid)
@@ -799,18 +997,29 @@ namespace VPB
                 return;
             }
 
-            // Plugins subset: prune to the checked plugins and force Merge so they add to the target (new UIDs)
-            // without dropping its existing plugins; off = import all (the whole PluginPresets storable).
-            if (type == VpbResourceType.Plugins && importSidebarPluginsMergeSingle)
+            // Plugins: always hand the PluginPresets manager a plugins-ONLY slice (PluginManager dict + each
+            // plugin's param storable) — the same shape VaM loads for a .vap plugin preset. Feeding the whole
+            // person preset to the plugin preset manager imports nothing reliably. Pick-mode prunes to the
+            // checked plugins; off imports every source plugin. Merge so they add without dropping target plugins.
+            if (type == VpbResourceType.Plugins)
             {
-                JSONClass pluginSlice = VpbImport.BuildSelectedPluginsSlice(presetJSON, importSidebarSelectedPluginKeys);
+                ICollection<string> keys;
+                if (importSidebarPluginsMergeSingle)
+                {
+                    keys = importSidebarSelectedPluginKeys;
+                }
+                else
+                {
+                    keys = AllSourcePluginKeys(presetJSON);
+                }
+                JSONClass pluginSlice = VpbImport.BuildSelectedPluginsSlice(presetJSON, keys);
                 if (pluginSlice == null)
                 {
-                    LogUtil.LogWarning("[VPB import] No plugins selected for type Plugins; skipping.");
+                    LogUtil.LogWarning("[VPB import] No plugins to import for type Plugins; skipping.");
                     return;
                 }
                 presetJSON = pluginSlice;
-                mode = ClothingApplyMode.Merge;
+                mode = ClothingApplyMode.Replace;
             }
 
             // BreastPhysics / Glute / Plugins / Skin lack a dedicated dispatch case: route them through General

@@ -8,6 +8,15 @@ namespace VPB
         private static readonly Color ImportSidebarHeaderBg = new Color(0.10f, 0.26f, 0.44f, 1f);
         private static readonly Color ImportSidebarStepHeaderBg = new Color(0.18f, 0.24f, 0.32f, 0.98f);
         internal static readonly Color ImportSidebarSelectedAccent = new Color(0.14f, 0.40f, 0.62f, 1f);
+        // Bulk-select action buttons: deliberately off the blue/gray type-chip palette so they read as
+        // commands, not selectable chips. Faint green = add, faint red = clear.
+        private static readonly Color ImportSidebarSelectAllBg = new Color(0.20f, 0.34f, 0.26f, 1f);
+        private static readonly Color ImportSidebarClearAllBg = new Color(0.36f, 0.24f, 0.24f, 1f);
+        // Per-type option group caption: blue-tinted to tie it to the matching selected (blue) type chip.
+        private static readonly Color ImportSidebarGroupHeaderBg = new Color(0.16f, 0.30f, 0.46f, 1f);
+        // Type chip with nothing to import from the source: visibly recessed + greyed, non-interactable.
+        private static readonly Color ImportSidebarUnavailableRow = new Color(0.16f, 0.16f, 0.17f, 1f);
+        private static readonly Color ImportSidebarUnavailableText = new Color(0.45f, 0.46f, 0.48f, 1f);
         // Mid-tone between ColorInactiveRow and ImportSidebarSelectedAccent: marks rows whose ID
         // name-matches a counterpart on the opposite list without stealing the selected-state color.
         private static readonly Color ImportSidebarMatchHintColor = new Color(0.20f, 0.30f, 0.40f, 1f);

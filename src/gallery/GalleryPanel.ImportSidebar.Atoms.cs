@@ -22,7 +22,7 @@ namespace VPB
         {
             if (content == null) return;
 
-            // Random Scene button — same width/accent as Multi-select so it reads as a peer action.
+            // Random Scene button — same width/accent as the bulk-select row so it reads as a peer action.
             GameObject rndRow = new GameObject("RandomSceneRow");
             rndRow.transform.SetParent(content, false);
             LayoutElement rndLe = rndRow.AddComponent<LayoutElement>();
@@ -299,6 +299,7 @@ namespace VPB
             RefreshApplyButtonEnabled();
             // Source change reselects which plugins exist; target change re-evaluates the on-target sort.
             RefreshPluginChecklist();
+            RefreshSourceTypeAvailability();
         }
 
         private void RenderSourceList()
@@ -357,6 +358,7 @@ namespace VPB
                 RefreshTargetSelectionVisual();
                 RefreshApplyButtonEnabled();
                 RefreshPluginChecklist();
+                RefreshSourceTypeAvailability();
                 return;
             }
 
@@ -406,6 +408,7 @@ namespace VPB
             RefreshTargetSelectionVisual();
             RefreshApplyButtonEnabled();
             RefreshPluginChecklist();
+            RefreshSourceTypeAvailability();
         }
 
         // Random Scene button in step 1: sidebar is only active in Scenes category, so
