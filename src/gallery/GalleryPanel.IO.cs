@@ -1641,7 +1641,6 @@ namespace VPB
                 if (!bulkSqlAlreadyFilteredVar)
                 {
                     string catUt = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
-                    if (string.IsNullOrEmpty(catUt)) return false;
                     string pkgK, ipK;
                     if (!TryGetGalleryRowKeysForUserTags(entry, out pkgK, out ipK)) return false;
                     if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)

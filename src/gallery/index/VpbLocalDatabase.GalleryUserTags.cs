@@ -248,7 +248,7 @@ namespace VPB
         /// <summary>True when row has no user tags for current browse semantics (ALL VAR package rows use package-wide check).</summary>
         internal static bool TryGalleryRowHasNoUserTags(string categoryTitle, string pkgUid, string internalPath)
         {
-            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return true;
             if (IsGalleryAllVarPseudoCategory(categoryTitle)
                 && string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrEmpty(pkgUid))
@@ -1055,7 +1055,7 @@ namespace VPB
         internal static bool TryGalleryRowMatchesUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> normalizedUserTags, bool requireAllTags)
         {
             if (normalizedUserTags == null || normalizedUserTags.Count == 0) return true;
-            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
             var distinctNeed = new List<string>();
             var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var t in normalizedUserTags)
@@ -1065,7 +1065,7 @@ namespace VPB
                 distinctNeed.Add(n);
             }
             if (distinctNeed.Count == 0) return true;
-            bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle);
+            bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle) || string.IsNullOrEmpty(categoryTitle);
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -1214,7 +1214,7 @@ namespace VPB
         /// <summary>True if <c>gallery_item_user_tag</c> has at least one row for this item (lightweight for grid badge).</summary>
         internal static bool TryHasAnyGalleryUserTagsForRow(string categoryTitle, string pkgUid, string internalPath)
         {
-            if (!VpbSqlite3.IsAvailable || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (!VpbSqlite3.IsAvailable) return false;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -1252,10 +1252,10 @@ namespace VPB
 
         private static bool TryHasAnyGalleryUserTagsForRow(VpbSqlite3.Connection conn, string categoryTitle, string pkgUid, string internalPath)
         {
-            if (conn == null || string.IsNullOrEmpty(categoryTitle)) return false;
+            if (conn == null) return false;
             try
             {
-                bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle);
+                bool allVarPseudo = IsGalleryAllVarPseudoCategory(categoryTitle) || string.IsNullOrEmpty(categoryTitle);
                 string sql = allVarPseudo
                     ? "SELECT 1 FROM gallery_item_user_tag WHERE pkg_uid=? AND internal_path=? LIMIT 1"
                     : "SELECT 1 FROM gallery_item_user_tag WHERE category=? AND pkg_uid=? AND internal_path=? LIMIT 1";
