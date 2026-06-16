@@ -24,6 +24,14 @@ namespace VPB
 
         // Plugin picker: a caption + a pooled list of checkbox rows, rebuilt from the source atom's plugins.
         private GameObject importSidebarPluginChecklistRoot;
+        // The checklist's LayoutElement: its preferredHeight is driven by the live entry count so the scroll
+        // reserves space. The parent option panel uses a ContentSizeFitter (PreferredSize), under which a bare
+        // flexibleHeight collapses to zero, which would hide every plugin row.
+        private LayoutElement importSidebarPluginChecklistLe;
+        // How many rows are visible before the checklist starts to scroll (drives the reserved height).
+        private const int ImportSidebarVisiblePluginRows = 8;
+        // Select All / Clear All bulk row above the checklist (visibility tracks the checklist root).
+        private GameObject importSidebarPluginBulkRow;
         private const int ImportSidebarMaxPluginRows = 24;
         private readonly List<GameObject> importSidebarPluginRowPool = new List<GameObject>(ImportSidebarMaxPluginRows);
         // Enumerated once per source/target change; checkbox clicks re-skin from this, never re-parse the atom.
@@ -477,14 +485,43 @@ namespace VPB
 
         private void BuildImportSidebarPluginChecklist(Transform parent)
         {
-            // Scroll view fills the plugin panel below the "Pick plugins" toggle (flexibleHeight in the panel's VLG);
-            // the row list scrolls when it overflows, leaving the Apply button fixed at the section bottom.
+            // Select All / Clear All bulk row: a fixed peer above the scroll so the user can include/exclude every
+            // source plugin in one click, then refine per-row. Its visibility tracks the checklist (gate ON).
+            importSidebarPluginBulkRow = new GameObject("PluginBulkRow");
+            importSidebarPluginBulkRow.transform.SetParent(parent, false);
+            LayoutElement pluginBulkLe = importSidebarPluginBulkRow.AddComponent<LayoutElement>();
+            pluginBulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            pluginBulkLe.flexibleWidth = 1f;
+            HorizontalLayoutGroup pluginBulkHlg = importSidebarPluginBulkRow.AddComponent<HorizontalLayoutGroup>();
+            pluginBulkHlg.childForceExpandWidth = true;
+            pluginBulkHlg.childForceExpandHeight = true;
+            pluginBulkHlg.childControlWidth = true;
+            pluginBulkHlg.childControlHeight = true;
+            pluginBulkHlg.spacing = 2f;
+            BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
+                VPBTranslation.T("gallery.import.select_all_plugins", "Select All"),
+                "gallery.import.select_all_plugins_tip", "Import every plugin in the source",
+                ImportSidebarSelectAllBg, ImportSidebarSelectAllPlugins);
+            BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
+                VPBTranslation.T("gallery.import.clear_all_plugins", "Clear All"),
+                "gallery.import.clear_all_plugins_tip", "Exclude every plugin from import",
+                ImportSidebarClearAllBg, ImportSidebarClearAllPlugins);
+            LayoutElement pluginBulkLeC = pluginBulkLe;
+            innerPaneScaleActions.Add(s => {
+                if (pluginBulkLeC != null) pluginBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+            });
+            importSidebarPluginBulkRow.SetActive(false);
+
+            // Scroll view sits below the "Pick plugins" toggle. Its height is reserved per the live entry count
+            // (UpdatePluginChecklistHeight) since the option panel is ContentSizeFitter-driven; the row list
+            // scrolls when it overflows ImportSidebarVisiblePluginRows.
             importSidebarPluginChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
             LayoutElement scrollLe = importSidebarPluginChecklistRoot.AddComponent<LayoutElement>();
-            scrollLe.flexibleHeight = 1f;
             scrollLe.flexibleWidth = 1f;
+            importSidebarPluginChecklistLe = scrollLe;
+            innerPaneScaleActions.Add(s => UpdatePluginChecklistHeight());
 
             Transform content = importSidebarPluginChecklistRoot.GetComponent<ScrollRect>().content.transform;
 
@@ -542,6 +579,7 @@ namespace VPB
         {
             bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Plugins) && importSidebarPluginsMergeSingle;
             if (importSidebarPluginChecklistRoot != null) importSidebarPluginChecklistRoot.SetActive(show);
+            if (importSidebarPluginBulkRow != null) importSidebarPluginBulkRow.SetActive(show);
             if (!show || importSidebarPluginRowPool.Count == 0) return;
 
             importSidebarPluginEntries = BuildSourcePluginEntries();
@@ -554,7 +592,20 @@ namespace VPB
                 importSidebarPluginSelectionSig = sig;
             }
 
+            UpdatePluginChecklistHeight();
             RenderPluginChecklistRows();
+        }
+
+        // Reserve a concrete height for the checklist scroll: the parent option panel is ContentSizeFitter-driven,
+        // so a flexibleHeight-only scroll collapses to zero and hides the rows. Height = caption + up to
+        // ImportSidebarVisiblePluginRows rows (longer lists scroll), matched to the current chrome scale.
+        private void UpdatePluginChecklistHeight()
+        {
+            if (importSidebarPluginChecklistLe == null) return;
+            int visibleRows = Mathf.Min(importSidebarPluginEntries.Count, ImportSidebarVisiblePluginRows);
+            float s = ChromeScale;
+            // +1 for the "Plugins in source" caption row; 2px inter-row spacing matches the scroll's VLG spacing.
+            importSidebarPluginChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
         }
 
         // Skins the pooled rows from the already-enumerated entries; no atom re-parse (the toggle path uses this).
@@ -579,7 +630,7 @@ namespace VPB
             Text t = row.GetComponentInChildren<Text>();
             if (t != null) t.text = text;
             Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ColorCategory : ColorInactiveRow;
+            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -598,10 +649,32 @@ namespace VPB
             RefreshApplyButtonEnabled();
         }
 
+        // Check every source plugin (import all). Operates on the enumerated entries so it covers rows beyond the
+        // visible pool too. The selection sig is left intact so a later source-atom change still re-seeds normally.
+        private void ImportSidebarSelectAllPlugins()
+        {
+            importSidebarSelectedPluginKeys.Clear();
+            foreach (ImportPluginEntry e in importSidebarPluginEntries) importSidebarSelectedPluginKeys.Add(e.Key);
+            RenderPluginChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        // Uncheck every source plugin (exclude all). With the gate on, an empty selection imports no plugins.
+        private void ImportSidebarClearAllPlugins()
+        {
+            importSidebarSelectedPluginKeys.Clear();
+            RenderPluginChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
         private List<ImportPluginEntry> BuildSourcePluginEntries()
         {
             var result = new List<ImportPluginEntry>();
-            if (importSidebarSourceScene == null) return result;
+            // Match BuildPresetJSONForCurrentSelection's data dependency: it can slice the atom straight from the
+            // in-memory scene (cache-miss path) with no FileEntry. Guarding on importSidebarSourceScene alone made
+            // the picker return empty (no rows) even while the "Plugins (N)" chip — which reads the same preset —
+            // counted plugins. Bail only when there is genuinely no source to read.
+            if (importSidebarSourceScene == null && importSidebarLoadedSceneJSON == null) return result;
             JSONClass preset = BuildPresetJSONForCurrentSelection();
             JSONArray storables = (preset != null && preset["storables"] != null) ? preset["storables"].AsArray : null;
             if (storables == null) return result;

@@ -188,6 +188,15 @@ namespace VPB
         private void TryRestoreImportSidebarOpenFromGlobalPref(bool allowRestore)
         {
             if (!allowRestore || importSidebarOpenIntent || importSidebarOpenIntentLoaded) return;
+            // An explicitly configured default side panel (e.g. Category) wins over the transient
+            // last-session open state: don't auto-reopen the import sidebar on launch just because it
+            // happened to be open when the app last closed. (Config default = Import is already handled
+            // by ApplySidePanelDefaultsFromConfig, which would have set importSidebarOpenIntent above.)
+            if (ConfigSidePanelDefaultSuppressesImportRestore())
+            {
+                importSidebarOpenIntentLoaded = true;
+                return;
+            }
             JSONClass pp = VPBConfig.Instance != null ? VPBConfig.Instance.ImportSidebarPrefs : null;
             importSidebarOpenIntent = PrefBool(pp, "open", false);
             importSidebarOpenIntentLoaded = true;
@@ -195,6 +204,22 @@ namespace VPB
             {
                 try { RefreshImportSidebarCategoryGate(); } catch { }
             }
+        }
+
+        // True when the user has configured an explicit default side panel that is neither None nor
+        // Import. Such a choice should take precedence over the persisted last-session import-open flag.
+        private static bool ConfigSidePanelDefaultSuppressesImportRestore()
+        {
+            if (VPBConfig.Instance == null) return false;
+            return IsExplicitNonImportSidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel)
+                || IsExplicitNonImportSidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
+        }
+
+        private static bool IsExplicitNonImportSidePanel(string raw)
+        {
+            string v = VPBConfig.NormalizeGallerySidePanel(raw);
+            return !string.Equals(v, "None", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(v, "Import", StringComparison.OrdinalIgnoreCase);
         }
 
         internal void CopyImportSidebarStateFrom(GalleryPanel source)
