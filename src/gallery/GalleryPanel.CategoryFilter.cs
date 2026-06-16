@@ -57,7 +57,7 @@ namespace VPB
 
             if (_categoryFilterStates.TryGetValue(key, out state) && state != null)
             {
-                ApplyCategoryFilterState(state);
+                ApplyCategoryFilterState(state, restoreUserTagFilter: false);
                 return;
             }
 
@@ -68,7 +68,7 @@ namespace VPB
                 if (state != null)
                 {
                     _categoryFilterStates[key] = state;
-                    ApplyCategoryFilterState(state);
+                    ApplyCategoryFilterState(state, restoreUserTagFilter: false);
                     return;
                 }
             }
@@ -76,7 +76,13 @@ namespace VPB
             ClearFiltersForNewCategory();
         }
 
-        private void ApplyCategoryFilterState(CategoryFilterState state)
+        /// <param name="restoreUserTagFilter">
+        /// When false (auto-persisted per-category state, e.g. after restart), the user-tag availability
+        /// filter (FilterByTags / FilterUntagged + selected tags) is NOT restored — it resets to the default
+        /// non-filtering selection so re-entering a category never silently hides scenes by tag (issue #64).
+        /// Explicit Quick Filter presets pass true so a deliberately saved tag filter is honored.
+        /// </param>
+        private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true)
         {
             // Set search fields directly — RefreshFiles (called after Show returns) will build
             // currentFilteredFiles using these terms. topSearchBaseFiles must be null so that
@@ -97,15 +103,22 @@ namespace VPB
                 foreach (var t in state.Tags) activeTags.Add(t);
 
             activeUserTags.Clear();
-            if (state.UserTags != null)
-                foreach (var t in state.UserTags)
-                {
-                    string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
-                    if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
-                }
-            int utfm = state.UserTagAvailFilterMode;
-            if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
-            _userTagAvailMode = (UserTagAvailMode)utfm;
+            if (restoreUserTagFilter)
+            {
+                if (state.UserTags != null)
+                    foreach (var t in state.UserTags)
+                    {
+                        string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                        if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
+                    }
+                int utfm = state.UserTagAvailFilterMode;
+                if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
+                _userTagAvailMode = (UserTagAvailMode)utfm;
+            }
+            else
+            {
+                _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+            }
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;

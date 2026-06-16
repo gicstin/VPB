@@ -2197,6 +2197,7 @@ namespace VPB
                 sb.Append(creatorFilter ?? "").Append('\u001E');
                 sb.Append(tagFilter ?? "").Append('\u001E');
                 sb.Append(isRatingSortToggleEnabled ? '1' : '0').Append('\u001E');
+                sb.Append((VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) ? '1' : '0').Append('\u001E');
                 if (activeTags != null && activeTags.Count > 0)
                 {
                     var arr = new List<string>(activeTags);

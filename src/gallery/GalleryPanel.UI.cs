@@ -2125,6 +2125,7 @@ namespace VPB
             VPBConfig.Instance.GalleryShowHiddenPackages = !VPBConfig.Instance.GalleryShowHiddenPackages;
             VPBConfig.Instance.Save();
             UpdateFooterShowHiddenPackagesState();
+            GalleryFileListSnapshotCache.InvalidateAll();
             try
             {
                 if (TryFastApplyGalleryShowHiddenToggle(true))
