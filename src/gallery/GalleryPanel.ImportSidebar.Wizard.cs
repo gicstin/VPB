@@ -150,7 +150,7 @@ namespace VPB
 
             RefreshImportWizardStepHeaderGlyphs();
             RefreshTypeRadioVisibility();
-            OnImportSidebarTypeChosen(importSidebarPresetType);
+            OnImportSidebarTypeChosen(importSidebarPresetType, true);
             RefreshSourceTypeAvailability();
         }
 

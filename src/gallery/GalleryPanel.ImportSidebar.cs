@@ -28,8 +28,13 @@ namespace VPB
         private string importSidebarSourceAtomId;
         private Atom importSidebarTargetAtom;
         private VpbResourceType importSidebarPresetType = VpbResourceType.Appearance;
-        // Selected resource types. Type cells toggle in/out freely; Apply iterates every type in this set.
+        // Selected resource types. Apply iterates every type in this set.
         private readonly HashSet<VpbResourceType> importSidebarMultiSelectedTypes = new HashSet<VpbResourceType>();
+        // User-toggleable (VR-friendly on-screen toggle): true = chips accumulate (multi-select),
+        // false = each click selects only the clicked type. Persisted in ImportSidebarPrefs.
+        private bool importSidebarMultiSelectTypes = true;
+        private UnityEngine.UI.Image importSidebarMultiToggleBg;
+        private UnityEngine.UI.Text importSidebarMultiToggleLabel;
 
         // Per-type option panels keyed by VpbResourceType. Populated in Task 8 (Options.cs).
         private readonly Dictionary<VpbResourceType, GameObject> importSidebarOptionPanels
@@ -265,6 +270,7 @@ namespace VPB
             importSidebarImportLinkedCUAs         = PrefBool(p, "importLinkedCUAs", importSidebarImportLinkedCUAs);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
             importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
+            importSidebarMultiSelectTypes         = PrefBool(p, "multiSelectTypes", importSidebarMultiSelectTypes);
             // Open intent is per-pane; global "open" is restored only on the primary pane at init.
             importSidebarSubToggles.IncludeAppearanceMorphs   = PrefBool(p, "incAppearanceMorphs", importSidebarSubToggles.IncludeAppearanceMorphs);
             importSidebarSubToggles.IncludePhysicalPoseMorphs = PrefBool(p, "incPhysicalPoseMorphs", importSidebarSubToggles.IncludePhysicalPoseMorphs);
@@ -294,6 +300,7 @@ namespace VPB
             p["importLinkedCUAs"].AsBool = importSidebarImportLinkedCUAs;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
             p["pluginsMergeSingle"].AsBool = importSidebarPluginsMergeSingle;
+            p["multiSelectTypes"].AsBool = importSidebarMultiSelectTypes;
             p["open"].AsBool = importSidebarOpenIntent;
             p["incAppearanceMorphs"].AsBool = importSidebarSubToggles.IncludeAppearanceMorphs;
             p["incPhysicalPoseMorphs"].AsBool = importSidebarSubToggles.IncludePhysicalPoseMorphs;

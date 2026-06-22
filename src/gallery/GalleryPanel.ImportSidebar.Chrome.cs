@@ -12,6 +12,9 @@ namespace VPB
         // commands, not selectable chips. Faint green = add, faint red = clear.
         private static readonly Color ImportSidebarSelectAllBg = new Color(0.20f, 0.34f, 0.26f, 1f);
         private static readonly Color ImportSidebarClearAllBg = new Color(0.36f, 0.24f, 0.24f, 1f);
+        // Multi-select toggle: amber when on (chips accumulate), muted when off (single-select).
+        private static readonly Color ImportSidebarMultiToggleBg = new Color(0.44f, 0.30f, 0.12f, 1f);
+        private static readonly Color ImportSidebarMultiToggleOffBg = new Color(0.26f, 0.24f, 0.22f, 1f);
         // Per-type option group caption: blue-tinted to tie it to the matching selected (blue) type chip.
         private static readonly Color ImportSidebarGroupHeaderBg = new Color(0.16f, 0.30f, 0.46f, 1f);
         // Type chip with nothing to import from the source: visibly recessed + greyed, non-interactable.

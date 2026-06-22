@@ -77,13 +77,12 @@ namespace VPB
 
             RefreshTypeRadioVisibility();
             // Restore the persisted last-used type (LoadImportSidebarPrefs ran before the panels were built).
-            OnImportSidebarTypeChosen(importSidebarPresetType);
+            OnImportSidebarTypeChosen(importSidebarPresetType, true);
         }
 
         private void BuildImportSidebarTypeRadio(Transform parent)
         {
-            // Bulk-select controls: Select All / Clear All. Type cells always toggle, so any number of
-            // resource types can be picked at once without a separate "multi" mode.
+            // Bulk-select controls: Select All / Clear All / Multi (chips accumulate when on, single-select when off).
             GameObject bulkRow = new GameObject("BulkSelectRow");
             bulkRow.transform.SetParent(parent, false);
             LayoutElement bulkLe = bulkRow.AddComponent<LayoutElement>();
@@ -104,6 +103,13 @@ namespace VPB
                 VPBTranslation.T("gallery.import.clear_all_types", "Clear All"),
                 "gallery.import.clear_all_tip", "Deselect every resource type",
                 ImportSidebarClearAllBg, ImportSidebarClearAllTypes);
+            GameObject multiBtn = BuildImportSidebarBulkButton(bulkRow.transform,
+                "Multi",
+                "gallery.import.multi_select_tip", "When on, type chips accumulate; when off, each click picks one",
+                ImportSidebarMultiToggleBg, OnImportSidebarMultiSelectClicked);
+            importSidebarMultiToggleBg = multiBtn.GetComponent<Image>();
+            importSidebarMultiToggleLabel = multiBtn.GetComponentInChildren<Text>();
+            RefreshImportSidebarMultiToggleVisual();
 
             LayoutElement bulkLeC = bulkLe;
             innerPaneScaleActions.Add(s => {
@@ -160,14 +166,14 @@ namespace VPB
                 innerPaneScaleActions.Add(s => ApplyScaledFont(typeLabelCaptured, ImportSidebarBaseFontSize, s));
 
                 VpbResourceType captured = t;
-                b.onClick.AddListener(() => OnImportSidebarTypeChosen(captured));
+                b.onClick.AddListener(() => OnImportSidebarTypeChosen(captured, importSidebarMultiSelectTypes));
 
                 importSidebarTypeRadioButtons[t] = row;
                 importSidebarTypeRadioLabels[t] = typeLabel;
             }
         }
 
-        private void BuildImportSidebarBulkButton(Transform parent, string label,
+        private GameObject BuildImportSidebarBulkButton(Transform parent, string label,
             string tipKey, string tipDefault, Color bgColor, UnityEngine.Events.UnityAction onClick)
         {
             GameObject btnGO = new GameObject("BulkBtn_" + label);
@@ -183,6 +189,7 @@ namespace VPB
             AddTooltip(btnGO, tipKey, tipDefault);
             Text txtCaptured = txt;
             innerPaneScaleActions.Add(s => ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s));
+            return btnGO;
         }
 
         // Short label for the current type selection: the single type's name, an "N types" count for several,
@@ -833,13 +840,45 @@ namespace VPB
             innerPaneScaleActions.Add(s => ApplyScaledFont(labelCaptured, ImportSidebarBaseFontSize, s));
         }
 
-        private void OnImportSidebarTypeChosen(VpbResourceType t)
+        private void OnImportSidebarMultiSelectClicked()
         {
-            // Clicking a type cell always toggles it in/out of the selection.
-            if (importSidebarMultiSelectedTypes.Contains(t))
-                importSidebarMultiSelectedTypes.Remove(t);
+            importSidebarMultiSelectTypes = !importSidebarMultiSelectTypes;
+            // Leaving multi-select with several types picked: collapse to the active (last-clicked) type.
+            if (!importSidebarMultiSelectTypes && importSidebarMultiSelectedTypes.Count > 1)
+            {
+                importSidebarMultiSelectedTypes.Clear();
+                if (IsImportTypeAvailable(importSidebarPresetType))
+                    importSidebarMultiSelectedTypes.Add(importSidebarPresetType);
+                ApplyImportSidebarTypeSelectionChange();
+            }
+            RefreshImportSidebarMultiToggleVisual();
+            if (importSidebarBuilt) SaveImportSidebarPrefs();
+        }
+
+        private void RefreshImportSidebarMultiToggleVisual()
+        {
+            if (importSidebarMultiToggleLabel != null)
+                importSidebarMultiToggleLabel.text = importSidebarMultiSelectTypes ? "Multi: On" : "Multi: Off";
+            if (importSidebarMultiToggleBg != null)
+                importSidebarMultiToggleBg.color = importSidebarMultiSelectTypes
+                    ? ImportSidebarMultiToggleBg : ImportSidebarMultiToggleOffBg;
+        }
+
+        private void OnImportSidebarTypeChosen(VpbResourceType t, bool additive)
+        {
+            // Plain click selects only this type; Ctrl-click (additive) toggles it in/out for multi-select.
+            if (additive)
+            {
+                if (importSidebarMultiSelectedTypes.Contains(t))
+                    importSidebarMultiSelectedTypes.Remove(t);
+                else
+                    importSidebarMultiSelectedTypes.Add(t);
+            }
             else
+            {
+                importSidebarMultiSelectedTypes.Clear();
                 importSidebarMultiSelectedTypes.Add(t);
+            }
             // Last-clicked type drives which option panel is highlighted/scrolled to.
             importSidebarPresetType = t;
 
