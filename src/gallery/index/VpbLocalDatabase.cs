@@ -2691,6 +2691,16 @@ namespace VPB
             }
         }
 
+        // pkg_inv_sig is "count:hash"; the count is the package total the signature was stamped for.
+        static bool TryParseInventorySignatureCount(string sig, out int count)
+        {
+            count = 0;
+            if (string.IsNullOrEmpty(sig)) return false;
+            int colon = sig.IndexOf(':');
+            string head = colon >= 0 ? sig.Substring(0, colon) : sig;
+            return int.TryParse(head, out count);
+        }
+
         private static string GetCachedPackageInventorySignature(long scanBin, Dictionary<string, VarPackage> packagesByUid)
         {
             int count = packagesByUid != null ? packagesByUid.Count : 0;
@@ -2851,6 +2861,14 @@ namespace VPB
                     {
                         if (stPkg.Step() == VpbSqlite3.SqliteRow)
                             int.TryParse(stPkg.ColumnText(0), out pkgCount);
+                    }
+                    // Signature counts the live set; an incremental update only bodies its delta, so a dropped
+                    // delta over-reports the count here. Trusting it would skip the rebuild on every restart.
+                    int sigCount;
+                    if (TryParseInventorySignatureCount(metaInv, out sigCount) && sigCount != pkgCount)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: inv_sig count=" + sigCount + " != pkg rows=" + pkgCount); } catch { }
+                        return false;
                     }
                     int liveCount = 0;
                     try
@@ -3227,6 +3245,12 @@ namespace VPB
                     }
                     else
                     {
+                        // A stored signature that counts more packages than the body has rows means an earlier
+                        // incremental stamped a full-set count over a short delta write; rebuild to reconcile.
+                        int invSigCount;
+                        if (TryParseInventorySignatureCount(MetaGet(conn, "pkg_inv_sig"), out invSigCount)
+                            && invSigCount != pkgCount)
+                            return true;
                         int liveCount = 0;
                         lock (FileManager.packagesLock)
                         {
