@@ -164,12 +164,24 @@ namespace VPB
         private RemoveModeHighlight _removeHighlight;
         private UnityEngine.Object _removeHighlightedIdentity;
 
-        // Cache of a garment wrap's triangle index buffer (topology is constant; the vertices that
-        // those indices point at move every frame, so vertices are re-read, triangles are not).
-        private readonly Dictionary<DAZSkinWrap, int[]> _wrapTriCache = new Dictionary<DAZSkinWrap, int[]>();
-        // Reused vertex scratch buffer so re-reading a garment's live world-space verts every frame
-        // does not allocate (Mesh.GetVertices fills this in place).
-        private readonly List<Vector3> _wrapVertBuf = new List<Vector3>(8192);
+        // Baked world-space geometry for one garment wrap, captured once per remove-mode session.
+        // Remove mode freezes all animation + physics on enter, so the garment verts are static for
+        // the whole session; recomputing them (UpdateVerts), re-reading them, and rebuilding their
+        // AABB every frame was the dominant per-frame cost. We bake them once and only re-run the
+        // (ray-dependent) triangle intersection each frame.
+        private sealed class WrapGeom
+        {
+            public DAZDynamicItem item;
+            public Vector3[] verts;
+            public int[] tris;
+            public Vector3 min;
+            public Vector3 max;
+        }
+
+        // Per body atom: its baked garment geometry. Built lazily on first hover and reused every
+        // frame while the scene is frozen; cleared on enter/exit and after any removal so a changed
+        // garment set is re-baked exactly once.
+        private readonly Dictionary<Atom, List<WrapGeom>> _wrapGeomCache = new Dictionary<Atom, List<WrapGeom>>();
 
         // Side buttons (for square-chrome sizing) + their outline and icon image (recolored by state).
         private GameObject rightRemoveModeSideBtn;
@@ -209,6 +221,7 @@ namespace VPB
             _removeModeOwner = this;
             if (_removeHighlight == null) _removeHighlight = new RemoveModeHighlight();
             _removeHighlightedIdentity = null;
+            _wrapGeomCache.Clear();
             RemoveModeFreezeAnimation(true);
             RemoveModeUpdateButtonVisual();
         }
@@ -217,7 +230,7 @@ namespace VPB
         {
             _removeModeActive = false;
             if (ReferenceEquals(_removeModeOwner, this)) _removeModeOwner = null;
-            _wrapTriCache.Clear();
+            _wrapGeomCache.Clear();
             RemoveModeClearHighlight();
             RemoveModeClearHelp();
             RemoveModeHidePopup();
@@ -583,12 +596,51 @@ namespace VPB
             Vector3 o = ray.origin;
             Vector3 d = ray.direction.normalized;
 
-            DAZSkinWrap[] wraps;
-            try { wraps = bodyAtom.GetComponentsInChildren<DAZSkinWrap>(false); } catch { wraps = null; }
-            if (wraps == null || wraps.Length == 0) return null;
+            List<WrapGeom> geoms = GetGarmentGeom(bodyAtom);
+            if (geoms == null || geoms.Count == 0) return null;
 
             DAZDynamicItem best = null;
             float bestT = float.MaxValue;
+
+            for (int g = 0; g < geoms.Count; g++)
+            {
+                WrapGeom geom = geoms[g];
+                if (geom == null || geom.verts == null || geom.tris == null) continue;
+
+                // A garment removed (or undone) mid-session changes which items are live; skip any
+                // baked geometry whose item is no longer active rather than re-bake every frame.
+                bool active = false;
+                try { active = geom.item != null && geom.item.active; } catch { active = false; }
+                if (!active) continue;
+
+                if (!RayHitsAabb(o, d, geom.min, geom.max)) continue;
+
+                if (RayMeshNearest(o, d, geom.verts, geom.tris, out float t) && t < bestT)
+                {
+                    bestT = t;
+                    best = geom.item;
+                }
+            }
+
+            return best;
+        }
+
+        // Bakes (and caches) the world-space garment geometry for a body atom. Remove mode freezes
+        // animation + physics, so this is computed once and reused every frame; the expensive
+        // skinning recompute (UpdateVerts), vertex read, and AABB build run here instead of per
+        // frame. The triangle topology is captured alongside the verts and the AABB is precomputed
+        // for the per-frame ray fast-reject.
+        private List<WrapGeom> GetGarmentGeom(Atom bodyAtom)
+        {
+            List<WrapGeom> geoms;
+            if (_wrapGeomCache.TryGetValue(bodyAtom, out geoms) && geoms != null) return geoms;
+
+            geoms = new List<WrapGeom>();
+            _wrapGeomCache[bodyAtom] = geoms;
+
+            DAZSkinWrap[] wraps;
+            try { wraps = bodyAtom.GetComponentsInChildren<DAZSkinWrap>(false); } catch { wraps = null; }
+            if (wraps == null || wraps.Length == 0) return geoms;
 
             for (int w = 0; w < wraps.Length; w++)
             {
@@ -613,45 +665,29 @@ namespace VPB
                 try { m = wrap.Mesh; } catch { }
                 if (m == null) continue;
 
-                int[] tris = GetWrapTriangles(wrap, m);
+                int[] tris = null;
+                try { tris = m.triangles; } catch { }
                 if (tris == null || tris.Length < 3) continue;
 
-                try { m.GetVertices(_wrapVertBuf); } catch { continue; }
-                int vcount = _wrapVertBuf.Count;
-                if (vcount < 3) continue;
+                Vector3[] verts = null;
+                try { verts = m.vertices; } catch { }
+                if (verts == null || verts.Length < 3) continue;
 
-                // Ray/AABB fast reject (mesh.bounds is junk in play mode, so build it from the live
-                // verts in one pass) — skips full triangle scans for garments the ray never nears.
-                Vector3 mn = _wrapVertBuf[0], mx = mn;
-                for (int i = 1; i < vcount; i++)
+                // Build the AABB once from the (now live, world-space) verts; mesh.bounds is junk in
+                // play mode so we cannot use it.
+                Vector3 mn = verts[0], mx = mn;
+                for (int i = 1; i < verts.Length; i++)
                 {
-                    Vector3 p = _wrapVertBuf[i];
+                    Vector3 p = verts[i];
                     if (p.x < mn.x) mn.x = p.x; else if (p.x > mx.x) mx.x = p.x;
                     if (p.y < mn.y) mn.y = p.y; else if (p.y > mx.y) mx.y = p.y;
                     if (p.z < mn.z) mn.z = p.z; else if (p.z > mx.z) mx.z = p.z;
                 }
-                if (!RayHitsAabb(o, d, mn, mx)) continue;
 
-                if (RayMeshNearest(o, d, _wrapVertBuf, tris, out float t) && t < bestT)
-                {
-                    bestT = t;
-                    best = item;
-                }
+                geoms.Add(new WrapGeom { item = item, verts = verts, tris = tris, min = mn, max = mx });
             }
 
-            return best;
-        }
-
-        // Cached flattened triangle index buffer (all submeshes) for a garment wrap's mesh. Topology
-        // is constant for the life of the wrap; only the vertices it indexes move each frame.
-        private int[] GetWrapTriangles(DAZSkinWrap wrap, Mesh m)
-        {
-            int[] cached;
-            if (_wrapTriCache.TryGetValue(wrap, out cached) && cached != null) return cached;
-            int[] tris = null;
-            try { tris = m.triangles; } catch { }
-            _wrapTriCache[wrap] = tris;
-            return tris;
+            return geoms;
         }
 
         // Slab ray/AABB test; d is normalized, hits accepted on the forward half-line [0, +inf).
@@ -683,11 +719,11 @@ namespace VPB
         }
 
         // Nearest double-sided ray/triangle hit over a mesh (Moller-Trumbore). t is in world units.
-        private static bool RayMeshNearest(Vector3 o, Vector3 d, List<Vector3> verts, int[] tris, out float bestT)
+        private static bool RayMeshNearest(Vector3 o, Vector3 d, Vector3[] verts, int[] tris, out float bestT)
         {
             bestT = float.MaxValue;
             bool found = false;
-            int vcount = verts.Count;
+            int vcount = verts.Length;
             const float EPS = 1e-7f;
             for (int i = 0; i + 2 < tris.Length; i += 3)
             {
@@ -721,6 +757,10 @@ namespace VPB
         private void RemoveModeExecuteRemoval(RemoveTarget target)
         {
             if (target == null) return;
+
+            // Any removal changes which garments/atoms are live, so drop the baked geometry; the
+            // next hover re-bakes the new set exactly once.
+            _wrapGeomCache.Clear();
 
             if (target.kind == RemoveTargetKind.ClothingItem && target.selector != null)
             {
