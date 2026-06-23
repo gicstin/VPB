@@ -192,6 +192,7 @@ namespace VPB
             public bool EnableDragDrop;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
+            public bool VerticalMoveKeysEnabled;
             public bool RequireDragHoldBeforeMove;
             public float DragHoldThreshold;
             public float HoldToLaunchHoldSeconds;
@@ -550,6 +551,12 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.try_on_mode", "When ON, applying clothing/hair/skin/morphs/appearance/pose/plugin presets is non-destructive: a Keep / Compare (hold to peek) / Revert bar appears so you can preview before committing. Works in desktop and VR."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.TryOnModeEnabled,
                 SetBool = v => { VPBConfig.Instance.TryOnModeEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "interaction.verticalMoveKeys", GroupKey = "interaction", Label = VPBTranslation.T("settings.vertical_move_keys", "Vertical move keys (E/C)"),
+                Tooltip = VPBTranslation.T("settings.tip.vertical_move_keys", "When ON, press E to move up and C to move down in the world, complementing WASD. Ignored while typing in a text field."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.VerticalMoveKeysEnabled,
+                SetBool = v => { VPBConfig.Instance.VerticalMoveKeysEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.drag_hold_threshold", "Hold duration (s)"),
@@ -1417,6 +1424,7 @@ namespace VPB
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
+                VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
                 RequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove,
                 DragHoldThreshold = VPBConfig.Instance.DragHoldThreshold,
                 HoldToLaunchHoldSeconds = VPBConfig.Instance.HoldToLaunchHoldSeconds,
@@ -2305,6 +2313,7 @@ namespace VPB
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
+            VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
             VPBConfig.Instance.RequireDragHoldBeforeMove = b.RequireDragHoldBeforeMove;
             VPBConfig.Instance.DragHoldThreshold = b.DragHoldThreshold;
             VPBConfig.Instance.HoldToLaunchHoldSeconds = b.HoldToLaunchHoldSeconds;

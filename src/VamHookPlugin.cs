@@ -798,6 +798,43 @@ namespace VPB
             return false;
         }
 
+        /// <summary>Normal vertical fly speed (m/s at worldScale 1) for the E/C navigation keys.</summary>
+        private const float VerticalMoveSpeed = 1.0f;
+        /// <summary>Fast vertical fly speed used while Shift is held.</summary>
+        private const float VerticalMoveSpeedFast = 2.0f;
+
+        /// <summary>
+        /// E = move up, C = move down. Translates the VaM navigation rig vertically so users can
+        /// gain/lose altitude with the keyboard the same way WASD moves horizontally. Universal
+        /// (desktop + VR), gated by <see cref="VPBConfig.VerticalMoveKeysEnabled"/> (ON by default).
+        /// </summary>
+        private void UpdateVerticalNavigationKeys()
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.VerticalMoveKeysEnabled) return;
+
+            var sc = SuperController.singleton;
+            if (sc == null || sc.navigationRig == null) return;
+
+            // Don't hijack text entry (E/C are letters) or modifier combos (e.g. Ctrl+C copy).
+            if (IsTypingInTextInput() || IsGalleryPluginHotkeyCaptureActive()) return;
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) return;
+            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) return;
+
+            int dir = 0;
+            if (Input.GetKey(KeyCode.E)) dir += 1;
+            if (Input.GetKey(KeyCode.C)) dir -= 1;
+            if (dir == 0) return;
+
+            float scale = 1f;
+            try { scale = sc.worldScale; } catch { }
+            if (scale <= 0f) scale = 1f;
+
+            bool fast = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            float speed = fast ? VerticalMoveSpeedFast : VerticalMoveSpeed;
+            float delta = dir * speed * scale * Time.unscaledDeltaTime;
+            sc.navigationRig.position += Vector3.up * delta;
+        }
+
         void Update()
         {
             VpbFrameRate.Tick();
@@ -919,6 +956,8 @@ namespace VPB
                     OpenHubBrowse();
                 }
             }
+
+            try { UpdateVerticalNavigationKeys(); } catch { }
 
             if (!m_Inited)
             {

@@ -488,6 +488,8 @@ namespace VPB
         public bool HoldToLaunchEnabled = false;
         /// <summary>Try-On Mode: apply presets non-destructively with a Keep/Compare/Revert bar.</summary>
         public bool TryOnModeEnabled = true;
+        /// <summary>When ON, the E/C keys move the navigation rig up/down in world (complements WASD). On by default.</summary>
+        public bool VerticalMoveKeysEnabled = true;
         /// <summary>When HoldToLaunch is enabled, drag&drop is forced off; this stores the prior setting for restore.</summary>
         public bool HoldToLaunchPrevEnableDragDrop = false;
         /// <summary>Seconds pointer must stay pressed on item before hold-to-launch fires (when HoldToLaunch is on).</summary>
@@ -1005,6 +1007,7 @@ namespace VPB
             SpringScrollButtonEnabled = true;
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = true;
+            VerticalMoveKeysEnabled = true;
             HoldToLaunchPrevEnableDragDrop = false;
             HoldToLaunchHoldSeconds = 1f;
             QuickMenuButtonsVersion = 1;
@@ -1286,6 +1289,7 @@ namespace VPB
                         if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
+                        if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
                         if (node["HoldToLaunchPrevEnableDragDrop"] != null) HoldToLaunchPrevEnableDragDrop = node["HoldToLaunchPrevEnableDragDrop"].AsBool;
                         if (node["HoldToLaunchHoldSeconds"] != null)
                             HoldToLaunchHoldSeconds = Mathf.Clamp(node["HoldToLaunchHoldSeconds"].AsFloat, 0.2f, 1f);
@@ -1626,6 +1630,7 @@ namespace VPB
                 node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
+                node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
                 node["HoldToLaunchPrevEnableDragDrop"].AsBool = HoldToLaunchPrevEnableDragDrop;
                 node["HoldToLaunchHoldSeconds"].AsFloat = Mathf.Clamp(HoldToLaunchHoldSeconds, 0.2f, 1f);
                 node["BaMigrationPromptDismissed"].AsBool = BaMigrationPromptDismissed;
