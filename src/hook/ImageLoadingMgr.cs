@@ -1175,6 +1175,27 @@ namespace VPB
 
                 if (qi.callback != null)
                 {
+                    // Scan-whitelist + on-demand registration: the image callback is deferred
+                    // until scene load finishes (DelayDoCallback) and the texture is often served
+                    // from VPB's own cache, so the source package may never have been registered in
+                    // VaM's FileManager. Plugins like MacGruber PostMagic enumerate sibling files in
+                    // their package directory (FileManagerSecure.GetFiles) inside this callback; if
+                    // the package isn't registered, VaM's GetFiles throws "non-existent path" and
+                    // aborts the plugin. Ensure the source package is live before invoking.
+                    if (!qi.isThumbnail)
+                    {
+                        try
+                        {
+                            if (ScanWhitelistManager.Instance != null && ScanWhitelistManager.Instance.IsEnabled)
+                            {
+                                string uid = VamOnDemandLoader.UidFromEntryPath(qi.imgPath);
+                                if (!string.IsNullOrEmpty(uid))
+                                    VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                            }
+                        }
+                        catch { }
+                    }
+
                     qi.callback(qi);
                     qi.callback = null;
                 }

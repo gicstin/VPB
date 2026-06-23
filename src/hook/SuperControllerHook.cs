@@ -513,6 +513,73 @@ namespace VPB
         {
             PatchFileExists(harmony);
             PatchProcessImage(harmony);
+            PatchGetFiles(harmony);
+        }
+
+        // VaM's FileManager.GetFiles THROWS "Attempted to get files at non-existent path" when the
+        // directory is not present in its registered (simulated) filesystem, instead of returning an
+        // empty array like standard .NET enumeration. With the scan whitelist enabled, package-content
+        // directories are only registered on demand, so plugins that enumerate a directory of a
+        // not-yet-registered package (e.g. MacGruber PostMagic's UserLUT enumerating its LUT folder
+        // inside a deferred image callback) crash the throw straight through their own callback.
+        //
+        // PREFIX: for a package-prefixed directory path, trigger on-demand registration so the
+        //         enumeration resolves to the real files.
+        // FINALIZER: swallow the "non-existent path" throw and return an empty array, matching the
+        //            standard semantics plugins assume, so an unregistered directory degrades to
+        //            "no files" instead of aborting the caller.
+        static void PatchGetFiles(Harmony harmony)
+        {
+            var fm = typeof(MVR.FileManagement.FileManager);
+            var prefix = AccessTools.Method(typeof(SuperControllerHook), nameof(PreGetFiles));
+            var finalizer = AccessTools.Method(typeof(SuperControllerHook), nameof(FinalizeGetFiles));
+            if (prefix == null && finalizer == null) return;
+            var candidates = new Type[][]
+            {
+                new[] { typeof(string), typeof(string), typeof(bool) },
+                new[] { typeof(string), typeof(string) },
+                new[] { typeof(string) }
+            };
+            foreach (var sig in candidates)
+            {
+                var m = AccessTools.Method(fm, "GetFiles", sig);
+                if (m == null) continue;
+                harmony.Patch(m,
+                    prefix: prefix != null ? new HarmonyMethod(prefix) : null,
+                    finalizer: finalizer != null ? new HarmonyMethod(finalizer) : null);
+                return;
+            }
+        }
+
+        public static void PreGetFiles(string __0)
+        {
+            try
+            {
+                if (VamOnDemandLoader.s_InOnDemand) return;
+                if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(__0);
+                if (string.IsNullOrEmpty(uid)) return;
+
+                VamOnDemandLoader.s_InOnDemand = true;
+                try { VamOnDemandLoader.TryRegisterPackageOnDemand(uid); }
+                finally { VamOnDemandLoader.s_InOnDemand = false; }
+            }
+            catch { }
+        }
+
+        public static Exception FinalizeGetFiles(Exception __exception, string __0, ref string[] __result)
+        {
+            if (__exception == null) return null;
+            // Only neutralize the specific "directory does not exist in the simulated filesystem"
+            // throw; let any other failure (IO errors, etc.) propagate unchanged.
+            string msg = __exception.Message ?? string.Empty;
+            if (msg.IndexOf("non-existent path", StringComparison.OrdinalIgnoreCase) < 0)
+                return __exception;
+
+            __result = new string[0];
+            LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
+            return null;
         }
 
         static void PatchFileExists(Harmony harmony)

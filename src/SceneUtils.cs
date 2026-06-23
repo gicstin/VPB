@@ -215,7 +215,7 @@ namespace VPB
         }
 
 
-        private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced)
+        private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced, string hostUid, ICollection<string> sceneDeps)
         {
             if (node == null) return;
 
@@ -224,16 +224,71 @@ namespace VPB
                 string v = jd.Value;
                 if (!string.IsNullOrEmpty(v))
                 {
+                    // Packaged scenes commonly reference their own assets via SELF:/ — once the scene
+                    // is extracted to a loose temp file there is no host-package context, so SELF:/
+                    // no longer resolves. Heal it to the concrete host package UID.
+                    if (!string.IsNullOrEmpty(hostUid)
+                        && v.Replace('\\', '/').StartsWith("SELF:/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string rest = v.Replace('\\', '/').Substring("SELF:/".Length);
+                        if (rest.StartsWith("/")) rest = rest.Substring(1);
+                        jd.Value = hostUid + ":/" + rest;
+                        replaced++;
+                        return;
+                    }
+
                     string candidate = v;
                     if (candidate.StartsWith("/")) candidate = candidate.Substring(1);
                     if (candidate.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase))
                     {
+                        // For a packaged scene, its own assets live in the host package. Resolve against
+                        // the known host package FIRST so the loose temp rewrite keeps a valid,
+                        // fully-qualified reference even when the global internal-path index is
+                        // incomplete (e.g. the package was scan-excluded and only registered on demand).
+                        if (!string.IsNullOrEmpty(hostUid))
+                        {
+                            string hostCandidate = hostUid + ":/" + candidate;
+                            try
+                            {
+                                if (VPB.FileManager.GetVarFileEntry(hostCandidate) != null)
+                                {
+                                    jd.Value = hostCandidate;
+                                    replaced++;
+                                    return;
+                                }
+                            }
+                            catch { }
+                        }
+
                         // A loose file on disk always wins over a VAR copy with the same internal path.
                         // The rewrite only heals references whose loose target is missing.
                         string loosePath = Path.Combine(Directory.GetCurrentDirectory(), candidate);
                         if (File.Exists(loosePath))
                         {
                             return;
+                        }
+
+                        // Prefer the scene's own declared dependencies over the global internal-path
+                        // index. The index is first-writer-wins, so a bare reference whose internal
+                        // path collides across multiple packages could otherwise resolve to an
+                        // unrelated package. The scene's dependency packages are the intended source.
+                        if (sceneDeps != null && sceneDeps.Count > 0)
+                        {
+                            foreach (string depUid in sceneDeps)
+                            {
+                                if (string.IsNullOrEmpty(depUid)) continue;
+                                string depCandidate = depUid + ":/" + candidate;
+                                try
+                                {
+                                    if (VPB.FileManager.GetVarFileEntry(depCandidate) != null)
+                                    {
+                                        jd.Value = depCandidate;
+                                        replaced++;
+                                        return;
+                                    }
+                                }
+                                catch { }
+                            }
                         }
 
                         if (VPB.FileManager.TryResolveCustomInternalPathToUidPath(candidate, out string uidPath) && !string.IsNullOrEmpty(uidPath))
@@ -254,7 +309,7 @@ namespace VPB
             {
                 for (int i = 0; i < ja.Count; i++)
                 {
-                    RewriteCustomPathsRecursive(ja[i], unresolved, ref replaced);
+                    RewriteCustomPathsRecursive(ja[i], unresolved, ref replaced, hostUid, sceneDeps);
                 }
                 return;
             }
@@ -263,7 +318,7 @@ namespace VPB
             {
                 foreach (string k in jc.Keys)
                 {
-                    RewriteCustomPathsRecursive(jc[k], unresolved, ref replaced);
+                    RewriteCustomPathsRecursive(jc[k], unresolved, ref replaced, hostUid, sceneDeps);
                 }
                 return;
             }
@@ -307,11 +362,38 @@ namespace VPB
 
             if (root == null) return false;
 
+            // When the scene is loaded out of a .var, its own assets resolve against the host
+            // package. Extract that UID (Author.Name[.ver]) so the rewrite can re-qualify the
+            // scene's own SELF:/ and bare Custom/ references — the loose temp file has no package
+            // context, so unqualified references would otherwise fail to load (e.g. assetbundles).
+            string hostUid = null;
+            try
+            {
+                string up = uidOrPath.Replace('\\', '/');
+                int ci = up.IndexOf(":/");
+                // ci > 1 excludes absolute Windows paths (E:/...); require a dot so it is a package UID.
+                if (ci > 1 && up.Substring(0, ci).IndexOf('.') > 0)
+                    hostUid = up.Substring(0, ci);
+            }
+            catch { hostUid = null; }
+
+            // Collect the scene's de-facto dependency packages from its fully-qualified
+            // (Author.Name.version) references. Bare Custom/ paths are resolved against these
+            // before the global first-writer-wins index, so a reference whose internal path
+            // collides across packages resolves to the package the scene actually depends on.
+            var sceneDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                DependencyExtractor.ScanAllStringsForDependencies(root, sceneDeps);
+                if (!string.IsNullOrEmpty(hostUid)) sceneDeps.Remove(hostUid);
+            }
+            catch { }
+
             int replaced = 0;
             var unresolved = new List<string>();
             try
             {
-                RewriteCustomPathsRecursive(root, unresolved, ref replaced);
+                RewriteCustomPathsRecursive(root, unresolved, ref replaced, hostUid, sceneDeps);
             }
             catch (Exception ex)
             {
