@@ -99,13 +99,6 @@ namespace VPB
                 CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
                 {
                     currentSettingsGroup = key;
-                    if (string.Equals(key, "categories", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (string.IsNullOrEmpty(currentSettingsCategoriesSubGroup)
-                            || (!string.Equals(currentSettingsCategoriesSubGroup, "options", StringComparison.OrdinalIgnoreCase)
-                                && !string.Equals(currentSettingsCategoriesSubGroup, "visibility", StringComparison.OrdinalIgnoreCase)))
-                            currentSettingsCategoriesSubGroup = "options";
-                    }
                     try { CancelPluginHotkeyCapture(false); } catch { }
                     UpdateTabs();
                     RefreshInternalSettingsListRows(true);
@@ -113,59 +106,8 @@ namespace VPB
             }
 
             AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
-            AddGroupRow("visuals", VPBTranslation.T("settings.header.visuals", "Visuals"));
-            AddGroupRow("follow", VPBTranslation.T("settings.header.follow_mode", "Follow Mode"));
-            AddGroupRow("performance", VPBTranslation.T("settings.group.performance", "Quality"));
-            AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
-            AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
-            AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
-            AddGroupRow("tags", VPBTranslation.T("settings.group.tags", "Tags"));
-            AddGroupRow("helpers", VPBTranslation.T("settings.group.side_tabs", "Helpers"));
-            AddGroupRow("categories", VPBTranslation.T("settings.group.categories", "Categories"));
-            AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
-            AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
-            AddGroupRow("scan_wl_border", VPBTranslation.T("settings.group.scan_wl_border", "Scan whitelist highlight"));
-            AddGroupRow("search", VPBTranslation.T("settings.header.search", "Search"));
-            AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
-            if (BaImporter.TryDetectBaDataDir(out _))
-                AddGroupRow("ba_migration", VPBTranslation.T("settings.group.ba_migration", "BrowserAssist Migration"));
-            AddGroupRow("updater", VPBTranslation.T("settings.group.updater", "Auto-Updater"));
-            AddGroupRow("plugin_hotkeys", VPBTranslation.T("settings.group.plugin_hotkeys", "Hotkeys"));
-            AddGroupRow("plugin_zstd", VPBTranslation.T("settings.group.plugin_zstd", "Texture cache"));
-            AddGroupRow("plugin_scan_whitelist", VPBTranslation.T("settings.group.plugin_scan_whitelist", "VaM scan whitelist"));
-            AddGroupRow("plugin_quickmenu", VPBTranslation.T("settings.group.plugin_quickmenu", "Quick Menu"));
-            AddGroupRow("plugin_bench", VPBTranslation.T("settings.group.plugin_bench", "Scene Load Test"));
-
-            BuildSettingsCategoriesSubTabs(container, trackedButtons, groupTabScale, groupActive, groupInactive, MatchFilter);
-        }
-
-        private void BuildSettingsCategoriesSubTabs(
-            GameObject container,
-            List<GameObject> trackedButtons,
-            float groupTabScale,
-            Color groupActive,
-            Color groupInactive,
-            Func<string, bool> matchFilter)
-        {
-            if (!string.Equals(currentSettingsGroup, "categories", StringComparison.OrdinalIgnoreCase))
-                return;
-
-            void AddSubRow(string key, string label)
-            {
-                if (!matchFilter(label)) return;
-                bool isActive = string.Equals(currentSettingsCategoriesSubGroup, key, StringComparison.OrdinalIgnoreCase);
-                CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
-                {
-                    if (string.Equals(currentSettingsCategoriesSubGroup, key, StringComparison.OrdinalIgnoreCase)) return;
-                    currentSettingsCategoriesSubGroup = key;
-                    try { CancelPluginHotkeyCapture(false); } catch { }
-                    UpdateTabs();
-                    RefreshInternalSettingsListRows(true);
-                }, trackedButtons, null, null, null, TextAnchor.MiddleLeft, 10f * groupTabScale, 8f * groupTabScale);
-            }
-
-            AddSubRow("options", VPBTranslation.T("settings.categories.sub.options", "General"));
-            AddSubRow("visibility", VPBTranslation.T("settings.categories.sub.visibility", "Side list"));
+            foreach (var g in GetSettingsGroupTabs())
+                AddGroupRow(g.Key, g.Label);
         }
 
         private void BuildRatingsTabs(GameObject container, List<GameObject> trackedButtons)

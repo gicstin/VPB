@@ -32,7 +32,9 @@ namespace VPB
         {
             public string Key;
             public string GroupKey;
-            /// <summary>When <see cref="GroupKey"/> is <c>categories</c>, filters rows under that settings tab.</summary>
+            /// <summary>Authoring sub-classifier. After <c>RemapSettingDefinitionGroups</c> this holds the
+            /// fine-grained group key (e.g. <c>hover</c>) used for behavioural special-cases; the legacy
+            /// <c>categories</c> group also uses it pre-remap to pick <c>options</c> vs <c>visibility</c>.</summary>
             public string SubGroupKey;
             public string Label;
             public string Tooltip;
@@ -80,6 +82,138 @@ namespace VPB
             _internalSettingsDefsCacheSig = int.MinValue;
         }
 
+        // ── Settings group consolidation ──
+        // Each row's original fine-grained group key is mapped onto one of a small set of broad
+        // groups shown as a single layer of top-level settings tabs (no sub-tabs). row[0] is the
+        // displayed group key; row[1..] are the fine keys folded into it, in authoring order.
+        private static readonly string[][] SettingsGroupStructure = new[]
+        {
+            new[] { "appearance",      "visuals", "hover" },
+            new[] { "grid_highlights", "grid", "scan_wl_border" },
+            new[] { "layout",          "follow", "desktop", "vr" },
+            new[] { "browsing",        "lists", "cat_general", "tags", "search" },
+            new[] { "cat_visibility",  "cat_visibility" },
+            new[] { "interaction",     "interaction", "plugin_hotkeys", "plugin_quickmenu" },
+            new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
+            new[] { "maintenance",     "helpers", "updater", "ba_migration", "plugin_bench" },
+        };
+
+        private static Dictionary<string, string> _settingsFineToGroup;
+
+        private static Dictionary<string, string> SettingsFineToGroup()
+        {
+            if (_settingsFineToGroup == null)
+            {
+                var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var row in SettingsGroupStructure)
+                    for (int i = 1; i < row.Length; i++) d[row[i]] = row[0];
+                _settingsFineToGroup = d;
+            }
+            return _settingsFineToGroup;
+        }
+
+        private sealed class SettingsGroupTab { public string Key; public string Label; }
+
+        private static string SettingsGroupLabel(string key)
+        {
+            switch (key)
+            {
+                case "appearance":      return VPBTranslation.T("settings.group.tab.appearance", "Appearance");
+                case "grid_highlights": return VPBTranslation.T("settings.group.tab.grid_highlights", "Grid & Highlights");
+                case "layout":          return VPBTranslation.T("settings.group.tab.layout", "Layout & Position");
+                case "browsing":        return VPBTranslation.T("settings.group.tab.browsing", "Browsing");
+                case "cat_visibility":  return VPBTranslation.T("settings.group.category_visibility", "Category visibility");
+                case "interaction":     return VPBTranslation.T("settings.group.tab.interaction", "Interaction");
+                case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
+                case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
+                default:                return key;
+            }
+        }
+
+        /// <summary>Ordered single-layer settings group tabs.</summary>
+        private List<SettingsGroupTab> GetSettingsGroupTabs()
+        {
+            var list = new List<SettingsGroupTab>(SettingsGroupStructure.Length);
+            foreach (var row in SettingsGroupStructure)
+                list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]) });
+            return list;
+        }
+
+#if DEBUG
+        // Fine keys already flagged as unmapped, so the dev warning fires at most once per key
+        // (the remap runs on every settings-defs cache rebuild).
+        private static HashSet<string> _settingsUnmappedFineWarned;
+#endif
+
+        /// <summary>Re-point each definition's GroupKey onto its single-layer display group. The fine
+        /// key is preserved in SubGroupKey (used only for the hover live-preview special-case). The
+        /// legacy two-level "categories" group is split into "cat_general" (-> Browsing) and
+        /// "cat_visibility" (-> its own tab). A missing/unmapped key falls back to "maintenance" so no
+        /// setting is ever left without a group; in DEBUG this is reported once per key so a new fine
+        /// group is added to <see cref="SettingsGroupStructure"/> rather than silently absorbed.</summary>
+        private void RemapSettingDefinitionGroups(List<InternalSettingDefinition> defs)
+        {
+            if (defs == null) return;
+            var map = SettingsFineToGroup();
+            for (int i = 0; i < defs.Count; i++)
+            {
+                var d = defs[i];
+                if (d == null) continue;
+
+                string fine;
+                if (string.IsNullOrEmpty(d.GroupKey))
+                    fine = "";
+                else if (string.Equals(d.GroupKey, "categories", StringComparison.OrdinalIgnoreCase))
+                    fine = string.Equals(d.SubGroupKey, "visibility", StringComparison.OrdinalIgnoreCase)
+                        ? "cat_visibility" : "cat_general";
+                else
+                    fine = d.GroupKey;
+
+                string group;
+                if (string.IsNullOrEmpty(fine) || !map.TryGetValue(fine, out group))
+                {
+                    group = "maintenance";
+#if DEBUG
+                    string warnKey = string.IsNullOrEmpty(fine) ? ("<empty:" + (d.Key ?? "?") + ">") : fine;
+                    if (_settingsUnmappedFineWarned == null)
+                        _settingsUnmappedFineWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (_settingsUnmappedFineWarned.Add(warnKey))
+                        Debug.LogWarning("VPB settings: definition '" + (d.Key ?? "?") + "' has group key '" + warnKey
+                            + "' with no entry in SettingsGroupStructure; routed to 'maintenance'. Add it to a group.");
+#endif
+                }
+                d.GroupKey = group;
+                d.SubGroupKey = fine;
+            }
+        }
+
+        /// <summary>Resolve a display group key, a fine key (e.g. "updater", "performance",
+        /// "ba_migration") or "all" into the active settings group tab.</summary>
+        private void SetActiveSettingsGroup(string key)
+        {
+            if (string.IsNullOrEmpty(key)) key = "all";
+            if (string.Equals(key, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                currentSettingsGroup = "all";
+                return;
+            }
+            foreach (var row in SettingsGroupStructure)
+            {
+                if (string.Equals(row[0], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentSettingsGroup = row[0];
+                    return;
+                }
+            }
+            string group;
+            if (SettingsFineToGroup().TryGetValue(key, out group))
+            {
+                currentSettingsGroup = group;
+                return;
+            }
+            currentSettingsGroup = "all";
+        }
+
         private int ComputeInternalSettingsDefsCacheSignature()
         {
             int sig = 0;
@@ -113,6 +247,7 @@ namespace VPB
                 return _internalSettingsDefsCache;
 
             var defs = BuildInternalSettingDefinitions();
+            RemapSettingDefinitionGroups(defs);
             var byKey = new Dictionary<string, InternalSettingDefinition>(defs.Count, StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < defs.Count; i++)
             {
@@ -1537,16 +1672,7 @@ namespace VPB
         /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
         public void OpenSettingsGroup(string groupKey)
         {
-            if (string.IsNullOrEmpty(groupKey))
-                groupKey = "all";
-            currentSettingsGroup = groupKey;
-            if (string.Equals(groupKey, "categories", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrEmpty(currentSettingsCategoriesSubGroup)
-                    || (!string.Equals(currentSettingsCategoriesSubGroup, "options", StringComparison.OrdinalIgnoreCase)
-                        && !string.Equals(currentSettingsCategoriesSubGroup, "visibility", StringComparison.OrdinalIgnoreCase)))
-                    currentSettingsCategoriesSubGroup = "options";
-            }
+            SetActiveSettingsGroup(groupKey);
             try { CancelPluginHotkeyCapture(false); } catch { }
             if (!IsSettingsPanelOpen())
                 OpenSettingsSideTab();
@@ -1685,15 +1811,6 @@ namespace VPB
             bool GroupAllowed(string group) =>
                 string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(currentSettingsGroup, group, StringComparison.OrdinalIgnoreCase);
-            bool SubGroupAllowed(InternalSettingDefinition def)
-            {
-                if (def == null) return true;
-                if (!string.Equals(def.GroupKey, "categories", StringComparison.OrdinalIgnoreCase)) return true;
-                if (string.Equals(currentSettingsGroup, "all", StringComparison.OrdinalIgnoreCase)) return true;
-                if (!string.Equals(currentSettingsGroup, "categories", StringComparison.OrdinalIgnoreCase)) return true;
-                string sub = string.IsNullOrEmpty(def.SubGroupKey) ? "options" : def.SubGroupKey;
-                return string.Equals(currentSettingsCategoriesSubGroup, sub, StringComparison.OrdinalIgnoreCase);
-            }
             bool FilterAllowed(string label) =>
                 string.IsNullOrEmpty(f) || (label ?? "").IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0;
             void Add(InternalSettingDefinition def)
@@ -1703,7 +1820,6 @@ namespace VPB
                 string group = def.GroupKey;
                 string label = def.Label;
                 if (!GroupAllowed(group)) return;
-                if (!SubGroupAllowed(def)) return;
                 if (!FilterAllowed(label)) return;
                 try
                 {
@@ -1780,7 +1896,7 @@ namespace VPB
             if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
             if (def.ControlType == InternalSettingControlType.Hotkey) return false;
             ApplyInternalSettingDefinition(def, secondary);
-            if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                 NotifyInternalSettingsHoverPreviewChanged();
 
             RefreshInternalSettingsListRows(true);
@@ -1924,7 +2040,7 @@ namespace VPB
                         if (t != null) t.text = (next ?? "").ToUpperInvariant();
                     }
                     catch { }
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                     RefreshInternalSettingsListRows(true);
                 });
@@ -2074,7 +2190,7 @@ namespace VPB
                     // would rebuild the settings list rows and destroy this slider mid-drag. Commit on release.
                     if (deferLive) return;
                     def.SetFloat(v);
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                 });
                 if (deferLive)
@@ -2083,7 +2199,7 @@ namespace VPB
                     commit.OnRelease = () =>
                     {
                         def.SetFloat(slider.value);
-                        if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                             NotifyInternalSettingsHoverPreviewChanged();
                         // UI-scale sliders defer until release; now that the gesture is over it is safe
                         // to rescale the gallery chrome and rebuild the settings rows so the new scale
@@ -2104,7 +2220,7 @@ namespace VPB
                     slider.value = parsed;
                     def.SetFloat(parsed);
                     input.text = parsed.ToString("F" + Math.Max(0, def.Decimals));
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                 });
                 return;
@@ -2494,7 +2610,7 @@ namespace VPB
                         catch { }
                         try
                         {
-                            currentSettingsGroup = "ba_migration";
+                            SetActiveSettingsGroup("ba_migration");
                             UpdateTabs();
                             RefreshInternalSettingsListRows(false);
                         }
