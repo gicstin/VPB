@@ -343,6 +343,11 @@ namespace VPB
 
         private IEnumerator FinalizeSceneSaveModeCoroutine(string path)
         {
+            // Capture the sidecar screenshot's on-disk timestamp before VaM writes the new one,
+            // so we can detect when the fresh .jpg actually lands (see invalidation step below).
+            string screenshotFull = TryGetSceneScreenshotFullPath(path);
+            long screenshotBaselineMtime = GetSceneScreenshotMtimeTicks(screenshotFull);
+
             float waitStart = Time.unscaledTime;
             const float waitForScreenshotStartMax = 12f;
             const float waitForScreenshotFinishMax = 45f;
@@ -379,11 +384,65 @@ namespace VPB
 
             _sceneSaveFinalizeCoroutine = null;
 
-            // Let VaM finish writing the .jpg before we invalidate caches and reload thumbs.
-            yield return new WaitForSecondsRealtime(0.2f);
+            // VaM writes the scene screenshot (.jpg) asynchronously, often a moment after the
+            // screenshot camera disables. Invalidating/reloading too early re-decodes the OLD
+            // image bytes and re-caches them, leaving a stale gallery thumbnail after an overwrite
+            // (issue #44). When a screenshot was captured, wait until the sidecar .jpg actually
+            // changes on disk before invalidating; otherwise fall back to a brief fixed delay.
+            if (_sceneSaveSawScreenshotCamera)
+                yield return WaitForSceneScreenshotWrittenCoroutine(screenshotFull, screenshotBaselineMtime);
+            else
+                yield return new WaitForSecondsRealtime(0.2f);
+
             // Restore gallery visibility first — RefreshVisibleGridVisualsOnly no-ops while hidden.
             EndSaveMode();
             InvalidateSceneSaveGalleryCaches(path);
+        }
+
+        private static string TryGetSceneScreenshotFullPath(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath)) return null;
+            try
+            {
+                string jpg = Path.ChangeExtension(scenePath.Replace('\\', '/'), ".jpg");
+                string full = FileManager.GetFullPath(jpg);
+                return string.IsNullOrEmpty(full) ? jpg : full;
+            }
+            catch { return null; }
+        }
+
+        private static long GetSceneScreenshotMtimeTicks(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath)) return 0;
+            try
+            {
+                if (File.Exists(fullPath)) return File.GetLastWriteTimeUtc(fullPath).ToFileTimeUtc();
+            }
+            catch { }
+            return 0;
+        }
+
+        private IEnumerator WaitForSceneScreenshotWrittenCoroutine(string jpgFullPath, long baselineMtime)
+        {
+            if (string.IsNullOrEmpty(jpgFullPath))
+            {
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield break;
+            }
+
+            const float maxWait = 5f;
+            float start = Time.unscaledTime;
+            while (Time.unscaledTime - start < maxWait)
+            {
+                long now = GetSceneScreenshotMtimeTicks(jpgFullPath);
+                if (now > 0 && now > baselineMtime)
+                {
+                    // Timestamp advanced; allow a brief moment for the file body to finish flushing.
+                    yield return new WaitForSecondsRealtime(0.15f);
+                    yield break;
+                }
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
         }
 
         private void InvalidateSceneSaveGalleryCaches(string scenePath)
