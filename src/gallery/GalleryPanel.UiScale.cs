@@ -173,6 +173,7 @@ namespace VPB
             try { ApplyCategoryQuickMenuRowsLayout(s); } catch { }
             try { ApplyTitleCreatorDropdownLayout(s); } catch { }
             try { RescaleTitleBarOverflowMenuInternal(s); } catch { }
+            try { RescaleSaveMenuPopupInternal(s); } catch { }
             if (tboxTargetMenuOpen)
             {
                 try { RebuildTboxTargetMenuOptions(); } catch { }

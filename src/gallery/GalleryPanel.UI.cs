@@ -205,33 +205,9 @@ namespace VPB
         private void ToggleSaveSubmenuFromSideButtons(bool? forceLeftSide = null)
         {
             bool useLeftSide = forceLeftSide ?? isFixedLocally;
-            CloseOtherSideIfSubmenu(useLeftSide);
-            if (useLeftSide)
-            {
-                if (leftActiveContent == ContentType.SavePresets)
-                {
-                    leftActiveContent = leftPrevActiveContent;
-                }
-                else
-                {
-                    leftPrevActiveContent = leftActiveContent;
-                    leftActiveContent = ContentType.SavePresets;
-                }
-            }
-            else
-            {
-                if (rightActiveContent == ContentType.SavePresets)
-                {
-                    rightActiveContent = rightPrevActiveContent;
-                }
-                else
-                {
-                    rightPrevActiveContent = rightActiveContent;
-                    rightActiveContent = ContentType.SavePresets;
-                }
-            }
-            UpdateLayout();
-            UpdateTabs();
+            // Unified save UX (issue #62): open the floating Save popup (same as the quick-menu
+            // assignable Save button) instead of the SavePresets side tab.
+            ToggleSaveMenuPopup(useLeftSide);
         }
 
         private void CloseSaveSubmenuUI()

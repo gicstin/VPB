@@ -2613,7 +2613,9 @@ namespace VPB
                 string label = (o != null && !string.IsNullOrEmpty(o.Label)) ? o.Label : ("Option " + (iCopy + 1));
                 bool enabled = (o != null) ? o.Enabled : false;
 
-                var btnGo = UI.CreateUIButton(m_QuickMenuAssignPopupRoot, w, h, label, font, 10f, y + gap * i, AnchorPresets.bottomLeft, () =>
+                // Bottom-up coordinates: place option 0 at the top and the Cancel row at the
+                // bottom so the visual order matches the gallery Save popup (issue #62).
+                var btnGo = UI.CreateUIButton(m_QuickMenuAssignPopupRoot, w, h, label, font, 10f, y + gap * (n - i), AnchorPresets.bottomLeft, () =>
                 {
                     try
                     {
@@ -2637,7 +2639,7 @@ namespace VPB
             }
 
             var closeBtn = UI.CreateUIButton(m_QuickMenuAssignPopupRoot, w, h,
-                VPBTranslation.T("hook.qmbutton.cancel", "Cancel"), font, 10f, y + gap * n, AnchorPresets.bottomLeft, () =>
+                VPBTranslation.T("hook.qmbutton.cancel", "Cancel"), font, 10f, y, AnchorPresets.bottomLeft, () =>
             {
                 QuickMenuHideAssignPopup();
             });
