@@ -2636,7 +2636,20 @@ namespace VPB
                 m_QuickMenuAssignPopupButtons.Add(btnGo);
             }
 
-            float totalH = 20f + n * gap + 10f;
+            var closeBtn = UI.CreateUIButton(m_QuickMenuAssignPopupRoot, w, h,
+                VPBTranslation.T("hook.qmbutton.cancel", "Cancel"), font, 10f, y + gap * n, AnchorPresets.bottomLeft, () =>
+            {
+                QuickMenuHideAssignPopup();
+            });
+            try
+            {
+                var img = closeBtn != null ? closeBtn.GetComponent<Image>() : null;
+                if (img != null) img.color = new Color(0.55f, 0.22f, 0.22f, 1f);
+            }
+            catch { }
+            m_QuickMenuAssignPopupButtons.Add(closeBtn);
+
+            float totalH = 20f + (n + 1) * gap + 10f;
             if (totalH < 120f) totalH = 120f;
             m_QuickMenuAssignPopupRT.sizeDelta = new Vector2(300f, totalH);
             try { UI.ApplyGalleryPaneHoverPolicy(m_QuickMenuAssignPopupRoot); } catch { }
