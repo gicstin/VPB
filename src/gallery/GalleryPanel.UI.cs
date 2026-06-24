@@ -397,6 +397,67 @@ namespace VPB
             // Restore gallery visibility first — RefreshVisibleGridVisualsOnly no-ops while hidden.
             EndSaveMode();
             InvalidateSceneSaveGalleryCaches(path);
+
+            // The displayed list still holds the pre-save FileEntry with a stale mtime, so Date
+            // modified/updated sorts don't float the just-saved scene to the top (issue #45).
+            // A full RefreshFiles doesn't help: the list is usually served straight from
+            // GalleryFileListSnapshotCache (which also skips the re-sort), so it returns the same
+            // stale order. Instead refresh the live entry's mtime from disk and re-sort in place.
+            // The snapshot cache shares these FileEntry references, so it stays coherent, and the
+            // SQLite loose-file cache self-heals on the next refresh (its signature keys off the
+            // directory mtime, which the save just bumped).
+            if (CurrentViewListsLocalScenes())
+            {
+                try { RefreshSavedLocalSceneEntryAndResort(path); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Issue #45: after an overwrite-save, update the displayed loose-scene entry's on-disk
+        /// timestamp and re-sort the current view in place so Date Updated/modified sorts reflect
+        /// the new save time without a full (cache-served, unsorted) rescan.
+        /// </summary>
+        private void RefreshSavedLocalSceneEntryAndResort(string scenePath)
+        {
+            if (string.IsNullOrEmpty(scenePath) || currentFilteredFiles == null) return;
+
+            string norm = FileManager.NormalizePath(scenePath).Replace('\\', '/');
+            SystemFileEntry match = null;
+            for (int i = 0; i < currentFilteredFiles.Count; i++)
+            {
+                var sfe = currentFilteredFiles[i] as SystemFileEntry;
+                if (sfe == null || string.IsNullOrEmpty(sfe.Path)) continue;
+                if (string.Equals(sfe.Path, norm, StringComparison.OrdinalIgnoreCase))
+                {
+                    match = sfe;
+                    break;
+                }
+            }
+            if (match == null) return;
+
+            match.RefreshLastWriteTimeFromDisk();
+
+            try
+            {
+                var st = GetSortState("Files");
+                if (st != null)
+                {
+                    ApplyFilesSortExclusiveFiltersInPlace(currentFilteredFiles, st.Type);
+                    if (activeContentType != ContentType.History)
+                        GallerySortManager.Instance.SortFiles(currentFilteredFiles, st);
+                }
+            }
+            catch { }
+
+            RefreshRecycleGridAfterFilterChange();
+        }
+
+        private bool CurrentViewListsLocalScenes()
+        {
+            string title = currentCategoryTitle;
+            if (string.IsNullOrEmpty(title) && titleText != null) title = titleText.text;
+            if (string.IsNullOrEmpty(title)) return false;
+            return title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string TryGetSceneScreenshotFullPath(string scenePath)
