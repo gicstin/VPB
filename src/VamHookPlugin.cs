@@ -226,6 +226,8 @@ namespace VPB
         }
         private bool m_PendingGc;
         private bool m_PendingAutoLoadRefresh;
+        private bool m_PendingTargetListRefresh;
+        private bool m_AtomAddedSubscribed;
         private int m_PendingVamCacheCount;
         private float m_ExpandedHeight;
         float m_UIScale = 1;
@@ -480,6 +482,32 @@ namespace VPB
             try { VpbPerfController.Initialize(); } catch { }
         }
 
+        // Lazily subscribe to atom-add once SuperController exists. Awake runs at BepInEx
+        // load time (before SuperController.singleton is set), so subscribing there is a no-op.
+        // Atom removal is already handled by the SuperController.RemoveAtom Harmony postfix.
+        private void EnsureAtomAddedSubscription()
+        {
+            if (m_AtomAddedSubscribed) return;
+            var sc = SuperController.singleton;
+            if (sc == null) return;
+            try
+            {
+                sc.onAtomAddedHandlers -= OnSceneAtomAdded;
+                sc.onAtomAddedHandlers += OnSceneAtomAdded;
+                m_AtomAddedSubscribed = true;
+            }
+            catch { }
+        }
+
+        // Coalesce same-frame atom-add bursts (e.g. importing several atoms) into a single
+        // deferred refresh. A newly added Person atom is not reported as person-like by
+        // GetAtoms() for a few frames, so we use the multi-frame coroutine refresh rather
+        // than a single next-frame pass.
+        private void OnSceneAtomAdded(Atom a)
+        {
+            m_PendingTargetListRefresh = true;
+        }
+
         private bool _perfMonSilencerPatched;
 
         internal void EnsurePerfMonSilencerPatched()
@@ -639,6 +667,14 @@ namespace VPB
         void OnDestroy()
         {
             try { VpbPerfController.Shutdown(); } catch { }
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc != null)
+                    sc.onAtomAddedHandlers -= OnSceneAtomAdded;
+                m_AtomAddedSubscribed = false;
+            }
+            catch { }
             try
             {
                 if (VPBConfig.Instance != null)
@@ -837,6 +873,7 @@ namespace VPB
 
         void Update()
         {
+            EnsureAtomAddedSubscription();
             VpbFrameRate.Tick();
             VpbPerfDiag.RefreshCache();
             VamStartupProfiler.RefreshCache();
@@ -870,6 +907,15 @@ namespace VPB
             {
                 m_PendingAutoLoadRefresh = false;
                 Refresh("autoload");
+            }
+
+            if (m_PendingTargetListRefresh)
+            {
+                m_PendingTargetListRefresh = false;
+                // The coroutine waits for IsLoadingScene to clear before refreshing, so it
+                // correctly handles both manual atom adds (which briefly set the loading flag
+                // while the character loads) and full scene loads.
+                try { SceneLoadingUtils.ScheduleGalleryTargetListRefresh(); } catch { }
             }
 
             float unscaledDt = Time.unscaledDeltaTime;
