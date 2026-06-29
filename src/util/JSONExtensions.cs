@@ -106,6 +106,56 @@ namespace VPB.src.util
         }
 
         /// <summary>
+        /// Rewrites self-referencing atom UIDs in a plugin slice: any string value equal to
+        /// <paramref name="fromUid"/> (a bare atom-reference like a trigger's <c>receiverAtom</c>),
+        /// or prefixed with <c>fromUid:</c> (compound <c>atom:storable</c> / <c>atom:control</c> links),
+        /// becomes the <paramref name="toUid"/> target atom. References to OTHER atoms are left alone.
+        /// In-place (no serialize/reparse) for the same heap-fragmentation reasons as the SELF: rewrite.
+        /// </summary>
+        public static void ReplaceAtomUidReferencesMutable(JSONNode root, string fromUid, string toUid)
+        {
+            if (root == null) return;
+            if (string.IsNullOrEmpty(fromUid) || string.IsNullOrEmpty(toUid)) return;
+            if (fromUid == toUid) return;
+            ReplaceAtomUidWalk(root, fromUid, toUid, fromUid + ":");
+        }
+
+        static void ReplaceAtomUidWalk(JSONNode node, string fromUid, string toUid, string fromPrefix)
+        {
+            if (node == null) return;
+
+            // JSONArray before JSONClass: some SimpleJSON forks derive JSONArray from JSONClass.
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    ReplaceAtomUidWalk(ja[i], fromUid, toUid, fromPrefix);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc != null)
+            {
+                foreach (string key in jc.Keys)
+                    ReplaceAtomUidWalk(jc[key], fromUid, toUid, fromPrefix);
+                return;
+            }
+
+            try
+            {
+                string v = node.Value;
+                if (string.IsNullOrEmpty(v)) return;
+                if (v == fromUid)
+                    node.Value = toUid;
+                else if (v.StartsWith(fromPrefix, StringComparison.Ordinal))
+                    node.Value = toUid + v.Substring(fromUid.Length);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
         /// Return the storable with the given id from the "storables" array, or null if not found
         /// </summary>
         /// <param name="id">The ID of the storable</param>

@@ -3732,10 +3732,12 @@ namespace VPB
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: format tag + category + extensions + search paths. The "sf3" tag marks resolved
-                        // disk roots + VaM local-scene listing rules (json + sibling jpg under Saves/scene).
+                        // Cache key: format tag + category + extensions + search paths. The "sf4" tag marks resolved
+                        // disk roots + local-scene listing rules (any json under Saves/scene; sibling jpg NOT required).
+                        // Bumped sf3->sf4 so caches built under the old "jpg required" rule regenerate and pick up
+                        // preview-less scenes.
                         var sbKey = new System.Text.StringBuilder(256);
-                        sbKey.Append("sf3|").Append(currentCategoryTitle ?? "").Append("|ext=");
+                        sbKey.Append("sf4|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
                         {
                             var ex = new List<string>(extensions);

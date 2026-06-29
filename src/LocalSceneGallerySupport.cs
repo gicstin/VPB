@@ -64,8 +64,10 @@ namespace VPB
         }
 
         /// <summary>
-        /// VaM <c>FileBrowser.CollectFlattenedFileEntries</c> (inGame + json): recursive scan under
-        /// <c>Saves/scene</c>, include <c>.json</c> only when sibling <c>.jpg</c> exists on disk.
+        /// Recursive listing rule for on-disk <c>Saves/scene</c> scenes: any real <c>.json</c> under
+        /// <c>Saves/scene</c> (incl. nested subfolders), excluding subscenes and VPB-generated scenes.
+        /// Unlike VaM's native browser, a sibling <c>.jpg</c> preview is NOT required \u2014 preview-less
+        /// scenes are listed and render with the gallery's thumbnail placeholder.
         /// </summary>
         public static bool IsVaMLocalSceneListingCandidate(string jsonPath)
         {
@@ -96,9 +98,9 @@ namespace VPB
             string lower = norm.ToLowerInvariant();
             if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
 
-            // Same sibling rule as VaM: strip ".json" (4 chars) and append "jpg".
-            string jpgPath = full.Substring(0, full.Length - 4) + "jpg";
-            return File.Exists(jpgPath);
+            // A sibling .jpg is intentionally NOT required: preview-less scenes (and scenes in subfolders
+            // that lack a preview) still list and fall back to the gallery thumbnail placeholder.
+            return true;
         }
 
         public static bool IsVpbGeneratedLocalScenePath(string path)

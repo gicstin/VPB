@@ -339,6 +339,10 @@ namespace VPB
                         () => importSidebarPluginsMergeSingle,
                         v => { importSidebarPluginsMergeSingle = v; RefreshPluginChecklist(); },
                         null);
+                    AddOptionToggle(panel.transform, "Migrate self-UID references",
+                        () => importSidebarMigratePluginUIDs,
+                        v => importSidebarMigratePluginUIDs = v,
+                        null);
                     BuildImportSidebarPluginChecklist(panel.transform);
                     break;
 
@@ -1132,6 +1136,16 @@ namespace VPB
                 }
                 presetJSON = pluginSlice;
                 mode = ClothingApplyMode.Replace;
+
+                // Issue #66: rewrite plugin self-references (e.g. trigger receiverAtom) from the source
+                // atom uid to the target atom uid so they don't break when the names differ. Opt-in.
+                if (importSidebarMigratePluginUIDs
+                    && importSidebarTargetAtom != null
+                    && !string.IsNullOrEmpty(importSidebarSourceAtomId))
+                {
+                    VPB.src.util.JSONExtensions.ReplaceAtomUidReferencesMutable(
+                        presetJSON, importSidebarSourceAtomId, importSidebarTargetAtom.uid);
+                }
             }
 
             // BreastPhysics / Glute / Plugins / Skin lack a dedicated dispatch case: route them through General
