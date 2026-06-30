@@ -156,6 +156,59 @@ namespace VPB.src.util
         }
 
         /// <summary>
+        /// Rewrites a plugin slot token in leaf string values: any value equal to <paramref name="fromKey"/>
+        /// (e.g. <c>plugin#0</c>), or prefixed with <c>fromKey_</c> / <c>fromKey:</c> (param storable ids like
+        /// <c>plugin#0_ClassName</c> and references), becomes <paramref name="toKey"/> with the remainder kept.
+        /// Boundary-checked (only <c>_</c> / <c>:</c> after the token) so <c>plugin#1</c> never matches
+        /// <c>plugin#10</c>. Dict KEYS are not touched here (the caller rebuilds those). In-place walk.
+        /// </summary>
+        public static void ReplacePluginKeyTokenMutable(JSONNode root, string fromKey, string toKey)
+        {
+            if (root == null) return;
+            if (string.IsNullOrEmpty(fromKey) || string.IsNullOrEmpty(toKey)) return;
+            if (fromKey == toKey) return;
+            ReplacePluginKeyTokenWalk(root, fromKey, toKey);
+        }
+
+        static void ReplacePluginKeyTokenWalk(JSONNode node, string fromKey, string toKey)
+        {
+            if (node == null) return;
+
+            // JSONArray before JSONClass: some SimpleJSON forks derive JSONArray from JSONClass.
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    ReplacePluginKeyTokenWalk(ja[i], fromKey, toKey);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc != null)
+            {
+                foreach (string key in jc.Keys)
+                    ReplacePluginKeyTokenWalk(jc[key], fromKey, toKey);
+                return;
+            }
+
+            try
+            {
+                string v = node.Value;
+                if (string.IsNullOrEmpty(v)) return;
+                if (v == fromKey) { node.Value = toKey; return; }
+                if (v.Length > fromKey.Length && v.StartsWith(fromKey, StringComparison.Ordinal))
+                {
+                    char b = v[fromKey.Length];
+                    if (b == '_' || b == ':')
+                        node.Value = toKey + v.Substring(fromKey.Length);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
         /// Return the storable with the given id from the "storables" array, or null if not found
         /// </summary>
         /// <param name="id">The ID of the storable</param>

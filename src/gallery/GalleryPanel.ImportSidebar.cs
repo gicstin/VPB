@@ -66,6 +66,9 @@ namespace VPB
         // Plugins: when on, self-referencing atom UIDs in imported plugins (e.g. trigger receiverAtom)
         // are rewritten from the source atom uid to the target atom uid. Opt-in (defaults OFF).
         private bool importSidebarMigratePluginUIDs;
+        // Plugins: when off (default) imported plugins MERGE onto the target's existing plugins
+        // (renumbered to append past them); when on, the target's plugins are cleared/replaced.
+        private bool importSidebarClearExistingPlugins;
         private readonly HashSet<string> importSidebarSelectedPluginKeys = new HashSet<string>(StringComparer.Ordinal);
         private string importSidebarPluginSelectionSig;
 
@@ -274,6 +277,7 @@ namespace VPB
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
             importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
             importSidebarMigratePluginUIDs        = PrefBool(p, "migratePluginUIDs", importSidebarMigratePluginUIDs);
+            importSidebarClearExistingPlugins     = PrefBool(p, "clearExistingPlugins", importSidebarClearExistingPlugins);
             importSidebarMultiSelectTypes         = PrefBool(p, "multiSelectTypes", importSidebarMultiSelectTypes);
             // Open intent is per-pane; global "open" is restored only on the primary pane at init.
             importSidebarSubToggles.IncludeAppearanceMorphs   = PrefBool(p, "incAppearanceMorphs", importSidebarSubToggles.IncludeAppearanceMorphs);
@@ -305,6 +309,7 @@ namespace VPB
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
             p["pluginsMergeSingle"].AsBool = importSidebarPluginsMergeSingle;
             p["migratePluginUIDs"].AsBool = importSidebarMigratePluginUIDs;
+            p["clearExistingPlugins"].AsBool = importSidebarClearExistingPlugins;
             p["multiSelectTypes"].AsBool = importSidebarMultiSelectTypes;
             p["open"].AsBool = importSidebarOpenIntent;
             p["incAppearanceMorphs"].AsBool = importSidebarSubToggles.IncludeAppearanceMorphs;

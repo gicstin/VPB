@@ -343,6 +343,10 @@ namespace VPB
                         () => importSidebarMigratePluginUIDs,
                         v => importSidebarMigratePluginUIDs = v,
                         null);
+                    AddOptionToggle(panel.transform, "Clear existing plugins",
+                        () => importSidebarClearExistingPlugins,
+                        v => importSidebarClearExistingPlugins = v,
+                        null);
                     BuildImportSidebarPluginChecklist(panel.transform);
                     break;
 
@@ -783,6 +787,59 @@ namespace VPB
             return (h >= 0 && int.TryParse(key.Substring(h + 1), out n)) ? n : int.MaxValue;
         }
 
+        // Maps each target plugin URL -> its existing plugin#N slot key, so a merging source plugin with the
+        // same URL updates that live slot's settings instead of being appended as a duplicate. First slot wins
+        // when the target has the same URL twice. Keyed case-insensitively to match GetTargetPluginUrls.
+        private Dictionary<string, string> GetTargetPluginUrlToKey()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (importSidebarTargetAtom == null) return map;
+            try
+            {
+                JSONStorable pm = importSidebarTargetAtom.GetStorableByID("PluginManager");
+                if (pm != null)
+                {
+                    JSONClass j = pm.GetJSON();
+                    JSONClass plugins = (j != null && j["plugins"] != null) ? j["plugins"].AsObject : null;
+                    if (plugins != null)
+                        foreach (string k in plugins.Keys)
+                        {
+                            string u = plugins[k] != null ? plugins[k].Value : "";
+                            if (string.IsNullOrEmpty(u)) continue;
+                            u = u.Trim();
+                            if (!map.ContainsKey(u)) map[u] = k;
+                        }
+                }
+            }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB import] target plugin url->key scan failed: " + ex.Message); }
+            return map;
+        }
+
+        // Highest plugin#N slot number currently on the target's PluginManager, or -1 when it has none
+        // (so the merge append starts at plugin#0). Used to renumber the incoming plugin slice on merge.
+        private int GetTargetMaxPluginNumber()
+        {
+            int max = -1;
+            if (importSidebarTargetAtom == null) return max;
+            try
+            {
+                JSONStorable pm = importSidebarTargetAtom.GetStorableByID("PluginManager");
+                if (pm != null)
+                {
+                    JSONClass j = pm.GetJSON();
+                    JSONClass plugins = (j != null && j["plugins"] != null) ? j["plugins"].AsObject : null;
+                    if (plugins != null)
+                        foreach (string k in plugins.Keys)
+                        {
+                            int n = PluginKeyNumber(k);
+                            if (n != int.MaxValue && n > max) max = n;
+                        }
+                }
+            }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB import] target plugin number scan failed: " + ex.Message); }
+            return max;
+        }
+
         private static string ParsePluginName(string url)
         {
             if (string.IsNullOrEmpty(url)) return "(plugin)";
@@ -1135,7 +1192,23 @@ namespace VPB
                     return;
                 }
                 presetJSON = pluginSlice;
-                mode = ClothingApplyMode.Replace;
+
+                // Default = MERGE: keep the target's existing plugins. A source plugin whose URL already
+                // exists on the target UPDATES that live plugin's settings (its param storable is remapped
+                // onto the existing slot, and it is NOT re-added) instead of creating a duplicate; only
+                // genuinely new plugins are appended past the target's existing slots. VaM assigns appended
+                // plugins the next slot numbers, so the slice's plugin#N keys + plugin#N_* param storables
+                // must be remapped accordingly. "Clear existing plugins" = old wipe-and-replace.
+                if (importSidebarClearExistingPlugins)
+                {
+                    mode = ClothingApplyMode.Replace;
+                }
+                else
+                {
+                    mode = ClothingApplyMode.Merge;
+                    int startNumber = GetTargetMaxPluginNumber() + 1;
+                    VpbImport.MergePluginSliceKeys(presetJSON, startNumber, GetTargetPluginUrlToKey());
+                }
 
                 // Issue #66: rewrite plugin self-references (e.g. trigger receiverAtom) from the source
                 // atom uid to the target atom uid so they don't break when the names differ. Opt-in.

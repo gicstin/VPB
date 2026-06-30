@@ -826,6 +826,90 @@ namespace VPB
             return clone;
         }
 
+        // Merge support: remaps a plugins slice's plugin#N keys (and matching plugin#N_* param storable ids +
+        // references) for a MERGE onto a target that already has plugins.
+        //   - A source plugin whose URL is already on the target (<paramref name="targetUrlToExistingKey"/>)
+        //     is remapped onto that EXISTING slot and dropped from the PluginManager dict, so applying the
+        //     slice updates the live plugin's settings in place instead of creating a duplicate.
+        //   - A source plugin with a new URL is appended: assigned the next free slot starting at
+        //     <paramref name="startNumber"/> (= target's max plugin# + 1) and kept in the dict.
+        // Without the remap, VaM's append renumbering would leave the param storables bound to the wrong/
+        // colliding slot and the imported plugins would land without their settings.
+        internal static void MergePluginSliceKeys(JSONClass slice, int startNumber, Dictionary<string, string> targetUrlToExistingKey)
+        {
+            if (slice == null) return;
+            JSONArray storables = slice["storables"] != null ? slice["storables"].AsArray : null;
+            if (storables == null) return;
+
+            JSONClass pmStorable = null;
+            JSONClass plugins = null;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                if (s["id"] != null && s["id"].Value == "PluginManager")
+                {
+                    pmStorable = s;
+                    plugins = s["plugins"] != null ? s["plugins"].AsObject : null;
+                    break;
+                }
+            }
+            if (pmStorable == null || plugins == null || plugins.Count == 0) return;
+
+            // Ascending slot order = stable, contiguous numbering for the appended (new) plugins.
+            List<string> oldKeys = new List<string>(plugins.Keys);
+            oldKeys.Sort((a, b) => PluginSlotNumber(a).CompareTo(PluginSlotNumber(b)));
+
+            int next = startNumber < 0 ? 0 : startNumber;
+            Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.Ordinal);
+            JSONClass rebuilt = new JSONClass();   // only NEW plugins remain in the PluginManager dict
+            foreach (string ok in oldKeys)
+            {
+                string url = plugins[ok] != null ? plugins[ok].Value : "";
+                string existing = null;
+                if (targetUrlToExistingKey != null && !string.IsNullOrEmpty(url))
+                    targetUrlToExistingKey.TryGetValue(url.Trim(), out existing);
+
+                if (!string.IsNullOrEmpty(existing))
+                {
+                    // Already on target: update-in-place. Bind params to the live slot, do not re-add the plugin.
+                    map[ok] = existing;
+                }
+                else
+                {
+                    string nk = "plugin#" + next;
+                    next++;
+                    map[ok] = nk;
+                    rebuilt[nk] = plugins[ok];
+                }
+            }
+            // Dropping matched plugins from the dict is itself a change even when no key was renumbered.
+            pmStorable["plugins"] = rebuilt;
+
+            // Rewrite the param storable ids + any plugin#N references for keys that actually moved, via a
+            // two-phase sentinel pass: old -> unique sentinel, then sentinel -> new. The sentinel can never
+            // equal an old OR new plugin key, so overlapping ranges cannot cross-corrupt regardless of order.
+            List<string> changed = new List<string>();
+            foreach (string ok in oldKeys)
+                if (map[ok] != ok) changed.Add(ok);
+            if (changed.Count == 0) return;
+
+            const string sentPrefix = "\u0000VPBPLG#";
+            const string sentSuffix = "\u0000";
+            for (int i = 0; i < changed.Count; i++)
+                JSONExtensions.ReplacePluginKeyTokenMutable(slice, changed[i], sentPrefix + i + sentSuffix);
+            for (int i = 0; i < changed.Count; i++)
+                JSONExtensions.ReplacePluginKeyTokenMutable(slice, sentPrefix + i + sentSuffix, map[changed[i]]);
+        }
+
+        // Numeric slot of a "plugin#N" key, or int.MaxValue if unparseable (sorts such keys last).
+        private static int PluginSlotNumber(string key)
+        {
+            int h = key != null ? key.IndexOf('#') : -1;
+            int n;
+            return (h >= 0 && int.TryParse(key.Substring(h + 1), out n)) ? n : int.MaxValue;
+        }
+
         // A plugin's param storable id is "<plugin#N>_<ClassName>"; keep it when plugin#N is selected.
         private static bool IsSelectedPluginParamStorable(string id, ICollection<string> selectedPluginKeys)
         {
