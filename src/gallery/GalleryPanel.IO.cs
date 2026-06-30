@@ -3732,12 +3732,15 @@ namespace VPB
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: format tag + category + extensions + search paths. The "sf4" tag marks resolved
+                        // Cache key: format tag + category + extensions + search paths. The "sf5" tag marks resolved
                         // disk roots + local-scene listing rules (any json under Saves/scene; sibling jpg NOT required).
                         // Bumped sf3->sf4 so caches built under the old "jpg required" rule regenerate and pick up
-                        // preview-less scenes.
+                        // preview-less scenes. Bumped sf4->sf5 so caches written under the OLD rule — where the live
+                        // filter state (user-tag "Untagged" mode, creator, source, pose, rating) was baked into cache
+                        // membership and silently hid tagged scenes next launch — are discarded and rebuilt with the
+                        // filter-independent membership rule (#64).
                         var sbKey = new System.Text.StringBuilder(256);
-                        sbKey.Append("sf4|").Append(currentCategoryTitle ?? "").Append("|ext=");
+                        sbKey.Append("sf5|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
                         {
                             var ex = new List<string>(extensions);
@@ -3815,6 +3818,29 @@ namespace VPB
                             // logic keys off VaM-relative paths, so normalize the entry path back.
                             var sysEntryFast = new SystemFileEntry(FileManager.NormalizePath(r.Path), wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
+
+                            // Cache now stores the unfiltered candidate set, so pose/rating filters (which live
+                            // outside PassesFilters) must be re-applied here exactly as the live scan does — otherwise
+                            // they would not filter on a cache hit (#64).
+                            if (posePeopleFilter != PosePeopleFilter.All)
+                            {
+                                int pcPoseRead = 1;
+                                bool isJsonPoseRead = false;
+                                try { isJsonPoseRead = (sysEntryFast.Path != null && sysEntryFast.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPoseRead = false; }
+                                if (isJsonPoseRead)
+                                {
+                                    int knownRead;
+                                    if (TryGetKnownPosePeopleCount(sysEntryFast, out knownRead)) pcPoseRead = knownRead;
+                                    else { EnqueuePosePeopleIndex(sysEntryFast); pcPoseRead = 1; }
+                                }
+                                if (posePeopleFilter == PosePeopleFilter.Single && pcPoseRead >= 2) continue;
+                                if (posePeopleFilter == PosePeopleFilter.Dual && pcPoseRead < 2) continue;
+                            }
+                            if (isRatingSortToggleEnabled)
+                            {
+                                if (RatingsManager.Instance.GetRating(sysEntryFast) <= 0) continue;
+                            }
+
                             files.Add(sysEntryFast);
                             if (sysLooseFilesAddedCount != null) sysLooseFilesAddedCount[0]++;
                             if (swDeep != null) deepSysFilesAdded++;
@@ -3874,10 +3900,27 @@ namespace VPB
                                 // logic keys off VaM-relative paths, so normalize the entry path back.
                                 var sysEntry = new SystemFileEntry(FileManager.NormalizePath(sysPath));
 
-                                // Cache membership ignores the clothing/hair subfilter (not part of the cache key):
-                                // store rows that pass with it skipped, and re-apply the active subfilter on read.
-                                // Grid add below uses the full gate. Without this split, a scan under one subfilter
-                                // state bakes that filtering into the cache and other states read pre-filtered rows.
+                                // Cache membership = every valid loose-scene candidate, INDEPENDENT of the live
+                                // filter state. The sf5 cache key is category|ext|paths only (no filter signature),
+                                // so the read path (above) re-applies PassesFilters/pose/rating per row. Writing the
+                                // row here, before any filter `continue`, prevents a scan performed while a transient
+                                // filter was active (e.g. user-tag "Untagged" mode during the tag-a-scene workflow)
+                                // from baking that filtering into the persisted cache and silently hiding tagged
+                                // scenes on the next launch until a folder mtime change invalidates the cache (#64).
+                                try
+                                {
+                                    var rr = new VpbLocalDatabase.SystemFileRow();
+                                    rr.Path = sysEntry.Path ?? sysPath;
+                                    long wtB = long.MinValue;
+                                    try { wtB = sysEntry.LastWriteTime.ToBinary(); } catch { wtB = long.MinValue; }
+                                    rr.LastWriteBinaryOrInvalid = wtB;
+                                    rr.SizeOrInvalid = sysEntry.Size;
+                                    sysRowsForWrite.Add(rr);
+                                }
+                                catch { }
+
+                                // From here down decides GRID membership only (cache row already written above).
+                                // The clothing/hair subfilter is skipped for the facet/pass gate and re-applied on read.
                                 if (!PassesFilters(sysEntry, true, true)) continue;
                                 bool gridOk = PassesFilters(sysEntry, true);
 
@@ -3925,18 +3968,6 @@ namespace VPB
                                         sysLooseFilesAddedCount[0]++;
                                     if (swDeep != null) deepSysFilesAdded++;
                                 }
-
-                                try
-                                {
-                                    var rr = new VpbLocalDatabase.SystemFileRow();
-                                    rr.Path = sysEntry.Path ?? sysPath;
-                                    long wtB = long.MinValue;
-                                    try { wtB = sysEntry.LastWriteTime.ToBinary(); } catch { wtB = long.MinValue; }
-                                    rr.LastWriteBinaryOrInvalid = wtB;
-                                    rr.SizeOrInvalid = sysEntry.Size;
-                                    sysRowsForWrite.Add(rr);
-                                }
-                                catch { }
                             }
                         }
                     }
