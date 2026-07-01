@@ -815,12 +815,14 @@ namespace VPB
             return map;
         }
 
-        // Highest plugin#N slot number currently on the target's PluginManager, or -1 when it has none
-        // (so the merge append starts at plugin#0). Used to renumber the incoming plugin slice on merge.
-        private int GetTargetMaxPluginNumber()
+        // Count of plugin slots currently on the target's PluginManager. VaM's merge-load renumbers
+        // ALL active plugins on the atom into a single contiguous 0..N-1 range (it does not preserve
+        // gaps or the original slot numbers - e.g. an existing plugin#5 compacts down to plugin#1 if
+        // only one other plugin precedes it), so the newly appended source plugins must start
+        // numbering at this COUNT, not at (highest existing slot number + 1).
+        private int GetTargetPluginCount()
         {
-            int max = -1;
-            if (importSidebarTargetAtom == null) return max;
+            if (importSidebarTargetAtom == null) return 0;
             try
             {
                 JSONStorable pm = importSidebarTargetAtom.GetStorableByID("PluginManager");
@@ -828,16 +830,11 @@ namespace VPB
                 {
                     JSONClass j = pm.GetJSON();
                     JSONClass plugins = (j != null && j["plugins"] != null) ? j["plugins"].AsObject : null;
-                    if (plugins != null)
-                        foreach (string k in plugins.Keys)
-                        {
-                            int n = PluginKeyNumber(k);
-                            if (n != int.MaxValue && n > max) max = n;
-                        }
+                    if (plugins != null) return plugins.Count;
                 }
             }
-            catch (Exception ex) { LogUtil.LogWarning("[VPB import] target plugin number scan failed: " + ex.Message); }
-            return max;
+            catch (Exception ex) { LogUtil.LogWarning("[VPB import] target plugin count scan failed: " + ex.Message); }
+            return 0;
         }
 
         private static string ParsePluginName(string url)
@@ -1206,7 +1203,7 @@ namespace VPB
                 else
                 {
                     mode = ClothingApplyMode.Merge;
-                    int startNumber = GetTargetMaxPluginNumber() + 1;
+                    int startNumber = GetTargetPluginCount();
                     VpbImport.MergePluginSliceKeys(presetJSON, startNumber, GetTargetPluginUrlToKey());
                 }
 
