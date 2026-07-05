@@ -97,23 +97,17 @@ namespace VPB
 
             try
             {
-                bool sameSession = _tryOnActive && _tryOnAtomUid == target.uid;
+                // Changing the interaction away from the current try-on (applying a different
+                // preset/item, on this atom or another) auto-accepts it: commit the candidate and
+                // push its undo before starting a fresh session. The new session's baseline is the
+                // just-accepted look, so Revert returns to it rather than discarding it.
+                if (_tryOnActive) TryOnKeep();
 
-                if (sameSession)
-                {
-                    // Flipping through looks: unstack to baseline before applying the new candidate.
-                    TryOnRestoreState(_tryOnBaseline, _tryOnTouchedPhysical);
-                }
-                else
-                {
-                    // New session: capture a clean baseline of the target.
-                    if (_tryOnActive) TryOnEndSession(false);
-                    _tryOnBaseline = TryOnCaptureState(target);
-                    if (_tryOnBaseline == null) return false; // capture failed, fall through
-                    _tryOnAtomUid = target.uid;
-                    _tryOnTouchedPhysical = false;
-                    _tryOnActive = true;
-                }
+                _tryOnBaseline = TryOnCaptureState(target);
+                if (_tryOnBaseline == null) return false; // capture failed, fall through
+                _tryOnAtomUid = target.uid;
+                _tryOnTouchedPhysical = false;
+                _tryOnActive = true;
 
                 // Candidate snapshot is captured lazily on first Compare.
                 _tryOnCandidate = null;
