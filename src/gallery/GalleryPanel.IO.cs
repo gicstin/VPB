@@ -2328,6 +2328,24 @@ namespace VPB
                 if (localLoadingGroupId != currentLoadingGroupId) return bulk;
 
                 VpbLocalDatabase.Row r = idxRows[ri];
+
+                // Local (non-package) history row, e.g. a loose Saves/scene scene. These have no
+                // package UID, so build a loose SystemFileEntry directly from the recorded path.
+                if (string.IsNullOrEmpty(r.PackageUid))
+                {
+                    string localPath = !string.IsNullOrEmpty(r.ListPath) ? r.ListPath : r.ItemUsageKey;
+                    if (string.IsNullOrEmpty(localPath)) continue;
+
+                    if (wantsLoadedStateForIndexMain == 0) continue; // loose files are always "loaded"
+
+                    SystemFileEntry sfe;
+                    try { sfe = new SystemFileEntry(localPath); }
+                    catch { continue; }
+                    if (!sfe.Exists) continue;
+                    bulk.Add(sfe);
+                    continue;
+                }
+
                 string internalPath = r.InternalPath;
                 // Launch from index paths; ItemUsageKey is for remove-from-history identity only (legacy keys can break load).
 

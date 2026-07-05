@@ -1093,6 +1093,10 @@ namespace VPB
                         outCounts[GalleryHistoryFilterMode.Misc] = misc;
                     }
 
+                    // Local (non-package) usage rows (loose Saves/scene scenes, etc.) are excluded by the
+                    // pkg INNER JOIN above; add their per-kind counts so the History side tabs match the list.
+                    AddLocalHistoryModeCounts(conn, outCounts);
+
                     return true;
                 }
             }
@@ -1101,6 +1105,55 @@ namespace VPB
                 outCounts.Clear();
                 return false;
             }
+        }
+
+        /// <summary>Adds per-kind counts for local (non-package) <c>item_usage</c> rows to the History side-tab counts.</summary>
+        private static void AddLocalHistoryModeCounts(VpbSqlite3.Connection conn, Dictionary<GalleryHistoryFilterMode, int> outCounts)
+        {
+            if (conn == null || outCounts == null) return;
+            try
+            {
+                const string miscKindList = "'scene','appearance','clothing','hair','plugins','pose','skin','morphs'";
+                var sb = new StringBuilder(512);
+                sb.Append("SELECT ");
+                sb.Append("COUNT(DISTINCT i.item_key), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'scene' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'appearance' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'clothing' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'hair' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'plugins' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind = 'pose' THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind IN ('skin','morphs') THEN i.item_key END), ");
+                sb.Append("COUNT(DISTINCT CASE WHEN i.kind NOT IN (").Append(miscKindList).Append(") THEN i.item_key END) ");
+                sb.Append("FROM item_usage i WHERE NOT EXISTS (SELECT 1 FROM pkg p WHERE lower(p.uid) = ");
+                sb.Append(GalleryHistoryUsagePkgKeySql);
+                sb.Append(")");
+
+                using (var st = conn.Prepare(sb.ToString()))
+                {
+                    if (st.Step() != VpbSqlite3.SqliteRow) return;
+
+                    int all = (int)Math.Min(Math.Max(st.ColumnInt64(0), 0), int.MaxValue);
+                    AddCount(outCounts, GalleryHistoryFilterMode.Recent, all);
+                    AddCount(outCounts, GalleryHistoryFilterMode.MostUsed, all);
+                    AddCount(outCounts, GalleryHistoryFilterMode.Scenes, (int)Math.Min(Math.Max(st.ColumnInt64(1), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Appearance, (int)Math.Min(Math.Max(st.ColumnInt64(2), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Clothing, (int)Math.Min(Math.Max(st.ColumnInt64(3), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Hair, (int)Math.Min(Math.Max(st.ColumnInt64(4), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Plugins, (int)Math.Min(Math.Max(st.ColumnInt64(5), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Pose, (int)Math.Min(Math.Max(st.ColumnInt64(6), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Body, (int)Math.Min(Math.Max(st.ColumnInt64(7), 0), int.MaxValue));
+                    AddCount(outCounts, GalleryHistoryFilterMode.Misc, (int)Math.Min(Math.Max(st.ColumnInt64(8), 0), int.MaxValue));
+                }
+            }
+            catch { }
+        }
+
+        private static void AddCount(Dictionary<GalleryHistoryFilterMode, int> counts, GalleryHistoryFilterMode mode, int delta)
+        {
+            if (counts == null || delta == 0) return;
+            int cur;
+            counts[mode] = counts.TryGetValue(mode, out cur) ? cur + delta : delta;
         }
 
         internal struct ItemUsageSnapshot
@@ -6390,6 +6443,11 @@ namespace VPB
                         }
                     }
 
+                    // Local (non-package) history items, e.g. loose Saves/scene scenes, have no pkg
+                    // row so the INNER JOIN above skips them. Append them from item_usage directly.
+                    AppendLocalHistoryRows(conn, mode, nameTerms, outRows);
+                    SortHistoryRows(outRows, mode);
+
                     if (LogHistoryUsageDebug)
                     {
                         try
@@ -6441,6 +6499,96 @@ namespace VPB
                     try { LogUtil.LogWarning("[VPB.History] TryQueryGalleryHistoryRows failed: " + ex.Message); } catch { }
                 }
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Appends History rows for local (non-package) <c>item_usage</c> entries — items whose
+        /// <c>item_key</c> resolves to no package (e.g. loose <c>Saves/scene/*.json</c> scenes). These
+        /// are invisible to <see cref="AppendGalleryHistoryJoinFromWhere"/>'s INNER JOIN on <c>pkg</c>.
+        /// The row carries an empty <see cref="Row.PackageUid"/>; the list builder turns it into a
+        /// loose <c>SystemFileEntry</c> from <see cref="Row.ItemUsageKey"/>.
+        /// </summary>
+        private static void AppendLocalHistoryRows(VpbSqlite3.Connection conn, GalleryHistoryFilterMode mode, string[] nameTerms, List<Row> outRows)
+        {
+            if (conn == null || outRows == null) return;
+            try
+            {
+                string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
+                var sb = new StringBuilder(256);
+                sb.Append("SELECT i.item_key, i.use_count, i.last_used FROM item_usage i ");
+                sb.Append("WHERE NOT EXISTS (SELECT 1 FROM pkg p WHERE lower(p.uid) = ");
+                sb.Append(GalleryHistoryUsagePkgKeySql);
+                sb.Append(")");
+                sb.Append(kindSql);
+                if (nameTerms != null && nameTerms.Length > 0)
+                {
+                    for (int t = 0; t < nameTerms.Length; t++)
+                    {
+                        if (string.IsNullOrEmpty(nameTerms[t])) continue;
+                        sb.Append(" AND i.item_key LIKE ? ESCAPE '\\'");
+                    }
+                }
+
+                using (var stmt = conn.Prepare(sb.ToString()))
+                {
+                    int bind = 1;
+                    if (nameTerms != null && nameTerms.Length > 0)
+                    {
+                        for (int t = 0; t < nameTerms.Length; t++)
+                        {
+                            if (string.IsNullOrEmpty(nameTerms[t])) continue;
+                            stmt.BindText(bind++, "%" + EscapeLike(nameTerms[t]) + "%");
+                        }
+                    }
+
+                    while (stmt.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string key = stmt.ColumnText(0) ?? "";
+                        if (key.Length == 0) continue;
+                        Row r;
+                        r.ItemUsageKey = key;
+                        r.PackageUid = "";
+                        r.InternalPath = "";
+                        r.ListPath = key;
+                        r.VarPath = "";
+                        r.LastWriteTicksOrInvalid = long.MinValue;
+                        r.PackageSizeOrInvalid = long.MinValue;
+                        r.PackageCreationTicksOrInvalid = long.MinValue;
+                        r.FirstScannedTicksOrInvalid = 0;
+                        r.ClothingAttrPacked = 0;
+                        r.PackageIsLoaded = true; // loose files under the VaM tree are always "loaded"
+                        r.ItemUsageCount = (int)Math.Min(Math.Max(stmt.ColumnInt64(1), 0), int.MaxValue);
+                        r.ItemLastUsedBinary = stmt.ColumnInt64(2);
+                        outRows.Add(r);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (LogHistoryUsageDebug)
+                {
+                    try { LogUtil.LogWarning("[VPB.History] AppendLocalHistoryRows failed: " + ex.Message); } catch { }
+                }
+            }
+        }
+
+        /// <summary>Re-sorts combined package + local History rows to match <see cref="BuildGalleryHistoryOrderSql"/>.</summary>
+        private static void SortHistoryRows(List<Row> rows, GalleryHistoryFilterMode mode)
+        {
+            if (rows == null || rows.Count < 2) return;
+            if (mode == GalleryHistoryFilterMode.MostUsed)
+            {
+                rows.Sort((a, b) =>
+                {
+                    int c = b.ItemUsageCount.CompareTo(a.ItemUsageCount);
+                    if (c != 0) return c;
+                    return b.ItemLastUsedBinary.CompareTo(a.ItemLastUsedBinary);
+                });
+            }
+            else
+            {
+                rows.Sort((a, b) => b.ItemLastUsedBinary.CompareTo(a.ItemLastUsedBinary));
             }
         }
 
