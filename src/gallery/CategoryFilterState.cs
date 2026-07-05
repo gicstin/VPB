@@ -10,6 +10,8 @@ namespace VPB
         public string Creator = "";
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
+        /// <summary>Excluded (none-of) user tags in filter-by-tags mode.</summary>
+        public List<string> ExcludedUserTags = new List<string>();
         /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only). Legacy: 1 meant filter-by-tags only.</summary>
         public int UserTagAvailFilterMode = 0;
         /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
@@ -57,6 +59,10 @@ namespace VPB
             if (UserTags != null)
                 foreach (var t in UserTags) utArr.Add(t);
             node["utags"] = utArr;
+            var xutArr = new JSONArray();
+            if (ExcludedUserTags != null)
+                foreach (var t in ExcludedUserTags) xutArr.Add(t);
+            node["xutags"] = xutArr;
             node["utfm"].AsInt = UserTagAvailFilterMode;
             node["utin"].AsInt = UserTagInheritVarToChildren;
 
@@ -99,6 +105,11 @@ namespace VPB
                 if (utArr != null)
                     foreach (JSONNode t in utArr)
                         if (!string.IsNullOrEmpty(t)) s.UserTags.Add(t);
+
+                var xutArr = node["xutags"].AsArray;
+                if (xutArr != null)
+                    foreach (JSONNode t in xutArr)
+                        if (!string.IsNullOrEmpty(t)) s.ExcludedUserTags.Add(t);
 
                 s.UserTagAvailFilterMode = node["utfm"] != null ? node["utfm"].AsInt : 0;
                 s.UserTagInheritVarToChildren = node["utin"] != null ? node["utin"].AsInt : 0;

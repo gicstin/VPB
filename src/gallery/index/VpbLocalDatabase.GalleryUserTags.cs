@@ -14,9 +14,11 @@ namespace VPB
             conn.ExecUtf8(
                 "CREATE TABLE IF NOT EXISTS gallery_user_tag (tag_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);" +
                 "CREATE TABLE IF NOT EXISTS gallery_item_user_tag (category TEXT NOT NULL, pkg_uid TEXT NOT NULL, internal_path TEXT NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY(category, pkg_uid, internal_path, tag_id), FOREIGN KEY(tag_id) REFERENCES gallery_user_tag(tag_id) ON DELETE CASCADE);" +
+                "CREATE TABLE IF NOT EXISTS gallery_user_tag_category (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, color TEXT NOT NULL);" +
                 "CREATE INDEX IF NOT EXISTS idx_giut_tag ON gallery_item_user_tag(tag_id);" +
                 "CREATE INDEX IF NOT EXISTS idx_giut_pkg_path ON gallery_item_user_tag(pkg_uid, internal_path);");
             TryEnsureGalleryItemUserTagSchemaV11(conn);
+            TryEnsureGalleryUserTagCategoryColumn(conn);
             BumpMetaSchemaVersionAfterUserTagTables(conn);
         }
 
@@ -77,6 +79,31 @@ namespace VPB
             catch (Exception ex)
             {
                 try { LogUtil.LogWarning("[VPB] VpbLocalDatabase: gallery_item_user_tag v11 migration failed: " + ex.Message); } catch { }
+            }
+        }
+
+        /// <summary>v13: add nullable <c>category_id</c> to <c>gallery_user_tag</c> (FK to <c>gallery_user_tag_category</c>). SQLite ALTER ADD COLUMN is safe for a nullable column on existing DBs.</summary>
+        private static void TryEnsureGalleryUserTagCategoryColumn(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            try
+            {
+                bool hasCol = false;
+                using (var st = conn.Prepare("PRAGMA table_info(gallery_user_tag)"))
+                {
+                    while (st.Step() == VpbSqlite3.SqliteRow)
+                    {
+                        string colName = st.ColumnText(1) ?? "";
+                        if (string.Equals(colName, "category_id", StringComparison.OrdinalIgnoreCase)) { hasCol = true; break; }
+                    }
+                }
+                if (!hasCol)
+                    conn.ExecUtf8("ALTER TABLE gallery_user_tag ADD COLUMN category_id INTEGER;");
+                conn.ExecUtf8("CREATE INDEX IF NOT EXISTS idx_gut_category ON gallery_user_tag(category_id);");
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] VpbLocalDatabase: gallery_user_tag category_id migration failed: " + ex.Message); } catch { }
             }
         }
 
@@ -229,6 +256,35 @@ namespace VPB
         private static void AppendSqlActiveUserTagExists(StringBuilder sb, List<string> bindNamesOut, HashSet<string> activeUserTags, string mAlias, string categoryLiteral = null)
         {
             AppendSqlActiveUserTagExistsAll(sb, bindNamesOut, activeUserTags, mAlias, categoryLiteral);
+        }
+
+        /// <summary>None-of (exclude) filter: row must carry none of <paramref name="excludedUserTags"/>.</summary>
+        internal static void AppendSqlExcludedUserTagNoneExists(StringBuilder sb, List<string> bindNamesOut, HashSet<string> excludedUserTags, string mAlias, string categoryLiteral = null)
+        {
+            if (excludedUserTags == null || excludedUserTags.Count == 0 || bindNamesOut == null) return;
+            var names = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in excludedUserTags)
+            {
+                string n = NormalizeGalleryUserTagName(raw);
+                if (string.IsNullOrEmpty(n) || !seen.Add(n)) continue;
+                names.Add(n);
+            }
+            if (names.Count == 0) return;
+            string catExpr = categoryLiteral != null ? "'" + categoryLiteral + "'" : mAlias + ".category";
+            bindNamesOut.AddRange(names);
+            sb.Append(" AND NOT EXISTS (SELECT 1 FROM gallery_item_user_tag gut");
+            sb.Append(" INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id");
+            sb.Append(" WHERE gut.category=").Append(catExpr);
+            sb.Append(" AND gut.pkg_uid=").Append(mAlias).Append(".pkg_uid");
+            sb.Append(" AND gut.internal_path=").Append(mAlias).Append(".internal_path");
+            sb.Append(" AND gt.name IN (");
+            for (int i = 0; i < names.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('?');
+            }
+            sb.Append("))");
         }
 
         /// <summary>Restrict <c>cat_mem</c> rows to items with no SQLite user tags (browse category semantics).</summary>
@@ -1109,6 +1165,14 @@ namespace VPB
         internal static bool TryGalleryRowMatchesAllUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> normalizedUserTags)
         {
             return TryGalleryRowMatchesUserTags(categoryTitle, pkgUid, internalPath, normalizedUserTags, requireAllTags: true);
+        }
+
+        /// <summary>True when row carries NONE of <paramref name="excludedUserTags"/> (none-of / exclude filter). Empty set passes.</summary>
+        internal static bool TryGalleryRowHasNoneOfUserTags(string categoryTitle, string pkgUid, string internalPath, HashSet<string> excludedUserTags)
+        {
+            if (excludedUserTags == null || excludedUserTags.Count == 0) return true;
+            // requireAllTags:false → returns true if the row has ANY of the tags; none-of is the negation.
+            return !TryGalleryRowMatchesUserTags(categoryTitle, pkgUid, internalPath, excludedUserTags, requireAllTags: false);
         }
 
         /// <summary>Tags on one indexed row; reuses <paramref name="conn"/> (one connection for many rows — selection pane, batch export).</summary>

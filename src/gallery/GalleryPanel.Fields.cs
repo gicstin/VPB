@@ -595,6 +595,8 @@ namespace VPB
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Checked tags in Available pick list. Tag mode: staging for Apply. Filter-by-tags: SQL grid AND filter. Untagged: grid shows rows with no user tags.</summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Excluded tags (none-of) in filter-by-tags mode: grid hides rows carrying any of these tags. Right-click an Available row to toggle.</summary>
+        private readonly HashSet<string> excludedUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Available pane mode: apply, filter by selected tags, or filter untagged items only.</summary>
         private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.FilterByTags;
         /// <summary>Not Tagged mode: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
@@ -655,6 +657,7 @@ namespace VPB
         private static readonly Color UserTagStateMixedColor = new Color(0.35f, 0.38f, 0.22f, 1f);
         private static readonly Color UserTagStatePulseColor = new Color(0.20f, 0.55f, 0.58f, 1f);
         private static readonly Color UserTagFilterActiveColor = new Color(0.18f, 0.38f, 0.62f, 1f);
+        private static readonly Color UserTagFilterExcludedColor = new Color(0.62f, 0.20f, 0.22f, 1f);
         private static readonly Color UserTagDropGlowColor = new Color(0.35f, 0.95f, 0.55f, 1f);
         private const float UserTagVisualPulseSeconds = 0.45f;
 

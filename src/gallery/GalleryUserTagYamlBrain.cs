@@ -11,6 +11,15 @@ namespace VPB
         internal const char ItemKeySep = '\t';
         internal const string TagFirstRoot = "tags";
         internal const string ItemFirstRoot = "items";
+        internal const string CategoriesRoot = "categories";
+
+        /// <summary>One named color category plus the tags assigned to it (US-02 round-trip).</summary>
+        internal struct GalleryUserTagCategoryYaml
+        {
+            public string Name;
+            public string Color;
+            public List<string> Tags;
+        }
 
         private static bool IsNullOrWhiteSpace(string s)
         {
@@ -44,13 +53,14 @@ namespace VPB
             return category.Length > 0 && pkgUid.Length > 0 && internalPath.Length > 0;
         }
 
-        internal static string BuildTagToItemsYaml(IDictionary<string, List<string>> tagToItems)
+        internal static string BuildTagToItemsYaml(IDictionary<string, List<string>> tagToItems, IList<GalleryUserTagCategoryYaml> categories)
         {
             var sb = new StringBuilder(4096);
             sb.AppendLine("# VPB user tags — tag → items. Item line = category<TAB>pkg_uid<TAB>internal_path. Tag with no items = unassigned (vocabulary only).");
             sb.AppendLine("vpb_user_tags_format: tag_to_items");
-            sb.AppendLine("version: 2");
-            sb.AppendLine("# version 2: tag mapping keys always double-quoted (unicode / punctuation / colon safe).");
+            sb.AppendLine("version: 3");
+            sb.AppendLine("# version 3: adds optional 'categories' block (named color categories + their tags).");
+            AppendCategoriesBlock(sb, categories);
             sb.AppendLine(TagFirstRoot + ":");
             if (tagToItems == null || tagToItems.Count == 0) return sb.ToString();
 
@@ -78,13 +88,14 @@ namespace VPB
             return sb.ToString();
         }
 
-        internal static string BuildItemToTagsYaml(IDictionary<string, List<string>> itemToTags)
+        internal static string BuildItemToTagsYaml(IDictionary<string, List<string>> itemToTags, IList<GalleryUserTagCategoryYaml> categories)
         {
             var sb = new StringBuilder(4096);
             sb.AppendLine("# VPB user tags — item → tags. Item key = category<TAB>pkg_uid<TAB>internal_path");
             sb.AppendLine("vpb_user_tags_format: item_to_tags");
-            sb.AppendLine("version: 2");
-            sb.AppendLine("# version 2: list tag scalars always double-quoted (unicode / punctuation / colon safe).");
+            sb.AppendLine("version: 3");
+            sb.AppendLine("# version 3: adds optional 'categories' block (named color categories + their tags).");
+            AppendCategoriesBlock(sb, categories);
             sb.AppendLine(ItemFirstRoot + ":");
             if (itemToTags == null || itemToTags.Count == 0) return sb.ToString();
 
@@ -112,15 +123,121 @@ namespace VPB
             return sb.ToString();
         }
 
+        private static void AppendCategoriesBlock(StringBuilder sb, IList<GalleryUserTagCategoryYaml> categories)
+        {
+            if (categories == null || categories.Count == 0) return;
+            sb.AppendLine(CategoriesRoot + ":");
+            for (int ci = 0; ci < categories.Count; ci++)
+            {
+                GalleryUserTagCategoryYaml c = categories[ci];
+                string name = c.Name == null ? "" : c.Name.Trim();
+                if (name.Length == 0) continue;
+                sb.Append("  ");
+                sb.Append(YamlDoubleQuotedScalar(name));
+                sb.AppendLine(":");
+                sb.Append("    color: ");
+                sb.AppendLine(YamlDoubleQuotedScalar(c.Color ?? ""));
+                if (c.Tags != null && c.Tags.Count > 0)
+                {
+                    sb.AppendLine("    tags:");
+                    var st = new List<string>(c.Tags);
+                    st.Sort(StringComparer.OrdinalIgnoreCase);
+                    for (int ti = 0; ti < st.Count; ti++)
+                    {
+                        string t = st[ti];
+                        if (string.IsNullOrEmpty(t)) continue;
+                        sb.Append("      - ");
+                        sb.AppendLine(YamlDoubleQuotedScalar(t));
+                    }
+                }
+            }
+        }
+
+        /// <summary>Pulls a top-level <c>categories:</c> block (if present) out of the text into <paramref name="catsOut"/>,
+        /// returning the remaining text so the existing tag/item parsers see an unchanged layout.</summary>
+        private static string ExtractCategoriesBlock(string text, List<GalleryUserTagCategoryYaml> catsOut)
+        {
+            var lines = SplitLines(text);
+            var sb = new StringBuilder(text.Length);
+            GalleryUserTagCategoryYaml cur = default(GalleryUserTagCategoryYaml);
+            bool haveCur = false;
+            bool inBlock = false;
+            bool inTags = false;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string ln = lines[i].TrimEnd('\r');
+                if (!inBlock)
+                {
+                    if (CountLeadingSpaces(ln) == 0 && ln.Trim().Equals(CategoriesRoot + ":", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inBlock = true;
+                        haveCur = false;
+                        inTags = false;
+                        continue;
+                    }
+                    sb.AppendLine(ln);
+                    continue;
+                }
+                if (IsNullOrWhiteSpace(ln)) continue;
+                int indent = CountLeadingSpaces(ln);
+                if (indent == 0)
+                {
+                    if (haveCur) { catsOut.Add(cur); haveCur = false; }
+                    inBlock = false;
+                    inTags = false;
+                    sb.AppendLine(ln);
+                    continue;
+                }
+                if (indent == 2)
+                {
+                    string k;
+                    bool onlyKey;
+                    if (TryParseIndentKeyLine(ln, 2, out k, out onlyKey) && onlyKey)
+                    {
+                        if (haveCur) catsOut.Add(cur);
+                        cur = new GalleryUserTagCategoryYaml { Name = UnquoteYamlKey(k), Color = "", Tags = new List<string>() };
+                        haveCur = true;
+                        inTags = false;
+                    }
+                    continue;
+                }
+                if (indent == 4)
+                {
+                    inTags = false;
+                    string s = ln.Substring(4).TrimEnd();
+                    int colon = IndexOfYamlKeyValueColon(s);
+                    if (colon >= 0)
+                    {
+                        string key = s.Substring(0, colon).Trim();
+                        string val = colon + 1 < s.Length ? s.Substring(colon + 1).Trim() : "";
+                        if (key.Equals("color", StringComparison.OrdinalIgnoreCase) && haveCur)
+                            cur.Color = ParseYamlScalar(val);
+                        else if (key.Equals("tags", StringComparison.OrdinalIgnoreCase) && val.Length == 0)
+                            inTags = true;
+                    }
+                    continue;
+                }
+                if (indent >= 6 && inTags && haveCur && IsListItemLine(ln, out _))
+                {
+                    string tag = ParseListScalar(ln);
+                    if (!string.IsNullOrEmpty(tag)) cur.Tags.Add(tag);
+                }
+            }
+            if (inBlock && haveCur) catsOut.Add(cur);
+            return sb.ToString();
+        }
+
         /// <summary>Returns normalized tag → item-keys and item-key → tags from one YAML file. Sniffs tag-first vs item-first.</summary>
         internal static bool TryParseImport(
             string yamlText,
             out Dictionary<string, List<string>> tagToItemKeys,
             out Dictionary<string, List<string>> itemKeyToTags,
+            out List<GalleryUserTagCategoryYaml> categories,
             out string errorOut)
         {
             tagToItemKeys = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             itemKeyToTags = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            categories = new List<GalleryUserTagCategoryYaml>();
             errorOut = null;
             if (string.IsNullOrEmpty(yamlText))
             {
@@ -129,6 +246,7 @@ namespace VPB
             }
             string text = yamlText;
             if (text.Length > 0 && text[0] == '\uFEFF') text = text.Substring(1);
+            text = ExtractCategoriesBlock(text, categories);
 
             bool tagFirst;
             if (!SniffFormat(text, out tagFirst))

@@ -19,6 +19,7 @@ namespace VPB
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
             s.UserTags = new List<string>(activeUserTags);
+            s.ExcludedUserTags = new List<string>(excludedUserTags);
             s.UserTagAvailFilterMode = (int)_userTagAvailMode;
             s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
             s.SceneSourceFilter = currentSceneSourceFilter ?? "";
@@ -103,6 +104,7 @@ namespace VPB
                 foreach (var t in state.Tags) activeTags.Add(t);
 
             activeUserTags.Clear();
+            excludedUserTags.Clear();
             if (restoreUserTagFilter)
             {
                 if (state.UserTags != null)
@@ -110,6 +112,12 @@ namespace VPB
                     {
                         string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
                         if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
+                    }
+                if (state.ExcludedUserTags != null)
+                    foreach (var t in state.ExcludedUserTags)
+                    {
+                        string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                        if (!string.IsNullOrEmpty(n)) excludedUserTags.Add(n);
                     }
                 int utfm = state.UserTagAvailFilterMode;
                 if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
@@ -159,6 +167,7 @@ namespace VPB
 
             activeTags.Clear();
             activeUserTags.Clear();
+            excludedUserTags.Clear();
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;

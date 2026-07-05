@@ -2572,6 +2572,9 @@ namespace VPB
                 HashSet<string> utNames = null;
                 if (utFilterByTags && activeUserTags != null && activeUserTags.Count > 0)
                     utNames = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+                HashSet<string> utExcludeNames = null;
+                if (utFilterByTags && excludedUserTags != null && excludedUserTags.Count > 0)
+                    utExcludeNames = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
 
                 int session = _deferredSubPaneSessionId;
                 bool memoHit = session == _clothingChipCountsSession;
@@ -2591,7 +2594,7 @@ namespace VPB
                         creator, loadedState, nameFilterTerms,
                         null, null, // pathExclusions/pathInclusions: both null for Clothing
                         activeTags, utNames, utUntaggedOnly, utRequireAll,
-                        sourceFilterMode, hideOldVersions, out chips)) return;
+                        sourceFilterMode, hideOldVersions, out chips, utExcludeNames)) return;
                     _clothingChipCountsCached = chips;
                     _clothingChipCountsSession = session;
                 }

@@ -37,7 +37,7 @@ namespace VPB
                 RebuildUserTagVirtViewList(isLeft, resetScrollToTop: false);
             }
 
-            if (activeUserTags.Count > 0)
+            if (activeUserTags.Count > 0 || excludedUserTags.Count > 0)
             {
                 CreateTabButton(container.transform,
                     VPBTranslation.T("gallery.usertags.clear_filters", "Clear user tag filters"),
@@ -45,6 +45,7 @@ namespace VPB
                     () =>
                     {
                         activeUserTags.Clear();
+                        excludedUserTags.Clear();
                         userTagsCached = false;
                         if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { } }
                         try { RefreshUserTagsAvailPaneInPlace(isLeft); } catch { }

@@ -219,6 +219,7 @@ namespace VPB
             entry.Creator = state.Creator ?? "";
             entry.Tags = state.Tags != null ? new List<string>(state.Tags) : new List<string>();
             entry.UserTags = state.UserTags != null ? new List<string>(state.UserTags) : new List<string>();
+            entry.ExcludedUserTags = state.ExcludedUserTags != null ? new List<string>(state.ExcludedUserTags) : new List<string>();
             entry.UserTagAvailFilterMode = state.UserTagAvailFilterMode;
             entry.UserTagInheritVarToChildren = state.UserTagInheritVarToChildren;
             entry.SceneSourceFilter = state.SceneSourceFilter ?? "";
@@ -240,6 +241,7 @@ namespace VPB
             state.Creator = entry.Creator ?? "";
             state.Tags = entry.Tags != null ? new List<string>(entry.Tags) : new List<string>();
             state.UserTags = entry.UserTags != null ? new List<string>(entry.UserTags) : new List<string>();
+            state.ExcludedUserTags = entry.ExcludedUserTags != null ? new List<string>(entry.ExcludedUserTags) : new List<string>();
             state.UserTagAvailFilterMode = entry.UserTagAvailFilterMode;
             state.UserTagInheritVarToChildren = entry.UserTagInheritVarToChildren;
             state.SceneSourceFilter = entry.SceneSourceFilter ?? "";

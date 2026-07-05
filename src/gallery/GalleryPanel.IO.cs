@@ -1654,10 +1654,18 @@ namespace VPB
                             if (!keepTaggedVisible) return false;
                         }
                     }
-                    else if (activeUserTags != null && activeUserTags.Count > 0)
+                    else
                     {
-                        if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(catUt, pkgK, ipK, activeUserTags, UserTagFilterRequiresAllTags()))
-                            return false;
+                        if (activeUserTags != null && activeUserTags.Count > 0)
+                        {
+                            if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(catUt, pkgK, ipK, activeUserTags, UserTagFilterRequiresAllTags()))
+                                return false;
+                        }
+                        if (excludedUserTags != null && excludedUserTags.Count > 0)
+                        {
+                            if (!VpbLocalDatabase.TryGalleryRowHasNoneOfUserTags(catUt, pkgK, ipK, excludedUserTags))
+                                return false;
+                        }
                     }
                 }
             }
@@ -2216,6 +2224,19 @@ namespace VPB
                     for (int i = 0; i < uarr.Count; i++)
                     {
                         sb.Append(uarr[i] ?? "");
+                        sb.Append('\u001F');
+                    }
+                }
+                sb.Append('\u001E');
+                // Excluded (none-of) user tags must vary the key too, else toggling an exclude reuses the
+                // previously cached, unfiltered list and the exclusion appears to do nothing.
+                if (_userTagAvailMode == UserTagAvailMode.FilterByTags && excludedUserTags != null && excludedUserTags.Count > 0)
+                {
+                    var xarr = new List<string>(excludedUserTags);
+                    xarr.Sort(StringComparer.Ordinal);
+                    for (int i = 0; i < xarr.Count; i++)
+                    {
+                        sb.Append(xarr[i] ?? "");
                         sb.Append('\u001F');
                     }
                 }
@@ -3148,6 +3169,9 @@ namespace VPB
                 HashSet<string> userTagNamesForGridSqlSnap = null;
                 if (userTagGridFilterByTagsSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+                HashSet<string> excludedUserTagNamesForGridSqlSnap = null;
+                if (userTagGridFilterByTagsSnap && excludedUserTags != null && excludedUserTags.Count > 0)
+                    excludedUserTagNamesForGridSqlSnap = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
                 int[] refreshDrainUtSqlFilterApplied = { 0 };
 
                 ThreadPool.QueueUserWorkItem((state) =>
@@ -3217,7 +3241,8 @@ namespace VPB
                                 activeUserTags: userTagNamesForGridSqlSnap,
                                 sortState: fileListSortSnapForWorker,
                                 userTagsUntaggedOnly: userTagGridFilterUntaggedSnap,
-                                userTagsRequireAll: userTagFilterIsolateSnap);
+                                userTagsRequireAll: userTagFilterIsolateSnap,
+                                excludedUserTags: excludedUserTagNamesForGridSqlSnap);
                             }
                         }
                         else

@@ -108,6 +108,7 @@ namespace VPB
             if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
             {
                 try { activeUserTags?.Clear(); } catch { }
+                try { excludedUserTags?.Clear(); } catch { }
             }
             else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
             {

@@ -2632,8 +2632,8 @@ namespace VPB
         private string GetUserTagPickRowTooltipFilter()
         {
             return UserTagFilterRequiresAllTags()
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Click: filter main grid by this tag (multi-select, all must match). Drag to Applied below.")
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Click: filter main grid by this tag (multi-select, any can match). Drag to Applied below.");
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Tap to cycle: include (all must match) \u2192 exclude (hide items with this tag) \u2192 off. Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Tap to cycle: include (any can match) \u2192 exclude (hide items with this tag) \u2192 off. Drag to Applied below.");
         }
 
         /// <summary>True when available tag row should be omitted in filter-by-tags mode (unused in current category).</summary>
@@ -2851,6 +2851,7 @@ namespace VPB
             if (_userTagEditorRenameModalGo != null) _userTagEditorRenameModalGo.SetActive(false);
             if (_userTagEditorRenameModalInput != null) _userTagEditorRenameModalInput.text = "";
             _userTagEditorRenameSourcePrefix = null;
+            CloseTagCategoryEditorModal();
             UserTagEditorSyncSortIcon();
             RebuildUserTagEditorRows();
             _userTagEditorRoot.SetActive(true);
@@ -2859,6 +2860,7 @@ namespace VPB
 
         private void HideUserTagListEditor()
         {
+            CloseTagCategoryEditorModal();
             if (_userTagEditorRoot != null)
                 _userTagEditorRoot.SetActive(false);
         }
@@ -3183,6 +3185,10 @@ namespace VPB
             Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
             GameObject renameBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprRename, UserTagEditorOpenRenameDialog, renameCol, 10f * s);
             AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.usertags.editor_rename_tip", "Rename the selected tag (opens dialog)."));
+            Color catCol = new Color(0.42f, 0.34f, 0.55f, 1f);
+            Sprite sprCat = UI.LoadIconSprite("vpb_icons/gallery_category.png", Color.white);
+            GameObject catBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprCat, UserTagEditorOpenCategoryDialog, catCol, 10f * s);
+            AddTooltipPlain(catBtn, VPBTranslation.T("gallery.usertags.editor_category_tip", "Assign the selected tag(s) to a color category, or create/manage categories."));
             GameObject impBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprImp, UserTagEditorBeginImportYaml, ioImpCol, 10f * s);
             AddTooltipPlain(impBtn, VPBTranslation.T("gallery.usertags.editor_import_tip", "Import tag assignments from a YAML file (tag→items or item→tags)."));
             GameObject expBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprExp, UserTagEditorBeginExportYaml, ioExpCol, 10f * s);
@@ -4042,8 +4048,9 @@ namespace VPB
                 }
             }
 
-            string yamlTag = GalleryUserTagYamlBrain.BuildTagToItemsYaml(tagToItems);
-            string yamlItem = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags);
+            List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> categoriesExport = BuildUserTagCategoryExportList();
+            string yamlTag = GalleryUserTagYamlBrain.BuildTagToItemsYaml(tagToItems, categoriesExport);
+            string yamlItem = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags, categoriesExport);
             try
             {
                 FileManager.WriteAllText(pathTag, yamlTag);
@@ -4119,6 +4126,7 @@ namespace VPB
                     text,
                     out Dictionary<string, List<string>> tagToItemKeys,
                     out Dictionary<string, List<string>> itemKeyToTags,
+                    out List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> importedCategories,
                     out string err))
             {
                 ShowTemporaryStatus(
@@ -4128,8 +4136,10 @@ namespace VPB
             }
 
             int nLinks = UserTagEditorApplyImportedAssignments(tagToItemKeys, itemKeyToTags, out int nUnassigned, out List<string> skippedInvalidTags);
+            int nCategories = UserTagEditorApplyImportedCategories(importedCategories);
             InvalidateTags();
             userTagsCached = false;
+            if (nCategories > 0) InvalidateUserTagCategoryColorCache();
             try { RefreshFilesThenUpdateTabs(true); } catch { }
             RebuildUserTagEditorRows();
             string importMsg;
@@ -4146,6 +4156,10 @@ namespace VPB
                     VPBTranslation.T("gallery.usertags.editor_import_done", "Import applied: {0} tag link(s) updated."),
                     nLinks);
             }
+            if (nCategories > 0)
+                importMsg += " " + string.Format(
+                    VPBTranslation.T("gallery.usertags.editor_import_done_categories", "{0} categor(y/ies) applied."),
+                    nCategories);
             ShowTemporaryStatus(importMsg, 2.8f);
             UserTagEditorNotifyImportSkippedTags(skippedInvalidTags);
         }
@@ -4341,6 +4355,22 @@ namespace VPB
                 int riCapture = ri;
                 btn.onClick.AddListener(() => UserTagEditorOnRowClicked(nameSnap, riCapture, rows, bg, baseCol, selCol));
 
+                // Category color swatch (US-02): shows the tag's assigned category color, or a faint empty chip.
+                Color? catColor = TryGetUserTagCategoryColor(nameSnap);
+                float swSize = rowH * 0.46f;
+                GameObject swGo = new GameObject("CatSwatch");
+                swGo.transform.SetParent(rowGo.transform, false);
+                Image swImg = swGo.AddComponent<Image>();
+                swImg.color = catColor.HasValue ? catColor.Value : new Color(1f, 1f, 1f, 0.06f);
+                swImg.raycastTarget = false;
+                RectTransform swRt = swGo.GetComponent<RectTransform>();
+                swRt.anchorMin = new Vector2(0f, 0.5f);
+                swRt.anchorMax = new Vector2(0f, 0.5f);
+                swRt.pivot = new Vector2(0f, 0.5f);
+                swRt.sizeDelta = new Vector2(swSize, swSize);
+                swRt.anchoredPosition = new Vector2(9f * s, 0f);
+
+                float labelLeft = 9f * s + swSize + 8f * s;
                 GameObject txtGo = new GameObject("Label");
                 txtGo.transform.SetParent(rowGo.transform, false);
                 Text txt = txtGo.AddComponent<Text>();
@@ -4352,7 +4382,7 @@ namespace VPB
                 RectTransform trt = txtGo.GetComponent<RectTransform>();
                 trt.anchorMin = Vector2.zero;
                 trt.anchorMax = Vector2.one;
-                trt.offsetMin = new Vector2(10f * s, 2f * s);
+                trt.offsetMin = new Vector2(labelLeft, 2f * s);
                 trt.offsetMax = new Vector2(-10f * s, -2f * s);
             }
         }

@@ -122,7 +122,7 @@ namespace VPB
         // Loose-only: a user-saved .vap under Custom/. VAR rows never set this. Bit chosen from the free range (bits 10-30 unused; 0-9 are kind/gender/preset/decal, 31 is present-flag).
         internal const int ClothingAttrIsCustomFlag = 0x400; // bit 10
 
-        private const int SchemaVersion = 12;
+        private const int SchemaVersion = 13;
 
         private static readonly object s_Sync = new object();
         private static volatile bool s_RebuildScheduled;
@@ -5938,6 +5938,7 @@ namespace VPB
             public string InclusionAndFragment;// " AND (m.internal_path LIKE ? ...) " or ""
             public string TagAndFragment;      // " AND m.list_path LIKE ? ..." or ""
             public string UserTagAndFragment;  // user-tag correlated subquery or ""
+            public string ExcludedUserTagAndFragment; // " AND NOT EXISTS (... IN (excluded))" or ""
 
             // Bind values in the order they appear after the cloth AND slot.
             // category bind comes first (slot 1), then creatorBindValues, then the rest.
@@ -5947,6 +5948,7 @@ namespace VPB
             public List<string> InclusionBindValues;
             public List<string> TagBindValues;
             public List<string> UserTagBindValues;
+            public List<string> ExcludedUserTagBindValues;
 
             public bool IsEverything;
             public bool PkgHasLoadedCol;
@@ -5967,7 +5969,8 @@ namespace VPB
             HashSet<string> activeTags,
             HashSet<string> activeUserTags,
             bool userTagsUntaggedOnly,
-            bool userTagsRequireAll)
+            bool userTagsRequireAll,
+            HashSet<string> excludedUserTags = null)
         {
             var ctx = new GalleryCategoryWhereContext();
             ctx.CategoryTitle = categoryTitle;
@@ -6086,6 +6089,14 @@ namespace VPB
                 AppendSqlActiveUserTagFilter(sbUt, ctx.UserTagBindValues, activeUserTags, "m", userTagsRequireAll, ctx.IsEverything ? Gallery.EverythingCategoryName : null);
             ctx.UserTagAndFragment = sbUt.ToString();
 
+            // excluded user tags (none-of): row must carry none of the excluded tags.
+            ctx.ExcludedUserTagBindValues = new List<string>();
+            var sbXut = new StringBuilder();
+            // Untagged-only already guarantees no user tags, so exclusion is redundant there.
+            if (!userTagsUntaggedOnly)
+                AppendSqlExcludedUserTagNoneExists(sbXut, ctx.ExcludedUserTagBindValues, excludedUserTags, "m", ctx.IsEverything ? Gallery.EverythingCategoryName : null);
+            ctx.ExcludedUserTagAndFragment = sbXut.ToString();
+
             return ctx;
         }
 
@@ -6108,6 +6119,8 @@ namespace VPB
                 for (int i = 0; i < ctx.TagBindValues.Count; i++) stmt.BindText(b++, ctx.TagBindValues[i] ?? "");
             if (ctx.UserTagBindValues != null)
                 for (int i = 0; i < ctx.UserTagBindValues.Count; i++) stmt.BindText(b++, ctx.UserTagBindValues[i] ?? "");
+            if (ctx.ExcludedUserTagBindValues != null)
+                for (int i = 0; i < ctx.ExcludedUserTagBindValues.Count; i++) stmt.BindText(b++, ctx.ExcludedUserTagBindValues[i] ?? "");
             return b;
         }
 
@@ -6130,7 +6143,8 @@ namespace VPB
             HashSet<string> activeUserTags = null,
             SortState sortState = null,
             bool userTagsUntaggedOnly = false,
-            bool userTagsRequireAll = false)
+            bool userTagsRequireAll = false,
+            HashSet<string> excludedUserTags = null)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -6201,7 +6215,7 @@ namespace VPB
                     var ctx = BuildGalleryCategoryWhere(
                         conn, categoryTitle, creatorFilter, loadedState,
                         nameTerms, pathExclusions, pathInclusions,
-                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll);
+                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
                     string loadedSelect = ctx.PkgHasLoadedCol ? "ifnull(p.loaded,'')" : "0";
@@ -6238,6 +6252,7 @@ namespace VPB
                     sbSql.Append(ctx.LoadedAndFragment).Append(ctx.NameAndFragment)
                          .Append(ctx.ExclusionAndFragment).Append(ctx.InclusionAndFragment)
                          .Append(ctx.TagAndFragment).Append(ctx.UserTagAndFragment)
+                         .Append(ctx.ExcludedUserTagAndFragment)
                          .Append(orderBy);
                     string sql = sbSql.ToString();
 

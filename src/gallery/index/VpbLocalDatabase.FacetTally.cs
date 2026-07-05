@@ -230,7 +230,8 @@ namespace VPB
             bool userTagsRequireAll,
             int sourceMode,
             bool hideOldVersions,
-            out ClothingChipCounts counts)
+            out ClothingChipCounts counts,
+            HashSet<string> excludedUserTags = null)
         {
             counts = new ClothingChipCounts();
             if (!VpbSqlite3.IsAvailable) return false;
@@ -256,11 +257,11 @@ namespace VPB
                     var ctx = BuildGalleryCategoryWhere(
                         conn, "Clothing", creatorFilter, loadedState,
                         nameTerms, pathExclusions, pathInclusions,
-                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll);
+                        activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
 
                     string afterClothFragments = ctx.LoadedAndFragment + ctx.NameAndFragment
                         + ctx.ExclusionAndFragment + ctx.InclusionAndFragment
-                        + ctx.TagAndFragment + ctx.UserTagAndFragment;
+                        + ctx.TagAndFragment + ctx.UserTagAndFragment + ctx.ExcludedUserTagAndFragment;
 
                     GalleryPanel.ClothingSubfilter[] chips = new GalleryPanel.ClothingSubfilter[]
                     {

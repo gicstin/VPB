@@ -16,6 +16,7 @@ namespace VPB
         public string Creator;
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
+        public List<string> ExcludedUserTags = new List<string>();
         /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only).</summary>
         public int UserTagAvailFilterMode = 0;
         public int UserTagInheritVarToChildren = 0;
@@ -65,6 +66,11 @@ namespace VPB
             if (UserTags != null)
                 foreach (var t in UserTags) userTagsArr.Add(t);
             node["UserTags"] = userTagsArr;
+
+            var excludedUserTagsArr = new JSONArray();
+            if (ExcludedUserTags != null)
+                foreach (var t in ExcludedUserTags) excludedUserTagsArr.Add(t);
+            node["ExcludedUserTags"] = excludedUserTagsArr;
 
             node["UserTagAvailFilterMode"].AsInt = UserTagAvailFilterMode;
             node["UserTagInheritVarToChildren"].AsInt = UserTagInheritVarToChildren;
@@ -137,6 +143,13 @@ namespace VPB
             {
                 foreach (JSONNode t in userTagsArr)
                     if (!string.IsNullOrEmpty(t)) entry.UserTags.Add(t);
+            }
+
+            var excludedUserTagsArr = node["ExcludedUserTags"].AsArray;
+            if (excludedUserTagsArr != null)
+            {
+                foreach (JSONNode t in excludedUserTagsArr)
+                    if (!string.IsNullOrEmpty(t)) entry.ExcludedUserTags.Add(t);
             }
 
             entry.UserTagAvailFilterMode = node["UserTagAvailFilterMode"] != null ? node["UserTagAvailFilterMode"].AsInt : 0;

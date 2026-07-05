@@ -844,6 +844,7 @@ namespace VPB
                     else if (rightActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
                         activeUserTags.Clear();
+                        excludedUserTags.Clear();
                         userTagsCached = false;
                         if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true); } catch { } }
                         try { UpdateTabs(); } catch { }
@@ -1152,6 +1153,7 @@ namespace VPB
                     else if (leftActiveContent == ContentType.UserTags) {
                         userTagFilter = "";
                         activeUserTags.Clear();
+                        excludedUserTags.Clear();
                         userTagsCached = false;
                         if (_userTagAvailMode != UserTagAvailMode.Tag) { try { RefreshFiles(true); } catch { } }
                         try { UpdateTabs(); } catch { }

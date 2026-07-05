@@ -95,7 +95,8 @@ namespace VPB
             if (appearanceSubfilter != 0) return true;
             if (posePeopleFilter != PosePeopleFilter.All) return true;
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return true;
-            if (_userTagAvailMode == UserTagAvailMode.FilterByTags && activeUserTags != null && activeUserTags.Count > 0)
+            if (_userTagAvailMode == UserTagAvailMode.FilterByTags
+                && ((activeUserTags != null && activeUserTags.Count > 0) || (excludedUserTags != null && excludedUserTags.Count > 0)))
                 return true;
             return false;
         }
@@ -473,19 +474,37 @@ namespace VPB
                     OnDismiss = () => DismissUntaggedOnlyFilterChip()
                 });
             }
-            else if (_userTagAvailMode == UserTagAvailMode.FilterByTags && activeUserTags != null && activeUserTags.Count > 0)
+            else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
             {
-                var userTags = new List<string>(activeUserTags);
-                userTags.Sort(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < userTags.Count; i++)
+                if (activeUserTags != null && activeUserTags.Count > 0)
                 {
-                    string ut = userTags[i];
-                    specs.Add(new ActiveFilterChipSpec
+                    var userTags = new List<string>(activeUserTags);
+                    userTags.Sort(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < userTags.Count; i++)
                     {
-                        Label = VPBTranslation.T("gallery.filter_chip.user_tag", "User tag") + ": " + TruncateFilterChipLabel(ut, 22),
-                        Kind = FilterChipKind.UserTag,
-                        OnDismiss = () => DismissUserTagFilterChip(ut)
-                    });
+                        string ut = userTags[i];
+                        specs.Add(new ActiveFilterChipSpec
+                        {
+                            Label = VPBTranslation.T("gallery.filter_chip.user_tag", "User tag") + ": " + TruncateFilterChipLabel(ut, 22),
+                            Kind = FilterChipKind.UserTag,
+                            OnDismiss = () => DismissUserTagFilterChip(ut)
+                        });
+                    }
+                }
+                if (excludedUserTags != null && excludedUserTags.Count > 0)
+                {
+                    var xUserTags = new List<string>(excludedUserTags);
+                    xUserTags.Sort(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < xUserTags.Count; i++)
+                    {
+                        string xut = xUserTags[i];
+                        specs.Add(new ActiveFilterChipSpec
+                        {
+                            Label = VPBTranslation.T("gallery.filter_chip.user_tag_exclude", "Exclude tag") + ": " + TruncateFilterChipLabel(xut, 22),
+                            Kind = FilterChipKind.UserTag,
+                            OnDismiss = () => DismissExcludedUserTagFilterChip(xut)
+                        });
+                    }
                 }
             }
 
@@ -584,6 +603,26 @@ namespace VPB
                     }
                 }
                 if (found != null) activeUserTags.Remove(found);
+            }
+            try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
+            SyncBrowseFilterChipChrome();
+        }
+
+        private void DismissExcludedUserTagFilterChip(string tag)
+        {
+            if (excludedUserTags == null || string.IsNullOrEmpty(tag)) return;
+            if (!excludedUserTags.Remove(tag))
+            {
+                string found = null;
+                foreach (string t in excludedUserTags)
+                {
+                    if (string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = t;
+                        break;
+                    }
+                }
+                if (found != null) excludedUserTags.Remove(found);
             }
             try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
             SyncBrowseFilterChipChrome();

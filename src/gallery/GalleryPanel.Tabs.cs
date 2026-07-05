@@ -681,6 +681,10 @@ namespace VPB
                 && _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && activeUserTags != null
                 && activeUserTags.Contains(tagSnap);
+            bool isFilterExcluded = !isCreateRow
+                && _userTagAvailMode == UserTagAvailMode.FilterByTags
+                && excludedUserTags != null
+                && excludedUserTags.Contains(tagSnap);
             bool isPulsing = !isCreateRow
                 && !string.IsNullOrEmpty(_userTagPulseTag)
                 && string.Equals(_userTagPulseTag, tagSnap, StringComparison.OrdinalIgnoreCase)
@@ -690,12 +694,21 @@ namespace VPB
                 && (state == UserTagSelectionState.On || state == UserTagSelectionState.Mixed);
             bool preferSelectionColor = _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && hasGridSelection && isOnSelection && !isFilterActive;
+            // Resting (fully-inactive) slot is tinted by the tag's category color when assigned (US-02);
+            // filter/selection states above still take visual priority.
+            Color restingRowColor = ColorInactiveRow;
+            if (!isCreateRow)
+            {
+                Color? catCol = TryGetUserTagCategoryColor(tagSnap);
+                if (catCol.HasValue) restingRowColor = catCol.Value;
+            }
             Color btnColor = isCreateRow ? new Color(0.25f, 0.45f, 0.28f, 1f)
+                : (isFilterExcluded ? UserTagFilterExcludedColor
                 : (isFilterActive ? UserTagFilterActiveColor
                 : (preferSelectionColor ? UserTagStateOnColor
                 : (isPulsing ? UserTagStatePulseColor
                 : (state == UserTagSelectionState.On ? UserTagStateOnColor
-                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : ColorInactiveRow)))));
+                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : restingRowColor))))));
             string labelUt = isCreateRow
                 ? (VPBTranslation.T(CreateLabelKey, "Create Tag") + ": " + tagSnap)
                 : (tagSnap + " (" + ut.Count + ")");
@@ -719,8 +732,22 @@ namespace VPB
                         }
                         else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
                         {
-                            if (activeUserTags.Contains(tagSnap)) activeUserTags.Remove(tagSnap);
-                            else activeUserTags.Add(tagSnap);
+                            // Tri-state tap cycle (VR-friendly, no right-click needed):
+                            // Off -> Include (green) -> Exclude (red) -> Off. Row color reflects the state.
+                            if (activeUserTags.Contains(tagSnap))
+                            {
+                                activeUserTags.Remove(tagSnap);
+                                excludedUserTags.Add(tagSnap);
+                            }
+                            else if (excludedUserTags.Contains(tagSnap))
+                            {
+                                excludedUserTags.Remove(tagSnap);
+                            }
+                            else
+                            {
+                                activeUserTags.Add(tagSnap);
+                                excludedUserTags.Remove(tagSnap);
+                            }
                             RefreshFiles(true, false, false, "user_tag_filter_toggle");
                         }
                         else
@@ -736,6 +763,22 @@ namespace VPB
             UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
             rightClickDelegate.OnRightClick = null;
+            if (!isCreateRow && _userTagAvailMode == UserTagAvailMode.FilterByTags)
+            {
+                bool sideLeftRc = isLeft;
+                rightClickDelegate.OnRightClick = () =>
+                {
+                    try
+                    {
+                        // Right-click cycles the exclude (none-of) state for this tag.
+                        if (excludedUserTags.Contains(tagSnap)) excludedUserTags.Remove(tagSnap);
+                        else { excludedUserTags.Add(tagSnap); activeUserTags.Remove(tagSnap); }
+                        RefreshFiles(true, false, false, "user_tag_filter_exclude_toggle");
+                        RefreshUserTagsAvailPaneInPlace(sideLeftRc);
+                    }
+                    catch { }
+                };
+            }
 
             Image img = btnGO.GetComponent<Image>();
             if (img != null) img.color = btnColor;
