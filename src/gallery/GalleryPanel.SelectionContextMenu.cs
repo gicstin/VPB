@@ -57,6 +57,20 @@ namespace VPB
         private GameObject tboxFilterClearBtn;
         private Text tboxFilterModeText;
 
+        // Appearance clothing-apply-mode segmented row (Preset / Keep / Only). Shown in the
+        // toolbox only while the Appearance category is active; single-select, one click.
+        private GameObject tboxClothingModeRowGO;
+        private RectTransform tboxClothingModeRowRT;
+        private LayoutElement tboxClothingModeRowLE;
+        private HorizontalLayoutGroup tboxClothingModeRowHLG;
+        private Text tboxClothingModeLabel;
+        private Image tboxClothesPresetImg;
+        private Image tboxClothesKeepImg;
+        private Image tboxClothesOnlyImg;
+        private Text tboxClothesPresetText;
+        private Text tboxClothesKeepText;
+        private Text tboxClothesOnlyText;
+
         private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
         {
             if (go == null) return;
@@ -521,6 +535,9 @@ namespace VPB
             // Add filter row height when active
             if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + tboxBtnRowGap;
+            // Add appearance clothing-mode row height when active
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
+                band += tboxInfoRowHeight + tboxBtnRowGap;
             if (tboxButtonsLayerRT != null)
                 tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
 
@@ -548,6 +565,29 @@ namespace VPB
         private RectTransform tboxButtonsLayerRT; // reference for scale updates
 
         // ─────────────────────────────────────────────────────────────────────────
+
+        // Build one segment of the appearance clothing-mode row. Single-select: clicking sets
+        // the mode and re-styles the row (see UpdateKeepClothingButtonState).
+        private void TboxBuildClothingModeButton(string mode, string label, string tooltipKey, string tooltipText, out Image img, out Text text)
+        {
+            GameObject go = UI.CreateUIButton(
+                tboxClothingModeRowGO, 90, 40, label, GalleryUiDesignTokens.FontBodyRef,
+                0, 0, AnchorPresets.stretchAll, () => SetAppearanceClothingMode(mode));
+            go.name = "TboxClothesMode_" + mode;
+            img = go.GetComponent<Image>();
+            text = go.GetComponentInChildren<Text>();
+            // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
+            if (text != null)
+                GalleryUiMetrics.ApplyFont(text, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+            var le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            le.minWidth = 72f;
+            le.preferredWidth = 100f;
+            le.flexibleWidth = 1f;
+            le.minHeight = tboxInfoRowHeight;
+            le.preferredHeight = tboxInfoRowHeight;
+            AddTooltip(go, tooltipKey, tooltipText);
+        }
 
         private void EnsureTboxUI()
         {
@@ -796,6 +836,69 @@ namespace VPB
             tboxFilterClearBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
             { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
             AddTooltip(tboxFilterClearBtn, "gallery.tooltip.filter_clear", VPBTranslation.T("gallery.tooltip.filter_clear", "Clear Filter"));
+
+            // ── Appearance Clothing Mode Row (Preset / Keep / Only) ────────────
+            // Segmented single-select control, shown only while the Appearance category is
+            // active. Replaces the old text side tab; one click picks the mode.
+            tboxClothingModeRowGO = new GameObject("TboxClothingModeRow");
+            tboxClothingModeRowGO.transform.SetParent(flexGO.transform, false);
+            tboxClothingModeRowGO.transform.SetAsFirstSibling();
+            tboxClothingModeRowRT = tboxClothingModeRowGO.AddComponent<RectTransform>();
+            tboxClothingModeRowRT.anchorMin = Vector2.zero;
+            tboxClothingModeRowRT.anchorMax = Vector2.one;
+            tboxClothingModeRowRT.sizeDelta = Vector2.zero;
+            tboxClothingModeRowLE = tboxClothingModeRowGO.AddComponent<LayoutElement>();
+            tboxClothingModeRowLE.minHeight = tboxInfoRowHeight;
+            tboxClothingModeRowLE.preferredHeight = tboxInfoRowHeight;
+            tboxClothingModeRowLE.flexibleWidth = 1f;
+            tboxClothingModeRowHLG = tboxClothingModeRowGO.AddComponent<HorizontalLayoutGroup>();
+            tboxClothingModeRowHLG.spacing = 8f;
+            tboxClothingModeRowHLG.padding = new RectOffset(8, 8, 0, 0);
+            tboxClothingModeRowHLG.childAlignment = TextAnchor.MiddleLeft;
+            tboxClothingModeRowHLG.childControlWidth = true;
+            tboxClothingModeRowHLG.childForceExpandWidth = false;
+            tboxClothingModeRowHLG.childControlHeight = true;
+            tboxClothingModeRowHLG.childForceExpandHeight = true;
+            tboxClothingModeRowGO.SetActive(false);
+
+            // Leading label
+            {
+                var lblGO = new GameObject("ClothingModeLabel");
+                lblGO.transform.SetParent(tboxClothingModeRowGO.transform, false);
+                tboxClothingModeLabel = lblGO.AddComponent<Text>();
+                tboxClothingModeLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                tboxClothingModeLabel.fontStyle = FontStyle.Normal;
+                tboxClothingModeLabel.color = new Color(0.8f, 0.8f, 0.82f, 1f);
+                tboxClothingModeLabel.alignment = TextAnchor.MiddleLeft;
+                tboxClothingModeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+                tboxClothingModeLabel.verticalOverflow = VerticalWrapMode.Truncate;
+                tboxClothingModeLabel.raycastTarget = false;
+                tboxClothingModeLabel.text = VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:");
+                // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
+                GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+                var lblLE = lblGO.AddComponent<LayoutElement>();
+                // Wider than the text so there's clear right padding before the first button.
+                lblLE.minWidth = lblLE.preferredWidth = 240f;
+                lblLE.flexibleWidth = 0f;
+            }
+
+            TboxBuildClothingModeButton("replace",
+                VPBTranslation.T("gallery.clothes.preset_short", "Full Look"),
+                "gallery.tooltip.clothes_preset",
+                VPBTranslation.T("gallery.tooltip.clothes_preset", "Load the whole look including the preset's outfit (replaces your current clothing)."),
+                out tboxClothesPresetImg, out tboxClothesPresetText);
+            TboxBuildClothingModeButton("keep",
+                VPBTranslation.T("gallery.clothes.keep_short", "Keep My Outfit"),
+                "gallery.tooltip.clothes_keep",
+                VPBTranslation.T("gallery.tooltip.clothes_keep", "Load the look but keep your current outfit and its textures/colors; only body, skin and hair change."),
+                out tboxClothesKeepImg, out tboxClothesKeepText);
+            TboxBuildClothingModeButton("clothingonly",
+                VPBTranslation.T("gallery.clothes.only_short", "Outfit Only"),
+                "gallery.tooltip.clothes_only",
+                VPBTranslation.T("gallery.tooltip.clothes_only", "Load only the preset's outfit; keep your current body, skin and hair."),
+                out tboxClothesOnlyImg, out tboxClothesOnlyText);
+
+            UpdateKeepClothingButtonState();
 
             const int tboxActionBtnFont = GalleryUiDesignTokens.FontBodyRef;
 
@@ -1477,6 +1580,7 @@ namespace VPB
                         pRT.anchoredPosition = new Vector2(0f, rowH * 0.5f);
                     }
                     if (fLE != null) { fLE.minHeight = rowH; fLE.preferredHeight = rowH; }
+                    if (tboxClothingModeRowLE != null) { tboxClothingModeRowLE.minHeight = rowH; tboxClothingModeRowLE.preferredHeight = rowH; }
                     try { RescaleFooterInfoBarInternal(s); } catch { }
                     try { TboxSetAllFlexActionButtonHeights(TboxActionButtonInnerHeight()); } catch { }
                     try { RefreshTboxFlexButtonLayout(); } catch { }
@@ -1484,6 +1588,14 @@ namespace VPB
                     {
                         if (tboxTargetDropdownBtnText != null)
                             GalleryUiMetrics.ApplyFont(tboxTargetDropdownBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                        if (tboxClothingModeLabel != null)
+                            GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                        if (tboxClothesPresetText != null)
+                            GalleryUiMetrics.ApplyFont(tboxClothesPresetText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                        if (tboxClothesKeepText != null)
+                            GalleryUiMetrics.ApplyFont(tboxClothesKeepText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                        if (tboxClothesOnlyText != null)
+                            GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     }
                     catch { }
                 });
@@ -2013,6 +2125,9 @@ namespace VPB
                     + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap * (tboxButtonLayoutRows - 1) : 0f);
                 // Add filter row height when active
                 if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
+                    btnBand += tboxInfoRowHeight + tboxBtnRowGap;
+                // Add appearance clothing-mode row height when active
+                if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 // Reserve a row at the very top of the toolbox for the active Try-On bar so
                 // it becomes part of the toolbox layout instead of floating over the buttons.

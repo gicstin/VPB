@@ -1595,12 +1595,8 @@ namespace VPB
                     AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
                 }
 
-                // Appearance outfit: keep current vs load from preset (Right)
-                rightKeepClothingBtnGO = UI.CreateUIButton(rightSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
-                rightKeepClothingBtnImage = rightKeepClothingBtnGO.GetComponent<Image>();
-                rightKeepClothingBtnText = rightKeepClothingBtnGO.GetComponentInChildren<Text>();
-                rightSideButtons.Add(rightKeepClothingBtnGO.GetComponent<RectTransform>());
-                rightKeepClothingBtnGO.SetActive(false);
+                // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
+                // toolbox (see EnsureTboxUI / tboxClothingModeRow), not a side tab.
 
                 // Replace Toggle (Right): one button cycles Add ↔ Replace (distinct icons when both assets exist)
                 {
@@ -2129,12 +2125,8 @@ namespace VPB
                     AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
                 }
 
-                // Appearance outfit: keep current vs load from preset (Left)
-                leftKeepClothingBtnGO = UI.CreateUIButton(leftSideContainer, btnWidth, btnHeight, VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset"), btnFontSize, 0, startY - spacing * 12 - groupGap * 4, AnchorPresets.centre, ToggleKeepClothingMode);
-                leftKeepClothingBtnImage = leftKeepClothingBtnGO.GetComponent<Image>();
-                leftKeepClothingBtnText = leftKeepClothingBtnGO.GetComponentInChildren<Text>();
-                leftSideButtons.Add(leftKeepClothingBtnGO.GetComponent<RectTransform>());
-                leftKeepClothingBtnGO.SetActive(false);
+                // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
+                // toolbox (see EnsureTboxUI / tboxClothingModeRow), not a side tab.
 
                 // Replace Toggle (Left)
                 {

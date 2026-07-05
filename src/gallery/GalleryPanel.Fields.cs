@@ -346,13 +346,6 @@ namespace VPB
         private Image leftReplaceBtnImage;
         private Image leftReplaceBtnIconImage;
 
-        private GameObject rightKeepClothingBtnGO;
-        private Text rightKeepClothingBtnText;
-        private Image rightKeepClothingBtnImage;
-        private GameObject leftKeepClothingBtnGO;
-        private Text leftKeepClothingBtnText;
-        private Image leftKeepClothingBtnImage;
-
         private GameObject footerUndoBtnGO;
         private GameObject footerRedoBtnGO;
 

@@ -393,6 +393,17 @@ namespace VPB
             titleText.text = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
             bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
+
+            // Navigating to a different category while a Try-On preview is still pending should not
+            // silently discard it. Auto-commit (implicit Keep) so e.g. previewing clothing then moving
+            // to the Appearance category keeps that clothing instead of reverting when the next preset
+            // loads. Only fires on an actual category change, so flipping through looks in the same
+            // category still unstacks normally.
+            if (categoryTitleChanged && hasLoadedContent && _tryOnActive)
+            {
+                try { TryOnKeep(); } catch { }
+            }
+
             if (cleanupModeActive && (paramsChanged || categoryTitleChanged))
             {
                 try { ExitCleanupModeForSidePanelNavigation(restoreGalleryCategory: false, refreshGalleryFiles: false); } catch { }

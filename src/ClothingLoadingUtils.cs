@@ -1753,6 +1753,77 @@ namespace VPB
             }
         }
 
+        // Clothing-only variant used by the "Clothes: Keep" appearance load. Snapshots the material /
+        // customization state (textures, colors, sim, etc.) of the currently-active clothing item
+        // storables so it can be re-applied after a non-merge appearance preset load. The ClothingPresets
+        // lock preserves which items are worn, but a non-merge load still resets unlisted storables to
+        // default, which strips the customization from the kept clothing. Hair and aggregate storables are
+        // intentionally excluded so the incoming preset's hair still applies normally.
+        internal static List<JSONClass> CaptureActiveClothingStorableSnapshots(Atom atom)
+        {
+            var snapshots = new List<JSONClass>();
+            if (atom == null) return snapshots;
+
+            HashSet<string> itemTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            JSONStorable geometry = null;
+            try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+            if (geometry != null)
+            {
+                List<string> names = null;
+                try { names = geometry.GetBoolParamNames(); } catch { }
+                if (names != null)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string key = names[i];
+                        if (string.IsNullOrEmpty(key)) continue;
+                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(key); } catch { }
+                        if (b == null || !b.val) continue; // only currently-active clothing
+
+                        CollectClothingHairItemMatchTokens(key.Substring("clothing:".Length), itemTokens);
+                    }
+                }
+            }
+
+            HashSet<string> captured = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> storableIds = null;
+            try { storableIds = atom.GetStorableIDs(); } catch { }
+            if (storableIds == null) return snapshots;
+
+            for (int i = 0; i < storableIds.Count; i++)
+            {
+                string sid = storableIds[i];
+                if (string.IsNullOrEmpty(sid)) continue;
+                if (s_ClothingHairAggregateStorables.Contains(sid)) continue;
+                // Exclude hair item storables and hair aggregates so the new preset's hair still loads.
+                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                bool include = sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) >= 0
+                    || StorableMatchesClothingHairItemTokens(sid, itemTokens);
+                if (!include) continue;
+                if (!captured.Add(sid)) continue;
+
+                JSONStorable s = null;
+                try { s = atom.GetStorableByID(sid); } catch { }
+                if (s == null) continue;
+
+                JSONClass snap = null;
+                try { snap = s.GetJSON(); } catch { }
+                if (snap != null) snapshots.Add(snap);
+            }
+
+            return snapshots;
+        }
+
+        internal static void RestoreClothingStorableSnapshots(Atom atom, List<JSONClass> storableSnapshots)
+        {
+            RestoreClothingHairStorableSnapshots(atom, storableSnapshots);
+        }
+
         private static IEnumerator DeferredRestoreClothingHairUndoStateCoroutine(
             Atom atom,
             ClothingHairUndoState state)

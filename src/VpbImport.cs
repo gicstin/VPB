@@ -223,10 +223,18 @@ namespace VPB
 
                         // Keep: lock ClothingPresets PMC so VaM's preset loader skips clothing storables during the load.
                         PresetLockStore lockStore = null;
+                        List<JSONClass> keepClothingMaterialSnapshots = null;
                         if (clothingMode == ClothingApplyMode.Keep && targetAtom.type == "Person")
                         {
                             lockStore = new PresetLockStore();
                             lockStore.StorePresetLocks(targetAtom, clearAllLocks: true, lockClothingPreset: true, lockMorphPreset: false);
+
+                            // The lock preserves which clothing items are worn, but a non-merge appearance
+                            // load resets unlisted storables to default — stripping textures/colors from the
+                            // kept clothing since those material storables aren't in the incoming preset.
+                            // Snapshot them now and re-apply after the load (issue #43).
+                            try { keepClothingMaterialSnapshots = ClothingLoadingUtils.CaptureActiveClothingStorableSnapshots(targetAtom); }
+                            catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Keep clothing material snapshot failed: {ex.Message}"); }
                         }
 
                         bool mergeLoad = clothingMode == ClothingApplyMode.Merge;
@@ -245,6 +253,15 @@ namespace VPB
                             if (lpos != null) lpos.val = lposPre;
                             if (psName != null) psName.val = psNamePre;
                             if (lockStore != null) lockStore.RestorePresetLocks(targetAtom);
+                        }
+
+                        // Re-apply the kept clothing's material/customization state that the non-merge load
+                        // reset to default. Clothing selection was locked and unchanged, so the same storables
+                        // still exist and can be restored synchronously (issue #43).
+                        if (keepClothingMaterialSnapshots != null && keepClothingMaterialSnapshots.Count > 0)
+                        {
+                            try { ClothingLoadingUtils.RestoreClothingStorableSnapshots(targetAtom, keepClothingMaterialSnapshots); }
+                            catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Keep clothing material restore failed: {ex.Message}"); }
                         }
 
                         if (targetAtom.type == "Person")

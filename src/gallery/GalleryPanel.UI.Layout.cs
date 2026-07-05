@@ -1096,7 +1096,6 @@ namespace VPB
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxRemoveMode = -1;
-            int idxKeepOutfit = -1;
             int idxReplace = -1;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
@@ -1120,7 +1119,6 @@ namespace VPB
                     idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
                     // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
-                    idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
                     idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
@@ -1205,7 +1203,6 @@ namespace VPB
                 new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
                 new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(idxRemoveMode, 0, 2), // Remove Item Mode (hover-to-remove tool)
-                new SideButtonLayoutEntry(idxKeepOutfit, 0, 0), // Keep body clothes vs preset
                 new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
 
                 new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove (clothing context)
@@ -1619,6 +1616,20 @@ namespace VPB
                 leftSceneImportSideBtn.SetActive(show);
         }
 
+        // True when the current selection contains an appearance preset. Used to reveal the
+        // appearance clothing-mode row in mixed views (History) only when it's relevant.
+        private bool SelectionContainsAppearance()
+        {
+            if (selectedFiles == null) return false;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                if (TryOnClassify(f) == TryOnKind.Appearance) return true;
+            }
+            return false;
+        }
+
         private void UpdateSideContextActions()
         {
             RefreshSceneImportSideButtonVisibility();
@@ -1631,8 +1642,20 @@ namespace VPB
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = true;
 
-            if (rightKeepClothingBtnGO != null) rightKeepClothingBtnGO.SetActive(isAppearance);
-            if (leftKeepClothingBtnGO != null) leftKeepClothingBtnGO.SetActive(isAppearance);
+            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only)
+            // lives in the toolbox. Shown while browsing the Appearance category, and in History mode
+            // (mixed items) only when the selected item is actually an appearance preset — so it isn't
+            // always on when History contains scenes, clothing, etc.
+            bool isHistoryBrowse = activeContentType == ContentType.History
+                || leftActiveContent == ContentType.History
+                || rightActiveContent == ContentType.History;
+            bool showClothingMode = isAppearance || (isHistoryBrowse && SelectionContainsAppearance());
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf != showClothingMode)
+            {
+                tboxClothingModeRowGO.SetActive(showClothingMode);
+                if (showClothingMode) UpdateKeepClothingButtonState();
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+            }
             if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
             if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
             if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);

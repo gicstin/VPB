@@ -3372,50 +3372,39 @@ namespace VPB
             UpdateKeepClothingButtonState();
         }
 
+        // Reflect the persisted appearance clothing-apply-mode on the toolbox segmented row
+        // (Preset / Keep / Only). Single-select: the active mode's button is highlighted, the
+        // others are dimmed.
         private void UpdateKeepClothingButtonState()
         {
             string m = AppearanceClothingApplyMode ?? "replace";
-            string text;
-            Color color;
-            if (string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase))
-            {
-                text = VPBTranslation.T("gallery.clothes.keep", "Clothes: Keep");
-                color = new Color(0.15f, 0.35f, 0.55f, 1f);
-            }
-            else if (string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase))
-            {
-                text = VPBTranslation.T("gallery.clothes.only", "Clothes: Only");
-                color = new Color(0.15f, 0.45f, 0.28f, 1f);
-            }
-            else
-            {
-                text = VPBTranslation.T("gallery.clothes.preset", "Clothes: Preset");
-                color = new Color(0.35f, 0.3f, 0.2f, 1f);
-            }
+            bool keep = string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase);
+            bool only = string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase);
+            bool preset = !keep && !only;
 
-            if (rightKeepClothingBtnText != null) rightKeepClothingBtnText.text = text;
-            if (rightKeepClothingBtnImage != null) rightKeepClothingBtnImage.color = color;
+            StyleClothingModeButton(tboxClothesPresetImg, tboxClothesPresetText, preset, new Color(0.35f, 0.3f, 0.2f, 1f));
+            StyleClothingModeButton(tboxClothesKeepImg, tboxClothesKeepText, keep, new Color(0.15f, 0.35f, 0.55f, 1f));
+            StyleClothingModeButton(tboxClothesOnlyImg, tboxClothesOnlyText, only, new Color(0.15f, 0.45f, 0.28f, 1f));
+        }
 
-            if (leftKeepClothingBtnText != null) leftKeepClothingBtnText.text = text;
-            if (leftKeepClothingBtnImage != null) leftKeepClothingBtnImage.color = color;
+        private static void StyleClothingModeButton(Image img, Text text, bool selected, Color selectedColor)
+        {
+            if (img != null)
+                img.color = selected ? selectedColor : new Color(0.16f, 0.16f, 0.18f, 1f);
+            if (text != null)
+                text.color = selected ? new Color(1f, 1f, 1f, 1f) : new Color(0.6f, 0.6f, 0.62f, 1f);
+        }
+
+        private void SetAppearanceClothingMode(string mode)
+        {
+            AppearanceClothingApplyMode = mode;
+            UpdateKeepClothingButtonState();
         }
 
         private void ToggleReplaceMode()
         {
             DragDropReplaceMode = !DragDropReplaceMode;
             UpdateReplaceButtonState();
-        }
-
-        private void ToggleKeepClothingMode()
-        {
-            string m = AppearanceClothingApplyMode ?? "replace";
-            if (string.Equals(m, "replace", StringComparison.OrdinalIgnoreCase))
-                AppearanceClothingApplyMode = "keep";
-            else if (string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase))
-                AppearanceClothingApplyMode = "clothingonly";
-            else
-                AppearanceClothingApplyMode = "replace";
-            UpdateKeepClothingButtonState();
         }
 
         private void UpdateApplyModeButtonState()
