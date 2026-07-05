@@ -815,7 +815,8 @@ namespace VPB
         {
             if (alreadyHaveScenePath != null)
             {
-                //SuperController.singleton.Load(alreadyHaveScenePath);
+                try { browser?.Hide(); } catch { }
+                SceneLoadingUtils.LoadScene(alreadyHaveScenePath, false);
             }
         }
 
