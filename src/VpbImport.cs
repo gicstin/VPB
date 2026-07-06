@@ -199,6 +199,9 @@ namespace VPB
                                 break;
                             }
 
+                            try { DumpOutfitOnlyDiag(preset, keepCosmetics, slice); }
+                            catch (Exception ex) { LogUtil.LogWarning($"[VPB OutfitDiag] dump failed: {ex.Message}"); }
+
                             MeshVR.PresetManager clothingPM = null;
                             JSONStorable clothingPresetStorable = targetAtom.GetStorableByID("ClothingPresets");
                             if (clothingPresetStorable != null)
@@ -765,7 +768,8 @@ namespace VPB
         private sealed class ClothingSliceItem
         {
             public JSONClass Entry;
-            public JSONClass Material;
+            public string InternalId;
+            public List<JSONClass> ItemStorables;
             public string BoolKey;
             public JSONNode BoolVal;
         }
@@ -782,7 +786,11 @@ namespace VPB
             if (storables == null) return;
 
             JSONClass geometry = null;
+            List<JSONClass> allStorables = new List<JSONClass>();
+            // Older/alternate presets customize via positional clothingItem#N or url-keyed material
+            // storables. Keep those as a fallback binding path.
             Dictionary<int, JSONClass> positional = new Dictionary<int, JSONClass>();
+            Dictionary<string, JSONClass> materialByUrl = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
             foreach (JSONNode node in storables)
             {
                 JSONClass s = node as JSONClass;
@@ -792,9 +800,16 @@ namespace VPB
                 if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase)) { geometry = s; continue; }
                 if (string.Equals(id, "ClothingPresets", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(id, "AppearancePresets", StringComparison.OrdinalIgnoreCase)) continue;
+                allStorables.Add(s);
 
                 int idx = ParseClothingItemIndex(id);
-                if (idx >= 0) { positional[idx] = s; continue; }
+                if (idx >= 0)
+                {
+                    positional[idx] = s;
+                    string murl = ExtractClothingUrlFromStorableJsonStatic(s);
+                    if (!string.IsNullOrEmpty(murl) && !materialByUrl.ContainsKey(murl)) materialByUrl[murl] = s;
+                    continue;
+                }
 
                 // uid/asset-path clothing material storable (exclude hair).
                 if (IsClothingRelatedStorableId(id) && id.IndexOf("hair", StringComparison.OrdinalIgnoreCase) < 0)
@@ -805,6 +820,22 @@ namespace VPB
 
             if (geometry == null || geometry["clothing"] == null || geometry["clothing"].AsArray == null) return;
             JSONArray clothing = geometry["clothing"].AsArray;
+
+            // Normalized internalIds of ALL enabled clothing items in this source, for longest-match
+            // disambiguation (a shorter internalId that prefixes a longer one must not steal storables).
+            List<string> allWornNorm = new List<string>();
+            for (int j = 0; j < clothing.Count; j++)
+            {
+                JSONClass e = clothing[j].AsObject;
+                if (e == null) continue;
+                if (e["enabled"] != null && string.Equals(e["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase)) continue;
+                string euid = e["id"] != null ? e["id"].Value : "";
+                string eiid = e["internalId"] != null ? e["internalId"].Value : "";
+                if (string.IsNullOrEmpty(eiid)) eiid = ClothingInternalIdFromUid(euid);
+                string norm = NormalizeStorablePrefix(eiid);
+                if (!string.IsNullOrEmpty(norm)) allWornNorm.Add(norm);
+            }
+
             for (int i = 0; i < clothing.Count; i++)
             {
                 JSONClass entry = clothing[i].AsObject;
@@ -816,13 +847,43 @@ namespace VPB
                     continue;
 
                 string uid = entry["id"] != null ? entry["id"].Value : "";
+                // Three-way split for Outfit Only: real garments and ACCESSORIES (glasses, hats,
+                // jewelry) load from the preset; true FACE cosmetics (eye overlays, makeup, lashes,
+                // decals) are kept from the target. Accessories are cosmetic-classified but part of
+                // the outfit, so they ride the garment pass (wantCosmetic=false).
                 bool cosmetic = ClothingLoadingUtils.ClassifyClothingWearClass(uid) == ClothingLoadingUtils.ClothingWearClass.Cosmetic
                     || ClothingLoadingUtils.IsCosmeticClothingUidHeuristic(uid);
-                if (cosmetic != wantCosmetic) continue;
+                bool faceCosmetic = cosmetic && !ClothingLoadingUtils.IsAccessoryClothingUidHeuristic(uid);
+                if (faceCosmetic != wantCosmetic) continue;
 
-                ClothingSliceItem item = new ClothingSliceItem { Entry = entry };
-                JSONClass mat;
-                if (positional.TryGetValue(i, out mat)) item.Material = mat;
+                string internalId = entry["internalId"] != null ? entry["internalId"].Value : "";
+                if (string.IsNullOrEmpty(internalId)) internalId = ClothingInternalIdFromUid(uid);
+
+                ClothingSliceItem item = new ClothingSliceItem { Entry = entry, InternalId = internalId, ItemStorables = new List<JSONClass>() };
+                // Primary binding: an item's customization (textures/colors/sim/wrap) is saved as storables
+                // whose id is the item's runtime storeId plus an arbitrary control suffix. The storeId is
+                // the internalId with spaces/underscores stripped (local items) or preserved (packaged),
+                // so match with separators removed and preserve the storables' original ids on load.
+                string normInternal = NormalizeStorablePrefix(internalId);
+                if (!string.IsNullOrEmpty(normInternal))
+                {
+                    foreach (JSONClass s in allStorables)
+                    {
+                        string sid = s["id"].Value;
+                        if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                        if (StorableBelongsToItem(sid, normInternal, allWornNorm)) item.ItemStorables.Add(s);
+                    }
+                }
+                // Fallback for presets that customize via positional/url material storables.
+                if (item.ItemStorables.Count == 0)
+                {
+                    JSONClass mat = null;
+                    if (!string.IsNullOrEmpty(uid)) materialByUrl.TryGetValue(uid, out mat);
+                    if (mat == null && !string.IsNullOrEmpty(internalId)) materialByUrl.TryGetValue(internalId, out mat);
+                    if (mat == null) positional.TryGetValue(i, out mat);
+                    if (mat != null) item.ItemStorables.Add(mat);
+                }
+
                 if (!string.IsNullOrEmpty(uid))
                 {
                     string boolKey = "clothing:" + uid;
@@ -830,6 +891,42 @@ namespace VPB
                 }
                 items.Add(item);
             }
+        }
+
+        // A clothing item's customization storable id is its runtime storeId (internalId with
+        // spaces/underscores stripped) plus an arbitrary control suffix (Material.../Sim/WrapControl/
+        // ItemControl/Style/Preset...). Compare separator-stripped, case-sensitive. Rejects when a
+        // longer worn internalId also prefixes the storable (that item owns it instead).
+        private static bool StorableBelongsToItem(string storableId, string normInternal, List<string> allWornNorm)
+        {
+            string normS = NormalizeStorablePrefix(storableId);
+            if (normInternal.Length == 0 || normS.Length <= normInternal.Length) return false;
+            if (!normS.StartsWith(normInternal, StringComparison.Ordinal)) return false;
+            foreach (string other in allWornNorm)
+                if (other.Length > normInternal.Length && normS.StartsWith(other, StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        // Strip spaces and underscores to compare against VaM's runtime clothing storeId, which drops
+        // those separators from the item internalId.
+        private static string NormalizeStorablePrefix(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s) if (c != ' ' && c != '_') sb.Append(c);
+            return sb.ToString();
+        }
+
+        // Derive an item's internalId from its uid when the geometry entry omits it: the file name
+        // without directory or extension. Modern presets carry internalId explicitly.
+        private static string ClothingInternalIdFromUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return "";
+            int slash = uid.LastIndexOfAny(new[] { '/', '\\' });
+            string name = slash >= 0 ? uid.Substring(slash + 1) : uid;
+            int dot = name.LastIndexOf('.');
+            if (dot > 0) name = name.Substring(0, dot);
+            return name;
         }
 
         // Parses the N from a "clothingItem#N" storable id (positional material storable). Returns -1 otherwise.
@@ -867,30 +964,116 @@ namespace VPB
             JSONClass geomSlice = new JSONClass();
             geomSlice["id"] = "geometry";
             JSONArray clothingArr = new JSONArray();
-            JSONArray materials = new JSONArray();
+            JSONArray storablesOut = new JSONArray();
+            storablesOut.Add(geomSlice);
+
+            HashSet<string> emitted = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < items.Count; i++)
             {
                 ClothingSliceItem it = items[i];
                 clothingArr.Add(it.Entry);
                 if (it.BoolKey != null) geomSlice[it.BoolKey] = it.BoolVal;
-                if (it.Material != null)
+                if (it.ItemStorables == null) continue;
+                foreach (JSONClass ms in it.ItemStorables)
                 {
-                    JSONClass m = CloneJsonClassStatic(it.Material);
-                    m["id"] = "clothingItem#" + i;
-                    materials.Add(m);
+                    string mid = ms["id"] != null ? ms["id"].Value : null;
+                    if (string.IsNullOrEmpty(mid) || !emitted.Add(mid)) continue;
+                    storablesOut.Add(CloneJsonClassStatic(ms));
                 }
             }
             geomSlice["clothing"] = clothingArr;
 
-            JSONArray storablesOut = new JSONArray();
-            storablesOut.Add(geomSlice);
-            foreach (JSONNode m in materials) storablesOut.Add(m);
-            foreach (JSONClass m in uidMaterials) storablesOut.Add(m);
+            foreach (JSONClass m in uidMaterials)
+            {
+                string mid = m["id"] != null ? m["id"].Value : null;
+                if (string.IsNullOrEmpty(mid) || !emitted.Add(mid)) continue;
+                storablesOut.Add(m);
+            }
 
             JSONClass slice = new JSONClass();
             slice["storables"] = storablesOut;
             slice["setUnlistedParamsToDefault"] = "true";
             return slice;
+        }
+
+        // Temporary diagnostic for the "Outfit Only" import path. One-shot per apply (not a hot path),
+        // so it always logs. Prefix "[VPB OutfitDiag]" for easy grep in BepInEx/LogOutput.log.
+        // Dumps how source clothing maps to the built ClothingPresets slice so material (texture/color)
+        // binding can be verified against the real JSON field names.
+        private static void DumpOutfitOnlyDiag(JSONClass preset, JSONClass keepCosmetics, JSONClass slice)
+        {
+            LogUtil.Log("[VPB OutfitDiag] ===== Outfit Only apply diagnostic =====");
+            DumpOutfitOnlySource("PRESET(garments source)", preset);
+            DumpOutfitOnlySource("KEEP(target cosmetics)", keepCosmetics);
+            DumpOutfitOnlySource("SLICE(built ClothingPresets)", slice);
+            LogUtil.Log("[VPB OutfitDiag] ===== end =====");
+        }
+
+        private static void DumpOutfitOnlySource(string label, JSONClass source)
+        {
+            if (source == null) { LogUtil.Log($"[VPB OutfitDiag] {label}: <null>"); return; }
+            JSONArray storables = source["storables"] != null ? source["storables"].AsArray : null;
+            if (storables == null) { LogUtil.Log($"[VPB OutfitDiag] {label}: no storables"); return; }
+
+            JSONClass geometry = null;
+            int matCount = 0;
+            System.Text.StringBuilder allIds = new System.Text.StringBuilder();
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                string id = s["id"] != null ? s["id"].Value : "";
+                if (allIds.Length < 1200) { if (allIds.Length > 0) allIds.Append(" | "); allIds.Append(id); }
+                if (string.Equals(id, "ClothingPresets", StringComparison.OrdinalIgnoreCase))
+                {
+                    string pn = s["presetName"] != null ? s["presetName"].Value : "<none>";
+                    LogUtil.Log($"[VPB OutfitDiag] {label} ClothingPresets presetName='{pn}'");
+                }
+                if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase)) { geometry = s; continue; }
+                if (!IsClothingRelatedStorableId(id)) continue;
+                if (id.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                string url = ExtractClothingUrlFromStorableJsonStatic(s);
+                // List the customization keys present (what makes RedTexture differ from base).
+                System.Text.StringBuilder keys = new System.Text.StringBuilder();
+                foreach (string k in s.Keys)
+                {
+                    if (k == "id" || k == "url") continue;
+                    if (keys.Length > 0) keys.Append(",");
+                    keys.Append(k);
+                    if (keys.Length > 300) { keys.Append("..."); break; }
+                }
+                matCount++;
+                LogUtil.Log($"[VPB OutfitDiag] {label} MAT id='{id}' url='{url ?? "<none>"}' keys=[{keys}]");
+            }
+
+            if (geometry != null && geometry["clothing"] != null && geometry["clothing"].AsArray != null)
+            {
+                JSONArray clothing = geometry["clothing"].AsArray;
+                for (int i = 0; i < clothing.Count; i++)
+                {
+                    JSONClass e = clothing[i].AsObject;
+                    if (e == null) continue;
+                    string uid = e["id"] != null ? e["id"].Value : "";
+                    string internalId = e["internalId"] != null ? e["internalId"].Value : "";
+                    if (string.IsNullOrEmpty(internalId)) internalId = ClothingInternalIdFromUid(uid);
+                    string enabled = e["enabled"] != null ? e["enabled"].Value : "";
+                    int itemStorables = 0;
+                    string normInternal = NormalizeStorablePrefix(internalId);
+                    if (!string.IsNullOrEmpty(normInternal))
+                        foreach (JSONNode node in storables)
+                        {
+                            JSONClass s = node as JSONClass;
+                            if (s == null || s["id"] == null) continue;
+                            string sid = s["id"].Value;
+                            if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                            if (StorableBelongsToItem(sid, normInternal, new List<string>())) itemStorables++;
+                        }
+                    LogUtil.Log($"[VPB OutfitDiag] {label} CLOTH[{i}] id='{uid}' internalId='{internalId}' enabled='{enabled}' itemStorables={itemStorables}");
+                }
+            }
+            LogUtil.Log($"[VPB OutfitDiag] {label}: storables={storables.Count} clothingMaterials={matCount}");
+            LogUtil.Log($"[VPB OutfitDiag] {label} ALLIDS=[{allIds}]");
         }
 
         // Filter a wrapped appearance slice to the source's non-real (Cosmetic) clothing only, for the

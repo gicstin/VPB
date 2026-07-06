@@ -3601,7 +3601,8 @@ namespace VPB
                         {
                             if (useSqliteIndex && activeContentSnap == ContentType.Category
                                 && (userTagGridFilterUntaggedSnap
-                                    || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)))
+                                    || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                    || (excludedUserTagNamesForGridSqlSnap != null && excludedUserTagNamesForGridSqlSnap.Count > 0)))
                                 refreshDrainUtSqlFilterApplied[0] = 1;
                         }
                         catch { }

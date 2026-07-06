@@ -270,6 +270,25 @@ namespace VPB
             return false;
         }
 
+        // Physical wearable accessories (eyewear, jewelry, headwear) that some heuristics flag as
+        // "cosmetic" but which belong WITH an outfit, not with the face. Used by Outfit Only import to
+        // carry preset accessories while still keeping the target's face cosmetics (eye overlays, makeup).
+        private static readonly string[] AccessoryClothingKeywords =
+        {
+            "glasses", "sunglasses", "goggles", "monocle", "eyewear",
+            "earring", "piercing", "necklace", "choker", "bracelet", "anklet",
+            "crown", "tiara", "headband", "head flower", "headflower"
+        };
+
+        public static bool IsAccessoryClothingUidHeuristic(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < AccessoryClothingKeywords.Length; i++)
+                if (s.Contains(AccessoryClothingKeywords[i])) return true;
+            return false;
+        }
+
         public static bool IsGarmentClothingUidHeuristicPositive(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
@@ -1572,6 +1591,19 @@ namespace VPB
                 || string.Equals(storableId, "FemaleBreastPhysicsPresets", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsBodyControlOrPhysicsStorableId(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            if (string.Equals(storableId, "control", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(storableId, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+            if (storableId.EndsWith("Control", StringComparison.OrdinalIgnoreCase)) return true;
+            if (storableId.IndexOf("Physics", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("AutoCollider", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("Rescale", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("JointDrive", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
         private static bool StorableMatchesClothingHairItemTokens(string storableId, HashSet<string> itemTokens)
         {
             if (string.IsNullOrEmpty(storableId) || itemTokens == null || itemTokens.Count == 0)
@@ -1592,6 +1624,7 @@ namespace VPB
         private static bool ShouldCaptureClothingHairStorable(string storableId, HashSet<string> itemTokens)
         {
             if (string.IsNullOrEmpty(storableId)) return false;
+            if (IsBodyControlOrPhysicsStorableId(storableId)) return false;
             if (s_ClothingHairAggregateStorables.Contains(storableId)) return true;
             if (IsClothingHairItemStorableId(storableId)) return true;
             if (StorableMatchesClothingHairItemTokens(storableId, itemTokens)) return true;
@@ -1744,6 +1777,7 @@ namespace VPB
 
                 string sid = snap["id"].Value;
                 if (string.IsNullOrEmpty(sid)) continue;
+                if (IsBodyControlOrPhysicsStorableId(sid)) continue;
 
                 JSONStorable s = null;
                 try { s = atom.GetStorableByID(sid); } catch { }
@@ -1799,6 +1833,7 @@ namespace VPB
                 string sid = storableIds[i];
                 if (string.IsNullOrEmpty(sid)) continue;
                 if (s_ClothingHairAggregateStorables.Contains(sid)) continue;
+                if (IsBodyControlOrPhysicsStorableId(sid)) continue;
                 // Exclude hair item storables and hair aggregates so the new preset's hair still loads.
                 if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
 
