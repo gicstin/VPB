@@ -492,7 +492,7 @@ namespace VPB
             titleBarSettingsRT.anchoredPosition = new Vector2(-324, 0);
             _titleBarSettingsBtnRT = titleBarSettingsRT;
             VPBUiFont.ApplyTo(titleBarSettingsBtnText);
-            AddTooltip(titleBarSettingsBtn, "gallery.tooltip.open_settings", "Settings");
+            AddDynamicTooltip(titleBarSettingsBtn, BuildPluginInfoTooltip);
 
             // Filter Presets Button (match Creator dropdown chrome)
             GameObject qfToggleBtn = UI.CreateUIButton(titleBarGO, 40, 40, " ", 16, 0, 0, AnchorPresets.middleCenter, ToggleQuickFilters);

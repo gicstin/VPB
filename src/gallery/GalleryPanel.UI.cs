@@ -2445,6 +2445,41 @@ namespace VPB
             del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
         }
 
+        // Like AddTooltipPlain but the text is computed at hover time via the provider, so it can show
+        // live details (version, loaded package count, memory, etc.). Snapshot is taken on hover-enter.
+        private void AddDynamicTooltip(GameObject go, Func<string> provider)
+        {
+            if (go == null || provider == null) return;
+            var del = go.GetComponent<UIHoverDelegate>();
+            if (del == null) del = go.AddComponent<UIHoverDelegate>();
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.TooltipAttach++;
+
+            if (del.TooltipHandler != null) del.OnHoverChange -= del.TooltipHandler;
+            Action<bool> handler = (enter) =>
+            {
+                if (enter)
+                {
+                    if (temporaryStatusCoroutine != null)
+                    {
+                        StopCoroutine(temporaryStatusCoroutine);
+                        temporaryStatusCoroutine = null;
+                    }
+                    string msg;
+                    try { msg = provider(); } catch { msg = null; }
+                    temporaryStatusMsg = msg;
+                    temporaryStatusOwner = go;
+                }
+                else if (temporaryStatusOwner == go)
+                {
+                    temporaryStatusMsg = null;
+                    temporaryStatusOwner = null;
+                }
+            };
+            del.TooltipHandler = handler;
+            del.OnHoverChange += handler;
+            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
+        }
+
         private void AddTooltipPlain(GameObject go, string tooltip)
         {
             if (go == null) return;

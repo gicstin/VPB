@@ -28,6 +28,8 @@ function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [
     $eb = Escape-CSharpString $baseSemVer
     $ef = Escape-CSharpString $fullVersion
     $ns = [string]$n
+    # UTC date only (no time) so the tooltip can show build age without leaking timezone/work hours.
+    $buildDate = [System.DateTime]::UtcNow.ToString('yyyy-MM-dd')
     $lines = @(
         'namespace VPB {',
         '    internal static class PluginVersionInfo {',
@@ -35,6 +37,7 @@ function Write-PluginVersionCs([string] $path, [string] $baseSemVer, [int] $n, [
         "        public const string BuildNumber = `"$ns`";",
         "        public const string BuildVersion = `"b$ns`";",
         "        public const string Version = `"$ef`";",
+        "        public const string BuildDate = `"$buildDate`";",
         '    }',
         '}'
     )
