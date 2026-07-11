@@ -1019,6 +1019,20 @@ namespace VPB
             }
             catch { }
 
+            // Ctrl+Shift+P: dump the last imported pose (source foot/toe/hand/root control specs vs live applied
+            // controller states + toe/foot bone angles) to diagnose toes curling / hand drift. Diagnostic only.
+            try
+            {
+                if (Input.GetKeyDown(KeyCode.P)
+                    && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                    && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                    && !IsTypingInTextInput())
+                {
+                    VPB.src.util.PoseImportDiagnostics.Dump("hotkey");
+                }
+            }
+            catch { }
+
             if (!m_Inited)
             {
                 Init();

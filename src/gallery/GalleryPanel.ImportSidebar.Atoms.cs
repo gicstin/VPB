@@ -299,6 +299,7 @@ namespace VPB
             RefreshApplyButtonEnabled();
             // Source change reselects which plugins exist; target change re-evaluates the on-target sort.
             RefreshPluginChecklist();
+            RefreshCUAChecklist();
             RefreshSourceTypeAvailability();
         }
 
@@ -358,6 +359,7 @@ namespace VPB
                 RefreshTargetSelectionVisual();
                 RefreshApplyButtonEnabled();
                 RefreshPluginChecklist();
+                RefreshCUAChecklist();
                 RefreshSourceTypeAvailability();
                 return;
             }
@@ -408,6 +410,7 @@ namespace VPB
             RefreshTargetSelectionVisual();
             RefreshApplyButtonEnabled();
             RefreshPluginChecklist();
+            RefreshCUAChecklist();
             RefreshSourceTypeAvailability();
         }
 

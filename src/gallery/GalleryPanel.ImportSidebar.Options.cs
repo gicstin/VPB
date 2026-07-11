@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using SimpleJSON;
 using UnityEngine;
@@ -45,9 +46,28 @@ namespace VPB
             public bool OnTarget;   // an identical plugin url is already on the target atom
         }
 
+        // CUA picker: same pooled-row scaffold as the plugin picker, listing every CustomUnityAsset in the source.
+        private GameObject importSidebarCUAChecklistRoot;
+        private LayoutElement importSidebarCUAChecklistLe;
+        private const int ImportSidebarVisibleCUARows = 8;
+        private GameObject importSidebarCUABulkRow;
+        private const int ImportSidebarMaxCUARows = 24;
+        private readonly List<GameObject> importSidebarCUARowPool = new List<GameObject>(ImportSidebarMaxCUARows);
+        private List<ImportCUAEntry> importSidebarCUAEntries = new List<ImportCUAEntry>();
+        // Checked CUA atom ids to import; per source-atom (sig tracks scene+atom so switching source reseeds to "all").
+        private readonly HashSet<string> importSidebarSelectedCUAKeys = new HashSet<string>(StringComparer.Ordinal);
+        private string importSidebarCUASelectionSig;
+
+        private sealed class ImportCUAEntry
+        {
+            public string Id;            // CUA atom id
+            public bool LinksToPerson;   // reaches the selected source person (tagged "on person")
+        }
+
         // Appearance conditional rows (visibility driven by the suppress-clothing toggle).
         private GameObject importSidebarOnlySuppressRealRow;
         private GameObject importSidebarImportCUARow;
+        private GameObject importSidebarCUARelativeRow;
 
         // Re-reads each option toggle's checkbox text on demand so external changes (toolbox Suppress-scale) sync in.
         private readonly List<System.Action> importSidebarOptionToggleRefreshers = new List<System.Action>();
@@ -297,7 +317,15 @@ namespace VPB
                     importSidebarOnlySuppressRealRow = AddOptionToggle(panel.transform, "  Only disable real clothing",
                         () => importSidebarOnlySuppressRealClothing, v => importSidebarOnlySuppressRealClothing = v, null);
                     importSidebarImportCUARow = AddOptionToggle(panel.transform, "Import atom CUAs",
-                        () => importSidebarImportLinkedCUAs, v => importSidebarImportLinkedCUAs = v, null);
+                        () => importSidebarImportLinkedCUAs,
+                        v => { importSidebarImportLinkedCUAs = v; RefreshCUAChecklist(); RefreshAppearanceConditionalRows(); }, null);
+                    AddOptionToggle(panel.transform, "Pick CUAs to import",
+                        () => importSidebarPickCUAs,
+                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null);
+                    importSidebarCUARelativeRow = AddOptionToggle(panel.transform, "Place off-person relative to person",
+                        () => importSidebarCUARelativeToPerson,
+                        v => importSidebarCUARelativeToPerson = v, null);
+                    BuildImportSidebarCUAChecklist(panel.transform);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
                         new Color(0.91f, 0.53f, 0.53f, 1f));
@@ -682,6 +710,212 @@ namespace VPB
             RefreshApplyButtonEnabled();
         }
 
+        // ---- CUA picker (mirrors the plugin picker; lists every CustomUnityAsset in the source scene) ----
+
+        private void BuildImportSidebarCUAChecklist(Transform parent)
+        {
+            importSidebarCUABulkRow = new GameObject("CUABulkRow");
+            importSidebarCUABulkRow.transform.SetParent(parent, false);
+            LayoutElement cuaBulkLe = importSidebarCUABulkRow.AddComponent<LayoutElement>();
+            cuaBulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            cuaBulkLe.flexibleWidth = 1f;
+            HorizontalLayoutGroup cuaBulkHlg = importSidebarCUABulkRow.AddComponent<HorizontalLayoutGroup>();
+            cuaBulkHlg.childForceExpandWidth = true;
+            cuaBulkHlg.childForceExpandHeight = true;
+            cuaBulkHlg.childControlWidth = true;
+            cuaBulkHlg.childControlHeight = true;
+            cuaBulkHlg.spacing = 2f;
+            BuildImportSidebarBulkButton(importSidebarCUABulkRow.transform,
+                VPBTranslation.T("gallery.import.select_all_cuas", "Select All"),
+                "gallery.import.select_all_cuas_tip", "Import every CUA in the source",
+                ImportSidebarSelectAllBg, ImportSidebarSelectAllCUAs);
+            BuildImportSidebarBulkButton(importSidebarCUABulkRow.transform,
+                VPBTranslation.T("gallery.import.clear_all_cuas", "Clear All"),
+                "gallery.import.clear_all_cuas_tip", "Exclude every CUA from import",
+                ImportSidebarClearAllBg, ImportSidebarClearAllCUAs);
+            LayoutElement cuaBulkLeC = cuaBulkLe;
+            innerPaneScaleActions.Add(s => {
+                if (cuaBulkLeC != null) cuaBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+            });
+            importSidebarCUABulkRow.SetActive(false);
+
+            importSidebarCUAChecklistRoot = UI.CreateVScrollableContent(
+                parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
+                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
+            LayoutElement scrollLe = importSidebarCUAChecklistRoot.AddComponent<LayoutElement>();
+            scrollLe.flexibleWidth = 1f;
+            importSidebarCUAChecklistLe = scrollLe;
+            innerPaneScaleActions.Add(s => UpdateCUAChecklistHeight());
+
+            Transform content = importSidebarCUAChecklistRoot.GetComponent<ScrollRect>().content.transform;
+
+            Text caption = AddSimpleLabelText(content,
+                "CUAs in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
+            LayoutElement capLe = caption.gameObject.AddComponent<LayoutElement>();
+            capLe.preferredHeight = ImportSidebarBaseRowHeight;
+            capLe.flexibleWidth = 1f;
+            Text capCaptured = caption;
+            LayoutElement capLeCaptured = capLe;
+            innerPaneScaleActions.Add(s => {
+                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
+            });
+
+            for (int i = 0; i < ImportSidebarMaxCUARows; i++)
+            {
+                GameObject row = CreateImportSidebarCUARow(content, i);
+                importSidebarCUARowPool.Add(row);
+                row.SetActive(false);
+            }
+            importSidebarCUAChecklistRoot.SetActive(false);
+        }
+
+        private GameObject CreateImportSidebarCUARow(Transform parent, int index)
+        {
+            GameObject row = new GameObject("CUARow_" + index);
+            row.transform.SetParent(parent, false);
+
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = ImportSidebarBaseRowHeight;
+            le.flexibleWidth = 1f;
+
+            Image bg = row.AddComponent<Image>();
+            bg.color = ColorInactiveRow;
+
+            Button btn = row.AddComponent<Button>();
+            btn.targetGraphic = bg;
+            UI.NeutralizeSelectableColorTint(btn);
+
+            Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
+
+            LayoutElement leCaptured = le;
+            Text txtCaptured = label;
+            innerPaneScaleActions.Add(s => {
+                if (leCaptured != null) leCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s);
+            });
+            return row;
+        }
+
+        // Rebuilds the CUA checklist from the source scene. Visible only for Appearance + "Import atom CUAs" + pick gate.
+        // Switching source atom (or scene) reseeds the checks to "all"; within the same source, checks are preserved.
+        private void RefreshCUAChecklist()
+        {
+            bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
+                && importSidebarImportLinkedCUAs && importSidebarPickCUAs;
+            if (importSidebarCUAChecklistRoot != null) importSidebarCUAChecklistRoot.SetActive(show);
+            if (importSidebarCUABulkRow != null) importSidebarCUABulkRow.SetActive(show);
+            if (!show || importSidebarCUARowPool.Count == 0) return;
+
+            importSidebarCUAEntries = BuildSourceCUAEntries();
+
+            string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
+            if (sig != importSidebarCUASelectionSig)
+            {
+                importSidebarSelectedCUAKeys.Clear();
+                foreach (ImportCUAEntry e in importSidebarCUAEntries) importSidebarSelectedCUAKeys.Add(e.Id);
+                importSidebarCUASelectionSig = sig;
+            }
+
+            UpdateCUAChecklistHeight();
+            RenderCUAChecklistRows();
+        }
+
+        private void UpdateCUAChecklistHeight()
+        {
+            if (importSidebarCUAChecklistLe == null) return;
+            int visibleRows = Mathf.Min(importSidebarCUAEntries.Count, ImportSidebarVisibleCUARows);
+            float s = ChromeScale;
+            importSidebarCUAChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
+        }
+
+        private void RenderCUAChecklistRows()
+        {
+            for (int i = 0; i < importSidebarCUARowPool.Count; i++)
+            {
+                GameObject row = importSidebarCUARowPool[i];
+                if (i < importSidebarCUAEntries.Count) { ConfigureCUARow(row, importSidebarCUAEntries[i]); row.SetActive(true); }
+                else row.SetActive(false);
+            }
+        }
+
+        private void ConfigureCUARow(GameObject row, ImportCUAEntry e)
+        {
+            bool selected = importSidebarSelectedCUAKeys.Contains(e.Id);
+            string text = (selected ? "[x] " : "[ ] ") + e.Id;
+            if (e.LinksToPerson) text += "  (on person)";
+
+            Text t = row.GetComponentInChildren<Text>();
+            if (t != null) t.text = text;
+            Image bg = row.GetComponent<Image>();
+            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
+
+            Button btn = row.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                string id = e.Id;
+                btn.onClick.AddListener(() => ToggleCUASelected(id));
+            }
+        }
+
+        private void ToggleCUASelected(string id)
+        {
+            if (importSidebarSelectedCUAKeys.Contains(id)) importSidebarSelectedCUAKeys.Remove(id);
+            else importSidebarSelectedCUAKeys.Add(id);
+            RenderCUAChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        private void ImportSidebarSelectAllCUAs()
+        {
+            importSidebarSelectedCUAKeys.Clear();
+            foreach (ImportCUAEntry e in importSidebarCUAEntries) importSidebarSelectedCUAKeys.Add(e.Id);
+            RenderCUAChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        private void ImportSidebarClearAllCUAs()
+        {
+            importSidebarSelectedCUAKeys.Clear();
+            RenderCUAChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        // Enumerate every CustomUnityAsset in the source scene. Free-standing CUAs live OUTSIDE the person atom, so
+        // this needs the whole scene JSON (unlike the plugin picker, which slices one person). On the cache-hit path
+        // importSidebarLoadedSceneJSON is null, so parse the scene once here (the same accepted one-time freeze).
+        private List<ImportCUAEntry> BuildSourceCUAEntries()
+        {
+            var result = new List<ImportCUAEntry>();
+            JSONClass scene = EnsureLoadedSceneJSON();
+            if (scene == null) return result;
+            foreach (VPB.src.util.CUAAtomImporter.CuaEntry ce
+                     in VPB.src.util.CUAAtomImporter.EnumerateSceneCUAs(scene, importSidebarSourceAtomId))
+                result.Add(new ImportCUAEntry { Id = ce.Id, LinksToPerson = ce.LinksToPerson });
+            return result;
+        }
+
+        // Returns the full source scene JSON, parsing + caching it once if only person-atom ids were cached.
+        private JSONClass EnsureLoadedSceneJSON()
+        {
+            if (importSidebarLoadedSceneJSON != null) return importSidebarLoadedSceneJSON;
+            if (importSidebarSourceScene == null) return null;
+            try
+            {
+                using (FileEntryStreamReader r = importSidebarSourceScene.OpenStreamReader())
+                {
+                    JSONNode parsed = JSON.Parse(r.ReadToEnd());
+                    importSidebarLoadedSceneJSON = parsed != null ? parsed.AsObject : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB import] EnsureLoadedSceneJSON failed for " + importSidebarSourceScene.Uid + ": " + ex.Message);
+            }
+            return importSidebarLoadedSceneJSON;
+        }
+
         private List<ImportPluginEntry> BuildSourcePluginEntries()
         {
             var result = new List<ImportPluginEntry>();
@@ -856,6 +1090,8 @@ namespace VPB
                 importSidebarOnlySuppressRealRow.SetActive(importSidebarSuppressClothingLoad);
             if (importSidebarImportCUARow != null)
                 importSidebarImportCUARow.SetActive(true);
+            if (importSidebarCUARelativeRow != null)
+                importSidebarCUARelativeRow.SetActive(importSidebarImportLinkedCUAs);
         }
 
         private void RefreshImportSidebarOptionToggles()
@@ -946,6 +1182,7 @@ namespace VPB
 
             RefreshTypeRadioButtonColors();
             RefreshPluginChecklist();
+            RefreshCUAChecklist();
             RefreshApplyButtonEnabled();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             // Swapping the active panel changes the scroll content's total height; force the VLG/CSF to recompute.
@@ -1080,6 +1317,7 @@ namespace VPB
             foreach (var kv in importSidebarOptionPanels)
                 kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
             RefreshPluginChecklist();
+            RefreshCUAChecklist();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             RebuildImportSidebarContent();
             RefreshApplyButtonEnabled();
@@ -1127,13 +1365,36 @@ namespace VPB
             string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
                 ? sceneVar.Package.Uid : null;
 
-            // Apply each selected type in sequence.
+            // Apply each selected type in sequence, EXCEPT Pose. The selected-types set is unordered, so a pose
+            // applied before Appearance (or before its scale/morphs settle) lands its control nodes on a
+            // still-rescaling skeleton and drifts (feet/toes/hands off). Defer Pose until every other type has
+            // applied and the body has settled.
+            bool hasPose = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Pose);
             foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
+            {
+                if (t == VpbResourceType.Pose) continue;
                 ApplyOneTypeImport(t, sourceHostUid);
+            }
 
-            // CUA import is Appearance-specific; run it when Appearance is among the selected types.
+            // CUA import is Appearance-specific; run it when Appearance is among the selected types. It must run
+            // AFTER the pose so it anchors to the final posed skeleton.
             bool importCUAs = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
                 && importSidebarImportLinkedCUAs;
+
+            if (hasPose)
+                StartCoroutine(ApplyDeferredPoseThenCUAImport(sourceHostUid, importCUAs));
+            else if (importCUAs)
+                StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
+        }
+
+        // Applies the pose once the target skeleton has settled from the appearance load (scale/morphs settle over
+        // several frames), then runs the CUA import so it anchors to the final pose. Mirrors the settle wait the
+        // CUA importer already uses for bone-based placement.
+        private IEnumerator ApplyDeferredPoseThenCUAImport(string sourceHostUid, bool importCUAs)
+        {
+            yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
+            ApplyOneTypeImport(VpbResourceType.Pose, sourceHostUid);
+            yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
             if (importCUAs)
                 StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
@@ -1311,7 +1572,12 @@ namespace VPB
                 return;
             }
             if (scene == null) return;
-            StartCoroutine(VPB.src.util.CUAAtomImporter.ImportLinkedCUAsAsAtoms(scene, sourceAtomId, target, sourceHostUid));
+            // Picker on -> import exactly the checked CUAs; off -> all person-linked CUAs (legacy behavior).
+            HashSet<string> selectedIds = importSidebarPickCUAs
+                ? new HashSet<string>(importSidebarSelectedCUAKeys, StringComparer.Ordinal) : null;
+            StartCoroutine(VPB.src.util.CUAAtomImporter.ImportSelectedCUAsAsAtoms(
+                scene, sourceAtomId, target, sourceHostUid, selectedIds,
+                importSidebarCUARelativeToPerson));
         }
 
         // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target

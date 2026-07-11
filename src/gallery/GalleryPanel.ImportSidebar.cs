@@ -59,6 +59,11 @@ namespace VPB
         private bool importSidebarOnlySuppressRealClothing = true;
         private bool importSidebarOnlyReplaceRealClothing = true;
         private bool importSidebarImportLinkedCUAs;
+        // CUAs: when on, the picker restricts the import to the checked subset (else all person-linked CUAs).
+        private bool importSidebarPickCUAs;
+        // CUAs: off-person (free-standing) props are placed relative to the target person root instead of raw
+        // source world coords, so they land in the same spot relative to the person regardless of scene origin.
+        private bool importSidebarCUARelativeToPerson = true;
         private bool importSidebarDeleteTargetCUAs;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
         // tracks scene+atom so switching source resets the checks to "all"), and is not persisted.
@@ -274,6 +279,8 @@ namespace VPB
             importSidebarMergeClothingOrHair      = PrefBool(p, "mergeClothingOrHair", importSidebarMergeClothingOrHair);
             importSidebarOnlyReplaceRealClothing  = PrefBool(p, "onlyReplaceReal", importSidebarOnlyReplaceRealClothing);
             importSidebarImportLinkedCUAs         = PrefBool(p, "importLinkedCUAs", importSidebarImportLinkedCUAs);
+            importSidebarPickCUAs                 = PrefBool(p, "pickCUAs", importSidebarPickCUAs);
+            importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
             importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
             importSidebarMigratePluginUIDs        = PrefBool(p, "migratePluginUIDs", importSidebarMigratePluginUIDs);
@@ -306,6 +313,8 @@ namespace VPB
             p["mergeClothingOrHair"].AsBool = importSidebarMergeClothingOrHair;
             p["onlyReplaceReal"].AsBool = importSidebarOnlyReplaceRealClothing;
             p["importLinkedCUAs"].AsBool = importSidebarImportLinkedCUAs;
+            p["pickCUAs"].AsBool = importSidebarPickCUAs;
+            p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
             p["pluginsMergeSingle"].AsBool = importSidebarPluginsMergeSingle;
             p["migratePluginUIDs"].AsBool = importSidebarMigratePluginUIDs;

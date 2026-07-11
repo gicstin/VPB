@@ -496,6 +496,7 @@
     <Compile Include="src\util\JsonSerializationUtil.cs" />
     <Compile Include="src\util\CUAConverter.cs" />
     <Compile Include="src\util\CUAAtomImporter.cs" />
+    <Compile Include="src\util\PoseImportDiagnostics.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
     <Compile Include="src\gallery\GalleryThumbnailCache.cs" />
     <Compile Include="src\gallery\CategoryFilterState.cs" />

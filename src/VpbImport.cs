@@ -421,6 +421,14 @@ namespace VPB
                             LogUtil.Log("[VpbImport] Pose dispatch: suppressRoot stripping applied.");
                         }
 
+                        // Pin the primary body controls On when the pose omits their state (see helper). Without this,
+                        // merge-load leaves pre-existing Off/Comply foot/hip states → feet unpinned → toes curl.
+                        EnsurePrimaryPoseControlStatesHelper(preset);
+
+                        // Diagnostics: snapshot exactly what we hand to VaM's native pose loader so Ctrl+Shift+P can
+                        // compare the source foot/toe/hand control specs against the live applied state.
+                        VPB.src.util.PoseImportDiagnostics.CaptureSource(preset, targetAtom != null ? targetAtom.uid : null);
+
                         // Resolve target storable and PresetManager (steps 7-8)
                         string storableName = "PosePresets";
 
@@ -1394,6 +1402,38 @@ namespace VPB
             else if (preset["presets"] != null)
             {
                 CleanPresetsArrayHelper(preset["presets"].AsArray);
+            }
+        }
+
+        // VaM's primary body controls default to positionState/rotationState = On, so a pose save OMITS those
+        // keys for them (only NON-default states like the deliberately-enabled pelvis/toe controls get written).
+        // On a fresh scene load that is fine, but our merge-load applies the pose onto an EXISTING person whose
+        // foot controls may be Off / hip Comply — and native merge-load leaves a control's state untouched when
+        // the JSON omits it. Result: feet unpinned, toes curl. This restores the fresh-load intent by injecting
+        // On into exactly the primary controls when (and only when) the pose omits their state — an explicit
+        // Off/Comply written by the author is present in the JSON and therefore never overridden.
+        private static readonly string[] PrimaryPoseControlIds =
+            { "hipControl", "chestControl", "headControl", "rHandControl", "lHandControl", "rFootControl", "lFootControl" };
+
+        private static void EnsurePrimaryPoseControlStatesHelper(JSONClass preset)
+        {
+            if (preset == null) return;
+            JSONArray storables = preset["storables"] != null ? preset["storables"].AsArray : null;
+            if (storables == null) return;
+
+            for (int i = 0; i < storables.Count; i++)
+            {
+                JSONClass s = storables[i].AsObject;
+                if (s == null || s["id"] == null) continue;
+                string id = s["id"].Value;
+
+                bool isPrimary = false;
+                for (int k = 0; k < PrimaryPoseControlIds.Length; k++)
+                    if (PrimaryPoseControlIds[k] == id) { isPrimary = true; break; }
+                if (!isPrimary) continue;
+
+                if (!s.HasKey("positionState")) { s["positionState"] = "On"; }
+                if (!s.HasKey("rotationState")) { s["rotationState"] = "On"; }
             }
         }
 
