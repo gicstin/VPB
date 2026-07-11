@@ -102,7 +102,8 @@ namespace VPB
         private string _categoryQuickMenuLastPath;
         private string _categoryQuickMenuLastExtension;
         private Coroutine _categoryQuickApplyCoroutine;
-        private Text _categoryQuickArrowText;
+        private Image _categoryQuickArrowImage;
+        private RectTransform _categoryQuickArrowIconRT;
         private LayoutElement _categoryQuickArrowLE;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();

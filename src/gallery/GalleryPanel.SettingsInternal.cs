@@ -302,6 +302,18 @@ namespace VPB
             catch { return false; }
         }
 
+        private static bool GalleryElementCornerRadiusSubSettingsVisible()
+        {
+            try { return VPBConfig.Instance != null && VPBConfig.Instance.EnableGalleryElementRounding; }
+            catch { return false; }
+        }
+
+        private static void ApplyGalleryElementCornerRadiusFromSettings()
+        {
+            try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }
+            try { VPBConfig.Instance?.TriggerChange(); } catch { }
+        }
+
         private sealed class InternalSettingsSnapshot
         {
             public bool DisableGalleryTransparency;
@@ -317,6 +329,8 @@ namespace VPB
             public float InnerPaneScaleVR;
             public float InnerPaneScaleDesktop;
             public bool EnableButtonGaps;
+            public bool EnableGalleryElementRounding;
+            public float GalleryElementCornerRadiusFraction;
             public string ShowSideButtons;
             public string FollowAngle;
             public string FollowEyeHeight;
@@ -608,6 +622,33 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableButtonGaps,
                 SetBool = v => { VPBConfig.Instance.EnableButtonGaps = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.elementRounding", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_element_rounding", "Rounded element corners"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_element_rounding", "Rounds gallery buttons and other UI element corners. Turn off for square corners."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.EnableGalleryElementRounding,
+                SetBool = v => {
+                    VPBConfig.Instance.EnableGalleryElementRounding = v;
+                    ApplyGalleryElementCornerRadiusFromSettings();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.elementCornerRadius", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_element_corner_radius", "Element corner radius"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_element_corner_radius", "Corner roundness as a fraction of each element's shorter side (0.05 = subtle, 0.5 = maximum)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryElementCornerRadiusFraction,
+                SetFloat = v => {
+                    VPBConfig.Instance.GalleryElementCornerRadiusFraction = VPBConfig.ClampGalleryElementCornerRadiusFraction(v);
+                    ApplyGalleryElementCornerRadiusFromSettings();
+                },
+                Min = VPBConfig.MinGalleryElementCornerRadiusFraction,
+                Max = VPBConfig.MaxGalleryElementCornerRadiusFraction,
+                Step = 0.01f, Decimals = 2,
+                RowVisible = GalleryElementCornerRadiusSubSettingsVisible
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.showSideButtons", GroupKey = "visuals", Label = VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"),
@@ -1549,6 +1590,8 @@ namespace VPB
                 InnerPaneScaleVR = VPBConfig.Instance.InnerPaneScaleVR,
                 InnerPaneScaleDesktop = VPBConfig.Instance.InnerPaneScaleDesktop,
                 EnableButtonGaps = VPBConfig.Instance.EnableButtonGaps,
+                EnableGalleryElementRounding = VPBConfig.Instance.EnableGalleryElementRounding,
+                GalleryElementCornerRadiusFraction = VPBConfig.Instance.GalleryElementCornerRadiusFraction,
                 ShowSideButtons = VPBConfig.Instance.ShowSideButtons,
                 FollowAngle = VPBConfig.Instance.FollowAngle,
                 FollowEyeHeight = VPBConfig.Instance.FollowEyeHeight,
@@ -1915,36 +1958,46 @@ namespace VPB
             }
         }
 
+        private float InternalSettingsChromeScale()
+        {
+            float s = ChromeScale;
+            return s <= 0f ? 1f : s;
+        }
+
+        private static Image AddSettingsControlRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
         private GameObject CreateMiniButton(Transform parent, string label, float width, Color bg, Action onClick)
         {
             GameObject go = new GameObject("SettingsControlBtn");
             go.transform.SetParent(parent, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
+            Image img = AddSettingsControlRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
+            b.targetGraphic = img;
             if (onClick != null) b.onClick.AddListener(() => onClick());
-            var cb = b.colors;
-            cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
-            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-            b.colors = cb;
-            b.transition = Selectable.Transition.None;
-            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.NeutralizeSelectableColorTint(b);
 
-            float rowScale = Mathf.Clamp(EffectiveListRowHeightForGallery() / 100f, 0.6f, 2f);
+            float uiS = InternalSettingsChromeScale();
+            float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
             LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width * rowScale;
-            le.minWidth = width * rowScale;
-            le.preferredHeight = 32f * rowScale;
-            le.minHeight = 32f * rowScale;
+            le.preferredWidth = width * uiS;
+            le.minWidth = width * uiS;
+            le.preferredHeight = chipH;
+            le.minHeight = chipH;
             le.flexibleWidth = 0f;
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(go.transform, false);
             Text t = tgo.AddComponent<Text>();
             t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
+            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
             t.color = Color.white;
             t.alignment = TextAnchor.MiddleCenter;
             t.text = label;
@@ -1960,8 +2013,8 @@ namespace VPB
             AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
 
             float rowH = EffectiveListRowHeightForGallery();
-            float rowScale = Mathf.Clamp(rowH / 100f, 0.6f, 2f);
-            float paneScale = rowScale;
+            float uiS = InternalSettingsChromeScale();
+            float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
             Transform listRowTr = btnGO.transform.Find("ListRow");
             if (listRowTr == null) return;
@@ -1977,12 +2030,12 @@ namespace VPB
                 if (nameText != null)
                 {
                     nameText.resizeTextForBestFit = false;
-                    GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.FontRef, rowScale, GalleryUiDesignTokens.FontMinRef);
+                    GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                     nameText.fontStyle = FontStyle.Normal;
                 }
                 LayoutElement nameLe = nameTr != null ? nameTr.GetComponent<LayoutElement>() : null;
                 if (nameLe != null)
-                    nameLe.minHeight = 32f * rowScale;
+                    nameLe.minHeight = chipH;
             }
             catch { }
 
@@ -2004,10 +2057,10 @@ namespace VPB
             hlg.childControlWidth = true;
             hlg.childForceExpandHeight = false;
             hlg.childForceExpandWidth = false;
-            hlg.spacing = 6f * rowScale;
+            hlg.spacing = 6f * uiS;
             LayoutElement cle = controls.AddComponent<LayoutElement>();
             cle.flexibleWidth = 1f;
-            cle.minHeight = 32f * rowScale;
+            cle.minHeight = chipH;
 
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
@@ -2059,10 +2112,10 @@ namespace VPB
                 GameObject swatch = new GameObject("SettingsBorderColorSwatch");
                 swatch.transform.SetParent(controls.transform, false);
                 LayoutElement swle = swatch.AddComponent<LayoutElement>();
-                swle.preferredWidth = 72f * paneScale;
-                swle.minWidth = 48f * paneScale;
-                swle.preferredHeight = 28f * paneScale;
-                swle.minHeight = 28f * paneScale;
+                swle.preferredWidth = 72f * uiS;
+                swle.minWidth = 48f * uiS;
+                swle.preferredHeight = chipH - 4f * uiS;
+                swle.minHeight = chipH - 4f * uiS;
                 swle.flexibleWidth = 0f;
                 Image swImg = swatch.AddComponent<Image>();
                 swImg.color = def.GetColor();
@@ -2099,10 +2152,10 @@ namespace VPB
                 GameObject sliderHost = new GameObject("SettingsSliderHost");
                 sliderHost.transform.SetParent(controls.transform, false);
                 LayoutElement sle = sliderHost.AddComponent<LayoutElement>();
-                sle.preferredWidth = 320f * paneScale;
-                sle.minWidth = 120f * paneScale;
-                sle.preferredHeight = 32f * paneScale;
-                sle.minHeight = 32f * paneScale;
+                sle.preferredWidth = 320f * uiS;
+                sle.minWidth = 120f * uiS;
+                sle.preferredHeight = chipH;
+                sle.minHeight = chipH;
                 sle.flexibleWidth = 1f;
 
                 Slider slider = sliderHost.AddComponent<Slider>();
@@ -2110,6 +2163,9 @@ namespace VPB
                 slider.maxValue = def.Max;
                 slider.value = Mathf.Clamp(cur, def.Min, def.Max);
                 slider.wholeNumbers = def.Decimals <= 0;
+
+                float handleW = 20f * uiS;
+                float trackEndPad = handleW * 0.5f;
 
                 // Full-height transparent raycast target so the whole control row area (not just the
                 // thin bar) receives hover, click, and drag events. Pointer events bubble up to the
@@ -2124,21 +2180,20 @@ namespace VPB
 
                 GameObject bg = new GameObject("Background");
                 bg.transform.SetParent(sliderHost.transform, false);
-                var bgImg = bg.AddComponent<Image>();
-                bgImg.color = new Color(0.2f, 0.2f, 0.2f);
-                bgImg.raycastTarget = false;
+                var bgImg = AddSettingsControlRoundedBg(bg, new Color(0.2f, 0.2f, 0.2f), false);
                 RectTransform bgRT = bg.GetComponent<RectTransform>();
-                bgRT.anchorMin = new Vector2(0, 0.28f); bgRT.anchorMax = new Vector2(1, 0.72f); bgRT.sizeDelta = Vector2.zero;
+                bgRT.anchorMin = new Vector2(0, 0.28f); bgRT.anchorMax = new Vector2(1, 0.72f);
+                bgRT.offsetMin = new Vector2(trackEndPad, 0f); bgRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject fillArea = new GameObject("Fill Area");
                 fillArea.transform.SetParent(sliderHost.transform, false);
                 RectTransform faRT = fillArea.AddComponent<RectTransform>();
-                faRT.anchorMin = new Vector2(0, 0.28f); faRT.anchorMax = new Vector2(1, 0.72f); faRT.sizeDelta = Vector2.zero;
+                faRT.anchorMin = new Vector2(0, 0.28f); faRT.anchorMax = new Vector2(1, 0.72f);
+                faRT.offsetMin = new Vector2(trackEndPad, 0f); faRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject fill = new GameObject("Fill");
                 fill.transform.SetParent(fillArea.transform, false);
-                var fillImg = fill.AddComponent<Image>();
-                fillImg.color = new Color(0.25f, 0.5f, 0.8f);
+                var fillImg = AddSettingsControlRoundedBg(fill, new Color(0.25f, 0.5f, 0.8f), false);
                 RectTransform fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one; fillRT.sizeDelta = Vector2.zero;
                 slider.fillRect = fillRT;
@@ -2146,26 +2201,25 @@ namespace VPB
                 GameObject handleArea = new GameObject("Handle Area");
                 handleArea.transform.SetParent(sliderHost.transform, false);
                 RectTransform haRT = handleArea.AddComponent<RectTransform>();
-                haRT.anchorMin = Vector2.zero; haRT.anchorMax = Vector2.one; haRT.sizeDelta = Vector2.zero;
+                haRT.anchorMin = Vector2.zero; haRT.anchorMax = Vector2.one;
+                haRT.offsetMin = new Vector2(trackEndPad, 0f); haRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject handle = new GameObject("Handle");
                 handle.transform.SetParent(handleArea.transform, false);
-                var handleImg = handle.AddComponent<Image>();
-                handleImg.color = Color.white;
+                var handleImg = AddSettingsControlRoundedBg(handle, Color.white);
                 RectTransform handleRT = handle.GetComponent<RectTransform>();
-                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(20f * paneScale, 0);
+                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(handleW, 0);
                 slider.handleRect = handleRT;
                 slider.targetGraphic = handleImg;
 
                 GameObject inputGO = new GameObject("SettingsValueInput");
                 inputGO.transform.SetParent(controls.transform, false);
                 LayoutElement ile = inputGO.AddComponent<LayoutElement>();
-                ile.preferredWidth = 78f * paneScale;
-                ile.minWidth = 78f * paneScale;
-                ile.preferredHeight = 32f * paneScale;
-                ile.minHeight = 32f * paneScale;
-                Image inputBg = inputGO.AddComponent<Image>();
-                inputBg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+                ile.preferredWidth = 78f * uiS;
+                ile.minWidth = 78f * uiS;
+                ile.preferredHeight = chipH;
+                ile.minHeight = chipH;
+                Image inputBg = AddSettingsControlRoundedBg(inputGO, new Color(0.1f, 0.1f, 0.1f, 1f));
                 InputField input = inputGO.AddComponent<InputField>();
                 input.targetGraphic = inputBg;
                 input.contentType = def.AllowNegative ? InputField.ContentType.Standard : InputField.ContentType.DecimalNumber;
@@ -2174,7 +2228,7 @@ namespace VPB
                 tgo.transform.SetParent(inputGO.transform, false);
                 Text it = tgo.AddComponent<Text>();
                 it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
+                GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 it.color = Color.white;
                 it.alignment = TextAnchor.MiddleCenter;
                 RectTransform itRT = tgo.GetComponent<RectTransform>();
@@ -2230,18 +2284,18 @@ namespace VPB
             {
                 if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
                 {
-                    cle.minHeight = 40f * paneScale;
+                    cle.minHeight = 40f * uiS;
                     GameObject btnRow = new GameObject("SettingsTextAreaButtons");
                     btnRow.transform.SetParent(controls.transform, false);
                     HorizontalLayoutGroup bh = btnRow.AddComponent<HorizontalLayoutGroup>();
                     bh.childAlignment = TextAnchor.MiddleRight;
-                    bh.spacing = 6f * paneScale;
+                    bh.spacing = 6f * uiS;
                     bh.childControlWidth = true;
                     bh.childControlHeight = true;
                     bh.childForceExpandWidth = false;
                     bh.childForceExpandHeight = false;
                     LayoutElement ble = btnRow.AddComponent<LayoutElement>();
-                    ble.minHeight = 32f * paneScale;
+                    ble.minHeight = chipH;
 
                     CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
                     {
@@ -2250,19 +2304,17 @@ namespace VPB
                     return;
                 }
 
-                cle.minHeight = 96f * paneScale;
+                cle.minHeight = 96f * uiS;
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
                 LayoutElement tle = taHost.AddComponent<LayoutElement>();
                 tle.flexibleWidth = 1f;
-                tle.preferredWidth = 320f * paneScale;
-                tle.minWidth = 120f * paneScale;
-                tle.preferredHeight = 72f * paneScale;
-                tle.minHeight = 72f * paneScale;
+                tle.preferredWidth = 320f * uiS;
+                tle.minWidth = 120f * uiS;
+                tle.preferredHeight = 72f * uiS;
+                tle.minHeight = 72f * uiS;
 
-                Image taBg = taHost.AddComponent<Image>();
-                taBg.color = new Color(0.16f, 0.16f, 0.18f, 1f);
-                taBg.raycastTarget = true;
+                Image taBg = AddSettingsControlRoundedBg(taHost, new Color(0.16f, 0.16f, 0.18f, 1f));
                 InputField inf = taHost.AddComponent<InputField>();
                 inf.lineType = InputField.LineType.MultiLineNewline;
                 inf.targetGraphic = taBg;
@@ -2281,7 +2333,7 @@ namespace VPB
                 textGo.transform.SetParent(taHost.transform, false);
                 Text taTxt = textGo.AddComponent<Text>();
                 taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.TabButtonFontRef, rowScale, 11);
+                GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
                 taTxt.alignment = TextAnchor.UpperLeft;
                 taTxt.supportRichText = false;
@@ -2290,8 +2342,8 @@ namespace VPB
                 RectTransform taTxtRt = textGo.GetComponent<RectTransform>();
                 taTxtRt.anchorMin = Vector2.zero;
                 taTxtRt.anchorMax = Vector2.one;
-                taTxtRt.offsetMin = new Vector2(6f * paneScale, 6f * paneScale);
-                taTxtRt.offsetMax = new Vector2(-6f * paneScale, -6f * paneScale);
+                taTxtRt.offsetMin = new Vector2(6f * uiS, 6f * uiS);
+                taTxtRt.offsetMax = new Vector2(-6f * uiS, -6f * uiS);
                 inf.textComponent = taTxt;
                 inf.text = def.GetString() ?? "";
 
@@ -2307,7 +2359,7 @@ namespace VPB
 
             if (def.ControlType == InternalSettingControlType.Hotkey)
             {
-                RebuildPluginHotkeyRowControls(controls.transform, def, paneScale);
+                RebuildPluginHotkeyRowControls(controls.transform, def, uiS);
                 return;
             }
 
@@ -2320,10 +2372,10 @@ namespace VPB
                     warn.transform.SetParent(controls.transform, false);
                     LayoutElement wle = warn.AddComponent<LayoutElement>();
                     wle.flexibleWidth = 1f;
-                    wle.preferredHeight = 32f * paneScale;
+                    wle.preferredHeight = chipH;
                     Text wt = warn.AddComponent<Text>();
                     wt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.PopupMenuRowFontRef, rowScale, 10);
+                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                     wt.color = new Color(1f, 0.75f, 0.2f, 1f);
                     wt.alignment = TextAnchor.MiddleRight;
                     wt.supportRichText = false;
@@ -2419,6 +2471,8 @@ namespace VPB
             VPBConfig.Instance.InnerPaneScaleVR = b.InnerPaneScaleVR;
             VPBConfig.Instance.InnerPaneScaleDesktop = b.InnerPaneScaleDesktop;
             VPBConfig.Instance.EnableButtonGaps = b.EnableButtonGaps;
+            VPBConfig.Instance.EnableGalleryElementRounding = b.EnableGalleryElementRounding;
+            VPBConfig.Instance.GalleryElementCornerRadiusFraction = VPBConfig.ClampGalleryElementCornerRadiusFraction(b.GalleryElementCornerRadiusFraction);
             VPBConfig.Instance.ShowSideButtons = b.ShowSideButtons;
             VPBConfig.Instance.FollowAngle = b.FollowAngle;
             VPBConfig.Instance.FollowEyeHeight = b.FollowEyeHeight;
@@ -2509,6 +2563,7 @@ namespace VPB
                 RefreshFiles(true);
             }
             ApplyGalleryTransparencyToAllPanels();
+            try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }
             VPBConfig.Instance.TriggerChange();
             PluginSettingsEndSession();
             internalSettingsSessionActive = false;

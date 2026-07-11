@@ -585,8 +585,7 @@ namespace VPB
 
             GameObject row = new GameObject("Row");
             row.transform.SetParent(parent, false);
-            Image rowBg = row.AddComponent<Image>();
-            rowBg.color = altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f);
+            Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
             HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(Mathf.RoundToInt(8f * s), Mathf.RoundToInt(6f * s), Mathf.RoundToInt(4f * s), Mathf.RoundToInt(4f * s));
             h.spacing = 8f * s;
@@ -629,8 +628,7 @@ namespace VPB
         {
             GameObject go = new GameObject("Input");
             go.transform.SetParent(parent, false);
-            Image bg = go.AddComponent<Image>();
-            bg.color = new Color(0.12f, 0.12f, 0.14f, 1f);
+            Image bg = UI.AddGalleryElementRoundedBg(go, new Color(0.12f, 0.12f, 0.14f, 1f));
             LayoutElement le = go.AddComponent<LayoutElement>();
             le.flexibleWidth = flexWidth;
             le.minHeight = 34f * s;
@@ -679,12 +677,13 @@ namespace VPB
         {
             GameObject go = new GameObject("Btn");
             go.transform.SetParent(parent, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
+            Image img = UI.AddGalleryElementRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
             b.transition = Selectable.Transition.None;
+            b.targetGraphic = img;
             if (onClick != null) b.onClick.AddListener(onClick);
-            go.AddComponent<UIHoverBorder>();
+            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
+            try { hb.ApplyBorderSettings(); } catch { }
 
             LayoutElement le = go.AddComponent<LayoutElement>();
             if (width > 0f)

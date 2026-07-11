@@ -756,8 +756,7 @@ namespace VPB
             row.transform.SetParent(parent, false);
             LayoutElement le = row.AddComponent<LayoutElement>();
             le.minHeight = 30f * s;
-            Image img = row.AddComponent<Image>();
-            img.color = bg;
+            Image img = UI.AddGalleryElementRoundedBg(row, bg);
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(row.transform, false);
@@ -878,8 +877,7 @@ namespace VPB
 
             GameObject row = new GameObject("Row");
             row.transform.SetParent(parent, false);
-            Image rowBg = row.AddComponent<Image>();
-            rowBg.color = altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f);
+            Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
             rowBg.raycastTarget = true;
             HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(Mathf.RoundToInt(6f * s), Mathf.RoundToInt(4f * s), Mathf.RoundToInt(3f * s), Mathf.RoundToInt(3f * s));

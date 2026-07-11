@@ -258,8 +258,7 @@ namespace VPB
             le.flexibleWidth = 1f;
             le.preferredHeight = 44f;
 
-            Image img = go.AddComponent<Image>();
-            img.color = new Color(0.26f, 0.26f, 0.3f, 1f);
+            Image img = UI.AddGalleryElementRoundedBg(go, new Color(0.26f, 0.26f, 0.3f, 1f));
             img.raycastTarget = true;
 
             // Match gallery hover border behavior on buttons too.
@@ -283,6 +282,7 @@ namespace VPB
             btn.colors = cb;
             btn.transition = Selectable.Transition.None;
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
 
             GameObject textGO = new GameObject("Text");

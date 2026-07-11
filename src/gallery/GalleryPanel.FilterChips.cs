@@ -226,6 +226,15 @@ namespace VPB
             return new Color(accent.r * 0.55f, accent.g * 0.55f, accent.b * 0.55f, 0.9f);
         }
 
+        private static Image AddFilterChipRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
         private GameObject CreateFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize, float s = 1f)
         {
             if (parent == null || spec.OnDismiss == null) return null;
@@ -237,18 +246,22 @@ namespace VPB
             GameObject chip = new GameObject(isClearAll ? "FilterChipClearAll" : "FilterChip_" + spec.Kind);
             chip.transform.SetParent(parent, false);
 
-            Image bg = chip.AddComponent<Image>();
-            bg.raycastTarget = true;
-            bg.color = new Color(accent.r, accent.g, accent.b, isClearAll ? 0.94f : 0.96f);
+            Image bg = AddFilterChipRoundedBg(chip, new Color(accent.r, accent.g, accent.b, isClearAll ? 0.94f : 0.96f));
+
+            int padLeft = Mathf.RoundToInt(10f * s);
+            int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
+            float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
             HorizontalLayoutGroup row = chip.AddComponent<HorizontalLayoutGroup>();
-            row.padding = new RectOffset(Mathf.RoundToInt(10 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(2 * s), Mathf.RoundToInt(2 * s));
-            row.spacing = 2f;
+            row.padding = isClearAll
+                ? new RectOffset(padLeft, padLeft, padV, padV)
+                : new RectOffset(padLeft, 0, padV, padV);
+            row.spacing = isClearAll ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s;
             row.childAlignment = TextAnchor.MiddleCenter;
             row.childControlWidth = true;
             row.childControlHeight = true;
             row.childForceExpandWidth = false;
-            row.childForceExpandHeight = false;
+            row.childForceExpandHeight = true;
 
             LayoutElement chipLE = chip.AddComponent<LayoutElement>();
             chipLE.preferredHeight = chipH;
@@ -272,6 +285,9 @@ namespace VPB
             labelTxt.raycastTarget = false;
             ContentSizeFitter labelCsf = labelGO.AddComponent<ContentSizeFitter>();
             labelCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
+            labelLE.flexibleHeight = 0f;
+            labelLE.preferredHeight = innerH;
 
             UnityAction dismiss = spec.OnDismiss;
             if (!isClearAll)
@@ -282,38 +298,53 @@ namespace VPB
                 UI.NeutralizeSelectableColorTint(chipBodyBtn);
                 chipBodyBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
 
-                float dismissSize = Mathf.Max(18f, chipH - 4f);
+                float dismissSize = innerH;
                 GameObject dismissGO = new GameObject("Dismiss");
                 dismissGO.transform.SetParent(chip.transform, false);
-                Image dismissBg = dismissGO.AddComponent<Image>();
-                dismissBg.color = FilterChipDismissBackdrop(accent);
-                dismissBg.raycastTarget = true;
+                AddFilterChipRoundedBg(dismissGO, FilterChipDismissBackdrop(accent));
                 Button dismissBtn = dismissGO.AddComponent<Button>();
+                dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
                 UI.NeutralizeSelectableColorTint(dismissBtn);
                 dismissBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
 
-                GameObject xGO = new GameObject("X");
-                xGO.transform.SetParent(dismissGO.transform, false);
-                Text xTxt = xGO.AddComponent<Text>();
-                xTxt.text = "\u00d7";
-                try { VPBUiFont.ApplyTo(xTxt); } catch { xTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-                xTxt.fontSize = GalleryUiMetrics.GlyphFontFromControlHeight(
-                    GalleryUiDesignTokens.FilterChipRowHeightRef - 4f, ChromeScale, GalleryUiDesignTokens.FontMinRef);
-                xTxt.fontStyle = FontStyle.Normal;
-                xTxt.alignment = TextAnchor.MiddleCenter;
-                xTxt.color = Color.white;
-                xTxt.raycastTarget = false;
-                RectTransform xRT = xGO.GetComponent<RectTransform>();
-                xRT.anchorMin = Vector2.zero;
-                xRT.anchorMax = Vector2.one;
-                xRT.offsetMin = Vector2.zero;
-                xRT.offsetMax = Vector2.zero;
+                float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
+                Color dismissBg = FilterChipDismissBackdrop(accent);
+                Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
+                if (closeSpr != null)
+                {
+                    UI.AddIconToButton(dismissGO, closeSpr, iconPad, dismissBg);
+                }
+                else
+                {
+                    GameObject xGO = new GameObject("X");
+                    xGO.transform.SetParent(dismissGO.transform, false);
+                    Text xTxt = xGO.AddComponent<Text>();
+                    xTxt.text = "\u00d7";
+                    xTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    GalleryUiMetrics.ApplyGlyphFont(xTxt, GalleryUiDesignTokens.FilterChipDismissSizeRef, s, GalleryUiDesignTokens.FontMinRef);
+                    xTxt.fontStyle = FontStyle.Normal;
+                    xTxt.alignment = TextAnchor.MiddleCenter;
+                    xTxt.color = Color.white;
+                    xTxt.raycastTarget = false;
+                    RectTransform xRT = xGO.GetComponent<RectTransform>();
+                    xRT.anchorMin = Vector2.zero;
+                    xRT.anchorMax = Vector2.one;
+                    xRT.offsetMin = Vector2.zero;
+                    xRT.offsetMax = Vector2.zero;
+                }
+
+                var dismissHover = dismissGO.AddComponent<UIHoverBorder>();
+                dismissHover.hoverColor = Color.white;
+                dismissHover.borderSize = 2f;
+                dismissHover.inward = true;
+                dismissHover.ApplyBorderSettings();
 
                 LayoutElement dismissLE = dismissGO.AddComponent<LayoutElement>();
                 dismissLE.preferredWidth = dismissSize;
                 dismissLE.minWidth = dismissSize;
                 dismissLE.preferredHeight = dismissSize;
                 dismissLE.minHeight = dismissSize;
+                dismissLE.flexibleHeight = 0f;
 
                 try { AddTooltip(chip, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
             }
@@ -326,6 +357,12 @@ namespace VPB
             }
 
             chip.AddComponent<UIHoverBorder>();
+            try
+            {
+                var hb = chip.GetComponent<UIHoverBorder>();
+                if (hb != null) hb.ApplyBorderSettings();
+            }
+            catch { }
             return chip;
         }
 

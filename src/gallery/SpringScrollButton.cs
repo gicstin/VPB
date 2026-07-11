@@ -191,8 +191,9 @@ namespace VPB
             rt.sizeDelta = new Vector2(widthPx, heightPx);
             rt.anchoredPosition = Vector2.zero;
 
-            var img = go.AddComponent<Image>();
-            img.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+            var rr = go.AddComponent<RoundedRect>();
+            rr.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
 
             // Make it reliably hittable in world-space UI.
             var cg = go.AddComponent<CanvasGroup>();
@@ -207,7 +208,7 @@ namespace VPB
 
             var s = go.AddComponent<SpringScrollButton>();
             s.scrollRect = targetScrollRect;
-            s.normalColor = img.color;
+            s.normalColor = rr.color;
 
             // Subtle border/hover feedback if the project has it.
             try { go.AddComponent<UIHoverBorder>(); } catch { }

@@ -14,10 +14,11 @@ namespace VPB
         private const float ImportSidebarBaseTopRowRef = GalleryUiDesignTokens.ImportSidebarTopRowRef;
         private const float ImportSidebarScrollBarWidthRef = GalleryUiDesignTokens.ImportSidebarScrollBarWidthRef;
         private const float ImportSidebarInnerPadHRef = GalleryUiDesignTokens.ImportSidebarInnerPadHRef;
+        private const float ImportSidebarBaseHeaderGap = GalleryUiDesignTokens.ImportSidebarHeaderGapRef;
+        private const float ImportSidebarBaseRowSpacing = GalleryUiDesignTokens.ImportSidebarRowSpacingRef;
 
         private static readonly string[] ImportWizardStepTitleKeys =
         {
-            "gallery.import.wizard.step_package",
             "gallery.import.wizard.step_atoms",
             "gallery.import.wizard.step_type",
             "gallery.import.wizard.step_options"
@@ -25,7 +26,7 @@ namespace VPB
 
         private static readonly string[] ImportWizardStepTitleDefaults =
         {
-            "Package", "Atoms", "Resource type", "Options"
+            "Atoms", "Resource type", "Options"
         };
 
         public const float ImportSidebarBaseRowHeight = GalleryUiDesignTokens.ImportSidebarRowHeightRef;
@@ -141,8 +142,9 @@ namespace VPB
             }
 
             float headerH = ImportSidebarBaseHeaderHeight * s;
+            float headerGap = ImportSidebarBaseHeaderGap * s;
             float applyH = ImportSidebarBaseApplyHeight * s;
-            float scrollW = ImportSidebarScrollBarWidthPx(s);
+            ApplyImportSidebarChromeHorizontalInsets(s, out float insetLeft, out float insetRight);
 
             if (importSidebarHeaderRT != null)
             {
@@ -150,24 +152,27 @@ namespace VPB
                 importSidebarHeaderRT.anchorMax = new Vector2(1f, 1f);
                 importSidebarHeaderRT.pivot = new Vector2(0.5f, 1f);
                 importSidebarHeaderRT.anchoredPosition = Vector2.zero;
-                importSidebarHeaderRT.offsetMin = new Vector2(0f, -headerH);
-                importSidebarHeaderRT.offsetMax = new Vector2(-scrollW, 0f);
+                importSidebarHeaderRT.offsetMin = new Vector2(insetLeft, -headerH);
+                importSidebarHeaderRT.offsetMax = new Vector2(-insetRight, 0f);
             }
 
             if (importSidebarApplyRT != null)
             {
-                importSidebarApplyRT.offsetMin = new Vector2(0f, 0f);
-                importSidebarApplyRT.offsetMax = new Vector2(-scrollW, applyH);
+                importSidebarApplyRT.offsetMin = new Vector2(insetLeft, 0f);
+                importSidebarApplyRT.offsetMax = new Vector2(-insetRight, applyH);
             }
 
             if (importSidebarBodyScrollRT != null)
             {
+                // Full sidebar width — internal viewport reserves scrollbar gutter (matches header/apply content column).
                 importSidebarBodyScrollRT.offsetMin = new Vector2(0f, applyH);
-                importSidebarBodyScrollRT.offsetMax = new Vector2(0f, -headerH);
+                importSidebarBodyScrollRT.offsetMax = new Vector2(0f, -(headerH + headerGap));
             }
 
             try { AlignImportSidebarScrollViewport(s); } catch { }
+            try { SyncImportSidebarScrollContentLayout(s); } catch { }
             try { SyncImportSidebarTypeRadioGridWidth(s); } catch { }
+            try { SyncImportSidebarScrollHoverBorders(); } catch { }
             try { StyleImportSidebarHeader(s); } catch { }
             EnsureImportSidebarHeaderClickable();
             SyncImportSidebarHeaderLabel();
@@ -178,19 +183,66 @@ namespace VPB
 
         private static float ImportSidebarScrollBarWidthPx(float s) => ImportSidebarScrollBarWidthRef * s;
 
+        /// <summary>Horizontal insets inside the 220px column: flush on panel-outer edge; pad only before scrollbar.</summary>
+        private void GetImportSidebarContentWidthInsets(float s, out float insetLeft, out float insetRight, out float contentWidth)
+        {
+            float scrollW = ImportSidebarScrollBarWidthPx(s);
+            float padInner = ImportSidebarInnerPadHRef * s;
+            insetLeft = 0f;
+            insetRight = scrollW + padInner;
+            contentWidth = ImportSidebarBaseWidth * s - insetRight;
+        }
+
+        private void ApplyImportSidebarChromeHorizontalInsets(float s,
+            out float insetLeft, out float insetRight)
+        {
+            GetImportSidebarContentWidthInsets(s, out insetLeft, out insetRight, out _);
+        }
+
         private void SyncImportSidebarTypeRadioGridWidth(float s)
         {
             if (importSidebarTypeRadioContainer == null) return;
             GridLayoutGroup g = importSidebarTypeRadioContainer.GetComponent<GridLayoutGroup>();
             LayoutElement le = importSidebarTypeRadioContainer.GetComponent<LayoutElement>();
             if (g == null) return;
-            float scrollW = ImportSidebarScrollBarWidthPx(s);
-            float padH = ImportSidebarInnerPadHRef * s;
-            float cellW = (ImportSidebarBaseWidth * s - scrollW - 2f * padH) / 2f;
-            const int typeRadioRows = 5;
-            g.cellSize = new Vector2(cellW, 26f * s);
-            g.spacing = new Vector2(2f * s, 2f * s);
-            if (le != null) le.preferredHeight = (typeRadioRows * 26f + (typeRadioRows - 1) * 2f) * s;
+            GetImportSidebarContentWidthInsets(s, out _, out _, out float contentWidth);
+            float rowH = ImportSidebarBaseRowHeight * s;
+            float gap = ImportSidebarBaseRowSpacing * s;
+            float gridW = Mathf.Floor(contentWidth);
+            float cellW = Mathf.Floor((gridW - gap) * 0.5f);
+            const int typeRadioRows = 6;
+            g.cellSize = new Vector2(cellW, rowH);
+            g.spacing = new Vector2(gap, gap);
+            if (le != null)
+            {
+                le.preferredWidth = gridW;
+                le.flexibleWidth = 0f;
+                le.preferredHeight = typeRadioRows * rowH + (typeRadioRows - 1) * gap;
+            }
+        }
+
+        /// <summary>Scroll body sits under RectMask2D — outward hover rims clip; draw inward like side-tab rows.</summary>
+        private void SyncImportSidebarScrollHoverBorders()
+        {
+            if (importSidebarScrollContentRT == null) return;
+            UIHoverBorder[] borders = importSidebarScrollContentRT.GetComponentsInChildren<UIHoverBorder>(true);
+            for (int i = 0; i < borders.Length; i++)
+            {
+                UIHoverBorder hb = borders[i];
+                if (hb == null) continue;
+                hb.inward = true;
+                try { hb.ApplyBorderSettings(); } catch { }
+            }
+        }
+
+        private void SyncImportSidebarScrollContentLayout(float s)
+        {
+            if (importSidebarScrollContentRT == null) return;
+            VerticalLayoutGroup vlg = importSidebarScrollContentRT.GetComponent<VerticalLayoutGroup>();
+            if (vlg == null) return;
+            float gap = ImportSidebarBaseRowSpacing * s;
+            vlg.spacing = gap;
+            vlg.padding = new RectOffset(0, 0, Mathf.RoundToInt(gap), Mathf.RoundToInt(gap * 0.5f));
         }
 
         private void SyncImportSidebarHeaderTypography(float s)
@@ -228,11 +280,21 @@ namespace VPB
             AddTooltip(headerGo, "gallery.side.collapse_tip", "Collapse side list");
         }
 
+        private void ApplyImportSidebarHeaderLabelText(string full)
+        {
+            if (importSidebarHeaderLabel == null) return;
+            float s = ChromeScale;
+            GetImportSidebarContentWidthInsets(s, out _, out _, out float contentWidth);
+            float inner = contentWidth - 4f * s;
+            if (inner <= 2f) inner = 120f * s;
+            importSidebarHeaderLabel.text = EllipsizeTextPreferredWidth(importSidebarHeaderLabel, full ?? "", inner);
+        }
+
         private void SyncImportSidebarHeaderLabel()
         {
             if (importSidebarHeaderLabel == null) return;
             string title = SidePanelHeaderTranslation("gallery.import.sidebar_header", "Import");
-            importSidebarHeaderLabel.text = FormatSidePanelHeaderLabel(importSidebarOnLeft, title);
+            ApplyImportSidebarHeaderLabelText(FormatSidePanelHeaderLabel(importSidebarOnLeft, title));
         }
 
         // Same clamp-and-localScale technique GalleryPanel.Tabs.cs uses to keep text legible
@@ -240,6 +302,16 @@ namespace VPB
         public static void ApplyScaledFont(Text txt, int baseFont, float s)
         {
             GalleryUiMetrics.ApplyFont(txt, baseFont, s, ImportSidebarBaseFontSizeMin);
+        }
+
+        /// <summary>Rounded row/button fill — matches gallery <see cref="RoundedRect"/> chrome.</summary>
+        private static Image AddImportSidebarRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
         }
 
         private Transform ResolveImportSidebarParent()
@@ -266,8 +338,7 @@ namespace VPB
 
             // Header tone matches the selected-Category row color so users recognize it as
             // a side-column header rather than a generic popup chrome.
-            Image bg = header.AddComponent<Image>();
-            bg.color = ImportSidebarHeaderBg;
+            Image bg = AddImportSidebarRoundedBg(header, ImportSidebarHeaderBg);
 
             importSidebarHeaderLabel = CreateImportSidebarLabel(
                 header.transform,
@@ -276,7 +347,7 @@ namespace VPB
             importSidebarHeaderLabel.color = Color.white;
             importSidebarHeaderLabel.fontStyle = FontStyle.Normal;
             importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
-            importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
             importSidebarHeaderLabel.verticalOverflow = VerticalWrapMode.Truncate;
             StyleImportSidebarHeader();
 
@@ -292,7 +363,8 @@ namespace VPB
         {
             GameObject scroll = UI.CreateVScrollableContent(
                 importSidebarRoot, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
-                0f, 0f, Vector2.zero, scrollBarWidth: ImportSidebarScrollBarWidthRef, spacing: 2f, addBottomFlexSpacer: false);
+                0f, 0f, Vector2.zero, scrollBarWidth: ImportSidebarScrollBarWidthRef,
+                spacing: ImportSidebarBaseRowSpacing, addBottomFlexSpacer: false);
             importSidebarBodyScrollRT = scroll.GetComponent<RectTransform>();
             importSidebarScrollContentRT = scroll.GetComponent<ScrollRect>().content.GetComponent<RectTransform>();
         }
@@ -310,6 +382,7 @@ namespace VPB
         {
             if (importSidebarScrollContentRT != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(importSidebarScrollContentRT);
+            try { SyncImportSidebarScrollHoverBorders(); } catch { }
         }
 
         private Text CreateImportSidebarLabel(Transform parent, string text, int fontSize)
@@ -320,8 +393,6 @@ namespace VPB
             RectTransform rt = go.AddComponent<RectTransform>();
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(ImportSidebarInnerPadHRef, 0f);
-            rt.offsetMax = new Vector2(-ImportSidebarInnerPadHRef, 0f);
 
             Text t = go.AddComponent<Text>();
             t.text = text;
@@ -330,7 +401,26 @@ namespace VPB
             t.alignment = TextAnchor.MiddleLeft;
             VPBUiFont.ApplyTo(t);
             t.raycastTarget = false;
+
+            RectTransform rtCaptured = rt;
+            Text tCaptured = t;
+            int fontCaptured = fontSize;
+            innerPaneScaleActions.Add(s =>
+            {
+                ApplyImportSidebarLabelInsets(rtCaptured, s);
+                ApplyScaledFont(tCaptured, fontCaptured, s);
+            });
+            ApplyImportSidebarLabelInsets(rt, ChromeScale);
+            ApplyScaledFont(t, fontCaptured, ChromeScale);
             return t;
+        }
+
+        private static void ApplyImportSidebarLabelInsets(RectTransform rt, float s)
+        {
+            if (rt == null) return;
+            if (s <= 0f) s = 1f;
+            rt.offsetMin = new Vector2(GalleryUiDesignTokens.ImportSidebarLabelPadLeftRef * s, 0f);
+            rt.offsetMax = new Vector2(-GalleryUiDesignTokens.ImportSidebarLabelPadRightRef * s, 0f);
         }
 
         // Checklist rows use a fixed height; disable wrap so long atom ids stay on one visible line.

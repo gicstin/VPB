@@ -445,10 +445,7 @@ namespace VPB
         public GameObject hoverBorderGO;
 
         private GameObject rimRoot;
-        private Image rimL;
-        private Image rimR;
-        private Image rimT;
-        private Image rimB;
+        private RoundedRectOutline rimBorder;
 
         /// <summary>True while pointer hovers so we combine with <see cref="isSelected"/> for rim visibility.</summary>
         private bool hovering;
@@ -568,20 +565,24 @@ namespace VPB
             finally
             {
                 rimRoot = null;
-                rimL = rimR = rimT = rimB = null;
+                rimBorder = null;
             }
         }
 
-        private Image CreateRimPiece(string name)
+        private RoundedRectOutline CreateRimBorder()
         {
-            GameObject go = new GameObject(name);
+            GameObject go = new GameObject("Border");
             go.transform.SetParent(rimRoot.transform, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
+            RoundedRectOutline outline = go.AddComponent<RoundedRectOutline>();
+            outline.color = hoverColor;
+            outline.raycastTarget = false;
+            RectTransform rt = outline.rectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
             rt.localScale = Vector3.one;
-            Image img = go.AddComponent<Image>();
-            img.color = hoverColor;
-            img.raycastTarget = false;
-            return img;
+            return outline;
         }
 
         /// <summary>Place <see cref="rimRoot"/> rendered after backdrop so rims sit behind Text/Icon when possible.</summary>
@@ -620,22 +621,20 @@ namespace VPB
             var rimLe = rimRoot.AddComponent<LayoutElement>();
             rimLe.ignoreLayout = true;
 
-            rimL = CreateRimPiece("L");
-            rimR = CreateRimPiece("R");
-            rimT = CreateRimPiece("T");
-            rimB = CreateRimPiece("B");
+            rimBorder = CreateRimBorder();
 
             InsertRimAfterTargetGraphic();
         }
 
         private void RebuildRimLayout()
         {
-            if (rimL == null || rimR == null || rimT == null || rimB == null) return;
+            if (rimBorder == null) return;
 
             float t = borderSize;
             if (t < 1f) t = 1f;
 
-            // Match old Outline: outward = expand past rect, inward = shrink inside rect.
+            // Match old Outline: outward = expand past rect, inward = shrink inside rect. The rounded
+            // border band (thickness t) is then drawn along the inner edge of the expanded/shrunk rimRoot.
             var prt = rimRoot.GetComponent<RectTransform>();
             if (prt != null)
             {
@@ -651,38 +650,15 @@ namespace VPB
                 }
             }
 
-            void layoutV(Image img, float anchorX, float pivotX, float posX)
-            {
-                RectTransform rt = img.rectTransform;
-                rt.anchorMin = new Vector2(anchorX, 0f);
-                rt.anchorMax = new Vector2(anchorX, 1f);
-                rt.pivot = new Vector2(pivotX, 0.5f);
-                rt.anchoredPosition = new Vector2(posX, 0f);
-                rt.sizeDelta = new Vector2(t, 0f);
-            }
-
-            void layoutH(Image img, float anchorY, float pivotY, float posY)
-            {
-                RectTransform rt = img.rectTransform;
-                rt.anchorMin = new Vector2(0f, anchorY);
-                rt.anchorMax = new Vector2(1f, anchorY);
-                rt.pivot = new Vector2(0.5f, pivotY);
-                rt.anchoredPosition = new Vector2(0f, posY);
-                rt.sizeDelta = new Vector2(0f, t);
-            }
-
-            layoutV(rimL, 0f, 0f, t * 0.5f);
-            layoutV(rimR, 1f, 1f, -t * 0.5f);
-            layoutH(rimB, 0f, 0f, t * 0.5f);
-            layoutH(rimT, 1f, 1f, -t * 0.5f);
+            rimBorder.borderThickness = t;
+            // Match the button's own corner: rounded when the backdrop is a RoundedRect, square otherwise.
+            RoundedRect targetRounded = targetGraphic as RoundedRect;
+            rimBorder.cornerRadiusFraction = targetRounded != null ? targetRounded.cornerRadiusFraction : 0f;
         }
 
         private void ApplyRimTint()
         {
-            if (rimL != null) rimL.color = hoverColor;
-            if (rimR != null) rimR.color = hoverColor;
-            if (rimT != null) rimT.color = hoverColor;
-            if (rimB != null) rimB.color = hoverColor;
+            if (rimBorder != null) rimBorder.color = hoverColor;
         }
     }
 

@@ -18,7 +18,9 @@ namespace VPB
         }
 
         public const float MinUiScale = 0.5f;
-        public const float MaxUiScale = 1.5f;
+        public const float MaxUiScale = 2.0f;
+        public const float MinGalleryElementCornerRadiusFraction = 0.05f;
+        public const float MaxGalleryElementCornerRadiusFraction = 0.5f;
 
         private static float ClampUiScale(float v)
         {
@@ -27,6 +29,13 @@ namespace VPB
             if (v > MaxUiScale) return MaxUiScale;
             return v;
         }
+
+        public static float ClampGalleryElementCornerRadiusFraction(float v)
+        {
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
+            return Mathf.Clamp(v, MinGalleryElementCornerRadiusFraction, MaxGalleryElementCornerRadiusFraction);
+        }
+
         private static VPBConfig _instance;
         private static string s_LastLoggedSavedGalleryCategory;
         private static string s_LastLoggedLoadedGalleryCategory;
@@ -118,6 +127,10 @@ namespace VPB
 
         // Settings
         public bool EnableButtonGaps = true;
+        /// <summary>When false, gallery buttons and other rounded elements render with square corners.</summary>
+        public bool EnableGalleryElementRounding = true;
+        /// <summary>Corner radius as a fraction (0.05..0.5) of each element's shorter side. Used when <see cref="EnableGalleryElementRounding"/> is true.</summary>
+        public float GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
         /// <summary>When true, first-run hint strip under title bar is hidden permanently.</summary>
         public bool FirstRunHintsDismissed = false;
         /// <summary>When true (default), VR hover dwell shows a local tooltip label on controls.</summary>
@@ -725,6 +738,14 @@ namespace VPB
         public float CurrentGalleryUiScale => CurrentInnerPaneScale;
         public float CurrentSideButtonScale => CurrentGalleryUiScale;
         public float CurrentInnerPaneScale => IsVR ? InnerPaneScaleVR : InnerPaneScaleDesktop;
+
+        /// <summary>Effective rounded-corner fraction for gallery UI elements (0 when rounding is disabled).</summary>
+        public float EffectiveGalleryElementCornerRadiusFraction()
+        {
+            if (!EnableGalleryElementRounding) return 0f;
+            return ClampGalleryElementCornerRadiusFraction(GalleryElementCornerRadiusFraction);
+        }
+
         public float InnerPaneScale
         {
             get => CurrentInnerPaneScale;
@@ -887,6 +908,8 @@ namespace VPB
             VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
             // Reset to defaults before loading
             EnableButtonGaps = true;
+            EnableGalleryElementRounding = true;
+            GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
             FirstRunHintsDismissed = false;
             VrHoverTooltipEnabled = true;
             ModeSetupWizardDoneDesktopFixed = false;
@@ -1036,6 +1059,9 @@ namespace VPB
                     if (node != null)
                     {
                         if (node["EnableButtonGaps"] != null) EnableButtonGaps = node["EnableButtonGaps"].AsBool;
+                        if (node["EnableGalleryElementRounding"] != null) EnableGalleryElementRounding = node["EnableGalleryElementRounding"].AsBool;
+                        if (node["GalleryElementCornerRadiusFraction"] != null)
+                            GalleryElementCornerRadiusFraction = ClampGalleryElementCornerRadiusFraction(node["GalleryElementCornerRadiusFraction"].AsFloat);
                         if (node["FirstRunHintsDismissed"] != null) FirstRunHintsDismissed = node["FirstRunHintsDismissed"].AsBool;
                         if (node["VrHoverTooltipEnabled"] != null) VrHoverTooltipEnabled = node["VrHoverTooltipEnabled"].AsBool;
                         if (node["ModeSetupWizardDoneDesktopFixed"] != null) ModeSetupWizardDoneDesktopFixed = node["ModeSetupWizardDoneDesktopFixed"].AsBool;
@@ -1470,6 +1496,8 @@ namespace VPB
                 Stopwatch sw = Stopwatch.StartNew();
                 JSONClass node = new JSONClass();
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
+                node["EnableGalleryElementRounding"].AsBool = EnableGalleryElementRounding;
+                node["GalleryElementCornerRadiusFraction"].AsFloat = ClampGalleryElementCornerRadiusFraction(GalleryElementCornerRadiusFraction);
                 node["FirstRunHintsDismissed"].AsBool = FirstRunHintsDismissed;
                 node["VrHoverTooltipEnabled"].AsBool = VrHoverTooltipEnabled;
                 node["ModeSetupWizardDoneDesktopFixed"].AsBool = ModeSetupWizardDoneDesktopFixed;

@@ -120,11 +120,11 @@ namespace VPB
             rt.sizeDelta = Vector2.zero;
             rt.anchoredPosition = Vector2.zero;
             VerticalLayoutGroup v = go.AddComponent<VerticalLayoutGroup>();
-            v.spacing = 2f;
-            v.padding = new RectOffset(5, 5, 0, 0);
+            v.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef;
+            v.padding = new RectOffset(0, 0, 0, 0);
             {
                 var vlg = v;
-                innerPaneScaleActions.Add(s => { if (vlg) { vlg.spacing = 2f * s; vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, 0); } });
+                innerPaneScaleActions.Add(s => SyncSideTabListHolderVerticalLayoutOn(vlg, s));
             }
             v.childAlignment = TextAnchor.UpperCenter;
             v.childControlWidth = true;
@@ -157,11 +157,33 @@ namespace VPB
             return go;
         }
 
+        private bool IsUserTagsSideTabOpen(bool isLeft)
+        {
+            return isLeft
+                ? leftActiveContent == ContentType.UserTags
+                : rightActiveContent == ContentType.UserTags;
+        }
+
+        /// <summary>Remove User Tags rows/blocks from the main side scroll when another pane owns that rail.</summary>
+        private void PurgeUserTagsSideTabArtifactsFromMainPane(bool isLeft)
+        {
+            if (IsUserTagsSideTabOpen(isLeft)) return;
+            GameObject container = isLeft ? leftTabContainerGO : rightTabContainerGO;
+            if (container == null) return;
+            DestroyEphemeralSideTabBlocksForContentType(container.transform, ContentType.Category);
+            GameObject pinnedStrip = isLeft ? leftUserTagsAvailPinnedStickyGO : rightUserTagsAvailPinnedStickyGO;
+            if (pinnedStrip != null) pinnedStrip.SetActive(false);
+        }
+
         private void EnsureCategoryCreatorHolders(GameObject tabContainer, bool isLeft)
         {
             GameObject catH = isLeft ? leftCategoryTabHolder : rightCategoryTabHolder;
             GameObject crH = isLeft ? leftCreatorTabHolder : rightCreatorTabHolder;
-            if (catH != null && crH != null) return;
+            if (catH != null && crH != null)
+            {
+                PurgeUserTagsSideTabArtifactsFromMainPane(isLeft);
+                return;
+            }
 
             List<GameObject> legacy = isLeft ? leftActiveTabButtons : rightActiveTabButtons;
             if (legacy != null)
@@ -232,8 +254,70 @@ namespace VPB
         private float CreatorVirtRowHeight()
         {
             float s = ChromeScale;
-            // Match CreateTabButton size (35*s) plus the scaled VerticalLayoutGroup spacing (2*s).
-            return (35f * s) + (2f * s);
+            return (GalleryUiDesignTokens.SideTabRowHeightRef + GalleryUiDesignTokens.SideTabRowSpacingRef) * s;
+        }
+
+        private static void SyncRoundedFractionOnTabButton(GameObject btn, float frac)
+        {
+            if (btn == null) return;
+            RoundedRect rr = btn.GetComponent<RoundedRect>();
+            if (rr != null) rr.cornerRadiusFraction = frac;
+            ConfigureSideTabRowHoverBorder(btn);
+        }
+
+        private static void SyncRoundedFractionOnTabButtons(List<GameObject> buttons, float frac)
+        {
+            if (buttons == null) return;
+            for (int i = 0; i < buttons.Count; i++)
+                SyncRoundedFractionOnTabButton(buttons[i], frac);
+        }
+
+        private void SyncRoundedFractionOnTabButtonPool(float frac)
+        {
+            if (tabButtonPool == null || tabButtonPool.Count == 0) return;
+            foreach (GameObject btn in tabButtonPool)
+                SyncRoundedFractionOnTabButton(btn, frac);
+        }
+
+        internal void SyncLiveElementCornerRadiusChrome()
+        {
+            float frac = UI.ResolveGalleryElementCornerRadiusFraction();
+            SyncRoundedFractionOnTabButtons(leftSubActiveTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(rightSubActiveTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(leftCategoryTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(rightCategoryTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(leftCreatorTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(rightCreatorTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(leftActiveTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(rightActiveTabButtons, frac);
+            SyncRoundedFractionOnTabButtons(_leftCreatorVirtButtons, frac);
+            SyncRoundedFractionOnTabButtons(_rightCreatorVirtButtons, frac);
+            SyncRoundedFractionOnTabButtonPool(frac);
+            try { ApplyCategoryQuickChromeLayout(ChromeScale); } catch { }
+            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+        }
+
+        private static void ConfigureSideTabRowHoverBorder(GameObject btnGO)
+        {
+            if (btnGO == null) return;
+            UIHoverBorder hb = btnGO.GetComponent<UIHoverBorder>();
+            if (hb == null) return;
+            hb.inward = true;
+            try { hb.ApplyBorderSettings(); } catch { }
+        }
+
+        private static float SideTabRowHeightPx(float s)
+        {
+            return GalleryUiDesignTokens.SideTabRowHeightRef * s;
+        }
+
+        private static void ApplySideTabVirtRowHorizontalLayout(RectTransform rt, float s, float rowH)
+        {
+            if (rt == null) return;
+            float pad = GalleryUiDesignTokens.SideTabRowPadRef * s;
+            rt.sizeDelta = new Vector2(-pad, rowH);
+            rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
+            rt.offsetMax = new Vector2(-pad, rt.offsetMax.y);
         }
 
         private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)
@@ -257,8 +341,11 @@ namespace VPB
             {
                 // Create private buttons for the virtual list that are NOT part of the shared tabButtonPool.
                 // This prevents UpdateTabs from stealing them back every frame.
-                GameObject btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                GameObject btnGO = UI.CreateUIButton(parent.gameObject,
+                    GalleryUiDesignTokens.TabButtonPreferredWidthRef,
+                    GalleryUiDesignTokens.SideTabRowHeightRef, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 AddHoverDelegate(btnGO);
+                ConfigureSideTabRowHoverBorder(btnGO);
                 btnGO.SetActive(true);
 
                 // Positioning is manual; stretch horizontally.
@@ -270,9 +357,7 @@ namespace VPB
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
                     rt.anchoredPosition = Vector2.zero;
-                    rt.sizeDelta = new Vector2(-10f, 35f * s); // -10 accounts for the 5+5 padding
-                    rt.offsetMin = new Vector2(5f, rt.offsetMin.y);
-                    rt.offsetMax = new Vector2(-5f, rt.offsetMax.y);
+                    ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
                 }
 
                 pool.Add(btnGO);
@@ -322,10 +407,10 @@ namespace VPB
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
-            le.minWidth = 140f * s;
-            le.preferredWidth = 170f * s;
-            le.minHeight = 35f * s;
-            le.preferredHeight = 35f * s;
+            le.minWidth = GalleryUiDesignTokens.TabButtonMinWidthRef * s;
+            le.preferredWidth = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+            le.minHeight = SideTabRowHeightPx(s);
+            le.preferredHeight = SideTabRowHeightPx(s);
             le.flexibleWidth = 1;
         }
 
@@ -390,7 +475,7 @@ namespace VPB
                     if (rt != null)
                     {
                         float s = ChromeScale;
-                        rt.sizeDelta = new Vector2(-10f, 35f * s);
+                        ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
                         float y = -idx * rowH;
                         rt.anchoredPosition = new Vector2(0f, y);
                     }
@@ -647,8 +732,11 @@ namespace VPB
             }
             while (pool.Count < desired)
             {
-                GameObject btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                GameObject btnGO = UI.CreateUIButton(parent.gameObject,
+                    GalleryUiDesignTokens.TabButtonPreferredWidthRef,
+                    GalleryUiDesignTokens.SideTabRowHeightRef, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 AddHoverDelegate(btnGO);
+                ConfigureSideTabRowHoverBorder(btnGO);
                 btnGO.SetActive(true);
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
@@ -658,9 +746,7 @@ namespace VPB
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
                     rt.anchoredPosition = Vector2.zero;
-                    rt.sizeDelta = new Vector2(-10f, 35f * s);
-                    rt.offsetMin = new Vector2(5f, rt.offsetMin.y);
-                    rt.offsetMax = new Vector2(-5f, rt.offsetMax.y);
+                    ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
                 }
                 pool.Add(btnGO);
             }
@@ -812,10 +898,10 @@ namespace VPB
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
-            le.minWidth = 140f * s;
-            le.preferredWidth = 170f * s;
-            le.minHeight = 35f * s;
-            le.preferredHeight = 35f * s;
+            le.minWidth = GalleryUiDesignTokens.TabButtonMinWidthRef * s;
+            le.preferredWidth = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+            le.minHeight = SideTabRowHeightPx(s);
+            le.preferredHeight = SideTabRowHeightPx(s);
             le.flexibleWidth = 1;
 
             if (txt != null)
@@ -848,7 +934,7 @@ namespace VPB
 
         private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer, bool fromScroll = false)
         {
-            if (tabContainer == null) return;
+            if (tabContainer == null || !IsUserTagsSideTabOpen(isLeft)) return;
             GameObject holderGo = EnsureUserTagPickVirtualHolder(tabContainer);
             if (holderGo == null) return;
 
@@ -913,7 +999,7 @@ namespace VPB
                     if (rt != null)
                     {
                         float s = ChromeScale;
-                        rt.sizeDelta = new Vector2(-10f, 35f * s);
+                        ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
                         float y = -idx * rowH;
                         rt.anchoredPosition = new Vector2(0f, y);
                     }
@@ -1196,8 +1282,14 @@ namespace VPB
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
             {
-                btnGO = UI.CreateUIButton(parent.gameObject, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
+                btnGO = UI.CreateUIButton(parent.gameObject,
+                    GalleryUiDesignTokens.TabButtonPreferredWidthRef,
+                    GalleryUiDesignTokens.SideTabRowHeightRef, "", 18, 0, 0, AnchorPresets.middleLeft, null);
             }
+            RoundedRect tabRounded = btnGO != null ? btnGO.GetComponent<RoundedRect>() : null;
+            if (tabRounded != null)
+                tabRounded.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            ConfigureSideTabRowHoverBorder(btnGO);
             // Always ensure hover delegate exists (for both new and pooled buttons)
             var hoverDel = btnGO.GetComponent<UIHoverDelegate>();
             if (hoverDel == null)
@@ -1247,10 +1339,10 @@ namespace VPB
             // Ensure LayoutElement
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
-            le.minWidth = 140f * s;
-            le.preferredWidth = 170f * s;
-            le.minHeight = 35f * s;
-            le.preferredHeight = 35f * s;
+            le.minWidth = GalleryUiDesignTokens.TabButtonMinWidthRef * s;
+            le.preferredWidth = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+            le.minHeight = SideTabRowHeightPx(s);
+            le.preferredHeight = SideTabRowHeightPx(s);
             le.flexibleWidth = 1;
 
             float pad = 10f * s;
@@ -1295,8 +1387,9 @@ namespace VPB
             GameObject inputGO = new GameObject("SearchInput");
             inputGO.transform.SetParent(parent.transform, false);
             
-            Image bg = inputGO.AddComponent<Image>();
+            RoundedRect bg = inputGO.AddComponent<RoundedRect>();
             bg.color = UI.InputFieldBg;
+            bg.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
             
             // Add Hover Border
             inputGO.AddComponent<UIHoverBorder>();
@@ -1313,7 +1406,7 @@ namespace VPB
             textAreaRT.anchorMin = Vector2.zero;
             textAreaRT.anchorMax = Vector2.one;
             textAreaRT.offsetMin = new Vector2(38, 0); // Left offset accounts for search icon
-            textAreaRT.offsetMax = new Vector2(-45, 0); // Room for X button
+            textAreaRT.offsetMax = new Vector2(-GalleryUiDesignTokens.SearchTextRightInsetRef, 0);
 
             // Search icon (left side of input)
             {
@@ -1367,25 +1460,27 @@ namespace VPB
             input.placeholder = placeholderText;
             input.onValueChanged.AddListener(onValueChanged);
             
-            // Clear Button
-            GameObject clearBtn = UI.CreateUIButton(inputGO, 40, 40, "X", 24, 0, 0, AnchorPresets.middleRight, () => { // Increased size and font
+            // Clear button — flush right, full field height so hover rim meets search border.
+            GameObject clearBtn = UI.CreateUIButton(inputGO, GalleryUiDesignTokens.SearchClearBtnSizeRef, GalleryUiDesignTokens.SearchFieldHeightRef, "X", 24, 0, 0, AnchorPresets.middleRight, () => {
                 input.text = "";
                 input.ActivateInputField();
                 input.MoveTextEnd(false);
                 onClear?.Invoke();
             });
             RectTransform clearRT = clearBtn.GetComponent<RectTransform>();
-            clearRT.anchorMin = new Vector2(1, 0.5f);
-            clearRT.anchorMax = new Vector2(1, 0.5f);
-            clearRT.pivot = new Vector2(1, 0.5f);
-            clearRT.anchoredPosition = new Vector2(-5, 0);
+            clearRT.anchorMin = new Vector2(1f, 0f);
+            clearRT.anchorMax = new Vector2(1f, 1f);
+            clearRT.pivot = new Vector2(1f, 0.5f);
+            clearRT.anchoredPosition = Vector2.zero;
+            clearRT.sizeDelta = new Vector2(GalleryUiDesignTokens.SearchClearBtnSizeRef, 0f);
             clearBtn.GetComponent<Image>().color = new Color(0,0,0,0); // Transparent bg
             { var s = UI.LoadIconSprite("vpb_icons/backspace.png", new Color(0.6f, 0.6f, 0.6f)); if (s != null) UI.AddIconToButton(clearBtn, s, 6f, new Color(0, 0, 0, 0)); }
 
-            // Border-only hover (avoid text color fill)
+            // Border-only hover (avoid text color fill); inward so rim stays inside search field edge.
             var clearHoverBorder = clearBtn.AddComponent<UIHoverBorder>();
             clearHoverBorder.hoverColor = new Color(1f, 0.2f, 0.2f, 1f);
             clearHoverBorder.borderSize = 2f;
+            clearHoverBorder.inward = true;
 
             // ESC key handling to clear and refocus
             Button clearBtnComponent = clearBtn.GetComponent<Button>();
@@ -1458,14 +1553,14 @@ namespace VPB
             GameObject btnGO = new GameObject("NavButton_Template");
             btnGO.transform.SetParent(contentGO.transform, false);
             
-            Image img = btnGO.AddComponent<Image>();
-            img.color = new Color(0.2f, 0.4f, 0.6f, 1f);
+            Image img = UI.AddGalleryElementRoundedBg(btnGO, new Color(0.2f, 0.4f, 0.6f, 1f));
 
             // Add Hover Border
             btnGO.AddComponent<UIHoverBorder>();
             AddHoverDelegate(btnGO);
 
             Button btn = btnGO.AddComponent<Button>();
+            btn.targetGraphic = img;
 
             GameObject navTextGO = new GameObject("NavText");
             navTextGO.transform.SetParent(btnGO.transform, false);
@@ -2362,7 +2457,9 @@ namespace VPB
         private void ApplyListRowScale(Transform listRowTr, float rowHeight)
         {
             if (listRowTr == null) return;
-            float s = Mathf.Clamp(rowHeight / 100f, 0.6f, 2.0f);
+            float s = settingsListViewActive
+                ? Mathf.Clamp(InternalSettingsChromeScale(), 0.6f, 2.0f)
+                : Mathf.Clamp(rowHeight / 100f, 0.6f, 2.0f);
 
             VerticalLayoutGroup vlg = listRowTr.GetComponent<VerticalLayoutGroup>();
             if (vlg != null)
@@ -2377,11 +2474,15 @@ namespace VPB
                 Text t = nameTr.GetComponent<Text>();
                 if (t != null)
                 {
-                    t.fontSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontRef * s);
+                    if (settingsListViewActive)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowNameFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                    else
+                        t.fontSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontRef * s);
                     t.fontStyle = FontStyle.Normal;
                 }
                 LayoutElement le = nameTr.GetComponent<LayoutElement>();
-                if (le != null) le.minHeight = 32f * s;
+                if (le != null)
+                    le.minHeight = (settingsListViewActive ? GalleryUiDesignTokens.ButtonSizeRef : 32f) * s;
             }
 
             Transform detailsTr = listRowTr.Find("Details");
@@ -3376,8 +3477,7 @@ namespace VPB
             // Clear button
             GameObject clearBtnGO = new GameObject("ClearButton");
             clearBtnGO.transform.SetParent(indicatorGO.transform, false);
-            Image clearBtnImg = clearBtnGO.AddComponent<Image>();
-            clearBtnImg.color = new Color(0.8f, 0.2f, 0.2f, 0.8f);
+            Image clearBtnImg = UI.AddGalleryElementRoundedBg(clearBtnGO, new Color(0.8f, 0.2f, 0.2f, 0.8f));
             Button clearBtn = clearBtnGO.AddComponent<Button>();
             clearBtn.targetGraphic = clearBtnImg;
 

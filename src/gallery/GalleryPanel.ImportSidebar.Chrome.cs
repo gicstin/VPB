@@ -78,7 +78,7 @@ namespace VPB
             }
         }
 
-        /// <summary>Match CreateVScrollableContent viewport width to pinned header/Apply (no legacy -5px shift).</summary>
+        /// <summary>Flush viewport left; reserve scrollbar + inner pad on the right only (no center-shift).</summary>
         private void AlignImportSidebarScrollViewport(float s)
         {
             if (importSidebarBodyScrollRT == null) return;
@@ -86,9 +86,13 @@ namespace VPB
             if (vp == null) return;
             RectTransform vprt = vp as RectTransform;
             if (vprt == null) return;
-            float scrollW = ImportSidebarScrollBarWidthPx(s);
-            vprt.sizeDelta = new Vector2(-scrollW, 0f);
-            vprt.anchoredPosition = new Vector2(-scrollW * 0.5f, 0f);
+            float gutter = ImportSidebarScrollBarWidthPx(s) + ImportSidebarInnerPadHRef * s;
+            vprt.sizeDelta = Vector2.zero;
+            vprt.anchoredPosition = Vector2.zero;
+            float minY = vprt.offsetMin.y;
+            float maxY = vprt.offsetMax.y;
+            vprt.offsetMin = new Vector2(0f, minY);
+            vprt.offsetMax = new Vector2(-gutter, maxY);
         }
 
         private void StyleImportSidebarHeader(float s = 1f)
@@ -100,15 +104,15 @@ namespace VPB
             {
                 importSidebarHeaderLabel.color = Color.white;
                 importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
-                importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+                importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
                 importSidebarHeaderLabel.verticalOverflow = VerticalWrapMode.Truncate;
                 RectTransform rt = importSidebarHeaderLabel.GetComponent<RectTransform>();
                 if (rt != null)
                 {
-                    float padH = ImportSidebarInnerPadHRef * s;
+                    float padInner = ImportSidebarInnerPadHRef * s;
                     float padV = 2f * s;
-                    rt.offsetMin = new Vector2(padH, padV);
-                    rt.offsetMax = new Vector2(-padH, -padV);
+                    rt.offsetMin = new Vector2(0f, padV);
+                    rt.offsetMax = new Vector2(-padInner, -padV);
                 }
             }
         }

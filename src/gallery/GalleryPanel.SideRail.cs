@@ -68,8 +68,9 @@ namespace VPB
                 rail.TabScrollGO.SetActive(true);
                 ContentType type = rail.ActiveContent.Value;
                 bool cleanupSide = ContentTypeSuppressesSideSearch(type);
+                bool hideSort = cleanupSide || ContentTypeSuppressesSideSort(type);
 
-                if (rail.SortBtn != null) rail.SortBtn.SetActive(!cleanupSide);
+                if (rail.SortBtn != null) rail.SortBtn.SetActive(!hideSort);
                 if (rail.RefreshBtn != null) rail.RefreshBtn.SetActive(!cleanupSide);
 
                 if (rail.SearchInput != null)

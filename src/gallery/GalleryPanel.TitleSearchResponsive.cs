@@ -29,6 +29,7 @@ namespace VPB
         {
             if (titleSearchInput == null || backgroundBoxGO == null) return;
             float s = paneScale <= 0f ? 1f : paneScale;
+            try { RescaleTitleBarChromeInternal(UiMetrics); } catch { }
 
             RectTransform titleBarRT = titleSearchInput.transform.parent as RectTransform;
             if (titleBarRT == null) return;
@@ -283,8 +284,10 @@ namespace VPB
                     _titleSearchCompactGO.SetActive(true);
                     if (_titleSearchCompactRT != null)
                     {
+                        float compactSz = GalleryUiDesignTokens.TitleBarChipRef * s;
                         _titleSearchCompactRT.anchoredPosition = new Vector2(cxSearch, 0f);
-                        _titleSearchCompactRT.sizeDelta = new Vector2(Mathf.Max(wSearch, iconW * 0.85f), 40f * s);
+                        _titleSearchCompactRT.sizeDelta = new Vector2(compactSz, compactSz);
+                        ScaleButtonIconPadding(_titleSearchCompactRT, s);
                     }
                 }
             }
@@ -296,7 +299,7 @@ namespace VPB
                 titleSearchInput.gameObject.SetActive(true);
                 searchRT.sizeDelta = new Vector2(wSearch, GalleryUiDesignTokens.TitleBarChipRef * s);
                 searchRT.anchoredPosition = new Vector2(cxSearch, 0f);
-                RescaleSearchInput(titleSearchInput, s);
+                RescaleSearchInput(titleSearchInput, s, GalleryUiDesignTokens.TitleBarChipRef);
             }
 
             try { SyncTitleBarSearchBackdrop(); } catch { }
@@ -326,7 +329,7 @@ namespace VPB
         private void SetupTitleSearchCompactControl(GameObject titleBarGO)
         {
             if (titleBarGO == null) return;
-            _titleSearchCompactGO = UI.CreateUIButton(titleBarGO, 40, 40, "", 18, 0, 0, AnchorPresets.middleCenter, () => OpenTitleSearchPopup());
+            _titleSearchCompactGO = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "", 18, 0, 0, AnchorPresets.middleCenter, () => OpenTitleSearchPopup());
             _titleSearchCompactGO.name = "TitleSearchCompact";
             _titleSearchCompactGO.SetActive(false);
             RectTransform crt = _titleSearchCompactGO.GetComponent<RectTransform>();
@@ -334,7 +337,7 @@ namespace VPB
             crt.anchorMax = new Vector2(0.5f, 0.5f);
             crt.pivot = new Vector2(0.5f, 0.5f);
             crt.anchoredPosition = Vector2.zero;
-            crt.sizeDelta = new Vector2(40, 40);
+            crt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef);
             try
             {
                 var sp = UI.LoadIconSprite("vpb_icons/search.png", UI.BarIconGlyphTint);
@@ -429,7 +432,7 @@ namespace VPB
             float pw = Mathf.Clamp(Mathf.Min(288f * s, bw - 36f * s), 196f * s, 308f * s);
 
             _titleSearchPopupProximityAwayTimer = 0f;
-            _titleSearchPopupPanelRT.sizeDelta = new Vector2(pw, 44f * s + 10f);
+            _titleSearchPopupPanelRT.sizeDelta = new Vector2(pw, GalleryUiDesignTokens.TitleBarChipRef * s + 10f);
             float popupX = (_titleSearchCompactRT != null && _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf)
                 ? _titleSearchCompactRT.anchoredPosition.x
                 : 0f;
@@ -439,7 +442,8 @@ namespace VPB
             _titleSearchPopupPanelRT.anchoredPosition = new Vector2(popupX, -GalleryUiDesignTokens.TitleBarHeightRef * s - 6f);
 
             RectTransform ifrt = _titleSearchPopupField.GetComponent<RectTransform>();
-            ifrt.sizeDelta = new Vector2(pw - 12f * s, 40f * s);
+            ifrt.sizeDelta = new Vector2(pw - 12f * s, GalleryUiDesignTokens.TitleBarChipRef * s);
+            RescaleSearchInput(_titleSearchPopupField, s, GalleryUiDesignTokens.TitleBarChipRef);
 
             string t = titleSearchInput.text ?? "";
             try

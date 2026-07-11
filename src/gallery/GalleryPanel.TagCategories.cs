@@ -260,8 +260,7 @@ namespace VPB
         {
             GameObject row = new GameObject("CatModalRow");
             row.transform.SetParent(parent, false);
-            Image img = row.AddComponent<Image>();
-            img.color = bg.HasValue ? bg.Value : UI.PopupRowBackdrop;
+            Image img = AddCategoryQuickRoundedBg(row, bg.HasValue ? bg.Value : UI.PopupRowBackdrop);
             LayoutElement le = row.AddComponent<LayoutElement>();
             le.minHeight = rowH;
             le.preferredHeight = rowH;
@@ -269,6 +268,7 @@ namespace VPB
             if (onClick != null)
             {
                 Button b = row.AddComponent<Button>();
+                b.targetGraphic = img;
                 b.transition = Selectable.Transition.None;
                 b.onClick.AddListener(() => { try { onClick(); } catch { } });
             }

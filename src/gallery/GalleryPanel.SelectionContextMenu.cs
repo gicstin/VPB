@@ -554,6 +554,7 @@ namespace VPB
         private CanvasGroup tboxLabelCG;        // fades OUT when expanding
         private CanvasGroup tboxButtonsCG;      // fades IN when expanding
         private GameObject tboxPinBtn;
+        private RectTransform tboxPinBtnRT;
         private Text tboxPinBtnText;
 
         // Row height: matches the collapsed bar height set by the layout system.
@@ -563,6 +564,7 @@ namespace VPB
 
         private RectTransform tboxLabelLayerRT;   // reference for scale updates
         private RectTransform tboxButtonsLayerRT; // reference for scale updates
+        private RectTransform tboxRowSepRT;
 
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -1494,9 +1496,12 @@ namespace VPB
             catch { }
 
             // ── Pin toggle (right edge, always visible) ───────────────────────────
+            float initChromeS = UiMetrics.ChromeScale;
+            if (initChromeS <= 0f) initChromeS = 1f;
+            float initPinSz = GalleryUiDesignTokens.TboxPinBtnSizeRef * initChromeS;
             tboxPinBtn = UI.CreateUIButton(
-                tbox, 44, 0, "", 15,
-                0, 0, AnchorPresets.vStretchRight,
+                tbox, initPinSz, initPinSz, "", 15,
+                0, 0, AnchorPresets.bottomRight,
                 () =>
                 {
                     tboxPinned = !tboxPinned;
@@ -1510,12 +1515,10 @@ namespace VPB
             );
             tboxPinBtn.name = "Tbox_Pin";
             // Pin button is anchored to the bottom row (tooltip row), not the full bar
-            var pinRT = tboxPinBtn.GetComponent<RectTransform>();
-            pinRT.anchorMin = new Vector2(1f, 0f);
-            pinRT.anchorMax = new Vector2(1f, 0f);
-            pinRT.pivot = new Vector2(1f, 0.5f);
-            pinRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight * 0.5f);
-            pinRT.sizeDelta = new Vector2(GalleryUiDesignTokens.TboxPinBtnSizeRef, GalleryUiDesignTokens.TboxPinBtnSizeRef);
+            tboxPinBtnRT = tboxPinBtn.GetComponent<RectTransform>();
+            tboxPinBtnRT.anchorMin = new Vector2(1f, 0f);
+            tboxPinBtnRT.anchorMax = new Vector2(1f, 0f);
+            tboxPinBtnRT.pivot = new Vector2(1f, 0.5f);
 
             tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
 
@@ -1545,61 +1548,35 @@ namespace VPB
                 var rowSepImg = rowSepGO.AddComponent<Image>();
                 rowSepImg.color = new Color(1f, 1f, 1f, 0.12f);
                 rowSepImg.raycastTarget = false;
-                var rowSepRT = rowSepGO.GetComponent<RectTransform>();
-                rowSepRT.anchorMin = new Vector2(0f, 0f);
-                rowSepRT.anchorMax = new Vector2(1f, 0f);
-                rowSepRT.pivot = new Vector2(0.5f, 0f);
-                rowSepRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight);
-                rowSepRT.sizeDelta = new Vector2(0f, 1f);
-
-                // Scale action to reposition separator when InnerPaneScale changes
-                var rsRT = rowSepRT;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (rsRT != null) rsRT.anchoredPosition = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s);
-                });
+                tboxRowSepRT = rowSepGO.GetComponent<RectTransform>();
+                tboxRowSepRT.anchorMin = new Vector2(0f, 0f);
+                tboxRowSepRT.anchorMax = new Vector2(1f, 0f);
+                tboxRowSepRT.pivot = new Vector2(0.5f, 0f);
+                tboxRowSepRT.sizeDelta = new Vector2(0f, 1f);
             }
 
             // Scale actions to resize rows when InnerPaneScale changes
+            innerPaneScaleActions.Add(s =>
             {
-                var lRT = tboxLabelLayerRT;
-                var bRT = tboxButtonsLayerRT;
-                var pRT = pinRT;
-                var fRT = tboxFilterModeRowRT;
-                var fLE = tboxFilterModeRowLE;
-                innerPaneScaleActions.Add(s =>
+                try { SyncTboxFooterRowChrome(s); } catch { }
+                try { RescaleFooterInfoBarInternal(s); } catch { }
+                try { TboxSetAllFlexActionButtonHeights(TboxActionButtonInnerHeight()); } catch { }
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+                try
                 {
-                    float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
-                    float pinW = GalleryUiDesignTokens.TboxPinBtnSizeRef * s;
-                    tboxInfoRowHeight = rowH;
-                    if (lRT != null) lRT.sizeDelta = new Vector2(-pinW, rowH);
-                    if (bRT != null) bRT.anchoredPosition = new Vector2(0f, rowH);
-                    if (pRT != null)
-                    {
-                        pRT.sizeDelta = new Vector2(GalleryUiDesignTokens.TboxPinBtnSizeRef * s, GalleryUiDesignTokens.TboxPinBtnSizeRef * s);
-                        pRT.anchoredPosition = new Vector2(0f, rowH * 0.5f);
-                    }
-                    if (fLE != null) { fLE.minHeight = rowH; fLE.preferredHeight = rowH; }
-                    if (tboxClothingModeRowLE != null) { tboxClothingModeRowLE.minHeight = rowH; tboxClothingModeRowLE.preferredHeight = rowH; }
-                    try { RescaleFooterInfoBarInternal(s); } catch { }
-                    try { TboxSetAllFlexActionButtonHeights(TboxActionButtonInnerHeight()); } catch { }
-                    try { RefreshTboxFlexButtonLayout(); } catch { }
-                    try
-                    {
-                        if (tboxTargetDropdownBtnText != null)
-                            GalleryUiMetrics.ApplyFont(tboxTargetDropdownBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                        if (tboxClothingModeLabel != null)
-                            GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                        if (tboxClothesPresetText != null)
-                            GalleryUiMetrics.ApplyFont(tboxClothesPresetText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                        if (tboxClothesKeepText != null)
-                            GalleryUiMetrics.ApplyFont(tboxClothesKeepText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                        if (tboxClothesOnlyText != null)
-                            GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                    }
-                    catch { }
-                });
-            }
+                    if (tboxTargetDropdownBtnText != null)
+                        GalleryUiMetrics.ApplyFont(tboxTargetDropdownBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothingModeLabel != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesPresetText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesPresetText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesKeepText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesKeepText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesOnlyText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                }
+                catch { }
+            });
 
             if (VPBConfig.Instance != null)
                 tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
@@ -1608,6 +1585,42 @@ namespace VPB
 
             // Populate person atom buttons with whatever data is already loaded
             try { RefreshTboxPersonAtomButtons(); } catch { }
+            try { SyncTboxFooterRowChrome(UiMetrics.ChromeScale); } catch { }
+        }
+
+        /// <summary>Pin button + footer info row geometry; must run on scale changes and UpdateLayout.</summary>
+        private void SyncTboxFooterRowChrome(float s)
+        {
+            if (tbox == null) return;
+            if (s <= 0f) s = 1f;
+            float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
+            float pinW = GalleryUiDesignTokens.TboxPinBtnSizeRef * s;
+            tboxInfoRowHeight = rowH;
+            if (tboxLabelLayerRT != null)
+                tboxLabelLayerRT.sizeDelta = new Vector2(-pinW, rowH);
+            if (tboxButtonsLayerRT != null)
+            {
+                tboxButtonsLayerRT.anchoredPosition = new Vector2(0f, rowH);
+                tboxButtonsLayerRT.sizeDelta = new Vector2(-pinW, tboxButtonsLayerRT.sizeDelta.y);
+            }
+            if (tboxPinBtnRT != null)
+            {
+                tboxPinBtnRT.sizeDelta = new Vector2(pinW, pinW);
+                tboxPinBtnRT.anchoredPosition = new Vector2(0f, rowH * 0.5f);
+                ScaleButtonIconPadding(tboxPinBtnRT, s);
+            }
+            if (tboxRowSepRT != null)
+                tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
+            if (tboxFilterModeRowLE != null)
+            {
+                tboxFilterModeRowLE.minHeight = rowH;
+                tboxFilterModeRowLE.preferredHeight = rowH;
+            }
+            if (tboxClothingModeRowLE != null)
+            {
+                tboxClothingModeRowLE.minHeight = rowH;
+                tboxClothingModeRowLE.preferredHeight = rowH;
+            }
         }
 
         private void RefreshTboxPinVisual()

@@ -56,6 +56,33 @@ namespace VPB
             catch { }
         }
 
+        private static bool IsFilterChipDismissButton(Transform t)
+        {
+            if (t == null) return false;
+            if (!string.Equals(t.name, "Dismiss", StringComparison.Ordinal)) return false;
+            Transform p = t.parent;
+            return p != null && p.name.StartsWith("FilterChip", StringComparison.Ordinal);
+        }
+
+        private static bool IsUnderImportSidebarScrollViewport(Transform t)
+        {
+            while (t != null)
+            {
+                if (t.name == "Content" && t.parent != null && t.parent.name == "Viewport")
+                {
+                    Transform walk = t.parent.parent;
+                    while (walk != null)
+                    {
+                        if (walk.name == "VPB_ImportSidebar") return true;
+                        walk = walk.parent;
+                    }
+                    return false;
+                }
+                t = t.parent;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Gallery pane: no ColorTint fill on any <see cref="Selectable"/>; buttons get
         /// <see cref="UIHoverBorder"/>. Run once at init and continuously via <see cref="GalleryPaneChromeEnforcer"/>
@@ -77,10 +104,13 @@ namespace VPB
                     NeutralizeSelectableColorTint(s);
                     if (s is Button)
                     {
+                        if (IsFilterChipDismissButton(s.transform)) continue;
                         var hb = s.GetComponent<UIHoverBorder>();
                         if (hb == null) hb = s.gameObject.AddComponent<UIHoverBorder>();
                         // Global default for buttons that don't override (file rows override per-row already)
                         hb.hoverColor = border;
+                        if (IsUnderImportSidebarScrollViewport(s.transform))
+                            hb.inward = true;
                         hb.ApplyBorderSettings();
                     }
                 }
@@ -92,6 +122,8 @@ namespace VPB
                     var hb = hbs[i];
                     if (hb == null) continue;
                     hb.hoverColor = border;
+                    if (IsUnderImportSidebarScrollViewport(hb.transform))
+                        hb.inward = true;
                     hb.ApplyBorderSettings();
                 }
             }
@@ -979,7 +1011,7 @@ namespace VPB
             viewportRT.anchorMin = Vector2.zero;
             viewportRT.anchorMax = Vector2.one;
             viewportRT.sizeDelta = new Vector2(-scrollBarWidth, 0);
-            viewportRT.anchoredPosition = new Vector2(-scrollBarWidth / 2 - 5, 0); // Shift left slightly to avoid clip
+            viewportRT.anchoredPosition = new Vector2(-scrollBarWidth * 0.5f, 0);
             viewportGO.AddComponent<RectMask2D>();
 
             GameObject contentGO = new GameObject("Content");
@@ -1035,6 +1067,14 @@ namespace VPB
             return scrollableContentGO;
         }
 
+        private static Image AddScrollbarGraphic(GameObject go, Color color)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
         public static GameObject CreateScrollBar(GameObject parentGO, float width, float height, Scrollbar.Direction direction)
         {
             GameObject scrollbarGO = new GameObject("Scrollbar");
@@ -1045,8 +1085,7 @@ namespace VPB
             rt.pivot = new Vector2(1, 0.5f);
             rt.sizeDelta = new Vector2(width, 0);
 
-            Image bg = scrollbarGO.AddComponent<Image>();
-            bg.color = new Color(0.2f, 0.2f, 0.2f, 0.5f);
+            Image bg = AddScrollbarGraphic(scrollbarGO, new Color(0.2f, 0.2f, 0.2f, 0.5f));
 
             Scrollbar scrollbar = scrollbarGO.AddComponent<Scrollbar>();
             scrollbar.direction = direction;
@@ -1070,8 +1109,7 @@ namespace VPB
             handle.transform.SetParent(slidingArea.transform, false);
             RectTransform handleRT = handle.AddComponent<RectTransform>();
             handleRT.sizeDelta = Vector2.zero;
-            Image handleImg = handle.AddComponent<Image>();
-            handleImg.color = new Color(0.6f, 0.6f, 0.6f, 1f);
+            Image handleImg = AddScrollbarGraphic(handle, new Color(0.6f, 0.6f, 0.6f, 1f));
 
             scrollbar.handleRect = handleRT;
             scrollbar.targetGraphic = handleImg;
@@ -1086,11 +1124,118 @@ namespace VPB
             return scrollbarGO;
         }
 
-        public static GameObject AddChildGOImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset)
+        public static float ResolveGalleryElementCornerRadiusFraction()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.EffectiveGalleryElementCornerRadiusFraction();
+            }
+            catch { }
+            return GalleryUiDesignTokens.ButtonCornerRadiusFraction;
+        }
+
+        /// <summary>Rounded fill for gallery buttons, rows, and input chrome — uses live corner-radius setting.</summary>
+        public static Image AddGalleryElementRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
+        private static bool IsLiveSceneUiComponent(Component c)
+        {
+            if (c == null || c.gameObject == null) return false;
+            HideFlags hf = c.hideFlags;
+            if ((hf & HideFlags.NotEditable) != 0) return false;
+            if ((hf & HideFlags.HideAndDontSave) != 0) return false;
+            return true;
+        }
+
+        /// <summary>Re-applies the configured corner radius to every live <see cref="RoundedRect"/> / <see cref="RoundedRectOutline"/>.</summary>
+        public static void ApplyGalleryElementCornerRadiusGlobally()
+        {
+            float frac = ResolveGalleryElementCornerRadiusFraction();
+            try
+            {
+                UnityEngine.Object[] all = Resources.FindObjectsOfTypeAll(typeof(RoundedRect));
+                for (int i = 0; i < all.Length; i++)
+                {
+                    RoundedRect rr = all[i] as RoundedRect;
+                    if (rr == null || !IsLiveSceneUiComponent(rr)) continue;
+                    rr.cornerRadiusFraction = frac;
+                }
+            }
+            catch
+            {
+                try
+                {
+                    RoundedRect[] fills = UnityEngine.Object.FindObjectsOfType<RoundedRect>();
+                    for (int i = 0; i < fills.Length; i++)
+                    {
+                        if (fills[i] != null) fills[i].cornerRadiusFraction = frac;
+                    }
+                }
+                catch { }
+            }
+            try
+            {
+                UnityEngine.Object[] all = Resources.FindObjectsOfTypeAll(typeof(RoundedRectOutline));
+                for (int i = 0; i < all.Length; i++)
+                {
+                    RoundedRectOutline outline = all[i] as RoundedRectOutline;
+                    if (outline == null || !IsLiveSceneUiComponent(outline)) continue;
+                    outline.cornerRadiusFraction = frac;
+                }
+            }
+            catch
+            {
+                try
+                {
+                    RoundedRectOutline[] outlines = UnityEngine.Object.FindObjectsOfType<RoundedRectOutline>();
+                    for (int i = 0; i < outlines.Length; i++)
+                    {
+                        if (outlines[i] != null) outlines[i].cornerRadiusFraction = frac;
+                    }
+                }
+                catch { }
+            }
+            try
+            {
+                UnityEngine.Object[] borders = Resources.FindObjectsOfTypeAll(typeof(UIHoverBorder));
+                for (int i = 0; i < borders.Length; i++)
+                {
+                    UIHoverBorder hb = borders[i] as UIHoverBorder;
+                    if (hb == null || !IsLiveSceneUiComponent(hb)) continue;
+                    try { hb.ApplyBorderSettings(); } catch { }
+                }
+            }
+            catch { }
+            try { VamHookPlugin.singleton?.SyncQuickMenuElementCornerRadiusLive(); } catch { }
+            try
+            {
+                Gallery g = Gallery.singleton;
+                if (g != null && g.Panels != null)
+                {
+                    for (int i = 0; i < g.Panels.Count; i++)
+                    {
+                        GalleryPanel p = g.Panels[i];
+                        if (p != null) p.SyncLiveElementCornerRadiusChrome();
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static GameObject AddChildGOImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, bool rounded = false)
         {
             GameObject go = new GameObject("Image");
             go.transform.SetParent(parentGO.transform, false);
-            Image img = go.AddComponent<Image>();
+            // RoundedRect is an Image subclass; with cornerRadius 0 it renders an identical quad,
+            // so callers/lookups via GetComponent<Image>() are unaffected until a radius is set.
+            Image img = rounded ? go.AddComponent<RoundedRect>() : go.AddComponent<Image>();
             img.color = color;
             img.raycastTarget = true;
 
@@ -1100,6 +1245,13 @@ namespace VPB
             rt.pivot = AnchorPresets.GetPivot(anchorPreset);
             rt.anchoredPosition = anchoredPositionOffset;
             rt.sizeDelta = new Vector2(horizontalSize, verticalSize);
+
+            if (rounded)
+            {
+                RoundedRect rr = img as RoundedRect;
+                if (rr != null)
+                    rr.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();
+            }
 
             return go;
         }
@@ -1124,8 +1276,12 @@ namespace VPB
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
-            GameObject buttonGO = AddChildGOImage(parentGO, new Color(0.2f, 0.2f, 0.2f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            // Rounded background. Fraction-of-size radius is scale-resistant (re-derived from the live
+            // rect on every resize) and uniform across every gallery button.
+            GameObject buttonGO = AddChildGOImage(parentGO, new Color(0.2f, 0.2f, 0.2f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset), rounded: true);
             buttonGO.name = "Button_" + label;
+            RoundedRect bgRounded = buttonGO.GetComponent<RoundedRect>();
+            if (bgRounded != null) bgRounded.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();
             Button btn = buttonGO.AddComponent<Button>();
             if (onClick != null) btn.onClick.AddListener(onClick);
 
@@ -1168,9 +1324,11 @@ namespace VPB
         {
             GameObject go = new GameObject("SideTabSquareIcon");
             go.transform.SetParent(rowParent.transform, false);
-            Image img = go.AddComponent<Image>();
-            img.color = backdrop;
-            img.raycastTarget = true;
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = backdrop;
+            rr.raycastTarget = true;
+            rr.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();
+            Image img = rr;
             Button btn = go.AddComponent<Button>();
             ColorBlock cb = btn.colors;
             cb.normalColor = Color.white;
@@ -1180,6 +1338,7 @@ namespace VPB
             btn.colors = cb;
             btn.transition = Selectable.Transition.None;
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
             go.AddComponent<UIHoverBorder>();
 
@@ -1385,8 +1544,7 @@ namespace VPB
             boxRT.pivot = new Vector2(0, 0.5f);
             boxRT.anchoredPosition = new Vector2(10, 0);
             boxRT.sizeDelta = new Vector2(20, 20);
-            Image boxImg = boxGO.AddComponent<Image>();
-            boxImg.color = Color.white;
+            Image boxImg = AddGalleryElementRoundedBg(boxGO, Color.white);
             toggle.targetGraphic = boxImg;
 
             // Inner Box (Background - Black)
@@ -1397,8 +1555,7 @@ namespace VPB
             innerRT.anchorMax = new Vector2(0.5f, 0.5f);
             innerRT.pivot = new Vector2(0.5f, 0.5f);
             innerRT.sizeDelta = new Vector2(16, 16);
-            Image innerImg = innerGO.AddComponent<Image>();
-            innerImg.color = Color.black;
+            Image innerImg = AddGalleryElementRoundedBg(innerGO, Color.black, raycastTarget: false);
 
             // Checkmark (Fill - White)
             GameObject checkGO = new GameObject("Checkmark");
@@ -1408,8 +1565,7 @@ namespace VPB
             checkRT.anchorMax = new Vector2(0.5f, 0.5f);
             checkRT.pivot = new Vector2(0.5f, 0.5f);
             checkRT.sizeDelta = new Vector2(14, 14); 
-            Image checkImg = checkGO.AddComponent<Image>();
-            checkImg.color = Color.white;
+            Image checkImg = AddGalleryElementRoundedBg(checkGO, Color.white, raycastTarget: false);
             toggle.graphic = checkImg;
 
             GameObject labelGO = new GameObject("Label");
@@ -1445,8 +1601,7 @@ namespace VPB
             boxRT.pivot = new Vector2(0, 0.5f);
             boxRT.anchoredPosition = new Vector2(10, 0);
             boxRT.sizeDelta = new Vector2(20, 20);
-            Image boxImg = boxGO.AddComponent<Image>();
-            boxImg.color = Color.white;
+            Image boxImg = AddGalleryElementRoundedBg(boxGO, Color.white);
             toggle.targetGraphic = boxImg;
 
             // Inner Box (Background - Black)
@@ -1457,8 +1612,7 @@ namespace VPB
             innerRT.anchorMax = new Vector2(0.5f, 0.5f);
             innerRT.pivot = new Vector2(0.5f, 0.5f);
             innerRT.sizeDelta = new Vector2(16, 16);
-            Image innerImg = innerGO.AddComponent<Image>();
-            innerImg.color = Color.black;
+            Image innerImg = AddGalleryElementRoundedBg(innerGO, Color.black, raycastTarget: false);
 
             // Checkmark (Fill - White)
             GameObject checkGO = new GameObject("Checkmark");
@@ -1470,8 +1624,7 @@ namespace VPB
             checkRT.sizeDelta = new Vector2(14, 14); // Slightly smaller to leave a hint of border or full size? Let's use 14 to leave black gap, or 16 for solid. User said "white is selected". Solid white looks best.
             // Actually if I make it 16, it covers the black inner completely, merging with white outer.
             checkRT.sizeDelta = new Vector2(16, 16); 
-            Image checkImg = checkGO.AddComponent<Image>();
-            checkImg.color = Color.white;
+            Image checkImg = AddGalleryElementRoundedBg(checkGO, Color.white, raycastTarget: false);
             toggle.graphic = checkImg;
 
             GameObject labelGO = new GameObject("Label");
@@ -1594,7 +1747,7 @@ namespace VPB
 
         public static GameObject CreateTextInput(GameObject parentGO, float width, float height, string defaultText, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction<string> onEndEdit)
         {
-            GameObject inputGO = AddChildGOImage(parentGO, InputFieldBg, anchorPreset, width, height, new Vector2(xOffset, yOffset));
+            GameObject inputGO = AddChildGOImage(parentGO, InputFieldBg, anchorPreset, width, height, new Vector2(xOffset, yOffset), rounded: true);
             inputGO.name = "TextInput";
             
             InputField inputField = inputGO.AddComponent<InputField>();

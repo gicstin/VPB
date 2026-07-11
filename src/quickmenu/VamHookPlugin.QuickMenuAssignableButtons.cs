@@ -28,6 +28,54 @@ namespace VPB
         private static readonly Color QmBackdropEmptyHoverOpaque = new Color(0.14f, 0.14f, 0.14f, 1f);
         private static readonly Color QmBackdropEditOnOpaque = new Color(0.10f, 0.55f, 0.18f, 1f);
         private static readonly Color QmBackdropEditOnHoverOpaque = new Color(0.12f, 0.70f, 0.22f, 1f);
+
+        internal void SyncQuickMenuElementCornerRadiusLive()
+        {
+            float frac = UI.ResolveGalleryElementCornerRadiusFraction();
+            if (m_QuickMenuGridBackdropImages != null)
+            {
+                for (int i = 0; i < m_QuickMenuGridBackdropImages.Length; i++)
+                {
+                    RoundedRect rr = m_QuickMenuGridBackdropImages[i] as RoundedRect;
+                    if (rr != null) rr.cornerRadiusFraction = frac;
+                }
+            }
+            SyncQuickMenuPopupRoundedBg(m_QuickMenuAssignPopupRoot, frac);
+            SyncQuickMenuPopupRoundedBg(m_QuickMenuAssignCategoryPopupRoot, frac);
+            SyncQuickMenuPopupRoundedBg(m_QuickMenuAssignRandomPopupRoot, frac);
+            RoundedRect tooltipRounded = m_QmTooltipBackdrop as RoundedRect;
+            if (tooltipRounded != null) tooltipRounded.cornerRadiusFraction = frac;
+            if (m_QuickMenuGridButtons != null)
+            {
+                for (int i = 0; i < m_QuickMenuGridButtons.Length; i++)
+                {
+                    GameObject go = m_QuickMenuGridButtons[i];
+                    if (go == null) continue;
+                    UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+                    if (hb != null)
+                    {
+                        try { hb.ApplyBorderSettings(); } catch { }
+                    }
+                }
+            }
+        }
+
+        private static void SyncQuickMenuPopupRoundedBg(GameObject root, float frac)
+        {
+            if (root == null) return;
+            RoundedRect rr = root.GetComponent<RoundedRect>();
+            if (rr != null) rr.cornerRadiusFraction = frac;
+        }
+
+        private static Image AddQuickMenuRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
         private static readonly Color QmBackdropEditOffOpaque = new Color(0.12f, 0.12f, 0.12f, 1f);
         private static readonly Color QmBackdropEditOffHoverOpaque = new Color(0.18f, 0.18f, 0.18f, 1f);
         private static readonly Color QmTooltipBackdropTransparent = new Color(0f, 0f, 0f, 0.35f);
@@ -314,9 +362,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 0f);
             m_QmTooltipRT = rt;
 
-            var img = go.AddComponent<Image>();
-            img.color = QuickMenuAssignablesForceOpaque() ? QmTooltipBackdropOpaque : QmTooltipBackdropTransparent;
-            img.raycastTarget = false;
+            var img = AddQuickMenuRoundedBg(go, QuickMenuAssignablesForceOpaque() ? QmTooltipBackdropOpaque : QmTooltipBackdropTransparent, false);
             m_QmTooltipBackdrop = img;
 
             GameObject tgo = new GameObject("Text");

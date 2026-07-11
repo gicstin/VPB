@@ -196,7 +196,7 @@ namespace VPB
                 if (pathBtnGO != null)
                 {
                     float s = ChromeScale;
-                    float rowSingle = 35f * s;
+                    float rowSingle = GalleryUiDesignTokens.SideTabRowHeightRef * s;
                     LayoutElement le = pathBtnGO.GetComponent<LayoutElement>();
                     if (le == null) le = pathBtnGO.AddComponent<LayoutElement>();
                     le.minHeight = rowSingle;

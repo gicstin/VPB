@@ -114,13 +114,61 @@ namespace VPB
         {
             float s = paneScale <= 0f ? 1f : paneScale;
             if (leftTabScrollGO != null)
+            {
                 ApplySideTabColumnHorizontalInset(leftTabScrollGO.GetComponent<RectTransform>(), true, s);
+                AlignSideTabScrollViewport(leftTabScrollGO, s, isLeft: true, isSub: false);
+            }
             if (leftSubTabScrollGO != null)
+            {
                 ApplySideTabColumnHorizontalInset(leftSubTabScrollGO.GetComponent<RectTransform>(), true, s);
+                AlignSideTabScrollViewport(leftSubTabScrollGO, s, isLeft: true, isSub: true);
+            }
             if (rightTabScrollGO != null)
+            {
                 ApplySideTabColumnHorizontalInset(rightTabScrollGO.GetComponent<RectTransform>(), false, s);
+                AlignSideTabScrollViewport(rightTabScrollGO, s, isLeft: false, isSub: false);
+            }
             if (rightSubTabScrollGO != null)
+            {
                 ApplySideTabColumnHorizontalInset(rightSubTabScrollGO.GetComponent<RectTransform>(), false, s);
+                AlignSideTabScrollViewport(rightSubTabScrollGO, s, isLeft: false, isSub: true);
+            }
+        }
+
+        /// <summary>Flush scroll viewport left with column; reserve width on scrollbar side only.</summary>
+        private void AlignSideTabScrollViewport(GameObject scrollGO, float s, bool isLeft, bool isSub)
+        {
+            if (scrollGO == null) return;
+            Transform vp = scrollGO.transform.Find("Viewport");
+            RectTransform vprt = vp != null ? vp.GetComponent<RectTransform>() : null;
+            if (vprt == null) return;
+            float scrollW = GalleryUiDesignTokens.SideTabScrollBarWidthRef * s;
+            vprt.sizeDelta = Vector2.zero;
+            vprt.anchoredPosition = Vector2.zero;
+            float minY = vprt.offsetMin.y;
+            float maxY = vprt.offsetMax.y;
+            vprt.offsetMin = new Vector2(0f, minY);
+            vprt.offsetMax = new Vector2(-scrollW, maxY);
+            if (isLeft && !isSub)
+            {
+                _leftTabViewportDefOffsetMin = vprt.offsetMin;
+                _leftTabViewportDefOffsetMax = vprt.offsetMax;
+            }
+            else if (isLeft && isSub)
+            {
+                _leftSubTabViewportDefOffsetMin = vprt.offsetMin;
+                _leftSubTabViewportDefOffsetMax = vprt.offsetMax;
+            }
+            else if (!isLeft && !isSub)
+            {
+                _rightTabViewportDefOffsetMin = vprt.offsetMin;
+                _rightTabViewportDefOffsetMax = vprt.offsetMax;
+            }
+            else
+            {
+                _rightSubTabViewportDefOffsetMin = vprt.offsetMin;
+                _rightSubTabViewportDefOffsetMax = vprt.offsetMax;
+            }
         }
 
         private string ResolveCleanupSidePanelHeaderTitle()

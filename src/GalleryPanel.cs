@@ -174,7 +174,7 @@ namespace VPB
             // Handle for Right/Top dock: footer left slot, drags anchorMin.x (width) + height.
             {
                 GameObject handleGO = UI.AddChildGOImage(leftSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
-                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero);
+                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
                 handleGO.name = "ResizeHandle_FixedBottom";
                 handleGO.GetComponent<Image>().raycastTarget = true;
                 handleGO.AddComponent<UIDragBlocker>();
@@ -230,7 +230,7 @@ namespace VPB
             // Handle for Left dock: footer right slot, drags anchorMax.x (width) + height.
             {
                 GameObject handleGO = UI.AddChildGOImage(rightSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
-                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero);
+                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
                 handleGO.name = "ResizeHandle_FixedBottomRight";
                 handleGO.GetComponent<Image>().raycastTarget = true;
                 handleGO.AddComponent<UIDragBlocker>();
@@ -297,7 +297,7 @@ namespace VPB
         private GameObject CreateFloatingResizeHandle(int anchor, GameObject parent, bool asFirstSibling)
         {
             GameObject handleGO = UI.AddChildGOImage(parent, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
-                GalleryUiDesignTokens.ResizeHandleCornerHitRef, GalleryUiDesignTokens.ResizeHandleCornerHitRef, Vector2.zero);
+                GalleryUiDesignTokens.ResizeHandleCornerHitRef, GalleryUiDesignTokens.ResizeHandleCornerHitRef, Vector2.zero, rounded: true);
             handleGO.name = "ResizeHandle_" + anchor;
             handleGO.GetComponent<Image>().raycastTarget = true;
             handleGO.AddComponent<UIHoverBorder>();
@@ -328,7 +328,7 @@ namespace VPB
         {
             const int anchor = AnchorPresets.topLeft;
             GameObject handleGO = UI.AddChildGOImage(titleBar, UI.IconButtonBackdrop, AnchorPresets.topLeft,
-                GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef, Vector2.zero);
+                GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef, Vector2.zero, rounded: true);
             handleGO.name = "ResizeHandle_" + anchor;
             handleGO.GetComponent<Image>().raycastTarget = true;
             handleGO.AddComponent<UIHoverBorder>();

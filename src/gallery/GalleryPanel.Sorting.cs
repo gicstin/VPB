@@ -458,9 +458,21 @@ namespace VPB
                 }
 
                 LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 36f;
+                le.preferredHeight = GalleryUiDesignTokens.PopupMenuRowHeightCompactRef;
                 le.flexibleWidth = 1f;
             }
+
+            SyncSidePaneSortMenuLayout(ChromeScale);
+        }
+
+        private void SyncSidePaneSortMenuLayout(float s)
+        {
+            if (sidePaneSortMenuPanelGO == null) return;
+            if (s <= 0f) s = 1f;
+            ScaleVerticalPopupMenuRows(sidePaneSortMenuPanelGO, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightCompactRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.SidePaneSortMenuPanelWidthRef);
         }
 
         private void ToggleSidePaneSortMenu(string context, RectTransform anchorButtonRT)
@@ -480,10 +492,10 @@ namespace VPB
             // Position directly under the clicked sort button.
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
-            float gapY = 6f;
             float sc = ChromeScale;
-            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -65f * sc);
-            Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
+            float gapY = 6f * sc;
+            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f * sc, -65f * sc);
+            Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f * sc, 35f * sc);
 
             sidePaneSortMenuPanelRT.anchorMin = sidePaneSortMenuPanelRT.anchorMax = (anchorButtonRT != null ? anchorButtonRT.anchorMin : new Vector2(0f, 1f));
             sidePaneSortMenuPanelRT.pivot = isRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
@@ -581,6 +593,10 @@ namespace VPB
                 panelRT.anchoredPosition = new Vector2(108f * s, -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
             }
             panelRT.sizeDelta = new Vector2(GalleryUiDesignTokens.FileSortMenuPanelWidthRef * s, panelRT.sizeDelta.y);
+            ScaleVerticalPopupMenuRows(fileSortTypeMenuPanelGO, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.FileSortMenuPanelWidthRef);
         }
 
         // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
@@ -755,12 +771,12 @@ namespace VPB
         /// <summary>Upper side sort + tag sub-row: one place for vpb_icons vs legacy text.</summary>
         private void SyncSidePaneTopSortButtonVisuals()
         {
-            if (leftSortBtn != null && leftActiveContent.HasValue)
+            if (leftSortBtn != null && leftActiveContent.HasValue && !ContentTypeSuppressesSideSort(leftActiveContent.Value))
             {
                 string ctx = leftActiveContent.Value.ToString();
                 SyncSidePaneFourModeSortButtonVisual(leftSortBtnBackdrop, leftSortBtnIconImage, leftSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
             }
-            if (rightSortBtn != null && rightActiveContent.HasValue)
+            if (rightSortBtn != null && rightActiveContent.HasValue && !ContentTypeSuppressesSideSort(rightActiveContent.Value))
             {
                 string ctx = rightActiveContent.Value.ToString();
                 SyncSidePaneFourModeSortButtonVisual(rightSortBtnBackdrop, rightSortBtnIconImage, rightSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));

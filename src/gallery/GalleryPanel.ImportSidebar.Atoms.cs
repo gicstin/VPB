@@ -26,10 +26,9 @@ namespace VPB
             GameObject rndRow = new GameObject("RandomSceneRow");
             rndRow.transform.SetParent(content, false);
             LayoutElement rndLe = rndRow.AddComponent<LayoutElement>();
-            rndLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            rndLe.preferredHeight = ImportSidebarBaseRowHeight;
             rndLe.flexibleWidth = 1f;
-            Image rndBg = rndRow.AddComponent<Image>();
-            rndBg.color = new Color(0.15f, 0.45f, 0.22f, 1f);
+            Image rndBg = AddImportSidebarRoundedBg(rndRow, new Color(0.15f, 0.45f, 0.22f, 1f));
             Button rndBtn = rndRow.AddComponent<Button>();
             rndBtn.targetGraphic = rndBg;
             UI.NeutralizeSelectableColorTint(rndBtn);
@@ -44,7 +43,7 @@ namespace VPB
             LayoutElement rndLeCaptured = rndLe;
             Text rndLabelCaptured = rndLabel;
             innerPaneScaleActions.Add(s => {
-                if (rndLeCaptured != null) rndLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                if (rndLeCaptured != null) rndLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
                 ApplyScaledFont(rndLabelCaptured, ImportSidebarBaseFontSize, s);
             });
 
@@ -99,10 +98,7 @@ namespace VPB
             le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
 
-            Image bg = row.AddComponent<Image>();
-            // ColorInactiveRow is the same tone Creator/Category rows use when not selected,
-            // so a glance at the sidebar matches the look of the rest of the side-tab UI.
-            bg.color = ColorInactiveRow;
+            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -113,6 +109,8 @@ namespace VPB
             int capturedIndex = index;
             bool capturedIsSource = isSource;
             btn.onClick.AddListener(() => OnImportSidebarAtomRowClicked(capturedIndex, capturedIsSource));
+            Text atomTipLabel = label;
+            AddDynamicTooltip(row, () => ImportAtomRowTooltip(atomTipLabel, capturedIsSource));
 
             // Track inner-pane scale: row height + font use the same scale+localScale trick
             // GalleryPanel.Tabs.cs uses, so the sidebar visually tracks the UI scale slider.
@@ -248,7 +246,7 @@ namespace VPB
                 }
                 else if (i == n)
                 {
-                    SetImportSidebarRowText(row, "<New Atom>");
+                    SetImportSidebarRowText(row, "<New Person Atom>");
                     row.SetActive(true);
                 }
                 else

@@ -514,6 +514,7 @@
     <Compile Include="src\gallery\AnchorPresets.cs" />
     <Compile Include="src\gallery\SceneUtils.cs" />
     <Compile Include="src\gallery\ChamferedRect.cs" />
+    <Compile Include="src\gallery\RoundedRect.cs" />
     <Compile Include="src\gallery\UIDragBlocker.cs" />
     <Compile Include="src\gallery\UIScrollPassthrough.cs" />
     <Compile Include="src\gallery\GalleryViewportCtrlScrollColumns.cs" />

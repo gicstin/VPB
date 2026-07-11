@@ -20,7 +20,7 @@ namespace VPB
         {
             if (titleBarGO == null || _titleBarOverflowBtnGO != null) return;
 
-            _titleBarOverflowBtnGO = UI.CreateUIButton(titleBarGO, 40, 40, "\u2026", 22, 0, 0, AnchorPresets.middleCenter, ToggleTitleBarOverflowMenu);
+            _titleBarOverflowBtnGO = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "\u2026", 22, 0, 0, AnchorPresets.middleCenter, ToggleTitleBarOverflowMenu);
             _titleBarOverflowBtnGO.name = "TitleBarOverflowBtn";
             _titleBarOverflowBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             var overflowTxt = _titleBarOverflowBtnGO.GetComponentInChildren<Text>();

@@ -12,7 +12,7 @@ namespace VPB
         // a sortingOrder floor of 6000 to survive the gallery canvas's -10000 baseline.
 
         private const int GlobalSourceFilterButtonWidth = 100;
-        private const int GlobalSourceFilterButtonHeight = 40;
+        private const float GlobalSourceFilterButtonHeight = GalleryUiDesignTokens.TitleBarChipRef;
         private const int GlobalSourceFilterDropdownWidth = 160;
         private const int GlobalSourceFilterDropdownRowHeight = 36;
         private const int GlobalSourceFilterDropdownPadding = 8;

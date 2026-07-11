@@ -1281,7 +1281,6 @@ namespace VPB
 
             // Register inner pane button scale actions (footer)
             { var prt = paginationRT; innerPaneScaleActions.Add(s => { if (prt) prt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * s); }); }
-            { var rt = _footerSideButtonsGroupRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
             {
                 var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
                 var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;
@@ -1304,7 +1303,7 @@ namespace VPB
             }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
-                footerMenuGateBtn, footerShowHiddenPackagesBtn,
+                footerMenuGateBtn, footerWatchToggleBtn, footerShowHiddenPackagesBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerSpringScrollToggleBtn,
                 footerHoldToLaunchToggleBtn,
@@ -1320,6 +1319,17 @@ namespace VPB
                     if (t) GalleryUiMetrics.ApplyGlyphFont(t, GalleryUiDesignTokens.ButtonSizeRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
+
+            // Top-dock footer row: same scale path as footer buttons (outer chrome + group layout).
+            innerPaneScaleActions.Add(s =>
+            {
+                try
+                {
+                    if (IsFixedTopDockMode() && !isCollapsed)
+                        ApplyTopDockSideButtonsLayout(s);
+                }
+                catch { }
+            });
 
             innerPaneScaleActions.Add(s => { try { LayoutScrollbarJumpButtons(s); } catch { } });
 
@@ -1723,6 +1733,9 @@ namespace VPB
                     irt.sizeDelta = new Vector2(-inset, -inset);
                 }
             }
+            RoundedRect springRounded = springScrollButtonGO.GetComponent<RoundedRect>();
+            if (springRounded != null)
+                springRounded.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
         }
 
         private void EnsureSpringScrollButtonExists()

@@ -410,26 +410,20 @@ namespace VPB
             hle.flexibleWidth = 1f;
             hle.preferredWidth = 220f * paneScale;
             hle.minWidth = 120f * paneScale;
-            hle.preferredHeight = 32f * paneScale;
-            hle.minHeight = 32f * paneScale;
+            float chipH = GalleryUiDesignTokens.ButtonSizeRef * paneScale;
+            hle.preferredHeight = chipH;
+            hle.minHeight = chipH;
 
-            Image bg = host.AddComponent<Image>();
-            bg.color = capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : new Color(0.1f, 0.1f, 0.1f, 1f);
+            Image bg = AddSettingsControlRoundedBg(host, capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : new Color(0.1f, 0.1f, 0.1f, 1f));
             Button hit = host.AddComponent<Button>();
             hit.targetGraphic = bg;
-            var colors = hit.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
-            colors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
-            hit.colors = colors;
-            hit.transition = Selectable.Transition.None;
-            hit.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.NeutralizeSelectableColorTint(hit);
 
             GameObject tgo = new GameObject("Text");
             tgo.transform.SetParent(host.transform, false);
             Text it = tgo.AddComponent<Text>();
             it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            it.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, paneScale, GalleryUiDesignTokens.FontMinRef);
+            GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, paneScale, GalleryUiDesignTokens.FontMinRef);
             it.color = capturing ? new Color(1f, 0.95f, 0.6f, 1f) : Color.white;
             it.alignment = TextAnchor.MiddleCenter;
             it.supportRichText = false;

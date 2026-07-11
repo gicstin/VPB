@@ -13,7 +13,7 @@ namespace VPB
             if (titleBarGO == null || backgroundBoxGO == null) return;
 
             // Button (between filter presets and title search)
-            titleCreatorBtn = UI.CreateUIButton(titleBarGO, 40, 40, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
+            titleCreatorBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
             titleCreatorBtnBackdrop = titleCreatorBtn != null ? titleCreatorBtn.GetComponent<Image>() : null;
             titleCreatorBtnText = titleCreatorBtn != null ? titleCreatorBtn.GetComponentInChildren<Text>(true) : null;
             if (titleCreatorBtnBackdrop != null) titleCreatorBtnBackdrop.color = new Color(0f, 0f, 0f, 0.5f);

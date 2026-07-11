@@ -1058,7 +1058,7 @@ namespace VPB
         private float UserTagPinnedRowHeightPx()
         {
             float s = ChromeScale;
-            float rowH = 35f * s;
+            float rowH = (GalleryUiDesignTokens.SideTabRowHeightRef + GalleryUiDesignTokens.SideTabRowSpacingRef) * s;
             try
             {
                 float virt = CreatorVirtRowHeight();
@@ -1074,7 +1074,7 @@ namespace VPB
             if (n <= 0) return 0f;
             float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * GalleryUiDesignTokens.SideTabRowSpacingRef * s + 4f * s;
         }
 
         private float UserTagsAppliedPinnedStickyHeightPx()
@@ -1083,7 +1083,7 @@ namespace VPB
             if (n <= 0) return 0f;
             float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * GalleryUiDesignTokens.SideTabRowSpacingRef * s + 4f * s;
         }
 
         private GameObject EnsureUserTagsAvailPinnedStickyGO(bool isLeft)
@@ -1102,7 +1102,7 @@ namespace VPB
             rt.sizeDelta = Vector2.zero;
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             float s = ChromeScale;
-            vlg.spacing = 2f * s;
+            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
             vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
             vlg.childAlignment = TextAnchor.UpperCenter;
             vlg.childControlWidth = true;
@@ -1131,7 +1131,7 @@ namespace VPB
             rt.sizeDelta = Vector2.zero;
             VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             float s = ChromeScale;
-            vlg.spacing = 2f * s;
+            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
             vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
             vlg.childAlignment = TextAnchor.UpperCenter;
             vlg.childControlWidth = true;
@@ -1146,6 +1146,7 @@ namespace VPB
 
         private void SyncUserTagAvailPinnedStickyRows(bool isLeft, Color utAccent, Transform tabContainer)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             GameObject strip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
             if (strip == null) return;
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagPinnedRebuild++;
@@ -1240,6 +1241,7 @@ namespace VPB
 
         private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool preserveScroll)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
             StopCo(ref _userTagVirtLayoutCo);
             float offsetPx = preserveScroll ? (TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f) : 0f;
@@ -1250,6 +1252,11 @@ namespace VPB
         private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool resetScrollToTop, float preserveOffsetPx)
         {
             yield return null;
+            if (!IsUserTagsSideTabOpen(isLeft))
+            {
+                _userTagVirtLayoutCo = null;
+                yield break;
+            }
             try
             {
                 Canvas.ForceUpdateCanvases();
@@ -1272,6 +1279,52 @@ namespace VPB
         private const string UserTagPinBtnName = "VPB_UserTagPinBtn";
         private const string UserTagAppliedRemoveBtnName = "VPB_UserTagAppliedRemoveBtn";
         private Sprite _userTagAppliedRemoveSprite;
+
+        private static Image AddUserTagSideChromeRoundedBg(GameObject go, Color color)
+        {
+            return UI.AddGalleryElementRoundedBg(go, color);
+        }
+
+        private static void EnsureUserTagSideChromeRoundedBg(GameObject go, Color? colorOverride = null)
+        {
+            if (go == null) return;
+            RoundedRect rr = go.GetComponent<RoundedRect>();
+            if (rr == null)
+            {
+                Image legacy = go.GetComponent<Image>();
+                if (legacy == null) return;
+                Color c = colorOverride ?? legacy.color;
+                bool ray = legacy.raycastTarget;
+                UnityEngine.Object.Destroy(legacy);
+                rr = go.AddComponent<RoundedRect>();
+                rr.color = c;
+                rr.raycastTarget = ray;
+            }
+            else if (colorOverride.HasValue)
+            {
+                rr.color = colorOverride.Value;
+            }
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            Button btn = go.GetComponent<Button>();
+            if (btn != null) btn.targetGraphic = rr;
+            UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+            if (hb != null)
+            {
+                try { hb.ApplyBorderSettings(); } catch { }
+            }
+        }
+
+        private static void SyncUserTagSideChromeRoundedBg(GameObject go)
+        {
+            EnsureUserTagSideChromeRoundedBg(go, null);
+        }
+
+        private static bool UserTagSideChromeButtonNeedsRoundedUpgrade(GameObject go)
+        {
+            if (go == null) return false;
+            Image img = go.GetComponent<Image>();
+            return img != null && !(img is RoundedRect);
+        }
 
         private static void ParseUserTagPinnedOrderSpec(string spec, List<string> dest)
         {
@@ -1483,13 +1536,17 @@ namespace VPB
             if (rowGo == null) return;
             Transform existing = rowGo.transform.Find(UserTagAppliedRemoveBtnName);
             GameObject removeGo = existing != null ? existing.gameObject : null;
+            if (removeGo != null && UserTagSideChromeButtonNeedsRoundedUpgrade(removeGo))
+            {
+                UnityEngine.Object.Destroy(removeGo);
+                removeGo = null;
+            }
+
             if (removeGo == null)
             {
                 removeGo = new GameObject(UserTagAppliedRemoveBtnName);
                 removeGo.transform.SetParent(rowGo.transform, false);
-                Image bg = removeGo.AddComponent<Image>();
-                bg.color = new Color(0.62f, 0.14f, 0.14f, 1f);
-                bg.raycastTarget = true;
+                Image bg = AddUserTagSideChromeRoundedBg(removeGo, new Color(0.62f, 0.14f, 0.14f, 1f));
                 Button btn = removeGo.AddComponent<Button>();
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
@@ -1498,6 +1555,7 @@ namespace VPB
                 btn.colors = cb;
                 btn.transition = Selectable.Transition.None;
                 btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                btn.targetGraphic = bg;
                 removeGo.AddComponent<UIHoverBorder>();
             }
 
@@ -1549,6 +1607,7 @@ namespace VPB
             }
             removeGo.SetActive(true);
             removeGo.transform.SetAsLastSibling();
+            SyncUserTagSideChromeRoundedBg(removeGo);
 
             AddTooltipPlain(removeGo, VPBTranslation.T("gallery.usertags.remove_applied_row_tip", "Remove this tag from selected item(s)."));
         }
@@ -1587,13 +1646,17 @@ namespace VPB
             bool pinned = IsUserTagPinned(norm);
             EnsureUserTagPinSprites();
 
+            if (pinGo != null && UserTagSideChromeButtonNeedsRoundedUpgrade(pinGo))
+            {
+                UnityEngine.Object.Destroy(pinGo);
+                pinGo = null;
+            }
+
             if (pinGo == null)
             {
                 pinGo = new GameObject(UserTagPinBtnName);
                 pinGo.transform.SetParent(rowGo.transform, false);
-                Image bg = pinGo.AddComponent<Image>();
-                bg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
-                bg.raycastTarget = true;
+                Image bg = AddUserTagSideChromeRoundedBg(pinGo, new Color(0.14f, 0.14f, 0.16f, 0.92f));
                 Button btn = pinGo.AddComponent<Button>();
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
@@ -1602,6 +1665,7 @@ namespace VPB
                 btn.colors = cb;
                 btn.transition = Selectable.Transition.None;
                 btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                btn.targetGraphic = bg;
                 pinGo.AddComponent<UIHoverBorder>();
             }
 
@@ -1636,6 +1700,7 @@ namespace VPB
             }
             pinGo.SetActive(true);
             pinGo.transform.SetAsLastSibling();
+            SyncUserTagSideChromeRoundedBg(pinGo);
 
             string tipKey = pinned ? "gallery.usertags.pin_off_tip" : "gallery.usertags.pin_on_tip";
             string tipDefault = pinned ? "Unpin — return tag to sorted position." : "Pin — keep tag at top of list.";
@@ -2713,12 +2778,11 @@ namespace VPB
         {
             GameObject go = new GameObject("VPB_UserTagModeMiniBtn_" + mode);
             go.transform.SetParent(parent.transform, false);
-            Image img = go.AddComponent<Image>();
-            img.color = UserTagAvailModeColor(mode);
-            img.raycastTarget = true;
+            Image img = AddUserTagSideChromeRoundedBg(go, UserTagAvailModeColor(mode));
             Button btn = go.AddComponent<Button>();
             btn.transition = Selectable.Transition.None;
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            btn.targetGraphic = img;
             UserTagAvailMode target = mode;
             btn.onClick.AddListener(() => SetUserTagAvailMode(target));
             go.AddComponent<UIHoverBorder>();
@@ -2762,9 +2826,8 @@ namespace VPB
             if (tr == null) return;
             bool active = _userTagAvailMode == mode;
             Color baseCol = UserTagAvailModeColor(mode);
-            Image img = tr.GetComponent<Image>();
-            if (img != null)
-                img.color = active ? baseCol : new Color(baseCol.r * 0.42f, baseCol.g * 0.42f, baseCol.b * 0.42f, 0.85f);
+            Color showCol = active ? baseCol : new Color(baseCol.r * 0.42f, baseCol.g * 0.42f, baseCol.b * 0.42f, 0.85f);
+            EnsureUserTagSideChromeRoundedBg(tr.gameObject, showCol);
             Text lbl = tr.GetComponentInChildren<Text>(true);
             if (lbl != null)
                 lbl.color = active ? Color.white : new Color(0.72f, 0.72f, 0.75f, 1f);
@@ -3006,8 +3069,7 @@ namespace VPB
 
             GameObject filterGo = new GameObject("FilterInput");
             filterGo.transform.SetParent(headerRow.transform, false);
-            Image fiBg = filterGo.AddComponent<Image>();
-            fiBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
+            Image fiBg = UI.AddGalleryElementRoundedBg(filterGo, new Color(0.07f, 0.07f, 0.09f, 1f));
             LayoutElement fiLe = filterGo.AddComponent<LayoutElement>();
             fiLe.flexibleWidth = 1f;
             fiLe.minWidth = 0f;
@@ -3067,6 +3129,15 @@ namespace VPB
             scLe.minHeight = 280f * s;
             Transform vp = scrollGO.transform.Find("Viewport");
             _userTagEditorRowsParent = vp != null ? vp.Find("Content") : null;
+            if (_userTagEditorRowsParent != null)
+            {
+                VerticalLayoutGroup rowsVlg = _userTagEditorRowsParent.GetComponent<VerticalLayoutGroup>();
+                if (rowsVlg != null)
+                {
+                    int sidePad = Mathf.RoundToInt(8f * s);
+                    rowsVlg.padding = new RectOffset(sidePad, sidePad, 0, 0);
+                }
+            }
 
             GameObject newTagBlock = new GameObject("NewTagBlock");
             newTagBlock.transform.SetParent(panel.transform, false);
@@ -3086,6 +3157,7 @@ namespace VPB
             newInGo.transform.SetParent(newTagBlock.transform, false);
             Image nBg = newInGo.AddComponent<Image>();
             nBg.color = UserTagEditorNewTagChromeBaseCol;
+            nBg.raycastTarget = true;
             _userTagEditorNewTagInputChrome = nBg;
             LayoutElement nLe = newInGo.AddComponent<LayoutElement>();
             nLe.flexibleWidth = 1f;
@@ -3246,8 +3318,7 @@ namespace VPB
 
             GameObject mmInGo = new GameObject("MergeDialogInput");
             mmInGo.transform.SetParent(mmPanel.transform, false);
-            Image mmIBg = mmInGo.AddComponent<Image>();
-            mmIBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
+            Image mmIBg = UI.AddGalleryElementRoundedBg(mmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
             LayoutElement mmILe = mmInGo.AddComponent<LayoutElement>();
             mmILe.flexibleWidth = 1f;
             mmILe.minHeight = 36f * s;
@@ -3350,8 +3421,7 @@ namespace VPB
 
             GameObject rmInGo = new GameObject("RenameDialogInput");
             rmInGo.transform.SetParent(rmPanel.transform, false);
-            Image rmIBg = rmInGo.AddComponent<Image>();
-            rmIBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
+            Image rmIBg = UI.AddGalleryElementRoundedBg(rmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
             LayoutElement rmILe = rmInGo.AddComponent<LayoutElement>();
             rmILe.flexibleWidth = 1f;
             rmILe.minHeight = 36f * s;
@@ -4338,9 +4408,8 @@ namespace VPB
 
                 GameObject rowGo = new GameObject("EditorTagRow");
                 rowGo.transform.SetParent(_userTagEditorRowsParent, false);
-                Image bg = rowGo.AddComponent<Image>();
                 bool sel = _userTagEditorRowSelection.Contains(nameSnap);
-                bg.color = sel ? selCol : baseCol;
+                Image bg = UI.AddGalleryElementRoundedBg(rowGo, sel ? selCol : baseCol);
                 _userTagEditorRowVisuals.Add(new UserTagEditorRowVisual { Name = nameSnap, Bg = bg });
                 LayoutElement rle = rowGo.AddComponent<LayoutElement>();
                 rle.minHeight = rowH;
@@ -4348,6 +4417,7 @@ namespace VPB
                 rle.flexibleWidth = 1f;
 
                 Button btn = rowGo.AddComponent<Button>();
+                btn.targetGraphic = bg;
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
                 btn.colors = cb;
@@ -4368,9 +4438,9 @@ namespace VPB
                 swRt.anchorMax = new Vector2(0f, 0.5f);
                 swRt.pivot = new Vector2(0f, 0.5f);
                 swRt.sizeDelta = new Vector2(swSize, swSize);
-                swRt.anchoredPosition = new Vector2(9f * s, 0f);
+                swRt.anchoredPosition = new Vector2(12f * s, 0f);
 
-                float labelLeft = 9f * s + swSize + 8f * s;
+                float labelLeft = 12f * s + swSize + 8f * s;
                 GameObject txtGo = new GameObject("Label");
                 txtGo.transform.SetParent(rowGo.transform, false);
                 Text txt = txtGo.AddComponent<Text>();
@@ -4383,7 +4453,7 @@ namespace VPB
                 trt.anchorMin = Vector2.zero;
                 trt.anchorMax = Vector2.one;
                 trt.offsetMin = new Vector2(labelLeft, 2f * s);
-                trt.offsetMax = new Vector2(-10f * s, -2f * s);
+                trt.offsetMax = new Vector2(-14f * s, -2f * s);
             }
         }
     }

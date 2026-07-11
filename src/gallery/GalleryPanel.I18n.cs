@@ -217,7 +217,7 @@ namespace VPB
             // Keep language beside the settings icon to avoid overlap with floating-mode top-left resize handle.
 
             languageSwitcherBtnGO = UI.CreateUIButton(
-                titleBarGO, 40, 40,
+                titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef,
                 GetLocaleShortCode(VPBTranslation.CurrentLocale),
                 14, 0, 0, AnchorPresets.middleCenter,
                 ToggleLanguageMenu);
@@ -317,6 +317,36 @@ namespace VPB
 
         // ── Dropdown options ─────────────────────────────────────────────────────
 
+        private void RescaleLanguageMenuInternal(float s)
+        {
+            if (languageMenuPopupGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel");
+            if (panel == null) return;
+            ScaleVerticalPopupMenuRows(panel.gameObject, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.PopupMenuPanelWidthRef);
+            RectTransform panelRT = panel as RectTransform;
+            if (panelRT != null)
+            {
+                panelRT.anchorMin = new Vector2(0.5f, 1f);
+                panelRT.anchorMax = new Vector2(0.5f, 1f);
+                panelRT.pivot = new Vector2(0.5f, 1f);
+                if (languageSwitcherBtnGO != null)
+                {
+                    RectTransform btnRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
+                    if (btnRT != null)
+                    {
+                        float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                        panelRT.anchoredPosition = new Vector2(
+                            btnRT.anchoredPosition.x,
+                            -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+                    }
+                }
+            }
+        }
+
         private void RebuildLanguageMenuOptions()
         {
             if (languageMenuPopupGO == null) return;
@@ -339,7 +369,12 @@ namespace VPB
                 string label = (isCurrent ? "\u2713  " : "    ") + VPBTranslation.GetLocaleDisplayName(id);
 
                 GameObject row = UI.CreateUIButton(
-                    panel.gameObject, 218, 38, label, 14, 0, 0,
+                    panel.gameObject,
+                    GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f,
+                    GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                    label,
+                    GalleryUiDesignTokens.PopupMenuRowFontRef,
+                    0, 0,
                     AnchorPresets.middleCenter,
                     () =>
                     {
@@ -361,10 +396,11 @@ namespace VPB
 
                 // Let layout control height
                 LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 38f;
+                le.preferredHeight = GalleryUiDesignTokens.PopupMenuRowHeightRef;
                 le.flexibleWidth   = 1f;
             }
 
+            try { RescaleLanguageMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel.GetComponent<RectTransform>());
         }
 
@@ -377,20 +413,7 @@ namespace VPB
             if (languageMenuOpen)
             {
                 RebuildLanguageMenuOptions();
-                try
-                {
-                    var panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel") as RectTransform;
-                    var btnRT = languageSwitcherBtnGO != null ? languageSwitcherBtnGO.GetComponent<RectTransform>() : null;
-                    if (panel != null && btnRT != null)
-                    {
-                        panel.anchorMin = new Vector2(0.5f, 1f);
-                        panel.anchorMax = new Vector2(0.5f, 1f);
-                        panel.pivot = new Vector2(0.5f, 1f);
-                        // Drop directly under button, centered on its X (matches other title-bar dropdowns).
-                        panel.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -72f);
-                    }
-                }
-                catch { }
+                try { RescaleLanguageMenuInternal(ChromeScale); } catch { }
                 languageMenuPopupGO.transform.SetAsLastSibling();
             }
             languageMenuPopupGO.SetActive(languageMenuOpen);

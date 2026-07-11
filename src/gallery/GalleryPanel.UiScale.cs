@@ -28,6 +28,40 @@ namespace VPB
             }
         }
 
+        internal static void SyncSideTabScrollContentVerticalLayoutOn(VerticalLayoutGroup vlg, float s)
+        {
+            if (vlg == null) return;
+            if (s <= 0f) s = 1f;
+            int padInner = Mathf.RoundToInt(GalleryUiDesignTokens.SideTabRowPadRef * s);
+            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            // Column margin handles outer edge; reserve right pad only for scrollbar gutter.
+            vlg.padding = new RectOffset(0, padInner, 0, 0);
+        }
+
+        internal static void SyncSideTabListHolderVerticalLayoutOn(VerticalLayoutGroup vlg, float s)
+        {
+            if (vlg == null) return;
+            if (s <= 0f) s = 1f;
+            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+        }
+
+        internal static void SyncSideTabListVerticalLayoutOn(VerticalLayoutGroup vlg, float s)
+        {
+            SyncSideTabScrollContentVerticalLayoutOn(vlg, s);
+        }
+
+        private void SyncSideTabListVerticalLayout(float s)
+        {
+            if (s <= 0f) s = 1f;
+            SyncSideTabScrollContentVerticalLayoutOn(leftTabContainerGO != null ? leftTabContainerGO.GetComponent<VerticalLayoutGroup>() : null, s);
+            SyncSideTabScrollContentVerticalLayoutOn(rightTabContainerGO != null ? rightTabContainerGO.GetComponent<VerticalLayoutGroup>() : null, s);
+            SyncSideTabScrollContentVerticalLayoutOn(leftSubTabContainerGO != null ? leftSubTabContainerGO.GetComponent<VerticalLayoutGroup>() : null, s);
+            SyncSideTabScrollContentVerticalLayoutOn(rightSubTabContainerGO != null ? rightSubTabContainerGO.GetComponent<VerticalLayoutGroup>() : null, s);
+            SyncSideTabListHolderVerticalLayoutOn(leftCategoryTabHolder != null ? leftCategoryTabHolder.GetComponent<VerticalLayoutGroup>() : null, s);
+            SyncSideTabListHolderVerticalLayoutOn(rightCategoryTabHolder != null ? rightCategoryTabHolder.GetComponent<VerticalLayoutGroup>() : null, s);
+        }
+
         internal void ApplySideTabFilterRowVerticalLayoutInternal(float chromeScale)
         {
             ApplySideTabFilterRowVerticalLayout(chromeScale);
@@ -49,6 +83,8 @@ namespace VPB
             GalleryUiMetrics m = UiMetrics;
             float chromeS = m.ChromeScale;
             try { ApplyInnerPaneScaleLegacyActions(chromeS); } catch { }
+            try { SyncSideTabColumnHorizontalInsets(chromeS); } catch { }
+            try { SyncSideTabListVerticalLayout(chromeS); } catch { }
             try { ApplySideTabFilterRowVerticalLayoutInternal(chromeS); } catch { }
             try { ApplyUserTagsStickyScrollChromeInternal(TabScrollTopOffsetPublic()); } catch { }
             try { RescaleExistingTabButtonsInternal(m); } catch { }
@@ -57,6 +93,14 @@ namespace VPB
             try { RescaleFooterPerfControlsInternal(m); } catch { }
             try { RescaleAllSearchInputsInternal(m); } catch { }
             try { ApplySideButtonScale(m); } catch { }
+            try
+            {
+                if (IsFixedTopDockMode() && paginationRT != null)
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(paginationRT);
+                Canvas.ForceUpdateCanvases();
+            }
+            catch { }
+            try { if (IsFixedTopDockMode()) ApplyTopDockSideButtonsLayout(chromeS); } catch { }
             try { ApplyCategoryQuickChromeLayout(chromeS); } catch { }
             try { RescalePopupMenusInternal(chromeS); } catch { }
             try { RescaleFooterInfoBarInternal(chromeS); } catch { }
@@ -162,17 +206,11 @@ namespace VPB
         {
             if (s <= 0f) s = 1f;
             SyncFileSortTypeMenuLayout(s);
-            ScaleVerticalPopupMenuRows(fileSortTypeMenuPanelGO, s,
-                GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                GalleryUiDesignTokens.FileSortMenuPanelWidthRef);
-            ScaleVerticalPopupMenuRows(sidePaneSortMenuPanelGO, s,
-                GalleryUiDesignTokens.PopupMenuRowHeightCompactRef,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                GalleryUiDesignTokens.SidePaneSortMenuPanelWidthRef);
+            SyncSidePaneSortMenuLayout(s);
             try { ApplyCategoryQuickMenuRowsLayout(s); } catch { }
             try { ApplyTitleCreatorDropdownLayout(s); } catch { }
             try { RescaleTitleBarOverflowMenuInternal(s); } catch { }
+            try { RescaleLanguageMenuInternal(s); } catch { }
             try { RescaleSaveMenuPopupInternal(s); } catch { }
             if (tboxTargetMenuOpen)
             {
@@ -215,10 +253,18 @@ namespace VPB
                     _langBtnText.resizeTextForBestFit = false;
             }
 
+            if (_titleSearchCompactRT != null)
+            {
+                float compactSz = GalleryUiDesignTokens.TitleBarChipRef * s;
+                _titleSearchCompactRT.sizeDelta = new Vector2(compactSz, compactSz);
+            }
+
             ApplyTitleBarChipScale(_titleBarHelpBtnRT, _titleBarHelpBtnRT != null ? _titleBarHelpBtnRT.GetComponentInChildren<Text>() : null, GalleryUiDesignTokens.TitleBarHelpFontRef, s);
             ApplyTitleBarChipScale(_titleBarOverflowBtnRT, _titleBarOverflowBtnGO != null ? _titleBarOverflowBtnGO.GetComponentInChildren<Text>() : null, GalleryUiDesignTokens.TitleBarOverflowFontRef, s);
             ApplyTitleBarChipScale(_titleBarMinimizeBtnRT, _titleBarMinimizeBtnRT != null ? _titleBarMinimizeBtnRT.GetComponentInChildren<Text>() : null, 0, s, GalleryUiDesignTokens.FontMinRef, glyph: true);
             ApplyTitleBarChipScale(_titleBarCloseBtnRT, _titleBarCloseBtnRT != null ? _titleBarCloseBtnRT.GetComponentInChildren<Text>() : null, 0, s, GalleryUiDesignTokens.FontMinRef, glyph: true);
+
+            ScaleTitleBarIconButtonPadding(s);
 
             if (globalSourceFilterBtn != null)
             {
@@ -239,16 +285,8 @@ namespace VPB
             if (_titleBarFpsRT != null)
                 _titleBarFpsRT.sizeDelta = new Vector2(100f * s, GalleryUiDesignTokens.TitleBarChipRef * s);
 
-            if (_categoryQuickArrowText != null)
-            {
-                GalleryUiMetrics.ApplyGlyphFont(_categoryQuickArrowText, GalleryUiDesignTokens.TitleBarCategoryRowHeightRef, s, GalleryUiDesignTokens.FontMinRef);
-                if (_categoryQuickArrowLE != null)
-                {
-                    _categoryQuickArrowLE.preferredWidth = 28f * s;
-                    _categoryQuickArrowLE.minWidth = 28f * s;
-                    _categoryQuickArrowLE.preferredHeight = GalleryUiDesignTokens.TitleBarCategoryRowHeightRef * s;
-                }
-            }
+            if (_categoryQuickArrowLE != null || _categoryQuickArrowIconRT != null)
+                ApplyCategoryQuickArrowChromeLayout(s);
 
             if (titleSearchInput != null)
             {
@@ -285,6 +323,26 @@ namespace VPB
                 LayoutRebuilder.ForceRebuildLayoutImmediate(paginationRT);
         }
 
+        private void ScaleTitleBarIconButtonPadding(float scale)
+        {
+            ScaleButtonIconPadding(_titleBarSettingsBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarQfToggleBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarRatingSortToggleBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarRefreshBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarFileSortTypeBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarFileSortDirBtnRT, scale);
+            if (titleCreatorBtn != null)
+                ScaleButtonIconPadding(titleCreatorBtn.GetComponent<RectTransform>(), scale);
+            if (languageSwitcherBtnGO != null)
+                ScaleButtonIconPadding(languageSwitcherBtnGO.GetComponent<RectTransform>(), scale);
+            ScaleButtonIconPadding(_titleBarHelpBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarOverflowBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarMinimizeBtnRT, scale);
+            ScaleButtonIconPadding(_titleBarCloseBtnRT, scale);
+            if (_titleSearchCompactRT != null)
+                ScaleButtonIconPadding(_titleSearchCompactRT, scale);
+        }
+
         private static void ScaleButtonIconPadding(RectTransform btnRT, float scale)
         {
             if (btnRT == null) return;
@@ -301,22 +359,22 @@ namespace VPB
             float s = metrics.ChromeScale;
             ApplyMainSideSearchRowLayout(true, s);
             ApplyMainSideSearchRowLayout(false, s);
-            ApplyLeftSubSearchLayoutScaled(s);
-            ApplyRightSubSearchLayoutScaled(s);
-            RescaleSearchInput(titleSearchInput, s);
+            SyncSideTabSubFilterRowChrome(s);
+            RescaleSearchInput(titleSearchInput, s, GalleryUiDesignTokens.TitleBarChipRef);
             RescaleSearchInput(titleCreatorDropdownSearchInput, s);
-            RescaleSearchInput(_titleSearchPopupField, s);
+            RescaleSearchInput(_titleSearchPopupField, s, GalleryUiDesignTokens.TitleBarChipRef);
             RescaleSearchInput(_inAppHelpSearchInput, metrics.HelpChromeScale());
         }
 
-        internal static void RescaleSearchInput(InputField input, float scale)
+        internal static void RescaleSearchInput(InputField input, float scale, float heightRef = 0f)
         {
             if (input == null) return;
             float s = scale <= 0f ? 1f : scale;
+            float hRef = heightRef > 0f ? heightRef : GalleryUiDesignTokens.SearchFieldHeightRef;
 
             RectTransform rt = input.GetComponent<RectTransform>();
             if (rt != null && rt.sizeDelta.y > 0f)
-                rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+                rt.sizeDelta = new Vector2(rt.sizeDelta.x, hRef * s);
 
             Transform icon = input.transform.Find("SearchIcon");
             if (icon != null)
@@ -352,9 +410,13 @@ namespace VPB
                 if (ch == null || ch.name == "TextArea" || ch.name == "SearchIcon") continue;
                 RectTransform btnRT = ch as RectTransform;
                 if (btnRT == null || ch.GetComponent<Button>() == null) continue;
-                float clearSz = GalleryUiDesignTokens.SearchClearBtnSizeRef * s;
-                btnRT.sizeDelta = new Vector2(clearSz, clearSz);
-                btnRT.anchoredPosition = new Vector2(-GalleryUiDesignTokens.SearchClearBtnRightInsetRef * s, 0f);
+                float clearW = GalleryUiDesignTokens.SearchClearBtnSizeRef * s;
+                btnRT.anchorMin = new Vector2(1f, 0f);
+                btnRT.anchorMax = new Vector2(1f, 1f);
+                btnRT.pivot = new Vector2(1f, 0.5f);
+                btnRT.sizeDelta = new Vector2(clearW, 0f);
+                btnRT.anchoredPosition = Vector2.zero;
+                ScaleButtonIconPadding(btnRT, s);
                 Text clearText = ch.GetComponentInChildren<Text>();
                 if (clearText != null)
                     GalleryUiMetrics.ApplyGlyphFont(clearText, GalleryUiDesignTokens.SearchClearBtnSizeRef, s, GalleryUiDesignTokens.FontMinRef);
@@ -380,6 +442,8 @@ namespace VPB
             RescaleTabButtonList(rightActiveTabButtons, metrics);
             RescaleTabButtonList(leftSubActiveTabButtons, metrics);
             RescaleTabButtonList(rightSubActiveTabButtons, metrics);
+            RescaleTabButtonList(leftCategoryTabButtons, metrics);
+            RescaleTabButtonList(rightCategoryTabButtons, metrics);
             RescaleTabButtonList(_leftCreatorVirtButtons, metrics);
             RescaleTabButtonList(_rightCreatorVirtButtons, metrics);
 
@@ -424,6 +488,8 @@ namespace VPB
                 le.preferredHeight = GalleryUiDesignTokens.SideTabRowHeightRef * s;
             }
 
+            ConfigureSideTabRowHoverBorder(btnGO);
+
             RectTransform rt = btnGO.GetComponent<RectTransform>();
             if (rt != null && rt.anchorMin.y >= 0.99f && rt.anchorMax.y >= 0.99f)
                 rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.SideTabRowHeightRef * s);
@@ -447,6 +513,7 @@ namespace VPB
         public void ApplySideButtonScale(GalleryUiMetrics metrics)
         {
             float scale = metrics.ChromeScale;
+            bool topDock = IsFixedTopDockMode();
             float w = metrics.Px(GalleryUiDesignTokens.SideButtonWidthRef);
             float h = metrics.Px(GalleryUiDesignTokens.SideButtonHeightRef);
             float squareW = metrics.Px(GalleryUiDesignTokens.SideButtonSquareRef);
@@ -457,27 +524,31 @@ namespace VPB
             float subW = metrics.Px(GalleryUiDesignTokens.SideButtonWidthRef * GalleryUiDesignTokens.SideButtonSubmenuWidthFactorRef);
             int subFontSize = metrics.FontBody();
 
-            for (int i = 0; i < rightSideButtons.Count; i++)
+            // Top dock: footer row owns button chrome — side-rail sizeDelta here only fights outer scale.
+            if (!topDock)
             {
-                RectTransform rt = rightSideButtons[i];
-                if (rt == null) continue;
-                bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
-                rt.sizeDelta = new Vector2(square ? squareW : w, h);
-                Text t = rt.GetComponentInChildren<Text>(true);
-                if (t != null)
-                    GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
-                ScaleButtonIconPadding(rt, scale);
-            }
-            for (int i = 0; i < leftSideButtons.Count; i++)
-            {
-                RectTransform rt = leftSideButtons[i];
-                if (rt == null) continue;
-                bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
-                rt.sizeDelta = new Vector2(square ? squareW : w, h);
-                Text t = rt.GetComponentInChildren<Text>(true);
-                if (t != null)
-                    GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
-                ScaleButtonIconPadding(rt, scale);
+                for (int i = 0; i < rightSideButtons.Count; i++)
+                {
+                    RectTransform rt = rightSideButtons[i];
+                    if (rt == null) continue;
+                    bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
+                    rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                    Text t = rt.GetComponentInChildren<Text>(true);
+                    if (t != null)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
+                    ScaleButtonIconPadding(rt, scale);
+                }
+                for (int i = 0; i < leftSideButtons.Count; i++)
+                {
+                    RectTransform rt = leftSideButtons[i];
+                    if (rt == null) continue;
+                    bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
+                    rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                    Text t = rt.GetComponentInChildren<Text>(true);
+                    if (t != null)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
+                    ScaleButtonIconPadding(rt, scale);
+                }
             }
 
             if (rightSideContainer != null)
@@ -518,7 +589,10 @@ namespace VPB
                 if (t != null) t.fontSize = subFontSize;
             }
 
-            UpdateSideButtonPositions();
+            if (topDock)
+                ApplyTopDockSideButtonsLayout(scale);
+            else
+                UpdateSideButtonPositions();
         }
 
         /// <summary>Scales grid badges/labels from cell size — does not resize the cell.</summary>

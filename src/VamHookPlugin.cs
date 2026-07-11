@@ -1637,14 +1637,14 @@ namespace VPB
                     int row = i / QuickMenuGridCols;
                     rt.anchoredPosition = slot0Center + new Vector2(col * cell, -row * cell);
 
-                    Image img = go.AddComponent<Image>();
                     Color normalBackdrop = new Color(0.35f, 0.35f, 0.35f, 0.5f);
-                    img.color = normalBackdrop;
+                    Image img = AddQuickMenuRoundedBg(go, normalBackdrop);
                     m_QuickMenuGridBackdropImages[i] = img;
 
                     Button btn = go.AddComponent<Button>();
                     btn.transition = Selectable.Transition.None;
                     btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                    btn.targetGraphic = img;
                     m_QuickMenuGridUnityButtons[i] = btn;
 
                     int idxCopy = i;
@@ -1763,7 +1763,7 @@ namespace VPB
                 m_CloseAllButton = null;
 
                 // Assignment popup (simple list)
-                m_QuickMenuAssignPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.85f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero, rounded: true);
                 m_QuickMenuAssignPopupRoot.name = "VPB_QM_AssignPopup";
                 m_QuickMenuAssignPopupRT = m_QuickMenuAssignPopupRoot.GetComponent<RectTransform>();
                 if (m_QuickMenuAssignPopupRT != null)
@@ -1775,7 +1775,7 @@ namespace VPB
                 }
                 m_QuickMenuAssignPopupRoot.SetActive(false);
 
-                m_QuickMenuAssignCategoryPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 250f, 220f, Vector2.zero);
+                m_QuickMenuAssignCategoryPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 250f, 220f, Vector2.zero, rounded: true);
                 m_QuickMenuAssignCategoryPopupRoot.name = "VPB_QM_AssignPopup_Category";
                 m_QuickMenuAssignCategoryPopupRT = m_QuickMenuAssignCategoryPopupRoot.GetComponent<RectTransform>();
                 if (m_QuickMenuAssignCategoryPopupRT != null)
@@ -1788,7 +1788,7 @@ namespace VPB
                 if (catHover != null) catHover.owner = this;
                 m_QuickMenuAssignCategoryPopupRoot.SetActive(false);
 
-                m_QuickMenuAssignRandomPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero);
+                m_QuickMenuAssignRandomPopupRoot = UI.AddChildGOImage(canvasObject, new Color(0f, 0f, 0f, 0.9f), AnchorPresets.topLeft, 260f, 260f, Vector2.zero, rounded: true);
                 m_QuickMenuAssignRandomPopupRoot.name = "VPB_QM_AssignPopup_Random";
                 m_QuickMenuAssignRandomPopupRT = m_QuickMenuAssignRandomPopupRoot.GetComponent<RectTransform>();
                 if (m_QuickMenuAssignRandomPopupRT != null)

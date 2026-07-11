@@ -67,7 +67,7 @@ namespace VPB
                 return;
             }
 
-            GameObject helpBtn = UI.CreateUIButton(titleBarGO, 40, 40, "?", 22, 0, 0, AnchorPresets.middleCenter, ToggleInAppHelpPanel);
+            GameObject helpBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "?", 22, 0, 0, AnchorPresets.middleCenter, ToggleInAppHelpPanel);
             helpBtn.name = "TitleBarHelpBtn";
             helpBtn.GetComponent<Image>().color = new Color(0.12f, 0.28f, 0.42f, 0.92f);
             Text ht = helpBtn.GetComponentInChildren<Text>();
@@ -569,8 +569,7 @@ namespace VPB
             GameObject btnGO = new GameObject("Link_" + capturedId);
             btnGO.transform.SetParent(row, false);
 
-            Image bg = btnGO.AddComponent<Image>();
-            bg.color = InAppHelpIconLinkBgColor;
+            Image bg = UI.AddGalleryElementRoundedBg(btnGO, InAppHelpIconLinkBgColor);
             bg.raycastTarget = true;
 
             Button btn = btnGO.AddComponent<Button>();

@@ -409,11 +409,11 @@ namespace VPB
         {
             GameObject go = new GameObject("Button_" + text);
             go.transform.SetParent(parent.transform, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
+            Image img = UI.AddGalleryElementRoundedBg(go, bg);
             img.raycastTarget = true;
 
             Button btn = go.AddComponent<Button>();
+            btn.targetGraphic = img;
             ColorBlock cb = btn.colors;
             cb.normalColor = Color.white;
             cb.highlightedColor = new Color(1.18f, 1.18f, 1.18f, 1f);
@@ -421,7 +421,6 @@ namespace VPB
             cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
             btn.colors = cb;
             btn.transition = Selectable.Transition.ColorTint;
-            btn.targetGraphic = img;
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
             if (onClick != null) btn.onClick.AddListener(() => onClick());
 

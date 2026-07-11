@@ -68,15 +68,16 @@ namespace VPB
         private bool importSidebarCuaMergeLoad;
         private bool importSidebarDeleteTargetCUAs;
         // Scene atoms: when on, the picker restricts import to the checked subset; off imports every non-Person atom.
-        private bool importSidebarPickSceneAtoms = true;
+        // Defaults OFF to match the other pickers (Plugins/CUAs): the picker is opt-in and, once on, starts empty.
+        private bool importSidebarPickSceneAtoms;
         // Scene atoms: skip import when an atom with the same source uid (or uid#N variant) is already in the scene.
         private bool importSidebarSceneAtomSkipDuplicates = true;
         // Scene atoms: off-scene props placed relative to the target person root instead of raw source world coords.
         private bool importSidebarSceneAtomRelativeToPerson = true;
         private string importSidebarSceneAtomSearchFilter = string.Empty;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
-        // tracks scene+atom so switching source resets the checks to "all"), and is not persisted.
-        private bool importSidebarPluginsMergeSingle;
+        // tracks scene+atom so switching source resets the checks to none), and is not persisted.
+        private bool importSidebarPickPlugins;
         // Plugins: when on, self-referencing atom UIDs in imported plugins (e.g. trigger receiverAtom)
         // are rewritten from the source atom uid to the target atom uid. Opt-in (defaults OFF).
         private bool importSidebarMigratePluginUIDs;
@@ -294,7 +295,7 @@ namespace VPB
             importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
             importSidebarCuaMergeLoad             = PrefBool(p, "cuaMergeLoad", importSidebarCuaMergeLoad);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
-            importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
+            importSidebarPickPlugins              = PrefBool(p, "pluginsMergeSingle", importSidebarPickPlugins);
             importSidebarMigratePluginUIDs        = PrefBool(p, "migratePluginUIDs", importSidebarMigratePluginUIDs);
             importSidebarClearExistingPlugins     = PrefBool(p, "clearExistingPlugins", importSidebarClearExistingPlugins);
             importSidebarMultiSelectTypes         = PrefBool(p, "multiSelectTypes", importSidebarMultiSelectTypes);
@@ -331,7 +332,7 @@ namespace VPB
             p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
             p["cuaMergeLoad"].AsBool = importSidebarCuaMergeLoad;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
-            p["pluginsMergeSingle"].AsBool = importSidebarPluginsMergeSingle;
+            p["pluginsMergeSingle"].AsBool = importSidebarPickPlugins;
             p["migratePluginUIDs"].AsBool = importSidebarMigratePluginUIDs;
             p["clearExistingPlugins"].AsBool = importSidebarClearExistingPlugins;
             p["multiSelectTypes"].AsBool = importSidebarMultiSelectTypes;

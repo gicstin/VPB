@@ -216,7 +216,7 @@ namespace VPB
             var blocker = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0f, 0f, 0f, 0.35f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             blocker.name = "Blocker";
 
-            m_DepWhitelistUGUIPanel = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0.12f, 0.12f, 0.12f, 0.97f), AnchorPresets.middleCenter, 900, 720, Vector2.zero);
+            m_DepWhitelistUGUIPanel = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0.12f, 0.12f, 0.12f, 0.97f), AnchorPresets.middleCenter, 900, 720, Vector2.zero, rounded: true);
             m_DepWhitelistUGUIPanel.name = "Panel";
 
             var panelRT = m_DepWhitelistUGUIPanel.GetComponent<RectTransform>();
@@ -337,7 +337,7 @@ namespace VPB
             helpRt.sizeDelta = new Vector2(-40, 30);
             helpRt.anchoredPosition = new Vector2(20, -130);
 
-            var scrollBg = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0.10f, 0.10f, 0.10f, 0.95f), AnchorPresets.stretchAll, -40, -190, new Vector2(0, -30));
+            var scrollBg = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0.10f, 0.10f, 0.10f, 0.95f), AnchorPresets.stretchAll, -40, -190, new Vector2(0, -30), rounded: true);
             scrollBg.name = "ScrollBG";
             var scrollBgRt = scrollBg.GetComponent<RectTransform>();
             scrollBgRt.anchorMin = new Vector2(0, 0);

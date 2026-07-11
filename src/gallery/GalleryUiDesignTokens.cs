@@ -19,6 +19,11 @@ namespace VPB
         public const float GlyphFontHeightFactor = 0.55f;
         /// <summary>All interactive buttons: 2× FontRef. Ratio is global and intentional.</summary>
         public const float ButtonSizeRef = FontRef * 2; // 32
+        /// <summary>Rounded-corner radius for gallery buttons + their hover border, as a fraction of the
+        /// control's shorter side (0..0.5). Default when no user override is stored in VPB.cfg.
+        /// Live value comes from <see cref="VPBConfig.GalleryElementCornerRadiusFraction"/> /
+        /// <see cref="VPBConfig.EnableGalleryElementRounding"/>.</summary>
+        public const float ButtonCornerRadiusFraction = 0.22f;
 
         // Title bar
         public const float TitleBarHeightRef = 48f;
@@ -44,10 +49,10 @@ namespace VPB
         public const float SearchIconSizeRef = 24f;
         public const float SearchIconLeftPadRef = 6f;
         public const float SearchTextLeftInsetRef = 38f;
-        public const float SearchTextRightInsetRef = 45f;
         public const float SearchClearBtnSizeRef = ButtonSizeRef;
+        public const float SearchTextRightInsetRef = SearchClearBtnSizeRef;
         public const int SearchClearFontRef = FontRef;
-        public const float SearchClearBtnRightInsetRef = 5f;
+        public const float SearchClearBtnRightInsetRef = 0f;
         public const float SearchIconButtonPadRef = 4f;
 
         // Resize handles — sized/positioned like the corner-most bar button (40px, seated in the bar).
@@ -68,14 +73,19 @@ namespace VPB
         public const float SideTabColumnWidthRef = 220f;
         public const float SideTabSideMarginRef = 10f;
         public const float SideTabOpenGridInsetRef = 230f;
-        public const float SideTabClosedGridInsetRef = 20f;
+        public const float SideTabClosedGridInsetRef = 0f;
         public const float SideTabRowHeightRef = ButtonSizeRef;
         public const float SideTabControlGapRef = 5f;
         public const float SideTabRefreshBtnWidthRef = ButtonSizeRef;
         /// <summary>Sort column + left margin reserved from tab width for main side search (10 + 35).</summary>
         public const float SideTabMainSearchSortReserveRef = 45f;
-        public const float SideTabRowSpacingRef = 2f;
+        public const float SideTabRowSpacingRef = 4f;
+        /// <summary>Gap below sort+search row before tab list; matches collapse-header gap (4px).</summary>
+        public const float SideTabFilterRowBottomGapRef = SideTabRowSpacingRef;
+        /// <summary>Gap below split seam before lower-pane sort+search row.</summary>
+        public const float SideTabSubFilterRowTopGapRef = 10f;
         public const float SideTabRowPadRef = 5f;
+        public const float SideTabScrollBarWidthRef = 15f;
         public const int TabButtonFontRef = FontRef;
         public const int TabButtonFontMin = FontMinRef;
         public const float TabButtonMinWidthRef = 140f;
@@ -87,6 +97,8 @@ namespace VPB
         public const float FooterToolboxTopRef = 80f;
         public const float FilterChipRowHeightRef = ButtonSizeRef;
         public const float FilterChipRowMarginRef = 6f;
+        public const float FilterChipDismissSizeRef = ButtonSizeRef - 4f;
+        public const float FilterChipLabelDismissGapRef = 6f;
 
         // Side rail buttons (settings, follow, save, etc.)
         public const float SideButtonWidthRef = 120f;
@@ -119,7 +131,11 @@ namespace VPB
         public const float ImportSidebarSideMarginRef = 10f;
         public const float ImportSidebarTopRowRef = 65f;
         public const float ImportSidebarScrollBarWidthRef = 10f;
-        public const float ImportSidebarInnerPadHRef = 6f;
+        public const float ImportSidebarInnerPadHRef = SideTabRowPadRef;
+        public const float ImportSidebarLabelPadLeftRef = ImportSidebarInnerPadHRef + 8f;
+        public const float ImportSidebarLabelPadRightRef = 4f;
+        public const float ImportSidebarHeaderGapRef = SideTabRowSpacingRef;
+        public const float ImportSidebarRowSpacingRef = SideTabRowSpacingRef;
         public const float ImportSidebarRowHeightRef = ButtonSizeRef;
         public const int ImportSidebarFontRef = FontRef;
         public const int ImportSidebarFontMin = FontMinRef;
@@ -149,6 +165,7 @@ namespace VPB
         public const int PopupMenuRowFontLargeRef = FontRef;
         public const int PopupMenuOverflowFontRef = FontRef;
         public const float PopupMenuAnchorGapRef = 2f;
+        public const float PopupMenuPanelWidthRef = 230f;
         public const float FileSortMenuPanelWidthRef = 248f;
         public const float SidePaneSortMenuPanelWidthRef = 228f;
         public const float TitleCreatorDropdownWidthRef = 330f;
@@ -182,6 +199,8 @@ namespace VPB
         // exactly (no overlap, no gap) regardless of scale.
         public const float SideTabTopOffsetRef = TitleBarHeightRef;
         public const float SideTabSplitSeamRef = 5f;
+        /// <summary>Bottom sub-pane share in category split view (top pane gets the remainder).</summary>
+        public const float CategorySideSubPaneHeightFraction = 1f / 3f;
         public const float SideTabScrollBottomPadRef = 8f;
         public const float GalleryMainBottomFallbackRef = 120f;
     }

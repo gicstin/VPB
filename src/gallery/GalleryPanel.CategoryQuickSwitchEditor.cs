@@ -271,9 +271,9 @@ namespace VPB
             // Toggle hidden/show uses text button (icon set not guaranteed).
             GameObject tog = new GameObject("ToggleHidden");
             tog.transform.SetParent(row.transform, false);
-            Image bg = tog.AddComponent<Image>();
-            bg.color = new Color(0.44f, 0.36f, 0.20f, 1f);
+            Image bg = AddCategoryQuickRoundedBg(tog, new Color(0.44f, 0.36f, 0.20f, 1f));
             Button b = tog.AddComponent<Button>();
+            b.targetGraphic = bg;
             b.transition = Selectable.Transition.None;
             b.navigation = new Navigation { mode = Navigation.Mode.None };
             if (onToggleHidden != null) b.onClick.AddListener(() => onToggleHidden());
@@ -320,10 +320,9 @@ namespace VPB
         {
             GameObject go = new GameObject("Button_" + (label ?? ""));
             go.transform.SetParent(parent, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
-            img.raycastTarget = true;
+            Image img = AddCategoryQuickRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
+            b.targetGraphic = img;
             b.transition = Selectable.Transition.None;
             b.navigation = new Navigation { mode = Navigation.Mode.None };
             if (onClick != null) b.onClick.AddListener(onClick);
@@ -388,8 +387,7 @@ namespace VPB
             prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(860f * s, 720f * s);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.06f, 0.06f, 0.08f, 1f);
+            Image pbg = AddCategoryQuickRoundedBg(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
             VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
             v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));

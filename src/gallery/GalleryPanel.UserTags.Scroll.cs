@@ -185,6 +185,7 @@ namespace VPB
         /// <summary>Rebind User Tags rows without full <see cref="UpdateTabs"/> (avoids scroll jump).</summary>
         private void RefreshUserTagsAvailPaneInPlace(bool isLeft)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             GameObject container = isLeft ? leftTabContainerGO : rightTabContainerGO;
             if (container == null) return;
             EnsureUserTagAvailScrollTrackingHooks();

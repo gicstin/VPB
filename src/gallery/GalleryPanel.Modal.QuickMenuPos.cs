@@ -384,8 +384,7 @@ namespace VPB
 
             GameObject bg = new GameObject("Background");
             bg.transform.SetParent(sliderHost.transform, false);
-            Image bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.2f, 0.2f, 0.22f, 1f);
+            Image bgImg = UI.AddGalleryElementRoundedBg(bg, new Color(0.2f, 0.2f, 0.22f, 1f));
             RectTransform bgRt = bg.GetComponent<RectTransform>();
             bgRt.anchorMin = new Vector2(0, 0.25f);
             bgRt.anchorMax = new Vector2(1, 0.75f);
@@ -429,12 +428,13 @@ namespace VPB
         {
             GameObject go = new GameObject("Btn");
             go.transform.SetParent(parent, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
+            Image img = UI.AddGalleryElementRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
             b.transition = Selectable.Transition.None;
+            b.targetGraphic = img;
             if (onClick != null) b.onClick.AddListener(onClick);
-            go.AddComponent<UIHoverBorder>();
+            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
+            try { hb.ApplyBorderSettings(); } catch { }
 
             LayoutElement le = go.AddComponent<LayoutElement>();
             if (width > 0f)

@@ -138,14 +138,14 @@ namespace VPB
             GameObject bulkRow = new GameObject("BulkSelectRow");
             bulkRow.transform.SetParent(parent, false);
             LayoutElement bulkLe = bulkRow.AddComponent<LayoutElement>();
-            bulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            bulkLe.preferredHeight = ImportSidebarBaseRowHeight;
             bulkLe.flexibleWidth = 1f;
             HorizontalLayoutGroup bulkHlg = bulkRow.AddComponent<HorizontalLayoutGroup>();
             bulkHlg.childForceExpandWidth = true;
             bulkHlg.childForceExpandHeight = true;
             bulkHlg.childControlWidth = true;
             bulkHlg.childControlHeight = true;
-            bulkHlg.spacing = 2f;
+            bulkHlg.spacing = ImportSidebarBaseRowSpacing;
 
             BuildImportSidebarBulkButton(bulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_types", "Select All"),
@@ -164,8 +164,10 @@ namespace VPB
             RefreshImportSidebarMultiToggleVisual();
 
             LayoutElement bulkLeC = bulkLe;
+            HorizontalLayoutGroup bulkHlgCaptured = bulkHlg;
             innerPaneScaleActions.Add(s => {
-                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
+                if (bulkHlgCaptured != null) bulkHlgCaptured.spacing = ImportSidebarBaseRowSpacing * s;
             });
 
             GameObject grid = new GameObject("TypeRadio");
@@ -173,52 +175,43 @@ namespace VPB
 
             RectTransform rt = grid.AddComponent<RectTransform>();
             importSidebarTypeRadioContainer = rt;
-            // The panel is a constant 220px wide (root width is not scaled), so the 2 cells must fit a fixed content
-            // width (220 - ~10px scrollbar - spacing) / 2; scaling cell WIDTH by s overflows. Only the height scales.
-            const float typeRadioCellW = (ImportSidebarBaseWidth - 10f - 2f) / 2f;  // ~104
-            const int typeRadioRows = 6;  // 12 types / 2 columns
+            const int typeRadioRows = 6;
+            float rowH = ImportSidebarBaseRowHeight;
+            float gap = ImportSidebarBaseRowSpacing;
+            float contentW = ImportSidebarBaseWidth - ImportSidebarScrollBarWidthRef - ImportSidebarInnerPadHRef;
+            float cellW = Mathf.Floor((contentW - gap) * 0.5f);
             LayoutElement le = grid.AddComponent<LayoutElement>();
-            le.preferredHeight = typeRadioRows * 26f + (typeRadioRows - 1) * 2f;
+            le.preferredHeight = typeRadioRows * rowH + (typeRadioRows - 1) * gap;
             le.flexibleWidth = 1f;
 
             GridLayoutGroup g = grid.AddComponent<GridLayoutGroup>();
-            g.cellSize = new Vector2(typeRadioCellW, 26f);
-            g.spacing = new Vector2(2f, 2f);
+            g.cellSize = new Vector2(cellW, rowH);
+            g.spacing = new Vector2(gap, gap);
             g.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             g.constraintCount = 2;
 
             LayoutElement leCaptured = le;
-            GridLayoutGroup gCaptured = g;
-            innerPaneScaleActions.Add(s => {
-                if (leCaptured != null) leCaptured.preferredHeight = (typeRadioRows * 26f + (typeRadioRows - 1) * 2f) * s;
-                if (gCaptured != null)
-                {
-                    gCaptured.cellSize = new Vector2(typeRadioCellW, 26f * s);  // width fixed (panel width is fixed)
-                    gCaptured.spacing = new Vector2(2f * s, 2f * s);
-                }
-            });
+            innerPaneScaleActions.Add(s => SyncImportSidebarTypeRadioGridWidth(s));
 
             for (int i = 0; i < ImportSidebarTypeOrder.Length; i++)
             {
                 VpbResourceType t = ImportSidebarTypeOrder[i];
                 GameObject row = new GameObject("Type_" + t);
                 row.transform.SetParent(grid.transform, false);
-                Image rb = row.AddComponent<Image>();
-                // Inactive cell uses ColorInactiveRow (matches Creator/Category tab rows);
-                // active cell is set to ColorCategory in OnImportSidebarTypeChosen.
-                rb.color = ColorInactiveRow;
+                Image rb = AddImportSidebarRoundedBg(row, ColorInactiveRow);
                 Button b = row.AddComponent<Button>();
                 b.targetGraphic = rb;
                 UI.NeutralizeSelectableColorTint(b);
 
                 Text typeLabel = CreateImportSidebarLabel(row.transform, ShortNameForType(t), ImportSidebarBaseFontSize);
-                typeLabel.alignment = TextAnchor.MiddleCenter;
+                typeLabel.alignment = TextAnchor.MiddleLeft;
 
                 Text typeLabelCaptured = typeLabel;
                 innerPaneScaleActions.Add(s => ApplyScaledFont(typeLabelCaptured, ImportSidebarBaseFontSize, s));
 
                 VpbResourceType captured = t;
                 b.onClick.AddListener(() => OnImportSidebarTypeChosen(captured, importSidebarMultiSelectTypes));
+                AddDynamicTooltip(row, () => BuildImportTypeTooltip(captured));
 
                 importSidebarTypeRadioButtons[t] = row;
                 importSidebarTypeRadioLabels[t] = typeLabel;
@@ -230,8 +223,10 @@ namespace VPB
         {
             GameObject btnGO = new GameObject("BulkBtn_" + label);
             btnGO.transform.SetParent(parent, false);
-            Image bg = btnGO.AddComponent<Image>();
-            bg.color = bgColor;
+            LayoutElement btnLe = btnGO.AddComponent<LayoutElement>();
+            btnLe.preferredHeight = ImportSidebarBaseRowHeight;
+            btnLe.flexibleWidth = 1f;
+            Image bg = AddImportSidebarRoundedBg(btnGO, bgColor);
             Button btn = btnGO.AddComponent<Button>();
             btn.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(btn);
@@ -240,7 +235,11 @@ namespace VPB
             btn.onClick.AddListener(onClick);
             AddTooltip(btnGO, tipKey, tipDefault);
             Text txtCaptured = txt;
-            innerPaneScaleActions.Add(s => ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s));
+            LayoutElement btnLeCaptured = btnLe;
+            innerPaneScaleActions.Add(s => {
+                ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s);
+                if (btnLeCaptured != null) btnLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+            });
             return btnGO;
         }
 
@@ -328,14 +327,14 @@ namespace VPB
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2f;
+            vlg.spacing = ImportSidebarBaseRowSpacing;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.childControlHeight = true;
             vlg.childControlWidth = true;
 
             VerticalLayoutGroup vlgCaptured = vlg;
-            innerPaneScaleActions.Add(s => { if (vlgCaptured != null) vlgCaptured.spacing = 2f * s; });
+            innerPaneScaleActions.Add(s => { if (vlgCaptured != null) vlgCaptured.spacing = ImportSidebarBaseRowSpacing * s; });
 
             // Caption so stacked panels read as distinct groups (which options belong to which type).
             AddOptionGroupHeader(panel.transform, DisplayNameForType(t));
@@ -344,102 +343,127 @@ namespace VPB
             {
                 case VpbResourceType.Appearance:
                     AddOptionToggle(panel.transform, "Disable scale change",
-                        () => importSidebarSuppressScale, v => importSidebarSuppressScale = v, null);
+                        () => importSidebarSuppressScale, v => importSidebarSuppressScale = v, null,
+                        VPBTranslation.T("gallery.import.opt.appr_scale", "Keep the target person's current height/scale instead of applying the source's scale."));
                     AddOptionToggle(panel.transform, "Disable clothing load",
                         () => importSidebarSuppressClothingLoad,
-                        v => { importSidebarSuppressClothingLoad = v; RefreshAppearanceConditionalRows(); }, null);
+                        v => { importSidebarSuppressClothingLoad = v; RefreshAppearanceConditionalRows(); }, null,
+                        VPBTranslation.T("gallery.import.opt.appr_noclothing", "Import the look but leave the target's current clothing untouched."));
                     importSidebarOnlySuppressRealRow = AddOptionToggle(panel.transform, "  Only disable real clothing",
-                        () => importSidebarOnlySuppressRealClothing, v => importSidebarOnlySuppressRealClothing = v, null);
+                        () => importSidebarOnlySuppressRealClothing, v => importSidebarOnlySuppressRealClothing = v, null,
+                        VPBTranslation.T("gallery.import.opt.appr_realclothing", "When skipping clothing, still import accessories/hair-like items \u2014 only real garments are skipped."));
                     importSidebarImportCUARow = AddOptionToggle(panel.transform, "Import atom CUAs",
                         () => importSidebarImportLinkedCUAs,
-                        v => { importSidebarImportLinkedCUAs = v; RefreshCUAChecklist(); RefreshAppearanceConditionalRows(); }, null);
+                        v => { importSidebarImportLinkedCUAs = v; RefreshCUAChecklist(); RefreshAppearanceConditionalRows(); }, null,
+                        VPBTranslation.T("gallery.import.opt.appr_cua", "Also import Custom Unity Assets (props: horns, tails, etc.) attached to the source person."));
                     AddOptionToggle(panel.transform, "Pick CUAs to import",
                         () => importSidebarPickCUAs,
-                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null);
+                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null,
+                        VPBTranslation.T("gallery.import.opt.pick_cua", "Show a checklist to choose which CUAs to import instead of importing all of them."));
                     importSidebarCUARelativeRow = AddOptionToggle(panel.transform, "Place off-person relative to person",
                         () => importSidebarCUARelativeToPerson,
-                        v => importSidebarCUARelativeToPerson = v, null);
+                        v => importSidebarCUARelativeToPerson = v, null,
+                        VPBTranslation.T("gallery.import.opt.cua_relative", "Position CUAs that aren't parented to a bone relative to the target person rather than at their absolute scene coordinates."));
                     AddOptionToggle(panel.transform, "Merge load",
-                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null);
+                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null,
+                        VPBTranslation.T("gallery.import.opt.cua_merge", "Add the imported CUAs alongside the target's existing ones instead of replacing them."));
                     BuildImportSidebarCUAChecklist(panel.transform, importSidebarAppearanceCUAUi);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
-                        new Color(0.91f, 0.53f, 0.53f, 1f));
+                        new Color(0.91f, 0.53f, 0.53f, 1f),
+                        VPBTranslation.T("gallery.import.opt.cua_delete", "Destructive: remove all CUAs currently on the target person before importing."));
                     RefreshAppearanceConditionalRows();
                     break;
 
                 case VpbResourceType.Clothing:
                     AddOptionToggle(panel.transform, "Merge load",
-                        () => importSidebarMergeClothingOrHair, v => importSidebarMergeClothingOrHair = v, null);
+                        () => importSidebarMergeClothingOrHair, v => importSidebarMergeClothingOrHair = v, null,
+                        VPBTranslation.T("gallery.import.opt.cloth_merge", "Add the source clothing on top of what the target already wears instead of replacing the whole outfit."));
                     AddOptionToggle(panel.transform, "Only replace \"real\" clothing",
-                        () => importSidebarOnlyReplaceRealClothing, v => importSidebarOnlyReplaceRealClothing = v, null);
+                        () => importSidebarOnlyReplaceRealClothing, v => importSidebarOnlyReplaceRealClothing = v, null,
+                        VPBTranslation.T("gallery.import.opt.cloth_real", "Keep accessory/non-garment items on the target; only real garments get replaced."));
                     break;
 
                 case VpbResourceType.Hair:
                     AddOptionToggle(panel.transform, "Merge load",
-                        () => importSidebarMergeClothingOrHair, v => importSidebarMergeClothingOrHair = v, null);
+                        () => importSidebarMergeClothingOrHair, v => importSidebarMergeClothingOrHair = v, null,
+                        VPBTranslation.T("gallery.import.opt.hair_merge", "Add the source hair alongside the target's existing hair instead of replacing it."));
                     break;
 
                 case VpbResourceType.Pose:
                     AddOptionToggle(panel.transform, "Disable morph load",
                         () => importSidebarSubToggles.SuppressMorphLoad,
-                        v => importSidebarSubToggles.SuppressMorphLoad = v, null);
+                        v => importSidebarSubToggles.SuppressMorphLoad = v, null,
+                        VPBTranslation.T("gallery.import.opt.pose_nomorph", "Apply the pose only; don't touch the target's morphs (body/face shape)."));
                     AddOptionToggle(panel.transform, "Disable root-node load",
                         () => importSidebarSubToggles.SuppressRootNodeLoad,
-                        v => importSidebarSubToggles.SuppressRootNodeLoad = v, null);
+                        v => importSidebarSubToggles.SuppressRootNodeLoad = v, null,
+                        VPBTranslation.T("gallery.import.opt.pose_noroot", "Apply the pose in place without moving the person's root position/rotation in the scene."));
                     break;
 
                 case VpbResourceType.Morphs:
                     AddOptionToggle(panel.transform, "Include Appearance morphs",
                         () => importSidebarSubToggles.IncludeAppearanceMorphs,
-                        v => importSidebarSubToggles.IncludeAppearanceMorphs = v, null);
+                        v => importSidebarSubToggles.IncludeAppearanceMorphs = v, null,
+                        VPBTranslation.T("gallery.import.opt.morph_appr", "Import morphs that shape the look (face/body appearance)."));
                     AddOptionToggle(panel.transform, "Include Physical/Pose morphs",
                         () => importSidebarSubToggles.IncludePhysicalPoseMorphs,
-                        v => importSidebarSubToggles.IncludePhysicalPoseMorphs = v, null);
+                        v => importSidebarSubToggles.IncludePhysicalPoseMorphs = v, null,
+                        VPBTranslation.T("gallery.import.opt.morph_phys", "Import physical/pose-driven morphs (e.g. joint corrective and physics morphs)."));
                     break;
 
                 case VpbResourceType.Plugins:
                     AddOptionToggle(panel.transform, "Pick plugins to import",
-                        () => importSidebarPluginsMergeSingle,
-                        v => { importSidebarPluginsMergeSingle = v; RefreshPluginChecklist(); },
-                        null);
+                        () => importSidebarPickPlugins,
+                        v => { importSidebarPickPlugins = v; RefreshPluginChecklist(); },
+                        null,
+                        VPBTranslation.T("gallery.import.opt.pick_plugins", "Show a checklist to choose which plugins to import instead of importing all of them."));
                     AddOptionToggle(panel.transform, "Migrate self-UID references",
                         () => importSidebarMigratePluginUIDs,
                         v => importSidebarMigratePluginUIDs = v,
-                        null);
+                        null,
+                        VPBTranslation.T("gallery.import.opt.plugin_uid", "Rewrite plugin settings that point at the source atom's name so they point at the target atom (fixes self-references after import)."));
                     AddOptionToggle(panel.transform, "Clear existing plugins",
                         () => importSidebarClearExistingPlugins,
                         v => importSidebarClearExistingPlugins = v,
-                        null);
+                        null,
+                        VPBTranslation.T("gallery.import.opt.plugin_clear", "Remove the target's current plugins first. Off = merge (existing plugins are kept and duplicates updated in place)."));
                     BuildImportSidebarPluginChecklist(panel.transform);
                     break;
 
                 case VpbResourceType.CUA:
                     AddOptionToggle(panel.transform, "Merge load",
-                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null);
+                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null,
+                        VPBTranslation.T("gallery.import.opt.cua_merge", "Add the imported CUAs alongside the target's existing ones instead of replacing them."));
                     AddOptionToggle(panel.transform, "Pick CUAs to import",
                         () => importSidebarPickCUAs,
-                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null);
+                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null,
+                        VPBTranslation.T("gallery.import.opt.pick_cua", "Show a checklist to choose which CUAs to import instead of importing all of them."));
                     AddOptionToggle(panel.transform, "Place off-person relative to person",
                         () => importSidebarCUARelativeToPerson,
-                        v => importSidebarCUARelativeToPerson = v, null);
+                        v => importSidebarCUARelativeToPerson = v, null,
+                        VPBTranslation.T("gallery.import.opt.cua_relative", "Position CUAs that aren't parented to a bone relative to the target person rather than at their absolute scene coordinates."));
                     BuildImportSidebarCUAChecklist(panel.transform, importSidebarCuaOnlyCUAUi);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
-                        new Color(0.91f, 0.53f, 0.53f, 1f));
+                        new Color(0.91f, 0.53f, 0.53f, 1f),
+                        VPBTranslation.T("gallery.import.opt.cua_delete", "Destructive: remove all CUAs currently on the target person before importing."));
                     break;
 
                 case VpbResourceType.Atoms:
                     AddOptionToggle(panel.transform, "Skip existing atoms",
                         () => importSidebarSceneAtomSkipDuplicates,
-                        v => importSidebarSceneAtomSkipDuplicates = v, null);
+                        v => importSidebarSceneAtomSkipDuplicates = v, null,
+                        VPBTranslation.T("gallery.import.opt.atom_skip", "Don't import a source atom if an atom with the same name already exists in the current scene (avoids duplicates)."));
                     AddOptionToggle(panel.transform, "Place relative to target person",
                         () => importSidebarSceneAtomRelativeToPerson,
-                        v => importSidebarSceneAtomRelativeToPerson = v, null);
+                        v => importSidebarSceneAtomRelativeToPerson = v, null,
+                        VPBTranslation.T("gallery.import.opt.atom_relative", "Offset imported atoms relative to the target person instead of dropping them at their absolute source coordinates."));
                     AddOptionToggle(panel.transform, "Pick atoms to import",
                         () => importSidebarPickSceneAtoms,
                         v => { importSidebarPickSceneAtoms = v; RefreshSceneAtomChecklist(); RebuildImportSidebarContent(); },
-                        null);
+                        null,
+                        VPBTranslation.T("gallery.import.opt.pick_atoms", "Show a searchable checklist to choose which scene atoms to import instead of importing all of them."));
                     BuildImportSidebarSceneAtomSearchRow(panel.transform);
                     BuildImportSidebarSceneAtomChecklist(panel.transform);
                     break;
@@ -447,16 +471,20 @@ namespace VPB
                 case VpbResourceType.General:
                     AddOptionToggle(panel.transform, "Include Physical",
                         () => importSidebarSubToggles.IncludePhysical,
-                        v => importSidebarSubToggles.IncludePhysical = v, null);
+                        v => importSidebarSubToggles.IncludePhysical = v, null,
+                        VPBTranslation.T("gallery.import.opt.gen_physical", "Import physical settings (physics, collision, joint parameters) from the source."));
                     AddOptionToggle(panel.transform, "Include Pose",
                         () => importSidebarSubToggles.IncludePose,
-                        v => importSidebarSubToggles.IncludePose = v, null);
+                        v => importSidebarSubToggles.IncludePose = v, null,
+                        VPBTranslation.T("gallery.import.opt.gen_pose", "Import the body pose from the source."));
                     AddOptionToggle(panel.transform, "Include Appearance",
                         () => importSidebarSubToggles.IncludeAppearance,
-                        v => importSidebarSubToggles.IncludeAppearance = v, null);
+                        v => importSidebarSubToggles.IncludeAppearance = v, null,
+                        VPBTranslation.T("gallery.import.opt.gen_appr", "Import appearance (morphs, skin, hair, clothing) from the source."));
                     GameObject mocapRow = AddOptionToggle(panel.transform, "Include Mocap",
                         () => importSidebarSubToggles.IncludeMocap,
-                        v => importSidebarSubToggles.IncludeMocap = v, null);
+                        v => importSidebarSubToggles.IncludeMocap = v, null,
+                        VPBTranslation.T("gallery.import.opt.gen_mocap", "Motion-capture animation data (not available for this import type)."));
                     Button mocapBtn = mocapRow.GetComponent<Button>();
                     if (mocapBtn != null) mocapBtn.interactable = false;
                     break;
@@ -475,18 +503,16 @@ namespace VPB
             GameObject row = new GameObject("GroupHeader_" + label);
             row.transform.SetParent(parent, false);
             LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight * 0.82f;
+            le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
-            Image bg = row.AddComponent<Image>();
-            bg.color = ImportSidebarGroupHeaderBg;
-            bg.raycastTarget = false;
+            Image bg = AddImportSidebarRoundedBg(row, ImportSidebarGroupHeaderBg, raycastTarget: false);
             Text t = CreateImportSidebarLabel(row.transform, label, ImportSidebarBaseFontSize);
             t.alignment = TextAnchor.MiddleLeft;
             t.color = new Color(0.92f, 0.95f, 1f, 1f);
             LayoutElement leC = le;
             Text tC = t;
             innerPaneScaleActions.Add(s => {
-                if (leC != null) leC.preferredHeight = ImportSidebarBaseRowHeight * 0.82f * s;
+                if (leC != null) leC.preferredHeight = ImportSidebarBaseRowHeight * s;
                 ApplyScaledFont(tC, ImportSidebarBaseFontSize, s);
             });
         }
@@ -528,7 +554,65 @@ namespace VPB
             }
         }
 
-        private GameObject AddOptionToggle(Transform parent, string label, System.Func<bool> get, System.Action<bool> set, Color? labelColor)
+        // One-line summary of what importing a given resource type does, shown in the status bar on hover.
+        private static string DescribeImportType(VpbResourceType t)
+        {
+            switch (t)
+            {
+                case VpbResourceType.Appearance:    return VPBTranslation.T("gallery.import.type_desc.appearance", "full look \u2014 morphs, skin, hair and clothing from the source person");
+                case VpbResourceType.Clothing:      return VPBTranslation.T("gallery.import.type_desc.clothing", "only the clothing items worn by the source person");
+                case VpbResourceType.Hair:          return VPBTranslation.T("gallery.import.type_desc.hair", "only the hair items and styling from the source person");
+                case VpbResourceType.Pose:          return VPBTranslation.T("gallery.import.type_desc.pose", "only the body pose \u2014 bone rotations and root position");
+                case VpbResourceType.Skin:          return VPBTranslation.T("gallery.import.type_desc.skin", "only the skin textures and materials from the source");
+                case VpbResourceType.Morphs:        return VPBTranslation.T("gallery.import.type_desc.morphs", "only the morph values \u2014 body and face shape");
+                case VpbResourceType.BreastPhysics: return VPBTranslation.T("gallery.import.type_desc.breast", "only the breast physics settings");
+                case VpbResourceType.Glute:         return VPBTranslation.T("gallery.import.type_desc.glute", "only the glute physics settings");
+                case VpbResourceType.Plugins:       return VPBTranslation.T("gallery.import.type_desc.plugins", "the person plugins loaded in the source scene");
+                case VpbResourceType.CUA:           return VPBTranslation.T("gallery.import.type_desc.cua", "Custom Unity Assets \u2014 props attached in the source scene");
+                case VpbResourceType.Atoms:         return VPBTranslation.T("gallery.import.type_desc.atoms", "whole atoms copied from the source scene into the current scene");
+                case VpbResourceType.General:       return VPBTranslation.T("gallery.import.type_desc.general", "general person settings from the source");
+                default: return "";
+            }
+        }
+
+        // Status-bar tooltip for a type radio cell: name + what it imports + whether clicking adds or removes it.
+        private string BuildImportTypeTooltip(VpbResourceType t)
+        {
+            bool selected = importSidebarMultiSelectedTypes.Contains(t);
+            string action = selected
+                ? VPBTranslation.T("gallery.import.type_tip.on", "selected \u2014 click to remove from import")
+                : VPBTranslation.T("gallery.import.type_tip.off", "click to add to import");
+            return DisplayNameForType(t) + ": " + DescribeImportType(t) + "  \u2014  " + action;
+        }
+
+        // Pooled checklist rows are re-skinned per entry and their labels are visually truncated, so the tooltip
+        // reads the row's live label text (full, untruncated) at hover time and drops the "[x]/[ ]" checkbox glyph.
+        private static string ImportChecklistRowTooltip(Text label)
+        {
+            if (label == null) return null;
+            string s = label.text;
+            if (string.IsNullOrEmpty(s)) return null;
+            if (s.Length >= 4 && (s.StartsWith("[x] ", StringComparison.Ordinal) || s.StartsWith("[ ] ", StringComparison.Ordinal)))
+                s = s.Substring(4);
+            return s + "  \u2014  " + VPBTranslation.T("gallery.import.pick_row_tip", "click to include/exclude from import");
+        }
+
+        // Status-bar tooltip for a source/target atom row: full (untruncated) uid + the role clicking it assigns.
+        private string ImportAtomRowTooltip(Text label, bool isSource)
+        {
+            if (label == null) return null;
+            string s = label.text;
+            if (string.IsNullOrEmpty(s)) return null;
+            if (isSource)
+                return VPBTranslation.T("gallery.import.source_row_tip", "Source") + ": " + s
+                    + "  \u2014  " + VPBTranslation.T("gallery.import.source_row_tip2", "click to import from this atom");
+            if (s == "<New Person Atom>")
+                return VPBTranslation.T("gallery.import.new_person_tip", "create a new Person atom and import onto it");
+            return VPBTranslation.T("gallery.import.target_row_tip", "Target") + ": " + s
+                + "  \u2014  " + VPBTranslation.T("gallery.import.target_row_tip2", "click to import onto this atom");
+        }
+
+        private GameObject AddOptionToggle(Transform parent, string label, System.Func<bool> get, System.Action<bool> set, Color? labelColor, string tooltip = null)
         {
             GameObject row = new GameObject("Toggle_" + label);
             row.transform.SetParent(parent, false);
@@ -537,10 +621,7 @@ namespace VPB
             le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
 
-            Image bg = row.AddComponent<Image>();
-            // Same neutral row tone as Creator/Category list rows; checked-state is shown
-            // by the "[x] " prefix and the bg toggling to the active accent.
-            bg.color = ColorInactiveRow;
+            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -565,6 +646,8 @@ namespace VPB
                 if (t != null) t.text = (get() ? "[x] " : "[ ] ") + label;
             });
 
+            if (!string.IsNullOrEmpty(tooltip)) AddTooltipPlain(row, tooltip);
+
             LayoutElement leCaptured = le;
             Text tCaptured = t;
             innerPaneScaleActions.Add(s => {
@@ -581,8 +664,6 @@ namespace VPB
             RectTransform rt = go.AddComponent<RectTransform>();
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(4f, 0f);
-            rt.offsetMax = new Vector2(-4f, 0f);
 
             Text t = go.AddComponent<Text>();
             t.color = color;
@@ -591,6 +672,17 @@ namespace VPB
             t.text = label;
             VPBUiFont.ApplyTo(t);
             t.raycastTarget = false;
+
+            RectTransform rtCaptured = rt;
+            Text tCaptured = t;
+            int sizeCaptured = size;
+            innerPaneScaleActions.Add(s =>
+            {
+                ApplyImportSidebarLabelInsets(rtCaptured, s);
+                ApplyScaledFont(tCaptured, sizeCaptured, s);
+            });
+            ApplyImportSidebarLabelInsets(rt, ChromeScale);
+            ApplyScaledFont(t, sizeCaptured, ChromeScale);
             return t;
         }
 
@@ -601,14 +693,14 @@ namespace VPB
             importSidebarPluginBulkRow = new GameObject("PluginBulkRow");
             importSidebarPluginBulkRow.transform.SetParent(parent, false);
             LayoutElement pluginBulkLe = importSidebarPluginBulkRow.AddComponent<LayoutElement>();
-            pluginBulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            pluginBulkLe.preferredHeight = ImportSidebarBaseRowHeight;
             pluginBulkLe.flexibleWidth = 1f;
             HorizontalLayoutGroup pluginBulkHlg = importSidebarPluginBulkRow.AddComponent<HorizontalLayoutGroup>();
             pluginBulkHlg.childForceExpandWidth = true;
             pluginBulkHlg.childForceExpandHeight = true;
             pluginBulkHlg.childControlWidth = true;
             pluginBulkHlg.childControlHeight = true;
-            pluginBulkHlg.spacing = 2f;
+            pluginBulkHlg.spacing = ImportSidebarBaseRowSpacing;
             BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_plugins", "Select All"),
                 "gallery.import.select_all_plugins_tip", "Import every plugin in the source",
@@ -619,7 +711,7 @@ namespace VPB
                 ImportSidebarClearAllBg, ImportSidebarClearAllPlugins);
             LayoutElement pluginBulkLeC = pluginBulkLe;
             innerPaneScaleActions.Add(s => {
-                if (pluginBulkLeC != null) pluginBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                if (pluginBulkLeC != null) pluginBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
             });
             importSidebarPluginBulkRow.SetActive(false);
 
@@ -666,8 +758,7 @@ namespace VPB
             le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
 
-            Image bg = row.AddComponent<Image>();
-            bg.color = ColorInactiveRow;
+            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -675,6 +766,8 @@ namespace VPB
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
             ConfigureImportSidebarChecklistLabel(label);
+            Text pluginTipLabel = label;
+            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(pluginTipLabel));
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
@@ -686,10 +779,12 @@ namespace VPB
         }
 
         // Rebuilds the checkbox list from the selected source atom's plugins. Visible only for Plugins + gate on.
-        // Switching source atom resets the checks to "all" (sig change); within the same atom, checks are preserved.
+        // Switching source atom resets the checks to NONE (sig change); within the same atom, checks are preserved.
+        // Opting into "Pick plugins" means "I want to choose", so the list starts empty rather than mirroring the
+        // gate-off "import all" behavior (an all-checked default would make the picker a no-op).
         private void RefreshPluginChecklist()
         {
-            bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Plugins) && importSidebarPluginsMergeSingle;
+            bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Plugins) && importSidebarPickPlugins;
             if (importSidebarPluginChecklistRoot != null) importSidebarPluginChecklistRoot.SetActive(show);
             if (importSidebarPluginBulkRow != null) importSidebarPluginBulkRow.SetActive(show);
             if (!show || importSidebarPluginRowPool.Count == 0) return;
@@ -700,7 +795,6 @@ namespace VPB
             if (sig != importSidebarPluginSelectionSig)
             {
                 importSidebarSelectedPluginKeys.Clear();
-                foreach (ImportPluginEntry e in importSidebarPluginEntries) importSidebarSelectedPluginKeys.Add(e.Key);
                 importSidebarPluginSelectionSig = sig;
             }
 
@@ -786,14 +880,14 @@ namespace VPB
             ui.BulkRow = new GameObject("CUABulkRow");
             ui.BulkRow.transform.SetParent(parent, false);
             LayoutElement cuaBulkLe = ui.BulkRow.AddComponent<LayoutElement>();
-            cuaBulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            cuaBulkLe.preferredHeight = ImportSidebarBaseRowHeight;
             cuaBulkLe.flexibleWidth = 1f;
             HorizontalLayoutGroup cuaBulkHlg = ui.BulkRow.AddComponent<HorizontalLayoutGroup>();
             cuaBulkHlg.childForceExpandWidth = true;
             cuaBulkHlg.childForceExpandHeight = true;
             cuaBulkHlg.childControlWidth = true;
             cuaBulkHlg.childControlHeight = true;
-            cuaBulkHlg.spacing = 2f;
+            cuaBulkHlg.spacing = ImportSidebarBaseRowSpacing;
             BuildImportSidebarBulkButton(ui.BulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_cuas", "Select All"),
                 "gallery.import.select_all_cuas_tip", "Import every CUA in the source",
@@ -804,7 +898,7 @@ namespace VPB
                 ImportSidebarClearAllBg, ImportSidebarClearAllCUAs);
             LayoutElement cuaBulkLeC = cuaBulkLe;
             innerPaneScaleActions.Add(s => {
-                if (cuaBulkLeC != null) cuaBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                if (cuaBulkLeC != null) cuaBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
             });
             ui.BulkRow.SetActive(false);
 
@@ -848,8 +942,7 @@ namespace VPB
             le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
 
-            Image bg = row.AddComponent<Image>();
-            bg.color = ColorInactiveRow;
+            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -857,6 +950,8 @@ namespace VPB
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
             ConfigureImportSidebarChecklistLabel(label);
+            Text cuaTipLabel = label;
+            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(cuaTipLabel));
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
@@ -887,8 +982,8 @@ namespace VPB
             string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
             if (sig != importSidebarCUASelectionSig)
             {
+                // Opting into "Pick CUAs" starts with nothing checked (see RefreshPluginChecklist rationale).
                 importSidebarSelectedCUAKeys.Clear();
-                foreach (ImportCUAEntry e in importSidebarCUAEntries) importSidebarSelectedCUAKeys.Add(e.Id);
                 importSidebarCUASelectionSig = sig;
             }
 
@@ -1077,14 +1172,14 @@ namespace VPB
             importSidebarSceneAtomUi.BulkRow = new GameObject("SceneAtomBulkRow");
             importSidebarSceneAtomUi.BulkRow.transform.SetParent(parent, false);
             LayoutElement bulkLe = importSidebarSceneAtomUi.BulkRow.AddComponent<LayoutElement>();
-            bulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            bulkLe.preferredHeight = ImportSidebarBaseRowHeight;
             bulkLe.flexibleWidth = 1f;
             HorizontalLayoutGroup bulkHlg = importSidebarSceneAtomUi.BulkRow.AddComponent<HorizontalLayoutGroup>();
             bulkHlg.childForceExpandWidth = true;
             bulkHlg.childForceExpandHeight = true;
             bulkHlg.childControlWidth = true;
             bulkHlg.childControlHeight = true;
-            bulkHlg.spacing = 2f;
+            bulkHlg.spacing = ImportSidebarBaseRowSpacing;
             BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_atoms", "Select All"),
                 "gallery.import.select_all_atoms_tip", "Select every importable atom in the source scene",
@@ -1095,7 +1190,7 @@ namespace VPB
                 ImportSidebarClearAllBg, ImportSidebarClearAllSceneAtoms);
             LayoutElement bulkLeC = bulkLe;
             innerPaneScaleActions.Add(s => {
-                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
             });
             importSidebarSceneAtomUi.BulkRow.SetActive(false);
 
@@ -1164,8 +1259,7 @@ namespace VPB
             le.preferredHeight = ImportSidebarBaseRowHeight;
             le.flexibleWidth = 1f;
 
-            Image bg = row.AddComponent<Image>();
-            bg.color = ColorInactiveRow;
+            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -1173,6 +1267,8 @@ namespace VPB
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
             ConfigureImportSidebarChecklistLabel(label);
+            Text sceneAtomTipLabel = label;
+            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(sceneAtomTipLabel));
 
             GameObject rowCaptured = row;
             innerPaneScaleActions.Add(s => ApplySceneAtomRowScale(rowCaptured, s));
@@ -1188,16 +1284,17 @@ namespace VPB
                 importSidebarSceneAtomSearchRow.SetActive(showPicker);
             SetCUAChecklistVisible(importSidebarSceneAtomUi, showPicker);
 
-            if (!typeSelected) return;
+            // Only build/enumerate when the picker is actually shown (matches the plugin/CUA pickers, which bail
+            // before parsing when their gate is off — avoids an unnecessary scene parse on the gate-off path).
+            if (!showPicker) return;
 
             importSidebarSceneAtomEntries = BuildSourceSceneAtomEntries();
 
             string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
             if (sig != importSidebarSceneAtomSelectionSig)
             {
+                // Opting into "Pick atoms" starts with nothing checked (see RefreshPluginChecklist rationale).
                 importSidebarSelectedSceneAtomKeys.Clear();
-                foreach (ImportSceneAtomEntry e in importSidebarSceneAtomEntries)
-                    importSidebarSelectedSceneAtomKeys.Add(e.Id);
                 importSidebarSceneAtomSelectionSig = sig;
                 importSidebarSceneAtomSearchFilter = string.Empty;
                 if (importSidebarSceneAtomSearchInput != null)
@@ -1583,10 +1680,7 @@ namespace VPB
             rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta = new Vector2(0f, ImportSidebarBaseApplyHeight);
 
-            Image bg = btn.AddComponent<Image>();
-            // Accent-blue: the Apply button is the single terminal action of the whole sidebar,
-            // so it gets the most-saturated treatment to draw the eye.
-            bg.color = new Color(0.16f, 0.36f, 0.56f, 1f);
+            Image bg = AddImportSidebarRoundedBg(btn, new Color(0.16f, 0.36f, 0.56f, 1f));
 
             Button b = btn.AddComponent<Button>();
             b.targetGraphic = bg;
@@ -1596,6 +1690,10 @@ namespace VPB
             importSidebarApplyButton = b;
             importSidebarApplyButtonLabel = AddSimpleLabelText(btn.transform, "Apply", ImportSidebarBaseFontSize, UI.PopupText);
             importSidebarApplyButtonLabel.alignment = TextAnchor.MiddleCenter;
+            AddDynamicTooltip(btn, () => VPBTranslation.T("gallery.import.apply_tip",
+                "Import the selected resource types from the source onto the target with the options above.")
+                + " (" + ImportSidebarSelectedTypesSummary() + " \u2192 "
+                + (importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "\u2014") + ")");
 
             Text labelCaptured = importSidebarApplyButtonLabel;
             innerPaneScaleActions.Add(s => ApplyScaledFont(labelCaptured, ImportSidebarBaseFontSize, s));
@@ -1961,7 +2059,7 @@ namespace VPB
             if (type == VpbResourceType.Plugins)
             {
                 ICollection<string> keys;
-                if (importSidebarPluginsMergeSingle)
+                if (importSidebarPickPlugins)
                 {
                     keys = importSidebarSelectedPluginKeys;
                 }
@@ -2104,6 +2202,13 @@ namespace VPB
                     || (importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance) && importSidebarImportLinkedCUAs));
             HashSet<string> selectedIds = pickerActive
                 ? new HashSet<string>(importSidebarSelectedCUAKeys, StringComparer.Ordinal) : null;
+            // Match the plugin/scene-atom pickers: with the picker on and nothing checked, skip CUA import
+            // (and say so) rather than silently importing zero.
+            if (pickerActive && selectedIds.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB][CUA] picker on but nothing checked; skipping CUA import.");
+                return;
+            }
             StartCoroutine(VPB.src.util.CUAAtomImporter.ImportSelectedCUAsAsAtoms(
                 scene, sourceAtomId, target, sourceHostUid, selectedIds,
                 importSidebarCUARelativeToPerson, replaceExisting: !importSidebarCuaMergeLoad));
