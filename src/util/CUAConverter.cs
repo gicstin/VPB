@@ -119,20 +119,19 @@ namespace VPB.src.util
             return path;
         }
 
-        public static bool TryComputeCuaBoneOffset(JSONClass sourcePerson, SimpleTransform cuaWorld, string bone, out SimpleTransform offset)
+        public static bool TryGetSourceBoneWorld(JSONClass sourcePerson, string bone, out SimpleTransform boneWorld)
         {
-            offset = new SimpleTransform();
-            if (sourcePerson == null || cuaWorld == null || string.IsNullOrEmpty(bone)) return false;
-            if (!TryGetBoneTransform(sourcePerson, bone, out SimpleTransform boneRelToRoot)) return false;
-            SimpleTransform personRoot = new SimpleTransform();
-            JSONClass control = sourcePerson.GetStorable("control");
-            if (control != null) personRoot = control.GetTransform();
-            SimpleTransform boneWorld = personRoot.TransformPoint(boneRelToRoot);
-            offset = boneWorld.InverseTransformPoint(cuaWorld);
-            return true;
+            return TryGetSourceBoneWorld(sourcePerson, bone, 1f, out boneWorld);
         }
 
-        private static bool TryGetBoneTransform(JSONClass person, string offsetBone, out SimpleTransform boneOffset)
+        public static bool TryGetSourceBoneWorld(JSONClass sourcePerson, string bone, float sourceScale, out SimpleTransform boneWorld)
+        {
+            boneWorld = new SimpleTransform();
+            if (sourcePerson == null || string.IsNullOrEmpty(bone)) return false;
+            return TryGetBoneTransform(sourcePerson, bone, sourceScale, out boneWorld);
+        }
+
+        private static bool TryGetBoneTransform(JSONClass person, string offsetBone, float sourceScale, out SimpleTransform boneOffset)
         {
             boneOffset = new SimpleTransform();
             var path = BonePathToRoot(offsetBone);
@@ -148,6 +147,8 @@ namespace VPB.src.util
                     continue;
                 }
                 var localTransform = storable.GetTransform();
+                if (sourceScale != 1f && !storable.HasKey("rootPosition"))
+                    localTransform.Position *= sourceScale;
                 boneOffset = boneOffset.TransformPoint(localTransform);
             }
             return true;

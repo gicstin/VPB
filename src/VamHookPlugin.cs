@@ -1005,6 +1005,20 @@ namespace VPB
 
             try { UpdateVerticalNavigationKeys(); } catch { }
 
+            // Ctrl+Shift+U: dump live CUA geometry (control / linked-bone / mesh bounds) for comparing a
+            // normal scene load against an import. Diagnostic only.
+            try
+            {
+                if (Input.GetKeyDown(KeyCode.U)
+                    && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                    && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                    && !IsTypingInTextInput())
+                {
+                    VPB.src.util.CUAAtomImporter.DumpLiveCUAGeometry("hotkey");
+                }
+            }
+            catch { }
+
             if (!m_Inited)
             {
                 Init();

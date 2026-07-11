@@ -147,6 +147,11 @@ namespace VPB
             }
         }
 
+        public static string WriteTempSceneForMergeLoad(JSONNode root, string prefix)
+        {
+            return WriteTempSceneJson(root, string.IsNullOrEmpty(prefix) ? "vpb_scene" : prefix);
+        }
+
         public static string CreateFilteredSceneJSON(string path, FileEntry entry, Func<JSONNode, bool> atomFilter, bool ensureUniqueIds = false)
         {
             try
