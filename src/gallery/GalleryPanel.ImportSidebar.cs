@@ -64,6 +64,8 @@ namespace VPB
         // CUAs: off-person (free-standing) props are placed relative to the target person root instead of raw
         // source world coords, so they land in the same spot relative to the person regardless of scene origin.
         private bool importSidebarCUARelativeToPerson = true;
+        // CUAs: merge on = append (keep prior VPB imports); off = replace them before import.
+        private bool importSidebarCuaMergeLoad;
         private bool importSidebarDeleteTargetCUAs;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
         // tracks scene+atom so switching source resets the checks to "all"), and is not persisted.
@@ -281,6 +283,7 @@ namespace VPB
             importSidebarImportLinkedCUAs         = PrefBool(p, "importLinkedCUAs", importSidebarImportLinkedCUAs);
             importSidebarPickCUAs                 = PrefBool(p, "pickCUAs", importSidebarPickCUAs);
             importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
+            importSidebarCuaMergeLoad             = PrefBool(p, "cuaMergeLoad", importSidebarCuaMergeLoad);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
             importSidebarPluginsMergeSingle       = PrefBool(p, "pluginsMergeSingle", importSidebarPluginsMergeSingle);
             importSidebarMigratePluginUIDs        = PrefBool(p, "migratePluginUIDs", importSidebarMigratePluginUIDs);
@@ -315,6 +318,7 @@ namespace VPB
             p["importLinkedCUAs"].AsBool = importSidebarImportLinkedCUAs;
             p["pickCUAs"].AsBool = importSidebarPickCUAs;
             p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
+            p["cuaMergeLoad"].AsBool = importSidebarCuaMergeLoad;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
             p["pluginsMergeSingle"].AsBool = importSidebarPluginsMergeSingle;
             p["migratePluginUIDs"].AsBool = importSidebarMigratePluginUIDs;

@@ -47,12 +47,19 @@ namespace VPB
         }
 
         // CUA picker: same pooled-row scaffold as the plugin picker, listing every CustomUnityAsset in the source.
-        private GameObject importSidebarCUAChecklistRoot;
-        private LayoutElement importSidebarCUAChecklistLe;
+        // Two instances — Appearance panel (optional add-on) and standalone CUA type panel — share selection state.
+        private sealed class ImportCUAChecklistHandles
+        {
+            public GameObject ChecklistRoot;
+            public LayoutElement ChecklistLe;
+            public GameObject BulkRow;
+            public readonly List<GameObject> RowPool = new List<GameObject>(ImportSidebarMaxCUARows);
+        }
+
         private const int ImportSidebarVisibleCUARows = 8;
-        private GameObject importSidebarCUABulkRow;
         private const int ImportSidebarMaxCUARows = 24;
-        private readonly List<GameObject> importSidebarCUARowPool = new List<GameObject>(ImportSidebarMaxCUARows);
+        private readonly ImportCUAChecklistHandles importSidebarAppearanceCUAUi = new ImportCUAChecklistHandles();
+        private readonly ImportCUAChecklistHandles importSidebarCuaOnlyCUAUi = new ImportCUAChecklistHandles();
         private List<ImportCUAEntry> importSidebarCUAEntries = new List<ImportCUAEntry>();
         // Checked CUA atom ids to import; per source-atom (sig tracks scene+atom so switching source reseeds to "all").
         private readonly HashSet<string> importSidebarSelectedCUAKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -83,6 +90,7 @@ namespace VPB
             VpbResourceType.BreastPhysics,
             VpbResourceType.Glute,
             VpbResourceType.Plugins,
+            VpbResourceType.CUA,
             VpbResourceType.General,
         };
 
@@ -144,7 +152,7 @@ namespace VPB
             // The panel is a constant 220px wide (root width is not scaled), so the 2 cells must fit a fixed content
             // width (220 - ~10px scrollbar - spacing) / 2; scaling cell WIDTH by s overflows. Only the height scales.
             const float typeRadioCellW = (ImportSidebarBaseWidth - 10f - 2f) / 2f;  // ~104
-            const int typeRadioRows = 5;  // 10 types / 2 columns
+            const int typeRadioRows = 6;  // 11 types / 2 columns
             LayoutElement le = grid.AddComponent<LayoutElement>();
             le.preferredHeight = typeRadioRows * 26f + (typeRadioRows - 1) * 2f;
             le.flexibleWidth = 1f;
@@ -239,6 +247,7 @@ namespace VPB
                 case VpbResourceType.BreastPhysics: return "Breast";
                 case VpbResourceType.Glute:         return "Glute";
                 case VpbResourceType.Plugins:       return "Plugins";
+                case VpbResourceType.CUA:           return "CUA";
                 case VpbResourceType.General:       return "General";
                 default: return t.ToString();
             }
@@ -325,7 +334,9 @@ namespace VPB
                     importSidebarCUARelativeRow = AddOptionToggle(panel.transform, "Place off-person relative to person",
                         () => importSidebarCUARelativeToPerson,
                         v => importSidebarCUARelativeToPerson = v, null);
-                    BuildImportSidebarCUAChecklist(panel.transform);
+                    AddOptionToggle(panel.transform, "Merge load",
+                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null);
+                    BuildImportSidebarCUAChecklist(panel.transform, importSidebarAppearanceCUAUi);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
                         new Color(0.91f, 0.53f, 0.53f, 1f));
@@ -376,6 +387,21 @@ namespace VPB
                         v => importSidebarClearExistingPlugins = v,
                         null);
                     BuildImportSidebarPluginChecklist(panel.transform);
+                    break;
+
+                case VpbResourceType.CUA:
+                    AddOptionToggle(panel.transform, "Merge load",
+                        () => importSidebarCuaMergeLoad, v => importSidebarCuaMergeLoad = v, null);
+                    AddOptionToggle(panel.transform, "Pick CUAs to import",
+                        () => importSidebarPickCUAs,
+                        v => { importSidebarPickCUAs = v; RefreshCUAChecklist(); }, null);
+                    AddOptionToggle(panel.transform, "Place off-person relative to person",
+                        () => importSidebarCUARelativeToPerson,
+                        v => importSidebarCUARelativeToPerson = v, null);
+                    BuildImportSidebarCUAChecklist(panel.transform, importSidebarCuaOnlyCUAUi);
+                    AddOptionToggle(panel.transform, "Delete current atom CUAs",
+                        () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
+                        new Color(0.91f, 0.53f, 0.53f, 1f));
                     break;
 
                 case VpbResourceType.General:
@@ -455,6 +481,7 @@ namespace VPB
                 case VpbResourceType.BreastPhysics: return "Breast Physics";
                 case VpbResourceType.Glute:         return "Glute";
                 case VpbResourceType.Plugins:       return "Plugins";
+                case VpbResourceType.CUA:           return "Custom Unity Assets";
                 case VpbResourceType.General:       return "General";
                 default: return t.ToString();
             }
@@ -712,24 +739,24 @@ namespace VPB
 
         // ---- CUA picker (mirrors the plugin picker; lists every CustomUnityAsset in the source scene) ----
 
-        private void BuildImportSidebarCUAChecklist(Transform parent)
+        private void BuildImportSidebarCUAChecklist(Transform parent, ImportCUAChecklistHandles ui)
         {
-            importSidebarCUABulkRow = new GameObject("CUABulkRow");
-            importSidebarCUABulkRow.transform.SetParent(parent, false);
-            LayoutElement cuaBulkLe = importSidebarCUABulkRow.AddComponent<LayoutElement>();
+            ui.BulkRow = new GameObject("CUABulkRow");
+            ui.BulkRow.transform.SetParent(parent, false);
+            LayoutElement cuaBulkLe = ui.BulkRow.AddComponent<LayoutElement>();
             cuaBulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
             cuaBulkLe.flexibleWidth = 1f;
-            HorizontalLayoutGroup cuaBulkHlg = importSidebarCUABulkRow.AddComponent<HorizontalLayoutGroup>();
+            HorizontalLayoutGroup cuaBulkHlg = ui.BulkRow.AddComponent<HorizontalLayoutGroup>();
             cuaBulkHlg.childForceExpandWidth = true;
             cuaBulkHlg.childForceExpandHeight = true;
             cuaBulkHlg.childControlWidth = true;
             cuaBulkHlg.childControlHeight = true;
             cuaBulkHlg.spacing = 2f;
-            BuildImportSidebarBulkButton(importSidebarCUABulkRow.transform,
+            BuildImportSidebarBulkButton(ui.BulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_cuas", "Select All"),
                 "gallery.import.select_all_cuas_tip", "Import every CUA in the source",
                 ImportSidebarSelectAllBg, ImportSidebarSelectAllCUAs);
-            BuildImportSidebarBulkButton(importSidebarCUABulkRow.transform,
+            BuildImportSidebarBulkButton(ui.BulkRow.transform,
                 VPBTranslation.T("gallery.import.clear_all_cuas", "Clear All"),
                 "gallery.import.clear_all_cuas_tip", "Exclude every CUA from import",
                 ImportSidebarClearAllBg, ImportSidebarClearAllCUAs);
@@ -737,17 +764,17 @@ namespace VPB
             innerPaneScaleActions.Add(s => {
                 if (cuaBulkLeC != null) cuaBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
             });
-            importSidebarCUABulkRow.SetActive(false);
+            ui.BulkRow.SetActive(false);
 
-            importSidebarCUAChecklistRoot = UI.CreateVScrollableContent(
+            ui.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
-            LayoutElement scrollLe = importSidebarCUAChecklistRoot.AddComponent<LayoutElement>();
+            LayoutElement scrollLe = ui.ChecklistRoot.AddComponent<LayoutElement>();
             scrollLe.flexibleWidth = 1f;
-            importSidebarCUAChecklistLe = scrollLe;
-            innerPaneScaleActions.Add(s => UpdateCUAChecklistHeight());
+            ui.ChecklistLe = scrollLe;
+            innerPaneScaleActions.Add(s => UpdateCUAChecklistHeights());
 
-            Transform content = importSidebarCUAChecklistRoot.GetComponent<ScrollRect>().content.transform;
+            Transform content = ui.ChecklistRoot.GetComponent<ScrollRect>().content.transform;
 
             Text caption = AddSimpleLabelText(content,
                 "CUAs in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
@@ -764,10 +791,10 @@ namespace VPB
             for (int i = 0; i < ImportSidebarMaxCUARows; i++)
             {
                 GameObject row = CreateImportSidebarCUARow(content, i);
-                importSidebarCUARowPool.Add(row);
+                ui.RowPool.Add(row);
                 row.SetActive(false);
             }
-            importSidebarCUAChecklistRoot.SetActive(false);
+            ui.ChecklistRoot.SetActive(false);
         }
 
         private GameObject CreateImportSidebarCUARow(Transform parent, int index)
@@ -797,15 +824,20 @@ namespace VPB
             return row;
         }
 
-        // Rebuilds the CUA checklist from the source scene. Visible only for Appearance + "Import atom CUAs" + pick gate.
-        // Switching source atom (or scene) reseeds the checks to "all"; within the same source, checks are preserved.
+        // Rebuilds the CUA checklist from the source scene. Appearance shows picker only with import+picked gates;
+        // standalone CUA type shows picker when "Pick CUAs" is on. Both lists share the same checked ids.
         private void RefreshCUAChecklist()
         {
-            bool show = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
+            bool showAppearance = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
                 && importSidebarImportLinkedCUAs && importSidebarPickCUAs;
-            if (importSidebarCUAChecklistRoot != null) importSidebarCUAChecklistRoot.SetActive(show);
-            if (importSidebarCUABulkRow != null) importSidebarCUABulkRow.SetActive(show);
-            if (!show || importSidebarCUARowPool.Count == 0) return;
+            bool showCuaOnly = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA)
+                && importSidebarPickCUAs;
+            bool needEntries = showAppearance || showCuaOnly;
+
+            SetCUAChecklistVisible(importSidebarAppearanceCUAUi, showAppearance);
+            SetCUAChecklistVisible(importSidebarCuaOnlyCUAUi, showCuaOnly);
+
+            if (!needEntries) return;
 
             importSidebarCUAEntries = BuildSourceCUAEntries();
 
@@ -817,23 +849,41 @@ namespace VPB
                 importSidebarCUASelectionSig = sig;
             }
 
-            UpdateCUAChecklistHeight();
+            UpdateCUAChecklistHeights();
             RenderCUAChecklistRows();
         }
 
-        private void UpdateCUAChecklistHeight()
+        private static void SetCUAChecklistVisible(ImportCUAChecklistHandles ui, bool show)
         {
-            if (importSidebarCUAChecklistLe == null) return;
+            if (ui.ChecklistRoot != null) ui.ChecklistRoot.SetActive(show);
+            if (ui.BulkRow != null) ui.BulkRow.SetActive(show);
+        }
+
+        private void UpdateCUAChecklistHeights()
+        {
+            UpdateCUAChecklistHeight(importSidebarAppearanceCUAUi);
+            UpdateCUAChecklistHeight(importSidebarCuaOnlyCUAUi);
+        }
+
+        private void UpdateCUAChecklistHeight(ImportCUAChecklistHandles ui)
+        {
+            if (ui.ChecklistLe == null) return;
             int visibleRows = Mathf.Min(importSidebarCUAEntries.Count, ImportSidebarVisibleCUARows);
             float s = ChromeScale;
-            importSidebarCUAChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
+            ui.ChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
         }
 
         private void RenderCUAChecklistRows()
         {
-            for (int i = 0; i < importSidebarCUARowPool.Count; i++)
+            RenderCUAChecklistRows(importSidebarAppearanceCUAUi);
+            RenderCUAChecklistRows(importSidebarCuaOnlyCUAUi);
+        }
+
+        private void RenderCUAChecklistRows(ImportCUAChecklistHandles ui)
+        {
+            for (int i = 0; i < ui.RowPool.Count; i++)
             {
-                GameObject row = importSidebarCUARowPool[i];
+                GameObject row = ui.RowPool[i];
                 if (i < importSidebarCUAEntries.Count) { ConfigureCUARow(row, importSidebarCUAEntries[i]); row.SetActive(true); }
                 else row.SetActive(false);
             }
@@ -1267,6 +1317,16 @@ namespace VPB
                     importSidebarSourceTypeCounts[VpbResourceType.Morphs] = morphs;
                     importSidebarSourceTypeCounts[VpbResourceType.Plugins] = plugins;
                 }
+
+                JSONClass scene = EnsureLoadedSceneJSON();
+                if (scene != null)
+                {
+                    int cuaCount = 0;
+                    foreach (VPB.src.util.CUAAtomImporter.CuaEntry _ in
+                             VPB.src.util.CUAAtomImporter.EnumerateSceneCUAs(scene, importSidebarSourceAtomId))
+                        cuaCount++;
+                    importSidebarSourceTypeCounts[VpbResourceType.CUA] = cuaCount;
+                }
             }
 
             // Prune now-unavailable types from the selection.
@@ -1372,19 +1432,35 @@ namespace VPB
             bool hasPose = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Pose);
             foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
             {
-                if (t == VpbResourceType.Pose) continue;
+                if (t == VpbResourceType.Pose || t == VpbResourceType.CUA) continue;
                 ApplyOneTypeImport(t, sourceHostUid);
             }
 
-            // CUA import is Appearance-specific; run it when Appearance is among the selected types. It must run
-            // AFTER the pose so it anchors to the final posed skeleton.
-            bool importCUAs = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
+            // CUA import runs from Appearance (optional add-on) or the standalone CUA type. Must run AFTER pose
+            // so anchors land on the final posed skeleton.
+            bool importCUAsFromAppearance = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
                 && importSidebarImportLinkedCUAs;
+            bool importCUAsStandalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA);
+            bool importCUAs = importCUAsFromAppearance || importCUAsStandalone;
 
             if (hasPose)
                 StartCoroutine(ApplyDeferredPoseThenCUAImport(sourceHostUid, importCUAs));
             else if (importCUAs)
-                StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
+                RunCUAImportWithOptionalDelete(importCUAsStandalone);
+        }
+
+        // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
+        // its own apply). Then spawns the chosen source CUAs as native atoms.
+        private void RunCUAImportWithOptionalDelete(bool standaloneCuaType)
+        {
+            bool appearanceWillDelete = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
+                && importSidebarDeleteTargetCUAs;
+            if (standaloneCuaType && importSidebarDeleteTargetCUAs && !appearanceWillDelete)
+                DeleteTargetLinkedCUAs(importSidebarTargetAtom);
+
+            string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
+                ? sceneVar.Package.Uid : null;
+            StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
         }
 
         // Applies the pose once the target skeleton has settled from the appearance load (scale/morphs settle over
@@ -1396,7 +1472,10 @@ namespace VPB
             ApplyOneTypeImport(VpbResourceType.Pose, sourceHostUid);
             yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
             if (importCUAs)
-                StartImportLinkedCUAs(importSidebarSourceScene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid);
+            {
+                bool standalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA);
+                RunCUAImportWithOptionalDelete(standalone);
+            }
         }
 
         private void ApplyOneTypeImport(VpbResourceType type, string sourceHostUid)
@@ -1573,11 +1652,14 @@ namespace VPB
             }
             if (scene == null) return;
             // Picker on -> import exactly the checked CUAs; off -> all person-linked CUAs (legacy behavior).
-            HashSet<string> selectedIds = importSidebarPickCUAs
+            bool pickerActive = importSidebarPickCUAs
+                && (importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA)
+                    || (importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance) && importSidebarImportLinkedCUAs));
+            HashSet<string> selectedIds = pickerActive
                 ? new HashSet<string>(importSidebarSelectedCUAKeys, StringComparer.Ordinal) : null;
             StartCoroutine(VPB.src.util.CUAAtomImporter.ImportSelectedCUAsAsAtoms(
                 scene, sourceAtomId, target, sourceHostUid, selectedIds,
-                importSidebarCUARelativeToPerson));
+                importSidebarCUARelativeToPerson, replaceExisting: !importSidebarCuaMergeLoad));
         }
 
         // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target

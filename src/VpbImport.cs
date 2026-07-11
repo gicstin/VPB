@@ -22,7 +22,8 @@ namespace VPB
         Skin,
         BreastPhysics,
         Glute,
-        Plugins
+        Plugins,
+        CUA
     }
 
     internal enum ClothingApplyMode

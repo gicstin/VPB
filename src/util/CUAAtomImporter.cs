@@ -25,7 +25,7 @@ namespace VPB.src.util
         public static IEnumerator ImportLinkedCUAsAsAtoms(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid)
         {
-            yield return ImportSelectedCUAsAsAtoms(sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid, null, false);
+            yield return ImportSelectedCUAsAsAtoms(sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid, null, false, true);
         }
 
         // Import a chosen set of CUAs. selectedIds == null keeps the legacy behavior (all person-linked CUAs);
@@ -33,9 +33,34 @@ namespace VPB.src.util
         // ParentLinked. Free-standing CUAs (no link reaching the person): by default keep their raw source world
         // position; when offPersonRelativeToPerson is set they are re-placed relative to the target person root so
         // props (e.g. a sword) land in the same spot relative to the person regardless of scene origin.
+        // replaceExisting=false (merge) appends without removing prior VPB imports; true replaces them first.
         public static IEnumerator ImportSelectedCUAsAsAtoms(
             JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid,
-            HashSet<string> selectedIds, bool offPersonRelativeToPerson)
+            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting = true)
+        {
+            if (sourceScene == null || targetPerson == null || string.IsNullOrEmpty(sourcePersonAtomId))
+                yield break;
+
+            while (s_importRunning)
+                yield return null;
+            s_importRunning = true;
+            try
+            {
+                yield return ImportSelectedCUAsAsAtomsCore(
+                    sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
+                    selectedIds, offPersonRelativeToPerson, replaceExisting);
+            }
+            finally
+            {
+                s_importRunning = false;
+            }
+        }
+
+        private static bool s_importRunning;
+
+        private static IEnumerator ImportSelectedCUAsAsAtomsCore(
+            JSONClass sourceScene, string sourcePersonAtomId, Atom targetPerson, string sourceHostUid,
+            HashSet<string> selectedIds, bool offPersonRelativeToPerson, bool replaceExisting)
         {
             if (sourceScene == null || targetPerson == null || string.IsNullOrEmpty(sourcePersonAtomId))
                 yield break;
@@ -59,7 +84,11 @@ namespace VPB.src.util
                 // A new appearance with no CUAs must still drop CUAs we spawned in a prior import on this target,
                 // otherwise stale horns/tails/etc. persist across appearance swaps.
                 LogUtil.Log("[VPB][CUA] no CUA atoms in source scene.");
-                RemovePriorImports(new List<CuaPlan>(0), targetPerson);
+                if (replaceExisting)
+                {
+                    List<string> removed = RemovePriorImports(new List<string>(0), targetPerson);
+                    if (removed.Count > 0) yield return WaitForAtomsRemoved(removed);
+                }
                 yield break;
             }
 
@@ -89,18 +118,27 @@ namespace VPB.src.util
             {
                 // Nothing selected/linked in this source, but still clear any CUAs we imported earlier onto this target.
                 LogUtil.Log($"[VPB][CUA] no CUAs to import for '{sourcePersonAtomId}'.");
-                RemovePriorImports(new List<CuaPlan>(0), targetPerson);
+                if (replaceExisting)
+                {
+                    List<string> removed = RemovePriorImports(new List<string>(0), targetPerson);
+                    if (removed.Count > 0) yield return WaitForAtomsRemoved(removed);
+                }
                 yield break;
             }
 
-            LogUtil.Log($"[VPB][CUA] atom import: {importIds.Count} CUA(s) ({anchorPlanById.Count} anchored) -> target '{targetPerson.uid}'.");
+            LogUtil.Log($"[VPB][CUA] atom import: {importIds.Count} CUA(s) ({anchorPlanById.Count} anchored) -> target '{targetPerson.uid}'"
+                + (replaceExisting ? " (replace)" : " (merge)"));
 
             // Settle the target skeleton so bone-based placement isn't sampled mid-morph (first import too low).
             yield return WaitForPersonSettled(targetPerson);
 
-            // Re-import replaces rather than stacks: drop any prior imports on this target (session registry covers
-            // free-standing CUAs; the anchored plans also enable the cross-reload link/base-uid dedup).
-            RemovePriorImports(new List<CuaPlan>(anchorPlanById.Values), targetPerson);
+            // Replace mode: drop prior VPB imports on this target and wait until VaM actually destroys them so the
+            // same source uid can be re-spawned (RemoveAtom is not always synchronous).
+            if (replaceExisting)
+            {
+                List<string> removed = RemovePriorImports(importIds, targetPerson);
+                if (removed.Count > 0) yield return WaitForAtomsRemoved(removed);
+            }
 
             var idMap = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string id in importIds)
@@ -368,12 +406,15 @@ namespace VPB.src.util
             LogUtil.Log($"[VPB][CUA] spawned {created.Count} CUA atom(s) directly (no scene-load overlay).");
         }
 
-        private static void RemovePriorImports(List<CuaPlan> plans, Atom target)
+        private static List<string> RemovePriorImports(IEnumerable<string> sourceIds, Atom target)
         {
+            var removedUids = new List<string>();
             SuperController sc = SuperController.singleton;
-            if (sc == null || target == null) return;
-            var sourceIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (CuaPlan p in plans) sourceIds.Add(p.SourceId);
+            if (sc == null || target == null) return removedUids;
+            var sourceIdSet = new HashSet<string>(StringComparer.Ordinal);
+            if (sourceIds != null)
+                foreach (string id in sourceIds)
+                    if (!string.IsNullOrEmpty(id)) sourceIdSet.Add(id);
             HashSet<string> priorIds;
             s_importedByTarget.TryGetValue(target.uid, out priorIds);
 
@@ -385,16 +426,38 @@ namespace VPB.src.util
                 if (priorIds != null && priorIds.Contains(uid)) { toRemove.Add(a); continue; }
                 int hash = uid.IndexOf('#');
                 string baseUid = hash > 0 ? uid.Substring(0, hash) : uid;
-                if (!sourceIds.Contains(uid) && !sourceIds.Contains(baseUid)) continue;
+                if (!sourceIdSet.Contains(uid) && !sourceIdSet.Contains(baseUid)) continue;
                 if (WasImportedByUs(a, target)) toRemove.Add(a);
             }
             if (priorIds != null) foreach (Atom a in toRemove) priorIds.Remove(a.uid);
             foreach (Atom a in toRemove)
             {
+                removedUids.Add(a.uid);
                 try { sc.RemoveAtom(a); }
                 catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] remove prior import " + a.uid + " failed: " + ex.Message); }
             }
             if (toRemove.Count > 0) LogUtil.Log($"[VPB][CUA] replaced {toRemove.Count} prior import(s) on '{target.uid}'.");
+            return removedUids;
+        }
+
+        // VaM may keep removed atom uids reserved for a few frames; block spawn until they are gone.
+        private static IEnumerator WaitForAtomsRemoved(List<string> uids)
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null || uids == null || uids.Count == 0) yield break;
+            var pending = new HashSet<string>(uids, StringComparer.Ordinal);
+            for (int frame = 0; frame < 600 && pending.Count > 0; frame++)
+            {
+                if (sc.isLoading) { yield return null; continue; }
+                var gone = new List<string>();
+                foreach (string uid in pending)
+                    if (sc.GetAtomByUid(uid) == null) gone.Add(uid);
+                for (int i = 0; i < gone.Count; i++) pending.Remove(gone[i]);
+                if (pending.Count == 0) break;
+                yield return null;
+            }
+            if (pending.Count > 0)
+                LogUtil.LogWarning("[VPB][CUA] timed out waiting for " + pending.Count + " atom(s) to be removed.");
         }
 
         private static bool WasImportedByUs(Atom cua, Atom target)
