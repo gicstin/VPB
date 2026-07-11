@@ -300,6 +300,7 @@ namespace VPB
             // Source change reselects which plugins exist; target change re-evaluates the on-target sort.
             RefreshPluginChecklist();
             RefreshCUAChecklist();
+            RefreshSceneAtomChecklist();
             RefreshSourceTypeAvailability();
         }
 
@@ -360,6 +361,7 @@ namespace VPB
                 RefreshApplyButtonEnabled();
                 RefreshPluginChecklist();
                 RefreshCUAChecklist();
+                RefreshSceneAtomChecklist();
                 RefreshSourceTypeAvailability();
                 return;
             }
@@ -411,6 +413,7 @@ namespace VPB
             RefreshApplyButtonEnabled();
             RefreshPluginChecklist();
             RefreshCUAChecklist();
+            RefreshSceneAtomChecklist();
             RefreshSourceTypeAvailability();
         }
 

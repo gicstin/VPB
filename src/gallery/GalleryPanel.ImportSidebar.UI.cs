@@ -333,6 +333,15 @@ namespace VPB
             return t;
         }
 
+        // Checklist rows use a fixed height; disable wrap so long atom ids stay on one visible line.
+        private static void ConfigureImportSidebarChecklistLabel(Text t)
+        {
+            if (t == null) return;
+            t.supportRichText = false;
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
         // [diag] Dump resolved rects one frame after activation so an empty-body symptom can be
         // attributed to zero-size / off-screen containers vs missing children, without guessing.
         private System.Collections.IEnumerator DiagDumpImportSidebarRects()

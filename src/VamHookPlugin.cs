@@ -802,6 +802,31 @@ namespace VPB
             return ShouldSuppressPluginHotkey(ku);
         }
 
+        private static void DumpVisibleGalleryAtomSelection(string tag)
+        {
+            try
+            {
+                Gallery g = Gallery.singleton;
+                if (g == null || g.Panels == null)
+                {
+                    LogUtil.Log("[VPB][ATOMS][dump:" + tag + "] gallery not open.");
+                    return;
+                }
+                for (int i = 0; i < g.Panels.Count; i++)
+                {
+                    GalleryPanel p = g.Panels[i];
+                    if (p == null || !p.IsVisible) continue;
+                    p.DumpSelectedGalleryItemAtoms(tag);
+                    return;
+                }
+                LogUtil.Log("[VPB][ATOMS][dump:" + tag + "] gallery not visible.");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB][ATOMS][dump:" + tag + "] failed: " + ex.Message);
+            }
+        }
+
         private static bool IsTypingInTextInput()
         {
             try
@@ -1029,6 +1054,19 @@ namespace VPB
                     && !IsTypingInTextInput())
                 {
                     VPB.src.util.PoseImportDiagnostics.Dump("hotkey");
+                }
+            }
+            catch { }
+
+            // Ctrl+Shift+L: dump atoms listed in the gallery's selected scene/preset, not live scene state.
+            try
+            {
+                if (Input.GetKeyDown(KeyCode.L)
+                    && (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                    && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                    && !IsTypingInTextInput())
+                {
+                    DumpVisibleGalleryAtomSelection("hotkey");
                 }
             }
             catch { }

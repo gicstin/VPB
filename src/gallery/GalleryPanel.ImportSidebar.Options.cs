@@ -5,6 +5,7 @@ using SimpleJSON;
 using UnityEngine;
 using UnityEngine.UI;
 using MVR.FileManagement;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -71,6 +72,28 @@ namespace VPB
             public bool LinksToPerson;   // reaches the selected source person (tagged "on person")
         }
 
+        // Scene atom picker: every non-Person atom in the source scene (Lights, Empty, CUA, SubScene, …).
+        private const int ImportSidebarVisibleSceneAtomRows = 8;
+        private const int ImportSidebarMaxSceneAtomRows = 256;
+        private const int ImportSidebarSceneAtomRowPoolInitial = 32;
+        private readonly ImportCUAChecklistHandles importSidebarSceneAtomUi = new ImportCUAChecklistHandles();
+        private List<ImportSceneAtomEntry> importSidebarSceneAtomEntries = new List<ImportSceneAtomEntry>();
+        private List<ImportSceneAtomEntry> importSidebarSceneAtomFilteredEntries = new List<ImportSceneAtomEntry>();
+        private readonly HashSet<string> importSidebarSelectedSceneAtomKeys = new HashSet<string>(StringComparer.Ordinal);
+        private string importSidebarSceneAtomSelectionSig;
+        private GameObject importSidebarSceneAtomSearchRow;
+        private InputField importSidebarSceneAtomSearchInput;
+        private GameObject importSidebarSceneAtomEmptyHintRow;
+        private Text importSidebarSceneAtomEmptyHint;
+
+        private sealed class ImportSceneAtomEntry
+        {
+            public string Id;
+            public string Type;
+            public bool LinksToPerson;
+            public bool UidCollision;
+        }
+
         // Appearance conditional rows (visibility driven by the suppress-clothing toggle).
         private GameObject importSidebarOnlySuppressRealRow;
         private GameObject importSidebarImportCUARow;
@@ -91,6 +114,7 @@ namespace VPB
             VpbResourceType.Glute,
             VpbResourceType.Plugins,
             VpbResourceType.CUA,
+            VpbResourceType.Atoms,
             VpbResourceType.General,
         };
 
@@ -152,7 +176,7 @@ namespace VPB
             // The panel is a constant 220px wide (root width is not scaled), so the 2 cells must fit a fixed content
             // width (220 - ~10px scrollbar - spacing) / 2; scaling cell WIDTH by s overflows. Only the height scales.
             const float typeRadioCellW = (ImportSidebarBaseWidth - 10f - 2f) / 2f;  // ~104
-            const int typeRadioRows = 6;  // 11 types / 2 columns
+            const int typeRadioRows = 6;  // 12 types / 2 columns
             LayoutElement le = grid.AddComponent<LayoutElement>();
             le.preferredHeight = typeRadioRows * 26f + (typeRadioRows - 1) * 2f;
             le.flexibleWidth = 1f;
@@ -248,6 +272,7 @@ namespace VPB
                 case VpbResourceType.Glute:         return "Glute";
                 case VpbResourceType.Plugins:       return "Plugins";
                 case VpbResourceType.CUA:           return "CUA";
+                case VpbResourceType.Atoms:         return "Atoms";
                 case VpbResourceType.General:       return "General";
                 default: return t.ToString();
             }
@@ -404,6 +429,21 @@ namespace VPB
                         new Color(0.91f, 0.53f, 0.53f, 1f));
                     break;
 
+                case VpbResourceType.Atoms:
+                    AddOptionToggle(panel.transform, "Skip existing atoms",
+                        () => importSidebarSceneAtomSkipDuplicates,
+                        v => importSidebarSceneAtomSkipDuplicates = v, null);
+                    AddOptionToggle(panel.transform, "Place relative to target person",
+                        () => importSidebarSceneAtomRelativeToPerson,
+                        v => importSidebarSceneAtomRelativeToPerson = v, null);
+                    AddOptionToggle(panel.transform, "Pick atoms to import",
+                        () => importSidebarPickSceneAtoms,
+                        v => { importSidebarPickSceneAtoms = v; RefreshSceneAtomChecklist(); RebuildImportSidebarContent(); },
+                        null);
+                    BuildImportSidebarSceneAtomSearchRow(panel.transform);
+                    BuildImportSidebarSceneAtomChecklist(panel.transform);
+                    break;
+
                 case VpbResourceType.General:
                     AddOptionToggle(panel.transform, "Include Physical",
                         () => importSidebarSubToggles.IncludePhysical,
@@ -482,6 +522,7 @@ namespace VPB
                 case VpbResourceType.Glute:         return "Glute";
                 case VpbResourceType.Plugins:       return "Plugins";
                 case VpbResourceType.CUA:           return "Custom Unity Assets";
+                case VpbResourceType.Atoms:         return "Scene Atoms";
                 case VpbResourceType.General:       return "General";
                 default: return t.ToString();
             }
@@ -633,6 +674,7 @@ namespace VPB
             UI.NeutralizeSelectableColorTint(btn);
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
+            ConfigureImportSidebarChecklistLabel(label);
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
@@ -814,6 +856,7 @@ namespace VPB
             UI.NeutralizeSelectableColorTint(btn);
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
+            ConfigureImportSidebarChecklistLabel(label);
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
@@ -930,6 +973,380 @@ namespace VPB
             importSidebarSelectedCUAKeys.Clear();
             RenderCUAChecklistRows();
             RefreshApplyButtonEnabled();
+        }
+
+        // ---- Scene atom picker (every non-Person atom in the source scene) ----
+
+        private void BuildImportSidebarSceneAtomSearchRow(Transform parent)
+        {
+            importSidebarSceneAtomSearchRow = new GameObject("SceneAtomSearchRow");
+            importSidebarSceneAtomSearchRow.transform.SetParent(parent, false);
+            LayoutElement searchLe = importSidebarSceneAtomSearchRow.AddComponent<LayoutElement>();
+            searchLe.preferredHeight = ImportSidebarBaseRowHeight * 1.05f;
+            searchLe.flexibleWidth = 1f;
+
+            importSidebarSceneAtomSearchInput = CreateSearchInput(
+                importSidebarSceneAtomSearchRow, ImportSidebarBaseWidth,
+                OnImportSidebarSceneAtomSearchChanged,
+                () => SetImportSidebarSceneAtomSearch(string.Empty));
+            RectTransform searchRt = importSidebarSceneAtomSearchInput.GetComponent<RectTransform>();
+            searchRt.anchorMin = Vector2.zero;
+            searchRt.anchorMax = Vector2.one;
+            searchRt.pivot = new Vector2(0.5f, 0.5f);
+            searchRt.offsetMin = Vector2.zero;
+            searchRt.offsetMax = Vector2.zero;
+            LayoutElement inputLe = importSidebarSceneAtomSearchInput.gameObject.GetComponent<LayoutElement>();
+            if (inputLe == null) inputLe = importSidebarSceneAtomSearchInput.gameObject.AddComponent<LayoutElement>();
+            inputLe.flexibleWidth = 1f;
+            inputLe.preferredHeight = ImportSidebarBaseRowHeight;
+
+            LayoutElement searchLeC = searchLe;
+            innerPaneScaleActions.Add(s => {
+                if (searchLeC != null) searchLeC.preferredHeight = ImportSidebarBaseRowHeight * 1.05f * s;
+                if (importSidebarSceneAtomSearchInput != null)
+                    RescaleSearchInput(importSidebarSceneAtomSearchInput, s);
+            });
+            importSidebarSceneAtomSearchRow.SetActive(false);
+        }
+
+        private void OnImportSidebarSceneAtomSearchChanged(string value)
+        {
+            importSidebarSceneAtomSearchFilter = value ?? string.Empty;
+            RefreshSceneAtomChecklistFilteredOnly();
+        }
+
+        private void SetImportSidebarSceneAtomSearch(string value)
+        {
+            importSidebarSceneAtomSearchFilter = value ?? string.Empty;
+            if (importSidebarSceneAtomSearchInput != null)
+                importSidebarSceneAtomSearchInput.text = importSidebarSceneAtomSearchFilter;
+            RefreshSceneAtomChecklistFilteredOnly();
+        }
+
+        private void RefreshSceneAtomChecklistFilteredOnly()
+        {
+            if (!importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms)) return;
+            ApplySceneAtomSearchFilter();
+            UpdateSceneAtomChecklistHeight();
+            RenderSceneAtomChecklistRows();
+            RefreshSceneAtomEmptyHint();
+            RefreshApplyButtonEnabled();
+            RebuildImportSidebarContent();
+        }
+
+        private void ApplySceneAtomSearchFilter()
+        {
+            importSidebarSceneAtomFilteredEntries.Clear();
+            string needle = (importSidebarSceneAtomSearchFilter ?? string.Empty).Trim();
+            bool hasNeedle = needle.Length > 0;
+
+            foreach (ImportSceneAtomEntry e in importSidebarSceneAtomEntries)
+            {
+                if (hasNeedle)
+                {
+                    if (e.Id.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0
+                        && e.Type.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                }
+                importSidebarSceneAtomFilteredEntries.Add(e);
+            }
+        }
+
+        private void RefreshSceneAtomEmptyHint()
+        {
+            if (importSidebarSceneAtomEmptyHintRow == null) return;
+            bool showPicker = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms)
+                && importSidebarPickSceneAtoms;
+            if (!showPicker)
+            {
+                importSidebarSceneAtomEmptyHintRow.SetActive(false);
+                return;
+            }
+            bool empty = importSidebarSceneAtomFilteredEntries.Count == 0;
+            importSidebarSceneAtomEmptyHintRow.SetActive(empty);
+            if (empty && importSidebarSceneAtomEmptyHint != null)
+            {
+                importSidebarSceneAtomEmptyHint.text = importSidebarSceneAtomEntries.Count == 0
+                    ? "No importable atoms in this scene."
+                    : "No atoms match the current search.";
+            }
+        }
+
+        private void BuildImportSidebarSceneAtomChecklist(Transform parent)
+        {
+            importSidebarSceneAtomUi.BulkRow = new GameObject("SceneAtomBulkRow");
+            importSidebarSceneAtomUi.BulkRow.transform.SetParent(parent, false);
+            LayoutElement bulkLe = importSidebarSceneAtomUi.BulkRow.AddComponent<LayoutElement>();
+            bulkLe.preferredHeight = ImportSidebarBaseRowHeight * 0.8f;
+            bulkLe.flexibleWidth = 1f;
+            HorizontalLayoutGroup bulkHlg = importSidebarSceneAtomUi.BulkRow.AddComponent<HorizontalLayoutGroup>();
+            bulkHlg.childForceExpandWidth = true;
+            bulkHlg.childForceExpandHeight = true;
+            bulkHlg.childControlWidth = true;
+            bulkHlg.childControlHeight = true;
+            bulkHlg.spacing = 2f;
+            BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
+                VPBTranslation.T("gallery.import.select_all_atoms", "Select All"),
+                "gallery.import.select_all_atoms_tip", "Select every importable atom in the source scene",
+                ImportSidebarSelectAllBg, ImportSidebarSelectAllSceneAtoms);
+            BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
+                VPBTranslation.T("gallery.import.clear_all_atoms", "Clear All"),
+                "gallery.import.clear_all_atoms_tip", "Deselect every atom",
+                ImportSidebarClearAllBg, ImportSidebarClearAllSceneAtoms);
+            LayoutElement bulkLeC = bulkLe;
+            innerPaneScaleActions.Add(s => {
+                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * 0.8f * s;
+            });
+            importSidebarSceneAtomUi.BulkRow.SetActive(false);
+
+            importSidebarSceneAtomUi.ChecklistRoot = UI.CreateVScrollableContent(
+                parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
+                0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
+            LayoutElement scrollLe = importSidebarSceneAtomUi.ChecklistRoot.AddComponent<LayoutElement>();
+            scrollLe.flexibleWidth = 1f;
+            importSidebarSceneAtomUi.ChecklistLe = scrollLe;
+            innerPaneScaleActions.Add(s => UpdateSceneAtomChecklistHeight());
+
+            Transform content = importSidebarSceneAtomUi.ChecklistRoot.GetComponent<ScrollRect>().content.transform;
+
+            Text caption = AddSimpleLabelText(content,
+                "Atoms in source scene (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
+            LayoutElement capLe = caption.gameObject.AddComponent<LayoutElement>();
+            capLe.preferredHeight = ImportSidebarBaseRowHeight;
+            capLe.flexibleWidth = 1f;
+            Text capCaptured = caption;
+            LayoutElement capLeCaptured = capLe;
+            innerPaneScaleActions.Add(s => {
+                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
+            });
+
+            for (int i = 0; i < ImportSidebarSceneAtomRowPoolInitial; i++)
+            {
+                GameObject row = CreateImportSidebarSceneAtomRow(content, i);
+                importSidebarSceneAtomUi.RowPool.Add(row);
+                row.SetActive(false);
+            }
+
+            GameObject emptyGO = new GameObject("SceneAtomEmptyHint");
+            emptyGO.transform.SetParent(parent, false);
+            importSidebarSceneAtomEmptyHintRow = emptyGO;
+            LayoutElement emptyLe = emptyGO.AddComponent<LayoutElement>();
+            emptyLe.preferredHeight = ImportSidebarBaseRowHeight * 1.2f;
+            emptyLe.flexibleWidth = 1f;
+            importSidebarSceneAtomEmptyHint = AddSimpleLabelText(
+                emptyGO.transform,
+                "No importable atoms in this scene.",
+                ImportSidebarBaseFontSize,
+                new Color(0.62f, 0.64f, 0.68f, 1f));
+            importSidebarSceneAtomEmptyHint.fontStyle = FontStyle.Italic;
+            importSidebarSceneAtomEmptyHint.alignment = TextAnchor.MiddleCenter;
+            emptyGO.SetActive(false);
+
+            importSidebarSceneAtomUi.ChecklistRoot.SetActive(false);
+        }
+
+        private void ApplySceneAtomRowScale(GameObject row, float s)
+        {
+            if (row == null) return;
+            LayoutElement le = row.GetComponent<LayoutElement>();
+            if (le != null) le.preferredHeight = ImportSidebarBaseRowHeight * s;
+            Text t = row.GetComponentInChildren<Text>();
+            ApplyScaledFont(t, ImportSidebarBaseFontSize, s);
+        }
+
+        private GameObject CreateImportSidebarSceneAtomRow(Transform parent, int index)
+        {
+            GameObject row = new GameObject("SceneAtomRow_" + index);
+            row.transform.SetParent(parent, false);
+
+            LayoutElement le = row.AddComponent<LayoutElement>();
+            le.preferredHeight = ImportSidebarBaseRowHeight;
+            le.flexibleWidth = 1f;
+
+            Image bg = row.AddComponent<Image>();
+            bg.color = ColorInactiveRow;
+
+            Button btn = row.AddComponent<Button>();
+            btn.targetGraphic = bg;
+            UI.NeutralizeSelectableColorTint(btn);
+
+            Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
+            ConfigureImportSidebarChecklistLabel(label);
+
+            GameObject rowCaptured = row;
+            innerPaneScaleActions.Add(s => ApplySceneAtomRowScale(rowCaptured, s));
+            return row;
+        }
+
+        private void RefreshSceneAtomChecklist()
+        {
+            bool typeSelected = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms);
+            bool showPicker = typeSelected && importSidebarPickSceneAtoms;
+
+            if (importSidebarSceneAtomSearchRow != null)
+                importSidebarSceneAtomSearchRow.SetActive(showPicker);
+            SetCUAChecklistVisible(importSidebarSceneAtomUi, showPicker);
+
+            if (!typeSelected) return;
+
+            importSidebarSceneAtomEntries = BuildSourceSceneAtomEntries();
+
+            string sig = (importSidebarSourceScene != null ? importSidebarSourceScene.Uid : "") + "|" + (importSidebarSourceAtomId ?? "");
+            if (sig != importSidebarSceneAtomSelectionSig)
+            {
+                importSidebarSelectedSceneAtomKeys.Clear();
+                foreach (ImportSceneAtomEntry e in importSidebarSceneAtomEntries)
+                    importSidebarSelectedSceneAtomKeys.Add(e.Id);
+                importSidebarSceneAtomSelectionSig = sig;
+                importSidebarSceneAtomSearchFilter = string.Empty;
+                if (importSidebarSceneAtomSearchInput != null)
+                    importSidebarSceneAtomSearchInput.text = string.Empty;
+            }
+
+            ApplySceneAtomSearchFilter();
+            UpdateSceneAtomChecklistHeight();
+            RenderSceneAtomChecklistRows();
+            RefreshSceneAtomEmptyHint();
+        }
+
+        private void UpdateSceneAtomChecklistHeight()
+        {
+            if (importSidebarSceneAtomUi.ChecklistLe == null) return;
+            int filteredCount = importSidebarSceneAtomFilteredEntries.Count;
+            int visibleRows = Mathf.Clamp(filteredCount, 1, ImportSidebarVisibleSceneAtomRows);
+            float s = ChromeScale;
+            importSidebarSceneAtomUi.ChecklistLe.preferredHeight = (visibleRows + 1) * (ImportSidebarBaseRowHeight + 2f) * s;
+        }
+
+        private void EnsureSceneAtomRowPool(int needed)
+        {
+            if (needed <= 0 || importSidebarSceneAtomUi.ChecklistRoot == null) return;
+            int cap = Mathf.Min(needed, ImportSidebarMaxSceneAtomRows);
+            ScrollRect sr = importSidebarSceneAtomUi.ChecklistRoot.GetComponent<ScrollRect>();
+            Transform content = sr != null && sr.content != null ? sr.content.transform : null;
+            if (content == null) return;
+            while (importSidebarSceneAtomUi.RowPool.Count < cap)
+            {
+                int i = importSidebarSceneAtomUi.RowPool.Count;
+                GameObject row = CreateImportSidebarSceneAtomRow(content, i);
+                importSidebarSceneAtomUi.RowPool.Add(row);
+                ApplySceneAtomRowScale(row, ChromeScale);
+                row.SetActive(false);
+            }
+        }
+
+        private void RenderSceneAtomChecklistRows()
+        {
+            int filteredCount = importSidebarSceneAtomFilteredEntries.Count;
+            int renderCount = Mathf.Min(filteredCount, ImportSidebarMaxSceneAtomRows);
+            EnsureSceneAtomRowPool(renderCount);
+
+            for (int i = 0; i < importSidebarSceneAtomUi.RowPool.Count; i++)
+            {
+                GameObject row = importSidebarSceneAtomUi.RowPool[i];
+                if (i < renderCount)
+                {
+                    ImportSceneAtomEntry e = importSidebarSceneAtomFilteredEntries[i];
+                    ConfigureSceneAtomRow(row, e,
+                        i == renderCount - 1 && filteredCount > renderCount
+                            ? filteredCount - renderCount : 0);
+                    row.SetActive(true);
+                }
+                else row.SetActive(false);
+            }
+        }
+
+        private static string FormatSceneAtomDisplayId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return "?";
+            int slash = id.IndexOf('/');
+            if (slash < 0) return id;
+            int lastSlash = id.LastIndexOf('/');
+            string leaf = id.Substring(lastSlash + 1);
+            if (lastSlash <= 0) return leaf;
+            string parent = id.Substring(0, lastSlash);
+            return parent + " \u203a " + leaf;
+        }
+
+        private static string FormatSceneAtomRowLabel(ImportSceneAtomEntry e, bool selected, int moreHidden)
+        {
+            string mark = selected ? "[x] " : "[ ] ";
+            string idDisplay = FormatSceneAtomDisplayId(e.Id);
+            string text = mark + idDisplay;
+            if (!string.IsNullOrEmpty(e.Type) && !string.Equals(e.Type, e.Id, StringComparison.Ordinal)
+                && !string.Equals(e.Type, idDisplay, StringComparison.Ordinal))
+                text += "  " + e.Type;
+            if (e.LinksToPerson) text += "  (on person)";
+            if (e.UidCollision) text += "  (exists)";
+            if (moreHidden > 0) text += "  (+" + moreHidden + " more — narrow search)";
+            return text;
+        }
+
+        private void ConfigureSceneAtomRow(GameObject row, ImportSceneAtomEntry e, int moreHidden)
+        {
+            bool selected = importSidebarSelectedSceneAtomKeys.Contains(e.Id);
+            string text = FormatSceneAtomRowLabel(e, selected, moreHidden);
+
+            Text t = row.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.text = text;
+                ConfigureImportSidebarChecklistLabel(t);
+            }
+            ApplySceneAtomRowScale(row, ChromeScale);
+            Image bg = row.GetComponent<Image>();
+            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
+
+            Button btn = row.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                string id = e.Id;
+                btn.onClick.AddListener(() => ToggleSceneAtomSelected(id));
+            }
+        }
+
+        private void ToggleSceneAtomSelected(string id)
+        {
+            if (importSidebarSelectedSceneAtomKeys.Contains(id)) importSidebarSelectedSceneAtomKeys.Remove(id);
+            else importSidebarSelectedSceneAtomKeys.Add(id);
+            RenderSceneAtomChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        private void ImportSidebarSelectAllSceneAtoms()
+        {
+            importSidebarSelectedSceneAtomKeys.Clear();
+            foreach (ImportSceneAtomEntry e in importSidebarSceneAtomEntries)
+                importSidebarSelectedSceneAtomKeys.Add(e.Id);
+            RenderSceneAtomChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        private void ImportSidebarClearAllSceneAtoms()
+        {
+            importSidebarSelectedSceneAtomKeys.Clear();
+            RenderSceneAtomChecklistRows();
+            RefreshApplyButtonEnabled();
+        }
+
+        private List<ImportSceneAtomEntry> BuildSourceSceneAtomEntries()
+        {
+            var result = new List<ImportSceneAtomEntry>();
+            JSONClass scene = EnsureLoadedSceneJSON();
+            if (scene == null) return result;
+            foreach (SceneAtomImporter.SceneAtomEntry e in SceneAtomImporter.EnumerateSceneAtoms(scene, importSidebarSourceAtomId))
+            {
+                result.Add(new ImportSceneAtomEntry
+                {
+                    Id = e.Id,
+                    Type = e.Type,
+                    LinksToPerson = e.LinksToPerson,
+                    UidCollision = e.UidCollision
+                });
+            }
+            return result;
         }
 
         // Enumerate every CustomUnityAsset in the source scene. Free-standing CUAs live OUTSIDE the person atom, so
@@ -1233,6 +1650,7 @@ namespace VPB
             RefreshTypeRadioButtonColors();
             RefreshPluginChecklist();
             RefreshCUAChecklist();
+            RefreshSceneAtomChecklist();
             RefreshApplyButtonEnabled();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             // Swapping the active panel changes the scroll content's total height; force the VLG/CSF to recompute.
@@ -1287,6 +1705,22 @@ namespace VPB
         {
             importSidebarSourceTypeCounts.Clear();
 
+            JSONClass scene = importSidebarSourceScene != null ? EnsureLoadedSceneJSON() : null;
+            if (scene != null)
+            {
+                int cuaCount = 0;
+                foreach (CUAAtomImporter.CuaEntry _ in
+                         CUAAtomImporter.EnumerateSceneCUAs(scene, importSidebarSourceAtomId))
+                    cuaCount++;
+                importSidebarSourceTypeCounts[VpbResourceType.CUA] = cuaCount;
+
+                int atomCount = 0;
+                foreach (SceneAtomImporter.SceneAtomEntry _ in
+                         SceneAtomImporter.EnumerateSceneAtoms(scene, importSidebarSourceAtomId))
+                    atomCount++;
+                importSidebarSourceTypeCounts[VpbResourceType.Atoms] = atomCount;
+            }
+
             if (!string.IsNullOrEmpty(importSidebarSourceAtomId))
             {
                 JSONClass preset = null;
@@ -1317,16 +1751,6 @@ namespace VPB
                     importSidebarSourceTypeCounts[VpbResourceType.Morphs] = morphs;
                     importSidebarSourceTypeCounts[VpbResourceType.Plugins] = plugins;
                 }
-
-                JSONClass scene = EnsureLoadedSceneJSON();
-                if (scene != null)
-                {
-                    int cuaCount = 0;
-                    foreach (VPB.src.util.CUAAtomImporter.CuaEntry _ in
-                             VPB.src.util.CUAAtomImporter.EnumerateSceneCUAs(scene, importSidebarSourceAtomId))
-                        cuaCount++;
-                    importSidebarSourceTypeCounts[VpbResourceType.CUA] = cuaCount;
-                }
             }
 
             // Prune now-unavailable types from the selection.
@@ -1338,6 +1762,7 @@ namespace VPB
             RefreshTypeRadioButtonColors();
             foreach (var kv in importSidebarOptionPanels)
                 kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
+            RefreshSceneAtomChecklist();
             RefreshApplyButtonEnabled();
         }
 
@@ -1378,6 +1803,7 @@ namespace VPB
                 kv.Value.SetActive(importSidebarMultiSelectedTypes.Contains(kv.Key));
             RefreshPluginChecklist();
             RefreshCUAChecklist();
+            RefreshSceneAtomChecklist();
             try { RefreshImportSidebarWizardHeader(); } catch { }
             RebuildImportSidebarContent();
             RefreshApplyButtonEnabled();
@@ -1394,9 +1820,21 @@ namespace VPB
             bool sceneOk = importSidebarSourceScene != null;
             bool typeOk = importSidebarMultiSelectedTypes.Count > 0;
             bool multiBlock = ImportSidebarMultiSelectBlocked();
+            bool atomsOk = true;
+            if (importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms))
+            {
+                if (importSidebarPickSceneAtoms)
+                    atomsOk = importSidebarSelectedSceneAtomKeys.Count > 0;
+                else
+                {
+                    int atomCount;
+                    atomsOk = importSidebarSourceTypeCounts.TryGetValue(VpbResourceType.Atoms, out atomCount)
+                        && atomCount > 0;
+                }
+            }
 
             if (importSidebarApplyButton != null)
-                importSidebarApplyButton.interactable = !multiBlock && sourceOk && targetOk && sceneOk && typeOk;
+                importSidebarApplyButton.interactable = !multiBlock && sourceOk && targetOk && sceneOk && typeOk && atomsOk;
 
             try { RefreshImportSidebarWizardHeader(); } catch { }
         }
@@ -1432,21 +1870,28 @@ namespace VPB
             bool hasPose = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Pose);
             foreach (VpbResourceType t in importSidebarMultiSelectedTypes)
             {
-                if (t == VpbResourceType.Pose || t == VpbResourceType.CUA) continue;
+                if (t == VpbResourceType.Pose || t == VpbResourceType.CUA || t == VpbResourceType.Atoms) continue;
                 ApplyOneTypeImport(t, sourceHostUid);
             }
 
             // CUA import runs from Appearance (optional add-on) or the standalone CUA type. Must run AFTER pose
-            // so anchors land on the final posed skeleton.
+            // so anchors land on the final posed skeleton. When Atoms is also selected it supersedes standalone CUA.
             bool importCUAsFromAppearance = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Appearance)
                 && importSidebarImportLinkedCUAs;
-            bool importCUAsStandalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA);
+            bool importCUAsStandalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA)
+                && !importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms);
             bool importCUAs = importCUAsFromAppearance || importCUAsStandalone;
+            bool importSceneAtoms = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms);
 
             if (hasPose)
-                StartCoroutine(ApplyDeferredPoseThenCUAImport(sourceHostUid, importCUAs));
-            else if (importCUAs)
-                RunCUAImportWithOptionalDelete(importCUAsStandalone);
+                StartCoroutine(ApplyDeferredPoseThenSpawnImports(sourceHostUid, importCUAs, importSceneAtoms));
+            else
+            {
+                if (importCUAs)
+                    RunCUAImportWithOptionalDelete(importCUAsStandalone);
+                if (importSceneAtoms)
+                    StartImportSelectedSceneAtoms(sourceHostUid);
+            }
         }
 
         // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
@@ -1464,18 +1909,20 @@ namespace VPB
         }
 
         // Applies the pose once the target skeleton has settled from the appearance load (scale/morphs settle over
-        // several frames), then runs the CUA import so it anchors to the final pose. Mirrors the settle wait the
-        // CUA importer already uses for bone-based placement.
-        private IEnumerator ApplyDeferredPoseThenCUAImport(string sourceHostUid, bool importCUAs)
+        // several frames), then runs CUA / scene-atom spawns so they anchor to the final pose.
+        private IEnumerator ApplyDeferredPoseThenSpawnImports(string sourceHostUid, bool importCUAs, bool importSceneAtoms)
         {
             yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
             ApplyOneTypeImport(VpbResourceType.Pose, sourceHostUid);
             yield return VPB.src.util.CUAAtomImporter.WaitForPersonSettled(importSidebarTargetAtom);
             if (importCUAs)
             {
-                bool standalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA);
+                bool standalone = importSidebarMultiSelectedTypes.Contains(VpbResourceType.CUA)
+                    && !importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms);
                 RunCUAImportWithOptionalDelete(standalone);
             }
+            if (importSceneAtoms)
+                StartImportSelectedSceneAtoms(sourceHostUid);
         }
 
         private void ApplyOneTypeImport(VpbResourceType type, string sourceHostUid)
@@ -1660,6 +2107,75 @@ namespace VPB
             StartCoroutine(VPB.src.util.CUAAtomImporter.ImportSelectedCUAsAsAtoms(
                 scene, sourceAtomId, target, sourceHostUid, selectedIds,
                 importSidebarCUARelativeToPerson, replaceExisting: !importSidebarCuaMergeLoad));
+        }
+
+        // Spawns the checked non-Person atoms from the source scene (CUAs delegate to CUAAtomImporter).
+        private void StartImportSelectedSceneAtoms(string sourceHostUid)
+        {
+            if (importSidebarSourceScene == null || importSidebarTargetAtom == null)
+            {
+                LogUtil.LogWarning("[VPB][Atoms][import] abort — sourceScene="
+                    + (importSidebarSourceScene != null ? "ok" : "null")
+                    + " target=" + (importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "null"));
+                return;
+            }
+
+            JSONClass scene = EnsureLoadedSceneJSON();
+            if (scene == null)
+            {
+                try
+                {
+                    using (FileEntryStreamReader r = importSidebarSourceScene.OpenStreamReader())
+                    {
+                        JSONNode parsed = JSON.Parse(r.ReadToEnd());
+                        scene = parsed != null ? parsed.AsObject : null;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB][Atoms][import] failed to read source scene: " + ex.Message);
+                    return;
+                }
+            }
+            if (scene == null)
+            {
+                LogUtil.LogWarning("[VPB][Atoms][import] abort — scene JSON null.");
+                return;
+            }
+
+            HashSet<string> selectedIds;
+            if (importSidebarPickSceneAtoms)
+            {
+                if (importSidebarSelectedSceneAtomKeys.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB][Atoms][import] abort — picker on but nothing checked.");
+                    return;
+                }
+                selectedIds = new HashSet<string>(importSidebarSelectedSceneAtomKeys, StringComparer.Ordinal);
+            }
+            else
+            {
+                selectedIds = new HashSet<string>(StringComparer.Ordinal);
+                foreach (SceneAtomImporter.SceneAtomEntry e in SceneAtomImporter.EnumerateSceneAtoms(scene, importSidebarSourceAtomId))
+                    selectedIds.Add(e.Id);
+                if (selectedIds.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB][Atoms][import] abort — no importable atoms in source scene.");
+                    return;
+                }
+            }
+
+            LogUtil.Log("[VPB][Atoms][import] apply sidebar pick=" + importSidebarPickSceneAtoms
+                + " selected=" + selectedIds.Count
+                + " skipDup=" + importSidebarSceneAtomSkipDuplicates
+                + " relative=" + importSidebarSceneAtomRelativeToPerson
+                + " source='" + (importSidebarSourceAtomId ?? "") + "'"
+                + " target='" + importSidebarTargetAtom.uid + "'"
+                + " hostUid='" + (sourceHostUid ?? "") + "'");
+
+            StartCoroutine(SceneAtomImporter.ImportSelectedAtoms(
+                scene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid,
+                selectedIds, importSidebarSceneAtomRelativeToPerson, importSidebarSceneAtomSkipDuplicates));
         }
 
         // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target

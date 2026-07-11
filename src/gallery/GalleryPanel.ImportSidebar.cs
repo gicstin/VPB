@@ -67,6 +67,13 @@ namespace VPB
         // CUAs: merge on = append (keep prior VPB imports); off = replace them before import.
         private bool importSidebarCuaMergeLoad;
         private bool importSidebarDeleteTargetCUAs;
+        // Scene atoms: when on, the picker restricts import to the checked subset; off imports every non-Person atom.
+        private bool importSidebarPickSceneAtoms = true;
+        // Scene atoms: skip import when an atom with the same source uid (or uid#N variant) is already in the scene.
+        private bool importSidebarSceneAtomSkipDuplicates = true;
+        // Scene atoms: off-scene props placed relative to the target person root instead of raw source world coords.
+        private bool importSidebarSceneAtomRelativeToPerson = true;
+        private string importSidebarSceneAtomSearchFilter = string.Empty;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
         // tracks scene+atom so switching source resets the checks to "all"), and is not persisted.
         private bool importSidebarPluginsMergeSingle;
@@ -282,6 +289,8 @@ namespace VPB
             importSidebarOnlyReplaceRealClothing  = PrefBool(p, "onlyReplaceReal", importSidebarOnlyReplaceRealClothing);
             importSidebarImportLinkedCUAs         = PrefBool(p, "importLinkedCUAs", importSidebarImportLinkedCUAs);
             importSidebarPickCUAs                 = PrefBool(p, "pickCUAs", importSidebarPickCUAs);
+            importSidebarPickSceneAtoms           = PrefBool(p, "pickSceneAtoms", importSidebarPickSceneAtoms);
+            importSidebarSceneAtomSkipDuplicates  = PrefBool(p, "sceneAtomSkipDuplicates", importSidebarSceneAtomSkipDuplicates);
             importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
             importSidebarCuaMergeLoad             = PrefBool(p, "cuaMergeLoad", importSidebarCuaMergeLoad);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
@@ -317,6 +326,8 @@ namespace VPB
             p["onlyReplaceReal"].AsBool = importSidebarOnlyReplaceRealClothing;
             p["importLinkedCUAs"].AsBool = importSidebarImportLinkedCUAs;
             p["pickCUAs"].AsBool = importSidebarPickCUAs;
+            p["pickSceneAtoms"].AsBool = importSidebarPickSceneAtoms;
+            p["sceneAtomSkipDuplicates"].AsBool = importSidebarSceneAtomSkipDuplicates;
             p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
             p["cuaMergeLoad"].AsBool = importSidebarCuaMergeLoad;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;
@@ -361,5 +372,11 @@ namespace VPB
         partial void LoadSourceScene(FileEntry entry);
         partial void RefreshApplyButtonEnabled();
         partial void UpdateImportToggleBtnVisual();
+
+        internal void DumpSelectedGalleryItemAtoms(string tag)
+        {
+            VPB.src.util.GalleryAtomListingDiagnostics.DumpGallerySelection(
+                selectedFiles, currentCategoryTitle, tag);
+        }
     }
 }
