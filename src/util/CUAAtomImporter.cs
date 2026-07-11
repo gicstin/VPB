@@ -41,7 +41,14 @@ namespace VPB.src.util
                     if (!cuaById.ContainsKey(id)) cuaById[id] = a;
                 }
             }
-            if (cuaById.Count == 0) { LogUtil.Log("[VPB][CUA] no CUA atoms in source scene."); yield break; }
+            if (cuaById.Count == 0)
+            {
+                // A new appearance with no CUAs must still drop CUAs we spawned in a prior import on this target,
+                // otherwise stale horns/tails/etc. persist across appearance swaps.
+                LogUtil.Log("[VPB][CUA] no CUA atoms in source scene.");
+                RemovePriorImports(new List<CuaPlan>(0), targetPerson);
+                yield break;
+            }
 
             JSONClass sourcePerson = FindAtom(atoms, sourcePersonAtomId);
             float sourceScale = ReadPersonScale(sourcePerson);
@@ -53,7 +60,13 @@ namespace VPB.src.util
                 CuaPlan p = BuildPlan(kvp.Key, kvp.Value, sourcePersonAtomId, cuaById);
                 if (p != null) plans.Add(p);
             }
-            if (plans.Count == 0) { LogUtil.Log($"[VPB][CUA] no CUAs linked to '{sourcePersonAtomId}'."); yield break; }
+            if (plans.Count == 0)
+            {
+                // Same as above: no linked CUAs in this source, but clear any we imported earlier onto this target.
+                LogUtil.Log($"[VPB][CUA] no CUAs linked to '{sourcePersonAtomId}'.");
+                RemovePriorImports(plans, targetPerson);
+                yield break;
+            }
 
             LogUtil.Log($"[VPB][CUA] atom import: {plans.Count} CUA(s) linked to '{sourcePersonAtomId}' -> target '{targetPerson.uid}'.");
 
@@ -135,17 +148,10 @@ namespace VPB.src.util
 
             if (outAtoms.Count == 0) { LogUtil.Log("[VPB][CUA] nothing to import after anchoring."); yield break; }
 
-            JSONClass root = new JSONClass();
-            root["atoms"] = outAtoms;
-            string tempPath = SceneLoadingUtils.WriteTempSceneForMergeLoad(root, "vpb_cua");
-            if (string.IsNullOrEmpty(tempPath))
-            {
-                LogUtil.LogWarning("[VPB][CUA] failed to write temp CUA scene; import aborted.");
-                yield break;
-            }
-
-            bool ok = SceneLoadingUtils.LoadScene(UI.NormalizePath(tempPath), true);
-            LogUtil.Log($"[VPB][CUA] merge-loaded {outAtoms.Count} CUA atom(s) from '{tempPath}' (ok={ok}).");
+            // Spawn each CUA atom directly instead of merge-loading a temp scene file. VaM's LoadMerge shows the
+            // full-screen loading overlay (the "scene reload" blank the user sees during CUA imports); AddAtomByType
+            // only raises the small loading icon, so a direct spawn keeps the live view on screen.
+            yield return SpawnCUAAtoms(outAtoms);
 
             // Attach each spawned CUA to its target bone with a native VaM ParentLink so it rides the body.
             yield return EstablishParentLinks(placements, targetPerson);
@@ -221,6 +227,54 @@ namespace VPB.src.util
                 }
                 LogUtil.Log($"[VPB][CUA] '{pl.LiveId}': ParentLink -> '{target.uid}':{boneRB.name} held={held} at {mc.transform.position.ToString("F4")}.");
             }
+        }
+
+        // Create each CUA atom via AddAtomByType and run VaM's native restore pipeline in the same phase order
+        // its scene loader uses. This mirrors LoadInternal without activating the full-screen loading overlay.
+        private static IEnumerator SpawnCUAAtoms(JSONArray outAtoms)
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null || outAtoms == null) yield break;
+
+            var created = new List<KeyValuePair<Atom, JSONClass>>();
+            foreach (JSONNode n in outAtoms)
+            {
+                JSONClass node = n as JSONClass;
+                if (node == null) continue;
+                string type = node["type"] != null && !string.IsNullOrEmpty(node["type"].Value) ? node["type"].Value : "CustomUnityAsset";
+                string uid = node["id"] != null ? node["id"].Value : null;
+                if (string.IsNullOrEmpty(uid)) continue;
+
+                Atom atom = sc.GetAtomByUid(uid);
+                if (atom == null)
+                {
+                    yield return sc.AddAtomByType(type, uid);
+                    atom = sc.GetAtomByUid(uid);
+                }
+                if (atom == null)
+                {
+                    LogUtil.LogWarning($"[VPB][CUA] failed to create atom '{uid}' (type '{type}').");
+                    continue;
+                }
+                try { atom.SetOn(true); } catch { }
+                created.Add(new KeyValuePair<Atom, JSONClass>(atom, node));
+            }
+            if (created.Count == 0) { LogUtil.LogWarning("[VPB][CUA] no CUA atoms spawned."); yield break; }
+
+            // Phased restore (PreRestore all -> RestoreTransform -> Restore -> LateRestore -> PostRestore) so
+            // chained CUA->CUA references resolve just as they do during a native scene load.
+            foreach (var kv in created)
+                try { kv.Key.PreRestore(); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] PreRestore " + kv.Key.uid + ": " + ex.Message); }
+            foreach (var kv in created)
+                try { kv.Key.RestoreTransform(kv.Value); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] RestoreTransform " + kv.Key.uid + ": " + ex.Message); }
+            foreach (var kv in created)
+                try { kv.Key.Restore(kv.Value); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] Restore " + kv.Key.uid + ": " + ex.Message); }
+            foreach (var kv in created)
+                try { kv.Key.LateRestore(kv.Value); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] LateRestore " + kv.Key.uid + ": " + ex.Message); }
+            foreach (var kv in created)
+                try { kv.Key.PostRestore(); } catch (Exception ex) { LogUtil.LogWarning("[VPB][CUA] PostRestore " + kv.Key.uid + ": " + ex.Message); }
+
+            LogUtil.Log($"[VPB][CUA] spawned {created.Count} CUA atom(s) directly (no scene-load overlay).");
         }
 
         private static void RemovePriorImports(List<CuaPlan> plans, Atom target)
