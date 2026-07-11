@@ -603,7 +603,7 @@ namespace VPB
 
             // Background already set to opaque grey in UI.cs; ensure raycastTarget on
             var img = tbox.GetComponent<Image>();
-            if (img != null) { img.color = new Color(0.15f, 0.15f, 0.15f, 1f); img.raycastTarget = true; }
+            if (img != null) { img.color = UI.ChromeDark; img.raycastTarget = true; }
 
             var hoverDel = tbox.AddComponent<UIHoverDelegate>();
             hoverDel.OnHoverChange = h => tboxIsHovered = h;
@@ -642,15 +642,8 @@ namespace VPB
 
             const int tboxCollapsedFont = GalleryUiDesignTokens.FontBodyRef;
 
-            var labelTextGO = new GameObject("Text");
-            labelTextGO.transform.SetParent(rowGO.transform, false);
-            tboxLabel = labelTextGO.AddComponent<Text>();
-            tboxLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxLabel.fontSize = tboxCollapsedFont;
-            tboxLabel.fontStyle = FontStyle.Normal;
-            tboxLabel.color = Color.white;
-            tboxLabel.alignment = TextAnchor.MiddleCenter;
-            tboxLabel.raycastTarget = false;
+            tboxLabel = UI.CreateLabel(rowGO, "", tboxCollapsedFont, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            var labelTextGO = tboxLabel.gameObject;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
             labelShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
             labelShadow.effectDistance = new Vector2(1f, -1f);
@@ -658,16 +651,8 @@ namespace VPB
             labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             labelCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            var hintTextGO = new GameObject("HoverHint");
-            hintTextGO.transform.SetParent(rowGO.transform, false);
-            tboxHintLabel = hintTextGO.AddComponent<Text>();
-            tboxHintLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxHintLabel.fontSize = tboxCollapsedFont;
-            tboxHintLabel.fontStyle = FontStyle.Normal;
-            tboxHintLabel.color = new Color(0.50f, 0.50f, 0.50f, 1f);
-            tboxHintLabel.alignment = TextAnchor.MiddleCenter;
-            tboxHintLabel.raycastTarget = false;
-            tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
+            tboxHintLabel = UI.CreateLabel(rowGO, VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand"), tboxCollapsedFont, new Color(0.50f, 0.50f, 0.50f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "HoverHint");
+            var hintTextGO = tboxHintLabel.gameObject;
             hintTextGO.SetActive(false);
             var hintShadow = hintTextGO.AddComponent<Shadow>();
             hintShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
@@ -865,20 +850,10 @@ namespace VPB
 
             // Leading label
             {
-                var lblGO = new GameObject("ClothingModeLabel");
-                lblGO.transform.SetParent(tboxClothingModeRowGO.transform, false);
-                tboxClothingModeLabel = lblGO.AddComponent<Text>();
-                tboxClothingModeLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                tboxClothingModeLabel.fontStyle = FontStyle.Normal;
-                tboxClothingModeLabel.color = new Color(0.8f, 0.8f, 0.82f, 1f);
-                tboxClothingModeLabel.alignment = TextAnchor.MiddleLeft;
-                tboxClothingModeLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-                tboxClothingModeLabel.verticalOverflow = VerticalWrapMode.Truncate;
-                tboxClothingModeLabel.raycastTarget = false;
-                tboxClothingModeLabel.text = VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:");
+                tboxClothingModeLabel = UI.CreateLabel(tboxClothingModeRowGO, VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:"), GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.82f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "ClothingModeLabel");
                 // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
                 GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
-                var lblLE = lblGO.AddComponent<LayoutElement>();
+                var lblLE = tboxClothingModeLabel.gameObject.AddComponent<LayoutElement>();
                 // Wider than the text so there's clear right padding before the first button.
                 lblLE.minWidth = lblLE.preferredWidth = 240f;
                 lblLE.flexibleWidth = 0f;
@@ -1746,7 +1721,7 @@ namespace VPB
 
             float innerRowH   = TboxActionButtonInnerHeight();
             Transform stash      = tboxButtonStash.transform;
-            Color inactiveColor  = new Color(0.18f, 0.18f, 0.20f, 1f);
+            Color inactiveColor  = UI.PopupRowBackdrop;
 
             // Single dropup button row (active person label). Click opens list of all people.
             tboxTargetDropdownRowGO = new GameObject("TboxTargetDropdownRow");

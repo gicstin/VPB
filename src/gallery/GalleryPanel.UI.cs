@@ -1370,7 +1370,7 @@ namespace VPB
             }
 
             // Unified info bar — always visible; hosts hover path, status messages, and tbox label/buttons.
-            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, new Color(0.15f, 0.15f, 0.15f, 1f), AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
+            GameObject pathGO = UI.AddChildGOImage(backgroundBoxGO, UI.ChromeDark, AnchorPresets.hStretchBottom, 0, 40, new Vector2(0, 40));
             pathGO.name = "HoverPathContainer";
             pathGO.GetComponent<Image>().raycastTarget = true; // tbox hover delegate needs raycasts
             // Removed RectMask2D - it was causing visual glitches/flashing during height animation during category switches
@@ -1850,7 +1850,7 @@ namespace VPB
 
                 footerHoldToLaunchToggleIconImage.color = holdToLaunchEnabled
                     ? new Color(1f, 1f, 1f, 1f)
-                    : new Color(1f, 1f, 1f, 0.45f);
+                    : UI.White(0.45f);
             }
         }
 
@@ -1882,7 +1882,7 @@ namespace VPB
             {
                 footerSpringScrollToggleIconImage.color = springScrollButtonEnabled
                     ? new Color(1f, 1f, 1f, 1f)
-                    : new Color(1f, 1f, 1f, 0.45f);
+                    : UI.White(0.45f);
             }
 
             // If this pane is fixed (desktop overlay), keep the toggle disabled-looking.
@@ -2152,8 +2152,8 @@ namespace VPB
 
         private void UpdateFooterLayoutState()
         {
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
 
             if (footerLayoutBtnImage != null)
             {
@@ -2198,8 +2198,8 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
 
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
 
             if (footerHeightBtnImage != null)
                 footerHeightBtnImage.color = VPBConfig.Instance.DesktopFixedHeightMode > 0 ? activeColor : inactiveColor;
@@ -2248,8 +2248,8 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
 
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
 
             if (footerShowHiddenPackagesBtnImage != null)
                 footerShowHiddenPackagesBtnImage.color = VPBConfig.Instance.GalleryShowHiddenPackages ? activeColor : inactiveColor;
@@ -2294,8 +2294,8 @@ namespace VPB
         private void UpdateFooterVamMenuGateState()
         {
             if (VPBConfig.Instance == null) return;
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
             if (footerMenuGateBtnImage != null)
                 footerMenuGateBtnImage.color = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible ? activeColor : inactiveColor;
             if (footerMenuGateIconImage != null)
@@ -2316,8 +2316,8 @@ namespace VPB
         private void UpdateFooterVrWatchState()
         {
             if (VPBConfig.Instance == null) return;
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
             bool on = VPBConfig.Instance.QuickMenuVrWatchVisible;
             if (footerWatchToggleBtnImage != null)
                 footerWatchToggleBtnImage.color = on ? activeColor : inactiveColor;
@@ -2361,8 +2361,8 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
 
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
 
             if (footerAutoHideBtnImage != null)
                 footerAutoHideBtnImage.color = VPBConfig.Instance.DesktopFixedAutoCollapse ? activeColor : inactiveColor;
@@ -2413,8 +2413,8 @@ namespace VPB
         {
             if (VPBConfig.Instance == null) return;
             
-            Color activeColor = new Color(0.15f, 0.45f, 0.6f, 1f);
-            Color inactiveColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color activeColor = UI.AccentBlue;
+            Color inactiveColor = UI.ChromeMid;
             
             if (footerFollowAngleImage != null)
                 footerFollowAngleImage.color = VPBConfig.Instance.FollowAngle != "Off" ? activeColor : inactiveColor;
@@ -2534,7 +2534,7 @@ namespace VPB
             string text = fixedMode
                 ? VPBTranslation.T("gallery.desktop.floating", "Floating")
                 : VPBTranslation.T("gallery.desktop.fixed", "Fixed");
-            Color color = fixedMode ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.15f, 0.15f, 0.15f, 1f);
+            Color color = fixedMode ? UI.AccentBlue : UI.ChromeDark;
             Sprite deskSpr = fixedMode ? galleryFloatSprite : galleryFixedSprite;
 
             GameObject rightDeskGo = rightDesktopModeBtnImage != null ? rightDesktopModeBtnImage.gameObject : null;

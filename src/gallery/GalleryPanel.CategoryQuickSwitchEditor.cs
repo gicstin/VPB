@@ -209,45 +209,22 @@ namespace VPB
             int font = rowType.Body;
             float rowH = 42f * s;
 
-            GameObject row = new GameObject("CatQuickRow");
-            row.transform.SetParent(parent, false);
-            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.spacing = 6f * s;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childForceExpandHeight = false;
+            GameObject row = UI.CreateChildRT(parent.gameObject, "CatQuickRow");
+            UI.AddHLG(row, 6f * s, childForceExpandWidth: false);
             LayoutElement le = row.AddComponent<LayoutElement>();
             le.minHeight = rowH;
             le.preferredHeight = rowH;
 
             if (displayIndex.HasValue)
             {
-                GameObject idxGo = new GameObject("Index");
-                idxGo.transform.SetParent(row.transform, false);
-                Text it = idxGo.AddComponent<Text>();
-                it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                it.fontSize = rowType.Body;
-                it.color = new Color(0.75f, 0.78f, 0.82f, 1f);
-                it.alignment = TextAnchor.MiddleRight;
-                it.text = displayIndex.Value.ToString();
-                try { VPBUiFont.ApplyTo(it); } catch { }
-                LayoutElement ile = idxGo.AddComponent<LayoutElement>();
+                Text it = UI.CreateLabel(row.gameObject, displayIndex.Value.ToString(), rowType.Body, new Color(0.75f, 0.78f, 0.82f, 1f), TextAnchor.MiddleRight, name: "Index");
+                LayoutElement ile = it.gameObject.AddComponent<LayoutElement>();
                 ile.preferredWidth = 42f * s;
                 ile.minWidth = 42f * s;
             }
 
-            GameObject labelGo = new GameObject("Label");
-            labelGo.transform.SetParent(row.transform, false);
-            Text t = labelGo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = font;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
-            t.text = name ?? "";
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            LayoutElement tle = labelGo.AddComponent<LayoutElement>();
+            Text t = UI.CreateLabel(row.gameObject, name ?? "", font, Color.white, TextAnchor.MiddleLeft, name: "Label");
+            LayoutElement tle = t.gameObject.AddComponent<LayoutElement>();
             tle.flexibleWidth = 1f;
             tle.minWidth = 0f;
 
@@ -283,37 +260,13 @@ namespace VPB
             ble.preferredHeight = rowH;
             ble.minHeight = rowH;
 
-            GameObject tt = new GameObject("Text");
-            tt.transform.SetParent(tog.transform, false);
-            Text bt = tt.AddComponent<Text>();
-            bt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            bt.fontSize = rowType.Body;
-            bt.color = Color.white;
-            bt.alignment = TextAnchor.MiddleCenter;
-            bt.text = toggleHiddenLabel ?? "";
-            try { VPBUiFont.ApplyTo(bt); } catch { }
-            RectTransform rt = tt.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
+            UI.CreateLabel(tog, toggleHiddenLabel ?? "", rowType.Body, Color.white, TextAnchor.MiddleCenter);
         }
 
         private static void AddButtonOverlayGlyph(GameObject btnGo, string glyph, int fontSize)
         {
             if (btnGo == null) return;
-            GameObject g = new GameObject("Glyph");
-            g.transform.SetParent(btnGo.transform, false);
-            Text t = g.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.text = glyph ?? "";
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            RectTransform rt = g.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
+            UI.CreateLabel(btnGo, glyph ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Glyph");
         }
 
         private static GameObject CreateHeaderButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
@@ -334,20 +287,7 @@ namespace VPB
             le.flexibleWidth = 0f;
             le.flexibleHeight = 0f;
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label ?? "";
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
+            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter);
 
             return go;
         }
@@ -389,25 +329,11 @@ namespace VPB
             prt.sizeDelta = new Vector2(860f * s, 720f * s);
             Image pbg = AddCategoryQuickRoundedBg(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
-            VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));
-            v.spacing = 10f * s;
-            v.childAlignment = TextAnchor.UpperLeft;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 14f, 14f, s));
 
             // Header row.
-            GameObject header = new GameObject("HeaderRow");
-            header.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup hh = header.AddComponent<HorizontalLayoutGroup>();
-            hh.childAlignment = TextAnchor.MiddleLeft;
-            hh.spacing = 8f * s;
-            hh.childControlWidth = true;
-            hh.childControlHeight = true;
-            hh.childForceExpandWidth = false;
-            hh.childForceExpandHeight = false;
+            GameObject header = UI.CreateChildRT(panel, "HeaderRow");
+            UI.AddHLG(header, 8f * s, childForceExpandWidth: false);
             LayoutElement hle = header.AddComponent<LayoutElement>();
             hle.minHeight = 54f * s;
             hle.preferredHeight = 54f * s;
@@ -425,7 +351,7 @@ namespace VPB
             tle.flexibleWidth = 1f;
             tle.minWidth = 0f;
 
-            GameObject resetBtn = CreateHeaderButton(header.transform, 160f * s, 44f * s, VPBTranslation.T("settings.category_quick.editor.reset", "Reset"), bodyFont, new Color(0.2f, 0.2f, 0.2f, 1f), () =>
+            GameObject resetBtn = CreateHeaderButton(header.transform, 160f * s, 44f * s, VPBTranslation.T("settings.category_quick.editor.reset", "Reset"), bodyFont, UI.ChromePanel, () =>
             {
                 if (VPBConfig.Instance == null) return;
                 VPBConfig.Instance.GalleryCategoryQuickOrder = "";
@@ -468,15 +394,8 @@ namespace VPB
             LayoutElement vhLe = visHeader.AddComponent<LayoutElement>();
             vhLe.minHeight = 34f * s;
 
-            GameObject visList = new GameObject("VisibleList");
-            visList.transform.SetParent(content, false);
-            VerticalLayoutGroup vvg = visList.AddComponent<VerticalLayoutGroup>();
-            vvg.spacing = 6f * s;
-            vvg.childAlignment = TextAnchor.UpperLeft;
-            vvg.childControlWidth = true;
-            vvg.childControlHeight = true;
-            vvg.childForceExpandWidth = true;
-            vvg.childForceExpandHeight = false;
+            GameObject visList = UI.CreateChildRT(content.gameObject, "VisibleList");
+            UI.AddVLG(visList, 6f * s);
             _catQuickEditorVisibleParent = visList.transform;
 
             GameObject hidHeader = new GameObject("HiddenHeader");
@@ -491,15 +410,8 @@ namespace VPB
             LayoutElement hhLe = hidHeader.AddComponent<LayoutElement>();
             hhLe.minHeight = 34f * s;
 
-            GameObject hidList = new GameObject("HiddenList");
-            hidList.transform.SetParent(content, false);
-            VerticalLayoutGroup hvg = hidList.AddComponent<VerticalLayoutGroup>();
-            hvg.spacing = 6f * s;
-            hvg.childAlignment = TextAnchor.UpperLeft;
-            hvg.childControlWidth = true;
-            hvg.childControlHeight = true;
-            hvg.childForceExpandWidth = true;
-            hvg.childForceExpandHeight = false;
+            GameObject hidList = UI.CreateChildRT(content.gameObject, "HiddenList");
+            UI.AddVLG(hidList, 6f * s);
             _catQuickEditorHiddenParent = hidList.transform;
 
             RebuildCategoryQuickEditorRows();

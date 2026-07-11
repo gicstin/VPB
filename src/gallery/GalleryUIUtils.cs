@@ -31,6 +31,21 @@ namespace VPB
         public static readonly Color InputFieldBg = new Color(0.10f, 0.10f, 0.12f, 1f);
         public static readonly Color TextShadowColor = new Color(0f, 0f, 0f, 0.75f);
 
+        // Neutral chrome fills (formerly written inline as raw new Color(...) dozens of times).
+        public static readonly Color ChromeDarker = new Color(0.1f, 0.1f, 0.1f, 1f);
+        public static readonly Color ChromeDark = new Color(0.15f, 0.15f, 0.15f, 1f);
+        public static readonly Color ChromePanel = new Color(0.2f, 0.2f, 0.2f, 1f);
+        public static readonly Color ChromeMid = new Color(0.3f, 0.3f, 0.3f, 1f);
+        // Interactive accents: blue = active/selected state, green = on/confirm, red = off/clear/destructive.
+        public static readonly Color AccentBlue = new Color(0.15f, 0.45f, 0.6f, 1f);
+        public static readonly Color AccentGreen = new Color(0.2f, 0.6f, 0.2f, 1f);
+        public static readonly Color AccentRed = new Color(0.6f, 0.2f, 0.2f, 1f);
+
+        /// <summary>White with the given alpha — for hover/separator/overlay tints (replaces inline new Color(1,1,1,a)).</summary>
+        public static Color White(float alpha) => new Color(1f, 1f, 1f, alpha);
+        /// <summary>Black with the given alpha — for scrims/shadows (replaces inline new Color(0,0,0,a)).</summary>
+        public static Color Black(float alpha) => new Color(0f, 0f, 0f, alpha);
+
         /// <summary>
         /// Kills Unity <see cref="Selectable"/> ColorTint hover/press (the gray “fill” on neutral buttons).
         /// Keeps <see cref="ColorBlock.disabledColor"/> so disabled chrome still dims.
@@ -1229,22 +1244,33 @@ namespace VPB
             catch { }
         }
 
-        public static GameObject AddChildGOImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, bool rounded = false)
+        /// <summary>
+        /// Creates a child GameObject with a RectTransform anchored/sized from an <see cref="AnchorPresets"/> preset.
+        /// The single primitive behind the image/label/row factories — folds the repeated
+        /// new GameObject + SetParent + AddComponent&lt;RectTransform&gt; + GetAnchorMin/Max/Pivot boilerplate.
+        /// </summary>
+        public static GameObject CreateChildRT(GameObject parentGO, string name, int anchorPreset = AnchorPresets.stretchAll, Vector2 size = default(Vector2), Vector2 anchoredPosition = default(Vector2))
         {
-            GameObject go = new GameObject("Image");
+            GameObject go = new GameObject(name);
             go.transform.SetParent(parentGO.transform, false);
-            // RoundedRect is an Image subclass; with cornerRadius 0 it renders an identical quad,
-            // so callers/lookups via GetComponent<Image>() are unaffected until a radius is set.
-            Image img = rounded ? go.AddComponent<RoundedRect>() : go.AddComponent<Image>();
-            img.color = color;
-            img.raycastTarget = true;
-
-            RectTransform rt = go.GetComponent<RectTransform>();
+            RectTransform rt = go.AddComponent<RectTransform>();
             rt.anchorMin = AnchorPresets.GetAnchorMin(anchorPreset);
             rt.anchorMax = AnchorPresets.GetAnchorMax(anchorPreset);
             rt.pivot = AnchorPresets.GetPivot(anchorPreset);
-            rt.anchoredPosition = anchoredPositionOffset;
-            rt.sizeDelta = new Vector2(horizontalSize, verticalSize);
+            rt.anchoredPosition = anchoredPosition;
+            rt.sizeDelta = size;
+            return go;
+        }
+
+        public static GameObject AddChildGOImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, bool rounded = false)
+        {
+            // RectTransform is pre-added by CreateChildRT; AddComponent<Image> reuses it (Graphic requires RectTransform).
+            // RoundedRect is an Image subclass; with cornerRadius 0 it renders an identical quad,
+            // so callers/lookups via GetComponent<Image>() are unaffected until a radius is set.
+            GameObject go = CreateChildRT(parentGO, "Image", anchorPreset, new Vector2(horizontalSize, verticalSize), anchoredPositionOffset);
+            Image img = rounded ? go.AddComponent<RoundedRect>() : go.AddComponent<Image>();
+            img.color = color;
+            img.raycastTarget = true;
 
             if (rounded)
             {
@@ -1258,27 +1284,114 @@ namespace VPB
 
         public static GameObject AddChildGOChamferedImage(GameObject parentGO, Color color, int anchorPreset, float horizontalSize, float verticalSize, Vector2 anchoredPositionOffset, float chamferSize = 20f)
         {
-            GameObject go = new GameObject("ChamferedImage");
-            go.transform.SetParent(parentGO.transform, false);
+            GameObject go = CreateChildRT(parentGO, "ChamferedImage", anchorPreset, new Vector2(horizontalSize, verticalSize), anchoredPositionOffset);
             ChamferedRect img = go.AddComponent<ChamferedRect>();
             img.color = color;
             img.chamferSize = chamferSize;
 
-            RectTransform rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = AnchorPresets.GetAnchorMin(anchorPreset);
-            rt.anchorMax = AnchorPresets.GetAnchorMax(anchorPreset);
-            rt.pivot = AnchorPresets.GetPivot(anchorPreset);
-            rt.anchoredPosition = anchoredPositionOffset;
-            rt.sizeDelta = new Vector2(horizontalSize, verticalSize);
-
             return go;
+        }
+
+        /// <summary>Scaled <see cref="RectOffset"/> — folds the pervasive new RectOffset(RoundToInt(x*s), ...) pattern.</summary>
+        public static RectOffset Pad(float left, float right, float top, float bottom, float scale = 1f)
+        {
+            return new RectOffset(
+                Mathf.RoundToInt(left * scale),
+                Mathf.RoundToInt(right * scale),
+                Mathf.RoundToInt(top * scale),
+                Mathf.RoundToInt(bottom * scale));
+        }
+
+        /// <summary>Adds a <see cref="VerticalLayoutGroup"/>. Defaults match the common gallery list column.</summary>
+        public static VerticalLayoutGroup AddVLG(GameObject go, float spacing = 0f, RectOffset padding = null, TextAnchor childAlignment = TextAnchor.UpperLeft, bool childControlWidth = true, bool childControlHeight = true, bool childForceExpandWidth = true, bool childForceExpandHeight = false)
+        {
+            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = spacing;
+            if (padding != null) vlg.padding = padding;
+            vlg.childAlignment = childAlignment;
+            vlg.childControlWidth = childControlWidth;
+            vlg.childControlHeight = childControlHeight;
+            vlg.childForceExpandWidth = childForceExpandWidth;
+            vlg.childForceExpandHeight = childForceExpandHeight;
+            return vlg;
+        }
+
+        /// <summary>Adds a <see cref="HorizontalLayoutGroup"/>. Defaults match the common gallery row.</summary>
+        public static HorizontalLayoutGroup AddHLG(GameObject go, float spacing = 0f, RectOffset padding = null, TextAnchor childAlignment = TextAnchor.MiddleLeft, bool childControlWidth = true, bool childControlHeight = true, bool childForceExpandWidth = true, bool childForceExpandHeight = false)
+        {
+            HorizontalLayoutGroup hlg = go.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = spacing;
+            if (padding != null) hlg.padding = padding;
+            hlg.childAlignment = childAlignment;
+            hlg.childControlWidth = childControlWidth;
+            hlg.childControlHeight = childControlHeight;
+            hlg.childForceExpandWidth = childForceExpandWidth;
+            hlg.childForceExpandHeight = childForceExpandHeight;
+            return hlg;
+        }
+
+        /// <summary>
+        /// Creates a gallery text label. Bakes in the Arial builtin font, non-bold style, and VPBUiFont hook.
+        /// Optional-parameter DEFAULTS mirror Unity's own <see cref="Text"/> defaults (Wrap/Truncate/UpperLeft,
+        /// raycast+richtext on) so omitting an argument reproduces a hand-rolled AddComponent&lt;Text&gt; site exactly.
+        /// Returns the <see cref="Text"/>; use <c>.rectTransform</c>/<c>.gameObject</c> for further layout tweaks.
+        /// </summary>
+        public static Text CreateLabel(GameObject parentGO, string text, int fontSize, Color? color = null,
+            TextAnchor alignment = TextAnchor.UpperLeft,
+            HorizontalWrapMode horizontalWrap = HorizontalWrapMode.Wrap,
+            VerticalWrapMode verticalWrap = VerticalWrapMode.Truncate,
+            bool raycastTarget = true, bool richText = true,
+            int anchorPreset = AnchorPresets.stretchAll, Vector2 size = default(Vector2), Vector2 anchoredPosition = default(Vector2),
+            string name = "Text")
+        {
+            GameObject go = CreateChildRT(parentGO, name, anchorPreset, size, anchoredPosition);
+            Text t = go.AddComponent<Text>();
+            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            t.fontSize = fontSize;
+            t.fontStyle = FontStyle.Normal;
+            t.color = color ?? Color.white;
+            t.alignment = alignment;
+            t.horizontalOverflow = horizontalWrap;
+            t.verticalOverflow = verticalWrap;
+            t.raycastTarget = raycastTarget;
+            t.supportRichText = richText;
+            t.text = text ?? "";
+            try { VPBUiFont.ApplyTo(t); } catch { }
+            return t;
+        }
+
+        /// <summary>
+        /// Builds the standard full-screen modal scaffold: a stretch-all root, a click-to-dismiss dim layer
+        /// (black at <paramref name="dimAlpha"/>, transition/navigation off), and a centered panel of the given
+        /// size + background. Returns the root; the panel is returned via <paramref name="panelGO"/> for the
+        /// caller to attach its own layout group / click blocker / content.
+        /// </summary>
+        public static GameObject CreateModalChrome(GameObject parentGO, string name, float panelWidth, float panelHeight, Color panelBg, UnityAction onDismiss, out GameObject panelGO, float dimAlpha = 0.72f)
+        {
+            GameObject root = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
+
+            GameObject dim = CreateChildRT(root, "Dim", AnchorPresets.stretchAll);
+            Image dimImg = dim.AddComponent<Image>();
+            dimImg.color = Black(dimAlpha);
+            dimImg.raycastTarget = true;
+            Button dimBtn = dim.AddComponent<Button>();
+            dimBtn.transition = Selectable.Transition.None;
+            dimBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            if (onDismiss != null) dimBtn.onClick.AddListener(onDismiss);
+
+            panelGO = CreateChildRT(root, "Panel", AnchorPresets.middleCenter, new Vector2(panelWidth, panelHeight));
+            Image pbg = panelGO.AddComponent<Image>();
+            pbg.color = panelBg;
+            pbg.raycastTarget = true;
+
+            return root;
         }
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
             // Rounded background. Fraction-of-size radius is scale-resistant (re-derived from the live
             // rect on every resize) and uniform across every gallery button.
-            GameObject buttonGO = AddChildGOImage(parentGO, new Color(0.2f, 0.2f, 0.2f, 1f), anchorPreset, width, height, new Vector2(xOffset, yOffset), rounded: true);
+            GameObject buttonGO = AddChildGOImage(parentGO, ChromePanel, anchorPreset, width, height, new Vector2(xOffset, yOffset), rounded: true);
             buttonGO.name = "Button_" + label;
             RoundedRect bgRounded = buttonGO.GetComponent<RoundedRect>();
             if (bgRounded != null) bgRounded.cornerRadiusFraction = ResolveGalleryElementCornerRadiusFraction();

@@ -414,7 +414,7 @@ namespace VPB
             hle.preferredHeight = chipH;
             hle.minHeight = chipH;
 
-            Image bg = AddSettingsControlRoundedBg(host, capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : new Color(0.1f, 0.1f, 0.1f, 1f));
+            Image bg = AddSettingsControlRoundedBg(host, capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : UI.ChromeDarker);
             Button hit = host.AddComponent<Button>();
             hit.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(hit);

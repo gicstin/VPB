@@ -203,15 +203,8 @@ namespace VPB
             Transform sameCheckTextTr = sameCheckBtn != null ? sameCheckBtn.transform.Find("Text") : null;
             _qmPosSameVrCheckText = sameCheckTextTr != null ? sameCheckTextTr.GetComponent<Text>() : null;
 
-            GameObject sameLbl = new GameObject("SameVrLabel");
-            sameLbl.transform.SetParent(sameRow.transform, false);
-            Text sl = sameLbl.AddComponent<Text>();
-            sl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            sl.fontSize = bodyFont;
-            sl.color = Color.white;
-            sl.text = VPBTranslation.T("hook.qmpos.same_vr", "Use same position in VR mode");
-            try { VPBUiFont.ApplyTo(sl); } catch { }
-            LayoutElement sll = sameLbl.AddComponent<LayoutElement>();
+            Text sl = UI.CreateLabel(sameRow, VPBTranslation.T("hook.qmpos.same_vr", "Use same position in VR mode"), bodyFont, Color.white, name: "SameVrLabel");
+            LayoutElement sll = sl.gameObject.AddComponent<LayoutElement>();
             sll.flexibleWidth = 1f;
 
             _qmPosVrSection = new GameObject("VrSection");
@@ -305,15 +298,7 @@ namespace VPB
             LayoutElement ble = block.AddComponent<LayoutElement>();
             ble.minHeight = 88f * s;
 
-            GameObject sec = new GameObject("SectionTitle");
-            sec.transform.SetParent(block.transform, false);
-            Text st = sec.AddComponent<Text>();
-            st.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            st.fontSize = bodyFont;
-            st.fontStyle = FontStyle.Normal;
-            st.color = new Color(0.85f, 0.9f, 1f, 1f);
-            st.text = sectionTitle ?? "";
-            try { VPBUiFont.ApplyTo(st); } catch { }
+            Text st = UI.CreateLabel(block, sectionTitle ?? "", bodyFont, new Color(0.85f, 0.9f, 1f, 1f), name: "SectionTitle");
 
             QmPosBuildSingleAxisSlider(block.transform, "X", bodyFont, s, initX, xMin, xMax, out sliderX, out labelX);
             QmPosBuildSingleAxisSlider(block.transform, "Y", bodyFont, s, initY, yMin, yMax, out sliderY, out labelY);
@@ -359,15 +344,8 @@ namespace VPB
             LayoutElement rle = row.AddComponent<LayoutElement>();
             rle.minHeight = 32f * s;
 
-            GameObject lblGo = new GameObject("ValueLabel");
-            lblGo.transform.SetParent(row.transform, false);
-            valueLabel = lblGo.AddComponent<Text>();
-            valueLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            valueLabel.fontSize = fontSize;
-            valueLabel.color = Color.white;
-            valueLabel.text = axis + ": " + Mathf.RoundToInt(value);
-            try { VPBUiFont.ApplyTo(valueLabel); } catch { }
-            LayoutElement lblLe = lblGo.AddComponent<LayoutElement>();
+            valueLabel = UI.CreateLabel(row, axis + ": " + Mathf.RoundToInt(value), fontSize, Color.white, name: "ValueLabel");
+            LayoutElement lblLe = valueLabel.gameObject.AddComponent<LayoutElement>();
             lblLe.minWidth = 56f * s;
 
             GameObject sliderHost = new GameObject("Slider");
@@ -446,19 +424,7 @@ namespace VPB
                 le.flexibleWidth = 1f;
             le.minHeight = le.preferredHeight = height;
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label ?? "";
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
+            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
             return go;
         }
     }

@@ -44,7 +44,7 @@ namespace VPB
         public List<QuickFilterSideTabSortEntry> SideTabSortStates = new List<QuickFilterSideTabSortEntry>();
         
         // Visual customization
-        public Color ButtonColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+        public Color ButtonColor = UI.ChromePanel;
         public Color TextColor = Color.white;
 
         public QuickFilterEntry() { }

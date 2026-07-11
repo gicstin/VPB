@@ -5,12 +5,12 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private static readonly Color GalleryBackgroundOpaque = new Color(0.1f, 0.1f, 0.1f, 1f);
+        private static readonly Color GalleryBackgroundOpaque = UI.ChromeDarker;
         private static readonly Color GalleryBackgroundTinted = new Color(0.1f, 0.1f, 0.1f, 0.9f);
         /// <summary>Invisible hit area only — no visible side-rail backdrop.</summary>
         private static readonly Color SideHoverHitAreaInvisible = new Color(0f, 0f, 0f, 0f);
         private static readonly Color CollapseTriggerCollapsedTransparent = new Color(0.15f, 0.15f, 0.15f, 0.4f);
-        private static readonly Color CollapseTriggerCollapsedOpaque = new Color(0.15f, 0.15f, 0.15f, 1f);
+        private static readonly Color CollapseTriggerCollapsedOpaque = UI.ChromeDark;
         private static readonly Color CollapseTriggerExpandedHidden = new Color(1f, 1f, 1f, 0f);
 
         private UIHoverColor backgroundHoverColor;

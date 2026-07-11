@@ -644,14 +644,7 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            VerticalLayoutGroup vlg = root.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 6f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(8 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(root, 6f * s, UI.Pad(6f, 6f, 4f, 8f, s), TextAnchor.UpperCenter);
 
             LayoutElement rootLe = root.AddComponent<LayoutElement>();
             rootLe.flexibleWidth = 1f;
@@ -659,16 +652,8 @@ namespace VPB
             rootCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject titleRow = new GameObject("AppliedTitleRow");
-            titleRow.transform.SetParent(root.transform, false);
-            HorizontalLayoutGroup trH = titleRow.AddComponent<HorizontalLayoutGroup>();
-            trH.spacing = 8f * s;
-            trH.padding = new RectOffset(0, 0, 0, 0);
-            trH.childAlignment = TextAnchor.MiddleLeft;
-            trH.childControlWidth = true;
-            trH.childControlHeight = true;
-            trH.childForceExpandWidth = true;
-            trH.childForceExpandHeight = false;
+            GameObject titleRow = UI.CreateChildRT(root, "AppliedTitleRow");
+            UI.AddHLG(titleRow, 8f * s);
 
             float delSz = Mathf.Max(32f, 42f * s);
 
@@ -677,15 +662,10 @@ namespace VPB
             titleRowLe.preferredHeight = Mathf.Max(34f * s, delSz);
             titleRowLe.flexibleWidth = 1f;
 
-            GameObject titleGo = new GameObject("AppliedTitleText");
-            titleGo.transform.SetParent(titleRow.transform, false);
-            Text titleTxt = titleGo.AddComponent<Text>();
-            titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleTxt.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef);
-            titleTxt.fontStyle = FontStyle.Normal;
-            titleTxt.color = new Color(0.88f, 0.88f, 0.92f, 1f);
-            titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0);
-            LayoutElement titleLe = titleGo.AddComponent<LayoutElement>();
+            Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0),
+                GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef),
+                new Color(0.88f, 0.88f, 0.92f, 1f), name: "AppliedTitleText");
+            LayoutElement titleLe = titleTxt.gameObject.AddComponent<LayoutElement>();
             titleLe.flexibleWidth = 1f;
             titleLe.minHeight = Mathf.Max(28f * s, delSz * 0.85f);
             Sprite delSpr = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
@@ -1100,15 +1080,8 @@ namespace VPB
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
-            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             float s = ChromeScale;
-            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAvailPinnedStickyGO = go;
             else rightUserTagsAvailPinnedStickyGO = go;
@@ -1129,15 +1102,8 @@ namespace VPB
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
-            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
             float s = ChromeScale;
-            vlg.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAppliedPinnedStickyGO = go;
             else rightUserTagsAppliedPinnedStickyGO = go;
@@ -2296,14 +2262,7 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            VerticalLayoutGroup vlg = root.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 7f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(10 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(root, 7f * s, UI.Pad(6f, 6f, 4f, 10f, s), TextAnchor.UpperCenter);
 
             LayoutElement rootLe = root.AddComponent<LayoutElement>();
             rootLe.flexibleWidth = 1f;
@@ -2315,33 +2274,16 @@ namespace VPB
             float miniSq = 34f * s;
             float titleBand = Mathf.Max(miniSq, Mathf.Max(30f * s, titleFs * 1.22f));
 
-            GameObject titleRow = new GameObject("TagsTitleRow");
-            titleRow.transform.SetParent(root.transform, false);
-            HorizontalLayoutGroup trHlg = titleRow.AddComponent<HorizontalLayoutGroup>();
-            trHlg.padding = new RectOffset(0, 0, 0, 0);
-            trHlg.spacing = 5f * s;
-            trHlg.childAlignment = TextAnchor.MiddleCenter;
-            trHlg.childControlWidth = true;
-            trHlg.childControlHeight = true;
-            trHlg.childForceExpandWidth = false;
-            trHlg.childForceExpandHeight = false;
+            GameObject titleRow = UI.CreateChildRT(root, "TagsTitleRow");
+            UI.AddHLG(titleRow, 5f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
             LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
             titleRowLe.minHeight = titleBand;
             titleRowLe.preferredHeight = titleBand;
             titleRowLe.flexibleWidth = 1f;
 
-            GameObject titleGo = new GameObject("BulkTitle");
-            titleGo.transform.SetParent(titleRow.transform, false);
-            Text titleTxt = titleGo.AddComponent<Text>();
-            titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleTxt.fontSize = titleFs;
-            titleTxt.fontStyle = FontStyle.Normal;
-            titleTxt.color = Color.white;
-            titleTxt.alignment = TextAnchor.MiddleCenter;
-            titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0);
-            titleTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            titleTxt.verticalOverflow = VerticalWrapMode.Truncate;
-            LayoutElement titleLe = titleGo.AddComponent<LayoutElement>();
+            Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0),
+                titleFs, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, name: "BulkTitle");
+            LayoutElement titleLe = titleTxt.gameObject.AddComponent<LayoutElement>();
             titleLe.minHeight = titleBand;
             titleLe.preferredHeight = titleBand;
             titleLe.flexibleWidth = 1f;
@@ -2353,17 +2295,9 @@ namespace VPB
             CreateUserTagModeMiniButton(titleRow, "T", UserTagAvailMode.Tag, miniSq, s,
                 VPBTranslation.T("gallery.usertags.mini_tag_tip", "Tag Mode: click tags to apply them to the selection."));
 
-            GameObject btnRow = new GameObject("BulkBtnRow");
-            btnRow.transform.SetParent(root.transform, false);
-            HorizontalLayoutGroup hlg = btnRow.AddComponent<HorizontalLayoutGroup>();
-            hlg.padding = new RectOffset(0, 0, 0, 0);
-            hlg.spacing = 6f * s;
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.childControlWidth = true;
-            hlg.childControlHeight = true;
             // false: only Apply (flexibleWidth 1) grows; true spreads width across all children and crushes the label.
-            hlg.childForceExpandWidth = false;
-            hlg.childForceExpandHeight = false;
+            GameObject btnRow = UI.CreateChildRT(root, "BulkBtnRow");
+            UI.AddHLG(btnRow, 6f * s, childForceExpandWidth: false);
             LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
             rowLe.minHeight = 34f * s;
             rowLe.preferredHeight = 36f * s;
@@ -2793,19 +2727,8 @@ namespace VPB
             le.flexibleWidth = 0f;
             le.flexibleHeight = 0f;
 
-            GameObject txtGo = new GameObject("Text");
-            txtGo.transform.SetParent(go.transform, false);
-            Text t = txtGo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.text = letter;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.raycastTarget = false;
-            t.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            RectTransform trt = txtGo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.sizeDelta = Vector2.zero;
+            UI.CreateLabel(go, letter, GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef),
+                Color.white, TextAnchor.MiddleCenter, raycastTarget: false);
 
             AddTooltipPlain(go, tip);
         }
@@ -2830,7 +2753,7 @@ namespace VPB
             EnsureUserTagSideChromeRoundedBg(tr.gameObject, showCol);
             Text lbl = tr.GetComponentInChildren<Text>(true);
             if (lbl != null)
-                lbl.color = active ? Color.white : new Color(0.72f, 0.72f, 0.75f, 1f);
+                lbl.color = active ? Color.white : UI.TextMuted;
         }
 
         private void SyncUserTagFilterModeToggleVisualsEverywhere()
@@ -3006,37 +2929,17 @@ namespace VPB
             pbg.color = new Color(0.11f, 0.11f, 0.13f, 1f);
             pbg.raycastTarget = true;
 
-            VerticalLayoutGroup pvlg = panel.AddComponent<VerticalLayoutGroup>();
-            pvlg.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            pvlg.spacing = 8f * s;
-            pvlg.childControlWidth = true;
-            pvlg.childControlHeight = true;
-            pvlg.childForceExpandWidth = true;
-            pvlg.childForceExpandHeight = false;
+            UI.AddVLG(panel, 8f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
-            GameObject titleRow = new GameObject("TitleRow");
-            titleRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup trh = titleRow.AddComponent<HorizontalLayoutGroup>();
-            trh.childAlignment = TextAnchor.UpperLeft;
-            trh.spacing = 0f;
-            trh.childControlWidth = true;
-            trh.childControlHeight = true;
-            trh.childForceExpandWidth = true;
-            trh.childForceExpandHeight = false;
+            GameObject titleRow = UI.CreateChildRT(panel, "TitleRow");
+            UI.AddHLG(titleRow, 0f, childAlignment: TextAnchor.UpperLeft);
             LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
             titleRowLe.minHeight = Mathf.Max(26f * s, headerChromeSq * 0.72f);
             titleRowLe.preferredHeight = titleRowLe.minHeight;
 
-            GameObject titleGo = new GameObject("TagsDbTitle");
-            titleGo.transform.SetParent(titleRow.transform, false);
-            Text headerTitleTxt = titleGo.AddComponent<Text>();
-            headerTitleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            headerTitleTxt.fontSize = editorType.Prose;
-            headerTitleTxt.fontStyle = FontStyle.Normal;
-            headerTitleTxt.fontStyle = FontStyle.Normal;
-            headerTitleTxt.color = new Color(0.92f, 0.92f, 0.95f, 1f);
-            headerTitleTxt.alignment = TextAnchor.UpperLeft;
+            Text headerTitleTxt = UI.CreateLabel(titleRow, "", editorType.Prose, new Color(0.92f, 0.92f, 0.95f, 1f), name: "TagsDbTitle");
             _userTagEditorTitleText = headerTitleTxt;
+            GameObject titleGo = headerTitleTxt.gameObject;
             LayoutElement titleHLe = titleGo.AddComponent<LayoutElement>();
             titleHLe.flexibleWidth = 0f;
             titleHLe.minHeight = titleRowLe.minHeight;
@@ -3044,15 +2947,8 @@ namespace VPB
             titleCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             titleCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject headerRow = new GameObject("HeaderRow");
-            headerRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup hh = headerRow.AddComponent<HorizontalLayoutGroup>();
-            hh.childAlignment = TextAnchor.MiddleLeft;
-            hh.spacing = 6f * s;
-            hh.childControlWidth = true;
-            hh.childControlHeight = true;
-            hh.childForceExpandWidth = false;
-            hh.childForceExpandHeight = false;
+            GameObject headerRow = UI.CreateChildRT(panel, "HeaderRow");
+            UI.AddHLG(headerRow, 6f * s, childForceExpandWidth: false);
             LayoutElement hle = headerRow.AddComponent<LayoutElement>();
             hle.minHeight = Mathf.Max(headerChromeSq, searchBarH);
             hle.preferredHeight = headerChromeSq;
@@ -3082,29 +2978,8 @@ namespace VPB
             ftaRt.anchorMax = Vector2.one;
             ftaRt.offsetMin = new Vector2(8f * s, 2f * s);
             ftaRt.offsetMax = new Vector2(-8f * s, -2f * s);
-            GameObject fph = new GameObject("Placeholder");
-            fph.transform.SetParent(fta.transform, false);
-            Text fphT = fph.AddComponent<Text>();
-            fphT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            fphT.fontSize = bodyFont;
-            fphT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            fphT.alignment = TextAnchor.MiddleLeft;
-            fphT.text = VPBTranslation.T("gallery.usertags.editor_filter_ph", "Filter list…");
-            RectTransform fphRt = fph.GetComponent<RectTransform>();
-            fphRt.anchorMin = Vector2.zero;
-            fphRt.anchorMax = Vector2.one;
-            fphRt.sizeDelta = Vector2.zero;
-            GameObject ftc = new GameObject("Text");
-            ftc.transform.SetParent(fta.transform, false);
-            Text ftcT = ftc.AddComponent<Text>();
-            ftcT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ftcT.fontSize = bodyFont;
-            ftcT.color = Color.white;
-            ftcT.alignment = TextAnchor.MiddleLeft;
-            RectTransform ftcRt = ftc.GetComponent<RectTransform>();
-            ftcRt.anchorMin = Vector2.zero;
-            ftcRt.anchorMax = Vector2.one;
-            ftcRt.sizeDelta = Vector2.zero;
+            Text fphT = UI.CreateLabel(fta, VPBTranslation.T("gallery.usertags.editor_filter_ph", "Filter list…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), TextAnchor.MiddleLeft, name: "Placeholder");
+            Text ftcT = UI.CreateLabel(fta, "", bodyFont, Color.white, TextAnchor.MiddleLeft);
             _userTagEditorFilterInput = filterGo.AddComponent<InputField>();
             _userTagEditorFilterInput.textComponent = ftcT;
             _userTagEditorFilterInput.placeholder = fphT;
@@ -3139,15 +3014,8 @@ namespace VPB
                 }
             }
 
-            GameObject newTagBlock = new GameObject("NewTagBlock");
-            newTagBlock.transform.SetParent(panel.transform, false);
-            VerticalLayoutGroup ntbV = newTagBlock.AddComponent<VerticalLayoutGroup>();
-            ntbV.spacing = 4f * s;
-            ntbV.childAlignment = TextAnchor.UpperLeft;
-            ntbV.childControlWidth = true;
-            ntbV.childControlHeight = true;
-            ntbV.childForceExpandWidth = true;
-            ntbV.childForceExpandHeight = false;
+            GameObject newTagBlock = UI.CreateChildRT(panel, "NewTagBlock");
+            UI.AddVLG(newTagBlock, 4f * s);
             LayoutElement ntbLe = newTagBlock.AddComponent<LayoutElement>();
             ntbLe.flexibleWidth = 1f;
             ntbLe.minHeight = 152f * s;
@@ -3170,31 +3038,8 @@ namespace VPB
             ntaRt.anchorMax = Vector2.one;
             ntaRt.offsetMin = new Vector2(8f * s, 6f * s);
             ntaRt.offsetMax = new Vector2(-8f * s, -6f * s);
-            GameObject nph = new GameObject("Placeholder");
-            nph.transform.SetParent(nta.transform, false);
-            Text nphT = nph.AddComponent<Text>();
-            nphT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            nphT.fontSize = bodyFont;
-            nphT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            nphT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            nphT.verticalOverflow = VerticalWrapMode.Overflow;
-            nphT.text = VPBTranslation.T("gallery.usertags.editor_new_ph", "Type or paste tag names here…");
-            RectTransform nphRt = nph.GetComponent<RectTransform>();
-            nphRt.anchorMin = Vector2.zero;
-            nphRt.anchorMax = Vector2.one;
-            nphRt.sizeDelta = Vector2.zero;
-            GameObject ntx = new GameObject("Text");
-            ntx.transform.SetParent(nta.transform, false);
-            Text ntxT = ntx.AddComponent<Text>();
-            ntxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ntxT.fontSize = bodyFont;
-            ntxT.color = Color.white;
-            ntxT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            ntxT.verticalOverflow = VerticalWrapMode.Overflow;
-            RectTransform ntxRt = ntx.GetComponent<RectTransform>();
-            ntxRt.anchorMin = Vector2.zero;
-            ntxRt.anchorMax = Vector2.one;
-            ntxRt.sizeDelta = Vector2.zero;
+            Text nphT = UI.CreateLabel(nta, VPBTranslation.T("gallery.usertags.editor_new_ph", "Type or paste tag names here…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), TextAnchor.UpperLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow, name: "Placeholder");
+            Text ntxT = UI.CreateLabel(nta, "", bodyFont, Color.white, TextAnchor.UpperLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow);
             _userTagEditorNewTagInput = newInGo.AddComponent<InputField>();
             _userTagEditorNewTagInput.textComponent = ntxT;
             _userTagEditorNewTagInput.placeholder = nphT;
@@ -3296,23 +3141,10 @@ namespace VPB
             Image mmPbg = mmPanel.AddComponent<Image>();
             mmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
             mmPbg.raycastTarget = true;
-            VerticalLayoutGroup mmV = mmPanel.AddComponent<VerticalLayoutGroup>();
-            mmV.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            mmV.spacing = 10f * s;
-            mmV.childControlWidth = true;
-            mmV.childControlHeight = true;
-            mmV.childForceExpandWidth = true;
+            UI.AddVLG(mmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
-            GameObject mmTitleGo = new GameObject("MergeTitle");
-            mmTitleGo.transform.SetParent(mmPanel.transform, false);
-            _userTagEditorMergeModalTitleText = mmTitleGo.AddComponent<Text>();
-            _userTagEditorMergeModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorMergeModalTitleText.fontSize = editorType.Prose;
-            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Normal;
-            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Normal;
-            _userTagEditorMergeModalTitleText.color = Color.white;
-            _userTagEditorMergeModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…");
-            LayoutElement mmTle = mmTitleGo.AddComponent<LayoutElement>();
+            _userTagEditorMergeModalTitleText = UI.CreateLabel(mmPanel, VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), editorType.Prose, Color.white, name: "MergeTitle");
+            LayoutElement mmTle = _userTagEditorMergeModalTitleText.gameObject.AddComponent<LayoutElement>();
             mmTle.minHeight = 24f * s;
             mmTle.flexibleWidth = 1f;
 
@@ -3329,38 +3161,15 @@ namespace VPB
             mmTaRt.anchorMax = Vector2.one;
             mmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
             mmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            GameObject mmPh = new GameObject("Placeholder");
-            mmPh.transform.SetParent(mmTa.transform, false);
-            Text mmPhT = mmPh.AddComponent<Text>();
-            mmPhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            mmPhT.fontSize = bodyFont;
-            mmPhT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            mmPhT.text = VPBTranslation.T("gallery.usertags.editor_merge_ph", "New tag name…");
-            RectTransform mmPhRt = mmPh.GetComponent<RectTransform>();
-            mmPhRt.anchorMin = Vector2.zero;
-            mmPhRt.anchorMax = Vector2.one;
-            mmPhRt.sizeDelta = Vector2.zero;
-            GameObject mmTx = new GameObject("Text");
-            mmTx.transform.SetParent(mmTa.transform, false);
-            Text mmTxT = mmTx.AddComponent<Text>();
-            mmTxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            mmTxT.fontSize = bodyFont;
-            mmTxT.color = Color.white;
-            RectTransform mmTxRt = mmTx.GetComponent<RectTransform>();
-            mmTxRt.anchorMin = Vector2.zero;
-            mmTxRt.anchorMax = Vector2.one;
-            mmTxRt.sizeDelta = Vector2.zero;
+            Text mmPhT = UI.CreateLabel(mmTa, VPBTranslation.T("gallery.usertags.editor_merge_ph", "New tag name…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), name: "Placeholder");
+            Text mmTxT = UI.CreateLabel(mmTa, "", bodyFont, Color.white);
             _userTagEditorMergeModalInput = mmInGo.AddComponent<InputField>();
             _userTagEditorMergeModalInput.textComponent = mmTxT;
             _userTagEditorMergeModalInput.placeholder = mmPhT;
             _userTagEditorMergeModalInput.lineType = InputField.LineType.SingleLine;
 
-            GameObject mmBtnRow = new GameObject("MergeDialogButtons");
-            mmBtnRow.transform.SetParent(mmPanel.transform, false);
-            HorizontalLayoutGroup mmBH = mmBtnRow.AddComponent<HorizontalLayoutGroup>();
-            mmBH.spacing = 8f * s;
-            mmBH.childAlignment = TextAnchor.MiddleCenter;
-            mmBH.childForceExpandWidth = true;
+            GameObject mmBtnRow = UI.CreateChildRT(mmPanel, "MergeDialogButtons");
+            UI.AddHLG(mmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
             LayoutElement mmBRle = mmBtnRow.AddComponent<LayoutElement>();
             mmBRle.minHeight = 40f * s;
             mmBRle.flexibleWidth = 1f;
@@ -3399,23 +3208,10 @@ namespace VPB
             Image rmPbg = rmPanel.AddComponent<Image>();
             rmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
             rmPbg.raycastTarget = true;
-            VerticalLayoutGroup rmV = rmPanel.AddComponent<VerticalLayoutGroup>();
-            rmV.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            rmV.spacing = 10f * s;
-            rmV.childControlWidth = true;
-            rmV.childControlHeight = true;
-            rmV.childForceExpandWidth = true;
+            UI.AddVLG(rmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
-            GameObject rmTitleGo = new GameObject("RenameTitle");
-            rmTitleGo.transform.SetParent(rmPanel.transform, false);
-            _userTagEditorRenameModalTitleText = rmTitleGo.AddComponent<Text>();
-            _userTagEditorRenameModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorRenameModalTitleText.fontSize = editorType.Prose;
-            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Normal;
-            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Normal;
-            _userTagEditorRenameModalTitleText.color = Color.white;
-            _userTagEditorRenameModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…");
-            LayoutElement rmTle = rmTitleGo.AddComponent<LayoutElement>();
+            _userTagEditorRenameModalTitleText = UI.CreateLabel(rmPanel, VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…"), editorType.Prose, Color.white, name: "RenameTitle");
+            LayoutElement rmTle = _userTagEditorRenameModalTitleText.gameObject.AddComponent<LayoutElement>();
             rmTle.minHeight = 24f * s;
             rmTle.flexibleWidth = 1f;
 
@@ -3432,38 +3228,15 @@ namespace VPB
             rmTaRt.anchorMax = Vector2.one;
             rmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
             rmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            GameObject rmPh = new GameObject("Placeholder");
-            rmPh.transform.SetParent(rmTa.transform, false);
-            Text rmPhT = rmPh.AddComponent<Text>();
-            rmPhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            rmPhT.fontSize = bodyFont;
-            rmPhT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            rmPhT.text = VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…");
-            RectTransform rmPhRt = rmPh.GetComponent<RectTransform>();
-            rmPhRt.anchorMin = Vector2.zero;
-            rmPhRt.anchorMax = Vector2.one;
-            rmPhRt.sizeDelta = Vector2.zero;
-            GameObject rmTx = new GameObject("Text");
-            rmTx.transform.SetParent(rmTa.transform, false);
-            Text rmTxT = rmTx.AddComponent<Text>();
-            rmTxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            rmTxT.fontSize = bodyFont;
-            rmTxT.color = Color.white;
-            RectTransform rmTxRt = rmTx.GetComponent<RectTransform>();
-            rmTxRt.anchorMin = Vector2.zero;
-            rmTxRt.anchorMax = Vector2.one;
-            rmTxRt.sizeDelta = Vector2.zero;
+            Text rmPhT = UI.CreateLabel(rmTa, VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), name: "Placeholder");
+            Text rmTxT = UI.CreateLabel(rmTa, "", bodyFont, Color.white);
             _userTagEditorRenameModalInput = rmInGo.AddComponent<InputField>();
             _userTagEditorRenameModalInput.textComponent = rmTxT;
             _userTagEditorRenameModalInput.placeholder = rmPhT;
             _userTagEditorRenameModalInput.lineType = InputField.LineType.SingleLine;
 
-            GameObject rmBtnRow = new GameObject("RenameDialogButtons");
-            rmBtnRow.transform.SetParent(rmPanel.transform, false);
-            HorizontalLayoutGroup rmBH = rmBtnRow.AddComponent<HorizontalLayoutGroup>();
-            rmBH.spacing = 8f * s;
-            rmBH.childAlignment = TextAnchor.MiddleCenter;
-            rmBH.childForceExpandWidth = true;
+            GameObject rmBtnRow = UI.CreateChildRT(rmPanel, "RenameDialogButtons");
+            UI.AddHLG(rmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
             LayoutElement rmBRle = rmBtnRow.AddComponent<LayoutElement>();
             rmBRle.minHeight = 40f * s;
             rmBRle.flexibleWidth = 1f;
@@ -4441,17 +4214,8 @@ namespace VPB
                 swRt.anchoredPosition = new Vector2(12f * s, 0f);
 
                 float labelLeft = 12f * s + swSize + 8f * s;
-                GameObject txtGo = new GameObject("Label");
-                txtGo.transform.SetParent(rowGo.transform, false);
-                Text txt = txtGo.AddComponent<Text>();
-                txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                txt.fontSize = rowFont;
-                txt.color = new Color(0.93f, 0.93f, 0.95f, 1f);
-                txt.text = label;
-                txt.alignment = TextAnchor.MiddleLeft;
-                RectTransform trt = txtGo.GetComponent<RectTransform>();
-                trt.anchorMin = Vector2.zero;
-                trt.anchorMax = Vector2.one;
+                Text txt = UI.CreateLabel(rowGo, label, rowFont, new Color(0.93f, 0.93f, 0.95f, 1f), TextAnchor.MiddleLeft, name: "Label");
+                RectTransform trt = txt.GetComponent<RectTransform>();
                 trt.offsetMin = new Vector2(labelLeft, 2f * s);
                 trt.offsetMax = new Vector2(-14f * s, -2f * s);
             }
@@ -4767,22 +4531,11 @@ namespace VPB
             bg.color = new Color(0.15f, 0.15f, 0.18f, 0.85f);
             bg.raycastTarget = false;
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(_ghost.transform, false);
-            RectTransform trt = tgo.AddComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
+            _ghostText = UI.CreateLabel(_ghost, tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count),
+                GalleryUiDesignTokens.FontBodyRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow);
+            RectTransform trt = _ghostText.GetComponent<RectTransform>();
             trt.offsetMin = new Vector2(10f, 6f);
             trt.offsetMax = new Vector2(-10f, -6f);
-
-            _ghostText = tgo.AddComponent<Text>();
-            _ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _ghostText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            _ghostText.color = new Color(0.95f, 0.95f, 0.97f, 1f);
-            _ghostText.alignment = TextAnchor.MiddleLeft;
-            _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            _ghostText.verticalOverflow = VerticalWrapMode.Truncate;
-            _ghostText.text = tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count);
         }
 
         private void UpdateGhostPosition()

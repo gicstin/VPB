@@ -1993,16 +1993,8 @@ namespace VPB
             le.minHeight = chipH;
             le.flexibleWidth = 0f;
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(go.transform, false);
-            Text t = tgo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
             GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.text = label;
-            RectTransform trt = tgo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.sizeDelta = Vector2.zero;
             return go;
         }
 
@@ -2065,11 +2057,11 @@ namespace VPB
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
                 bool cur = def.GetBool();
-                CreateMiniButton(controls.transform, "OFF", 58f, cur ? new Color(0.2f, 0.2f, 0.2f, 1f) : new Color(0.6f, 0.2f, 0.2f, 1f), () => {
+                CreateMiniButton(controls.transform, "OFF", 58f, cur ? UI.ChromePanel : UI.AccentRed, () => {
                     def.SetBool(false);
                     RefreshInternalSettingsListRows(true);
                 });
-                CreateMiniButton(controls.transform, "ON", 58f, cur ? new Color(0.2f, 0.6f, 0.2f, 1f) : new Color(0.2f, 0.2f, 0.2f, 1f), () => {
+                CreateMiniButton(controls.transform, "ON", 58f, cur ? UI.AccentGreen : UI.ChromePanel, () => {
                     def.SetBool(true);
                     RefreshInternalSettingsListRows(true);
                 });
@@ -2219,20 +2211,13 @@ namespace VPB
                 ile.minWidth = 78f * uiS;
                 ile.preferredHeight = chipH;
                 ile.minHeight = chipH;
-                Image inputBg = AddSettingsControlRoundedBg(inputGO, new Color(0.1f, 0.1f, 0.1f, 1f));
+                Image inputBg = AddSettingsControlRoundedBg(inputGO, UI.ChromeDarker);
                 InputField input = inputGO.AddComponent<InputField>();
                 input.targetGraphic = inputBg;
                 input.contentType = def.AllowNegative ? InputField.ContentType.Standard : InputField.ContentType.DecimalNumber;
 
-                GameObject tgo = new GameObject("Text");
-                tgo.transform.SetParent(inputGO.transform, false);
-                Text it = tgo.AddComponent<Text>();
-                it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                Text it = UI.CreateLabel(inputGO, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
                 GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                it.color = Color.white;
-                it.alignment = TextAnchor.MiddleCenter;
-                RectTransform itRT = tgo.GetComponent<RectTransform>();
-                itRT.anchorMin = Vector2.zero; itRT.anchorMax = Vector2.one; itRT.sizeDelta = Vector2.zero;
                 input.textComponent = it;
                 input.text = slider.value.ToString("F" + Math.Max(0, def.Decimals));
 
@@ -2329,19 +2314,9 @@ namespace VPB
                 cb.fadeDuration = 0f;
                 inf.colors = cb;
 
-                GameObject textGo = new GameObject("Text");
-                textGo.transform.SetParent(taHost.transform, false);
-                Text taTxt = textGo.AddComponent<Text>();
-                taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                Text taTxt = UI.CreateLabel(taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.UpperLeft, richText: false, name: "Text");
                 GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
-                taTxt.alignment = TextAnchor.UpperLeft;
-                taTxt.supportRichText = false;
-                taTxt.raycastTarget = true;
-                try { VPBUiFont.ApplyTo(taTxt); } catch { }
-                RectTransform taTxtRt = textGo.GetComponent<RectTransform>();
-                taTxtRt.anchorMin = Vector2.zero;
-                taTxtRt.anchorMax = Vector2.one;
+                RectTransform taTxtRt = taTxt.GetComponent<RectTransform>();
                 taTxtRt.offsetMin = new Vector2(6f * uiS, 6f * uiS);
                 taTxtRt.offsetMax = new Vector2(-6f * uiS, -6f * uiS);
                 inf.textComponent = taTxt;
@@ -2368,19 +2343,11 @@ namespace VPB
                 if (def.OnAction == null
                     && string.Equals(def.Key, "plugin.scan_whitelist.empty_warn", StringComparison.OrdinalIgnoreCase))
                 {
-                    GameObject warn = new GameObject("SettingsWarningLabel");
-                    warn.transform.SetParent(controls.transform, false);
-                    LayoutElement wle = warn.AddComponent<LayoutElement>();
+                    Text wt = UI.CreateLabel(controls, def.Label ?? "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(1f, 0.75f, 0.2f, 1f), TextAnchor.MiddleRight, richText: false, name: "SettingsWarningLabel");
+                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
+                    LayoutElement wle = wt.gameObject.AddComponent<LayoutElement>();
                     wle.flexibleWidth = 1f;
                     wle.preferredHeight = chipH;
-                    Text wt = warn.AddComponent<Text>();
-                    wt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                    wt.color = new Color(1f, 0.75f, 0.2f, 1f);
-                    wt.alignment = TextAnchor.MiddleRight;
-                    wt.supportRichText = false;
-                    wt.text = def.Label ?? "";
-                    try { VPBUiFont.ApplyTo(wt); } catch { }
                     return;
                 }
                 if (def.OnAction != null)
@@ -2603,7 +2570,7 @@ namespace VPB
                 boxRt.sizeDelta = new Vector2(560f, 260f);
                 boxRt.anchoredPosition = Vector2.zero;
                 UnityEngine.UI.Image boxBg = box.AddComponent<UnityEngine.UI.Image>();
-                boxBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                boxBg.color = UI.ChromeDark;
 
                 // Layout for text + buttons
                 UnityEngine.UI.VerticalLayoutGroup vl = box.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
@@ -2614,17 +2581,9 @@ namespace VPB
                 vl.childForceExpandHeight = false;
 
                 // Message text
-                GameObject textGo = new GameObject("Message");
-                textGo.transform.SetParent(box.transform, false);
-                UnityEngine.UI.Text msg = textGo.AddComponent<UnityEngine.UI.Text>();
-                msg.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                msg.fontSize = GalleryUiDesignTokens.FontRef;
-                msg.fontStyle = FontStyle.Normal;
-                msg.alignment = TextAnchor.MiddleCenter;
-                msg.color = Color.white;
-                msg.text = VPBTranslation.T("ba.prompt.msg",
-                    "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section.");
-                UnityEngine.UI.LayoutElement textLe = textGo.AddComponent<UnityEngine.UI.LayoutElement>();
+                Text msg = UI.CreateLabel(box, VPBTranslation.T("ba.prompt.msg",
+                    "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section."), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, name: "Message");
+                UnityEngine.UI.LayoutElement textLe = msg.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
                 textLe.preferredHeight = 130f;
                 textLe.flexibleWidth = 1f;
 

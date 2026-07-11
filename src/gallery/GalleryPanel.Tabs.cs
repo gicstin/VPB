@@ -1136,7 +1136,7 @@ namespace VPB
             else if (contentType == ContentType.SavePresets)
             {
                 var options = BuildSaveMenuOptions();
-                Color saveColor = new Color(0.2f, 0.2f, 0.2f, 1f);
+                Color saveColor = UI.ChromePanel;
                 Color cancelColor = ColorCancelRow;
 
                 AddCloseSidePaneRow(container.transform, trackedButtons, isLeft, cancelColor);
@@ -1443,19 +1443,8 @@ namespace VPB
             placeholderRT.sizeDelta = Vector2.zero;
             
             // Text
-            GameObject text = new GameObject("Text");
-            text.transform.SetParent(textArea.transform, false);
-            Text textComponent = text.AddComponent<Text>();
-            textComponent.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            textComponent.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            textComponent.color = UI.InputFieldTextColor;
-            textComponent.supportRichText = false;
-            textComponent.alignment = TextAnchor.MiddleLeft; // Vertically centered
-            RectTransform textRT = text.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
-            
+            Text textComponent = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, UI.InputFieldTextColor, TextAnchor.MiddleLeft, richText: false); // Vertically centered
+
             input.textComponent = textComponent;
             input.placeholder = placeholderText;
             input.onValueChanged.AddListener(onValueChanged);
@@ -1562,20 +1551,7 @@ namespace VPB
             Button btn = btnGO.AddComponent<Button>();
             btn.targetGraphic = img;
 
-            GameObject navTextGO = new GameObject("NavText");
-            navTextGO.transform.SetParent(btnGO.transform, false);
-            Text t = navTextGO.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = GalleryUiDesignTokens.FontRef;
-            t.fontStyle = FontStyle.Normal;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.raycastTarget = false;
-            
-            RectTransform rt = navTextGO.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.sizeDelta = Vector2.zero;
+            UI.CreateLabel(btnGO, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "NavText");
 
             return btnGO;
         }
@@ -1789,23 +1765,11 @@ namespace VPB
             gridLabelBg.color = new Color(0f, 0f, 0f, 0.6f);
             gridLabelBg.raycastTarget = false;
 
-            GameObject gridLabelTextGO = new GameObject("Text");
-            gridLabelTextGO.transform.SetParent(gridLabelGO.transform, false);
-            RectTransform gridLabelTextRT = gridLabelTextGO.AddComponent<RectTransform>();
-            gridLabelTextRT.anchorMin = Vector2.zero;
-            gridLabelTextRT.anchorMax = Vector2.one;
+            Text gridLabelText = UI.CreateLabel(gridLabelGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
+            GameObject gridLabelTextGO = gridLabelText.gameObject;
+            RectTransform gridLabelTextRT = gridLabelTextGO.GetComponent<RectTransform>();
             gridLabelTextRT.offsetMin = new Vector2(2f, 0f);
             gridLabelTextRT.offsetMax = new Vector2(-2f, 0f);
-
-            Text gridLabelText = gridLabelTextGO.AddComponent<Text>();
-            gridLabelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            gridLabelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            gridLabelText.color = Color.white;
-            gridLabelText.alignment = TextAnchor.MiddleCenter;
-            gridLabelText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            gridLabelText.verticalOverflow = VerticalWrapMode.Overflow;
-            gridLabelText.resizeTextForBestFit = false;
-            gridLabelText.raycastTarget = false;
 
             Shadow gridLabelShadow = gridLabelTextGO.AddComponent<Shadow>();
             gridLabelShadow.effectColor = new Color(0f, 0f, 0f, 0.9f);
@@ -1824,13 +1788,8 @@ namespace VPB
             cardRT.sizeDelta = new Vector2(0, 0); // Width stretch
 
             // Dynamic height based on content
-            VerticalLayoutGroup cardVLG = cardGO.AddComponent<VerticalLayoutGroup>();
-            cardVLG.childControlHeight = true;
-            cardVLG.childControlWidth = true;
-            cardVLG.childForceExpandHeight = false;
-            cardVLG.childForceExpandWidth = true;
-            cardVLG.padding = new RectOffset(5, 5, 5, 5);
-            
+            VerticalLayoutGroup cardVLG = UI.AddVLG(cardGO, 0f, UI.Pad(5f, 5f, 5f, 5f));
+
             ContentSizeFitter cardCSF = cardGO.AddComponent<ContentSizeFitter>();
             cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
@@ -1840,18 +1799,9 @@ namespace VPB
             cardBg.raycastTarget = false;
 
             // Label
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(cardGO.transform, false);
-            Text labelText = labelGO.AddComponent<Text>();
-            labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            labelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            labelText.color = Color.white;
-            labelText.alignment = TextAnchor.MiddleCenter;
-            labelText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            labelText.verticalOverflow = VerticalWrapMode.Overflow;
-            labelText.supportRichText = true;
-            labelText.raycastTarget = false;
-            
+            Text labelText = UI.CreateLabel(cardGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Label");
+            GameObject labelGO = labelText.gameObject;
+
             // Label Layout
             LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
             labelLE.minHeight = 30;
@@ -1872,27 +1822,11 @@ namespace VPB
             listRowRT.offsetMin = new Vector2(60, 0);
             listRowRT.offsetMax = new Vector2(-50, 0);
 
-            VerticalLayoutGroup listVLG = listRowGO.AddComponent<VerticalLayoutGroup>();
-            listVLG.childAlignment = TextAnchor.MiddleLeft;
-            listVLG.childControlHeight = true;
-            listVLG.childControlWidth = true;
-            listVLG.childForceExpandHeight = false;
-            listVLG.childForceExpandWidth = true;
-            listVLG.spacing = 0f;
-            listVLG.padding = new RectOffset(5, 5, 5, 5);
+            VerticalLayoutGroup listVLG = UI.AddVLG(listRowGO, 0f, UI.Pad(5f, 5f, 5f, 5f), TextAnchor.MiddleLeft);
 
             // Name
-            GameObject listNameGO = new GameObject("Name");
-            listNameGO.transform.SetParent(listRowGO.transform, false);
-            Text listNameText = listNameGO.AddComponent<Text>();
-            listNameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            listNameText.fontSize = GalleryUiDesignTokens.FontRef;
-            listNameText.fontStyle = FontStyle.Normal;
-            listNameText.color = Color.white;
-            listNameText.alignment = TextAnchor.LowerLeft;
-            listNameText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            listNameText.verticalOverflow = VerticalWrapMode.Truncate;
-            listNameText.raycastTarget = false;
+            Text listNameText = UI.CreateLabel(listRowGO, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.LowerLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Name");
+            GameObject listNameGO = listNameText.gameObject;
             LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
             listNameLE.flexibleWidth = 1;
             listNameLE.minHeight = 32;
@@ -1900,14 +1834,7 @@ namespace VPB
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
-            HorizontalLayoutGroup detailsHLG = detailsRowGO.AddComponent<HorizontalLayoutGroup>();
-            detailsHLG.childAlignment = TextAnchor.MiddleLeft;
-            detailsHLG.childControlHeight = true;
-            detailsHLG.childControlWidth = true;
-            detailsHLG.childForceExpandHeight = false;
-            detailsHLG.childForceExpandWidth = false;
-            detailsHLG.spacing = 15f;
-            detailsHLG.padding = new RectOffset(0, 0, 0, 0);
+            HorizontalLayoutGroup detailsHLG = UI.AddHLG(detailsRowGO, 15f, UI.Pad(0f, 0f, 0f, 0f), childForceExpandWidth: false);
             LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
             detailsLE.flexibleWidth = 1;
             detailsLE.minHeight = 24;
@@ -1915,17 +1842,8 @@ namespace VPB
             // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
             {
-                GameObject go = new GameObject(name);
-                go.transform.SetParent(detailsRowGO.transform, false);
-                Text t = go.AddComponent<Text>();
-                t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-                t.color = new Color(0.75f, 0.75f, 0.75f, 1f);
-                t.alignment = TextAnchor.MiddleLeft;
-                t.horizontalOverflow = HorizontalWrapMode.Overflow;
-                t.verticalOverflow = VerticalWrapMode.Truncate;
-                t.raycastTarget = false;
-                t.text = placeholder;
+                Text t = UI.CreateLabel(detailsRowGO, placeholder, GalleryUiDesignTokens.FontBodyRef, new Color(0.75f, 0.75f, 0.75f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: name);
+                GameObject go = t.gameObject;
                 LayoutElement le = go.AddComponent<LayoutElement>();
                 le.preferredWidth = width;
                 le.minWidth = width * 0.5f;
@@ -2053,21 +1971,7 @@ namespace VPB
             Image aiBadgeBg = aiBadgeGO.AddComponent<Image>();
             aiBadgeBg.color = new Color(0f, 0.35f, 1f, 0.85f);
             aiBadgeBg.raycastTarget = false;
-            GameObject aiBadgeTextGO = new GameObject("Text");
-            aiBadgeTextGO.transform.SetParent(aiBadgeGO.transform, false);
-            Text aiBadgeText = aiBadgeTextGO.AddComponent<Text>();
-            aiBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            aiBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            aiBadgeText.fontStyle = FontStyle.Normal;
-            aiBadgeText.color = Color.white;
-            aiBadgeText.alignment = TextAnchor.MiddleCenter;
-            aiBadgeText.text = "A";
-            aiBadgeText.raycastTarget = false;
-            RectTransform aiBadgeTextRT = aiBadgeTextGO.GetComponent<RectTransform>();
-            aiBadgeTextRT.anchorMin = Vector2.zero;
-            aiBadgeTextRT.anchorMax = Vector2.one;
-            aiBadgeTextRT.sizeDelta = Vector2.zero;
-            aiBadgeTextRT.anchoredPosition = Vector2.zero;
+            Text aiBadgeText = UI.CreateLabel(aiBadgeGO, "A", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement aiBadgeLE = aiBadgeGO.AddComponent<LayoutElement>();
             aiBadgeLE.preferredWidth = 32f;
             aiBadgeLE.preferredHeight = 32f;
@@ -2087,21 +1991,7 @@ namespace VPB
             Image hideBadgeBg = hideBadgeGO.AddComponent<Image>();
             hideBadgeBg.color = new Color(0.35f, 0.35f, 0.4f, 0.9f);
             hideBadgeBg.raycastTarget = false;
-            GameObject hideBadgeTextGO = new GameObject("Text");
-            hideBadgeTextGO.transform.SetParent(hideBadgeGO.transform, false);
-            Text hideBadgeText = hideBadgeTextGO.AddComponent<Text>();
-            hideBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            hideBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            hideBadgeText.fontStyle = FontStyle.Normal;
-            hideBadgeText.color = Color.white;
-            hideBadgeText.alignment = TextAnchor.MiddleCenter;
-            hideBadgeText.text = "H";
-            hideBadgeText.raycastTarget = false;
-            RectTransform hideBadgeTextRT = hideBadgeTextGO.GetComponent<RectTransform>();
-            hideBadgeTextRT.anchorMin = Vector2.zero;
-            hideBadgeTextRT.anchorMax = Vector2.one;
-            hideBadgeTextRT.sizeDelta = Vector2.zero;
-            hideBadgeTextRT.anchoredPosition = Vector2.zero;
+            Text hideBadgeText = UI.CreateLabel(hideBadgeGO, "H", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement hideBadgeLE = hideBadgeGO.AddComponent<LayoutElement>();
             hideBadgeLE.preferredWidth = 32f;
             hideBadgeLE.preferredHeight = 32f;
@@ -2122,21 +2012,7 @@ namespace VPB
             Image scanExBadgeBg = scanExBadgeGO.AddComponent<Image>();
             scanExBadgeBg.color = new Color(0.25f, 0.4f, 0.55f, 0.9f);
             scanExBadgeBg.raycastTarget = false;
-            GameObject scanExBadgeTextGO = new GameObject("Text");
-            scanExBadgeTextGO.transform.SetParent(scanExBadgeGO.transform, false);
-            Text scanExBadgeText = scanExBadgeTextGO.AddComponent<Text>();
-            scanExBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            scanExBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            scanExBadgeText.fontStyle = FontStyle.Normal;
-            scanExBadgeText.color = Color.white;
-            scanExBadgeText.alignment = TextAnchor.MiddleCenter;
-            scanExBadgeText.text = "W";
-            scanExBadgeText.raycastTarget = false;
-            RectTransform scanExBadgeTextRT = scanExBadgeTextGO.GetComponent<RectTransform>();
-            scanExBadgeTextRT.anchorMin = Vector2.zero;
-            scanExBadgeTextRT.anchorMax = Vector2.one;
-            scanExBadgeTextRT.sizeDelta = Vector2.zero;
-            scanExBadgeTextRT.anchoredPosition = Vector2.zero;
+            Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement scanExBadgeLE = scanExBadgeGO.AddComponent<LayoutElement>();
             scanExBadgeLE.preferredWidth = 32f;
             scanExBadgeLE.preferredHeight = 32f;
@@ -2156,21 +2032,7 @@ namespace VPB
             Image userTagsBadgeBg = userTagsBadgeGO.AddComponent<Image>();
             userTagsBadgeBg.color = new Color(0.14f, 0.42f, 0.48f, 0.9f);
             userTagsBadgeBg.raycastTarget = false;
-            GameObject userTagsBadgeTextGO = new GameObject("Text");
-            userTagsBadgeTextGO.transform.SetParent(userTagsBadgeGO.transform, false);
-            Text userTagsBadgeText = userTagsBadgeTextGO.AddComponent<Text>();
-            userTagsBadgeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            userTagsBadgeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            userTagsBadgeText.fontStyle = FontStyle.Normal;
-            userTagsBadgeText.color = Color.white;
-            userTagsBadgeText.alignment = TextAnchor.MiddleCenter;
-            userTagsBadgeText.text = "T";
-            userTagsBadgeText.raycastTarget = false;
-            RectTransform userTagsBadgeTextRT = userTagsBadgeTextGO.GetComponent<RectTransform>();
-            userTagsBadgeTextRT.anchorMin = Vector2.zero;
-            userTagsBadgeTextRT.anchorMax = Vector2.one;
-            userTagsBadgeTextRT.sizeDelta = Vector2.zero;
-            userTagsBadgeTextRT.anchoredPosition = Vector2.zero;
+            Text userTagsBadgeText = UI.CreateLabel(userTagsBadgeGO, "T", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement userTagsBadgeLE = userTagsBadgeGO.AddComponent<LayoutElement>();
             userTagsBadgeLE.preferredWidth = 32f;
             userTagsBadgeLE.preferredHeight = 32f;
@@ -2182,7 +2044,7 @@ namespace VPB
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
             Image listHoverBarImg = listHoverBarGO.AddComponent<Image>();
-            listHoverBarImg.color = new Color(1f, 1f, 1f, 0.45f);
+            listHoverBarImg.color = UI.White(0.45f);
             listHoverBarImg.raycastTarget = false;
             RectTransform listHoverBarRT = listHoverBarGO.GetComponent<RectTransform>();
             listHoverBarRT.anchorMin = new Vector2(0, 0);
@@ -3463,15 +3325,8 @@ namespace VPB
             hgroup.childForceExpandHeight = false;
 
             // Description text
-            GameObject descGO = new GameObject("Description");
-            descGO.transform.SetParent(indicatorGO.transform, false);
-            Text descText = descGO.AddComponent<Text>();
-            descText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            descText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            descText.fontStyle = FontStyle.Normal;
-            descText.color = Color.white;
-            descText.text = "Filtered";
-            descText.raycastTarget = false;
+            Text descText = UI.CreateLabel(indicatorGO, "Filtered", GalleryUiDesignTokens.FontBodyRef, Color.white, raycastTarget: false, name: "Description");
+            GameObject descGO = descText.gameObject;
             descGO.AddComponent<LayoutElement>().preferredWidth = 200;
 
             // Clear button

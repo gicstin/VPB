@@ -44,8 +44,8 @@ namespace VPB
 
         private static readonly Color ColorInactiveRow = new Color(0.25f, 0.25f, 0.25f, 1f);
         private static readonly Color ColorCancelRow = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private static readonly Color ColorGroupRow = new Color(0.2f, 0.2f, 0.2f, 1f);
-        private static readonly Color ColorDangerRow = new Color(0.6f, 0.2f, 0.2f, 1f);
+        private static readonly Color ColorGroupRow = UI.ChromePanel;
+        private static readonly Color ColorDangerRow = UI.AccentRed;
         private static readonly Color ColorDangerAllRow = new Color(0.8f, 0.2f, 0.2f, 1f);
         private static readonly Color ColorNewItemRow = new Color(0.2f, 0.5f, 0.4f, 1f);
         private static readonly Color ColorFacetActiveRow = new Color(0.35f, 0.35f, 0.6f, 1f);

@@ -201,16 +201,8 @@ namespace VPB
                 catch { }
             });
 
-            GameObject enableLbl = new GameObject("EnableLabel");
-            enableLbl.transform.SetParent(enableRow.transform, false);
-            Text el = enableLbl.AddComponent<Text>();
-            el.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            el.fontSize = bodyFont;
-            el.color = Color.white;
-            el.alignment = TextAnchor.MiddleLeft;
-            el.text = VPBTranslation.T("hook.settings.scan_whitelist.enable_short", "Enable scan whitelist");
-            try { VPBUiFont.ApplyTo(el); } catch { }
-            LayoutElement ell = enableLbl.AddComponent<LayoutElement>();
+            Text el = UI.CreateLabel(enableRow, VPBTranslation.T("hook.settings.scan_whitelist.enable_short", "Enable scan whitelist"), bodyFont, Color.white, TextAnchor.MiddleLeft, name: "EnableLabel");
+            LayoutElement ell = el.gameObject.AddComponent<LayoutElement>();
             ell.flexibleWidth = 1f;
 
             GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0.08f, 0.08f, 0.1f, 1f), AnchorPresets.stretchAll, 0f, 280f * s, Vector2.zero, 10f * s, 3f * s, false);
@@ -359,20 +351,10 @@ namespace VPB
             try { VPBUiFont.ApplyTo(title); } catch { }
             GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
 
-            GameObject bodyGo = new GameObject("Body");
-            bodyGo.transform.SetParent(panel.transform, false);
-            Text body = bodyGo.AddComponent<Text>();
-            body.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            body.fontSize = bodyFont;
-            body.color = new Color(0.88f, 0.88f, 0.9f, 1f);
-            body.alignment = TextAnchor.UpperLeft;
-            body.horizontalOverflow = HorizontalWrapMode.Wrap;
-            body.verticalOverflow = VerticalWrapMode.Overflow;
-            body.text = VPBTranslation.T(
+            Text body = UI.CreateLabel(panel, VPBTranslation.T(
                 "hook.settings.scan_whitelist.disable_confirm.body",
-                "Enable VaM scan whitelist to improve startup time. This “hides” most packages from VaM so it won’t rescan them every start.\n\nDisabling will make VaM startup much slower (full rescan).");
-            try { VPBUiFont.ApplyTo(body); } catch { }
-            LayoutElement bodyLe = bodyGo.AddComponent<LayoutElement>();
+                "Enable VaM scan whitelist to improve startup time. This “hides” most packages from VaM so it won’t rescan them every start.\n\nDisabling will make VaM startup much slower (full rescan)."), bodyFont, new Color(0.88f, 0.88f, 0.9f, 1f), TextAnchor.UpperLeft, verticalWrap: VerticalWrapMode.Overflow, name: "Body");
+            LayoutElement bodyLe = body.gameObject.AddComponent<LayoutElement>();
             bodyLe.minHeight = 100f * s;
             bodyLe.flexibleHeight = 1f;
 
@@ -499,17 +481,9 @@ namespace VPB
 
         private static Text ScanWlCreateSectionHeader(Transform parent, string title, int count, int fontSize, float s)
         {
-            GameObject go = new GameObject("SectionHeader");
-            go.transform.SetParent(parent, false);
-            Text t = go.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.fontStyle = FontStyle.Normal;
-            t.color = new Color(0.82f, 0.88f, 1f, 1f);
-            t.alignment = TextAnchor.MiddleLeft;
+            Text t = UI.CreateLabel(parent.gameObject, null, fontSize, new Color(0.82f, 0.88f, 1f, 1f), TextAnchor.MiddleLeft, name: "SectionHeader");
             ScanWlUpdateSectionHeader(t, title, count);
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            LayoutElement le = go.AddComponent<LayoutElement>();
+            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
             le.minHeight = 26f * s;
             le.preferredHeight = 26f * s;
             return t;
@@ -524,37 +498,15 @@ namespace VPB
 
         private static void ScanWlCreateAddBlock(Transform parent, string label, string placeholder, int fontSize, float s, out InputField input, UnityAction onAdd)
         {
-            GameObject block = new GameObject("AddBlock");
-            block.transform.SetParent(parent, false);
-            VerticalLayoutGroup bv = block.AddComponent<VerticalLayoutGroup>();
-            bv.spacing = 6f * s;
-            bv.childAlignment = TextAnchor.UpperLeft;
-            bv.childControlWidth = true;
-            bv.childControlHeight = true;
-            bv.childForceExpandWidth = true;
-            bv.childForceExpandHeight = false;
+            GameObject block = UI.CreateChildRT(parent.gameObject, "AddBlock");
+            UI.AddVLG(block, spacing: 6f * s);
 
-            GameObject lblGo = new GameObject("Label");
-            lblGo.transform.SetParent(block.transform, false);
-            Text lbl = lblGo.AddComponent<Text>();
-            lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lbl.fontSize = fontSize;
-            lbl.color = new Color(0.78f, 0.8f, 0.84f, 1f);
-            lbl.alignment = TextAnchor.MiddleLeft;
-            lbl.text = label ?? "";
-            try { VPBUiFont.ApplyTo(lbl); } catch { }
-            LayoutElement lblLe = lblGo.AddComponent<LayoutElement>();
+            Text lbl = UI.CreateLabel(block, label, fontSize, new Color(0.78f, 0.8f, 0.84f, 1f), TextAnchor.MiddleLeft, name: "Label");
+            LayoutElement lblLe = lbl.gameObject.AddComponent<LayoutElement>();
             lblLe.minHeight = 20f * s;
 
-            GameObject row = new GameObject("Row");
-            row.transform.SetParent(block.transform, false);
-            HorizontalLayoutGroup rh = row.AddComponent<HorizontalLayoutGroup>();
-            rh.spacing = 8f * s;
-            rh.childAlignment = TextAnchor.MiddleLeft;
-            rh.childControlWidth = true;
-            rh.childControlHeight = true;
-            rh.childForceExpandWidth = false;
-            rh.childForceExpandHeight = false;
+            GameObject row = UI.CreateChildRT(block, "Row");
+            UI.AddHLG(row, spacing: 8f * s, childForceExpandWidth: false);
             LayoutElement rowLe = row.AddComponent<LayoutElement>();
             rowLe.minHeight = 36f * s;
             rowLe.preferredHeight = 36f * s;
@@ -566,15 +518,8 @@ namespace VPB
 
         private static void ScanWlAddPlaceholderRow(Transform parent, string text, int fontSize, float s)
         {
-            GameObject go = new GameObject("Placeholder");
-            go.transform.SetParent(parent, false);
-            Text t = go.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = new Color(0.55f, 0.55f, 0.58f, 1f);
-            t.text = text ?? "";
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            LayoutElement le = go.AddComponent<LayoutElement>();
+            Text t = UI.CreateLabel(parent.gameObject, text, fontSize, UI.TextDim, name: "Placeholder");
+            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
             le.minHeight = 22f * s;
         }
 
@@ -598,17 +543,8 @@ namespace VPB
             rle.minHeight = rowH;
             rle.preferredHeight = rowH;
 
-            GameObject lbl = new GameObject("Label");
-            lbl.transform.SetParent(row.transform, false);
-            Text lt = lbl.AddComponent<Text>();
-            lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lt.fontSize = fontSize;
-            lt.color = new Color(0.92f, 0.92f, 0.94f, 1f);
-            lt.alignment = TextAnchor.MiddleLeft;
-            lt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            lt.text = label ?? "";
-            try { VPBUiFont.ApplyTo(lt); } catch { }
-            LayoutElement lle = lbl.AddComponent<LayoutElement>();
+            Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
+            LayoutElement lle = lt.gameObject.AddComponent<LayoutElement>();
             lle.flexibleWidth = 1f;
             lle.minWidth = 0f;
 
@@ -642,29 +578,9 @@ namespace VPB
             taRt.offsetMin = new Vector2(6f * s, 2f * s);
             taRt.offsetMax = new Vector2(-6f * s, -2f * s);
 
-            GameObject ph = new GameObject("Placeholder");
-            ph.transform.SetParent(ta.transform, false);
-            Text phT = ph.AddComponent<Text>();
-            phT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            phT.fontSize = fontSize;
-            phT.color = new Color(0.45f, 0.45f, 0.48f, 1f);
-            phT.text = placeholderText ?? "";
-            try { VPBUiFont.ApplyTo(phT); } catch { }
-            RectTransform phRt = ph.GetComponent<RectTransform>();
-            phRt.anchorMin = Vector2.zero;
-            phRt.anchorMax = Vector2.one;
-            phRt.sizeDelta = Vector2.zero;
+            Text phT = UI.CreateLabel(ta, placeholderText ?? "", fontSize, new Color(0.45f, 0.45f, 0.48f, 1f), name: "Placeholder");
 
-            GameObject tc = new GameObject("Text");
-            tc.transform.SetParent(ta.transform, false);
-            Text tcT = tc.AddComponent<Text>();
-            tcT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tcT.fontSize = fontSize;
-            tcT.color = Color.white;
-            RectTransform tcRt = tc.GetComponent<RectTransform>();
-            tcRt.anchorMin = Vector2.zero;
-            tcRt.anchorMax = Vector2.one;
-            tcRt.sizeDelta = Vector2.zero;
+            Text tcT = UI.CreateLabel(ta, "", fontSize, Color.white, name: "Text");
 
             InputField input = go.AddComponent<InputField>();
             input.textComponent = tcT;
@@ -699,19 +615,7 @@ namespace VPB
             le.minHeight = le.preferredHeight = height;
             le.flexibleHeight = 0f;
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label ?? "";
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
+            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
             return go;
         }
 

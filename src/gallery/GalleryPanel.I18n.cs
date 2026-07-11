@@ -8,7 +8,7 @@ namespace VPB
     {
         // ── Colors for the language button ──────────────────────────────────────
         private static readonly Color LangBtnColorNormal = new Color(0f, 0f, 0f, 0.5f);
-        private static readonly Color LangBtnColorOpen   = new Color(0.15f, 0.15f, 0.15f, 1f);
+        private static readonly Color LangBtnColorOpen   = UI.ChromeDark;
 
         private void SubscribeLocaleChanged()
         {

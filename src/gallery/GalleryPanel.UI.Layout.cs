@@ -577,7 +577,7 @@ namespace VPB
             string text = followUser
                 ? VPBTranslation.T("gallery.follow.follow", "Follow")
                 : VPBTranslation.T("gallery.follow.static", "Static");
-            Color color = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color color = followUser ? UI.AccentBlue : UI.ChromeMid;
             Sprite spr = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
 
             if (rightFollowBtnIconImage != null && spr != null)

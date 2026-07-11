@@ -693,24 +693,16 @@ namespace VPB
 
         private Text CreateInAppHelpBodyText(Transform parent, string richText, bool subheading = false, bool bullet = false, string prefix = null)
         {
-            GameObject go = new GameObject(subheading ? "Subheading" : (bullet ? "Bullet" : "Text"));
-            go.transform.SetParent(parent, false);
-            Text txt = go.AddComponent<Text>();
-            txt.supportRichText = true;
-            txt.color = subheading
-                ? new Color(0.78f, 0.90f, 1f, 1f)
-                : new Color(0.94f, 0.96f, 0.98f, 1f);
-            txt.alignment = TextAnchor.UpperLeft;
-            txt.horizontalOverflow = HorizontalWrapMode.Wrap;
-            txt.verticalOverflow = VerticalWrapMode.Overflow;
-            txt.resizeTextForBestFit = false;
+            Color col = subheading ? new Color(0.78f, 0.90f, 1f, 1f) : new Color(0.94f, 0.96f, 0.98f, 1f);
             string body = richText ?? "";
             if (bullet) body = (string.IsNullOrEmpty(prefix) ? "  \u2022 " : prefix + " ") + body;
-            txt.text = body;
-            try { VPBUiFont.ApplyTo(txt); } catch { }
-            ContentSizeFitter csf = go.AddComponent<ContentSizeFitter>();
+            // fontSize is set later by ApplyInAppHelpTypography (registered via _inAppHelpBodyTexts); 14 = Unity default until then.
+            Text txt = UI.CreateLabel(parent.gameObject, body, 14, col, TextAnchor.UpperLeft,
+                HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow,
+                name: subheading ? "Subheading" : (bullet ? "Bullet" : "Text"));
+            ContentSizeFitter csf = txt.gameObject.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement le = go.AddComponent<LayoutElement>();
+            LayoutElement le = txt.gameObject.AddComponent<LayoutElement>();
             le.flexibleWidth = 1f;
             _inAppHelpBodyTexts.Add(txt);
             return txt;

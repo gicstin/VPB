@@ -85,47 +85,11 @@ namespace VPB
             int titleFont = type.Title;
             int bodyFont = type.Body;
 
-            _benchModalRoot = new GameObject("VPB_BenchModal");
-            _benchModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRt = _benchModalRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
-
-            GameObject dimGo = new GameObject("Dim");
-            dimGo.transform.SetParent(_benchModalRoot.transform, false);
-            RectTransform dimRt = dimGo.AddComponent<RectTransform>();
-            dimRt.anchorMin = Vector2.zero;
-            dimRt.anchorMax = Vector2.one;
-            dimRt.offsetMin = Vector2.zero;
-            dimRt.offsetMax = Vector2.zero;
-            Image dim = dimGo.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.72f);
-            dim.raycastTarget = true;
-            Button dimBtn = dimGo.AddComponent<Button>();
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.navigation = new Navigation { mode = Navigation.Mode.None };
-            dimBtn.onClick.AddListener(HideBenchEditorModal);
-
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_benchModalRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(660f * s, 760f * s);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.07f, 0.08f, 0.10f, 1f);
-            pbg.raycastTarget = true;
+            GameObject panel;
+            _benchModalRoot = UI.CreateModalChrome(backgroundBoxGO, "VPB_BenchModal", 660f * s, 760f * s, new Color(0.07f, 0.08f, 0.10f, 1f), HideBenchEditorModal, out panel);
             BenchAddPanelClickBlocker(panel.transform);
 
-            VerticalLayoutGroup pv = panel.AddComponent<VerticalLayoutGroup>();
-            pv.padding = new RectOffset(Mathf.RoundToInt(16f * s), Mathf.RoundToInt(16f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(12f * s));
-            pv.spacing = 10f * s;
-            pv.childControlWidth = true;
-            pv.childControlHeight = true;
-            pv.childForceExpandWidth = true;
-            pv.childForceExpandHeight = false;
+            UI.AddVLG(panel, 10f * s, UI.Pad(16f, 16f, 14f, 12f, s));
 
             // Header
             GameObject header = new GameObject("Header");
@@ -151,17 +115,10 @@ namespace VPB
             ScanWlCreateHeaderButton(header.transform, 84f * s, 36f * s, VPBTranslation.T("hook.close", "Close"), bodyFont,
                 new Color(0.38f, 0.32f, 0.22f, 1f), HideBenchEditorModal);
 
-            GameObject helpGo = new GameObject("Help");
-            helpGo.transform.SetParent(panel.transform, false);
-            _benchHelpText = helpGo.AddComponent<Text>();
-            _benchHelpText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _benchHelpText.fontSize = bodyFont;
-            _benchHelpText.color = new Color(0.72f, 0.76f, 0.82f, 1f);
-            _benchHelpText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _benchHelpText.text = VPBTranslation.T("bench.simple.help",
-                "Pick scenes → Run Test. Changes save automatically. Compares when baseline exists.");
-            try { VPBUiFont.ApplyTo(_benchHelpText); } catch { }
-            LayoutElement helpLe = helpGo.AddComponent<LayoutElement>();
+            _benchHelpText = UI.CreateLabel(panel, VPBTranslation.T("bench.simple.help",
+                "Pick scenes → Run Test. Changes save automatically. Compares when baseline exists."),
+                bodyFont, new Color(0.72f, 0.76f, 0.82f, 1f), name: "Help");
+            LayoutElement helpLe = _benchHelpText.gameObject.AddComponent<LayoutElement>();
             helpLe.minHeight = 52f * s;
 
             // Scroll body
@@ -209,15 +166,8 @@ namespace VPB
             _benchScrollContent = content.transform;
 
             // Status + actions (fixed below scroll)
-            GameObject statusGo = new GameObject("Status");
-            statusGo.transform.SetParent(panel.transform, false);
-            _benchStatusText = statusGo.AddComponent<Text>();
-            _benchStatusText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _benchStatusText.fontSize = bodyFont;
-            _benchStatusText.color = new Color(0.65f, 0.82f, 1f, 1f);
-            _benchStatusText.alignment = TextAnchor.MiddleLeft;
-            _benchStatusText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            LayoutElement stLe = statusGo.AddComponent<LayoutElement>();
+            _benchStatusText = UI.CreateLabel(panel, "", bodyFont, new Color(0.65f, 0.82f, 1f, 1f), TextAnchor.MiddleLeft, name: "Status");
+            LayoutElement stLe = _benchStatusText.gameObject.AddComponent<LayoutElement>();
             stLe.minHeight = 36f * s;
 
             ScanWlCreateHeaderButton(panel.transform, 0f, 50f * s,
@@ -465,17 +415,9 @@ namespace VPB
                     RebuildBenchEditorModal();
                 });
 
-            GameObject nameGo = new GameObject("Name");
-            nameGo.transform.SetParent(row.transform, false);
-            Text nameText = nameGo.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            nameText.fontSize = bodyFont;
-            nameText.color = Color.white;
-            nameText.alignment = TextAnchor.MiddleCenter;
             bool hasBaseline = VpbBenchComparer.BaselineExists(cfg.BaselineId);
-            nameText.text = (cfg.BaselineId ?? "main") + (hasBaseline ? "" : " (new)");
-            try { VPBUiFont.ApplyTo(nameText); } catch { }
-            LayoutElement nle = nameGo.AddComponent<LayoutElement>();
+            Text nameText = UI.CreateLabel(row, (cfg.BaselineId ?? "main") + (hasBaseline ? "" : " (new)"), bodyFont, Color.white, TextAnchor.MiddleCenter, name: "Name");
+            LayoutElement nle = nameText.gameObject.AddComponent<LayoutElement>();
             nle.minWidth = 180f * s;
             nle.preferredWidth = 220f * s;
 
@@ -758,21 +700,10 @@ namespace VPB
             le.minHeight = 30f * s;
             Image img = UI.AddGalleryElementRoundedBg(row, bg);
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(row.transform, false);
-            RectTransform rt = tgo.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
+            Text t = UI.CreateLabel(row, text, fontSize, fg, TextAnchor.MiddleLeft, name: "Text");
+            RectTransform rt = t.GetComponent<RectTransform>();
             rt.offsetMin = new Vector2(8f * s, 2f);
             rt.offsetMax = new Vector2(-8f * s, -2f);
-            Text t = tgo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = fg;
-            t.alignment = TextAnchor.MiddleLeft;
-            t.horizontalOverflow = HorizontalWrapMode.Wrap;
-            t.text = text;
-            try { VPBUiFont.ApplyTo(t); } catch { }
         }
 
         static bool TryGetBenchSceneSpec(FileEntry f, out string sceneSpec)
@@ -893,17 +824,8 @@ namespace VPB
             rle.flexibleWidth = 1f;
             rle.minWidth = 0f;
 
-            GameObject lbl = new GameObject("Label");
-            lbl.transform.SetParent(row.transform, false);
-            Text lt = lbl.AddComponent<Text>();
-            lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lt.fontSize = fontSize;
-            lt.color = new Color(0.92f, 0.92f, 0.94f, 1f);
-            lt.alignment = TextAnchor.MiddleLeft;
-            lt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            lt.text = label ?? "";
-            try { VPBUiFont.ApplyTo(lt); } catch { }
-            LayoutElement lle = lbl.AddComponent<LayoutElement>();
+            Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
+            LayoutElement lle = lt.gameObject.AddComponent<LayoutElement>();
             lle.flexibleWidth = 1f;
             lle.minWidth = 0f;
 
@@ -968,16 +890,8 @@ namespace VPB
 
         static void BenchAddSimpleLabel(Transform parent, string text, int fontSize, float s)
         {
-            GameObject go = new GameObject("Label");
-            go.transform.SetParent(parent, false);
-            Text t = go.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.fontStyle = FontStyle.Normal;
-            t.color = new Color(0.88f, 0.90f, 0.94f, 1f);
-            t.text = text;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            LayoutElement le = go.AddComponent<LayoutElement>();
+            Text t = UI.CreateLabel(parent.gameObject, text, fontSize, new Color(0.88f, 0.90f, 0.94f, 1f), name: "Label");
+            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
             le.minHeight = 28f * s;
         }
 
@@ -999,15 +913,8 @@ namespace VPB
                 fontSize, on ? new Color(0.28f, 0.50f, 0.34f, 1f) : new Color(0.20f, 0.22f, 0.26f, 1f),
                 () => onChanged(!on));
 
-            GameObject lbl = new GameObject("Text");
-            lbl.transform.SetParent(row.transform, false);
-            Text t = lbl.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.text = label;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            LayoutElement tle = lbl.AddComponent<LayoutElement>();
+            Text t = UI.CreateLabel(row, label, fontSize, Color.white, name: "Text");
+            LayoutElement tle = t.gameObject.AddComponent<LayoutElement>();
             tle.flexibleWidth = 1f;
         }
 
@@ -1182,18 +1089,8 @@ namespace VPB
             titleText.text = title ?? "";
             try { VPBUiFont.ApplyTo(titleText); } catch { }
 
-            GameObject bodyGo = new GameObject("Body");
-            bodyGo.transform.SetParent(panel.transform, false);
-            Text bodyText = bodyGo.AddComponent<Text>();
-            bodyText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            bodyText.fontSize = bodyFont;
-            bodyText.color = new Color(0.88f, 0.90f, 0.94f, 1f);
-            bodyText.alignment = TextAnchor.UpperLeft;
-            bodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            bodyText.verticalOverflow = VerticalWrapMode.Overflow;
-            bodyText.text = message ?? "";
-            try { VPBUiFont.ApplyTo(bodyText); } catch { }
-            LayoutElement bodyLe = bodyGo.AddComponent<LayoutElement>();
+            Text bodyText = UI.CreateLabel(panel, message ?? "", bodyFont, new Color(0.88f, 0.90f, 0.94f, 1f), TextAnchor.UpperLeft, verticalWrap: VerticalWrapMode.Overflow, name: "Body");
+            LayoutElement bodyLe = bodyText.gameObject.AddComponent<LayoutElement>();
             bodyLe.minHeight = 72f * s;
             bodyLe.flexibleHeight = 1f;
 
@@ -1308,14 +1205,7 @@ namespace VPB
             v.spacing = 4f * s;
             v.childForceExpandWidth = true;
 
-            GameObject lblGo = new GameObject("Label");
-            lblGo.transform.SetParent(block.transform, false);
-            Text lbl = lblGo.AddComponent<Text>();
-            lbl.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lbl.fontSize = fontSize;
-            lbl.color = new Color(0.70f, 0.74f, 0.78f, 1f);
-            lbl.text = label;
-            try { VPBUiFont.ApplyTo(lbl); } catch { }
+            Text lbl = UI.CreateLabel(block, label, fontSize, new Color(0.70f, 0.74f, 0.78f, 1f), name: "Label");
 
             InputField input = ScanWlCreateInputField(block.transform, fontSize, s, 1f, value);
             if (input != null)

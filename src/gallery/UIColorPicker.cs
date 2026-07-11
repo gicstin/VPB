@@ -285,17 +285,8 @@ namespace VPB
             btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            StretchFull(textGO);
+            Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            StretchFull(t.gameObject);
         }
 
         private Slider CreateSliderRow(GameObject parent, string label, Color tint)
@@ -314,18 +305,8 @@ namespace VPB
             h.childForceExpandWidth = true;
             h.childForceExpandHeight = false;
 
-            GameObject lab = new GameObject("Label");
-            lab.transform.SetParent(row.transform, false);
-            Text lt = lab.AddComponent<Text>();
-            lt.text = label;
-            lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lt.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            lt.fontStyle = FontStyle.Normal;
-            lt.color = Color.white;
-            lt.alignment = TextAnchor.MiddleLeft;
-            lt.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(lt); } catch { }
-            LayoutElement labLe = lab.AddComponent<LayoutElement>();
+            Text lt = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            LayoutElement labLe = lt.gameObject.AddComponent<LayoutElement>();
             labLe.flexibleWidth = 0;
             labLe.preferredWidth = 22;
 
@@ -412,25 +393,11 @@ namespace VPB
             textAreaRT.offsetMin = new Vector2(10, 5);
             textAreaRT.offsetMax = new Vector2(-10, -5);
 
-            GameObject textGo = new GameObject("Text");
-            textGo.transform.SetParent(textArea.transform, false);
-            Text t = textGo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            StretchFull(textGo);
+            Text t = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
+            StretchFull(t.gameObject);
 
-            GameObject placeholder = new GameObject("Placeholder");
-            placeholder.transform.SetParent(textArea.transform, false);
-            Text ph = placeholder.AddComponent<Text>();
-            ph.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ph.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            ph.color = new Color(1f, 1f, 1f, 0.35f);
-            ph.text = "#RRGGBB or R,G,B";
-            try { VPBUiFont.ApplyTo(ph); } catch { }
-            StretchFull(placeholder);
+            Text ph = UI.CreateLabel(textArea, "#RRGGBB or R,G,B", GalleryUiDesignTokens.FontBodyRef, new Color(1f, 1f, 1f, 0.35f), name: "Placeholder");
+            StretchFull(ph.gameObject);
 
             input.textComponent = t;
             input.placeholder = ph;
