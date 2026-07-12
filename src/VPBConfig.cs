@@ -206,6 +206,10 @@ namespace VPB
         public bool SuppressCheesyFxNullReferenceLogs = true;
         /// <summary>Controls when in-game VaM notification messages (errors and warnings) are suppressed. "Off" = never; "VR Only" = suppressed in VR; "Desktop Only" = suppressed on desktop; "Both" = always suppressed.</summary>
         public string BlockInGameMessages = "Off";
+        /// <summary>When true, suppress VaM "Missing addon package … depends on …" spam in Unity/BepInEx and in-game error log.</summary>
+        public bool HideMissingDependencyLogs = true;
+        /// <summary>When true, clear VaM in-game error and message logs at the start of each full scene load (not merge).</summary>
+        public bool ClearInGameLogsOnSceneLaunch = false;
         /// <summary>Gallery item drag-and-drop to atoms/scene. Off by default (VR jitter / accidental drags); enable in Settings → Interaction.</summary>
         public bool EnableDragDrop = false;
         /// <summary>When true (default), Clothing/Hair categories auto-apply Male/Female subfilter based on selected target atom gender.</summary>
@@ -932,6 +936,8 @@ namespace VPB
             ImportSidebarPrefs = new JSONClass();
             SuppressCheesyFxNullReferenceLogs = true;
             BlockInGameMessages = "Off";
+            HideMissingDependencyLogs = true;
+            ClearInGameLogsOnSceneLaunch = false;
             EnableDragDrop = false;
             GalleryAutoGenderFilter = true;
             GalleryCollapseOnSceneLaunch = true;
@@ -1126,6 +1132,8 @@ namespace VPB
                         if (node["ImportSidebarPrefs"] != null) ImportSidebarPrefs = node["ImportSidebarPrefs"].AsObject;
                         if (node["SuppressCheesyFxNullReferenceLogs"] != null) SuppressCheesyFxNullReferenceLogs = node["SuppressCheesyFxNullReferenceLogs"].AsBool;
                         if (node["BlockInGameMessages"] != null) BlockInGameMessages = node["BlockInGameMessages"].Value;
+                        if (node["HideMissingDependencyLogs"] != null) HideMissingDependencyLogs = node["HideMissingDependencyLogs"].AsBool;
+                        if (node["ClearInGameLogsOnSceneLaunch"] != null) ClearInGameLogsOnSceneLaunch = node["ClearInGameLogsOnSceneLaunch"].AsBool;
                         if (node["EnableDragDrop"] != null) EnableDragDrop = node["EnableDragDrop"].AsBool;
                         if (node["GalleryAutoGenderFilter"] != null) GalleryAutoGenderFilter = node["GalleryAutoGenderFilter"].AsBool;
                         if (node["GalleryCollapseOnSceneLaunch"] != null) GalleryCollapseOnSceneLaunch = node["GalleryCollapseOnSceneLaunch"].AsBool;
@@ -1516,6 +1524,8 @@ namespace VPB
                 if (ImportSidebarPrefs != null) node["ImportSidebarPrefs"] = ImportSidebarPrefs;
                 node["SuppressCheesyFxNullReferenceLogs"].AsBool = SuppressCheesyFxNullReferenceLogs;
                 node["BlockInGameMessages"] = BlockInGameMessages;
+                node["HideMissingDependencyLogs"].AsBool = HideMissingDependencyLogs;
+                node["ClearInGameLogsOnSceneLaunch"].AsBool = ClearInGameLogsOnSceneLaunch;
                 node["KeepClothingWhenApplyingAppearance"].AsBool = KeepClothingWhenApplyingAppearance;
                 node["EnableDragDrop"].AsBool = EnableDragDrop;
                 node["GalleryAutoGenderFilter"].AsBool = GalleryAutoGenderFilter;

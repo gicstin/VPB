@@ -199,7 +199,21 @@ namespace VPB
         {
             BuildRemoveResourceTabs(
                 container, trackedButtons, isLeft, "clothing", removeClothingFilter,
-                EnumerateRemovableClothing,
+                target =>
+                {
+                    List<RemoveTabItem> items = EnumerateRemovableClothing(target);
+                    if (items.Count > 0
+                        && _sessionInitialClothingUids.TryGetValue(target.uid, out HashSet<string> initialUids))
+                    {
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            RemoveTabItem item = items[i];
+                            item.IsNew = !initialUids.Contains(item.Uid);
+                            items[i] = item;
+                        }
+                    }
+                    return items;
+                },
                 leftRemoveAllClothingBtn, rightRemoveAllClothingBtn,
                 (target, host) =>
                 {
@@ -216,12 +230,7 @@ namespace VPB
                 ClearClothingPreview,
                 ApplyClothingAllPreview, ClearClothingAllPreview,
                 ApplyClothingPreview, ClearClothingPreview,
-                (target, item) =>
-                {
-                    if (_sessionInitialClothingUids.TryGetValue(target.uid, out var initialUids) && !initialUids.Contains(item.Uid))
-                        return ColorNewItemRow;
-                    return ColorDangerRow;
-                });
+                (target, item) => item.IsNew ? ColorNewItemRow : ColorDangerRow);
         }
 
         private void BuildRemoveHairTabs(GameObject container, List<GameObject> trackedButtons, bool isLeft)

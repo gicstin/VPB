@@ -414,6 +414,8 @@ namespace VPB
             public bool PluginDownscale8kTo4k;
             public bool PluginScanWhitelistEnabled;
             public string BlockInGameMessages;
+            public bool HideMissingDependencyLogs;
+            public bool ClearInGameLogsOnSceneLaunch;
         }
 
         private static string NextOf(string cur, string[] options)
@@ -974,6 +976,28 @@ namespace VPB
                 GetString = () => VPBConfig.Instance?.BlockInGameMessages ?? "Off",
                 SetString = v => {
                     if (VPBConfig.Instance != null) VPBConfig.Instance.BlockInGameMessages = v ?? "Off";
+                    try { VPBConfig.Instance?.Save(false); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hideMissingDependencyLogs", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_hide_missing_dep_logs", "Hide missing dependency logs"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_hide_missing_dep_logs", "Suppress VaM \"Missing addon package … depends on …\" messages in the in-game error log and BepInEx console. Turn off to see missing dependency warnings again."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance?.HideMissingDependencyLogs ?? true,
+                SetBool = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.HideMissingDependencyLogs = v;
+                    try { VPBConfig.Instance?.Save(false); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.clearInGameLogsOnSceneLaunch", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_clear_logs_on_scene_launch", "Clear logs on scene launch"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_clear_logs_on_scene_launch", "Clear VaM in-game error and message logs when a full scene is loaded. Merge loads are not cleared. Logs from the previous scene otherwise stay until you clear them manually."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance?.ClearInGameLogsOnSceneLaunch ?? false,
+                SetBool = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = v;
                     try { VPBConfig.Instance?.Save(false); } catch { }
                 }
             });
@@ -1669,7 +1693,9 @@ namespace VPB
                 HiddenCategories = VPBConfig.Instance.HiddenCategories != null
                     ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                BlockInGameMessages = VPBConfig.Instance.BlockInGameMessages ?? "Off"
+                BlockInGameMessages = VPBConfig.Instance.BlockInGameMessages ?? "Off",
+                HideMissingDependencyLogs = VPBConfig.Instance.HideMissingDependencyLogs,
+                ClearInGameLogsOnSceneLaunch = VPBConfig.Instance.ClearInGameLogsOnSceneLaunch
             };
             CapturePluginSettingsIntoSnapshot(snap);
             return snap;
@@ -2473,6 +2499,8 @@ namespace VPB
                 ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             VPBConfig.Instance.BlockInGameMessages = b.BlockInGameMessages ?? "Off";
+            VPBConfig.Instance.HideMissingDependencyLogs = b.HideMissingDependencyLogs;
+            VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = b.ClearInGameLogsOnSceneLaunch;
 
             RestorePluginSettingsFromSnapshot(b);
 

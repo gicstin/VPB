@@ -52,7 +52,8 @@ namespace VPB
             {
                 try
                 {
-                    if (logType == LogType.Error && !string.IsNullOrEmpty(format) && IsMissingAddonDependencyMessage(format, args))
+                    if (logType == LogType.Error && !string.IsNullOrEmpty(format)
+                        && ThirdPartyFixHook.ShouldSuppressMissingDependencyLog(FormatLogMessage(format, args)))
                     {
                         return;
                     }
@@ -120,25 +121,6 @@ namespace VPB
                 return false;
             }
 
-            private static bool IsMissingAddonDependencyMessage(string format, object[] args)
-            {
-                string msg = format;
-                if (args != null && args.Length > 0)
-                {
-                    try
-                    {
-                        msg = string.Format(format, args);
-                    }
-                    catch
-                    {
-                        msg = format;
-                    }
-                }
-
-                if (string.IsNullOrEmpty(msg)) return false;
-                return msg.IndexOf("Missing addon package", StringComparison.OrdinalIgnoreCase) >= 0
-                    && msg.IndexOf("depends on", StringComparison.OrdinalIgnoreCase) >= 0;
-            }
         }
 
         private KeyUtil UIKey;
