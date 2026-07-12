@@ -20,11 +20,7 @@ namespace VPB
             if (_saveMenuPopupGO != null) return;
             if (backgroundBoxGO == null) return;
 
-            _saveMenuPopupGO = UI.CreateChildRT(backgroundBoxGO, "SaveMenuPopup", AnchorPresets.stretchAll);
-            Image overlayBg = UI.AddImage(_saveMenuPopupGO, new Color(0f, 0f, 0f, 0.001f));
-            Button overlayBtn = _saveMenuPopupGO.AddComponent<Button>();
-            overlayBtn.transition = Selectable.Transition.None;
-            overlayBtn.onClick.AddListener(CloseSaveMenuPopup);
+            _saveMenuPopupGO = UI.CreatePopupMenuRoot(backgroundBoxGO, "SaveMenuPopup", CloseSaveMenuPopup);
             _saveMenuPopupGO.SetActive(false);
 
             GameObject panel = new GameObject("SaveMenuPanel");
@@ -54,27 +50,12 @@ namespace VPB
                     SaveMenuOption o = options[i];
                     if (o == null) continue;
                     SaveMenuOption captured = o;
-                    GameObject row = UI.CreateUIButton(panel.gameObject, 0f, 36f, captured.Label, 15, 0f, 0f, AnchorPresets.stretchAll, () =>
+                    UI.AddStretchPopupMenuRow(panel, captured.Label, () =>
                     {
                         if (!captured.Enabled) return;
                         if (captured.AutoClose) CloseSaveMenuPopup();
                         try { if (captured.Action != null) captured.Action(); } catch { }
-                    });
-                    if (row == null) continue;
-                    Image img = row.GetComponent<Image>();
-                    if (img != null) img.color = captured.Enabled ? UI.PopupRowBackdrop : new Color(0.2f, 0.2f, 0.2f, 0.7f);
-                    Button btn = row.GetComponent<Button>();
-                    if (btn != null) btn.interactable = captured.Enabled;
-                    Text t = row.GetComponentInChildren<Text>();
-                    if (t != null)
-                    {
-                        t.alignment = TextAnchor.MiddleLeft;
-                        t.color = captured.Enabled ? Color.white : new Color(1f, 1f, 1f, 0.5f);
-                    }
-                    LayoutElement le = row.GetComponent<LayoutElement>();
-                    if (le == null) le = row.AddComponent<LayoutElement>();
-                    le.preferredHeight = 36f;
-                    le.flexibleWidth = 1f;
+                    }, isActive: false, enabled: captured.Enabled);
                 }
             }
 

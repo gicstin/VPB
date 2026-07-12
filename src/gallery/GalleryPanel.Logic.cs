@@ -718,26 +718,15 @@ namespace VPB
         }
 
         /// <summary>
-        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
-        /// (Package-only counting misses almost all session plugins.)
+        /// SQLite-cached recursive file count under <paramref name="root"/> for the given extensions.
         /// </summary>
-        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
+        private static int CountLooseFilesCached(string root, string[] exts, string cacheKeyPrefix)
         {
-            if (counts == null || !counts.ContainsKey("Plugins")) return;
-            const string root = "Custom/Scripts";
-            if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) return;
-            try
-            {
-                if (!Directory.Exists(root)) return;
-            }
-            catch { return; }
-
-            // Prefer SQLite-cached enumeration to avoid recursive disk walks on every side-tab rebuild.
-            var exts = new[] { "cs", "cslist", "dll" };
             string sig = "0";
-            // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
             try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
-            string cacheKey = "plugins:custom_scripts|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=cs,cslist,dll";
+
+            string extList = string.Join(",", exts);
+            string cacheKey = cacheKeyPrefix + "|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=" + extList;
 
             int n = 0;
             try
@@ -776,8 +765,29 @@ namespace VPB
                 }
             }
             catch { }
+            return n;
+        }
+
+        /// <summary>
+        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
+        /// (Package-only counting misses almost all session plugins.)
+        /// </summary>
+        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
+        {
+            if (counts == null || !counts.ContainsKey("Plugins")) return;
+            const string root = "Custom/Scripts";
+            if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) return;
+            try
+            {
+                if (!Directory.Exists(root)) return;
+            }
+            catch { return; }
+
+            int n = CountLooseFilesCached(root, new[] { "cs", "cslist", "dll" }, "plugins:custom_scripts");
 
             // Ref cache has its own sig so it rebuilds even when the file-list cache is warm.
+            string sig = "0";
+            try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
             const string refKey = "plugins:cslist_referenced_disk|root=Custom/Scripts";
             try
             {
@@ -842,45 +852,7 @@ namespace VPB
                 }
                 catch { continue; }
 
-                string sig = "0";
-                // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
-                try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
-                string cacheKey = "appearance:custom_presets|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=vap";
-
-                int n = 0;
-                try
-                {
-                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
-                    bool hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached);
-                    if (hit && cached.Count > 0)
-                    {
-                        n = cached.Count;
-                    }
-                    else
-                    {
-                        var rows = new List<VpbLocalDatabase.SystemFileRow>(256);
-                        var buf = new List<string>();
-                        try
-                        {
-                            FileManager.SafeGetFiles(root, "*.vap", buf);
-                            n = buf.Count;
-                            for (int i = 0; i < buf.Count; i++)
-                            {
-                                string p = buf[i];
-                                if (string.IsNullOrEmpty(p)) continue;
-                                var r = new VpbLocalDatabase.SystemFileRow();
-                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
-                                r.LastWriteBinaryOrInvalid = long.MinValue;
-                                r.SizeOrInvalid = long.MinValue;
-                                rows.Add(r);
-                            }
-                        }
-                        catch { }
-                        if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
-                    }
-                }
-                catch { }
-                total += n;
+                total += CountLooseFilesCached(root, new[] { "vap" }, "appearance:custom_presets");
             }
             counts["Appearance"] += total;
         }

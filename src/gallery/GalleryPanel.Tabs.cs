@@ -309,13 +309,12 @@ namespace VPB
             rt.offsetMax = new Vector2(-pad, rt.offsetMax.y);
         }
 
-        private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)
+        private void EnsureSideTabVirtPool(List<GameObject> pool, Transform parent, int desired)
         {
             if (parent == null) return;
             if (desired < 8) desired = 8;
-            List<GameObject> pool = isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons;
 
-            // If we have buttons in the pool that are parented elsewhere (e.g. returned to shared pool), 
+            // If we have buttons in the pool that are parented elsewhere (e.g. returned to shared pool),
             // we need to clear our local list and start fresh.
             for (int i = 0; i < pool.Count; i++)
             {
@@ -337,7 +336,6 @@ namespace VPB
                 ConfigureSideTabRowHoverBorder(btnGO);
                 btnGO.SetActive(true);
 
-                // Positioning is manual; stretch horizontally.
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
                 {
@@ -351,6 +349,11 @@ namespace VPB
 
                 pool.Add(btnGO);
             }
+        }
+
+        private void EnsureCreatorVirtPool(bool isLeft, Transform parent, int desired)
+        {
+            EnsureSideTabVirtPool(isLeft ? _leftCreatorVirtButtons : _rightCreatorVirtButtons, parent, desired);
         }
 
         /// <summary>
@@ -708,37 +711,7 @@ namespace VPB
 
         private void EnsureUserTagVirtPool(bool isLeft, Transform parent, int desired)
         {
-            if (parent == null) return;
-            if (desired < 8) desired = 8;
-            List<GameObject> pool = isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons;
-            for (int i = 0; i < pool.Count; i++)
-            {
-                if (pool[i] == null || pool[i].transform.parent != parent)
-                {
-                    pool.Clear();
-                    break;
-                }
-            }
-            while (pool.Count < desired)
-            {
-                GameObject btnGO = UI.CreateUIButton(parent.gameObject,
-                    GalleryUiDesignTokens.TabButtonPreferredWidthRef,
-                    GalleryUiDesignTokens.SideTabRowHeightRef, "", 18, 0, 0, AnchorPresets.middleLeft, null);
-                AddHoverDelegate(btnGO);
-                ConfigureSideTabRowHoverBorder(btnGO);
-                btnGO.SetActive(true);
-                RectTransform rt = btnGO.GetComponent<RectTransform>();
-                if (rt != null)
-                {
-                    float s = ChromeScale;
-                    rt.anchorMin = new Vector2(0, 1);
-                    rt.anchorMax = new Vector2(1, 1);
-                    rt.pivot = new Vector2(0.5f, 1f);
-                    rt.anchoredPosition = Vector2.zero;
-                    ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
-                }
-                pool.Add(btnGO);
-            }
+            EnsureSideTabVirtPool(isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons, parent, desired);
         }
 
         private void BindUserTagVirtButton(GameObject btnGO, UserTagSideTabEntry ut, Color utAccent, string pickTooltip, bool isLeft)

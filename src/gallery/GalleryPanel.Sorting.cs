@@ -272,22 +272,10 @@ namespace VPB
         {
             if (fileSortTypeMenuRoot != null || backgroundBoxGO == null) return;
 
-            fileSortTypeMenuRoot = UI.CreateChildRT(backgroundBoxGO, "FileSortTypeMenu");
-
-            GameObject backdropGO = UI.CreateChildRT(fileSortTypeMenuRoot, "Backdrop");
-            Image backdropImg = UI.AddImage(backdropGO, UI.Black(0.001f));
-            Button backdropBtn = backdropGO.AddComponent<Button>();
-            backdropBtn.transition = Selectable.Transition.None;
-            backdropBtn.onClick.AddListener(CloseFileSortTypeMenu);
-
-            fileSortTypeMenuPanelGO = UI.CreateChildRT(fileSortTypeMenuRoot, "FileSortTypeMenuPanel", AnchorPresets.topMiddle, new Vector2(260f, 50f), new Vector2(108f, -72f));
-
-            Image panelImg = UI.AddImage(fileSortTypeMenuPanelGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-
-            UI.AddVLG(fileSortTypeMenuPanelGO, 4f, UI.Pad(6f, 6f, 6f, 6f), TextAnchor.UpperCenter);
-
-            ContentSizeFitter csf = fileSortTypeMenuPanelGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fileSortTypeMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "FileSortTypeMenu", CloseFileSortTypeMenu);
+            fileSortTypeMenuPanelGO = UI.CreatePopupMenuPanel(
+                fileSortTypeMenuRoot, "FileSortTypeMenuPanel",
+                AnchorPresets.topMiddle, new Vector2(260f, 50f), new Vector2(108f, -72f));
 
             fileSortTypeMenuRoot.SetActive(false);
             RebuildFileSortTypeMenuOptions();
@@ -315,24 +303,12 @@ namespace VPB
         {
             if (sidePaneSortMenuRoot != null || backgroundBoxGO == null) return;
 
-            sidePaneSortMenuRoot = UI.CreateChildRT(backgroundBoxGO, "SidePaneSortMenu");
-
-            GameObject backdropGO = UI.CreateChildRT(sidePaneSortMenuRoot, "Backdrop");
-            Image backdropImg = UI.AddImage(backdropGO, UI.Black(0.001f));
-            Button backdropBtn = backdropGO.AddComponent<Button>();
-            backdropBtn.transition = Selectable.Transition.None;
-            backdropBtn.onClick.AddListener(CloseSidePaneSortMenu);
-
+            sidePaneSortMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "SidePaneSortMenu", CloseSidePaneSortMenu);
             // Anchors / position are set at open-time based on which button was clicked.
-            sidePaneSortMenuPanelGO = UI.CreateChildRT(sidePaneSortMenuRoot, "SidePaneSortMenuPanel", AnchorPresets.topLeft, new Vector2(240f, 50f), new Vector2(10f, -95f));
+            sidePaneSortMenuPanelGO = UI.CreatePopupMenuPanel(
+                sidePaneSortMenuRoot, "SidePaneSortMenuPanel",
+                AnchorPresets.topLeft, new Vector2(240f, 50f), new Vector2(10f, -95f));
             sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.GetComponent<RectTransform>();
-
-            Image panelImg = UI.AddImage(sidePaneSortMenuPanelGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-
-            UI.AddVLG(sidePaneSortMenuPanelGO, 4f, UI.Pad(6f, 6f, 6f, 6f), TextAnchor.UpperCenter);
-
-            ContentSizeFitter csf = sidePaneSortMenuPanelGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             sidePaneSortMenuRoot.SetActive(false);
         }
@@ -370,9 +346,8 @@ namespace VPB
                 SortType capturedType = optType;
                 SortDirection capturedDir = optDir;
 
-                GameObject row = UI.CreateUIButton(
-                    sidePaneSortMenuPanelGO, 228, 34, label, 14, 0, 0,
-                    AnchorPresets.middleCenter,
+                GameObject row = UI.AddPopupMenuRow(
+                    sidePaneSortMenuPanelGO, 228, 34, label, 14, isCurrent,
                     () =>
                     {
                         if (SupportsSidePaneFourModeSort(context))
@@ -386,21 +361,8 @@ namespace VPB
                             UpdateTabs();
                         }
                         CloseSidePaneSortMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color = isCurrent ? UI.PopupText : UI.PopupMutedText;
-                    rowT.fontStyle = FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                LayoutElement le = UI.AddLE(row, preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightCompactRef, flexibleWidth: 1f);
+                    },
+                    GalleryUiDesignTokens.PopupMenuRowHeightCompactRef);
             }
 
             SyncSidePaneSortMenuLayout(ChromeScale);
@@ -487,28 +449,14 @@ namespace VPB
                 string label = (isCurrent ? "\u2713  " : "    ") + FileSortTypeFullLabel(sortType);
                 SortType captured = sortType;
 
-                GameObject row = UI.CreateUIButton(
-                    fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
-                    AnchorPresets.middleCenter,
+                UI.AddPopupMenuRow(
+                    fileSortTypeMenuPanelGO, 248, 36, label, 14, isCurrent,
                     () =>
                     {
                         CommitSortTypeChange("Files", captured, fileSortTypeText, fileSortDirText);
                         CloseFileSortTypeMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color = isCurrent ? UI.PopupText : UI.PopupMutedText;
-                    rowT.fontStyle = FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                LayoutElement le = UI.AddLE(row, preferredHeight: 38f, flexibleWidth: 1f);
+                    },
+                    38f);
             }
 
             AppendHideOldVersionsMenuRow();
@@ -545,9 +493,8 @@ namespace VPB
             try { on = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { }
             string label = (on ? "\u2713  " : "    ") + VPBTranslation.T("gallery.sort.full.hide_old_versions", "Hide old versions (keep newest only)");
 
-            GameObject row = UI.CreateUIButton(
-                fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
-                AnchorPresets.middleCenter,
+            UI.AddPopupMenuRow(
+                fileSortTypeMenuPanelGO, 248, 36, label, 14, on,
                 () =>
                 {
                     try
@@ -558,21 +505,8 @@ namespace VPB
                     catch { }
                     CloseFileSortTypeMenu();
                     try { RefreshFiles(); } catch { }
-                });
-
-            Image rowImg = row.GetComponent<Image>();
-            rowImg.color = on ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-            Text rowT = row.GetComponentInChildren<Text>();
-            if (rowT != null)
-            {
-                rowT.color = on ? UI.PopupText : UI.PopupMutedText;
-                rowT.fontStyle = FontStyle.Normal;
-                rowT.alignment = TextAnchor.MiddleLeft;
-                VPBUiFont.ApplyTo(rowT);
-            }
-
-            LayoutElement le = UI.AddLE(row, preferredHeight: 38f, flexibleWidth: 1f);
+                },
+                38f);
         }
 
         private void ToggleFileSortDirection()

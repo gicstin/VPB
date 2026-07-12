@@ -262,30 +262,27 @@ namespace VPB
             AddTooltip(languageSwitcherBtnGO, "i18n.switcher.tooltip", "Language / 语言 / 言語");
 
             // ── Full-screen backdrop (click-outside-to-close) ──────────────────
-            languageMenuPopupGO = UI.CreateChildRT(backgroundBoxGO, "LanguageMenuPopup", AnchorPresets.stretchAll);
-
-            Image popBg = UI.AddImage(languageMenuPopupGO, new Color(0f, 0f, 0f, 0.001f));
-
-            Button popBtn = languageMenuPopupGO.AddComponent<Button>();
-            popBtn.transition = Selectable.Transition.None;
-            popBtn.onClick.AddListener(CloseLanguageMenu);
-
+            languageMenuPopupGO = UI.CreatePopupMenuRoot(backgroundBoxGO, "LanguageMenuPopup", CloseLanguageMenu);
             languageMenuPopupGO.SetActive(false);
 
             // ── Dropdown panel ─────────────────────────────────────────────────
             // Position below the language button on the left title-bar icon cluster.
-            GameObject panel = UI.CreateChildRT(languageMenuPopupGO, "LanguageMenuPanel", AnchorPresets.topLeft, new Vector2(230f, 50f), new Vector2(114f, -72f)); // height grows via ContentSizeFitter
-
-            Image panelImg = UI.AddImage(panel, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-
-            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
-            {
-                var v = vlg;
-                innerPaneScaleActions.Add(s => { if (v) { v.spacing = 4f * s; v.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s)); } });
-            }
-
-            ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            GameObject panel = UI.CreatePopupMenuPanel(
+                languageMenuPopupGO, "LanguageMenuPanel",
+                AnchorPresets.topLeft, new Vector2(230f, 50f), new Vector2(114f, -72f),
+                configureVlg: vlg =>
+                {
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (vlg)
+                        {
+                            vlg.spacing = 4f * s;
+                            vlg.padding = new RectOffset(
+                                Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s),
+                                Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s));
+                        }
+                    });
+                });
 
             RebuildLanguageMenuOptions();
         }
@@ -343,34 +340,19 @@ namespace VPB
                 // "\u2713" = ✓ checkmark; four spaces align non-active items
                 string label = (isCurrent ? "\u2713  " : "    ") + VPBTranslation.GetLocaleDisplayName(id);
 
-                GameObject row = UI.CreateUIButton(
+                GameObject row = UI.AddPopupMenuRow(
                     panel.gameObject,
                     GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f,
                     GalleryUiDesignTokens.PopupMenuRowHeightRef,
                     label,
                     GalleryUiDesignTokens.PopupMenuRowFontRef,
-                    0, 0,
-                    AnchorPresets.middleCenter,
+                    isCurrent,
                     () =>
                     {
                         VPBTranslation.SetLocale(id, saveConfig: true);
                         CloseLanguageMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color     = isCurrent ? UI.PopupText : UI.PopupMutedText;
-                    rowT.fontStyle = FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                // Let layout control height
-                LayoutElement le = UI.AddLE(row, preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef, flexibleWidth: 1f);
+                    },
+                    GalleryUiDesignTokens.PopupMenuRowHeightRef);
             }
 
             try { RescaleLanguageMenuInternal(ChromeScale); } catch { }

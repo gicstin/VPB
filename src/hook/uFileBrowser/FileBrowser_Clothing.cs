@@ -39,74 +39,48 @@ namespace VPB
                 item.gameObject.SetActive(active);
             }
         }
+        static void InitTagStorables(IList<string> tagNames, List<JSONStorableBool> target)
+        {
+            for (int i = 0; i < tagNames.Count; i++)
+                target.Add(new JSONStorableBool(tagNames[i], false));
+        }
+
         void InitTags()
         {
-            for (int i = 0; i < TagFilter.ClothingRegionTags.Count; i++)
-            {
-                ClothingRegionTagsJsonStorable.Add(new JSONStorableBool(TagFilter.ClothingRegionTags[i], false));
-            }
-            for (int i = 0; i < TagFilter.ClothingTypeTags.Count; i++)
-            {
-                ClothingTypeTagsJsonStorable.Add(new JSONStorableBool(TagFilter.ClothingTypeTags[i], false));
-            }
-            for (int i = 0; i < TagFilter.ClothingOtherTags.Count; i++)
-            {
-                ClothingOtherTagsJsonStorable.Add(new JSONStorableBool(TagFilter.ClothingOtherTags[i], false));
-            }
-
-            for (int i = 0; i < TagFilter.HairRegionTags.Count; i++)
-            {
-                HairRegionTagsJsonStorable.Add(new JSONStorableBool(TagFilter.HairRegionTags[i], false));
-            }
-            for (int i = 0; i < TagFilter.HairTypeTags.Count; i++)
-            {
-                HairTypeTagsJsonStorable.Add(new JSONStorableBool(TagFilter.HairTypeTags[i], false));
-            }
-            for (int i = 0; i < TagFilter.HairOtherTags.Count; i++)
-            {
-                HairOtherTagsJsonStorable.Add(new JSONStorableBool(TagFilter.HairOtherTags[i], false));
-            }
+            InitTagStorables(TagFilter.ClothingRegionTags, ClothingRegionTagsJsonStorable);
+            InitTagStorables(TagFilter.ClothingTypeTags, ClothingTypeTagsJsonStorable);
+            InitTagStorables(TagFilter.ClothingOtherTags, ClothingOtherTagsJsonStorable);
+            InitTagStorables(TagFilter.HairRegionTags, HairRegionTagsJsonStorable);
+            InitTagStorables(TagFilter.HairTypeTags, HairTypeTagsJsonStorable);
+            InitTagStorables(TagFilter.HairOtherTags, HairOtherTagsJsonStorable);
         }
-        HashSet<string> GetHairFilter()
+
+        static HashSet<string> CollectActiveTagFilter(params List<JSONStorableBool>[] groups)
         {
             HashSet<string> ret = new HashSet<string>();
-            foreach (var item in HairRegionTagsJsonStorable)
+            for (int g = 0; g < groups.Length; g++)
             {
-                if (item.val)
-                    ret.Add(item.name);
-            }
-            foreach (var item in HairTypeTagsJsonStorable)
-            {
-                if (item.val)
-                    ret.Add(item.name);
-            }
-            foreach(var item in HairOtherTagsJsonStorable)
-            {
-                if (item.val)
-                    ret.Add(item.name);
+                List<JSONStorableBool> group = groups[g];
+                if (group == null) continue;
+                for (int i = 0; i < group.Count; i++)
+                {
+                    JSONStorableBool item = group[i];
+                    if (item != null && item.val)
+                        ret.Add(item.name);
+                }
             }
             return ret;
         }
+
+        HashSet<string> GetHairFilter()
+        {
+            return CollectActiveTagFilter(HairRegionTagsJsonStorable, HairTypeTagsJsonStorable, HairOtherTagsJsonStorable);
+        }
+
         // If nothing is selected, it means we need to filter clothing
         HashSet<string> GetClothingFilter()
         {
-            HashSet<string> ret = new HashSet<string>();
-            foreach (var item in ClothingRegionTagsJsonStorable)
-            {
-                if (item.val)
-                    ret.Add(item.name);
-            }
-            foreach (var item in ClothingTypeTagsJsonStorable)
-            {
-                if (item.val)
-                    ret.Add(item.name);
-            }
-            foreach (var item in ClothingOtherTagsJsonStorable)
-            {
-                if (item.val)
-                    ret.Add(item.name);
-            }
-            return ret;
+            return CollectActiveTagFilter(ClothingRegionTagsJsonStorable, ClothingTypeTagsJsonStorable, ClothingOtherTagsJsonStorable);
         }
 
     }

@@ -32,18 +32,15 @@ namespace VPB
             _titleBarOverflowBtnGO.SetActive(false);
             AddTooltip(_titleBarOverflowBtnGO, "gallery.title.overflow", "More title bar actions");
 
-            _titleBarOverflowMenuGO = UI.CreateChildRT(backgroundBoxGO != null ? backgroundBoxGO : titleBarGO, "TitleBarOverflowMenu", AnchorPresets.stretchAll);
-            Image popBg = UI.AddImage(_titleBarOverflowMenuGO, new Color(0f, 0f, 0f, 0.001f));
-            Button popBtn = _titleBarOverflowMenuGO.AddComponent<Button>();
-            popBtn.transition = Selectable.Transition.None;
-            popBtn.onClick.AddListener(CloseTitleBarOverflowMenu);
+            _titleBarOverflowMenuGO = UI.CreatePopupMenuRoot(
+                backgroundBoxGO != null ? backgroundBoxGO : titleBarGO,
+                "TitleBarOverflowMenu",
+                CloseTitleBarOverflowMenu);
             _titleBarOverflowMenuGO.SetActive(false);
 
-            GameObject panel = UI.CreateChildRT(_titleBarOverflowMenuGO, "OverflowMenuPanel", AnchorPresets.topMiddle, new Vector2(220f, 50f), new Vector2(-200f, -72f));
-            Image panelImg = UI.AddImage(panel, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6));
-            ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            GameObject panel = UI.CreatePopupMenuPanel(
+                _titleBarOverflowMenuGO, "OverflowMenuPanel",
+                AnchorPresets.topMiddle, new Vector2(220f, 50f), new Vector2(-200f, -72f));
             RebuildTitleBarOverflowMenuRows(panel.transform);
         }
 
@@ -66,21 +63,7 @@ namespace VPB
 
         private static void AddOverflowMenuRow(Transform panel, string label, UnityAction onClick, bool active = false)
         {
-            if (panel == null || onClick == null) return;
-            GameObject row = UI.CreateUIButton(panel.gameObject, 0f, 36f, label, 15, 0f, 0f, AnchorPresets.stretchAll, onClick);
-            if (row == null) return;
-            Image img = row.GetComponent<Image>();
-            if (img != null) img.color = active ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-            Text t = row.GetComponentInChildren<Text>();
-            if (t != null)
-            {
-                t.alignment = TextAnchor.MiddleLeft;
-                t.color = Color.white;
-            }
-            LayoutElement le = row.GetComponent<LayoutElement>();
-            if (le == null) le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = 36f;
-            le.flexibleWidth = 1f;
+            UI.AddStretchPopupMenuRow(panel, label, onClick, active);
         }
 
         private void ToggleTitleBarOverflowMenu()

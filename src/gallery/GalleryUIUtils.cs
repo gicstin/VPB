@@ -1441,6 +1441,105 @@ namespace VPB
             return root;
         }
 
+        /// <summary>
+        /// Stretch-all popup root with near-transparent child backdrop for click-outside dismiss.
+        /// </summary>
+        public static GameObject CreatePopupMenuRoot(GameObject parentGO, string name, UnityAction onClose)
+        {
+            GameObject root = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
+            GameObject backdropGO = CreateChildRT(root, "Backdrop", AnchorPresets.stretchAll);
+            AddImage(backdropGO, Black(0.001f));
+            Button backdropBtn = backdropGO.AddComponent<Button>();
+            backdropBtn.transition = Selectable.Transition.None;
+            if (onClose != null) backdropBtn.onClick.AddListener(onClose);
+            return root;
+        }
+
+        /// <summary>
+        /// Standard dropdown panel: PopupBackdrop fill, VLG, vertical ContentSizeFitter.
+        /// </summary>
+        public static GameObject CreatePopupMenuPanel(
+            GameObject rootGO,
+            string panelName,
+            int anchorPreset,
+            Vector2 size,
+            Vector2 anchoredPosition,
+            TextAnchor childAlignment = TextAnchor.UpperCenter,
+            Action<VerticalLayoutGroup> configureVlg = null)
+        {
+            GameObject panelGO = CreateChildRT(rootGO, panelName, anchorPreset, size, anchoredPosition);
+            AddImage(panelGO, new Color(PopupBackdrop.r, PopupBackdrop.g, PopupBackdrop.b, 0.92f));
+            VerticalLayoutGroup vlg = AddVLG(panelGO, 4f, Pad(6f, 6f, 6f, 6f), childAlignment);
+            configureVlg?.Invoke(vlg);
+            ContentSizeFitter csf = panelGO.AddComponent<ContentSizeFitter>();
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            return panelGO;
+        }
+
+        /// <summary>
+        /// Sort/language-style popup row: left-aligned label, active/inactive chrome.
+        /// </summary>
+        public static GameObject AddPopupMenuRow(
+            GameObject panelGO,
+            float width,
+            float height,
+            string label,
+            int fontSize,
+            bool isActive,
+            UnityAction onClick,
+            float preferredHeight)
+        {
+            GameObject row = CreateUIButton(panelGO, width, height, label, fontSize, 0, 0, AnchorPresets.middleCenter, onClick);
+            Image rowImg = row.GetComponent<Image>();
+            if (rowImg != null) rowImg.color = isActive ? PopupRowActiveBackdrop : PopupRowBackdrop;
+
+            Text rowT = row.GetComponentInChildren<Text>();
+            if (rowT != null)
+            {
+                rowT.color = isActive ? PopupText : PopupMutedText;
+                rowT.fontStyle = FontStyle.Normal;
+                rowT.alignment = TextAnchor.MiddleLeft;
+                VPBUiFont.ApplyTo(rowT);
+            }
+
+            AddLE(row, preferredHeight: preferredHeight, flexibleWidth: 1f);
+            return row;
+        }
+
+        /// <summary>
+        /// Stretch-width popup row (overflow/save menus): left-aligned white text.
+        /// </summary>
+        public static GameObject AddStretchPopupMenuRow(
+            Transform panel,
+            string label,
+            UnityAction onClick,
+            bool isActive = false,
+            bool enabled = true,
+            float rowHeight = 36f)
+        {
+            if (panel == null || onClick == null) return null;
+            GameObject row = CreateUIButton(panel.gameObject, 0f, rowHeight, label, 15, 0f, 0f, AnchorPresets.stretchAll, onClick);
+            if (row == null) return null;
+
+            Image img = row.GetComponent<Image>();
+            if (img != null) img.color = enabled
+                ? (isActive ? PopupRowActiveBackdrop : PopupRowBackdrop)
+                : new Color(0.2f, 0.2f, 0.2f, 0.7f);
+
+            Button btn = row.GetComponent<Button>();
+            if (btn != null) btn.interactable = enabled;
+
+            Text t = row.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.alignment = TextAnchor.MiddleLeft;
+                t.color = enabled ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+            }
+
+            AddLE(row, preferredHeight: rowHeight, flexibleWidth: 1f);
+            return row;
+        }
+
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)
         {
             // Rounded background. Fraction-of-size radius is scale-resistant (re-derived from the live
