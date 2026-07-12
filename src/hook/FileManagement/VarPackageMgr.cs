@@ -16,10 +16,6 @@ namespace VPB
     {
         public static VarPackageMgr singleton = new VarPackageMgr();
 
-        const string LegacyCachePath = "Cache/VPB/AllPackages.bytes2";
-        const int LegacyCacheMagic = 0x56504231;
-        const int LegacyCacheVersion = 7;
-
         readonly object lookupLock = new object();
         public Dictionary<string, SerializableVarPackage> lookup = new Dictionary<string, SerializableVarPackage>();
 
@@ -137,19 +133,6 @@ namespace VPB
                 }
             }
 
-            lock (lookupLock)
-            {
-                if (TryLoadLegacyBytes2Fallback(lookup, out loadedCount) && loadedCount > 0)
-                {
-                    existCache = true;
-                    needsBlobUpgrade = VpbSqlite3.IsAvailable;
-                    manifestLoadState = 2;
-                    sw.Stop();
-                    LogUtil.Log("VarPackageMgr legacy bytes2 load " + loadedCount + " in " + sw.ElapsedMilliseconds + "ms");
-                    return;
-                }
-            }
-
             manifestLoadState = -1;
             sw.Stop();
             LogUtil.Log("VarPackageMgr manifest cache missing (sql=" + (VpbSqlite3.IsAvailable ? "1" : "0") + ")");
@@ -167,60 +150,6 @@ namespace VPB
             if (VpbSqlite3.IsAvailable) { }
         }
 
-        bool TryLoadLegacyBytes2Fallback(Dictionary<string, SerializableVarPackage> target, out int loadedCount)
-        {
-            loadedCount = 0;
-            string cachePath = LegacyCachePath;
-            try { cachePath = Path.GetFullPath(cachePath); } catch { }
-            if (!File.Exists(cachePath)) return false;
-
-            try
-            {
-                using (var stream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var reader = new BinaryReader(stream))
-                {
-                    int first = reader.ReadInt32();
-                    int count = 0;
-                    int version = LegacyCacheVersion;
-                    bool includeVarMeta = first == LegacyCacheMagic;
-                    if (includeVarMeta)
-                    {
-                        version = reader.ReadInt32();
-                        if (version != LegacyCacheVersion && version != 6)
-                        {
-                            LogUtil.Log("VarPackageMgr legacy cache version mismatch " + version);
-                            return false;
-                        }
-                        count = reader.ReadInt32();
-                    }
-                    else
-                    {
-                        count = first;
-                    }
-                    if (count <= 0) return false;
-                    lock (lookupLock)
-                    {
-                        for (int i = 0; i < count; i++)
-                        {
-                            string key = reader.ReadString();
-                            if (string.IsNullOrEmpty(key)) continue;
-                            var pkg = new SerializableVarPackage();
-                            pkg.Read(reader, includeVarMeta, version);
-                            if (!target.ContainsKey(key))
-                                target.Add(key, pkg);
-                            loadedCount++;
-                        }
-                    }
-                }
-                return loadedCount > 0;
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("VarPackageMgr legacy bytes2 load failed: " + ex.Message);
-                return false;
-            }
-        }
-
         public void Refresh()
         {
             if (!dirtyExternal && !needsBlobUpgrade) return;
@@ -236,53 +165,6 @@ namespace VPB
             {
                 dirtyExternal = false;
                 needsBlobUpgrade = false;
-                return;
-            }
-
-            if (dirtyExternal)
-            {
-                WriteLegacyBytes2Fallback(snapshot);
-                dirtyExternal = false;
-            }
-        }
-
-        void WriteLegacyBytes2Fallback(Dictionary<string, SerializableVarPackage> snapshot)
-        {
-            Stopwatch sw = Stopwatch.StartNew();
-            string cachePath = LegacyCachePath;
-            string tempPath = cachePath + ".tmp";
-            try
-            {
-                try
-                {
-                    if (!Directory.Exists("Cache/VPB")) Directory.CreateDirectory("Cache/VPB");
-                }
-                catch { }
-                using (var stream = new FileStream(tempPath, FileMode.Create))
-                using (var writer = new BinaryWriter(stream))
-                {
-                    writer.Write(LegacyCacheMagic);
-                    writer.Write(LegacyCacheVersion);
-                    writer.Write(snapshot.Count);
-                    foreach (var item in snapshot)
-                    {
-                        writer.Write(item.Key);
-                        item.Value.Write(writer);
-                    }
-                    writer.Flush();
-                }
-                if (File.Exists(cachePath)) File.Delete(cachePath);
-                File.Move(tempPath, cachePath);
-                sw.Stop();
-                long bytes = 0;
-                if (File.Exists(cachePath)) bytes = new FileInfo(cachePath).Length;
-                LogUtil.Log("VarPackageMgr legacy bytes2 write " + snapshot.Count + " in " + sw.ElapsedMilliseconds
-                    + "ms bytes=" + bytes + " (sqlite unavailable)");
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("Failed to write legacy bytes2 manifest: " + ex.Message);
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
         }
     }

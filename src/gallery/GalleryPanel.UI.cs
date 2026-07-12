@@ -982,15 +982,9 @@ namespace VPB
         private void CreatePaginationControls()
         {
             // Footer Bar
-            GameObject pageContainer = new GameObject("PaginationContainer");
-            pageContainer.transform.SetParent(backgroundBoxGO.transform, false);
-            paginationRT = pageContainer.AddComponent<RectTransform>();
-            paginationRT.anchorMin = new Vector2(0, 0);
-            paginationRT.anchorMax = new Vector2(1, 0); // Stretch horizontally
-            paginationRT.pivot = new Vector2(0.5f, 0);
-            paginationRT.anchoredPosition = new Vector2(0, 0);
-            paginationRT.sizeDelta = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef); // Footer bar height for buttons
-            
+            GameObject pageContainer = UI.CreateChildRT(backgroundBoxGO, "PaginationContainer", AnchorPresets.hStretchBottom, new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef)); // Footer bar height for buttons
+            paginationRT = pageContainer.GetComponent<RectTransform>();
+
             footerHLG = pageContainer.AddComponent<HorizontalLayoutGroup>();
             footerHLG.padding = new RectOffset(10, 10, 0, 0); // resize handles are real layout children now (no manual reservation)
             {
@@ -1002,18 +996,12 @@ namespace VPB
             footerHLG.childForceExpandWidth = true;
 
             // Fixed dock "Top": side rail buttons group (overlays footer, centered in free space).
-            _footerSideButtonsGroupGO = new GameObject("SideButtonsGroup");
-            _footerSideButtonsGroupGO.transform.SetParent(pageContainer.transform, false);
-            _footerSideButtonsGroupRT = _footerSideButtonsGroupGO.AddComponent<RectTransform>();
+            _footerSideButtonsGroupGO = UI.CreateChildRT(pageContainer, "SideButtonsGroup", AnchorPresets.middleCenter, new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef));
+            _footerSideButtonsGroupRT = _footerSideButtonsGroupGO.GetComponent<RectTransform>();
             {
                 var le = _footerSideButtonsGroupGO.AddComponent<LayoutElement>();
                 le.ignoreLayout = true;
             }
-            _footerSideButtonsGroupRT.anchorMin = new Vector2(0.5f, 0.5f);
-            _footerSideButtonsGroupRT.anchorMax = new Vector2(0.5f, 0.5f);
-            _footerSideButtonsGroupRT.pivot = new Vector2(0.5f, 0.5f);
-            _footerSideButtonsGroupRT.anchoredPosition = Vector2.zero;
-            _footerSideButtonsGroupRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef);
             _footerSideButtonsGroupGO.SetActive(false);
 
             // --- Left Section (Follow Controls) ---
@@ -1359,20 +1347,13 @@ namespace VPB
             CreateHoverPreviewOverlay(backgroundBoxGO);
 
             // HoverPathText — anchored to the bottom (tooltip) row; CanvasGroup fades only the text
-            GameObject hoverPathTextGO = new GameObject("HoverPathText");
-            hoverPathTextGO.transform.SetParent(pathGO.transform, false);
+            // Bottom-row anchor: pinned to bottom of bar, fixed 60 px tall (updated by scale actions)
+            GameObject hoverPathTextGO = UI.CreateChildRT(pathGO, "HoverPathText", AnchorPresets.hStretchBottom, new Vector2(0f, 60f));
             hoverPathCanvasGroup = hoverPathTextGO.AddComponent<CanvasGroup>();
             hoverPathCanvasGroup.alpha = 0;
             hoverPathCanvasGroup.blocksRaycasts = false;
             hoverPathCanvasGroup.interactable = false;
             var hoverPathTextRT2 = hoverPathTextGO.GetComponent<RectTransform>();
-            if (hoverPathTextRT2 == null) hoverPathTextRT2 = hoverPathTextGO.AddComponent<RectTransform>();
-            // Bottom-row anchor: pinned to bottom of bar, fixed 60 px tall (updated by scale actions)
-            hoverPathTextRT2.anchorMin        = new Vector2(0f, 0f);
-            hoverPathTextRT2.anchorMax        = new Vector2(1f, 0f);
-            hoverPathTextRT2.pivot            = new Vector2(0.5f, 0f);
-            hoverPathTextRT2.anchoredPosition = Vector2.zero;
-            hoverPathTextRT2.sizeDelta        = new Vector2(0f, 60f);
             // Scale action keeps text wrapper in sync with row height
             {
                 var hpRT = hoverPathTextRT2;
@@ -1749,18 +1730,11 @@ namespace VPB
                 Sprite icon = UI.LoadIconSprite("vpb_icons/scroll.png", UI.BarIconGlyphTint);
                 if (icon != null)
                 {
-                    GameObject iconGO = new GameObject("Icon");
-                    iconGO.transform.SetParent(springBtn.transform, false);
-                    Image img = iconGO.AddComponent<Image>();
+                    GameObject iconGO = UI.CreateChildRT(springBtn, "Icon", AnchorPresets.stretchAll, new Vector2(-24f, -24f));
+                    Image img = UI.AddImage(iconGO, Color.white);
                     img.sprite = icon;
-                    img.color = Color.white;
                     img.preserveAspect = true;
                     img.raycastTarget = false;
-                    RectTransform irt = iconGO.GetComponent<RectTransform>();
-                    irt.anchorMin = Vector2.zero;
-                    irt.anchorMax = Vector2.one;
-                    irt.sizeDelta = new Vector2(-24f, -24f);
-                    irt.anchoredPosition = Vector2.zero;
                 }
             }
             catch { }
@@ -1906,17 +1880,11 @@ namespace VPB
             hoverPreviewRT.pivot = new Vector2(0f, 0f);
 
             // Backdrop
-            var bg = hoverPreviewGO.AddComponent<Image>();
-            bg.color = new Color(0f, 0f, 0f, 0.55f);
-            bg.raycastTarget = false;
+            var bg = UI.AddImage(hoverPreviewGO, new Color(0f, 0f, 0f, 0.55f), false);
 
             // Actual preview
-            var imgGO = new GameObject("Image");
-            imgGO.transform.SetParent(hoverPreviewGO.transform, false);
-            var rt = imgGO.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.pivot = new Vector2(0.5f, 0.5f);
+            var imgGO = UI.CreateChildRT(hoverPreviewGO, "Image", AnchorPresets.stretchAll);
+            var rt = imgGO.GetComponent<RectTransform>();
             rt.offsetMin = new Vector2(4f, 4f);
             rt.offsetMax = new Vector2(-4f, -4f);
 

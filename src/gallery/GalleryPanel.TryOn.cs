@@ -350,22 +350,13 @@ namespace VPB
             GameObject parent = tbox != null ? tbox : backgroundBoxGO;
             if (parent == null) return;
 
-            GameObject bar = new GameObject("VPB_TryOnBar");
-            _tryOnBarGO = bar;
-            bar.transform.SetParent(parent.transform, false);
-            Image barBg = bar.AddComponent<Image>();
-            barBg.color = new Color(0.08f, 0.08f, 0.10f, 0.96f);
-            barBg.raycastTarget = true;
-
             // Pinned to the top edge of the toolbox interior (set fully in TryOnLayoutBar).
             // Scales with the rest of the chrome.
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            RectTransform rt = bar.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.sizeDelta = new Vector2(-(16f * s), TryOnRowHeight(s));
+            GameObject bar = UI.CreateChildRT(parent, "VPB_TryOnBar", AnchorPresets.hStretchTop, new Vector2(-(16f * s), TryOnRowHeight(s)));
+            _tryOnBarGO = bar;
+            Image barBg = UI.AddImage(bar, new Color(0.08f, 0.08f, 0.10f, 0.96f));
 
             HorizontalLayoutGroup row = UI.AddHLG(bar, spacing: 8f * s, padding: UI.Pad(12, 12, 8, 8, s), childForceExpandWidth: false, childForceExpandHeight: true);
 

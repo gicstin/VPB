@@ -119,30 +119,13 @@ namespace VPB
         {
             if (_overlay != null) return;
 
-            _overlay = new GameObject("HoldToApplyOverlay");
-            _overlay.transform.SetParent(transform, false);
+            _overlay = UI.CreateChildRT(gameObject, "HoldToApplyOverlay", AnchorPresets.middleCenter, new Vector2(78f, 78f));
 
-            var rt = _overlay.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(78f, 78f);
-            rt.anchoredPosition = Vector2.zero;
+            var bg = UI.AddImage(_overlay, new Color(0f, 0f, 0f, 0.55f), false);
 
-            var bg = _overlay.AddComponent<Image>();
-            bg.color = new Color(0f, 0f, 0f, 0.55f);
-            bg.raycastTarget = false;
+            var fillGO = UI.CreateChildRT(_overlay, "Fill", AnchorPresets.stretchAll, new Vector2(-10f, -10f));
 
-            var fillGO = new GameObject("Fill");
-            fillGO.transform.SetParent(_overlay.transform, false);
-            var frt = fillGO.AddComponent<RectTransform>();
-            frt.anchorMin = Vector2.zero;
-            frt.anchorMax = Vector2.one;
-            frt.sizeDelta = new Vector2(-10f, -10f);
-            frt.anchoredPosition = Vector2.zero;
-
-            _fill = fillGO.AddComponent<Image>();
-            _fill.color = new Color(0.15f, 0.75f, 0.2f, 0.85f);
+            _fill = UI.AddImage(fillGO, new Color(0.15f, 0.75f, 0.2f, 0.85f));
             _fill.type = Image.Type.Filled;
             _fill.fillMethod = Image.FillMethod.Radial360;
             _fill.fillOrigin = 2; // Top

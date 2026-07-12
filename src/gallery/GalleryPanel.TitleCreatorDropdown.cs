@@ -70,20 +70,9 @@ namespace VPB
             AddTooltip(titleCreatorBtn, "gallery.tooltip.creator_filter", "Creator filter (multi-select). Left-click open. Right-click clear.");
 
             // Click-outside blocker (behind dropdown, above grid)
-            titleCreatorDropdownBlocker = new GameObject("TitleCreatorDropdownBlocker");
-            titleCreatorDropdownBlocker.transform.SetParent(backgroundBoxGO.transform, false);
+            titleCreatorDropdownBlocker = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdownBlocker", AnchorPresets.stretchAll);
             {
-                var rt = titleCreatorDropdownBlocker.AddComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.anchoredPosition = Vector2.zero;
-                rt.sizeDelta = Vector2.zero;
-            }
-            {
-                var img = titleCreatorDropdownBlocker.AddComponent<Image>();
-                img.color = new Color(0, 0, 0, 0);
-                img.raycastTarget = true;
+                var img = UI.AddImage(titleCreatorDropdownBlocker, new Color(0, 0, 0, 0));
             }
             {
                 var blockerBtn = titleCreatorDropdownBlocker.AddComponent<Button>();
@@ -93,19 +82,11 @@ namespace VPB
             titleCreatorDropdownBlocker.SetActive(false);
 
             // Dropdown root (hidden by default)
-            titleCreatorDropdown = new GameObject("TitleCreatorDropdown");
-            titleCreatorDropdown.transform.SetParent(backgroundBoxGO.transform, false);
-            titleCreatorDropdown.transform.SetAsLastSibling();
-            var ddRT = titleCreatorDropdown.AddComponent<RectTransform>();
-            ddRT.anchorMin = new Vector2(0.5f, 1f);
-            ddRT.anchorMax = new Vector2(0.5f, 1f);
-            ddRT.pivot = new Vector2(0.5f, 1f);
             // Below title bar (70px height) so it overlays grid items.
-            ddRT.anchoredPosition = new Vector2(-184, -70);
-            ddRT.sizeDelta = new Vector2(330, 500);
+            titleCreatorDropdown = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdown", AnchorPresets.topMiddle, new Vector2(330, 500), new Vector2(-184, -70));
+            titleCreatorDropdown.transform.SetAsLastSibling();
 
-            var ddImg = titleCreatorDropdown.AddComponent<Image>();
-            ddImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            var ddImg = UI.AddImage(titleCreatorDropdown, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             var ddCg = titleCreatorDropdown.AddComponent<CanvasGroup>();
             ddCg.blocksRaycasts = true;
@@ -152,42 +133,21 @@ namespace VPB
 
             // Scroll view area
             {
-                GameObject scrollGO = new GameObject("Scroll");
-                scrollGO.transform.SetParent(titleCreatorDropdown.transform, false);
-                var scrollRT = scrollGO.AddComponent<RectTransform>();
-                scrollRT.anchorMin = new Vector2(0, 0);
-                scrollRT.anchorMax = new Vector2(1, 1);
+                float scrollBarWidth = 18f;
+                GameObject scrollGO = UI.CreateChildRT(titleCreatorDropdown, "Scroll", AnchorPresets.stretchAll);
+                RectTransform scrollRT = scrollGO.GetComponent<RectTransform>();
                 scrollRT.offsetMin = new Vector2(10, 10);
                 scrollRT.offsetMax = new Vector2(-10, -54);
-                float scrollBarWidth = 18f;
 
-                var viewportGO = new GameObject("Viewport");
-                viewportGO.transform.SetParent(scrollGO.transform, false);
-                var vpRT = viewportGO.AddComponent<RectTransform>();
-                vpRT.anchorMin = Vector2.zero;
-                vpRT.anchorMax = Vector2.one;
-                vpRT.sizeDelta = new Vector2(-scrollBarWidth, 0);
-                vpRT.anchoredPosition = new Vector2(-scrollBarWidth / 2f, 0);
+                var viewportGO = UI.CreateChildRT(scrollGO, "Viewport", AnchorPresets.stretchAll, new Vector2(-scrollBarWidth, 0), new Vector2(-scrollBarWidth / 2f, 0));
+                var vpRT = viewportGO.GetComponent<RectTransform>();
                 viewportGO.AddComponent<RectMask2D>();
 
-                var contentGO = new GameObject("Content");
-                contentGO.transform.SetParent(viewportGO.transform, false);
-                var contentRT = contentGO.AddComponent<RectTransform>();
-                contentRT.anchorMin = new Vector2(0, 1);
-                contentRT.anchorMax = new Vector2(1, 1);
-                contentRT.pivot = new Vector2(0.5f, 1f);
-                contentRT.anchoredPosition = Vector2.zero;
-                contentRT.sizeDelta = new Vector2(0, 0);
+                var contentGO = UI.CreateChildRT(viewportGO, "Content", AnchorPresets.hStretchTop);
+                var contentRT = contentGO.GetComponent<RectTransform>();
                 _titleCreatorVirtContentRT = contentRT;
 
-                titleCreatorDropdownHolder = new GameObject("Holder");
-                titleCreatorDropdownHolder.transform.SetParent(contentGO.transform, false);
-                var holderRT = titleCreatorDropdownHolder.AddComponent<RectTransform>();
-                holderRT.anchorMin = new Vector2(0, 1);
-                holderRT.anchorMax = new Vector2(1, 1);
-                holderRT.pivot = new Vector2(0.5f, 1f);
-                holderRT.anchoredPosition = Vector2.zero;
-                holderRT.sizeDelta = new Vector2(0, 0);
+                titleCreatorDropdownHolder = UI.CreateChildRT(contentGO, "Holder", AnchorPresets.hStretchTop);
                 titleCreatorDropdownHolder.AddComponent<LayoutElement>();
 
                 _titleCreatorVirtScroll = scrollGO.AddComponent<ScrollRect>();

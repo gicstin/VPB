@@ -288,28 +288,14 @@ namespace VPB
             int headerFont = type.Title;
             int bodyFont = type.Body;
 
-            _catQuickEditorRoot = new GameObject("CategoryQuickEditorRoot");
-            _catQuickEditorRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRt = _catQuickEditorRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
+            _catQuickEditorRoot = UI.CreateChildRT(backgroundBoxGO, "CategoryQuickEditorRoot", AnchorPresets.stretchAll);
 
-            Image dim = _catQuickEditorRoot.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.72f);
-            dim.raycastTarget = true;
+            Image dim = UI.AddImage(_catQuickEditorRoot, new Color(0f, 0f, 0f, 0.72f));
             Button dimBtn = _catQuickEditorRoot.AddComponent<Button>();
             UI.ConfigButtonFlat(dimBtn);
             dimBtn.onClick.AddListener(() => HideCategoryQuickEditor());
 
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_catQuickEditorRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = new Vector2(0.5f, 0.5f);
-            prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(860f * s, 720f * s);
+            GameObject panel = UI.CreateChildRT(_catQuickEditorRoot, "Panel", AnchorPresets.middleCenter, new Vector2(860f * s, 720f * s));
             Image pbg = AddCategoryQuickRoundedBg(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
             UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 14f, 14f, s));

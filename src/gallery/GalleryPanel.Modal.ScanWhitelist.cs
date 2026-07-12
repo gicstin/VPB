@@ -100,9 +100,7 @@ namespace VPB
             rootRt.offsetMin = Vector2.zero;
             rootRt.offsetMax = Vector2.zero;
 
-            Image dim = _scanWlModalRoot.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.72f);
-            dim.raycastTarget = true;
+            Image dim = UI.AddImage(_scanWlModalRoot, new Color(0f, 0f, 0f, 0.72f));
             Button dimBtn = _scanWlModalRoot.AddComponent<Button>();
             UI.ConfigButtonFlat(dimBtn);
             dimBtn.onClick.AddListener(HideScanWhitelistEditorModal);
@@ -113,9 +111,7 @@ namespace VPB
             prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(760f * s, 660f * s);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.06f, 0.06f, 0.08f, 1f);
-            pbg.raycastTarget = true;
+            Image pbg = UI.AddImage(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
             VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
@@ -155,8 +151,7 @@ namespace VPB
 
             GameObject enableRow = new GameObject("EnableRow");
             enableRow.transform.SetParent(panel.transform, false);
-            Image enableBg = enableRow.AddComponent<Image>();
-            enableBg.color = new Color(0.1f, 0.11f, 0.14f, 1f);
+            Image enableBg = UI.AddImage(enableRow, new Color(0.1f, 0.11f, 0.14f, 1f));
             HorizontalLayoutGroup erh = UI.AddHLG(enableRow, spacing: 10f * s, padding: UI.Pad(8, 8, 6, 6, s), childForceExpandWidth: false);
             LayoutElement erLe = UI.AddLE(enableRow, minHeight: 44f * s, preferredHeight: 44f * s);
 
@@ -209,8 +204,7 @@ namespace VPB
 
             GameObject addFooter = new GameObject("AddFooter");
             addFooter.transform.SetParent(panel.transform, false);
-            Image addFooterBg = addFooter.AddComponent<Image>();
-            addFooterBg.color = new Color(0.09f, 0.09f, 0.12f, 1f);
+            Image addFooterBg = UI.AddImage(addFooter, new Color(0.09f, 0.09f, 0.12f, 1f));
             VerticalLayoutGroup addFooterV = UI.AddVLG(addFooter, spacing: 10f * s, padding: UI.Pad(10, 10, 10, 10, s));
 
             ScanWlCreateAddBlock(
@@ -281,9 +275,7 @@ namespace VPB
             rootRt.offsetMin = Vector2.zero;
             rootRt.offsetMax = Vector2.zero;
 
-            Image dim = _scanWlDisableConfirmRoot.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.55f);
-            dim.raycastTarget = true;
+            Image dim = UI.AddImage(_scanWlDisableConfirmRoot, new Color(0f, 0f, 0f, 0.55f));
 
             GameObject panel = new GameObject("Panel");
             panel.transform.SetParent(_scanWlDisableConfirmRoot.transform, false);
@@ -291,8 +283,7 @@ namespace VPB
             prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(520f * s, 280f * s);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.08f, 0.08f, 0.1f, 1f);
+            Image pbg = UI.AddImage(panel, new Color(0.08f, 0.08f, 0.1f, 1f));
 
             VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
             v.padding = new RectOffset(Mathf.RoundToInt(16f * s), Mathf.RoundToInt(16f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));

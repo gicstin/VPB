@@ -233,7 +233,6 @@ namespace VPB
                 {
                     sig = unchecked(sig * 31 + (c.PerfApplyHair ? 1 : 0));
                     sig = unchecked(sig * 31 + (c.PerfApplyMirrors ? 2 : 0));
-                    sig = unchecked(sig * 31 + (c.PerfApplyVaMQualityPreset ? 4 : 0));
                 }
             }
             catch { }
@@ -2091,9 +2090,7 @@ namespace VPB
                 GameObject swatch = new GameObject("SettingsBorderColorSwatch");
                 swatch.transform.SetParent(controls.transform, false);
                 LayoutElement swle = UI.AddLE(swatch, minWidth: 48f * uiS, minHeight: chipH - 4f * uiS, preferredWidth: 72f * uiS, preferredHeight: chipH - 4f * uiS, flexibleWidth: 0f);
-                Image swImg = swatch.AddComponent<Image>();
-                swImg.color = def.GetColor();
-                swImg.raycastTarget = false;
+                Image swImg = UI.AddImage(swatch, def.GetColor(), false);
 
                 CreateMiniButton(
                     controls.transform,
@@ -2141,9 +2138,7 @@ namespace VPB
                 // Slider on sliderHost, which fixes click-drag being swallowed by the parent scroll view.
                 GameObject hitbox = new GameObject("Hitbox");
                 hitbox.transform.SetParent(sliderHost.transform, false);
-                var hitImg = hitbox.AddComponent<Image>();
-                hitImg.color = new Color(1f, 1f, 1f, 0f);
-                hitImg.raycastTarget = true;
+                var hitImg = UI.AddImage(hitbox, new Color(1f, 1f, 1f, 0f));
                 RectTransform hitRT = hitbox.GetComponent<RectTransform>();
                 hitRT.anchorMin = Vector2.zero; hitRT.anchorMax = Vector2.one; hitRT.sizeDelta = Vector2.zero;
 

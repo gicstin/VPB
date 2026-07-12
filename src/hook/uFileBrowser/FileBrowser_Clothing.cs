@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-//using MVR.FileManagement;
-//using MVR.FileManagementSecure;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,23 +11,14 @@ namespace VPB
 {
     public partial class FileBrowser : MonoBehaviour
     {
-     
-        //static List<string> ClothingExtraTags = new List<string>()
-        //{
-        //    "no tag",
-        //};
-
         List<JSONStorableBool> ClothingTypeTagsJsonStorable = new List<JSONStorableBool>();
         List<JSONStorableBool> ClothingRegionTagsJsonStorable = new List<JSONStorableBool>();
         List<JSONStorableBool> ClothingOtherTagsJsonStorable = new List<JSONStorableBool>();
-        //List<JSONStorableBool> ClothingExtraTagsJsonStorable = new List<JSONStorableBool>();
-        //JSONStorableBool ClothingNoTagJsonStorable;
         List<RectTransform> ClothingTagsUIList = new List<RectTransform>();
 
         List<JSONStorableBool> HairRegionTagsJsonStorable = new List<JSONStorableBool>();
         List<JSONStorableBool> HairTypeTagsJsonStorable = new List<JSONStorableBool>();
         List<JSONStorableBool> HairOtherTagsJsonStorable = new List<JSONStorableBool>();
-        //JSONStorableBool HairNoTagJsonStorable;
         List<RectTransform> HairTagsUIList = new List<RectTransform>();
 
         bool needFilterClothing = false;
@@ -52,7 +41,6 @@ namespace VPB
         }
         void InitTags()
         {
-            //ClothingNoTagJsonStorable = new JSONStorableBool("no tag", false);
             for (int i = 0; i < TagFilter.ClothingRegionTags.Count; i++)
             {
                 ClothingRegionTagsJsonStorable.Add(new JSONStorableBool(TagFilter.ClothingRegionTags[i], false));
@@ -65,12 +53,7 @@ namespace VPB
             {
                 ClothingOtherTagsJsonStorable.Add(new JSONStorableBool(TagFilter.ClothingOtherTags[i], false));
             }
-            //for (int i = 0; i < ClothingExtraTags.Count; i++)
-            //{
-            //    ClothingOtherTagsJsonStorable.Add(new JSONStorableBool(ClothingOtherTags[i], false));
-            //}
 
-            //HairNoTagJsonStorable = new JSONStorableBool("no tag", false);
             for (int i = 0; i < TagFilter.HairRegionTags.Count; i++)
             {
                 HairRegionTagsJsonStorable.Add(new JSONStorableBool(TagFilter.HairRegionTags[i], false));
@@ -82,14 +65,6 @@ namespace VPB
             for (int i = 0; i < TagFilter.HairOtherTags.Count; i++)
             {
                 HairOtherTagsJsonStorable.Add(new JSONStorableBool(TagFilter.HairOtherTags[i], false));
-            }
-            foreach (var item in TagFilter.ClothingUnknownTags)
-            {
-                //LogUtil.LogWarning("clothing other tag:" + item);
-            }
-            foreach (var item in TagFilter.HairUnknownTags)
-            {
-                //LogUtil.LogWarning("hair other tag:" + item);
             }
         }
         HashSet<string> GetHairFilter()
@@ -131,13 +106,6 @@ namespace VPB
                 if (item.val)
                     ret.Add(item.name);
             }
-            //foreach(var item in ClothingExtraTagsJsonStorable)
-            //{
-            //    if (item.val)
-            //        ret.Add(item.name);
-            //}
-            //if (ClothingNoTagJsonStorable.val)
-            //    ret.Add(ClothingNoTagJsonStorable.name);
             return ret;
         }
 

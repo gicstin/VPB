@@ -304,9 +304,7 @@ namespace VPB
 
                 GameObject panel = new GameObject("Panel");
                 panel.transform.SetParent(canvasGO.transform, false);
-                Image bg = panel.AddComponent<Image>();
-                bg.color = new Color(0.09f, 0.09f, 0.16f, 0.95f);
-                bg.raycastTarget = false;
+                Image bg = UI.AddImage(panel, new Color(0.09f, 0.09f, 0.16f, 0.95f), false);
                 Outline ol = panel.AddComponent<Outline>();
                 ol.effectColor = new Color(0.92f, 0.26f, 0.26f, 0.9f);
                 ol.effectDistance = new Vector2(1.5f, -1.5f);

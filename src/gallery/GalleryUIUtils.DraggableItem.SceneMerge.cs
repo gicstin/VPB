@@ -1045,9 +1045,7 @@ namespace VPB
                     }
                 }
 
-                ghostBorder = ghostObject.AddComponent<Image>();
-                ghostBorder.raycastTarget = false;
-                ghostBorder.color = new Color(1, 1, 1, 0.2f);
+                ghostBorder = UI.AddImage(ghostObject, new Color(1, 1, 1, 0.2f), false);
 
                 ghostText = UI.CreateLabel(ghostObject, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.UpperCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "ActionText");
                 ghostText.gameObject.AddComponent<Outline>().effectColor = Color.black;
@@ -1062,8 +1060,7 @@ namespace VPB
                 bool vr = VPB.src.util.XrUtils.IsVrActive();
                 if (!vr) textRT.localScale = new Vector3(0.3333f, 0.3333f, 1f);
 
-                GameObject contentGO = new GameObject("Content");
-                contentGO.transform.SetParent(ghostObject.transform, false);
+                GameObject contentGO = UI.CreateChildRT(ghostObject, "Content", AnchorPresets.stretchAll);
                 contentGO.layer = ghostObject.layer;
                 RawImage img = contentGO.AddComponent<RawImage>();
                 img.raycastTarget = false;
@@ -1077,9 +1074,6 @@ namespace VPB
                 rt.pivot = new Vector2(0.5f, 0.5f);
 
                 RectTransform contentRT = contentGO.GetComponent<RectTransform>();
-                if (contentRT == null) contentRT = contentGO.AddComponent<RectTransform>();
-                contentRT.anchorMin = Vector2.zero;
-                contentRT.anchorMax = Vector2.one;
                 contentRT.offsetMin = new Vector2(5, 5);
                 contentRT.offsetMax = new Vector2(-5, -5);
             }

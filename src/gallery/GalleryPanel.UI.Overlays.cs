@@ -30,21 +30,15 @@ namespace VPB
             if (loadingOverlayGO != null) return;
 
             loadingOverlayGO = UI.CreateChildRT(parentGO, "LoadingOverlay");
-            Image overlayImg = loadingOverlayGO.AddComponent<Image>();
-            overlayImg.color = UI.Black(0.35f);
-            overlayImg.raycastTarget = true;
+            Image overlayImg = UI.AddImage(loadingOverlayGO, UI.Black(0.35f));
 
             GameObject barGO = UI.CreateChildRT(loadingOverlayGO, "LoadingBar", AnchorPresets.middleCenter, new Vector2(420, 10));
             loadingBarContainerRT = barGO.GetComponent<RectTransform>();
-            Image barBg = barGO.AddComponent<Image>();
-            barBg.color = UI.White(0.18f);
-            barBg.raycastTarget = false;
+            Image barBg = UI.AddImage(barGO, UI.White(0.18f), false);
 
             GameObject fillGO = UI.CreateChildRT(barGO, "Fill", AnchorPresets.middleCenter, new Vector2(120, 10));
             loadingBarFillRT = fillGO.GetComponent<RectTransform>();
-            Image fillImg = fillGO.AddComponent<Image>();
-            fillImg.color = UI.White(0.85f);
-            fillImg.raycastTarget = false;
+            Image fillImg = UI.AddImage(fillGO, UI.White(0.85f), false);
 
             SetLayerRecursive(loadingOverlayGO, parentGO.layer);
             loadingOverlayGO.SetActive(false);
@@ -95,9 +89,7 @@ namespace VPB
             panelRT.sizeDelta = new Vector2(0f, 1f);
 
             // Dark track (background)
-            Image trackImg = _thumbCacheProgressGO.AddComponent<Image>();
-            trackImg.color = new Color(1f, 1f, 1f, 0.12f);
-            trackImg.raycastTarget = false;
+            Image trackImg = UI.AddImage(_thumbCacheProgressGO, new Color(1f, 1f, 1f, 0.12f), false);
 
             SetLayerRecursive(_thumbCacheProgressGO, viewportGO.layer);
 
@@ -108,9 +100,7 @@ namespace VPB
             _thumbCacheBarFillRT.anchorMin = Vector2.zero;
             _thumbCacheBarFillRT.anchorMax = new Vector2(0f, 1f);
             _thumbCacheBarFillRT.sizeDelta  = Vector2.zero;
-            Image fillImg = fillGO.AddComponent<Image>();
-            fillImg.color = new Color(0.3f, 0.7f, 1f, 1f);
-            fillImg.raycastTarget = false;
+            Image fillImg = UI.AddImage(fillGO, new Color(0.3f, 0.7f, 1f, 1f), false);
 
             _thumbCacheProgressGO.SetActive(false);
         }
@@ -157,8 +147,7 @@ namespace VPB
             overlayRT.anchorMax = Vector2.one;
             overlayRT.sizeDelta = Vector2.zero;
             
-            Image overlayImg = overlayGO.AddComponent<Image>();
-            overlayImg.color = new Color(0, 0, 0, 0.5f);
+            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.5f));
             
             // Panel
             GameObject panelGO = new GameObject("Panel");
@@ -166,8 +155,7 @@ namespace VPB
             RectTransform panelRT = panelGO.AddComponent<RectTransform>();
             panelRT.sizeDelta = new Vector2(400, 200);
             
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = UI.ChromeDarker;
+            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
             
             // Title
             Text titleText = UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -10), name: "Title");
@@ -177,8 +165,7 @@ namespace VPB
             // Let's create a simple InputField here.
             GameObject inputGO = new GameObject("InputField");
             inputGO.transform.SetParent(panelGO.transform, false);
-            Image inputBg = inputGO.AddComponent<Image>();
-            inputBg.color = UI.ChromePanel;
+            Image inputBg = UI.AddImage(inputGO, UI.ChromePanel);
             InputField input = inputGO.AddComponent<InputField>();
             RectTransform inputRT = inputGO.GetComponent<RectTransform>();
             inputRT.sizeDelta = new Vector2(350, 40);
@@ -240,8 +227,7 @@ namespace VPB
             overlayRT.offsetMin = Vector2.zero;
             overlayRT.offsetMax = Vector2.zero;
 
-            Image overlayImg = overlayGO.AddComponent<Image>();
-            overlayImg.color = new Color(0, 0, 0, 0.55f);
+            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.55f));
 
             GameObject panelGO = new GameObject("Panel");
             panelGO.transform.SetParent(overlayGO.transform, false);
@@ -251,8 +237,7 @@ namespace VPB
             panelRT.pivot = new Vector2(0.5f, 0.5f);
             panelRT.sizeDelta = new Vector2(440f, 300f);
 
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.12f, 0.12f, 0.12f, 1f);
+            Image panelImg = UI.AddImage(panelGO, new Color(0.12f, 0.12f, 0.12f, 1f));
 
             UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.title", "Rename Person Atom"), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-24f, 36f), anchoredPosition: new Vector2(0, -12f), name: "Title");
 
@@ -260,8 +245,7 @@ namespace VPB
 
             GameObject oldValGO = new GameObject("OldNameValue");
             oldValGO.transform.SetParent(panelGO.transform, false);
-            Image oldValBg = oldValGO.AddComponent<Image>();
-            oldValBg.color = new Color(0.18f, 0.18f, 0.2f, 1f);
+            Image oldValBg = UI.AddImage(oldValGO, new Color(0.18f, 0.18f, 0.2f, 1f));
             Text oldValTxt = UI.CreateLabel(oldValGO, oldUid, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
             RectTransform oldValTxtRt = oldValTxt.GetComponent<RectTransform>();
             oldValTxtRt.offsetMin = new Vector2(10f, 4f);
@@ -277,8 +261,7 @@ namespace VPB
 
             GameObject inputGO = new GameObject("InputField");
             inputGO.transform.SetParent(panelGO.transform, false);
-            Image inputBg = inputGO.AddComponent<Image>();
-            inputBg.color = new Color(0.22f, 0.22f, 0.22f, 1f);
+            Image inputBg = UI.AddImage(inputGO, new Color(0.22f, 0.22f, 0.22f, 1f));
             InputField input = inputGO.AddComponent<InputField>();
             RectTransform inputRt = inputGO.GetComponent<RectTransform>();
             inputRt.anchorMin = new Vector2(0, 1);
@@ -375,8 +358,7 @@ namespace VPB
             overlayRT.anchorMax = Vector2.one;
             overlayRT.sizeDelta = Vector2.zero;
             
-            Image overlayImg = overlayGO.AddComponent<Image>();
-            overlayImg.color = new Color(0, 0, 0, 0.5f);
+            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.5f));
             
             // Panel
             GameObject panelGO = new GameObject("Panel");
@@ -384,8 +366,7 @@ namespace VPB
             RectTransform panelRT = panelGO.AddComponent<RectTransform>();
             panelRT.sizeDelta = new Vector2(500, 420);
             
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = UI.ChromeDarker;
+            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
             
             // Title
             UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -15), name: "Title");
@@ -618,8 +599,7 @@ namespace VPB
 
             AddHoverDelegate(panelGO);
 
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = UI.ChromeDarker;
+            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
 
             // Layout
             int rows = Mathf.Clamp(options.Count, 1, 10);
@@ -643,12 +623,7 @@ namespace VPB
             listRT.offsetMin = new Vector2(10, 10);
             listRT.offsetMax = new Vector2(-10, -34);
 
-            VerticalLayoutGroup vlg = listGO.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = rowGap;
-            vlg.childControlHeight = true;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childForceExpandWidth = true;
+            VerticalLayoutGroup vlg = UI.AddVLG(listGO, spacing: rowGap);
 
             ContentSizeFitter csf = listGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -789,9 +764,7 @@ namespace VPB
 
             AddHoverDelegate(overlayGO);
 
-            Image overlayImg = overlayGO.AddComponent<Image>();
-            overlayImg.color = new Color(0, 0, 0, 0.01f);
-            overlayImg.raycastTarget = true;
+            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.01f));
 
             Button overlayBtn = overlayGO.AddComponent<Button>();
 
@@ -826,8 +799,7 @@ namespace VPB
             }
             catch { }
 
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = UI.ChromeDarker;
+            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
 
             int cols = 1;
             int rows = Mathf.Clamp(options.Count, 1, 10);
@@ -1010,9 +982,7 @@ namespace VPB
 
             AddHoverDelegate(overlayGO);
 
-            Image overlayImg = overlayGO.AddComponent<Image>();
-            overlayImg.color = new Color(0, 0, 0, 0.01f);
-            overlayImg.raycastTarget = true;
+            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.01f));
 
             Button overlayBtn = overlayGO.AddComponent<Button>();
 
@@ -1039,8 +1009,7 @@ namespace VPB
             }
             catch { }
 
-            Image panelImg = panelGO.AddComponent<Image>();
-            panelImg.color = UI.ChromeDarker;
+            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
 
             int cols = 1;
             int rows = Mathf.Clamp(options.Count, 1, 10);

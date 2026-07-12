@@ -19,25 +19,11 @@ namespace VPB
         {
             if (viewportGO == null || _emptyGridStateGO != null) return;
 
-            _emptyGridStateGO = new GameObject("EmptyGridState");
-            _emptyGridStateGO.transform.SetParent(viewportGO.transform, false);
-            RectTransform rootRT = _emptyGridStateGO.AddComponent<RectTransform>();
-            rootRT.anchorMin = Vector2.zero;
-            rootRT.anchorMax = Vector2.one;
-            rootRT.offsetMin = Vector2.zero;
-            rootRT.offsetMax = Vector2.zero;
+            _emptyGridStateGO = UI.CreateChildRT(viewportGO, "EmptyGridState", AnchorPresets.stretchAll);
 
-            Image blocker = _emptyGridStateGO.AddComponent<Image>();
-            blocker.color = new Color(0f, 0f, 0f, 0.01f);
-            blocker.raycastTarget = false;
+            Image blocker = UI.AddImage(_emptyGridStateGO, new Color(0f, 0f, 0f, 0.01f), false);
 
-            var colGO = new GameObject("Column");
-            colGO.transform.SetParent(_emptyGridStateGO.transform, false);
-            RectTransform colRT = colGO.AddComponent<RectTransform>();
-            colRT.anchorMin = new Vector2(0.5f, 0.5f);
-            colRT.anchorMax = new Vector2(0.5f, 0.5f);
-            colRT.pivot = new Vector2(0.5f, 0.5f);
-            colRT.sizeDelta = new Vector2(460f, 140f);
+            var colGO = UI.CreateChildRT(_emptyGridStateGO, "Column", AnchorPresets.middleCenter, new Vector2(460f, 140f));
 
             var vlg = UI.AddVLG(colGO, spacing: 12f, childAlignment: TextAnchor.MiddleCenter);
 
@@ -150,19 +136,12 @@ namespace VPB
         {
             if (backgroundBoxGO == null || _firstRunHintGO != null) return;
 
-            _firstRunHintGO = new GameObject("FirstRunHintStrip");
-            _firstRunHintGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rt = _firstRunHintGO.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = Vector2.zero;
+            _firstRunHintGO = UI.CreateChildRT(backgroundBoxGO, "FirstRunHintStrip", AnchorPresets.hStretchTop);
+            RectTransform rt = _firstRunHintGO.GetComponent<RectTransform>();
             rt.offsetMin = new Vector2(20f, -97f);
             rt.offsetMax = new Vector2(-20f, -65f);
 
-            Image bg = _firstRunHintGO.AddComponent<Image>();
-            bg.color = new Color(0.12f, 0.22f, 0.34f, 0.92f);
-            bg.raycastTarget = true;
+            Image bg = UI.AddImage(_firstRunHintGO, new Color(0.12f, 0.22f, 0.34f, 0.92f));
 
             _firstRunHintText = UI.CreateLabel(_firstRunHintGO, VPBTranslation.T(
                 "gallery.first_run.hint",

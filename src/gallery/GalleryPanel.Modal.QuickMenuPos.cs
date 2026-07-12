@@ -137,9 +137,7 @@ namespace VPB
             rootRt.offsetMin = Vector2.zero;
             rootRt.offsetMax = Vector2.zero;
 
-            Image dim = _qmPosModalRoot.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.72f);
-            dim.raycastTarget = true;
+            Image dim = UI.AddImage(_qmPosModalRoot, new Color(0f, 0f, 0f, 0.72f));
             Button dimBtn = _qmPosModalRoot.AddComponent<Button>();
             dimBtn.transition = Selectable.Transition.None;
             dimBtn.onClick.AddListener(() => HideQuickMenuPositionEditorModal(false));
@@ -150,9 +148,7 @@ namespace VPB
             prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(560f * s, 420f * s);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.06f, 0.06f, 0.08f, 1f);
-            pbg.raycastTarget = true;
+            Image pbg = UI.AddImage(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
 
             VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
@@ -361,8 +357,7 @@ namespace VPB
 
             GameObject fill = new GameObject("Fill");
             fill.transform.SetParent(fillArea.transform, false);
-            Image fillImg = fill.AddComponent<Image>();
-            fillImg.color = new Color(0.25f, 0.5f, 0.8f, 1f);
+            Image fillImg = UI.AddImage(fill, new Color(0.25f, 0.5f, 0.8f, 1f));
             RectTransform fillRt = fill.GetComponent<RectTransform>();
             fillRt.anchorMin = Vector2.zero;
             fillRt.anchorMax = Vector2.one;
@@ -378,8 +373,7 @@ namespace VPB
 
             GameObject handle = new GameObject("Handle");
             handle.transform.SetParent(handleArea.transform, false);
-            Image handleImg = handle.AddComponent<Image>();
-            handleImg.color = Color.white;
+            Image handleImg = UI.AddImage(handle, Color.white);
             RectTransform handleRt = handle.GetComponent<RectTransform>();
             handleRt.sizeDelta = new Vector2(16f, 0f);
             slider.handleRect = handleRt;

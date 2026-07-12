@@ -1404,9 +1404,8 @@ namespace VPB
                 {
                     GameObject iconGO = new GameObject("SearchIcon");
                     iconGO.transform.SetParent(inputGO.transform, false);
-                    Image iconImg = iconGO.AddComponent<Image>();
+                    Image iconImg = UI.AddImage(iconGO, new Color(0.5f, 0.5f, 0.5f, 1f));
                     iconImg.sprite = s;
-                    iconImg.color = new Color(0.5f, 0.5f, 0.5f, 1f);
                     RectTransform iconRT = iconGO.GetComponent<RectTransform>();
                     iconRT.anchorMin = new Vector2(0, 0.5f);
                     iconRT.anchorMax = new Vector2(0, 0.5f);
@@ -1670,8 +1669,7 @@ namespace VPB
             GameObject btnGO = new GameObject("FileButton_Template");
             btnGO.transform.SetParent(contentGO.transform, false);
             
-            Image img = btnGO.AddComponent<Image>();
-            img.color = new Color(0.2f, 0.2f, 0.2f, 0.5f);
+            Image img = UI.AddImage(btnGO, new Color(0.2f, 0.2f, 0.2f, 0.5f));
 
             // Add Hover Border
             btnGO.AddComponent<UIHoverBorder>();
@@ -1749,9 +1747,7 @@ namespace VPB
             gridLabelRT.offsetMin = Vector2.zero;
             gridLabelRT.offsetMax = Vector2.zero;
 
-            Image gridLabelBg = gridLabelGO.AddComponent<Image>();
-            gridLabelBg.color = new Color(0f, 0f, 0f, 0.6f);
-            gridLabelBg.raycastTarget = false;
+            Image gridLabelBg = UI.AddImage(gridLabelGO, new Color(0f, 0f, 0f, 0.6f), false);
 
             Text gridLabelText = UI.CreateLabel(gridLabelGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
             GameObject gridLabelTextGO = gridLabelText.gameObject;
@@ -1782,9 +1778,7 @@ namespace VPB
             cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Background
-            Image cardBg = cardGO.AddComponent<Image>();
-            cardBg.color = new Color(0, 0, 0, 0.8f);
-            cardBg.raycastTarget = false;
+            Image cardBg = UI.AddImage(cardGO, new Color(0, 0, 0, 0.8f), false);
 
             // Label
             Text labelText = UI.CreateLabel(cardGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Label");
@@ -1877,8 +1871,7 @@ namespace VPB
             selectorCG.interactable = false;
             selectorCG.blocksRaycasts = false;
 
-            Image selectorBg = selectorGO.AddComponent<Image>();
-            selectorBg.color = new Color(0.05f, 0.05f, 0.05f, 0.95f);
+            Image selectorBg = UI.AddImage(selectorGO, new Color(0.05f, 0.05f, 0.05f, 0.95f));
 
             GridLayoutGroup selectorGrid = selectorGO.AddComponent<GridLayoutGroup>();
             selectorGrid.cellSize = new Vector2(38, 36);
@@ -1938,9 +1931,7 @@ namespace VPB
             aiBadgeRT.pivot = new Vector2(0, 1);
             aiBadgeRT.sizeDelta = new Vector2(32, 32);
             aiBadgeRT.anchoredPosition = new Vector2(6, -6);
-            Image aiBadgeBg = aiBadgeGO.AddComponent<Image>();
-            aiBadgeBg.color = new Color(0f, 0.35f, 1f, 0.85f);
-            aiBadgeBg.raycastTarget = false;
+            Image aiBadgeBg = UI.AddImage(aiBadgeGO, new Color(0f, 0.35f, 1f, 0.85f), false);
             Text aiBadgeText = UI.CreateLabel(aiBadgeGO, "A", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement aiBadgeLE = UI.AddLE(aiBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             aiBadgeGO.SetActive(false);
@@ -1954,9 +1945,7 @@ namespace VPB
             hideBadgeRT.pivot = new Vector2(0, 1);
             hideBadgeRT.sizeDelta = new Vector2(32, 32);
             hideBadgeRT.anchoredPosition = new Vector2(42, -6);
-            Image hideBadgeBg = hideBadgeGO.AddComponent<Image>();
-            hideBadgeBg.color = new Color(0.35f, 0.35f, 0.4f, 0.9f);
-            hideBadgeBg.raycastTarget = false;
+            Image hideBadgeBg = UI.AddImage(hideBadgeGO, new Color(0.35f, 0.35f, 0.4f, 0.9f), false);
             Text hideBadgeText = UI.CreateLabel(hideBadgeGO, "H", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement hideBadgeLE = UI.AddLE(hideBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             hideBadgeGO.SetActive(false);
@@ -1971,9 +1960,7 @@ namespace VPB
             scanExBadgeRT.pivot = new Vector2(0, 1);
             scanExBadgeRT.sizeDelta = new Vector2(32, 32);
             scanExBadgeRT.anchoredPosition = new Vector2(80, -6);
-            Image scanExBadgeBg = scanExBadgeGO.AddComponent<Image>();
-            scanExBadgeBg.color = new Color(0.25f, 0.4f, 0.55f, 0.9f);
-            scanExBadgeBg.raycastTarget = false;
+            Image scanExBadgeBg = UI.AddImage(scanExBadgeGO, new Color(0.25f, 0.4f, 0.55f, 0.9f), false);
             Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement scanExBadgeLE = UI.AddLE(scanExBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             scanExBadgeGO.SetActive(false);
@@ -1987,9 +1974,7 @@ namespace VPB
             userTagsBadgeRT.pivot = new Vector2(0, 1);
             userTagsBadgeRT.sizeDelta = new Vector2(32, 32);
             userTagsBadgeRT.anchoredPosition = new Vector2(118, -6);
-            Image userTagsBadgeBg = userTagsBadgeGO.AddComponent<Image>();
-            userTagsBadgeBg.color = new Color(0.14f, 0.42f, 0.48f, 0.9f);
-            userTagsBadgeBg.raycastTarget = false;
+            Image userTagsBadgeBg = UI.AddImage(userTagsBadgeGO, new Color(0.14f, 0.42f, 0.48f, 0.9f), false);
             Text userTagsBadgeText = UI.CreateLabel(userTagsBadgeGO, "T", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement userTagsBadgeLE = UI.AddLE(userTagsBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             userTagsBadgeGO.SetActive(false);
@@ -1997,9 +1982,7 @@ namespace VPB
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
             listHoverBarGO.transform.SetParent(btnGO.transform, false);
-            Image listHoverBarImg = listHoverBarGO.AddComponent<Image>();
-            listHoverBarImg.color = UI.White(0.45f);
-            listHoverBarImg.raycastTarget = false;
+            Image listHoverBarImg = UI.AddImage(listHoverBarGO, UI.White(0.45f), false);
             RectTransform listHoverBarRT = listHoverBarGO.GetComponent<RectTransform>();
             listHoverBarRT.anchorMin = new Vector2(0, 0);
             listHoverBarRT.anchorMax = new Vector2(0, 1);
@@ -2011,9 +1994,7 @@ namespace VPB
             // List-mode selection indicator: left accent bar (yellow, opaque)
             GameObject listSelBarGO = new GameObject("ListSelectionBar");
             listSelBarGO.transform.SetParent(btnGO.transform, false);
-            Image listSelBarImg = listSelBarGO.AddComponent<Image>();
-            listSelBarImg.color = new Color(1f, 0.85f, 0f, 1f);
-            listSelBarImg.raycastTarget = false;
+            Image listSelBarImg = UI.AddImage(listSelBarGO, new Color(1f, 0.85f, 0f, 1f), false);
             RectTransform listSelBarRT = listSelBarGO.GetComponent<RectTransform>();
             listSelBarRT.anchorMin = new Vector2(0, 0);
             listSelBarRT.anchorMax = new Vector2(0, 1);
@@ -3269,8 +3250,7 @@ namespace VPB
             rt.sizeDelta = new Vector2(0, 28);
             rt.anchoredPosition = new Vector2(0, -2);
 
-            Image bgImg = indicatorGO.AddComponent<Image>();
-            bgImg.color = new Color(0.2f, 0.35f, 0.2f, 0.9f);
+            Image bgImg = UI.AddImage(indicatorGO, new Color(0.2f, 0.35f, 0.2f, 0.9f));
 
             HorizontalLayoutGroup hgroup = indicatorGO.AddComponent<HorizontalLayoutGroup>();
             hgroup.padding = new RectOffset(8, 8, 4, 4);

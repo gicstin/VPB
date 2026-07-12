@@ -684,9 +684,7 @@ namespace VPB
             Image rayImg = rootGo.GetComponent<Image>();
             if (rayImg == null)
             {
-                rayImg = rootGo.AddComponent<Image>();
-                rayImg.color = new Color(1f, 1f, 1f, 0.02f);
-                rayImg.raycastTarget = true;
+                rayImg = UI.AddImage(rootGo, new Color(1f, 1f, 1f, 0.02f));
             }
             UserTagApplyDropZone dz = rootGo.GetComponent<UserTagApplyDropZone>();
             if (dz == null) dz = rootGo.AddComponent<UserTagApplyDropZone>();
@@ -716,9 +714,7 @@ namespace VPB
             {
                 stripGo = new GameObject(stripName);
                 stripGo.transform.SetParent(container, false);
-                Image img = stripGo.AddComponent<Image>();
-                img.color = new Color(1f, 1f, 1f, 0.03f);
-                img.raycastTarget = true;
+                Image img = UI.AddImage(stripGo, new Color(1f, 1f, 1f, 0.03f));
                 LayoutElement le = UI.AddLE(stripGo, minHeight: 2f, preferredHeight: 4f * s, flexibleWidth: 1f);
                 UserTagApplyDropZone dz = stripGo.AddComponent<UserTagApplyDropZone>();
                 dz.Panel = this;
@@ -762,9 +758,7 @@ namespace VPB
                 LayoutElement le = go.AddComponent<LayoutElement>();
                 le.ignoreLayout = true;
 
-                Image img = go.AddComponent<Image>();
-                img.color = new Color(1f, 1f, 1f, 0.0f);
-                img.raycastTarget = true;
+                Image img = UI.AddImage(go, new Color(1f, 1f, 1f, 0.0f));
 
                 // Only participate in raycasts while a tag-drag session active.
                 var gate = go.AddComponent<UserTagDropRaycastGate>();
@@ -2548,10 +2542,8 @@ namespace VPB
 
             GameObject iconGo = new GameObject("Icon");
             iconGo.transform.SetParent(filterGo.transform, false);
-            Image iconImg = iconGo.AddComponent<Image>();
-            iconImg.raycastTarget = false;
+            Image iconImg = UI.AddImage(iconGo, Color.white, false);
             iconImg.preserveAspect = true;
-            iconImg.color = Color.white;
             RectTransform irt = iconGo.GetComponent<RectTransform>();
             if (irt != null)
             {
@@ -2879,9 +2871,7 @@ namespace VPB
             dimRT.anchorMin = Vector2.zero;
             dimRT.anchorMax = Vector2.one;
             dimRT.sizeDelta = Vector2.zero;
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
-            dimImg.raycastTarget = true;
+            Image dimImg = UI.AddImage(dim, new Color(0f, 0f, 0f, 0.55f));
             Button dimBtn = dim.AddComponent<Button>();
             ColorBlock dcb = dimBtn.colors;
             dcb.normalColor = Color.white;
@@ -2896,9 +2886,7 @@ namespace VPB
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(620f * s, 720f * s);
 
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.11f, 0.11f, 0.13f, 1f);
-            pbg.raycastTarget = true;
+            Image pbg = UI.AddImage(panel, new Color(0.11f, 0.11f, 0.13f, 1f));
 
             UI.AddVLG(panel, 8f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
@@ -2981,9 +2969,7 @@ namespace VPB
 
             GameObject newInGo = new GameObject("NewTagInput");
             newInGo.transform.SetParent(newTagBlock.transform, false);
-            Image nBg = newInGo.AddComponent<Image>();
-            nBg.color = UserTagEditorNewTagChromeBaseCol;
-            nBg.raycastTarget = true;
+            Image nBg = UI.AddImage(newInGo, UserTagEditorNewTagChromeBaseCol);
             _userTagEditorNewTagInputChrome = nBg;
             LayoutElement nLe = UI.AddLE(newInGo, minHeight: 160f * s, preferredHeight: 168f * s, flexibleWidth: 1f);
             GameObject nta = new GameObject("TextArea");
@@ -3019,13 +3005,7 @@ namespace VPB
 
             GameObject actionRow = new GameObject("ActionRow");
             actionRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup arH = actionRow.AddComponent<HorizontalLayoutGroup>();
-            arH.spacing = 8f * s;
-            arH.childAlignment = TextAnchor.MiddleCenter;
-            arH.childControlWidth = true;
-            arH.childControlHeight = true;
-            arH.childForceExpandWidth = false;
-            arH.childForceExpandHeight = false;
+            HorizontalLayoutGroup arH = UI.AddHLG(actionRow, spacing: 8f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
             LayoutElement arLe = UI.AddLE(actionRow, minHeight: actSq + 4f * s, preferredHeight: actSq + 4f * s);
 
             GameObject arPadL = new GameObject("PadL");
@@ -3076,9 +3056,7 @@ namespace VPB
             mmRootRt.anchorMin = Vector2.zero;
             mmRootRt.anchorMax = Vector2.one;
             mmRootRt.sizeDelta = Vector2.zero;
-            Image mmDim = _userTagEditorMergeModalGo.AddComponent<Image>();
-            mmDim.color = new Color(0f, 0f, 0f, 0.5f);
-            mmDim.raycastTarget = true;
+            Image mmDim = UI.AddImage(_userTagEditorMergeModalGo, new Color(0f, 0f, 0f, 0.5f));
             _userTagEditorMergeModalGo.SetActive(false);
 
             GameObject mmPanel = new GameObject("MergeDialogPanel");
@@ -3087,9 +3065,7 @@ namespace VPB
             mmPanelRt.anchorMin = mmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
             mmPanelRt.pivot = new Vector2(0.5f, 0.5f);
             mmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image mmPbg = mmPanel.AddComponent<Image>();
-            mmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
-            mmPbg.raycastTarget = true;
+            Image mmPbg = UI.AddImage(mmPanel, new Color(0.14f, 0.14f, 0.17f, 1f));
             UI.AddVLG(mmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
             _userTagEditorMergeModalTitleText = UI.CreateLabel(mmPanel, VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), editorType.Prose, Color.white, name: "MergeTitle");
@@ -3133,9 +3109,7 @@ namespace VPB
             rmRootRt.anchorMin = Vector2.zero;
             rmRootRt.anchorMax = Vector2.one;
             rmRootRt.sizeDelta = Vector2.zero;
-            Image rmDim = _userTagEditorRenameModalGo.AddComponent<Image>();
-            rmDim.color = new Color(0f, 0f, 0f, 0.5f);
-            rmDim.raycastTarget = true;
+            Image rmDim = UI.AddImage(_userTagEditorRenameModalGo, new Color(0f, 0f, 0f, 0.5f));
             _userTagEditorRenameModalGo.SetActive(false);
 
             GameObject rmPanel = new GameObject("RenameDialogPanel");
@@ -3144,9 +3118,7 @@ namespace VPB
             rmPanelRt.anchorMin = rmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
             rmPanelRt.pivot = new Vector2(0.5f, 0.5f);
             rmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image rmPbg = rmPanel.AddComponent<Image>();
-            rmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
-            rmPbg.raycastTarget = true;
+            Image rmPbg = UI.AddImage(rmPanel, new Color(0.14f, 0.14f, 0.17f, 1f));
             UI.AddVLG(rmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
             _userTagEditorRenameModalTitleText = UI.CreateLabel(rmPanel, VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…"), editorType.Prose, Color.white, name: "RenameTitle");
@@ -4129,9 +4101,7 @@ namespace VPB
                 float swSize = rowH * 0.46f;
                 GameObject swGo = new GameObject("CatSwatch");
                 swGo.transform.SetParent(rowGo.transform, false);
-                Image swImg = swGo.AddComponent<Image>();
-                swImg.color = catColor.HasValue ? catColor.Value : new Color(1f, 1f, 1f, 0.06f);
-                swImg.raycastTarget = false;
+                Image swImg = UI.AddImage(swGo, catColor.HasValue ? catColor.Value : new Color(1f, 1f, 1f, 0.06f), false);
                 RectTransform swRt = swGo.GetComponent<RectTransform>();
                 swRt.anchorMin = new Vector2(0f, 0.5f);
                 swRt.anchorMax = new Vector2(0f, 0.5f);
@@ -4453,9 +4423,7 @@ namespace VPB
             _ghostRT.pivot = new Vector2(0f, 0f);
             _ghostRT.sizeDelta = new Vector2(240f, 34f);
 
-            Image bg = _ghost.AddComponent<Image>();
-            bg.color = new Color(0.15f, 0.15f, 0.18f, 0.85f);
-            bg.raycastTarget = false;
+            Image bg = UI.AddImage(_ghost, new Color(0.15f, 0.15f, 0.18f, 0.85f), false);
 
             _ghostText = UI.CreateLabel(_ghost, tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count),
                 GalleryUiDesignTokens.FontBodyRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow);

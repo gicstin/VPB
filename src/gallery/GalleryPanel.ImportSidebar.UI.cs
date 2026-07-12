@@ -68,9 +68,7 @@ namespace VPB
                 // Transparent root, like leftTabScrollGO / rightTabScrollGO. Rows render against
                 // the gallery panel background, so the sidebar visually reads as part of the same
                 // UI family rather than a foreign popup tinted with PopupBackdrop.
-                Image bg = importSidebarRoot.AddComponent<Image>();
-                bg.color = new Color(0f, 0f, 0f, 0f);
-                bg.raycastTarget = false;
+                Image bg = UI.AddImage(importSidebarRoot, new Color(0f, 0f, 0f, 0f), false);
 
                 int siblingIndex = ResolveImportSidebarSiblingIndex(parent);
                 importSidebarRoot.transform.SetSiblingIndex(siblingIndex);
@@ -326,15 +324,9 @@ namespace VPB
 
         private void BuildImportSidebarHeader()
         {
-            GameObject header = new GameObject("Header");
-            header.transform.SetParent(importSidebarRoot.transform, false);
-            importSidebarHeaderRT = header.AddComponent<RectTransform>();
+            GameObject header = UI.CreateChildRT(importSidebarRoot, "Header", AnchorPresets.hStretchTop, new Vector2(0f, ImportSidebarBaseHeaderHeight));
+            importSidebarHeaderRT = header.GetComponent<RectTransform>();
             importSidebarHeaderRoot = importSidebarHeaderRT;
-            importSidebarHeaderRT.anchorMin = new Vector2(0f, 1f);
-            importSidebarHeaderRT.anchorMax = new Vector2(1f, 1f);
-            importSidebarHeaderRT.pivot = new Vector2(0.5f, 1f);
-            importSidebarHeaderRT.sizeDelta = new Vector2(0f, ImportSidebarBaseHeaderHeight);
-            importSidebarHeaderRT.anchoredPosition = Vector2.zero;
 
             // Header tone matches the selected-Category row color so users recognize it as
             // a side-column header rather than a generic popup chrome.

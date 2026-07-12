@@ -64,31 +64,16 @@ namespace VPB
         private void CreateUI(GameObject parent)
         {
             // Backdrop to close when clicking outside
-            backdropGO = new GameObject("QuickFiltersBackdrop");
-            backdropGO.transform.SetParent(parent.transform, false);
-            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
-            backdropRT.anchorMin = Vector2.zero;
-            backdropRT.anchorMax = Vector2.one;
-            backdropRT.sizeDelta = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0, 0, 0, 0); // Transparent but raycast target
+            backdropGO = UI.CreateChildRT(parent, "QuickFiltersBackdrop", AnchorPresets.stretchAll);
+            Image backdropImg = UI.AddImage(backdropGO, new Color(0, 0, 0, 0)); // Transparent but raycast target
             Button backdropBtn = backdropGO.AddComponent<Button>();
             backdropBtn.onClick.AddListener(() => SetVisible(false));
 
             // Dropdown container
-            containerGO = new GameObject("QuickFiltersDropdown");
-            containerGO.transform.SetParent(parent.transform, false);
-            
-            RectTransform rt = containerGO.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 1);
-            rt.anchorMax = new Vector2(0.5f, 1);
-            rt.pivot = new Vector2(0.5f, 1);
             // Aligned under title-bar P (see title bar anchoredPosition = -228)
-            rt.anchoredPosition = new Vector2(-228, -70);
-            rt.sizeDelta = new Vector2(330, 500);
-            
-            Image bgImg = containerGO.AddComponent<Image>();
-            bgImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            containerGO = UI.CreateChildRT(parent, "QuickFiltersDropdown", AnchorPresets.topMiddle, new Vector2(330, 500), new Vector2(-228, -70));
+
+            Image bgImg = UI.AddImage(containerGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             // Scroll View
             ScrollRect scrollRect = containerGO.AddComponent<ScrollRect>();
@@ -98,14 +83,8 @@ namespace VPB
             scrollRect.scrollSensitivity = 25;
 
             // Viewport
-            GameObject viewport = new GameObject("Viewport");
-            viewport.transform.SetParent(containerGO.transform, false);
-            RectTransform vpRT = viewport.AddComponent<RectTransform>();
-            vpRT.anchorMin = Vector2.zero;
-            vpRT.anchorMax = Vector2.one;
-            vpRT.sizeDelta = new Vector2(-18f, -20f);
-            vpRT.anchoredPosition = new Vector2(-9f, -10f);
-            vpRT.pivot = new Vector2(0.5f, 0.5f);
+            GameObject viewport = UI.CreateChildRT(containerGO, "Viewport", AnchorPresets.stretchAll, new Vector2(-18f, -20f), new Vector2(-9f, -10f));
+            RectTransform vpRT = viewport.GetComponent<RectTransform>();
             viewport.AddComponent<RectMask2D>();
             
             scrollRect.viewport = vpRT;
@@ -129,25 +108,13 @@ namespace VPB
             sync.minSizePixels = 20f;
 
             // Content
-            scrollContentGO = new GameObject("Content");
-            scrollContentGO.transform.SetParent(viewport.transform, false);
-            RectTransform contentRT = scrollContentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 1);
-            contentRT.anchorMax = new Vector2(1, 1);
-            contentRT.pivot = new Vector2(0.5f, 1);
-            contentRT.sizeDelta = new Vector2(0, 0);
+            scrollContentGO = UI.CreateChildRT(viewport, "Content", AnchorPresets.hStretchTop);
+            RectTransform contentRT = scrollContentGO.GetComponent<RectTransform>();
             
             scrollRect.content = contentRT;
 
             // Vertical Layout Group
-            VerticalLayoutGroup vlg = scrollContentGO.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2;
-            vlg.padding = new RectOffset(10, 10, 10, 10);
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            VerticalLayoutGroup vlg = UI.AddVLG(scrollContentGO, spacing: 2, padding: UI.Pad(10, 10, 10, 10), childAlignment: TextAnchor.UpperCenter, childControlHeight: false);
 
             ContentSizeFitter csf = scrollContentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -231,15 +198,9 @@ namespace VPB
             
             var le = UI.AddLE(splitter, preferredHeight: 15);
 
-            GameObject line = new GameObject("Line");
-            line.transform.SetParent(splitter.transform, false);
-            var lineRT = line.AddComponent<RectTransform>();
-            lineRT.anchorMin = new Vector2(0, 0.5f);
-            lineRT.anchorMax = new Vector2(1, 0.5f);
-            lineRT.sizeDelta = new Vector2(-10, 1);
-            
-            var img = line.AddComponent<Image>();
-            img.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+            GameObject line = UI.CreateChildRT(splitter, "Line", AnchorPresets.hStretchMiddle, new Vector2(-10, 1));
+
+            var img = UI.AddImage(line, new Color(0.5f, 0.5f, 0.5f, 0.3f));
 
             activeButtons.Add(splitter);
         }

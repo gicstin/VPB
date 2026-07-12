@@ -88,9 +88,7 @@ namespace VPB
             _inAppHelpPanelRT.anchorMax = new Vector2(1f, 1f);
             _inAppHelpPanelRT.pivot = new Vector2(1f, 0.5f);
 
-            Image panelBg = _inAppHelpPanelGO.AddComponent<Image>();
-            panelBg.color = new Color(0.08f, 0.10f, 0.14f, 0.98f);
-            panelBg.raycastTarget = true;
+            Image panelBg = UI.AddImage(_inAppHelpPanelGO, new Color(0.08f, 0.10f, 0.14f, 0.98f));
 
             GameObject accent = new GameObject("Accent");
             accent.transform.SetParent(_inAppHelpPanelGO.transform, false);
@@ -100,9 +98,7 @@ namespace VPB
             accentRT.pivot = new Vector2(0f, 0.5f);
             accentRT.sizeDelta = new Vector2(3f, 0f);
             accentRT.anchoredPosition = Vector2.zero;
-            Image accentImg = accent.AddComponent<Image>();
-            accentImg.color = new Color(0.14f, 0.40f, 0.62f, 1f);
-            accentImg.raycastTarget = false;
+            Image accentImg = UI.AddImage(accent, new Color(0.14f, 0.40f, 0.62f, 1f), false);
 
             GameObject header = new GameObject("Header");
             header.transform.SetParent(_inAppHelpPanelGO.transform, false);
@@ -112,8 +108,7 @@ namespace VPB
             _inAppHelpHeaderRT.pivot = new Vector2(0.5f, 1f);
             _inAppHelpHeaderRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.InAppHelpHeaderHeightRef);
             _inAppHelpHeaderRT.anchoredPosition = Vector2.zero;
-            Image headerBg = header.AddComponent<Image>();
-            headerBg.color = new Color(0.10f, 0.26f, 0.44f, 1f);
+            Image headerBg = UI.AddImage(header, new Color(0.10f, 0.26f, 0.44f, 1f));
 
             GameObject titleGO = new GameObject("Title");
             titleGO.transform.SetParent(header.transform, false);
@@ -192,9 +187,7 @@ namespace VPB
             RectTransform bodyCardRT = bodyCard.AddComponent<RectTransform>();
             bodyCardRT.anchorMin = Vector2.zero;
             bodyCardRT.anchorMax = Vector2.one;
-            Image bodyCardBg = bodyCard.AddComponent<Image>();
-            bodyCardBg.color = new Color(0.12f, 0.14f, 0.18f, 0.95f);
-            bodyCardBg.raycastTarget = false;
+            Image bodyCardBg = UI.AddImage(bodyCard, new Color(0.12f, 0.14f, 0.18f, 0.95f), false);
 
             GameObject scroll = UI.CreateVScrollableContent(
                 bodyCard, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
@@ -260,9 +253,7 @@ namespace VPB
                 _inAppHelpIconPreviewGO.transform.SetParent(parent, false);
                 _inAppHelpIconPreviewRT = _inAppHelpIconPreviewGO.AddComponent<RectTransform>();
 
-                Image popupBg = _inAppHelpIconPreviewGO.AddComponent<Image>();
-                popupBg.color = new Color(0.06f, 0.08f, 0.11f, 0.94f);
-                popupBg.raycastTarget = false;
+                Image popupBg = UI.AddImage(_inAppHelpIconPreviewGO, new Color(0.06f, 0.08f, 0.11f, 0.94f), false);
 
                 GameObject backdropGO = new GameObject("Backdrop");
                 backdropGO.transform.SetParent(_inAppHelpIconPreviewGO.transform, false);

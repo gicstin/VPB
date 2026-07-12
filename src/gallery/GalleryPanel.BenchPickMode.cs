@@ -257,18 +257,9 @@ namespace VPB
             float s = ChromeScale;
             int font = new GalleryModalTypography(s).Body;
 
-            _benchPickBannerRoot = new GameObject("VPB_BenchPickBanner");
-            _benchPickBannerRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rt = _benchPickBannerRoot.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 0f);
-            rt.anchorMax = new Vector2(1f, 0f);
-            rt.pivot = new Vector2(0.5f, 0f);
-            rt.anchoredPosition = new Vector2(0f, 8f * s);
-            rt.sizeDelta = new Vector2(-24f * s, 52f * s);
+            _benchPickBannerRoot = UI.CreateChildRT(backgroundBoxGO, "VPB_BenchPickBanner", AnchorPresets.hStretchBottom, new Vector2(-24f * s, 52f * s), new Vector2(0f, 8f * s));
 
-            Image bg = _benchPickBannerRoot.AddComponent<Image>();
-            bg.color = new Color(0.10f, 0.22f, 0.32f, 0.96f);
-            bg.raycastTarget = true;
+            Image bg = UI.AddImage(_benchPickBannerRoot, new Color(0.10f, 0.22f, 0.32f, 0.96f));
 
             HorizontalLayoutGroup h = _benchPickBannerRoot.AddComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(Mathf.RoundToInt(12f * s), Mathf.RoundToInt(12f * s), Mathf.RoundToInt(6f * s), Mathf.RoundToInt(6f * s));

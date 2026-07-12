@@ -262,18 +262,9 @@ namespace VPB
             AddTooltip(languageSwitcherBtnGO, "i18n.switcher.tooltip", "Language / 语言 / 言語");
 
             // ── Full-screen backdrop (click-outside-to-close) ──────────────────
-            languageMenuPopupGO = new GameObject("LanguageMenuPopup");
-            languageMenuPopupGO.transform.SetParent(backgroundBoxGO.transform, false);
+            languageMenuPopupGO = UI.CreateChildRT(backgroundBoxGO, "LanguageMenuPopup", AnchorPresets.stretchAll);
 
-            RectTransform popRT = languageMenuPopupGO.AddComponent<RectTransform>();
-            popRT.anchorMin = Vector2.zero;
-            popRT.anchorMax = Vector2.one;
-            popRT.offsetMin = Vector2.zero;
-            popRT.offsetMax = Vector2.zero;
-
-            Image popBg = languageMenuPopupGO.AddComponent<Image>();
-            popBg.color = new Color(0f, 0f, 0f, 0.001f);
-            popBg.raycastTarget = true;
+            Image popBg = UI.AddImage(languageMenuPopupGO, new Color(0f, 0f, 0f, 0.001f));
 
             Button popBtn = languageMenuPopupGO.AddComponent<Button>();
             popBtn.transition = Selectable.Transition.None;
@@ -283,18 +274,9 @@ namespace VPB
 
             // ── Dropdown panel ─────────────────────────────────────────────────
             // Position below the language button on the left title-bar icon cluster.
-            GameObject panel = new GameObject("LanguageMenuPanel");
-            panel.transform.SetParent(languageMenuPopupGO.transform, false);
+            GameObject panel = UI.CreateChildRT(languageMenuPopupGO, "LanguageMenuPanel", AnchorPresets.topLeft, new Vector2(230f, 50f), new Vector2(114f, -72f)); // height grows via ContentSizeFitter
 
-            RectTransform panelRT = panel.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0f, 1f);
-            panelRT.anchorMax = new Vector2(0f, 1f);
-            panelRT.pivot     = new Vector2(0f, 1f);
-            panelRT.anchoredPosition = new Vector2(114f, -72f);
-            panelRT.sizeDelta = new Vector2(230f, 50f); // height grows via ContentSizeFitter
-
-            Image panelImg = panel.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            Image panelImg = UI.AddImage(panel, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
             {

@@ -363,9 +363,8 @@ namespace VPB
                 GameObject dirIconGo = new GameObject("DirIcon");
                 dirIconGo.transform.SetParent(fileSortDirBtn.transform, false);
                 Sprite initial = fileSortDirAscSprite ?? fileSortDirDescSprite;
-                Image dirImg = dirIconGo.AddComponent<Image>();
+                Image dirImg = UI.AddImage(dirIconGo, Color.white);
                 dirImg.sprite = initial;
-                dirImg.color = Color.white;
                 dirImg.preserveAspect = true;
                 dirImg.raycastTarget = false;
                 RectTransform dirIrt = dirIconGo.GetComponent<RectTransform>();
@@ -2326,9 +2325,8 @@ namespace VPB
                             {
                                 GameObject iconGO = new GameObject("Icon");
                                 iconGO.transform.SetParent(springBtn.transform, false);
-                                Image img = iconGO.AddComponent<Image>();
+                                Image img = UI.AddImage(iconGO, UI.SideRailIconGlyphTint);
                                 img.sprite = icon;
-                                img.color = UI.SideRailIconGlyphTint;
                                 img.preserveAspect = true;
                                 img.raycastTarget = false;
 
@@ -2423,8 +2421,7 @@ namespace VPB
             // Pointer Dot
             pointerDotGO = new GameObject("PointerDot");
             pointerDotGO.transform.SetParent(canvasGO.transform, false);
-            Image dotImg = pointerDotGO.AddComponent<Image>();
-            dotImg.color = new Color(1, 1, 1, 0.5f);
+            Image dotImg = UI.AddImage(pointerDotGO, new Color(1, 1, 1, 0.5f));
             // We use a dot texture if available, otherwise just a small circle/square
             pointerDotGO.GetComponent<RectTransform>().sizeDelta = new Vector2(8, 8);
             pointerDotGO.SetActive(false);

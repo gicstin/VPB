@@ -7,17 +7,12 @@ using Prime31.MessageKit;
 namespace VPB
 {
     /// <summary>
-    /// Persistent VAR zip manifest cache in SQLite (replaces AllPackages.bytes2).
+    /// Persistent VAR zip manifest cache in SQLite (<c>pkg_manifest</c> blob payload).
     /// </summary>
     internal static partial class VpbLocalDatabase
     {
         const int PackageManifestSchemaVersion = 1;
         const string MetaManifestSchemaKey = "pkg_manifest_schema_v";
-        const string MetaManifestMigratedKey = "pkg_manifest_migrated_bytes2_v1";
-
-        const string LegacyManifestCachePath = "Cache/VPB/AllPackages.bytes2";
-        const int LegacyManifestCacheMagic = 0x56504231;
-        const int LegacyManifestCacheVersion = 6;
 
         internal static void EnsurePackageManifestSchema(VpbSqlite3.Connection conn)
         {
@@ -90,7 +85,6 @@ namespace VPB
                 {
                     EnsureSchema(conn);
                     EnsurePackageManifestSchema(conn);
-                    TryMigrateLegacyBytes2ManifestIntoSql(conn);
 
                     long manifestCount = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg_manifest;");
                     if (manifestCount <= 0) return false;
@@ -316,7 +310,7 @@ namespace VPB
                     }
                 }
 
-                TryRetireLegacyBytes2ManifestCache();
+                TryDeleteLegacyBytes2ManifestFiles();
                 sw.Stop();
                 long bytes = 0;
                 try { if (File.Exists(DbPath)) bytes = new FileInfo(DbPath).Length; } catch { }
@@ -378,125 +372,17 @@ namespace VPB
             insManifest.Reset();
         }
 
-        static void TryMigrateLegacyBytes2ManifestIntoSql(VpbSqlite3.Connection conn)
+        static void TryDeleteLegacyBytes2ManifestFiles()
         {
-            if (conn == null) return;
-            if (!string.IsNullOrEmpty(MetaGet(conn, MetaManifestMigratedKey)))
-                return;
-            long existing = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg_manifest;");
-            if (existing > 0)
+            foreach (string rel in new[] { "Cache/VPB/AllPackages.bytes2", "Cache/VPB/AllPackages.bytes2.migrated" })
             {
-                MarkLegacyBytes2ManifestMigrated(conn);
-                return;
-            }
-
-            string legacyPath = LegacyManifestCachePath;
-            try { legacyPath = Path.GetFullPath(legacyPath); } catch { }
-            if (!File.Exists(legacyPath)) return;
-
-            var lookup = new Dictionary<string, SerializableVarPackage>(StringComparer.OrdinalIgnoreCase);
-            if (!TryLoadLegacyBytes2Manifest(legacyPath, lookup) || lookup.Count == 0)
-            {
-                MarkLegacyBytes2ManifestMigrated(conn);
-                return;
-            }
-
-            Stopwatch sw = Stopwatch.StartNew();
-            conn.ExecUtf8("BEGIN IMMEDIATE;");
-            try
-            {
-                WriteManifestSnapshotToConnection(conn, lookup);
-                MarkLegacyBytes2ManifestMigrated(conn);
-                conn.ExecUtf8("COMMIT;");
-            }
-            catch
-            {
-                try { conn.ExecUtf8("ROLLBACK;"); } catch { }
-                throw;
-            }
-            sw.Stop();
-            LogUtil.Log("VarPackageMgr migrated AllPackages.bytes2 -> SQL (" + lookup.Count + " pkgs) in "
-                + sw.ElapsedMilliseconds + "ms");
-            TryRetireLegacyBytes2ManifestCache();
-        }
-
-        static void MarkLegacyBytes2ManifestMigrated(VpbSqlite3.Connection conn)
-        {
-            try
-            {
-                using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                try
                 {
-                    st.BindText(1, MetaManifestMigratedKey);
-                    st.BindText(2, "1");
-                    st.Step();
+                    string path = rel;
+                    try { path = Path.GetFullPath(path); } catch { }
+                    if (File.Exists(path)) File.Delete(path);
                 }
-            }
-            catch { }
-        }
-
-        static bool TryLoadLegacyBytes2Manifest(string cachePath, Dictionary<string, SerializableVarPackage> lookup)
-        {
-            if (lookup == null || string.IsNullOrEmpty(cachePath) || !File.Exists(cachePath))
-                return false;
-            try
-            {
-                using (var stream = new FileStream(cachePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var reader = new BinaryReader(stream))
-                {
-                    int first = reader.ReadInt32();
-                    int count = 0;
-                    int version = LegacyManifestCacheVersion;
-                    bool includeVarMeta = first == LegacyManifestCacheMagic;
-                    if (includeVarMeta)
-                    {
-                        version = reader.ReadInt32();
-                        // v7 added a trailing ZipNameCodePage int per record; v6 records lack it.
-                        if (version != 6 && version != 7)
-                        {
-                            LogUtil.Log("VarPackageMgr legacy cache version mismatch " + version);
-                            return false;
-                        }
-                        count = reader.ReadInt32();
-                    }
-                    else
-                    {
-                        count = first;
-                    }
-                    if (count <= 0) return false;
-                    for (int i = 0; i < count; i++)
-                    {
-                        string key = reader.ReadString();
-                        if (string.IsNullOrEmpty(key)) continue;
-                        var pkg = new SerializableVarPackage();
-                        pkg.Read(reader, includeVarMeta, version);
-                        if (!lookup.ContainsKey(key))
-                            lookup.Add(key, pkg);
-                    }
-                }
-                return lookup.Count > 0;
-            }
-            catch (Exception ex)
-            {
-                try { LogUtil.LogWarning("[VPB] TryLoadLegacyBytes2Manifest failed: " + ex.Message); } catch { }
-                return false;
-            }
-        }
-
-        static void TryRetireLegacyBytes2ManifestCache()
-        {
-            string legacyPath = LegacyManifestCachePath;
-            try { legacyPath = Path.GetFullPath(legacyPath); } catch { }
-            if (!File.Exists(legacyPath)) return;
-            try
-            {
-                string retired = legacyPath + ".migrated";
-                if (File.Exists(retired)) File.Delete(retired);
-                File.Move(legacyPath, retired);
-                LogUtil.Log("VarPackageMgr retired legacy AllPackages.bytes2 -> " + retired);
-            }
-            catch (Exception ex)
-            {
-                try { LogUtil.LogWarning("[VPB] Could not retire AllPackages.bytes2: " + ex.Message); } catch { }
+                catch { }
             }
         }
     }

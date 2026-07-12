@@ -383,16 +383,8 @@ namespace VPB
         {
             if (_titleSearchPopupRootGO != null || backgroundBoxGO == null || titleSearchInput == null) return;
 
-            _titleSearchPopupRootGO = new GameObject("TitleSearchPopupBackdrop");
-            _titleSearchPopupRootGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRT = _titleSearchPopupRootGO.AddComponent<RectTransform>();
-            rootRT.anchorMin = Vector2.zero;
-            rootRT.anchorMax = Vector2.one;
-            rootRT.offsetMin = Vector2.zero;
-            rootRT.offsetMax = Vector2.zero;
-            Image rootImg = _titleSearchPopupRootGO.AddComponent<Image>();
-            rootImg.color = new Color(0f, 0f, 0f, 0f);
-            rootImg.raycastTarget = false;
+            _titleSearchPopupRootGO = UI.CreateChildRT(backgroundBoxGO, "TitleSearchPopupBackdrop", AnchorPresets.stretchAll);
+            Image rootImg = UI.AddImage(_titleSearchPopupRootGO, new Color(0f, 0f, 0f, 0f), false);
 
             GameObject panel = new GameObject("TitleSearchPopupPanel");
             panel.transform.SetParent(_titleSearchPopupRootGO.transform, false);
@@ -400,9 +392,7 @@ namespace VPB
             _titleSearchPopupPanelRT.anchorMin = new Vector2(0.5f, 1f);
             _titleSearchPopupPanelRT.anchorMax = new Vector2(0.5f, 1f);
             _titleSearchPopupPanelRT.pivot = new Vector2(0.5f, 1f);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.14f, 0.14f, 0.16f, 1f);
-            pbg.raycastTarget = true;
+            Image pbg = UI.AddImage(panel, new Color(0.14f, 0.14f, 0.16f, 1f));
 
             float w0 = 320f;
             _titleSearchPopupField = CreateSearchInput(panel, w0, (val) =>

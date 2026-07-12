@@ -20,17 +20,8 @@ namespace VPB
             if (_saveMenuPopupGO != null) return;
             if (backgroundBoxGO == null) return;
 
-            _saveMenuPopupGO = new GameObject("SaveMenuPopup");
-            _saveMenuPopupGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform overlayRT = _saveMenuPopupGO.AddComponent<RectTransform>();
-            overlayRT.anchorMin = Vector2.zero;
-            overlayRT.anchorMax = Vector2.one;
-            overlayRT.offsetMin = Vector2.zero;
-            overlayRT.offsetMax = Vector2.zero;
-            overlayRT.pivot = new Vector2(0.5f, 0.5f);
-            Image overlayBg = _saveMenuPopupGO.AddComponent<Image>();
-            overlayBg.color = new Color(0f, 0f, 0f, 0.001f);
-            overlayBg.raycastTarget = true;
+            _saveMenuPopupGO = UI.CreateChildRT(backgroundBoxGO, "SaveMenuPopup", AnchorPresets.stretchAll);
+            Image overlayBg = UI.AddImage(_saveMenuPopupGO, new Color(0f, 0f, 0f, 0.001f));
             Button overlayBtn = _saveMenuPopupGO.AddComponent<Button>();
             overlayBtn.transition = Selectable.Transition.None;
             overlayBtn.onClick.AddListener(CloseSaveMenuPopup);
@@ -43,15 +34,8 @@ namespace VPB
             panelRT.anchorMax = new Vector2(0.5f, 0.5f);
             panelRT.pivot = new Vector2(0f, 0.5f);
             panelRT.sizeDelta = new Vector2(260f, 50f);
-            Image panelImg = panel.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
-            VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
+            Image panelImg = UI.AddImage(panel, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
+            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6));
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }

@@ -322,16 +322,8 @@ namespace VPB
             CreateDependencyWhitelistScroll(scrollBg);
 
             // Resize handle (triangle style, like Gallery panel).
-            var resizeHandle = new GameObject("ResizeHandle");
-            resizeHandle.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var rhImg = resizeHandle.AddComponent<Image>();
-            rhImg.color = new Color(0f, 0f, 0f, 0.01f); // Invisible hit area
-            var rhRT = resizeHandle.GetComponent<RectTransform>();
-            rhRT.anchorMin = new Vector2(1, 0);
-            rhRT.anchorMax = new Vector2(1, 0);
-            rhRT.pivot = new Vector2(1, 0);
-            rhRT.sizeDelta = new Vector2(60, 60);
-            rhRT.anchoredPosition = new Vector2(20, -20);
+            var resizeHandle = UI.CreateChildRT(m_DepWhitelistUGUIPanel, "ResizeHandle", AnchorPresets.bottomRight, new Vector2(60, 60), new Vector2(20, -20));
+            var rhImg = UI.AddImage(resizeHandle, new Color(0f, 0f, 0f, 0.01f)); // Invisible hit area
 
             UI.CreateLabel(resizeHandle, "◢", GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef), new Color(0.6f, 0.6f, 0.6f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "Triangle");
 
@@ -348,24 +340,14 @@ namespace VPB
 
         private void CreateDependencyWhitelistScroll(GameObject parent)
         {
-            GameObject viewportGO = new GameObject("Viewport");
-            viewportGO.transform.SetParent(parent.transform, false);
-            RectTransform viewportRT = viewportGO.AddComponent<RectTransform>();
-            viewportRT.anchorMin = Vector2.zero;
-            viewportRT.anchorMax = Vector2.one;
-            viewportRT.pivot = new Vector2(0.5f, 0.5f);
+            GameObject viewportGO = UI.CreateChildRT(parent, "Viewport", AnchorPresets.stretchAll);
+            RectTransform viewportRT = viewportGO.GetComponent<RectTransform>();
             viewportRT.offsetMin = new Vector2(0, 0);
             viewportRT.offsetMax = new Vector2(-18, 0);
             viewportGO.AddComponent<RectMask2D>();
 
-            GameObject contentGO = new GameObject("Content");
-            contentGO.transform.SetParent(viewportGO.transform, false);
-            RectTransform contentRT = contentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 1);
-            contentRT.anchorMax = new Vector2(1, 1);
-            contentRT.pivot = new Vector2(0.5f, 1);
-            contentRT.anchoredPosition = Vector2.zero;
-            contentRT.sizeDelta = new Vector2(0, 0);
+            GameObject contentGO = UI.CreateChildRT(viewportGO, "Content", AnchorPresets.hStretchTop);
+            RectTransform contentRT = contentGO.GetComponent<RectTransform>();
 
             var scrollbarGO = UI.CreateScrollBar(parent, 15f, 0f, Scrollbar.Direction.BottomToTop);
             RectTransform sbRT = scrollbarGO.GetComponent<RectTransform>();

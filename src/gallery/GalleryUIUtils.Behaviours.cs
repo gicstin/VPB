@@ -571,17 +571,10 @@ namespace VPB
 
         private RoundedRectOutline CreateRimBorder()
         {
-            GameObject go = new GameObject("Border");
-            go.transform.SetParent(rimRoot.transform, false);
+            GameObject go = UI.CreateChildRT(rimRoot, "Border", AnchorPresets.stretchAll);
             RoundedRectOutline outline = go.AddComponent<RoundedRectOutline>();
             outline.color = hoverColor;
             outline.raycastTarget = false;
-            RectTransform rt = outline.rectTransform;
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            rt.localScale = Vector3.one;
             return outline;
         }
 
@@ -606,14 +599,7 @@ namespace VPB
                 return;
             }
 
-            rimRoot = new GameObject("HoverRim");
-            rimRoot.transform.SetParent(transform, false);
-            RectTransform rr = rimRoot.AddComponent<RectTransform>();
-            rr.anchorMin = Vector2.zero;
-            rr.anchorMax = Vector2.one;
-            rr.offsetMin = Vector2.zero;
-            rr.offsetMax = Vector2.zero;
-            rr.localScale = Vector3.one;
+            rimRoot = UI.CreateChildRT(gameObject, "HoverRim", AnchorPresets.stretchAll);
 
             // Parent may have HorizontalLayoutGroup/VerticalLayoutGroup with childControlWidth/Height
             // that would squash the rim to ~0px (e.g. CategoryQuickSwitchChrome). Rim must always

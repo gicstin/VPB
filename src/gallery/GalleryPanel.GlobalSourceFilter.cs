@@ -97,17 +97,9 @@ namespace VPB
         private void BuildGlobalSourceFilterDropdown(GameObject backgroundBoxGO)
         {
             // Invisible click-outside blocker. Active only while dropdown is open.
-            globalSourceFilterDropdownBlocker = new GameObject("GlobalSourceFilterBlocker");
-            globalSourceFilterDropdownBlocker.transform.SetParent(backgroundBoxGO.transform, false);
+            globalSourceFilterDropdownBlocker = UI.CreateChildRT(backgroundBoxGO, "GlobalSourceFilterBlocker", AnchorPresets.stretchAll);
             {
-                RectTransform rt = globalSourceFilterDropdownBlocker.AddComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.offsetMin = Vector2.zero;
-                rt.offsetMax = Vector2.zero;
-                Image img = globalSourceFilterDropdownBlocker.AddComponent<Image>();
-                img.color = new Color(0f, 0f, 0f, 0.001f);
-                img.raycastTarget = true;
+                Image img = UI.AddImage(globalSourceFilterDropdownBlocker, new Color(0f, 0f, 0f, 0.001f));
                 Button blockerBtn = globalSourceFilterDropdownBlocker.AddComponent<Button>();
                 blockerBtn.targetGraphic = img;
                 blockerBtn.transition = Selectable.Transition.None;
@@ -116,22 +108,15 @@ namespace VPB
             globalSourceFilterDropdownBlocker.SetActive(false);
 
             // Dropdown root
-            globalSourceFilterDropdown = new GameObject("GlobalSourceFilterDropdown");
-            globalSourceFilterDropdown.transform.SetParent(backgroundBoxGO.transform, false);
-            globalSourceFilterDropdown.transform.SetAsLastSibling();
-
-            RectTransform ddRT = globalSourceFilterDropdown.AddComponent<RectTransform>();
             // Anchor top-center of the gallery panel; offset to match the button's center-relative X.
             // The dropdown's top-center sits directly below the source button.
-            ddRT.anchorMin = new Vector2(0.5f, 1f);
-            ddRT.anchorMax = new Vector2(0.5f, 1f);
-            ddRT.pivot = new Vector2(0.5f, 1f);
-            ddRT.anchoredPosition = new Vector2(GlobalSourceFilterButtonCenterRelativeX, -70f);
-            ddRT.sizeDelta = new Vector2(GlobalSourceFilterDropdownWidth,
-                                          GlobalSourceFilterDropdownRowHeight * 3 + GlobalSourceFilterDropdownPadding * 2);
+            globalSourceFilterDropdown = UI.CreateChildRT(backgroundBoxGO, "GlobalSourceFilterDropdown", AnchorPresets.topMiddle,
+                new Vector2(GlobalSourceFilterDropdownWidth, GlobalSourceFilterDropdownRowHeight * 3 + GlobalSourceFilterDropdownPadding * 2),
+                new Vector2(GlobalSourceFilterButtonCenterRelativeX, -70f));
+            globalSourceFilterDropdown.transform.SetAsLastSibling();
+            RectTransform ddRT = globalSourceFilterDropdown.GetComponent<RectTransform>();
 
-            Image ddImg = globalSourceFilterDropdown.AddComponent<Image>();
-            ddImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            Image ddImg = UI.AddImage(globalSourceFilterDropdown, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
             // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
@@ -161,19 +146,12 @@ namespace VPB
 
         private Text AddGlobalSourceFilterRow(GameObject parent, int rowIndex, string label, VPBConfig.GlobalSourceFilterValue value)
         {
-            GameObject row = new GameObject("Row_" + label);
-            row.transform.SetParent(parent.transform, false);
+            GameObject row = UI.CreateChildRT(parent, "Row_" + label, AnchorPresets.hStretchTop,
+                new Vector2(-GlobalSourceFilterDropdownPadding * 2, GlobalSourceFilterDropdownRowHeight),
+                new Vector2(0f, -(GlobalSourceFilterDropdownPadding + rowIndex * GlobalSourceFilterDropdownRowHeight)));
+            RectTransform rt = row.GetComponent<RectTransform>();
 
-            RectTransform rt = row.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.anchoredPosition = new Vector2(0f, -(GlobalSourceFilterDropdownPadding + rowIndex * GlobalSourceFilterDropdownRowHeight));
-            rt.sizeDelta = new Vector2(-GlobalSourceFilterDropdownPadding * 2, GlobalSourceFilterDropdownRowHeight);
-
-            Image rowImg = row.AddComponent<Image>();
-            rowImg.color = new Color(0f, 0f, 0f, 0.0f);
-            rowImg.raycastTarget = true;
+            Image rowImg = UI.AddImage(row, new Color(0f, 0f, 0f, 0.0f));
 
             Button rowBtn = row.AddComponent<Button>();
             rowBtn.targetGraphic = rowImg;

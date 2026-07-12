@@ -564,7 +564,6 @@
     <Compile Include="src\hook\Hub\HubResourceItemUI.cs" />
     <Compile Include="src\hook\Hub\HubResourcePackage.cs" />
     <Compile Include="src\hook\Hub\HubResourcePackageUI.cs" />
-    <Compile Include="src\hook\VarUtil.cs" />
     <Compile Include="src\Properties\AssemblyInfo.cs" />
     <Compile Include="src\VamHookPlugin_Interface.cs" />
     <Compile Include="src\updater\VpbUpdaterService.cs" />

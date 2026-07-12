@@ -201,28 +201,14 @@ namespace VPB
             bodyFont = typ.Body;
             rowH = 42f * s;
 
-            GameObject overlay = new GameObject("VPB_TagCategoryModal");
-            overlay.transform.SetParent(host, false);
-            RectTransform ort = overlay.AddComponent<RectTransform>();
-            ort.anchorMin = Vector2.zero;
-            ort.anchorMax = Vector2.one;
-            ort.sizeDelta = Vector2.zero;
-            Image odim = overlay.AddComponent<Image>();
-            odim.color = new Color(0f, 0f, 0f, 0.55f);
-            odim.raycastTarget = true;
+            GameObject overlay = UI.CreateChildRT(host.gameObject, "VPB_TagCategoryModal", AnchorPresets.stretchAll);
+            Image odim = UI.AddImage(overlay, new Color(0f, 0f, 0f, 0.55f));
             Button obtn = overlay.AddComponent<Button>();
             obtn.transition = Selectable.Transition.None;
             obtn.onClick.AddListener(CloseTagCategoryEditorModal);
 
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(overlay.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(470f * s, 60f);
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.12f, 0.12f, 0.14f, 1f);
-            pbg.raycastTarget = true;
+            GameObject panel = UI.CreateChildRT(overlay, "Panel", AnchorPresets.middleCenter, new Vector2(470f * s, 60f));
+            Image pbg = UI.AddImage(panel, new Color(0.12f, 0.12f, 0.14f, 1f));
             // Swallow clicks on the panel so they do not fall through to the overlay close button.
             Button pbtn = panel.AddComponent<Button>();
             pbtn.transition = Selectable.Transition.None;

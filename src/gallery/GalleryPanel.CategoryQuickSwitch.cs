@@ -66,14 +66,8 @@ namespace VPB
             if (titleBarGO == null || canvas == null || galleryBackgroundGO == null || titleGO == null) return;
             _categoryQuickMenuParentTr = galleryBackgroundGO.transform;
 
-            var cqRoot = new GameObject("CategoryQuickSwitchChrome");
-            cqRoot.transform.SetParent(titleBarGO.transform, false);
-            var cqRootRT = cqRoot.AddComponent<RectTransform>();
-            cqRootRT.anchorMin = new Vector2(0, 0.5f);
-            cqRootRT.anchorMax = new Vector2(0, 0.5f);
-            cqRootRT.pivot = new Vector2(0, 0.5f);
-            cqRootRT.anchoredPosition = new Vector2(60, 0);
-            cqRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44);
+            var cqRoot = UI.CreateChildRT(titleBarGO, "CategoryQuickSwitchChrome", AnchorPresets.middleLeft, new Vector2(TitleBarCategoryClampMaxRef, 44), new Vector2(60, 0));
+            var cqRootRT = cqRoot.GetComponent<RectTransform>();
             _categoryQuickChromeRootGO = cqRoot;
             _categoryQuickChromeRootRT = cqRootRT;
 
@@ -103,10 +97,8 @@ namespace VPB
                 _categoryQuickArrowIconRT = iconGO.AddComponent<RectTransform>();
                 _categoryQuickArrowIconRT.anchorMin = Vector2.zero;
                 _categoryQuickArrowIconRT.anchorMax = Vector2.one;
-                _categoryQuickArrowImage = iconGO.AddComponent<Image>();
-                _categoryQuickArrowImage.color = Color.white;
+                _categoryQuickArrowImage = UI.AddImage(iconGO, Color.white, false);
                 _categoryQuickArrowImage.preserveAspect = true;
-                _categoryQuickArrowImage.raycastTarget = false;
                 try
                 {
                     Sprite chevron = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint);
@@ -155,31 +147,17 @@ namespace VPB
             }
             catch { }
 
-            _categoryQuickBlockerGO = new GameObject("CategoryQuickSwitchBlocker");
-            _categoryQuickBlockerGO.transform.SetParent(galleryBackgroundGO.transform, false);
-            var blkRT = _categoryQuickBlockerGO.AddComponent<RectTransform>();
-            blkRT.anchorMin = Vector2.zero;
-            blkRT.anchorMax = Vector2.one;
-            blkRT.offsetMin = Vector2.zero;
-            blkRT.offsetMax = Vector2.zero;
-            var blkImg = _categoryQuickBlockerGO.AddComponent<Image>();
-            blkImg.color = new Color(0, 0, 0, 0.001f);
-            blkImg.raycastTarget = true;
+            _categoryQuickBlockerGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickSwitchBlocker", AnchorPresets.stretchAll);
+            var blkImg = UI.AddImage(_categoryQuickBlockerGO, new Color(0, 0, 0, 0.001f));
             var blkBtn = _categoryQuickBlockerGO.AddComponent<Button>();
             blkBtn.targetGraphic = blkImg;
             blkBtn.transition = Selectable.Transition.None;
             blkBtn.onClick.AddListener(() => SetCategoryQuickMenuVisible(false));
             _categoryQuickBlockerGO.SetActive(false);
 
-            _categoryQuickMenuOuterGO = new GameObject("CategoryQuickMenu");
             // Keep menu out of titlebar masks/clips.
-            _categoryQuickMenuOuterGO.transform.SetParent(galleryBackgroundGO.transform, false);
-            var outerRT = _categoryQuickMenuOuterGO.AddComponent<RectTransform>();
-            outerRT.anchorMin = new Vector2(0, 1);
-            outerRT.anchorMax = new Vector2(0, 1);
-            outerRT.pivot = new Vector2(0, 1);
-            outerRT.anchoredPosition = new Vector2(60, CategoryQuickMenuTopOffsetY(1f));
-            outerRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
+            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(TitleBarCategoryClampMaxRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
+            var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
             _categoryQuickMenuOuterRT = outerRT;
             var outerImg = AddCategoryQuickRoundedBg(_categoryQuickMenuOuterGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));

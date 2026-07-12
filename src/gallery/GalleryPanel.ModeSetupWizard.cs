@@ -84,27 +84,12 @@ namespace VPB
         {
             if (backgroundBoxGO == null) return;
 
-            _modeSetupWizardGO = new GameObject("ModeSetupWizard");
-            _modeSetupWizardGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRT = _modeSetupWizardGO.AddComponent<RectTransform>();
-            rootRT.anchorMin = Vector2.zero;
-            rootRT.anchorMax = Vector2.one;
-            rootRT.offsetMin = Vector2.zero;
-            rootRT.offsetMax = Vector2.zero;
+            _modeSetupWizardGO = UI.CreateChildRT(backgroundBoxGO, "ModeSetupWizard", AnchorPresets.stretchAll);
 
-            Image blocker = _modeSetupWizardGO.AddComponent<Image>();
-            blocker.color = new Color(0f, 0f, 0f, 0.55f);
-            blocker.raycastTarget = true;
+            Image blocker = UI.AddImage(_modeSetupWizardGO, new Color(0f, 0f, 0f, 0.55f));
 
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_modeSetupWizardGO.transform, false);
-            RectTransform panelRT = panel.AddComponent<RectTransform>();
-            panelRT.anchorMin = panelRT.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRT.pivot = new Vector2(0.5f, 0.5f);
-            panelRT.sizeDelta = new Vector2(440f, 320f);
-            Image panelBg = panel.AddComponent<Image>();
-            panelBg.color = UI.PopupBackdrop;
-            panelBg.raycastTarget = true;
+            GameObject panel = UI.CreateChildRT(_modeSetupWizardGO, "Panel", AnchorPresets.middleCenter, new Vector2(440f, 320f));
+            Image panelBg = UI.AddImage(panel, UI.PopupBackdrop);
             Button panelBtn = panel.AddComponent<Button>();
             panelBtn.targetGraphic = panelBg;
             panelBtn.transition = Selectable.Transition.None;

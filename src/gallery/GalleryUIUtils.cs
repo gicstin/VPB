@@ -1045,13 +1045,7 @@ namespace VPB
             contentRT.pivot = new Vector2(0.5f, 1);
             contentRT.sizeDelta = new Vector2(0, 0);
 
-            VerticalLayoutGroup vlg = contentGO.AddComponent<VerticalLayoutGroup>();
-            vlg.childAlignment = TextAnchor.UpperLeft;
-            vlg.childForceExpandHeight = false;
-            vlg.childForceExpandWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childControlWidth = true;
-            vlg.spacing = spacing;
+            VerticalLayoutGroup vlg = AddVLG(contentGO, spacing: spacing);
 
             ContentSizeFitter csf = contentGO.AddComponent<ContentSizeFitter>();
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -1298,6 +1292,17 @@ namespace VPB
             return go;
         }
 
+        /// <summary>Adds an Image to an existing GameObject, setting color + raycastTarget — folds the pervasive
+        /// AddComponent&lt;Image&gt;(); img.color=..; img.raycastTarget=..; pattern. Unity's default raycastTarget is
+        /// true, so color-only sites (no raycastTarget line) fold safely with the default.</summary>
+        public static Image AddImage(GameObject go, Color color, bool raycastTarget = true)
+        {
+            Image img = go.AddComponent<Image>();
+            img.color = color;
+            img.raycastTarget = raycastTarget;
+            return img;
+        }
+
         /// <summary>Scaled <see cref="RectOffset"/> — folds the pervasive new RectOffset(RoundToInt(x*s), ...) pattern.</summary>
         public static RectOffset Pad(float left, float right, float top, float bottom, float scale = 1f)
         {
@@ -1411,9 +1416,7 @@ namespace VPB
         public static GameObject CreateDimBlocker(GameObject parentGO, string name, UnityAction onDismiss, float dimAlpha = GalleryUiDesignTokens.ModalDimAlpha)
         {
             GameObject dim = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = Black(dimAlpha);
-            dimImg.raycastTarget = true;
+            Image dimImg = AddImage(dim, Black(dimAlpha));
             Button dimBtn = dim.AddComponent<Button>();
             ConfigButtonFlat(dimBtn);
             if (onDismiss != null) dimBtn.onClick.AddListener(onDismiss);
@@ -1433,9 +1436,7 @@ namespace VPB
             CreateDimBlocker(root, "Dim", onDismiss, dimAlpha);
 
             panelGO = CreateChildRT(root, "Panel", AnchorPresets.middleCenter, new Vector2(panelWidth, panelHeight));
-            Image pbg = panelGO.AddComponent<Image>();
-            pbg.color = panelBg;
-            pbg.raycastTarget = true;
+            Image pbg = AddImage(panelGO, panelBg);
 
             return root;
         }
@@ -1601,9 +1602,8 @@ namespace VPB
 
             GameObject iconGO = new GameObject("Icon");
             iconGO.transform.SetParent(buttonGO.transform, false);
-            Image img = iconGO.AddComponent<Image>();
+            Image img = AddImage(iconGO, Color.white);
             img.sprite = icon;
-            img.color = Color.white;
             img.preserveAspect = true;
             img.raycastTarget = false;
             RectTransform rt = iconGO.GetComponent<RectTransform>();
@@ -1768,85 +1768,6 @@ namespace VPB
 
             toggle.onValueChanged.AddListener(onValueChanged);
             return toggleGO;
-        }
-
-        public static GameObject CreateSlider(GameObject parentGO, string label, float width, float height, float min, float max, float currentVal, UnityAction<float> onValueChanged)
-        {
-            GameObject container = AddChildGOImage(parentGO, new Color(0,0,0,0), AnchorPresets.middleCenter, width, height, Vector2.zero);
-            
-            // Label
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(container.transform, false);
-            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
-            labelRT.anchorMin = new Vector2(0, 0.5f);
-            labelRT.anchorMax = new Vector2(0.5f, 1f);
-            labelRT.offsetMin = new Vector2(5, 0);
-            Text t = labelGO.AddComponent<Text>();
-            t.text = label + ": " + currentVal.ToString("F2");
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
-
-            // Slider
-            GameObject sliderGO = new GameObject("Slider");
-            sliderGO.transform.SetParent(container.transform, false);
-            RectTransform sliderRT = sliderGO.AddComponent<RectTransform>();
-            sliderRT.anchorMin = new Vector2(0.5f, 0.1f);
-            sliderRT.anchorMax = new Vector2(0.95f, 0.9f);
-            
-            Slider slider = sliderGO.AddComponent<Slider>();
-            slider.minValue = min;
-            slider.maxValue = max;
-            slider.value = currentVal;
-            
-            // Background
-            GameObject bg = new GameObject("Background");
-            bg.transform.SetParent(sliderGO.transform, false);
-            Image bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.2f, 0.2f, 0.2f);
-            RectTransform bgRT = bg.GetComponent<RectTransform>();
-            bgRT.anchorMin = new Vector2(0, 0.25f);
-            bgRT.anchorMax = new Vector2(1, 0.75f);
-            
-            // Fill Area
-            GameObject fillArea = new GameObject("Fill Area");
-            fillArea.transform.SetParent(sliderGO.transform, false);
-            RectTransform fillAreaRT = fillArea.AddComponent<RectTransform>();
-            fillAreaRT.anchorMin = new Vector2(0, 0.25f);
-            fillAreaRT.anchorMax = new Vector2(1, 0.75f);
-            
-            GameObject fill = new GameObject("Fill");
-            fill.transform.SetParent(fillArea.transform, false);
-            Image fillImg = fill.AddComponent<Image>();
-            fillImg.color = new Color(0.25f, 0.5f, 0.8f);
-            RectTransform fillRT = fill.GetComponent<RectTransform>();
-            fillRT.anchorMin = Vector2.zero;
-            fillRT.anchorMax = Vector2.one;
-            slider.fillRect = fillRT;
-            
-            // Handle
-            GameObject handleArea = new GameObject("Handle Area");
-            handleArea.transform.SetParent(sliderGO.transform, false);
-            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
-            handleAreaRT.anchorMin = Vector2.zero;
-            handleAreaRT.anchorMax = Vector2.one;
-            
-            GameObject handle = new GameObject("Handle");
-            handle.transform.SetParent(handleArea.transform, false);
-            Image handleImg = handle.AddComponent<Image>();
-            handleImg.color = Color.white;
-            RectTransform handleRT = handle.GetComponent<RectTransform>();
-            handleRT.sizeDelta = new Vector2(20, 0);
-            slider.handleRect = handleRT;
-            slider.targetGraphic = handleImg;
-
-            slider.onValueChanged.AddListener((val) => {
-                t.text = label + ": " + val.ToString("F2");
-                onValueChanged(val);
-            });
-            
-            return container;
         }
 
         public static GameObject CreateDropdown(GameObject parentGO, string label, float width, float height, List<string> options, int currentIdx, UnityAction<int> onValueChanged)

@@ -35,19 +35,12 @@ namespace VPB
             barRT.anchorMax = new Vector2(1f, 1f);
             barRT.pivot = new Vector2(0.5f, 1f);
 
-            Image barBg = _activeFilterChipBarGO.AddComponent<Image>();
-            barBg.color = new Color(0f, 0f, 0f, 0f);
-            barBg.raycastTarget = false;
+            Image barBg = UI.AddImage(_activeFilterChipBarGO, new Color(0f, 0f, 0f, 0f), false);
 
             // Manual flow-wrap host: chips are positioned by hand (top-left origin) so the row
             // wraps to a new line whenever the next chip would exceed the available width.
-            GameObject contentGO = new GameObject("Content");
-            contentGO.transform.SetParent(_activeFilterChipBarGO.transform, false);
-            _activeFilterChipScrollContentRT = contentGO.AddComponent<RectTransform>();
-            _activeFilterChipScrollContentRT.anchorMin = Vector2.zero;
-            _activeFilterChipScrollContentRT.anchorMax = Vector2.one;
-            _activeFilterChipScrollContentRT.offsetMin = Vector2.zero;
-            _activeFilterChipScrollContentRT.offsetMax = Vector2.zero;
+            GameObject contentGO = UI.CreateChildRT(_activeFilterChipBarGO, "Content", AnchorPresets.stretchAll);
+            _activeFilterChipScrollContentRT = contentGO.GetComponent<RectTransform>();
 
             _activeFilterChipBarGO.SetActive(false);
         }

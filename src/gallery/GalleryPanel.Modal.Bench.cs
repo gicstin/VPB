@@ -122,9 +122,7 @@ namespace VPB
             GameObject scrollHost = new GameObject("Scroll");
             scrollHost.transform.SetParent(panel.transform, false);
             LayoutElement scrollLe = UI.AddLE(scrollHost, minHeight: 400f * s, flexibleHeight: 1f);
-            Image scrollBg = scrollHost.AddComponent<Image>();
-            scrollBg.color = new Color(0.09f, 0.10f, 0.12f, 1f);
-            scrollBg.raycastTarget = true;
+            Image scrollBg = UI.AddImage(scrollHost, new Color(0.09f, 0.10f, 0.12f, 1f));
             ScrollRect sr = scrollHost.AddComponent<ScrollRect>();
             sr.horizontal = false;
             sr.vertical = true;
@@ -138,9 +136,7 @@ namespace VPB
             vpRt.offsetMin = Vector2.zero;
             vpRt.offsetMax = new Vector2(-BenchScrollBarWidth, 0f);
             viewport.AddComponent<Mask>().showMaskGraphic = false;
-            Image vpImg = viewport.AddComponent<Image>();
-            vpImg.color = Color.white;
-            vpImg.raycastTarget = true;
+            Image vpImg = UI.AddImage(viewport, Color.white);
 
             GameObject content = new GameObject("Content");
             content.transform.SetParent(viewport.transform, false);
@@ -851,9 +847,7 @@ namespace VPB
             rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
-            Image img = block.AddComponent<Image>();
-            img.color = new Color(1f, 1f, 1f, 0.004f);
-            img.raycastTarget = true;
+            Image img = UI.AddImage(block, new Color(1f, 1f, 1f, 0.004f));
         }
 
         static void BenchDestroyChildren(Transform parent)
@@ -873,9 +867,7 @@ namespace VPB
         {
             GameObject row = new GameObject("Toggle");
             row.transform.SetParent(parent, false);
-            Image rowBg = row.AddComponent<Image>();
-            rowBg.color = new Color(1f, 1f, 1f, 0.004f);
-            rowBg.raycastTarget = true;
+            Image rowBg = UI.AddImage(row, new Color(1f, 1f, 1f, 0.004f));
             HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 10f * s;
             h.childAlignment = TextAnchor.MiddleLeft;
@@ -896,9 +888,7 @@ namespace VPB
             int selCount = selectedFiles != null ? selectedFiles.Count : 0;
             GameObject row = new GameObject("SceneActions");
             row.transform.SetParent(parent, false);
-            Image rowBg = row.AddComponent<Image>();
-            rowBg.color = new Color(1f, 1f, 1f, 0.004f);
-            rowBg.raycastTarget = true;
+            Image rowBg = UI.AddImage(row, new Color(1f, 1f, 1f, 0.004f));
             HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 6f * s;
             h.childForceExpandWidth = true;
@@ -924,9 +914,7 @@ namespace VPB
             int actionFont = fontSize;
             GameObject row = new GameObject("PackageActions");
             row.transform.SetParent(parent, false);
-            Image rowBg = row.AddComponent<Image>();
-            rowBg.color = new Color(1f, 1f, 1f, 0.004f);
-            rowBg.raycastTarget = true;
+            Image rowBg = UI.AddImage(row, new Color(1f, 1f, 1f, 0.004f));
             HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 6f * s;
             h.childForceExpandWidth = true;
@@ -1025,9 +1013,7 @@ namespace VPB
             rootRt.offsetMin = Vector2.zero;
             rootRt.offsetMax = Vector2.zero;
 
-            Image dim = _benchConfirmRoot.AddComponent<Image>();
-            dim.color = new Color(0f, 0f, 0f, 0.55f);
-            dim.raycastTarget = true;
+            Image dim = UI.AddImage(_benchConfirmRoot, new Color(0f, 0f, 0f, 0.55f));
             // Consume clicks on confirm overlay — do not pass through to bench dim close handler.
             Button dimBlock = _benchConfirmRoot.AddComponent<Button>();
             UI.ConfigButtonFlat(dimBlock);
@@ -1038,9 +1024,7 @@ namespace VPB
             prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
             prt.pivot = new Vector2(0.5f, 0.5f);
             prt.sizeDelta = new Vector2(480f * s, 220f * s);
-            Image confirmPbg = panel.AddComponent<Image>();
-            confirmPbg.color = new Color(0.08f, 0.09f, 0.11f, 1f);
-            confirmPbg.raycastTarget = true;
+            Image confirmPbg = UI.AddImage(panel, new Color(0.08f, 0.09f, 0.11f, 1f));
 
             VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
             v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(12f * s), Mathf.RoundToInt(12f * s));
@@ -1098,9 +1082,7 @@ namespace VPB
             GameObject listHost = new GameObject("List");
             listHost.transform.SetParent(parent, false);
             LayoutElement lle = UI.AddLE(listHost, minHeight: listHeight, preferredHeight: listHeight);
-            Image listBg = listHost.AddComponent<Image>();
-            listBg.color = new Color(0.05f, 0.06f, 0.08f, 1f);
-            listBg.raycastTarget = true;
+            Image listBg = UI.AddImage(listHost, new Color(0.05f, 0.06f, 0.08f, 1f));
 
             GameObject vp = new GameObject("Viewport");
             vp.transform.SetParent(listHost.transform, false);
@@ -1110,9 +1092,7 @@ namespace VPB
             vpRt.offsetMin = new Vector2(4f, 4f);
             vpRt.offsetMax = new Vector2(-(4f + BenchScrollBarWidth), -4f);
             vp.AddComponent<Mask>().showMaskGraphic = false;
-            Image listVpImg = vp.AddComponent<Image>();
-            listVpImg.color = Color.white;
-            listVpImg.raycastTarget = true;
+            Image listVpImg = UI.AddImage(vp, Color.white);
 
             GameObject content = new GameObject("Content");
             content.transform.SetParent(vp.transform, false);

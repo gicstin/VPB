@@ -127,25 +127,12 @@ namespace VPB
             canvas.pixelPerfect = false;
             panelGO.AddComponent<GraphicRaycaster>();
 
-            GameObject dim = new GameObject("DimBackdrop");
-            dim.transform.SetParent(panelGO.transform, false);
-            StretchFull(dim);
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
-            dimImg.raycastTarget = true;
+            GameObject dim = UI.CreateChildRT(panelGO, "DimBackdrop", AnchorPresets.stretchAll);
+            Image dimImg = UI.AddImage(dim, new Color(0f, 0f, 0f, 0.55f));
 
-            GameObject window = new GameObject("ColorPickerWindow");
-            window.transform.SetParent(panelGO.transform, false);
-            RectTransform windowRT = window.AddComponent<RectTransform>();
-            windowRT.anchorMin = new Vector2(0.5f, 0.5f);
-            windowRT.anchorMax = new Vector2(0.5f, 0.5f);
-            windowRT.pivot = new Vector2(0.5f, 0.5f);
-            windowRT.anchoredPosition = Vector2.zero;
-            windowRT.sizeDelta = new Vector2(WindowWidth, WindowHeight);
+            GameObject window = UI.CreateChildRT(panelGO, "ColorPickerWindow", AnchorPresets.middleCenter, new Vector2(WindowWidth, WindowHeight));
 
-            Image winBg = window.AddComponent<Image>();
-            winBg.color = new Color(0.17f, 0.17f, 0.19f, 1f);
-            winBg.raycastTarget = true;
+            Image winBg = UI.AddImage(window, new Color(0.17f, 0.17f, 0.19f, 1f));
 
             Outline winOutline = window.AddComponent<Outline>();
             winOutline.effectDistance = new Vector2(2f, -2f);
@@ -197,9 +184,7 @@ namespace VPB
             GameObject go = new GameObject("Preview");
             go.transform.SetParent(parent.transform, false);
             LayoutElement le = UI.AddLE(go, preferredHeight: 52, flexibleHeight: 0);
-            Image img = go.AddComponent<Image>();
-            img.color = Color.white;
-            img.raycastTarget = false;
+            Image img = UI.AddImage(go, Color.white, false);
             return go;
         }
 
@@ -285,8 +270,7 @@ namespace VPB
 
             GameObject bg = new GameObject("Background");
             bg.transform.SetParent(sliderHost.transform, false);
-            Image bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.08f, 0.08f, 0.09f, 1f);
+            Image bgImg = UI.AddImage(bg, new Color(0.08f, 0.08f, 0.09f, 1f));
             RectTransform bgRT = bg.GetComponent<RectTransform>();
             bgRT.anchorMin = new Vector2(0, 0.2f);
             bgRT.anchorMax = new Vector2(1, 0.8f);
@@ -301,33 +285,19 @@ namespace VPB
             fillAreaRT.offsetMin = new Vector2(6, 0);
             fillAreaRT.offsetMax = new Vector2(-18, 0);
 
-            GameObject fill = new GameObject("Fill");
-            fill.transform.SetParent(fillArea.transform, false);
-            Image fillImg = fill.AddComponent<Image>();
-            fillImg.color = tint;
+            GameObject fill = UI.CreateChildRT(fillArea, "Fill", AnchorPresets.stretchAll);
+            Image fillImg = UI.AddImage(fill, tint);
             RectTransform fillRT = fill.GetComponent<RectTransform>();
-            fillRT.anchorMin = Vector2.zero;
-            fillRT.anchorMax = Vector2.one;
-            fillRT.offsetMin = Vector2.zero;
-            fillRT.offsetMax = Vector2.zero;
             s.fillRect = fillRT;
 
-            GameObject handleArea = new GameObject("Handle Area");
-            handleArea.transform.SetParent(sliderHost.transform, false);
-            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
-            handleAreaRT.anchorMin = Vector2.zero;
-            handleAreaRT.anchorMax = Vector2.one;
+            GameObject handleArea = UI.CreateChildRT(sliderHost, "Handle Area", AnchorPresets.stretchAll);
+            RectTransform handleAreaRT = handleArea.GetComponent<RectTransform>();
             handleAreaRT.offsetMin = new Vector2(10, 0);
             handleAreaRT.offsetMax = new Vector2(-18, 0);
 
-            GameObject handle = new GameObject("Handle");
-            handle.transform.SetParent(handleArea.transform, false);
-            Image handleImg = handle.AddComponent<Image>();
-            handleImg.color = Color.white;
+            GameObject handle = UI.CreateChildRT(handleArea, "Handle", AnchorPresets.middleCenter, new Vector2(12f, 16f));
+            Image handleImg = UI.AddImage(handle, Color.white);
             RectTransform handleRT = handle.GetComponent<RectTransform>();
-            handleRT.anchorMin = new Vector2(0.5f, 0.5f);
-            handleRT.anchorMax = new Vector2(0.5f, 0.5f);
-            handleRT.sizeDelta = new Vector2(12f, 16f);
 
             s.handleRect = handleRT;
             s.targetGraphic = handleImg;
@@ -341,8 +311,7 @@ namespace VPB
             go.transform.SetParent(parent.transform, false);
             LayoutElement rowLe = UI.AddLE(go, preferredHeight: 40, flexibleHeight: 0);
 
-            Image bgImg = go.AddComponent<Image>();
-            bgImg.color = new Color(0.07f, 0.07f, 0.08f, 1f);
+            Image bgImg = UI.AddImage(go, new Color(0.07f, 0.07f, 0.08f, 1f));
 
             InputField input = go.AddComponent<InputField>();
             GameObject textArea = new GameObject("TextArea");

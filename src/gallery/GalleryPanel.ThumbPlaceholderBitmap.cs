@@ -271,12 +271,9 @@ namespace VPB
 
             s_Canvas.worldCamera = s_Cam;
 
-            GameObject textGo = new GameObject("Text");
-            textGo.transform.SetParent(s_Root.transform, false);
+            GameObject textGo = UI.CreateChildRT(s_Root, "Text", AnchorPresets.stretchAll);
             SetLayerRecursive(textGo, layer);
-            s_TextRt = textGo.AddComponent<RectTransform>();
-            s_TextRt.anchorMin = Vector2.zero;
-            s_TextRt.anchorMax = Vector2.one;
+            s_TextRt = textGo.GetComponent<RectTransform>();
             s_TextRt.offsetMin = new Vector2(3f, 3f);
             s_TextRt.offsetMax = new Vector2(-3f, -3f);
 

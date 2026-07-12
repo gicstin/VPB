@@ -838,14 +838,7 @@ namespace VPB
 
         private static RawImage CreatePluginThumbPlaceholderLabelImage(Transform phTr)
         {
-            GameObject imgGO = new GameObject("LabelImage");
-            imgGO.transform.SetParent(phTr, false);
-            RectTransform imgRT = imgGO.AddComponent<RectTransform>();
-            imgRT.anchorMin = Vector2.zero;
-            imgRT.anchorMax = Vector2.one;
-            imgRT.offsetMin = Vector2.zero;
-            imgRT.offsetMax = Vector2.zero;
-
+            GameObject imgGO = UI.CreateChildRT(phTr.gameObject, "LabelImage", AnchorPresets.stretchAll);
             RawImage labelImage = imgGO.AddComponent<RawImage>();
             labelImage.raycastTarget = false;
             labelImage.color = Color.white;
@@ -861,11 +854,8 @@ namespace VPB
             TryWirePluginThumbPlaceholderLabel(existing);
             if (PluginThumbPlaceholderRefsIsUsable(existing)) return;
 
-            GameObject phGO = new GameObject("PluginPlaceholder");
-            phGO.transform.SetParent(thumbTr, false);
-            RectTransform phRT = phGO.AddComponent<RectTransform>();
-            phRT.anchorMin = Vector2.zero;
-            phRT.anchorMax = Vector2.one;
+            GameObject phGO = UI.CreateChildRT(thumbTr.gameObject, "PluginPlaceholder", AnchorPresets.stretchAll);
+            RectTransform phRT = phGO.GetComponent<RectTransform>();
             phRT.offsetMin = new Vector2(3f, 3f);
             phRT.offsetMax = new Vector2(-3f, -3f);
             phGO.AddComponent<RectMask2D>();

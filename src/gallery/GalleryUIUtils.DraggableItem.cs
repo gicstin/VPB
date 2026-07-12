@@ -256,19 +256,10 @@ namespace VPB
             if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
             if (rootCanvas == null) return;
 
-            _dragOverlay = new GameObject("DragInputBlocker");
+            _dragOverlay = UI.CreateChildRT(rootCanvas.gameObject, "DragInputBlocker", AnchorPresets.stretchAll);
             _dragOverlay.layer = rootCanvas.gameObject.layer;
 
-            RectTransform rt = _dragOverlay.AddComponent<RectTransform>();
-            rt.SetParent(rootCanvas.transform, false);
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-
-            Image img = _dragOverlay.AddComponent<Image>();
-            img.color = Color.clear;
-            img.raycastTarget = true;
+            Image img = UI.AddImage(_dragOverlay, Color.clear);
         }
 
         private void DestroyDragOverlay()

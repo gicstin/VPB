@@ -252,13 +252,9 @@ namespace VPB
         /// <summary>What session perf applies while footer perf is On (see Settings → Performance).</summary>
         public bool PerfApplyHair = true;
         public bool PerfApplyMirrors = true;
-        /// <summary>Obsolete: VaM SetQuality preset removed from UI; always false.</summary>
-        public bool PerfApplyVaMQualityPreset = false;
         public bool PerfApplyRenderScale = false;
         public bool PerfApplyMsaa = false;
         public bool PerfApplyPixelLightCount = false;
-        /// <summary>Obsolete: shader LOD removed from UI; always false.</summary>
-        public bool PerfApplyShaderLod = false;
         public bool PerfApplySmoothPasses = false;
         public bool PerfApplyMirrorReflections = false;
         public bool PerfApplyRealtimeReflectionProbes = false;
@@ -951,11 +947,9 @@ namespace VPB
             PerfReapplyOnSceneLoad = false;
             PerfApplyHair = true;
             PerfApplyMirrors = true;
-            PerfApplyVaMQualityPreset = false;
             PerfApplyRenderScale = false;
             PerfApplyMsaa = false;
             PerfApplyPixelLightCount = false;
-            PerfApplyShaderLod = false;
             PerfApplySmoothPasses = false;
             PerfApplyMirrorReflections = false;
             PerfApplyRealtimeReflectionProbes = false;
@@ -1153,11 +1147,9 @@ namespace VPB
                         if (node["PerfReapplyOnSceneLoad"] != null) PerfReapplyOnSceneLoad = node["PerfReapplyOnSceneLoad"].AsBool;
                         if (node["PerfApplyHair"] != null) PerfApplyHair = node["PerfApplyHair"].AsBool;
                         if (node["PerfApplyMirrors"] != null) PerfApplyMirrors = node["PerfApplyMirrors"].AsBool;
-                        PerfApplyVaMQualityPreset = false;
                         if (node["PerfApplyRenderScale"] != null) PerfApplyRenderScale = node["PerfApplyRenderScale"].AsBool;
                         if (node["PerfApplyMsaa"] != null) PerfApplyMsaa = node["PerfApplyMsaa"].AsBool;
                         if (node["PerfApplyPixelLightCount"] != null) PerfApplyPixelLightCount = node["PerfApplyPixelLightCount"].AsBool;
-                        PerfApplyShaderLod = false;
                         if (node["PerfApplySmoothPasses"] != null) PerfApplySmoothPasses = node["PerfApplySmoothPasses"].AsBool;
                         if (node["PerfApplyMirrorReflections"] != null) PerfApplyMirrorReflections = node["PerfApplyMirrorReflections"].AsBool;
                         if (node["PerfApplyRealtimeReflectionProbes"] != null) PerfApplyRealtimeReflectionProbes = node["PerfApplyRealtimeReflectionProbes"].AsBool;
@@ -1545,11 +1537,9 @@ namespace VPB
                 node["PerfReapplyOnSceneLoad"].AsBool = PerfReapplyOnSceneLoad;
                 node["PerfApplyHair"].AsBool = PerfApplyHair;
                 node["PerfApplyMirrors"].AsBool = PerfApplyMirrors;
-                node["PerfApplyVaMQualityPreset"].AsBool = false;
                 node["PerfApplyRenderScale"].AsBool = PerfApplyRenderScale;
                 node["PerfApplyMsaa"].AsBool = PerfApplyMsaa;
                 node["PerfApplyPixelLightCount"].AsBool = PerfApplyPixelLightCount;
-                node["PerfApplyShaderLod"].AsBool = false;
                 node["PerfApplySmoothPasses"].AsBool = PerfApplySmoothPasses;
                 node["PerfApplyMirrorReflections"].AsBool = PerfApplyMirrorReflections;
                 node["PerfApplyRealtimeReflectionProbes"].AsBool = PerfApplyRealtimeReflectionProbes;

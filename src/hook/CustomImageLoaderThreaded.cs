@@ -1831,10 +1831,6 @@ namespace VPB
 
 		protected AsyncFlag loadFlag;
 
-        // MTTask removed
-        // StopThreads removed
-        // StartThreads removed
-
 		public bool RegisterTextureUse(Texture2D tex)
 		{
 			if (textureTrackedCache.ContainsKey(tex))
@@ -2786,7 +2782,6 @@ namespace VPB
                 }
             }
             catch { }
-            // StopThreads removed
 			if (loadFlag != null)
 			{
 				loadFlag.Raise();
@@ -2799,7 +2794,6 @@ namespace VPB
 		protected void OnApplicationQuit()
 		{
             try { _varThumbIoStop = true; } catch { }
-            // StopThreads removed
 		}
 
 		// Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.

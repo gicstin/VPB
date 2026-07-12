@@ -275,24 +275,14 @@ namespace VPB
             fileSortTypeMenuRoot = UI.CreateChildRT(backgroundBoxGO, "FileSortTypeMenu");
 
             GameObject backdropGO = UI.CreateChildRT(fileSortTypeMenuRoot, "Backdrop");
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = UI.Black(0.001f);
-            backdropImg.raycastTarget = true;
+            Image backdropImg = UI.AddImage(backdropGO, UI.Black(0.001f));
             Button backdropBtn = backdropGO.AddComponent<Button>();
             backdropBtn.transition = Selectable.Transition.None;
             backdropBtn.onClick.AddListener(CloseFileSortTypeMenu);
 
-            fileSortTypeMenuPanelGO = new GameObject("FileSortTypeMenuPanel");
-            fileSortTypeMenuPanelGO.transform.SetParent(fileSortTypeMenuRoot.transform, false);
-            RectTransform panelRT = fileSortTypeMenuPanelGO.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0.5f, 1f);
-            panelRT.anchorMax = new Vector2(0.5f, 1f);
-            panelRT.pivot = new Vector2(0.5f, 1f);
-            panelRT.anchoredPosition = new Vector2(108f, -72f);
-            panelRT.sizeDelta = new Vector2(260f, 50f);
+            fileSortTypeMenuPanelGO = UI.CreateChildRT(fileSortTypeMenuRoot, "FileSortTypeMenuPanel", AnchorPresets.topMiddle, new Vector2(260f, 50f), new Vector2(108f, -72f));
 
-            Image panelImg = fileSortTypeMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            Image panelImg = UI.AddImage(fileSortTypeMenuPanelGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             UI.AddVLG(fileSortTypeMenuPanelGO, 4f, UI.Pad(6f, 6f, 6f, 6f), TextAnchor.UpperCenter);
 
@@ -328,25 +318,16 @@ namespace VPB
             sidePaneSortMenuRoot = UI.CreateChildRT(backgroundBoxGO, "SidePaneSortMenu");
 
             GameObject backdropGO = UI.CreateChildRT(sidePaneSortMenuRoot, "Backdrop");
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = UI.Black(0.001f);
-            backdropImg.raycastTarget = true;
+            Image backdropImg = UI.AddImage(backdropGO, UI.Black(0.001f));
             Button backdropBtn = backdropGO.AddComponent<Button>();
             backdropBtn.transition = Selectable.Transition.None;
             backdropBtn.onClick.AddListener(CloseSidePaneSortMenu);
 
-            sidePaneSortMenuPanelGO = new GameObject("SidePaneSortMenuPanel");
-            sidePaneSortMenuPanelGO.transform.SetParent(sidePaneSortMenuRoot.transform, false);
-            sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.AddComponent<RectTransform>();
             // Anchors / position are set at open-time based on which button was clicked.
-            sidePaneSortMenuPanelRT.anchorMin = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.anchorMax = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.pivot = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.anchoredPosition = new Vector2(10f, -95f);
-            sidePaneSortMenuPanelRT.sizeDelta = new Vector2(240f, 50f);
+            sidePaneSortMenuPanelGO = UI.CreateChildRT(sidePaneSortMenuRoot, "SidePaneSortMenuPanel", AnchorPresets.topLeft, new Vector2(240f, 50f), new Vector2(10f, -95f));
+            sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.GetComponent<RectTransform>();
 
-            Image panelImg = sidePaneSortMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            Image panelImg = UI.AddImage(sidePaneSortMenuPanelGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             UI.AddVLG(sidePaneSortMenuPanelGO, 4f, UI.Pad(6f, 6f, 6f, 6f), TextAnchor.UpperCenter);
 

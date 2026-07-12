@@ -914,8 +914,7 @@ namespace VPB
                 selectorCg.interactable = false;
                 selectorCg.blocksRaycasts = false;
 
-                Image selectorBgImg = tboxGridRateSelectorGO.AddComponent<Image>();
-                selectorBgImg.color = new Color(0.05f, 0.05f, 0.05f, 0.96f);
+                Image selectorBgImg = UI.AddImage(tboxGridRateSelectorGO, new Color(0.05f, 0.05f, 0.05f, 0.96f));
 
                 GridLayoutGroup selectorGrid = tboxGridRateSelectorGO.AddComponent<GridLayoutGroup>();
                 selectorGrid.cellSize = new Vector2(38, 36);
@@ -1439,9 +1438,7 @@ namespace VPB
             {
                 var sep = new GameObject("Separator");
                 sep.transform.SetParent(tboxPinBtn.transform, false);
-                var sepImg = sep.AddComponent<Image>();
-                sepImg.color = new Color(1f, 1f, 1f, 0.08f);
-                sepImg.raycastTarget = false;
+                var sepImg = UI.AddImage(sep, new Color(1f, 1f, 1f, 0.08f), false);
                 var sepRT = sep.GetComponent<RectTransform>();
                 sepRT.anchorMin = new Vector2(0f, 0.15f);
                 sepRT.anchorMax = new Vector2(0f, 0.85f);
@@ -1454,9 +1451,7 @@ namespace VPB
             {
                 var rowSepGO = new GameObject("RowSeparator");
                 rowSepGO.transform.SetParent(tbox.transform, false);
-                var rowSepImg = rowSepGO.AddComponent<Image>();
-                rowSepImg.color = new Color(1f, 1f, 1f, 0.12f);
-                rowSepImg.raycastTarget = false;
+                var rowSepImg = UI.AddImage(rowSepGO, new Color(1f, 1f, 1f, 0.12f), false);
                 tboxRowSepRT = rowSepGO.GetComponent<RectTransform>();
                 tboxRowSepRT.anchorMin = new Vector2(0f, 0f);
                 tboxRowSepRT.anchorMax = new Vector2(1f, 0f);
@@ -1727,9 +1722,7 @@ namespace VPB
             backdropRT.anchorMax = Vector2.one;
             backdropRT.offsetMin = Vector2.zero;
             backdropRT.offsetMax = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
-            backdropImg.raycastTarget = true;
+            Image backdropImg = UI.AddImage(backdropGO, new Color(0f, 0f, 0f, 0.001f));
             Button backdropBtn = backdropGO.AddComponent<Button>();
             backdropBtn.transition = Selectable.Transition.None;
             backdropBtn.onClick.AddListener(CloseTboxTargetMenu);
@@ -1742,8 +1735,7 @@ namespace VPB
             tboxTargetMenuPanelRT.anchoredPosition = Vector2.zero;
             tboxTargetMenuPanelRT.sizeDelta = new Vector2(380f, 50f);
 
-            Image panelImg = tboxTargetMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
+            Image panelImg = UI.AddImage(tboxTargetMenuPanelGO, new Color(0.09f, 0.09f, 0.16f, 0.97f));
             var outline = tboxTargetMenuPanelGO.AddComponent<Outline>();
             outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
             outline.effectDistance = new Vector2(1f, -1f);
@@ -1795,9 +1787,7 @@ namespace VPB
                 rowRT.pivot = new Vector2(0f, 1f);
                 rowRT.sizeDelta = new Vector2(0f, rowH);
 
-                var rowImg = rowGO.AddComponent<Image>();
-                rowImg.color = isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f);
-                rowImg.raycastTarget = false; // children handle clicks
+                var rowImg = UI.AddImage(rowGO, isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f), false); // children handle clicks
 
                 var rowHLG = UI.AddHLG(rowGO, spacing: 4f, padding: UI.Pad(4, 4, 2, 2), childForceExpandWidth: false, childForceExpandHeight: true);
 
