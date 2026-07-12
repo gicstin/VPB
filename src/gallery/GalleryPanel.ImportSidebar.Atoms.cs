@@ -25,9 +25,7 @@ namespace VPB
             // Random Scene button — same width/accent as the bulk-select row so it reads as a peer action.
             GameObject rndRow = new GameObject("RandomSceneRow");
             rndRow.transform.SetParent(content, false);
-            LayoutElement rndLe = rndRow.AddComponent<LayoutElement>();
-            rndLe.preferredHeight = ImportSidebarBaseRowHeight;
-            rndLe.flexibleWidth = 1f;
+            LayoutElement rndLe = UI.AddLE(rndRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Image rndBg = AddImportSidebarRoundedBg(rndRow, new Color(0.15f, 0.45f, 0.22f, 1f));
             Button rndBtn = rndRow.AddComponent<Button>();
             rndBtn.targetGraphic = rndBg;
@@ -64,20 +62,8 @@ namespace VPB
         // Caption row sized by LayoutElement (so the content VLG places it) with a scaled height + font.
         private void AddImportListCaption(Transform parent, string label)
         {
-            GameObject go = new GameObject("Caption");
-            go.transform.SetParent(parent, false);
-            go.AddComponent<RectTransform>();
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight * 0.7f;
-            le.flexibleWidth = 1f;
-
-            Text t = go.AddComponent<Text>();
-            t.text = label;
-            t.color = UI.PopupMutedText;
-            t.fontSize = ImportSidebarBaseFontSize;
-            t.alignment = TextAnchor.MiddleLeft;
-            VPBUiFont.ApplyTo(t);
-            t.raycastTarget = false;
+            Text t = UI.CreateLabel(parent.gameObject, label, ImportSidebarBaseFontSize, UI.PopupMutedText, TextAnchor.MiddleLeft, raycastTarget: false, name: "Caption");
+            LayoutElement le = UI.AddLE(t.gameObject, preferredHeight: ImportSidebarBaseRowHeight * 0.7f, flexibleWidth: 1f);
 
             Text tCaptured = t;
             LayoutElement leCaptured = le;
@@ -92,11 +78,9 @@ namespace VPB
             GameObject row = new GameObject("AtomRow_" + index);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
             // Row height matches the sidebar's tab-derived row convention so atoms read
             // at the same visual weight as Creator/Category rows on a normal panel.
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 

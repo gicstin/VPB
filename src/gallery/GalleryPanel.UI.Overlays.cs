@@ -633,21 +633,7 @@ namespace VPB
             float panelH = padTop + titleH + innerBottom + listH + 18f;
             panelRT.sizeDelta = new Vector2(panelW, panelH);
 
-            GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(panelGO.transform, false);
-            Text titleText = titleGO.AddComponent<Text>();
-            titleText.text = title;
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = GalleryUiDesignTokens.FontRef;
-            titleText.fontStyle = FontStyle.Normal;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleCenter;
-            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0, 1);
-            titleRT.anchorMax = new Vector2(1, 1);
-            titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -5);
-            titleRT.sizeDelta = new Vector2(0, 24);
+            UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 24), anchoredPosition: new Vector2(0, -5), name: "Title");
 
             GameObject listGO = new GameObject("List");
             listGO.transform.SetParent(panelGO.transform, false);
@@ -855,21 +841,7 @@ namespace VPB
             float panelH = padTop + titleH + innerBottom + listH + 18f;
             panelRT.sizeDelta = new Vector2(panelW, panelH);
 
-            GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(panelGO.transform, false);
-            Text titleText = titleGO.AddComponent<Text>();
-            titleText.text = title;
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = GalleryUiDesignTokens.FontRef;
-            titleText.fontStyle = FontStyle.Normal;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleCenter;
-            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0, 1);
-            titleRT.anchorMax = new Vector2(1, 1);
-            titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -5);
-            titleRT.sizeDelta = new Vector2(0, 24);
+            UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 24), anchoredPosition: new Vector2(0, -5), name: "Title");
 
             GameObject listGO = new GameObject("List");
             listGO.transform.SetParent(panelGO.transform, false);
@@ -1082,21 +1054,7 @@ namespace VPB
             float panelH = padTop + titleH + innerBottom + listH + 18f;
             panelRT.sizeDelta = new Vector2(panelW, panelH);
 
-            GameObject titleGO = new GameObject("Title");
-            titleGO.transform.SetParent(panelGO.transform, false);
-            Text titleText = titleGO.AddComponent<Text>();
-            titleText.text = title;
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.fontSize = GalleryUiDesignTokens.FontRef;
-            titleText.fontStyle = FontStyle.Normal;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleCenter;
-            RectTransform titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0, 1);
-            titleRT.anchorMax = new Vector2(1, 1);
-            titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.anchoredPosition = new Vector2(0, -5);
-            titleRT.sizeDelta = new Vector2(0, 24);
+            UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 24), anchoredPosition: new Vector2(0, -5), name: "Title");
 
             GameObject listGO = new GameObject("List");
             listGO.transform.SetParent(panelGO.transform, false);

@@ -832,25 +832,7 @@ namespace VPB
 
         private static Text CreatePluginThumbPlaceholderLabelText(Transform phTr)
         {
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(phTr, false);
-            RectTransform textRT = textGO.AddComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.offsetMin = Vector2.zero;
-            textRT.offsetMax = Vector2.zero;
-
-            Text label = textGO.AddComponent<Text>();
-            label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            label.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            label.lineSpacing = 1f;
-            label.color = new Color(0.88f, 0.88f, 0.92f, 1f);
-            label.alignment = TextAnchor.MiddleCenter;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
-            label.resizeTextForBestFit = false;
-            label.supportRichText = false;
-            label.raycastTarget = false;
+            Text label = UI.CreateLabel(phTr.gameObject, "", GalleryUiDesignTokens.FontBodyRef, new Color(0.88f, 0.88f, 0.92f, 1f), TextAnchor.MiddleCenter, richText: false, raycastTarget: false, name: "Text");
             return label;
         }
 

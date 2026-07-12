@@ -211,22 +211,16 @@ namespace VPB
 
             GameObject row = UI.CreateChildRT(parent.gameObject, "CatQuickRow");
             UI.AddHLG(row, 6f * s, childForceExpandWidth: false);
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = rowH;
-            le.preferredHeight = rowH;
+            LayoutElement le = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH);
 
             if (displayIndex.HasValue)
             {
                 Text it = UI.CreateLabel(row.gameObject, displayIndex.Value.ToString(), rowType.Body, new Color(0.75f, 0.78f, 0.82f, 1f), TextAnchor.MiddleRight, name: "Index");
-                LayoutElement ile = it.gameObject.AddComponent<LayoutElement>();
-                ile.preferredWidth = 42f * s;
-                ile.minWidth = 42f * s;
+                LayoutElement ile = UI.AddLE(it.gameObject, minWidth: 42f * s, preferredWidth: 42f * s);
             }
 
             Text t = UI.CreateLabel(row.gameObject, name ?? "", font, Color.white, TextAnchor.MiddleLeft, name: "Label");
-            LayoutElement tle = t.gameObject.AddComponent<LayoutElement>();
-            tle.flexibleWidth = 1f;
-            tle.minWidth = 0f;
+            LayoutElement tle = UI.AddLE(t.gameObject, minWidth: 0f, flexibleWidth: 1f);
 
             if (showUp)
             {
@@ -251,14 +245,9 @@ namespace VPB
             Image bg = AddCategoryQuickRoundedBg(tog, new Color(0.44f, 0.36f, 0.20f, 1f));
             Button b = tog.AddComponent<Button>();
             b.targetGraphic = bg;
-            b.transition = Selectable.Transition.None;
-            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(b);
             if (onToggleHidden != null) b.onClick.AddListener(() => onToggleHidden());
-            LayoutElement ble = tog.AddComponent<LayoutElement>();
-            ble.preferredWidth = 84f * s;
-            ble.minWidth = 84f * s;
-            ble.preferredHeight = rowH;
-            ble.minHeight = rowH;
+            LayoutElement ble = UI.AddLE(tog, minWidth: 84f * s, minHeight: rowH, preferredWidth: 84f * s, preferredHeight: rowH);
 
             UI.CreateLabel(tog, toggleHiddenLabel ?? "", rowType.Body, Color.white, TextAnchor.MiddleCenter);
         }
@@ -276,16 +265,11 @@ namespace VPB
             Image img = AddCategoryQuickRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
             b.targetGraphic = img;
-            b.transition = Selectable.Transition.None;
-            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(b);
             if (onClick != null) b.onClick.AddListener(onClick);
             go.AddComponent<UIHoverBorder>();
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = width;
-            le.minHeight = le.preferredHeight = height;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
+            LayoutElement le = UI.AddLE(go, minWidth: width, minHeight: height, preferredWidth: width, preferredHeight: height, flexibleWidth: 0f, flexibleHeight: 0f);
 
             UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter);
 
@@ -316,8 +300,7 @@ namespace VPB
             dim.color = new Color(0f, 0f, 0f, 0.72f);
             dim.raycastTarget = true;
             Button dimBtn = _catQuickEditorRoot.AddComponent<Button>();
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(dimBtn);
             dimBtn.onClick.AddListener(() => HideCategoryQuickEditor());
 
             GameObject panel = new GameObject("Panel");
@@ -334,9 +317,7 @@ namespace VPB
             // Header row.
             GameObject header = UI.CreateChildRT(panel, "HeaderRow");
             UI.AddHLG(header, 8f * s, childForceExpandWidth: false);
-            LayoutElement hle = header.AddComponent<LayoutElement>();
-            hle.minHeight = 54f * s;
-            hle.preferredHeight = 54f * s;
+            LayoutElement hle = UI.AddLE(header, minHeight: 54f * s, preferredHeight: 54f * s);
 
             GameObject titleGo = new GameObject("Title");
             titleGo.transform.SetParent(header.transform, false);
@@ -347,9 +328,7 @@ namespace VPB
             title.alignment = TextAnchor.MiddleLeft;
             title.text = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown");
             try { VPBUiFont.ApplyTo(title); } catch { }
-            LayoutElement tle = titleGo.AddComponent<LayoutElement>();
-            tle.flexibleWidth = 1f;
-            tle.minWidth = 0f;
+            LayoutElement tle = UI.AddLE(titleGo, minWidth: 0f, flexibleWidth: 1f);
 
             GameObject resetBtn = CreateHeaderButton(header.transform, 160f * s, 44f * s, VPBTranslation.T("settings.category_quick.editor.reset", "Reset"), bodyFont, UI.ChromePanel, () =>
             {
@@ -375,9 +354,7 @@ namespace VPB
 
             // Body: two sections inside scroll.
             GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0f, 300f * s, Vector2.zero, 10f * s, 3f * s, false);
-            LayoutElement scLe = scrollGO.AddComponent<LayoutElement>();
-            scLe.flexibleHeight = 1f;
-            scLe.minHeight = 420f * s;
+            LayoutElement scLe = UI.AddLE(scrollGO, minHeight: 420f * s, flexibleHeight: 1f);
             Transform vp = scrollGO.transform.Find("Viewport");
             Transform content = vp != null ? vp.Find("Content") : null;
             if (content == null) return;
@@ -391,8 +368,7 @@ namespace VPB
             vh.alignment = TextAnchor.MiddleLeft;
             vh.text = VPBTranslation.T("settings.category_quick.editor.visible_header", "Shown in header menu (ordered)");
             try { VPBUiFont.ApplyTo(vh); } catch { }
-            LayoutElement vhLe = visHeader.AddComponent<LayoutElement>();
-            vhLe.minHeight = 34f * s;
+            LayoutElement vhLe = UI.AddLE(visHeader, minHeight: 34f * s);
 
             GameObject visList = UI.CreateChildRT(content.gameObject, "VisibleList");
             UI.AddVLG(visList, 6f * s);
@@ -407,8 +383,7 @@ namespace VPB
             hhT.alignment = TextAnchor.MiddleLeft;
             hhT.text = VPBTranslation.T("settings.category_quick.editor.hidden_header", "Hidden from header menu");
             try { VPBUiFont.ApplyTo(hhT); } catch { }
-            LayoutElement hhLe = hidHeader.AddComponent<LayoutElement>();
-            hhLe.minHeight = 34f * s;
+            LayoutElement hhLe = UI.AddLE(hidHeader, minHeight: 34f * s);
 
             GameObject hidList = UI.CreateChildRT(content.gameObject, "HiddenList");
             UI.AddVLG(hidList, 6f * s);

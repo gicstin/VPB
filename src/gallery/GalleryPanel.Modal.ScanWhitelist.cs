@@ -104,8 +104,7 @@ namespace VPB
             dim.color = new Color(0f, 0f, 0f, 0.72f);
             dim.raycastTarget = true;
             Button dimBtn = _scanWlModalRoot.AddComponent<Button>();
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(dimBtn);
             dimBtn.onClick.AddListener(HideScanWhitelistEditorModal);
 
             GameObject panel = new GameObject("Panel");
@@ -118,14 +117,7 @@ namespace VPB
             pbg.color = new Color(0.06f, 0.06f, 0.08f, 1f);
             pbg.raycastTarget = true;
 
-            VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));
-            v.spacing = 8f * s;
-            v.childAlignment = TextAnchor.UpperLeft;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
             GameObject header = new GameObject("HeaderRow");
             header.transform.SetParent(panel.transform, false);
@@ -134,9 +126,7 @@ namespace VPB
             hh.spacing = 8f * s;
             hh.childControlWidth = true;
             hh.childControlHeight = true;
-            LayoutElement hle = header.AddComponent<LayoutElement>();
-            hle.minHeight = 48f * s;
-            hle.preferredHeight = 48f * s;
+            LayoutElement hle = UI.AddLE(header, minHeight: 48f * s, preferredHeight: 48f * s);
 
             GameObject titleGo = new GameObject("Title");
             titleGo.transform.SetParent(header.transform, false);
@@ -147,8 +137,7 @@ namespace VPB
             title.text = VPBTranslation.T("hook.settings.scan_whitelist.window_title", "VaM Scan Whitelist");
             try { VPBUiFont.ApplyTo(title); } catch { }
             GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
-            LayoutElement tle = titleGo.AddComponent<LayoutElement>();
-            tle.flexibleWidth = 1f;
+            LayoutElement tle = UI.AddLE(titleGo, flexibleWidth: 1f);
 
             ScanWlCreateHeaderButton(header.transform, 100f * s, 40f * s, VPBTranslation.T("hook.close", "Close"), bodyFont, new Color(0.44f, 0.36f, 0.20f, 1f), HideScanWhitelistEditorModal);
 
@@ -161,25 +150,15 @@ namespace VPB
             warnT.horizontalOverflow = HorizontalWrapMode.Wrap;
             warnT.text = VPBTranslation.T("hook.settings.scan_whitelist.empty_warning", "⚠ Warning: whitelist is enabled but empty — all packages will be excluded from VaM's scan!");
             try { VPBUiFont.ApplyTo(warnT); } catch { }
-            LayoutElement warnLe = _scanWlEmptyWarnGo.AddComponent<LayoutElement>();
-            warnLe.minHeight = 44f * s;
+            LayoutElement warnLe = UI.AddLE(_scanWlEmptyWarnGo, minHeight: 44f * s);
             _scanWlEmptyWarnGo.SetActive(false);
 
             GameObject enableRow = new GameObject("EnableRow");
             enableRow.transform.SetParent(panel.transform, false);
             Image enableBg = enableRow.AddComponent<Image>();
             enableBg.color = new Color(0.1f, 0.11f, 0.14f, 1f);
-            HorizontalLayoutGroup erh = enableRow.AddComponent<HorizontalLayoutGroup>();
-            erh.padding = new RectOffset(Mathf.RoundToInt(8f * s), Mathf.RoundToInt(8f * s), Mathf.RoundToInt(6f * s), Mathf.RoundToInt(6f * s));
-            erh.spacing = 10f * s;
-            erh.childAlignment = TextAnchor.MiddleLeft;
-            erh.childControlWidth = true;
-            erh.childControlHeight = true;
-            erh.childForceExpandWidth = false;
-            erh.childForceExpandHeight = false;
-            LayoutElement erLe = enableRow.AddComponent<LayoutElement>();
-            erLe.minHeight = 44f * s;
-            erLe.preferredHeight = 44f * s;
+            HorizontalLayoutGroup erh = UI.AddHLG(enableRow, spacing: 10f * s, padding: UI.Pad(8, 8, 6, 6, s), childForceExpandWidth: false);
+            LayoutElement erLe = UI.AddLE(enableRow, minHeight: 44f * s, preferredHeight: 44f * s);
 
             bool enabled = false;
             try { enabled = ScanWhitelistManager.Instance.IsEnabled; } catch { }
@@ -202,13 +181,10 @@ namespace VPB
             });
 
             Text el = UI.CreateLabel(enableRow, VPBTranslation.T("hook.settings.scan_whitelist.enable_short", "Enable scan whitelist"), bodyFont, Color.white, TextAnchor.MiddleLeft, name: "EnableLabel");
-            LayoutElement ell = el.gameObject.AddComponent<LayoutElement>();
-            ell.flexibleWidth = 1f;
+            LayoutElement ell = UI.AddLE(el.gameObject, flexibleWidth: 1f);
 
             GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0.08f, 0.08f, 0.1f, 1f), AnchorPresets.stretchAll, 0f, 280f * s, Vector2.zero, 10f * s, 3f * s, false);
-            LayoutElement scLe = scrollGO.AddComponent<LayoutElement>();
-            scLe.flexibleHeight = 1f;
-            scLe.minHeight = 260f * s;
+            LayoutElement scLe = UI.AddLE(scrollGO, minHeight: 260f * s, flexibleHeight: 1f);
             Transform content = scrollGO.transform.Find("Viewport/Content");
             if (content == null) return;
 
@@ -222,37 +198,20 @@ namespace VPB
             _scanWlFoldersHdrText = ScanWlCreateSectionHeader(content, VPBTranslation.T("hook.settings.scan_whitelist.folders", "Whitelisted Folders"), 0, bodyFont, s);
             GameObject foldersList = new GameObject("FoldersList");
             foldersList.transform.SetParent(content, false);
-            VerticalLayoutGroup fvg = foldersList.AddComponent<VerticalLayoutGroup>();
-            fvg.spacing = 3f * s;
-            fvg.childControlWidth = true;
-            fvg.childControlHeight = true;
-            fvg.childForceExpandWidth = true;
-            fvg.childForceExpandHeight = false;
+            VerticalLayoutGroup fvg = UI.AddVLG(foldersList, spacing: 3f * s);
             _scanWlFoldersParent = foldersList.transform;
 
             _scanWlUidsHdrText = ScanWlCreateSectionHeader(content, VPBTranslation.T("hook.settings.scan_whitelist.uids", "Per-Package UID Overrides"), 0, bodyFont, s);
             GameObject uidsList = new GameObject("UidsList");
             uidsList.transform.SetParent(content, false);
-            VerticalLayoutGroup uvg = uidsList.AddComponent<VerticalLayoutGroup>();
-            uvg.spacing = 3f * s;
-            uvg.childControlWidth = true;
-            uvg.childControlHeight = true;
-            uvg.childForceExpandWidth = true;
-            uvg.childForceExpandHeight = false;
+            VerticalLayoutGroup uvg = UI.AddVLG(uidsList, spacing: 3f * s);
             _scanWlUidsParent = uidsList.transform;
 
             GameObject addFooter = new GameObject("AddFooter");
             addFooter.transform.SetParent(panel.transform, false);
             Image addFooterBg = addFooter.AddComponent<Image>();
             addFooterBg.color = new Color(0.09f, 0.09f, 0.12f, 1f);
-            VerticalLayoutGroup addFooterV = addFooter.AddComponent<VerticalLayoutGroup>();
-            addFooterV.padding = new RectOffset(Mathf.RoundToInt(10f * s), Mathf.RoundToInt(10f * s), Mathf.RoundToInt(10f * s), Mathf.RoundToInt(10f * s));
-            addFooterV.spacing = 10f * s;
-            addFooterV.childAlignment = TextAnchor.UpperLeft;
-            addFooterV.childControlWidth = true;
-            addFooterV.childControlHeight = true;
-            addFooterV.childForceExpandWidth = true;
-            addFooterV.childForceExpandHeight = false;
+            VerticalLayoutGroup addFooterV = UI.AddVLG(addFooter, spacing: 10f * s, padding: UI.Pad(10, 10, 10, 10, s));
 
             ScanWlCreateAddBlock(
                 addFooter.transform,
@@ -354,9 +313,7 @@ namespace VPB
             Text body = UI.CreateLabel(panel, VPBTranslation.T(
                 "hook.settings.scan_whitelist.disable_confirm.body",
                 "Enable VaM scan whitelist to improve startup time. This “hides” most packages from VaM so it won’t rescan them every start.\n\nDisabling will make VaM startup much slower (full rescan)."), bodyFont, new Color(0.88f, 0.88f, 0.9f, 1f), TextAnchor.UpperLeft, verticalWrap: VerticalWrapMode.Overflow, name: "Body");
-            LayoutElement bodyLe = body.gameObject.AddComponent<LayoutElement>();
-            bodyLe.minHeight = 100f * s;
-            bodyLe.flexibleHeight = 1f;
+            LayoutElement bodyLe = UI.AddLE(body.gameObject, minHeight: 100f * s, flexibleHeight: 1f);
 
             GameObject btnRow = new GameObject("Buttons");
             btnRow.transform.SetParent(panel.transform, false);
@@ -365,8 +322,7 @@ namespace VPB
             brh.childControlWidth = true;
             brh.childControlHeight = true;
             brh.childForceExpandWidth = true;
-            LayoutElement brLe = btnRow.AddComponent<LayoutElement>();
-            brLe.minHeight = 40f * s;
+            LayoutElement brLe = UI.AddLE(btnRow, minHeight: 40f * s);
 
             ScanWlCreateHeaderButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.35f, 0.35f, 0.38f, 1f), HideScanWhitelistDisableConfirmModal);
             ScanWlCreateHeaderButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.disable", "Disable"), bodyFont, new Color(0.55f, 0.28f, 0.28f, 1f), () =>
@@ -483,9 +439,7 @@ namespace VPB
         {
             Text t = UI.CreateLabel(parent.gameObject, null, fontSize, new Color(0.82f, 0.88f, 1f, 1f), TextAnchor.MiddleLeft, name: "SectionHeader");
             ScanWlUpdateSectionHeader(t, title, count);
-            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 26f * s;
-            le.preferredHeight = 26f * s;
+            LayoutElement le = UI.AddLE(t.gameObject, minHeight: 26f * s, preferredHeight: 26f * s);
             return t;
         }
 
@@ -502,14 +456,11 @@ namespace VPB
             UI.AddVLG(block, spacing: 6f * s);
 
             Text lbl = UI.CreateLabel(block, label, fontSize, new Color(0.78f, 0.8f, 0.84f, 1f), TextAnchor.MiddleLeft, name: "Label");
-            LayoutElement lblLe = lbl.gameObject.AddComponent<LayoutElement>();
-            lblLe.minHeight = 20f * s;
+            LayoutElement lblLe = UI.AddLE(lbl.gameObject, minHeight: 20f * s);
 
             GameObject row = UI.CreateChildRT(block, "Row");
             UI.AddHLG(row, spacing: 8f * s, childForceExpandWidth: false);
-            LayoutElement rowLe = row.AddComponent<LayoutElement>();
-            rowLe.minHeight = 36f * s;
-            rowLe.preferredHeight = 36f * s;
+            LayoutElement rowLe = UI.AddLE(row, minHeight: 36f * s, preferredHeight: 36f * s);
 
             input = ScanWlCreateInputField(row.transform, fontSize, s, 1f, placeholder);
             float addBtnW = ScanWlRemoveBtnWidthScale * s;
@@ -519,8 +470,7 @@ namespace VPB
         private static void ScanWlAddPlaceholderRow(Transform parent, string text, int fontSize, float s)
         {
             Text t = UI.CreateLabel(parent.gameObject, text, fontSize, UI.TextDim, name: "Placeholder");
-            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 22f * s;
+            LayoutElement le = UI.AddLE(t.gameObject, minHeight: 22f * s);
         }
 
         private static void ScanWlAddRemovableRow(GalleryPanel panel, Transform parent, string label, int fontSize, float s, bool altStripe, UnityAction onRemove)
@@ -531,22 +481,11 @@ namespace VPB
             GameObject row = new GameObject("Row");
             row.transform.SetParent(parent, false);
             Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
-            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
-            h.padding = new RectOffset(Mathf.RoundToInt(8f * s), Mathf.RoundToInt(6f * s), Mathf.RoundToInt(4f * s), Mathf.RoundToInt(4f * s));
-            h.spacing = 8f * s;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childForceExpandHeight = false;
-            LayoutElement rle = row.AddComponent<LayoutElement>();
-            rle.minHeight = rowH;
-            rle.preferredHeight = rowH;
+            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 8f * s, padding: UI.Pad(8, 6, 4, 4, s), childForceExpandWidth: false);
+            LayoutElement rle = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH);
 
             Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
-            LayoutElement lle = lt.gameObject.AddComponent<LayoutElement>();
-            lle.flexibleWidth = 1f;
-            lle.minWidth = 0f;
+            LayoutElement lle = UI.AddLE(lt.gameObject, minWidth: 0f, flexibleWidth: 1f);
 
             GameObject removeBtn = ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, VPBTranslation.T("hook.remove", "Remove"),
                 fontSize, new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
@@ -565,10 +504,7 @@ namespace VPB
             GameObject go = new GameObject("Input");
             go.transform.SetParent(parent, false);
             Image bg = UI.AddGalleryElementRoundedBg(go, new Color(0.12f, 0.12f, 0.14f, 1f));
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleWidth = flexWidth;
-            le.minHeight = 34f * s;
-            le.preferredHeight = 34f * s;
+            LayoutElement le = UI.AddLE(go, minHeight: 34f * s, preferredHeight: 34f * s, flexibleWidth: flexWidth);
 
             GameObject ta = new GameObject("TextArea");
             ta.transform.SetParent(go.transform, false);

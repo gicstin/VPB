@@ -39,27 +39,10 @@ namespace VPB
             colRT.pivot = new Vector2(0.5f, 0.5f);
             colRT.sizeDelta = new Vector2(460f, 140f);
 
-            var vlg = colGO.AddComponent<VerticalLayoutGroup>();
-            vlg.childAlignment = TextAnchor.MiddleCenter;
-            vlg.spacing = 12f;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
+            var vlg = UI.AddVLG(colGO, spacing: 12f, childAlignment: TextAnchor.MiddleCenter);
 
-            var msgGO = new GameObject("Message");
-            msgGO.transform.SetParent(colGO.transform, false);
-            _emptyGridStateMessage = msgGO.AddComponent<Text>();
-            try { VPBUiFont.ApplyTo(_emptyGridStateMessage); } catch { _emptyGridStateMessage.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            _emptyGridStateMessage.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            _emptyGridStateMessage.fontStyle = FontStyle.Normal;
-            _emptyGridStateMessage.alignment = TextAnchor.MiddleCenter;
-            _emptyGridStateMessage.color = new Color(0.75f, 0.75f, 0.78f, 1f);
-            _emptyGridStateMessage.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _emptyGridStateMessage.verticalOverflow = VerticalWrapMode.Overflow;
-            _emptyGridStateMessage.raycastTarget = false;
-            var msgLE = msgGO.AddComponent<LayoutElement>();
-            msgLE.preferredHeight = 52f;
+            _emptyGridStateMessage = UI.CreateLabel(colGO, "", GalleryUiDesignTokens.FontBodyRef, new Color(0.75f, 0.75f, 0.78f, 1f), TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Message");
+            var msgLE = UI.AddLE(_emptyGridStateMessage.gameObject, preferredHeight: 52f);
 
             _emptyGridStateActionBtn = UI.CreateUIButton(
                 colGO, 200, 36,
@@ -181,22 +164,12 @@ namespace VPB
             bg.color = new Color(0.12f, 0.22f, 0.34f, 0.92f);
             bg.raycastTarget = true;
 
-            var textGO = new GameObject("Text");
-            textGO.transform.SetParent(_firstRunHintGO.transform, false);
-            RectTransform textRT = textGO.AddComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
+            _firstRunHintText = UI.CreateLabel(_firstRunHintGO, VPBTranslation.T(
+                "gallery.first_run.hint",
+                "Tip: Ctrl+V toggles gallery · Side buttons open filters · Select items for actions in the bar below"), GalleryUiDesignTokens.FontCaptionRef, new Color(0.92f, 0.94f, 0.98f, 1f), TextAnchor.MiddleLeft, raycastTarget: false, name: "Text");
+            RectTransform textRT = _firstRunHintText.GetComponent<RectTransform>();
             textRT.offsetMin = new Vector2(10f, 0f);
             textRT.offsetMax = new Vector2(-76f, 0f);
-            _firstRunHintText = textGO.AddComponent<Text>();
-            try { VPBUiFont.ApplyTo(_firstRunHintText); } catch { _firstRunHintText.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            _firstRunHintText.fontSize = GalleryUiDesignTokens.FontCaptionRef;
-            _firstRunHintText.alignment = TextAnchor.MiddleLeft;
-            _firstRunHintText.color = new Color(0.92f, 0.94f, 0.98f, 1f);
-            _firstRunHintText.raycastTarget = false;
-            _firstRunHintText.text = VPBTranslation.T(
-                "gallery.first_run.hint",
-                "Tip: Ctrl+V toggles gallery · Side buttons open filters · Select items for actions in the bar below");
 
             var helpBtn = UI.CreateUIButton(_firstRunHintGO, 32, 32, "?", 18, 0, 0, AnchorPresets.vStretchRight, OpenFirstRunHintHelp);
             helpBtn.name = "Help";

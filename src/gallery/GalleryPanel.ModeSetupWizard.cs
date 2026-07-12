@@ -146,21 +146,10 @@ namespace VPB
         private static Text CreateWizardLabel(Transform parent, string text, int fontSize, TextAnchor align,
             Vector2 offsetMin, Vector2 offsetMax)
         {
-            GameObject go = new GameObject("Label");
-            go.transform.SetParent(parent, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
+            Text t = UI.CreateLabel(parent.gameObject, text, fontSize, Color.white, align, raycastTarget: false, anchorPreset: AnchorPresets.hStretchTop, name: "Label");
+            RectTransform rt = t.GetComponent<RectTransform>();
             rt.offsetMin = offsetMin;
             rt.offsetMax = offsetMax;
-            Text t = go.AddComponent<Text>();
-            t.text = text;
-            t.fontSize = fontSize;
-            t.alignment = align;
-            t.color = Color.white;
-            t.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(t); } catch { t.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
             return t;
         }
 

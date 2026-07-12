@@ -234,21 +234,7 @@ namespace VPB
             var dragger = dragBar.AddComponent<DepWhitelistDragHandler>();
             dragger.Target = panelRT;
 
-            var titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var titleText = titleGo.AddComponent<Text>();
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.text = "Dependency Whitelist";
-            titleText.fontSize = GalleryUiDesignTokens.FontRef;
-            titleText.fontStyle = FontStyle.Normal;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleLeft;
-            var titleRt = titleGo.GetComponent<RectTransform>();
-            titleRt.anchorMin = new Vector2(0, 1);
-            titleRt.anchorMax = new Vector2(1, 1);
-            titleRt.pivot = new Vector2(0.5f, 1);
-            titleRt.sizeDelta = new Vector2(-120, 60);
-            titleRt.anchoredPosition = new Vector2(60, -10);
+            UI.CreateLabel(m_DepWhitelistUGUIPanel, "Dependency Whitelist", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-120, 60), anchoredPosition: new Vector2(60, -10), name: "Title");
 
             // Draggable overlay for the whole title bar (excluding the close button area).
             var titleDrag = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0f, 0f, 0f, 0.01f), AnchorPresets.hStretchTop, 0, 60, Vector2.zero);
@@ -322,20 +308,7 @@ namespace VPB
                 refreshBtnRt.anchoredPosition = new Vector2(-20, -80);
             }
 
-            var helpGo = new GameObject("Help");
-            helpGo.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var helpText = helpGo.AddComponent<Text>();
-            helpText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            helpText.text = "Checked = whitelisted (ignored by Force Latest).";
-            helpText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            helpText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
-            helpText.alignment = TextAnchor.MiddleLeft;
-            var helpRt = helpGo.GetComponent<RectTransform>();
-            helpRt.anchorMin = new Vector2(0, 1);
-            helpRt.anchorMax = new Vector2(1, 1);
-            helpRt.pivot = new Vector2(0.5f, 1);
-            helpRt.sizeDelta = new Vector2(-40, 30);
-            helpRt.anchoredPosition = new Vector2(20, -130);
+            UI.CreateLabel(m_DepWhitelistUGUIPanel, "Checked = whitelisted (ignored by Force Latest).", GalleryUiDesignTokens.FontBodyRef, new Color(0.85f, 0.85f, 0.85f, 1f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-40, 30), anchoredPosition: new Vector2(20, -130), name: "Help");
 
             var scrollBg = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0.10f, 0.10f, 0.10f, 0.95f), AnchorPresets.stretchAll, -40, -190, new Vector2(0, -30), rounded: true);
             scrollBg.name = "ScrollBG";
@@ -360,19 +333,7 @@ namespace VPB
             rhRT.sizeDelta = new Vector2(60, 60);
             rhRT.anchoredPosition = new Vector2(20, -20);
 
-            var triGO = new GameObject("Triangle");
-            triGO.transform.SetParent(resizeHandle.transform, false);
-            var triText = triGO.AddComponent<Text>();
-            triText.raycastTarget = false;
-            triText.text = "◢";
-            triText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            triText.fontSize = GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef);
-            triText.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-            triText.alignment = TextAnchor.MiddleCenter;
-            var triRT = triGO.GetComponent<RectTransform>();
-            triRT.anchorMin = Vector2.zero;
-            triRT.anchorMax = Vector2.one;
-            triRT.sizeDelta = Vector2.zero;
+            UI.CreateLabel(resizeHandle, "◢", GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef), new Color(0.6f, 0.6f, 0.6f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "Triangle");
 
             // Border-only hover (no fill/text color change)
             var rhHoverBorder = resizeHandle.AddComponent<UIHoverBorder>();

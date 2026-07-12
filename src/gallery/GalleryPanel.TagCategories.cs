@@ -227,28 +227,12 @@ namespace VPB
             Button pbtn = panel.AddComponent<Button>();
             pbtn.transition = Selectable.Transition.None;
 
-            VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(10 * s), Mathf.RoundToInt(10 * s));
-            v.spacing = 5f * s;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 5f * s, padding: UI.Pad(12, 12, 10, 10, s));
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject tg = new GameObject("Title");
-            tg.transform.SetParent(panel.transform, false);
-            Text tt = tg.AddComponent<Text>();
-            tt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tt.fontSize = typ.Prose;
-            tt.color = new Color(0.92f, 0.92f, 0.95f, 1f);
-            tt.alignment = TextAnchor.MiddleLeft;
-            tt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            tt.text = title ?? "";
-            LayoutElement tle = tg.AddComponent<LayoutElement>();
-            tle.minHeight = rowH;
-            tle.preferredHeight = rowH;
+            Text tt = UI.CreateLabel(panel, title ?? "", typ.Prose, new Color(0.92f, 0.92f, 0.95f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Title");
+            LayoutElement tle = UI.AddLE(tt.gameObject, minHeight: rowH, preferredHeight: rowH);
 
             SetLayerRecursive(overlay, host.gameObject.layer);
             overlay.transform.SetAsLastSibling();
@@ -261,10 +245,7 @@ namespace VPB
             GameObject row = new GameObject("CatModalRow");
             row.transform.SetParent(parent, false);
             Image img = AddCategoryQuickRoundedBg(row, bg.HasValue ? bg.Value : UI.PopupRowBackdrop);
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = rowH;
-            le.preferredHeight = rowH;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
             if (onClick != null)
             {
                 Button b = row.AddComponent<Button>();
@@ -272,18 +253,8 @@ namespace VPB
                 b.transition = Selectable.Transition.None;
                 b.onClick.AddListener(() => { try { onClick(); } catch { } });
             }
-            GameObject t = new GameObject("Label");
-            t.transform.SetParent(row.transform, false);
-            Text txt = t.AddComponent<Text>();
-            txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            txt.fontSize = font;
-            txt.color = Color.white;
-            txt.alignment = align;
-            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            txt.text = label;
-            RectTransform trt = t.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
+            Text txt = UI.CreateLabel(row, label, font, Color.white, align, HorizontalWrapMode.Overflow, name: "Label");
+            RectTransform trt = txt.GetComponent<RectTransform>();
             trt.offsetMin = new Vector2(14f, 0f);
             trt.offsetMax = new Vector2(-14f, 0f);
             return row;
@@ -405,16 +376,8 @@ namespace VPB
                 GameObject strip = new GameObject("CatManageRow");
                 strip.transform.SetParent(rows, false);
                 strip.AddComponent<RectTransform>();
-                HorizontalLayoutGroup hlg = strip.AddComponent<HorizontalLayoutGroup>();
-                hlg.spacing = 5f * s;
-                hlg.childControlWidth = true;
-                hlg.childControlHeight = true;
-                hlg.childForceExpandHeight = true;
-                hlg.childForceExpandWidth = false;
-                LayoutElement stripLe = strip.AddComponent<LayoutElement>();
-                stripLe.minHeight = rowH;
-                stripLe.preferredHeight = rowH;
-                stripLe.flexibleWidth = 1f;
+                HorizontalLayoutGroup hlg = UI.AddHLG(strip, spacing: 5f * s, childForceExpandWidth: false, childForceExpandHeight: true);
+                LayoutElement stripLe = UI.AddLE(strip, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
 
                 GameObject nameRow = AddCategoryModalRow(strip.transform, capName, swatch, rowH, font, TextAnchor.MiddleLeft, null);
                 if (nameRow != null) { var le = nameRow.GetComponent<LayoutElement>(); if (le != null) { le.flexibleWidth = 1f; le.minWidth = 140f * s; } }

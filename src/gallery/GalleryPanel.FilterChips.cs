@@ -252,42 +252,25 @@ namespace VPB
             int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
             float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
-            HorizontalLayoutGroup row = chip.AddComponent<HorizontalLayoutGroup>();
-            row.padding = isClearAll
-                ? new RectOffset(padLeft, padLeft, padV, padV)
-                : new RectOffset(padLeft, 0, padV, padV);
-            row.spacing = isClearAll ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s;
-            row.childAlignment = TextAnchor.MiddleCenter;
-            row.childControlWidth = true;
-            row.childControlHeight = true;
-            row.childForceExpandWidth = false;
-            row.childForceExpandHeight = true;
+            HorizontalLayoutGroup row = UI.AddHLG(chip,
+                spacing: isClearAll ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s,
+                padding: isClearAll
+                    ? new RectOffset(padLeft, padLeft, padV, padV)
+                    : new RectOffset(padLeft, 0, padV, padV),
+                childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
 
-            LayoutElement chipLE = chip.AddComponent<LayoutElement>();
-            chipLE.preferredHeight = chipH;
-            chipLE.minHeight = chipH;
+            LayoutElement chipLE = UI.AddLE(chip, minHeight: chipH, preferredHeight: chipH);
 
             ContentSizeFitter chipCsf = chip.AddComponent<ContentSizeFitter>();
             chipCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             // Self-size height (chip is flow-positioned with no parent layout group driving it).
             chipCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(chip.transform, false);
-            Text labelTxt = labelGO.AddComponent<Text>();
-            labelTxt.text = spec.Label;
-            try { VPBUiFont.ApplyTo(labelTxt); } catch { labelTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-            labelTxt.fontSize = fontSize;
-            labelTxt.fontStyle = FontStyle.Normal;
-            labelTxt.alignment = TextAnchor.MiddleLeft;
-            labelTxt.color = Color.white;
-            labelTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            labelTxt.raycastTarget = false;
+            Text labelTxt = UI.CreateLabel(chip, spec.Label, fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
+            GameObject labelGO = labelTxt.gameObject;
             ContentSizeFitter labelCsf = labelGO.AddComponent<ContentSizeFitter>();
             labelCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
-            labelLE.flexibleHeight = 0f;
-            labelLE.preferredHeight = innerH;
+            LayoutElement labelLE = UI.AddLE(labelGO, preferredHeight: innerH, flexibleHeight: 0f);
 
             UnityAction dismiss = spec.OnDismiss;
             if (!isClearAll)
@@ -316,21 +299,8 @@ namespace VPB
                 }
                 else
                 {
-                    GameObject xGO = new GameObject("X");
-                    xGO.transform.SetParent(dismissGO.transform, false);
-                    Text xTxt = xGO.AddComponent<Text>();
-                    xTxt.text = "\u00d7";
-                    xTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    Text xTxt = UI.CreateLabel(dismissGO, "\u00d7", (int)GalleryUiDesignTokens.FilterChipDismissSizeRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "X");
                     GalleryUiMetrics.ApplyGlyphFont(xTxt, GalleryUiDesignTokens.FilterChipDismissSizeRef, s, GalleryUiDesignTokens.FontMinRef);
-                    xTxt.fontStyle = FontStyle.Normal;
-                    xTxt.alignment = TextAnchor.MiddleCenter;
-                    xTxt.color = Color.white;
-                    xTxt.raycastTarget = false;
-                    RectTransform xRT = xGO.GetComponent<RectTransform>();
-                    xRT.anchorMin = Vector2.zero;
-                    xRT.anchorMax = Vector2.one;
-                    xRT.offsetMin = Vector2.zero;
-                    xRT.offsetMax = Vector2.zero;
                 }
 
                 var dismissHover = dismissGO.AddComponent<UIHoverBorder>();
@@ -339,12 +309,7 @@ namespace VPB
                 dismissHover.inward = true;
                 dismissHover.ApplyBorderSettings();
 
-                LayoutElement dismissLE = dismissGO.AddComponent<LayoutElement>();
-                dismissLE.preferredWidth = dismissSize;
-                dismissLE.minWidth = dismissSize;
-                dismissLE.preferredHeight = dismissSize;
-                dismissLE.minHeight = dismissSize;
-                dismissLE.flexibleHeight = 0f;
+                LayoutElement dismissLE = UI.AddLE(dismissGO, minWidth: dismissSize, minHeight: dismissSize, preferredWidth: dismissSize, preferredHeight: dismissSize, flexibleHeight: 0f);
 
                 try { AddTooltip(chip, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
             }

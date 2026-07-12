@@ -188,8 +188,7 @@ namespace VPB
             });
             btn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
             
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 50;
+            var le = UI.AddLE(btn, preferredHeight: 50);
 
             // Hover tooltip (status line)
             var del = btn.AddComponent<UIHoverDelegate>();
@@ -218,8 +217,7 @@ namespace VPB
             var img = btn.GetComponent<Image>();
             if (img != null) img.color = editMode ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
 
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 45;
+            var le = UI.AddLE(btn, preferredHeight: 45);
 
             activeButtons.Add(btn);
         }
@@ -231,8 +229,7 @@ namespace VPB
             var rt = splitter.AddComponent<RectTransform>();
             rt.sizeDelta = new Vector2(0, 15);
             
-            var le = splitter.AddComponent<LayoutElement>();
-            le.preferredHeight = 15;
+            var le = UI.AddLE(splitter, preferredHeight: 15);
 
             GameObject line = new GameObject("Line");
             line.transform.SetParent(splitter.transform, false);
@@ -278,8 +275,7 @@ namespace VPB
             if (editMode)
                 txtRT.offsetMax = new Vector2(-78, 0); // space for icon buttons
 
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 45;
+            var le = UI.AddLE(btn, preferredHeight: 45);
 
             // Reorderable (allow drag in edit mode too)
             var reorder = btn.AddComponent<UIListReorderable>();

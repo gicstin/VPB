@@ -219,22 +219,15 @@ namespace VPB
             _inAppHelpSectionTitleText.alignment = TextAnchor.UpperLeft;
             _inAppHelpSectionTitleText.horizontalOverflow = HorizontalWrapMode.Wrap;
             try { VPBUiFont.ApplyTo(_inAppHelpSectionTitleText); } catch { }
-            LayoutElement sectionTitleLe = sectionTitleGO.AddComponent<LayoutElement>();
-            sectionTitleLe.flexibleWidth = 1f;
+            LayoutElement sectionTitleLe = UI.AddLE(sectionTitleGO, flexibleWidth: 1f);
 
             GameObject bodyHostGO = new GameObject("SectionBodyHost");
             bodyHostGO.transform.SetParent(content, false);
             _inAppHelpBodyHost = bodyHostGO.transform;
-            VerticalLayoutGroup bodyHostVlg = bodyHostGO.AddComponent<VerticalLayoutGroup>();
-            bodyHostVlg.spacing = GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef;
-            bodyHostVlg.childControlWidth = true;
-            bodyHostVlg.childForceExpandWidth = true;
-            bodyHostVlg.childControlHeight = true;
-            bodyHostVlg.childForceExpandHeight = false;
+            VerticalLayoutGroup bodyHostVlg = UI.AddVLG(bodyHostGO, spacing: GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef);
             ContentSizeFitter bodyHostCsf = bodyHostGO.AddComponent<ContentSizeFitter>();
             bodyHostCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement bodyHostLe = bodyHostGO.AddComponent<LayoutElement>();
-            bodyHostLe.flexibleWidth = 1f;
+            LayoutElement bodyHostLe = UI.AddLE(bodyHostGO, flexibleWidth: 1f);
 
             EnsureInAppHelpIconPreviewChrome();
 
@@ -441,16 +434,10 @@ namespace VPB
             GameObject bodyHostGO = new GameObject("SectionBodyHost");
             bodyHostGO.transform.SetParent(content, false);
             _inAppHelpBodyHost = bodyHostGO.transform;
-            VerticalLayoutGroup bodyHostVlg = bodyHostGO.AddComponent<VerticalLayoutGroup>();
-            bodyHostVlg.spacing = GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef;
-            bodyHostVlg.childControlWidth = true;
-            bodyHostVlg.childForceExpandWidth = true;
-            bodyHostVlg.childControlHeight = true;
-            bodyHostVlg.childForceExpandHeight = false;
+            VerticalLayoutGroup bodyHostVlg = UI.AddVLG(bodyHostGO, spacing: GalleryUiDesignTokens.InAppHelpBodyLineSpacingRef);
             ContentSizeFitter bodyHostCsf = bodyHostGO.AddComponent<ContentSizeFitter>();
             bodyHostCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement bodyHostLe = bodyHostGO.AddComponent<LayoutElement>();
-            bodyHostLe.flexibleWidth = 1f;
+            LayoutElement bodyHostLe = UI.AddLE(bodyHostGO, flexibleWidth: 1f);
 
             EnsureInAppHelpIconPreviewChrome();
         }
@@ -521,36 +508,20 @@ namespace VPB
 
             GameObject blockGO = new GameObject("IconLineBlock");
             blockGO.transform.SetParent(_inAppHelpBodyHost, false);
-            VerticalLayoutGroup blockVlg = blockGO.AddComponent<VerticalLayoutGroup>();
-            blockVlg.spacing = 4f;
-            blockVlg.padding = new RectOffset(0, 0, 0, 0);
-            blockVlg.childAlignment = TextAnchor.UpperLeft;
-            blockVlg.childControlWidth = true;
-            blockVlg.childForceExpandWidth = true;
-            blockVlg.childControlHeight = true;
-            blockVlg.childForceExpandHeight = false;
+            VerticalLayoutGroup blockVlg = UI.AddVLG(blockGO, spacing: 4f);
             ContentSizeFitter blockCsf = blockGO.AddComponent<ContentSizeFitter>();
             blockCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement blockLe = blockGO.AddComponent<LayoutElement>();
-            blockLe.flexibleWidth = 1f;
+            LayoutElement blockLe = UI.AddLE(blockGO, flexibleWidth: 1f);
 
             Text bodyTxt = CreateInAppHelpBodyText(blockGO.transform, rich, line.IsSubheading);
             bodyTxt.raycastTarget = false;
 
             GameObject linkRowGO = new GameObject("LinkRow");
             linkRowGO.transform.SetParent(blockGO.transform, false);
-            HorizontalLayoutGroup linkHlg = linkRowGO.AddComponent<HorizontalLayoutGroup>();
-            linkHlg.spacing = 6f;
-            linkHlg.padding = new RectOffset(14, 0, 0, 0);
-            linkHlg.childAlignment = TextAnchor.MiddleLeft;
-            linkHlg.childControlWidth = false;
-            linkHlg.childForceExpandWidth = false;
-            linkHlg.childControlHeight = true;
-            linkHlg.childForceExpandHeight = false;
+            HorizontalLayoutGroup linkHlg = UI.AddHLG(linkRowGO, spacing: 6f, padding: UI.Pad(14, 0, 0, 0), childControlWidth: false, childForceExpandWidth: false);
             ContentSizeFitter linkCsf = linkRowGO.AddComponent<ContentSizeFitter>();
             linkCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement linkRowLe = linkRowGO.AddComponent<LayoutElement>();
-            linkRowLe.flexibleWidth = 1f;
+            LayoutElement linkRowLe = UI.AddLE(linkRowGO, flexibleWidth: 1f);
 
             for (int i = 0; i < line.Segments.Count; i++)
             {
@@ -601,8 +572,7 @@ namespace VPB
             try { VPBUiFont.ApplyTo(txt); } catch { }
             _inAppHelpBodyTexts.Add(txt);
 
-            LayoutElement le = btnGO.AddComponent<LayoutElement>();
-            le.minHeight = 22f;
+            LayoutElement le = UI.AddLE(btnGO, minHeight: 22f);
 
             var del = btnGO.AddComponent<UIHoverDelegate>();
             del.OnHoverChange = enter =>
@@ -670,8 +640,7 @@ namespace VPB
                 {
                     GameObject spacer = new GameObject("Spacer");
                     spacer.transform.SetParent(_inAppHelpBodyHost, false);
-                    LayoutElement le = spacer.AddComponent<LayoutElement>();
-                    le.preferredHeight = 2f;
+                    LayoutElement le = UI.AddLE(spacer, preferredHeight: 2f);
                     continue;
                 }
 
@@ -702,8 +671,7 @@ namespace VPB
                 name: subheading ? "Subheading" : (bullet ? "Bullet" : "Text"));
             ContentSizeFitter csf = txt.gameObject.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement le = txt.gameObject.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(txt.gameObject, flexibleWidth: 1f);
             _inAppHelpBodyTexts.Add(txt);
             return txt;
         }

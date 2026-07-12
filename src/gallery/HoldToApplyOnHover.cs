@@ -150,22 +150,7 @@ namespace VPB
             _fill.fillAmount = 0f;
             _fill.raycastTarget = false;
 
-            var textGO = new GameObject("Text");
-            textGO.transform.SetParent(_overlay.transform, false);
-            var trt = textGO.AddComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.sizeDelta = Vector2.zero;
-            trt.anchoredPosition = Vector2.zero;
-
-            _text = textGO.AddComponent<Text>();
-            _text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _text.fontSize = GalleryUiDesignTokens.FontRef;
-            _text.fontStyle = FontStyle.Normal;
-            _text.alignment = TextAnchor.MiddleCenter;
-            _text.color = Color.white;
-            _text.raycastTarget = false;
-            _text.text = ResolveHoldSeconds().ToString("0.0");
+            _text = UI.CreateLabel(_overlay, ResolveHoldSeconds().ToString("0.0"), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
         }
     }
 }

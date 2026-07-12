@@ -1986,12 +1986,7 @@ namespace VPB
             float uiS = InternalSettingsChromeScale();
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width * uiS;
-            le.minWidth = width * uiS;
-            le.preferredHeight = chipH;
-            le.minHeight = chipH;
-            le.flexibleWidth = 0f;
+            LayoutElement le = UI.AddLE(go, minWidth: width * uiS, minHeight: chipH, preferredWidth: width * uiS, preferredHeight: chipH, flexibleWidth: 0f);
 
             Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
             GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
@@ -2043,16 +2038,8 @@ namespace VPB
 
             GameObject controls = new GameObject("SettingsControlContainer");
             controls.transform.SetParent(detailsTr, false);
-            HorizontalLayoutGroup hlg = controls.AddComponent<HorizontalLayoutGroup>();
-            hlg.childAlignment = TextAnchor.MiddleRight;
-            hlg.childControlHeight = true;
-            hlg.childControlWidth = true;
-            hlg.childForceExpandHeight = false;
-            hlg.childForceExpandWidth = false;
-            hlg.spacing = 6f * uiS;
-            LayoutElement cle = controls.AddComponent<LayoutElement>();
-            cle.flexibleWidth = 1f;
-            cle.minHeight = chipH;
+            HorizontalLayoutGroup hlg = UI.AddHLG(controls, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            LayoutElement cle = UI.AddLE(controls, minHeight: chipH, flexibleWidth: 1f);
 
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
@@ -2103,12 +2090,7 @@ namespace VPB
             {
                 GameObject swatch = new GameObject("SettingsBorderColorSwatch");
                 swatch.transform.SetParent(controls.transform, false);
-                LayoutElement swle = swatch.AddComponent<LayoutElement>();
-                swle.preferredWidth = 72f * uiS;
-                swle.minWidth = 48f * uiS;
-                swle.preferredHeight = chipH - 4f * uiS;
-                swle.minHeight = chipH - 4f * uiS;
-                swle.flexibleWidth = 0f;
+                LayoutElement swle = UI.AddLE(swatch, minWidth: 48f * uiS, minHeight: chipH - 4f * uiS, preferredWidth: 72f * uiS, preferredHeight: chipH - 4f * uiS, flexibleWidth: 0f);
                 Image swImg = swatch.AddComponent<Image>();
                 swImg.color = def.GetColor();
                 swImg.raycastTarget = false;
@@ -2143,12 +2125,7 @@ namespace VPB
 
                 GameObject sliderHost = new GameObject("SettingsSliderHost");
                 sliderHost.transform.SetParent(controls.transform, false);
-                LayoutElement sle = sliderHost.AddComponent<LayoutElement>();
-                sle.preferredWidth = 320f * uiS;
-                sle.minWidth = 120f * uiS;
-                sle.preferredHeight = chipH;
-                sle.minHeight = chipH;
-                sle.flexibleWidth = 1f;
+                LayoutElement sle = UI.AddLE(sliderHost, minWidth: 120f * uiS, minHeight: chipH, preferredWidth: 320f * uiS, preferredHeight: chipH, flexibleWidth: 1f);
 
                 Slider slider = sliderHost.AddComponent<Slider>();
                 slider.minValue = def.Min;
@@ -2206,11 +2183,7 @@ namespace VPB
 
                 GameObject inputGO = new GameObject("SettingsValueInput");
                 inputGO.transform.SetParent(controls.transform, false);
-                LayoutElement ile = inputGO.AddComponent<LayoutElement>();
-                ile.preferredWidth = 78f * uiS;
-                ile.minWidth = 78f * uiS;
-                ile.preferredHeight = chipH;
-                ile.minHeight = chipH;
+                LayoutElement ile = UI.AddLE(inputGO, minWidth: 78f * uiS, minHeight: chipH, preferredWidth: 78f * uiS, preferredHeight: chipH);
                 Image inputBg = AddSettingsControlRoundedBg(inputGO, UI.ChromeDarker);
                 InputField input = inputGO.AddComponent<InputField>();
                 input.targetGraphic = inputBg;
@@ -2272,15 +2245,8 @@ namespace VPB
                     cle.minHeight = 40f * uiS;
                     GameObject btnRow = new GameObject("SettingsTextAreaButtons");
                     btnRow.transform.SetParent(controls.transform, false);
-                    HorizontalLayoutGroup bh = btnRow.AddComponent<HorizontalLayoutGroup>();
-                    bh.childAlignment = TextAnchor.MiddleRight;
-                    bh.spacing = 6f * uiS;
-                    bh.childControlWidth = true;
-                    bh.childControlHeight = true;
-                    bh.childForceExpandWidth = false;
-                    bh.childForceExpandHeight = false;
-                    LayoutElement ble = btnRow.AddComponent<LayoutElement>();
-                    ble.minHeight = chipH;
+                    HorizontalLayoutGroup bh = UI.AddHLG(btnRow, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+                    LayoutElement ble = UI.AddLE(btnRow, minHeight: chipH);
 
                     CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
                     {
@@ -2292,12 +2258,7 @@ namespace VPB
                 cle.minHeight = 96f * uiS;
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
-                LayoutElement tle = taHost.AddComponent<LayoutElement>();
-                tle.flexibleWidth = 1f;
-                tle.preferredWidth = 320f * uiS;
-                tle.minWidth = 120f * uiS;
-                tle.preferredHeight = 72f * uiS;
-                tle.minHeight = 72f * uiS;
+                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: 72f * uiS, preferredWidth: 320f * uiS, preferredHeight: 72f * uiS, flexibleWidth: 1f);
 
                 Image taBg = AddSettingsControlRoundedBg(taHost, new Color(0.16f, 0.16f, 0.18f, 1f));
                 InputField inf = taHost.AddComponent<InputField>();
@@ -2345,9 +2306,7 @@ namespace VPB
                 {
                     Text wt = UI.CreateLabel(controls, def.Label ?? "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(1f, 0.75f, 0.2f, 1f), TextAnchor.MiddleRight, richText: false, name: "SettingsWarningLabel");
                     GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
-                    LayoutElement wle = wt.gameObject.AddComponent<LayoutElement>();
-                    wle.flexibleWidth = 1f;
-                    wle.preferredHeight = chipH;
+                    LayoutElement wle = UI.AddLE(wt.gameObject, preferredHeight: chipH, flexibleWidth: 1f);
                     return;
                 }
                 if (def.OnAction != null)

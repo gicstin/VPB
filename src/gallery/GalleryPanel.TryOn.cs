@@ -367,28 +367,11 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = new Vector2(-(16f * s), TryOnRowHeight(s));
 
-            HorizontalLayoutGroup row = bar.AddComponent<HorizontalLayoutGroup>();
-            row.padding = new RectOffset(Mathf.RoundToInt(12f * s), Mathf.RoundToInt(12f * s), Mathf.RoundToInt(8f * s), Mathf.RoundToInt(8f * s));
-            row.spacing = 8f * s;
-            row.childAlignment = TextAnchor.MiddleLeft;
-            row.childControlWidth = true;
-            row.childControlHeight = true;
-            row.childForceExpandWidth = false;
-            row.childForceExpandHeight = true;
+            HorizontalLayoutGroup row = UI.AddHLG(bar, spacing: 8f * s, padding: UI.Pad(12, 12, 8, 8, s), childForceExpandWidth: false, childForceExpandHeight: true);
 
             // Label (takes the remaining width).
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(bar.transform, false);
-            Text label = labelGO.AddComponent<Text>();
-            label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            label.fontStyle = FontStyle.Normal;
-            label.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            label.color = new Color(1f, 1f, 1f, 0.92f);
-            label.alignment = TextAnchor.MiddleLeft;
-            label.horizontalOverflow = HorizontalWrapMode.Overflow;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
-            LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
-            labelLE.flexibleWidth = 1f;
+            Text label = UI.CreateLabel(bar, "", GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef), new Color(1f, 1f, 1f, 0.92f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "Label");
+            LayoutElement labelLE = UI.AddLE(label.gameObject, flexibleWidth: 1f);
             _tryOnLabel = label;
 
             // Compare (hold to peek at the original).
@@ -424,23 +407,9 @@ namespace VPB
             btn.navigation = new Navigation { mode = Navigation.Mode.None };
             if (onClick != null) btn.onClick.AddListener(() => onClick());
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = width;
-            le.flexibleWidth = 0f;
+            LayoutElement le = UI.AddLE(go, minWidth: width, preferredWidth: width, flexibleWidth: 0f);
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = text;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontStyle = FontStyle.Normal;
-            t.fontSize = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, scale, GalleryUiDesignTokens.FontMinRef);
-            t.color = new Color(1f, 1f, 1f, 0.95f);
-            t.alignment = TextAnchor.MiddleCenter;
-            RectTransform trt = textGO.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.sizeDelta = Vector2.zero;
+            UI.CreateLabel(go, text, GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, scale, GalleryUiDesignTokens.FontMinRef), new Color(1f, 1f, 1f, 0.95f), TextAnchor.MiddleCenter, name: "Text");
 
             return go;
         }

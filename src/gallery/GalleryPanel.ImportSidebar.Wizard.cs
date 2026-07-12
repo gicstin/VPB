@@ -17,38 +17,18 @@ namespace VPB
 
             GameObject block = new GameObject("ImportWizardStep_" + stepIndex);
             block.transform.SetParent(scrollContent, false);
-            LayoutElement blockLe = block.AddComponent<LayoutElement>();
-            blockLe.flexibleWidth = 1f;
+            LayoutElement blockLe = UI.AddLE(block, flexibleWidth: 1f);
 
-            VerticalLayoutGroup blockVlg = block.AddComponent<VerticalLayoutGroup>();
-            blockVlg.spacing = ImportSidebarBaseRowSpacing;
-            blockVlg.childControlWidth = true;
-            blockVlg.childControlHeight = true;
-            blockVlg.childForceExpandWidth = true;
-            blockVlg.childForceExpandHeight = false;
+            VerticalLayoutGroup blockVlg = UI.AddVLG(block, spacing: ImportSidebarBaseRowSpacing);
 
             GameObject header = new GameObject("StepHeader");
             header.transform.SetParent(block.transform, false);
             Image hdrBg = AddImportSidebarRoundedBg(header, ImportSidebarStepHeaderBg, raycastTarget: false);
 
-            GameObject hdrLabelGO = new GameObject("Label");
-            hdrLabelGO.transform.SetParent(header.transform, false);
-            RectTransform hdrLabelRT = hdrLabelGO.AddComponent<RectTransform>();
-            hdrLabelRT.anchorMin = Vector2.zero;
-            hdrLabelRT.anchorMax = Vector2.one;
-            hdrLabelRT.offsetMin = Vector2.zero;
-            hdrLabelRT.offsetMax = Vector2.zero;
-            Text hdrTxt = hdrLabelGO.AddComponent<Text>();
-            hdrTxt.alignment = TextAnchor.MiddleLeft;
-            hdrTxt.color = new Color(0.92f, 0.94f, 0.98f, 1f);
-            hdrTxt.fontSize = ImportSidebarBaseFontSize;
-            hdrTxt.text = (stepIndex + 1) + ". " + VPBTranslation.T(ImportWizardStepTitleKeys[stepIndex], ImportWizardStepTitleDefaults[stepIndex]);
-            hdrTxt.raycastTarget = false;
-            VPBUiFont.ApplyTo(hdrTxt);
+            Text hdrTxt = UI.CreateLabel(header, (stepIndex + 1) + ". " + VPBTranslation.T(ImportWizardStepTitleKeys[stepIndex], ImportWizardStepTitleDefaults[stepIndex]), ImportSidebarBaseFontSize, new Color(0.92f, 0.94f, 0.98f, 1f), TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            RectTransform hdrLabelRT = hdrTxt.GetComponent<RectTransform>();
 
-            LayoutElement hdrLe = header.AddComponent<LayoutElement>();
-            hdrLe.preferredHeight = ImportSidebarBaseRowHeight;
-            hdrLe.flexibleWidth = 1f;
+            LayoutElement hdrLe = UI.AddLE(header, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             _importWizardStepHeaders[stepIndex] = header;
 
             // Step headers must track the inner-pane scale like every other label, otherwise
@@ -65,15 +45,8 @@ namespace VPB
 
             GameObject content = new GameObject("StepContent");
             content.transform.SetParent(block.transform, false);
-            VerticalLayoutGroup contentVlg = content.AddComponent<VerticalLayoutGroup>();
-            contentVlg.spacing = ImportSidebarBaseRowSpacing;
-            contentVlg.padding = new RectOffset(0, 0, 0, Mathf.RoundToInt(ImportSidebarBaseRowSpacing * 0.5f));
-            contentVlg.childControlWidth = true;
-            contentVlg.childControlHeight = true;
-            contentVlg.childForceExpandWidth = true;
-            contentVlg.childForceExpandHeight = false;
-            LayoutElement contentLe = content.AddComponent<LayoutElement>();
-            contentLe.flexibleWidth = 1f;
+            VerticalLayoutGroup contentVlg = UI.AddVLG(content, spacing: ImportSidebarBaseRowSpacing, padding: new RectOffset(0, 0, 0, Mathf.RoundToInt(ImportSidebarBaseRowSpacing * 0.5f)));
+            LayoutElement contentLe = UI.AddLE(content, flexibleWidth: 1f);
             VerticalLayoutGroup contentVlgCaptured = contentVlg;
             innerPaneScaleActions.Add(s => {
                 if (contentVlgCaptured == null) return;
@@ -103,9 +76,7 @@ namespace VPB
 
             GameObject hintRow = new GameObject("MultiSelectHint");
             hintRow.transform.SetParent(parent, false);
-            LayoutElement hintLe = hintRow.AddComponent<LayoutElement>();
-            hintLe.preferredHeight = ImportSidebarBaseRowHeight * 0.75f;
-            hintLe.flexibleWidth = 1f;
+            LayoutElement hintLe = UI.AddLE(hintRow, preferredHeight: ImportSidebarBaseRowHeight * 0.75f, flexibleWidth: 1f);
             _importWizardMultiSelectHint = hintRow.AddComponent<Text>();
             _importWizardMultiSelectHint.text = "";
             _importWizardMultiSelectHint.color = new Color(1f, 0.75f, 0.45f, 1f);

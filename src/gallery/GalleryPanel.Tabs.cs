@@ -119,23 +119,15 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
             rt.anchoredPosition = Vector2.zero;
-            VerticalLayoutGroup v = go.AddComponent<VerticalLayoutGroup>();
-            v.spacing = GalleryUiDesignTokens.SideTabRowSpacingRef;
-            v.padding = new RectOffset(0, 0, 0, 0);
+            VerticalLayoutGroup v = UI.AddVLG(go, spacing: GalleryUiDesignTokens.SideTabRowSpacingRef, childAlignment: TextAnchor.UpperCenter);
             {
                 var vlg = v;
                 innerPaneScaleActions.Add(s => SyncSideTabListHolderVerticalLayoutOn(vlg, s));
             }
-            v.childAlignment = TextAnchor.UpperCenter;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
             ContentSizeFitter csf = go.AddComponent<ContentSizeFitter>();
             csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(go, flexibleWidth: 1f);
             return go;
         }
 
@@ -150,10 +142,7 @@ namespace VPB
             rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta = new Vector2(0, 0);
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
-            le.minHeight = 1f;
-            le.preferredHeight = 1f;
+            LayoutElement le = UI.AddLE(go, minHeight: 1f, preferredHeight: 1f, flexibleWidth: 1f);
             return go;
         }
 
@@ -1689,8 +1678,7 @@ namespace VPB
             AddHoverDelegate(btnGO);
 
             Button btn = btnGO.AddComponent<Button>();
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn);
 
             // Thumbnail (Fill 1x1)
             GameObject thumbGO = new GameObject("Thumbnail");
@@ -1803,8 +1791,7 @@ namespace VPB
             GameObject labelGO = labelText.gameObject;
 
             // Label Layout
-            LayoutElement labelLE = labelGO.AddComponent<LayoutElement>();
-            labelLE.minHeight = 30;
+            LayoutElement labelLE = UI.AddLE(labelGO, minHeight: 30);
 
             // Hover Logic
             UIHoverReveal hover = btnGO.AddComponent<UIHoverReveal>();
@@ -1827,26 +1814,20 @@ namespace VPB
             // Name
             Text listNameText = UI.CreateLabel(listRowGO, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.LowerLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Name");
             GameObject listNameGO = listNameText.gameObject;
-            LayoutElement listNameLE = listNameGO.AddComponent<LayoutElement>();
-            listNameLE.flexibleWidth = 1;
-            listNameLE.minHeight = 32;
+            LayoutElement listNameLE = UI.AddLE(listNameGO, minHeight: 32, flexibleWidth: 1);
 
             // Details Row
             GameObject detailsRowGO = new GameObject("Details");
             detailsRowGO.transform.SetParent(listRowGO.transform, false);
             HorizontalLayoutGroup detailsHLG = UI.AddHLG(detailsRowGO, 15f, UI.Pad(0f, 0f, 0f, 0f), childForceExpandWidth: false);
-            LayoutElement detailsLE = detailsRowGO.AddComponent<LayoutElement>();
-            detailsLE.flexibleWidth = 1;
-            detailsLE.minHeight = 24;
+            LayoutElement detailsLE = UI.AddLE(detailsRowGO, minHeight: 24, flexibleWidth: 1);
 
             // Helper to create detail text
             GameObject CreateDetailText(string name, string placeholder, float width)
             {
                 Text t = UI.CreateLabel(detailsRowGO, placeholder, GalleryUiDesignTokens.FontBodyRef, new Color(0.75f, 0.75f, 0.75f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: name);
                 GameObject go = t.gameObject;
-                LayoutElement le = go.AddComponent<LayoutElement>();
-                le.preferredWidth = width;
-                le.minWidth = width * 0.5f;
+                LayoutElement le = UI.AddLE(go, minWidth: width * 0.5f, preferredWidth: width);
                 return go;
             }
 
@@ -1863,19 +1844,8 @@ namespace VPB
             // Plain VerticalLayoutGroup child like Name/Details: let the group drive position/size.
             // Custom bottom-stretch anchors here fight the group and mis-place the strip.
             listBadgesGO.AddComponent<RectTransform>();
-            HorizontalLayoutGroup listBadgesHLG = listBadgesGO.AddComponent<HorizontalLayoutGroup>();
-            listBadgesHLG.childAlignment = TextAnchor.MiddleLeft;
-            listBadgesHLG.spacing = 4f;
-            listBadgesHLG.childControlWidth = true;
-            listBadgesHLG.childControlHeight = true;
-            listBadgesHLG.childForceExpandWidth = false;
-            listBadgesHLG.childForceExpandHeight = false;
-            listBadgesHLG.padding = new RectOffset(0, 0, 0, 0);
-            LayoutElement listBadgesLE = listBadgesGO.AddComponent<LayoutElement>();
-            listBadgesLE.flexibleWidth = 1f;
-            listBadgesLE.minHeight = 32f;
-            listBadgesLE.preferredHeight = 32f;
-            listBadgesLE.flexibleHeight = 0f;
+            HorizontalLayoutGroup listBadgesHLG = UI.AddHLG(listBadgesGO, spacing: 4f, childForceExpandWidth: false);
+            LayoutElement listBadgesLE = UI.AddLE(listBadgesGO, minHeight: 32f, preferredHeight: 32f, flexibleWidth: 1f, flexibleHeight: 0f);
 
             // Rating (Top-right corner)
             GameObject ratingGO = new GameObject("Rating");
@@ -1972,11 +1942,7 @@ namespace VPB
             aiBadgeBg.color = new Color(0f, 0.35f, 1f, 0.85f);
             aiBadgeBg.raycastTarget = false;
             Text aiBadgeText = UI.CreateLabel(aiBadgeGO, "A", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
-            LayoutElement aiBadgeLE = aiBadgeGO.AddComponent<LayoutElement>();
-            aiBadgeLE.preferredWidth = 32f;
-            aiBadgeLE.preferredHeight = 32f;
-            aiBadgeLE.minWidth = 32f;
-            aiBadgeLE.minHeight = 32f;
+            LayoutElement aiBadgeLE = UI.AddLE(aiBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             aiBadgeGO.SetActive(false);
 
             // Hidden package badge (top-left, to the right of AutoInstall "A")
@@ -1992,11 +1958,7 @@ namespace VPB
             hideBadgeBg.color = new Color(0.35f, 0.35f, 0.4f, 0.9f);
             hideBadgeBg.raycastTarget = false;
             Text hideBadgeText = UI.CreateLabel(hideBadgeGO, "H", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
-            LayoutElement hideBadgeLE = hideBadgeGO.AddComponent<LayoutElement>();
-            hideBadgeLE.preferredWidth = 32f;
-            hideBadgeLE.preferredHeight = 32f;
-            hideBadgeLE.minWidth = 32f;
-            hideBadgeLE.minHeight = 32f;
+            LayoutElement hideBadgeLE = UI.AddLE(hideBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             hideBadgeGO.SetActive(false);
 
             // Scan-whitelist excluded badge (top-left, to the right of Hide "H")
@@ -2013,11 +1975,7 @@ namespace VPB
             scanExBadgeBg.color = new Color(0.25f, 0.4f, 0.55f, 0.9f);
             scanExBadgeBg.raycastTarget = false;
             Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
-            LayoutElement scanExBadgeLE = scanExBadgeGO.AddComponent<LayoutElement>();
-            scanExBadgeLE.preferredWidth = 32f;
-            scanExBadgeLE.preferredHeight = 32f;
-            scanExBadgeLE.minWidth = 32f;
-            scanExBadgeLE.minHeight = 32f;
+            LayoutElement scanExBadgeLE = UI.AddLE(scanExBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             scanExBadgeGO.SetActive(false);
 
             // User tags badge (top-left; slot order via ApplyDynamicTopLeftBadgeLayout)
@@ -2033,11 +1991,7 @@ namespace VPB
             userTagsBadgeBg.color = new Color(0.14f, 0.42f, 0.48f, 0.9f);
             userTagsBadgeBg.raycastTarget = false;
             Text userTagsBadgeText = UI.CreateLabel(userTagsBadgeGO, "T", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
-            LayoutElement userTagsBadgeLE = userTagsBadgeGO.AddComponent<LayoutElement>();
-            userTagsBadgeLE.preferredWidth = 32f;
-            userTagsBadgeLE.preferredHeight = 32f;
-            userTagsBadgeLE.minWidth = 32f;
-            userTagsBadgeLE.minHeight = 32f;
+            LayoutElement userTagsBadgeLE = UI.AddLE(userTagsBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             userTagsBadgeGO.SetActive(false);
 
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
@@ -3327,7 +3281,7 @@ namespace VPB
             // Description text
             Text descText = UI.CreateLabel(indicatorGO, "Filtered", GalleryUiDesignTokens.FontBodyRef, Color.white, raycastTarget: false, name: "Description");
             GameObject descGO = descText.gameObject;
-            descGO.AddComponent<LayoutElement>().preferredWidth = 200;
+            UI.AddLE(descGO, preferredWidth: 200);
 
             // Clear button
             GameObject clearBtnGO = new GameObject("ClearButton");
@@ -3349,7 +3303,7 @@ namespace VPB
             RectTransform clearBtnRT = clearBtnGO.GetComponent<RectTransform>();
             clearBtnRT.sizeDelta = new Vector2(90, 20);
 
-            clearBtnGO.AddComponent<LayoutElement>().preferredWidth = 90;
+            UI.AddLE(clearBtnGO, preferredWidth: 90);
 
             return indicatorGO;
         }

@@ -296,18 +296,11 @@ namespace VPB
             Image panelImg = panel.AddComponent<Image>();
             panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
 
-            VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
-            vlg.padding           = new RectOffset(6, 6, 6, 6);
-            vlg.spacing           = 4;
+            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
             {
                 var v = vlg;
                 innerPaneScaleActions.Add(s => { if (v) { v.spacing = 4f * s; v.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s)); } });
             }
-            vlg.childControlHeight    = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth     = true;
-            vlg.childForceExpandWidth  = true;
-            vlg.childAlignment    = TextAnchor.UpperCenter;
 
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -395,9 +388,7 @@ namespace VPB
                 }
 
                 // Let layout control height
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = GalleryUiDesignTokens.PopupMenuRowHeightRef;
-                le.flexibleWidth   = 1f;
+                LayoutElement le = UI.AddLE(row, preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightRef, flexibleWidth: 1f);
             }
 
             try { RescaleLanguageMenuInternal(ChromeScale); } catch { }

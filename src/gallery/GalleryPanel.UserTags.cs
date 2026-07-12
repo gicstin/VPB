@@ -646,8 +646,7 @@ namespace VPB
 
             UI.AddVLG(root, 6f * s, UI.Pad(6f, 6f, 4f, 8f, s), TextAnchor.UpperCenter);
 
-            LayoutElement rootLe = root.AddComponent<LayoutElement>();
-            rootLe.flexibleWidth = 1f;
+            LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
             rootCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -657,17 +656,12 @@ namespace VPB
 
             float delSz = Mathf.Max(32f, 42f * s);
 
-            LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
-            titleRowLe.minHeight = Mathf.Max(30f * s, delSz);
-            titleRowLe.preferredHeight = Mathf.Max(34f * s, delSz);
-            titleRowLe.flexibleWidth = 1f;
+            LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: Mathf.Max(30f * s, delSz), preferredHeight: Mathf.Max(34f * s, delSz), flexibleWidth: 1f);
 
             Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0),
                 GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef),
                 new Color(0.88f, 0.88f, 0.92f, 1f), name: "AppliedTitleText");
-            LayoutElement titleLe = titleTxt.gameObject.AddComponent<LayoutElement>();
-            titleLe.flexibleWidth = 1f;
-            titleLe.minHeight = Mathf.Max(28f * s, delSz * 0.85f);
+            LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: Mathf.Max(28f * s, delSz * 0.85f), flexibleWidth: 1f);
             Sprite delSpr = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
             GameObject delBtn = UI.CreateSideTabSquareIconButton(titleRow, delSz, delSpr, RemoveFocusedAppliedUserTagFromSelection, new Color(0.5f, 0.22f, 0.22f, 1f), 6f * s);
             delBtn.name = "RemoveAppliedIconBtn";
@@ -725,10 +719,7 @@ namespace VPB
                 Image img = stripGo.AddComponent<Image>();
                 img.color = new Color(1f, 1f, 1f, 0.03f);
                 img.raycastTarget = true;
-                LayoutElement le = stripGo.AddComponent<LayoutElement>();
-                le.minHeight = 2f;
-                le.preferredHeight = 4f * s;
-                le.flexibleWidth = 1f;
+                LayoutElement le = UI.AddLE(stripGo, minHeight: 2f, preferredHeight: 4f * s, flexibleWidth: 1f);
                 UserTagApplyDropZone dz = stripGo.AddComponent<UserTagApplyDropZone>();
                 dz.Panel = this;
                 AddTooltipPlain(stripGo, VPBTranslation.T("gallery.usertags.apply_drop_zone_tip", "Drop tags here to apply to selection."));
@@ -1519,8 +1510,7 @@ namespace VPB
                 cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
                 cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
                 btn.colors = cb;
-                btn.transition = Selectable.Transition.None;
-                btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                UI.ConfigButtonFlat(btn);
                 btn.targetGraphic = bg;
                 removeGo.AddComponent<UIHoverBorder>();
             }
@@ -1629,8 +1619,7 @@ namespace VPB
                 cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
                 cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
                 btn.colors = cb;
-                btn.transition = Selectable.Transition.None;
-                btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                UI.ConfigButtonFlat(btn);
                 btn.targetGraphic = bg;
                 pinGo.AddComponent<UIHoverBorder>();
             }
@@ -2264,8 +2253,7 @@ namespace VPB
 
             UI.AddVLG(root, 7f * s, UI.Pad(6f, 6f, 4f, 10f, s), TextAnchor.UpperCenter);
 
-            LayoutElement rootLe = root.AddComponent<LayoutElement>();
-            rootLe.flexibleWidth = 1f;
+            LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
             rootCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -2276,17 +2264,11 @@ namespace VPB
 
             GameObject titleRow = UI.CreateChildRT(root, "TagsTitleRow");
             UI.AddHLG(titleRow, 5f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
-            LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
-            titleRowLe.minHeight = titleBand;
-            titleRowLe.preferredHeight = titleBand;
-            titleRowLe.flexibleWidth = 1f;
+            LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
 
             Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0),
                 titleFs, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, name: "BulkTitle");
-            LayoutElement titleLe = titleTxt.gameObject.AddComponent<LayoutElement>();
-            titleLe.minHeight = titleBand;
-            titleLe.preferredHeight = titleBand;
-            titleLe.flexibleWidth = 1f;
+            LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
 
             CreateUserTagModeMiniButton(titleRow, "F", UserTagAvailMode.FilterByTags, miniSq, s,
                 VPBTranslation.T("gallery.usertags.mini_filter_tip", "Filter Mode: grid shows items matching selected tags."));
@@ -2298,10 +2280,7 @@ namespace VPB
             // false: only Apply (flexibleWidth 1) grows; true spreads width across all children and crushes the label.
             GameObject btnRow = UI.CreateChildRT(root, "BulkBtnRow");
             UI.AddHLG(btnRow, 6f * s, childForceExpandWidth: false);
-            LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
-            rowLe.minHeight = 34f * s;
-            rowLe.preferredHeight = 36f * s;
-            rowLe.flexibleWidth = 1f;
+            LayoutElement rowLe = UI.AddLE(btnRow, minHeight: 34f * s, preferredHeight: 36f * s, flexibleWidth: 1f);
 
             float editSq = 36f * s;
             Sprite editSpr = UI.LoadIconSprite("vpb_icons/edit.png", new Color(0.88f, 0.88f, 0.9f, 1f));
@@ -2341,10 +2320,7 @@ namespace VPB
                 float pad = Mathf.RoundToInt(4f * s);
                 rrt.offsetMin = new Vector2(pad, pad);
                 rrt.offsetMax = new Vector2(-pad, -pad);
-                LayoutElement le = rowGo.AddComponent<LayoutElement>();
-                le.minHeight = Mathf.Max(28f, 34f * s);
-                le.preferredHeight = Mathf.Max(28f, 34f * s);
-                le.flexibleWidth = 1f;
+                LayoutElement le = UI.AddLE(rowGo, minHeight: Mathf.Max(28f, 34f * s), preferredHeight: Mathf.Max(28f, 34f * s), flexibleWidth: 1f);
 
                 string tip = VPBTranslation.T(
                     "gallery.usertags.inherit_tags_tip",
@@ -2714,18 +2690,13 @@ namespace VPB
             go.transform.SetParent(parent.transform, false);
             Image img = AddUserTagSideChromeRoundedBg(go, UserTagAvailModeColor(mode));
             Button btn = go.AddComponent<Button>();
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn);
             btn.targetGraphic = img;
             UserTagAvailMode target = mode;
             btn.onClick.AddListener(() => SetUserTagAvailMode(target));
             go.AddComponent<UIHoverBorder>();
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = sq;
-            le.minHeight = le.preferredHeight = sq;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
+            LayoutElement le = UI.AddLE(go, minWidth: sq, minHeight: sq, preferredWidth: sq, preferredHeight: sq, flexibleWidth: 0f, flexibleHeight: 0f);
 
             UI.CreateLabel(go, letter, GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef),
                 Color.white, TextAnchor.MiddleCenter, raycastTarget: false);
@@ -2933,25 +2904,20 @@ namespace VPB
 
             GameObject titleRow = UI.CreateChildRT(panel, "TitleRow");
             UI.AddHLG(titleRow, 0f, childAlignment: TextAnchor.UpperLeft);
-            LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
-            titleRowLe.minHeight = Mathf.Max(26f * s, headerChromeSq * 0.72f);
+            LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: Mathf.Max(26f * s, headerChromeSq * 0.72f));
             titleRowLe.preferredHeight = titleRowLe.minHeight;
 
             Text headerTitleTxt = UI.CreateLabel(titleRow, "", editorType.Prose, new Color(0.92f, 0.92f, 0.95f, 1f), name: "TagsDbTitle");
             _userTagEditorTitleText = headerTitleTxt;
             GameObject titleGo = headerTitleTxt.gameObject;
-            LayoutElement titleHLe = titleGo.AddComponent<LayoutElement>();
-            titleHLe.flexibleWidth = 0f;
-            titleHLe.minHeight = titleRowLe.minHeight;
+            LayoutElement titleHLe = UI.AddLE(titleGo, minHeight: titleRowLe.minHeight, flexibleWidth: 0f);
             ContentSizeFitter titleCsf = titleGo.AddComponent<ContentSizeFitter>();
             titleCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             titleCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             GameObject headerRow = UI.CreateChildRT(panel, "HeaderRow");
             UI.AddHLG(headerRow, 6f * s, childForceExpandWidth: false);
-            LayoutElement hle = headerRow.AddComponent<LayoutElement>();
-            hle.minHeight = Mathf.Max(headerChromeSq, searchBarH);
-            hle.preferredHeight = headerChromeSq;
+            LayoutElement hle = UI.AddLE(headerRow, minHeight: Mathf.Max(headerChromeSq, searchBarH), preferredHeight: headerChromeSq);
 
             float sortSq = headerChromeSq;
             Color sortBackdropCol = new Color(0.22f, 0.42f, 0.58f, 1f);
@@ -2966,10 +2932,7 @@ namespace VPB
             GameObject filterGo = new GameObject("FilterInput");
             filterGo.transform.SetParent(headerRow.transform, false);
             Image fiBg = UI.AddGalleryElementRoundedBg(filterGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement fiLe = filterGo.AddComponent<LayoutElement>();
-            fiLe.flexibleWidth = 1f;
-            fiLe.minWidth = 0f;
-            fiLe.minHeight = searchBarH;
+            LayoutElement fiLe = UI.AddLE(filterGo, minWidth: 0f, minHeight: searchBarH, flexibleWidth: 1f);
 
             GameObject fta = new GameObject("TextArea");
             fta.transform.SetParent(filterGo.transform, false);
@@ -2999,9 +2962,7 @@ namespace VPB
             AddTooltipPlain(closeBtn, VPBTranslation.T("gallery.usertags.editor_close_tip", "Close"));
 
             GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0f, 300f * s, Vector2.zero, 14f * s, 3f * s, false);
-            LayoutElement scLe = scrollGO.AddComponent<LayoutElement>();
-            scLe.flexibleHeight = 1f;
-            scLe.minHeight = 280f * s;
+            LayoutElement scLe = UI.AddLE(scrollGO, minHeight: 280f * s, flexibleHeight: 1f);
             Transform vp = scrollGO.transform.Find("Viewport");
             _userTagEditorRowsParent = vp != null ? vp.Find("Content") : null;
             if (_userTagEditorRowsParent != null)
@@ -3016,10 +2977,7 @@ namespace VPB
 
             GameObject newTagBlock = UI.CreateChildRT(panel, "NewTagBlock");
             UI.AddVLG(newTagBlock, 4f * s);
-            LayoutElement ntbLe = newTagBlock.AddComponent<LayoutElement>();
-            ntbLe.flexibleWidth = 1f;
-            ntbLe.minHeight = 152f * s;
-            ntbLe.preferredHeight = 168f * s;
+            LayoutElement ntbLe = UI.AddLE(newTagBlock, minHeight: 152f * s, preferredHeight: 168f * s, flexibleWidth: 1f);
 
             GameObject newInGo = new GameObject("NewTagInput");
             newInGo.transform.SetParent(newTagBlock.transform, false);
@@ -3027,10 +2985,7 @@ namespace VPB
             nBg.color = UserTagEditorNewTagChromeBaseCol;
             nBg.raycastTarget = true;
             _userTagEditorNewTagInputChrome = nBg;
-            LayoutElement nLe = newInGo.AddComponent<LayoutElement>();
-            nLe.flexibleWidth = 1f;
-            nLe.minHeight = 160f * s;
-            nLe.preferredHeight = 168f * s;
+            LayoutElement nLe = UI.AddLE(newInGo, minHeight: 160f * s, preferredHeight: 168f * s, flexibleWidth: 1f);
             GameObject nta = new GameObject("TextArea");
             nta.transform.SetParent(newInGo.transform, false);
             RectTransform ntaRt = nta.AddComponent<RectTransform>();
@@ -3071,15 +3026,11 @@ namespace VPB
             arH.childControlHeight = true;
             arH.childForceExpandWidth = false;
             arH.childForceExpandHeight = false;
-            LayoutElement arLe = actionRow.AddComponent<LayoutElement>();
-            arLe.minHeight = actSq + 4f * s;
-            arLe.preferredHeight = actSq + 4f * s;
+            LayoutElement arLe = UI.AddLE(actionRow, minHeight: actSq + 4f * s, preferredHeight: actSq + 4f * s);
 
             GameObject arPadL = new GameObject("PadL");
             arPadL.transform.SetParent(actionRow.transform, false);
-            LayoutElement arPadLle = arPadL.AddComponent<LayoutElement>();
-            arPadLle.flexibleWidth = 1f;
-            arPadLle.minWidth = 0f;
+            LayoutElement arPadLle = UI.AddLE(arPadL, minWidth: 0f, flexibleWidth: 1f);
 
             Color createCol = new Color(0.25f, 0.45f, 0.28f, 1f);
             Color removeCol = new Color(0.45f, 0.22f, 0.22f, 1f);
@@ -3117,9 +3068,7 @@ namespace VPB
 
             GameObject arPadR = new GameObject("PadR");
             arPadR.transform.SetParent(actionRow.transform, false);
-            LayoutElement arPadRle = arPadR.AddComponent<LayoutElement>();
-            arPadRle.flexibleWidth = 1f;
-            arPadRle.minWidth = 0f;
+            LayoutElement arPadRle = UI.AddLE(arPadR, minWidth: 0f, flexibleWidth: 1f);
 
             _userTagEditorMergeModalGo = new GameObject("UserTagEditorMergeModal");
             _userTagEditorMergeModalGo.transform.SetParent(dim.transform, false);
@@ -3144,16 +3093,12 @@ namespace VPB
             UI.AddVLG(mmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
             _userTagEditorMergeModalTitleText = UI.CreateLabel(mmPanel, VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), editorType.Prose, Color.white, name: "MergeTitle");
-            LayoutElement mmTle = _userTagEditorMergeModalTitleText.gameObject.AddComponent<LayoutElement>();
-            mmTle.minHeight = 24f * s;
-            mmTle.flexibleWidth = 1f;
+            LayoutElement mmTle = UI.AddLE(_userTagEditorMergeModalTitleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
 
             GameObject mmInGo = new GameObject("MergeDialogInput");
             mmInGo.transform.SetParent(mmPanel.transform, false);
             Image mmIBg = UI.AddGalleryElementRoundedBg(mmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement mmILe = mmInGo.AddComponent<LayoutElement>();
-            mmILe.flexibleWidth = 1f;
-            mmILe.minHeight = 36f * s;
+            LayoutElement mmILe = UI.AddLE(mmInGo, minHeight: 36f * s, flexibleWidth: 1f);
             GameObject mmTa = new GameObject("TextArea");
             mmTa.transform.SetParent(mmInGo.transform, false);
             RectTransform mmTaRt = mmTa.AddComponent<RectTransform>();
@@ -3170,21 +3115,15 @@ namespace VPB
 
             GameObject mmBtnRow = UI.CreateChildRT(mmPanel, "MergeDialogButtons");
             UI.AddHLG(mmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
-            LayoutElement mmBRle = mmBtnRow.AddComponent<LayoutElement>();
-            mmBRle.minHeight = 40f * s;
-            mmBRle.flexibleWidth = 1f;
+            LayoutElement mmBRle = UI.AddLE(mmBtnRow, minHeight: 40f * s, flexibleWidth: 1f);
 
             GameObject mmCancel = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseMergeDialog);
             mmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement mmCL = mmCancel.AddComponent<LayoutElement>();
-            mmCL.flexibleWidth = 1f;
-            mmCL.minHeight = 38f * s;
+            LayoutElement mmCL = UI.AddLE(mmCancel, minHeight: 38f * s, flexibleWidth: 1f);
 
             GameObject mmOk = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_confirm", "Merge"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmMergeFromDialog);
             mmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement mmOL = mmOk.AddComponent<LayoutElement>();
-            mmOL.flexibleWidth = 1f;
-            mmOL.minHeight = 38f * s;
+            LayoutElement mmOL = UI.AddLE(mmOk, minHeight: 38f * s, flexibleWidth: 1f);
 
             _userTagEditorMergeModalGo.transform.SetAsLastSibling();
 
@@ -3211,16 +3150,12 @@ namespace VPB
             UI.AddVLG(rmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
             _userTagEditorRenameModalTitleText = UI.CreateLabel(rmPanel, VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…"), editorType.Prose, Color.white, name: "RenameTitle");
-            LayoutElement rmTle = _userTagEditorRenameModalTitleText.gameObject.AddComponent<LayoutElement>();
-            rmTle.minHeight = 24f * s;
-            rmTle.flexibleWidth = 1f;
+            LayoutElement rmTle = UI.AddLE(_userTagEditorRenameModalTitleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
 
             GameObject rmInGo = new GameObject("RenameDialogInput");
             rmInGo.transform.SetParent(rmPanel.transform, false);
             Image rmIBg = UI.AddGalleryElementRoundedBg(rmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement rmILe = rmInGo.AddComponent<LayoutElement>();
-            rmILe.flexibleWidth = 1f;
-            rmILe.minHeight = 36f * s;
+            LayoutElement rmILe = UI.AddLE(rmInGo, minHeight: 36f * s, flexibleWidth: 1f);
             GameObject rmTa = new GameObject("TextArea");
             rmTa.transform.SetParent(rmInGo.transform, false);
             RectTransform rmTaRt = rmTa.AddComponent<RectTransform>();
@@ -3237,21 +3172,15 @@ namespace VPB
 
             GameObject rmBtnRow = UI.CreateChildRT(rmPanel, "RenameDialogButtons");
             UI.AddHLG(rmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
-            LayoutElement rmBRle = rmBtnRow.AddComponent<LayoutElement>();
-            rmBRle.minHeight = 40f * s;
-            rmBRle.flexibleWidth = 1f;
+            LayoutElement rmBRle = UI.AddLE(rmBtnRow, minHeight: 40f * s, flexibleWidth: 1f);
 
             GameObject rmCancel = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseRenameDialog);
             rmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement rmCL = rmCancel.AddComponent<LayoutElement>();
-            rmCL.flexibleWidth = 1f;
-            rmCL.minHeight = 38f * s;
+            LayoutElement rmCL = UI.AddLE(rmCancel, minHeight: 38f * s, flexibleWidth: 1f);
 
             GameObject rmOk = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_rename_confirm", "Rename"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmRenameFromDialog);
             rmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement rmOL = rmOk.AddComponent<LayoutElement>();
-            rmOL.flexibleWidth = 1f;
-            rmOL.minHeight = 38f * s;
+            LayoutElement rmOL = UI.AddLE(rmOk, minHeight: 38f * s, flexibleWidth: 1f);
 
             _userTagEditorRenameModalGo.transform.SetAsLastSibling();
 
@@ -4184,10 +4113,7 @@ namespace VPB
                 bool sel = _userTagEditorRowSelection.Contains(nameSnap);
                 Image bg = UI.AddGalleryElementRoundedBg(rowGo, sel ? selCol : baseCol);
                 _userTagEditorRowVisuals.Add(new UserTagEditorRowVisual { Name = nameSnap, Bg = bg });
-                LayoutElement rle = rowGo.AddComponent<LayoutElement>();
-                rle.minHeight = rowH;
-                rle.preferredHeight = rowH;
-                rle.flexibleWidth = 1f;
+                LayoutElement rle = UI.AddLE(rowGo, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
 
                 Button btn = rowGo.AddComponent<Button>();
                 btn.targetGraphic = bg;

@@ -88,25 +88,15 @@ namespace VPB
             var headerBehaviour = cqRoot.AddComponent<CategoryQuickSwitchHeaderBehaviour>();
             headerBehaviour.Panel = this;
 
-            var hlg = cqRoot.AddComponent<HorizontalLayoutGroup>();
             // Small left inset so arrow never touches edge.
-            hlg.padding = new RectOffset(6, 0, 0, 0);
-            hlg.spacing = 6;
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandHeight = true;
-            hlg.childControlWidth = true;
-            hlg.childForceExpandWidth = false;
+            var hlg = UI.AddHLG(cqRoot, spacing: 6, padding: UI.Pad(6, 0, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
 
             // Chevron indicator, left of label (header only; not settings rows).
             {
                 var arrowGO = new GameObject("CategoryQuickArrow");
                 arrowGO.transform.SetParent(cqRoot.transform, false);
-                var arrowLE = arrowGO.AddComponent<LayoutElement>();
+                var arrowLE = UI.AddLE(arrowGO, minWidth: GalleryUiDesignTokens.TitleBarChipRef, preferredWidth: GalleryUiDesignTokens.TitleBarChipRef, preferredHeight: GalleryUiDesignTokens.TitleBarCategoryRowHeightRef);
                 _categoryQuickArrowLE = arrowLE;
-                arrowLE.preferredWidth = GalleryUiDesignTokens.TitleBarChipRef;
-                arrowLE.minWidth = GalleryUiDesignTokens.TitleBarChipRef;
-                arrowLE.preferredHeight = GalleryUiDesignTokens.TitleBarCategoryRowHeightRef;
 
                 GameObject iconGO = new GameObject("Icon");
                 iconGO.transform.SetParent(arrowGO.transform, false);
@@ -642,15 +632,8 @@ namespace VPB
 
                 if (_categoryQuickMenuOuterGO != null && ordered.Count == 0)
                 {
-                    var empty = new GameObject("EmptyHint");
-                    empty.transform.SetParent(_categoryQuickMenuContentGO.transform, false);
-                    var t = empty.AddComponent<Text>();
-                    VPBUiFont.ApplyTo(t);
-                    t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-                    t.color = new Color(0.7f, 0.7f, 0.75f);
-                    t.text = VPBTranslation.T("gallery.category_quick.empty", "No categories available.");
-                    var le = empty.AddComponent<LayoutElement>();
-                    le.preferredHeight = 28;
+                    var t = UI.CreateLabel(_categoryQuickMenuContentGO, VPBTranslation.T("gallery.category_quick.empty", "No categories available."), GalleryUiDesignTokens.FontBodyRef, new Color(0.7f, 0.7f, 0.75f), name: "EmptyHint");
+                    var le = UI.AddLE(t.gameObject, preferredHeight: 28);
                 }
 
                 _categoryQuickMenuDirty = false;
@@ -680,9 +663,7 @@ namespace VPB
             hlg.childForceExpandHeight = false;
             hlg.childForceExpandWidth = false;
 
-            var rowLe = row.AddComponent<LayoutElement>();
-            rowLe.preferredHeight = 36;
-            rowLe.minHeight = 36;
+            var rowLe = UI.AddLE(row, minHeight: 36, preferredHeight: 36);
 
             var bg = AddCategoryQuickRoundedBg(row, isActive ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop);
 
@@ -694,31 +675,12 @@ namespace VPB
 
             string numPrefix = keyboardDigitLabel >= 0 ? (keyboardDigitLabel == 0 ? "0." : keyboardDigitLabel + ".") : rowLabelNumber + ".";
 
-            var numGO = new GameObject("Idx");
-            numGO.transform.SetParent(row.transform, false);
-            var numT = numGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(numT);
-            numT.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            numT.fontStyle = FontStyle.Normal;
-            numT.color = UI.PopupMutedText;
-            numT.alignment = TextAnchor.MiddleLeft;
-            numT.text = numPrefix;
-            var numLe = numGO.AddComponent<LayoutElement>();
-            numLe.preferredWidth = 34;
-            numLe.minWidth = 34;
+            var numT = UI.CreateLabel(row, numPrefix, GalleryUiDesignTokens.FontBodyRef, UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Idx");
+            var numLe = UI.AddLE(numT.gameObject, minWidth: 34, preferredWidth: 34);
 
-            var nameGO = new GameObject("Name");
-            nameGO.transform.SetParent(row.transform, false);
-            var nameT = nameGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(nameT);
-            nameT.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            nameT.color = isActive ? UI.PopupText : UI.PopupMutedText;
-            nameT.alignment = TextAnchor.MiddleLeft;
             int cnt = categoryCounts != null && categoryCounts.ContainsKey(cat.name ?? "") ? categoryCounts[cat.name] : 0;
-            nameT.text = (cat.name ?? "") + " (" + cnt + ")";
-            var nameLe = nameGO.AddComponent<LayoutElement>();
-            nameLe.flexibleWidth = 1;
-            nameLe.minWidth = 40;
+            var nameT = UI.CreateLabel(row, (cat.name ?? "") + " (" + cnt + ")", GalleryUiDesignTokens.FontBodyRef, isActive ? UI.PopupText : UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Name");
+            var nameLe = UI.AddLE(nameT.gameObject, minWidth: 40, flexibleWidth: 1);
         }
 
         internal void ApplyCategoryQuickPick(Gallery.Category c)

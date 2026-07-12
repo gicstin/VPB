@@ -97,8 +97,7 @@ namespace VPB
             HorizontalLayoutGroup hh = header.AddComponent<HorizontalLayoutGroup>();
             hh.childAlignment = TextAnchor.MiddleLeft;
             hh.childForceExpandWidth = false;
-            LayoutElement hle = header.AddComponent<LayoutElement>();
-            hle.minHeight = 44f * s;
+            LayoutElement hle = UI.AddLE(header, minHeight: 44f * s);
 
             GameObject titleGo = new GameObject("Title");
             titleGo.transform.SetParent(header.transform, false);
@@ -109,8 +108,7 @@ namespace VPB
             title.color = Color.white;
             title.text = VPBTranslation.T("bench.simple.title", "Scene Load Test");
             try { VPBUiFont.ApplyTo(title); } catch { }
-            LayoutElement tle = titleGo.AddComponent<LayoutElement>();
-            tle.flexibleWidth = 1f;
+            LayoutElement tle = UI.AddLE(titleGo, flexibleWidth: 1f);
 
             ScanWlCreateHeaderButton(header.transform, 84f * s, 36f * s, VPBTranslation.T("hook.close", "Close"), bodyFont,
                 new Color(0.38f, 0.32f, 0.22f, 1f), HideBenchEditorModal);
@@ -118,15 +116,12 @@ namespace VPB
             _benchHelpText = UI.CreateLabel(panel, VPBTranslation.T("bench.simple.help",
                 "Pick scenes → Run Test. Changes save automatically. Compares when baseline exists."),
                 bodyFont, new Color(0.72f, 0.76f, 0.82f, 1f), name: "Help");
-            LayoutElement helpLe = _benchHelpText.gameObject.AddComponent<LayoutElement>();
-            helpLe.minHeight = 52f * s;
+            LayoutElement helpLe = UI.AddLE(_benchHelpText.gameObject, minHeight: 52f * s);
 
             // Scroll body
             GameObject scrollHost = new GameObject("Scroll");
             scrollHost.transform.SetParent(panel.transform, false);
-            LayoutElement scrollLe = scrollHost.AddComponent<LayoutElement>();
-            scrollLe.flexibleHeight = 1f;
-            scrollLe.minHeight = 400f * s;
+            LayoutElement scrollLe = UI.AddLE(scrollHost, minHeight: 400f * s, flexibleHeight: 1f);
             Image scrollBg = scrollHost.AddComponent<Image>();
             scrollBg.color = new Color(0.09f, 0.10f, 0.12f, 1f);
             scrollBg.raycastTarget = true;
@@ -167,8 +162,7 @@ namespace VPB
 
             // Status + actions (fixed below scroll)
             _benchStatusText = UI.CreateLabel(panel, "", bodyFont, new Color(0.65f, 0.82f, 1f, 1f), TextAnchor.MiddleLeft, name: "Status");
-            LayoutElement stLe = _benchStatusText.gameObject.AddComponent<LayoutElement>();
-            stLe.minHeight = 36f * s;
+            LayoutElement stLe = UI.AddLE(_benchStatusText.gameObject, minHeight: 36f * s);
 
             ScanWlCreateHeaderButton(panel.transform, 0f, 50f * s,
                 VPBTranslation.T("bench.simple.run", "Run Test"),
@@ -181,8 +175,7 @@ namespace VPB
             subH.spacing = 6f * s;
             subH.childForceExpandWidth = true;
             subH.childControlWidth = true;
-            LayoutElement subLe = subRow.AddComponent<LayoutElement>();
-            subLe.minHeight = 34f * s;
+            LayoutElement subLe = UI.AddLE(subRow, minHeight: 34f * s);
             int subFont = bodyFont;
 
             ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
@@ -367,8 +360,7 @@ namespace VPB
             h.spacing = 8f * s;
             h.childForceExpandWidth = true;
             h.childControlWidth = true;
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 40f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 40f * s);
 
             BenchAddPresetButton(row.transform, cfg, VpbBenchPresetKind.Quick, bodyFont, s);
             BenchAddPresetButton(row.transform, cfg, VpbBenchPresetKind.Standard, bodyFont, s);
@@ -401,8 +393,7 @@ namespace VPB
             h.spacing = 8f * s;
             h.childAlignment = TextAnchor.MiddleLeft;
             h.childForceExpandWidth = false;
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 40f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 40f * s);
 
             ScanWlCreateHeaderButton(row.transform, 36f * s, 34f * s, "◀", bodyFont,
                 new Color(0.22f, 0.24f, 0.28f, 1f), () =>
@@ -417,9 +408,7 @@ namespace VPB
 
             bool hasBaseline = VpbBenchComparer.BaselineExists(cfg.BaselineId);
             Text nameText = UI.CreateLabel(row, (cfg.BaselineId ?? "main") + (hasBaseline ? "" : " (new)"), bodyFont, Color.white, TextAnchor.MiddleCenter, name: "Name");
-            LayoutElement nle = nameText.gameObject.AddComponent<LayoutElement>();
-            nle.minWidth = 180f * s;
-            nle.preferredWidth = 220f * s;
+            LayoutElement nle = UI.AddLE(nameText.gameObject, minWidth: 180f * s, preferredWidth: 220f * s);
 
             ScanWlCreateHeaderButton(row.transform, 36f * s, 34f * s, "▶", bodyFont,
                 new Color(0.22f, 0.24f, 0.28f, 1f), () =>
@@ -696,8 +685,7 @@ namespace VPB
 
             GameObject row = new GameObject("ResultRow");
             row.transform.SetParent(parent, false);
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 30f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 30f * s);
             Image img = UI.AddGalleryElementRoundedBg(row, bg);
 
             Text t = UI.CreateLabel(row, text, fontSize, fg, TextAnchor.MiddleLeft, name: "Text");
@@ -810,24 +798,11 @@ namespace VPB
             row.transform.SetParent(parent, false);
             Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
             rowBg.raycastTarget = true;
-            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
-            h.padding = new RectOffset(Mathf.RoundToInt(6f * s), Mathf.RoundToInt(4f * s), Mathf.RoundToInt(3f * s), Mathf.RoundToInt(3f * s));
-            h.spacing = 6f * s;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = false;
-            h.childForceExpandHeight = false;
-            LayoutElement rle = row.AddComponent<LayoutElement>();
-            rle.minHeight = rowH;
-            rle.preferredHeight = rowH;
-            rle.flexibleWidth = 1f;
-            rle.minWidth = 0f;
+            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 6f * s, padding: UI.Pad(6, 4, 3, 3, s), childForceExpandWidth: false);
+            LayoutElement rle = UI.AddLE(row, minWidth: 0f, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
 
             Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
-            LayoutElement lle = lt.gameObject.AddComponent<LayoutElement>();
-            lle.flexibleWidth = 1f;
-            lle.minWidth = 0f;
+            LayoutElement lle = UI.AddLE(lt.gameObject, minWidth: 0f, flexibleWidth: 1f);
 
             ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, "×",
                 fontSize,
@@ -891,8 +866,7 @@ namespace VPB
         static void BenchAddSimpleLabel(Transform parent, string text, int fontSize, float s)
         {
             Text t = UI.CreateLabel(parent.gameObject, text, fontSize, new Color(0.88f, 0.90f, 0.94f, 1f), name: "Label");
-            LayoutElement le = t.gameObject.AddComponent<LayoutElement>();
-            le.minHeight = 28f * s;
+            LayoutElement le = UI.AddLE(t.gameObject, minHeight: 28f * s);
         }
 
         static void BenchAddSimpleToggle(Transform parent, string label, bool on, Action<bool> onChanged, int fontSize, float s)
@@ -906,16 +880,14 @@ namespace VPB
             h.spacing = 10f * s;
             h.childAlignment = TextAnchor.MiddleLeft;
             h.childForceExpandWidth = false;
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 38f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 38f * s);
 
             ScanWlCreateHeaderButton(row.transform, 38f * s, 34f * s, on ? "✓" : "",
                 fontSize, on ? new Color(0.28f, 0.50f, 0.34f, 1f) : new Color(0.20f, 0.22f, 0.26f, 1f),
                 () => onChanged(!on));
 
             Text t = UI.CreateLabel(row, label, fontSize, Color.white, name: "Text");
-            LayoutElement tle = t.gameObject.AddComponent<LayoutElement>();
-            tle.flexibleWidth = 1f;
+            LayoutElement tle = UI.AddLE(t.gameObject, flexibleWidth: 1f);
         }
 
         void BenchAddSceneActionRow(Transform parent, VpbBenchConfig cfg, int fontSize, float s)
@@ -931,8 +903,7 @@ namespace VPB
             h.spacing = 6f * s;
             h.childForceExpandWidth = true;
             h.childControlWidth = true;
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 34f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 34f * s);
 
             ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.pick_scenes", "Pick…"),
@@ -960,8 +931,7 @@ namespace VPB
             h.spacing = 6f * s;
             h.childForceExpandWidth = true;
             h.childControlWidth = true;
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.minHeight = 34f * s;
+            LayoutElement le = UI.AddLE(row, minHeight: 34f * s);
 
             ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.pick_packages", "Pick…"),
@@ -1060,8 +1030,7 @@ namespace VPB
             dim.raycastTarget = true;
             // Consume clicks on confirm overlay — do not pass through to bench dim close handler.
             Button dimBlock = _benchConfirmRoot.AddComponent<Button>();
-            dimBlock.transition = Selectable.Transition.None;
-            dimBlock.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(dimBlock);
 
             GameObject panel = new GameObject("Panel");
             panel.transform.SetParent(_benchConfirmRoot.transform, false);
@@ -1090,9 +1059,7 @@ namespace VPB
             try { VPBUiFont.ApplyTo(titleText); } catch { }
 
             Text bodyText = UI.CreateLabel(panel, message ?? "", bodyFont, new Color(0.88f, 0.90f, 0.94f, 1f), TextAnchor.UpperLeft, verticalWrap: VerticalWrapMode.Overflow, name: "Body");
-            LayoutElement bodyLe = bodyText.gameObject.AddComponent<LayoutElement>();
-            bodyLe.minHeight = 72f * s;
-            bodyLe.flexibleHeight = 1f;
+            LayoutElement bodyLe = UI.AddLE(bodyText.gameObject, minHeight: 72f * s, flexibleHeight: 1f);
 
             GameObject btnRow = new GameObject("Buttons");
             btnRow.transform.SetParent(panel.transform, false);
@@ -1100,8 +1067,7 @@ namespace VPB
             brh.spacing = 8f * s;
             brh.childForceExpandWidth = true;
             brh.childControlWidth = true;
-            LayoutElement brLe = btnRow.AddComponent<LayoutElement>();
-            brLe.minHeight = 36f * s;
+            LayoutElement brLe = UI.AddLE(btnRow, minHeight: 36f * s);
 
             ScanWlCreateHeaderButton(btnRow.transform, 0f, 34f * s,
                 VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.35f, 0.35f, 0.38f, 1f), BenchHideConfirm);
@@ -1131,9 +1097,7 @@ namespace VPB
 
             GameObject listHost = new GameObject("List");
             listHost.transform.SetParent(parent, false);
-            LayoutElement lle = listHost.AddComponent<LayoutElement>();
-            lle.minHeight = listHeight;
-            lle.preferredHeight = listHeight;
+            LayoutElement lle = UI.AddLE(listHost, minHeight: listHeight, preferredHeight: listHeight);
             Image listBg = listHost.AddComponent<Image>();
             listBg.color = new Color(0.05f, 0.06f, 0.08f, 1f);
             listBg.raycastTarget = true;
@@ -1161,9 +1125,7 @@ namespace VPB
             v.childForceExpandWidth = true;
             v.childForceExpandHeight = false;
             v.spacing = 2f;
-            LayoutElement contentLe = content.AddComponent<LayoutElement>();
-            contentLe.flexibleWidth = 1f;
-            contentLe.minWidth = 0f;
+            LayoutElement contentLe = UI.AddLE(content, minWidth: 0f, flexibleWidth: 1f);
             content.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             listParent = content.transform;
 

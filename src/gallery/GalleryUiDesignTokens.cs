@@ -172,6 +172,10 @@ namespace VPB
         public const float TitleCreatorDropdownHeightRef = 500f;
         public const float TitleCreatorDropdownSearchWidthRef = 310f;
 
+        // Modal scrim
+        /// <summary>Opacity of the black click-to-dismiss dim behind centered modal panels.</summary>
+        public const float ModalDimAlpha = 0.72f;
+
         // Spring scroll drag button (on main grid scrollbar)
         public const float SpringScrollBtnWidthFixedRef = 50f;
         public const float SpringScrollBtnWidthFloatRef = 100f;

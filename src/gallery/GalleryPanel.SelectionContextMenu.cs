@@ -631,14 +631,7 @@ namespace VPB
             rowRT.offsetMin = Vector2.zero;
             rowRT.offsetMax = Vector2.zero;
 
-            var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-            rowHLG.childAlignment = TextAnchor.MiddleCenter;
-            rowHLG.spacing = 12f;
-            rowHLG.childForceExpandWidth = false;
-            rowHLG.childForceExpandHeight = true;
-            rowHLG.childControlWidth = true;
-            rowHLG.childControlHeight = true;
-            rowHLG.padding = new RectOffset(8, 8, 0, 0);
+            var rowHLG = UI.AddHLG(rowGO, spacing: 12f, padding: UI.Pad(8, 8, 0, 0), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
 
             const int tboxCollapsedFont = GalleryUiDesignTokens.FontBodyRef;
 
@@ -690,14 +683,7 @@ namespace VPB
             tboxButtonsFlexRootRT.offsetMin = new Vector2(8f, 0f);
             tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f, 0f);
             tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
-            var flexVlg = flexGO.AddComponent<VerticalLayoutGroup>();
-            flexVlg.spacing = tboxBtnRowGap;
-            flexVlg.padding = new RectOffset(0, 0, 0, 0);
-            flexVlg.childAlignment = TextAnchor.UpperRight;
-            flexVlg.childControlWidth = true;
-            flexVlg.childForceExpandWidth = true;
-            flexVlg.childControlHeight = true;
-            flexVlg.childForceExpandHeight = false;
+            var flexVlg = UI.AddVLG(flexGO, spacing: tboxBtnRowGap, childAlignment: TextAnchor.UpperRight);
 
             // Hold buttons between relayout passes (sibling of flex root — not in the VLG).
             var stashGO = new GameObject("TboxBtnStash");
@@ -718,18 +704,8 @@ namespace VPB
             tboxBtnRow0RT.anchorMin = Vector2.zero;
             tboxBtnRow0RT.anchorMax = Vector2.one;
             tboxBtnRow0RT.sizeDelta = Vector2.zero;
-            tboxBtnRow0LE = tboxBtnRow0GO.AddComponent<LayoutElement>();
-            tboxBtnRow0LE.minHeight = tboxInfoRowHeight;
-            tboxBtnRow0LE.preferredHeight = tboxInfoRowHeight;
-            tboxBtnRow0LE.flexibleWidth = 1f;
-            tboxBtnRow0HLG = tboxBtnRow0GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow0HLG.spacing = 10f;
-            tboxBtnRow0HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow0HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow0HLG.childControlWidth = true;
-            tboxBtnRow0HLG.childForceExpandWidth = false;
-            tboxBtnRow0HLG.childControlHeight = true;
-            tboxBtnRow0HLG.childForceExpandHeight = false;
+            tboxBtnRow0LE = UI.AddLE(tboxBtnRow0GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow0HLG = UI.AddHLG(tboxBtnRow0GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
 
             tboxBtnRow1GO = new GameObject("TboxBtnRow1");
             tboxBtnRow1GO.transform.SetParent(flexGO.transform, false);
@@ -737,18 +713,8 @@ namespace VPB
             tboxBtnRow1RT.anchorMin = Vector2.zero;
             tboxBtnRow1RT.anchorMax = Vector2.one;
             tboxBtnRow1RT.sizeDelta = Vector2.zero;
-            tboxBtnRow1LE = tboxBtnRow1GO.AddComponent<LayoutElement>();
-            tboxBtnRow1LE.minHeight = tboxInfoRowHeight;
-            tboxBtnRow1LE.preferredHeight = tboxInfoRowHeight;
-            tboxBtnRow1LE.flexibleWidth = 1f;
-            tboxBtnRow1HLG = tboxBtnRow1GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow1HLG.spacing = 10f;
-            tboxBtnRow1HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow1HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow1HLG.childControlWidth = true;
-            tboxBtnRow1HLG.childForceExpandWidth = false;
-            tboxBtnRow1HLG.childControlHeight = true;
-            tboxBtnRow1HLG.childForceExpandHeight = false;
+            tboxBtnRow1LE = UI.AddLE(tboxBtnRow1GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow1HLG = UI.AddHLG(tboxBtnRow1GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow1GO.SetActive(false);
 
             tboxBtnRow2GO = new GameObject("TboxBtnRow2");
@@ -757,18 +723,8 @@ namespace VPB
             tboxBtnRow2RT.anchorMin = Vector2.zero;
             tboxBtnRow2RT.anchorMax = Vector2.one;
             tboxBtnRow2RT.sizeDelta = Vector2.zero;
-            tboxBtnRow2LE = tboxBtnRow2GO.AddComponent<LayoutElement>();
-            tboxBtnRow2LE.minHeight = tboxInfoRowHeight;
-            tboxBtnRow2LE.preferredHeight = tboxInfoRowHeight;
-            tboxBtnRow2LE.flexibleWidth = 1f;
-            tboxBtnRow2HLG = tboxBtnRow2GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow2HLG.spacing = 10f;
-            tboxBtnRow2HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow2HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow2HLG.childControlWidth = true;
-            tboxBtnRow2HLG.childForceExpandWidth = false;
-            tboxBtnRow2HLG.childControlHeight = true;
-            tboxBtnRow2HLG.childForceExpandHeight = false;
+            tboxBtnRow2LE = UI.AddLE(tboxBtnRow2GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow2GO.SetActive(false);
 
             // ── Dependency Filter Mode Row ─────────────────────────────────────
@@ -779,18 +735,8 @@ namespace VPB
             tboxFilterModeRowRT.anchorMin = Vector2.zero;
             tboxFilterModeRowRT.anchorMax = Vector2.one;
             tboxFilterModeRowRT.sizeDelta = Vector2.zero;
-            tboxFilterModeRowLE = tboxFilterModeRowGO.AddComponent<LayoutElement>();
-            tboxFilterModeRowLE.minHeight = tboxInfoRowHeight;
-            tboxFilterModeRowLE.preferredHeight = tboxInfoRowHeight;
-            tboxFilterModeRowLE.flexibleWidth = 1f;
-            tboxFilterModeRowHLG = tboxFilterModeRowGO.AddComponent<HorizontalLayoutGroup>();
-            tboxFilterModeRowHLG.spacing = 12f;
-            tboxFilterModeRowHLG.padding = new RectOffset(8, 8, 0, 0);
-            tboxFilterModeRowHLG.childAlignment = TextAnchor.MiddleCenter;
-            tboxFilterModeRowHLG.childControlWidth = false;
-            tboxFilterModeRowHLG.childForceExpandWidth = false;
-            tboxFilterModeRowHLG.childControlHeight = true;
-            tboxFilterModeRowHLG.childForceExpandHeight = true;
+            tboxFilterModeRowLE = UI.AddLE(tboxFilterModeRowGO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxFilterModeRowHLG = UI.AddHLG(tboxFilterModeRowGO, spacing: 12f, padding: UI.Pad(8, 8, 0, 0), childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childForceExpandWidth: false, childForceExpandHeight: true);
             tboxFilterModeRowGO.SetActive(false);
 
             // Filter Mode Label
@@ -834,18 +780,8 @@ namespace VPB
             tboxClothingModeRowRT.anchorMin = Vector2.zero;
             tboxClothingModeRowRT.anchorMax = Vector2.one;
             tboxClothingModeRowRT.sizeDelta = Vector2.zero;
-            tboxClothingModeRowLE = tboxClothingModeRowGO.AddComponent<LayoutElement>();
-            tboxClothingModeRowLE.minHeight = tboxInfoRowHeight;
-            tboxClothingModeRowLE.preferredHeight = tboxInfoRowHeight;
-            tboxClothingModeRowLE.flexibleWidth = 1f;
-            tboxClothingModeRowHLG = tboxClothingModeRowGO.AddComponent<HorizontalLayoutGroup>();
-            tboxClothingModeRowHLG.spacing = 8f;
-            tboxClothingModeRowHLG.padding = new RectOffset(8, 8, 0, 0);
-            tboxClothingModeRowHLG.childAlignment = TextAnchor.MiddleLeft;
-            tboxClothingModeRowHLG.childControlWidth = true;
-            tboxClothingModeRowHLG.childForceExpandWidth = false;
-            tboxClothingModeRowHLG.childControlHeight = true;
-            tboxClothingModeRowHLG.childForceExpandHeight = true;
+            tboxClothingModeRowLE = UI.AddLE(tboxClothingModeRowGO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxClothingModeRowHLG = UI.AddHLG(tboxClothingModeRowGO, spacing: 8f, padding: UI.Pad(8, 8, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
             tboxClothingModeRowGO.SetActive(false);
 
             // Leading label
@@ -853,10 +789,8 @@ namespace VPB
                 tboxClothingModeLabel = UI.CreateLabel(tboxClothingModeRowGO, VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:"), GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.82f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "ClothingModeLabel");
                 // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
                 GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
-                var lblLE = tboxClothingModeLabel.gameObject.AddComponent<LayoutElement>();
                 // Wider than the text so there's clear right padding before the first button.
-                lblLE.minWidth = lblLE.preferredWidth = 240f;
-                lblLE.flexibleWidth = 0f;
+                var lblLE = UI.AddLE(tboxClothingModeLabel.gameObject, minWidth: 240f, preferredWidth: 240f, flexibleWidth: 0f);
             }
 
             TboxBuildClothingModeButton("replace",
@@ -1730,15 +1664,8 @@ namespace VPB
             rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
             rowRT.pivot = new Vector2(0.5f, 0.5f);
             rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
-            var rowHLG = tboxTargetDropdownRowGO.AddComponent<HorizontalLayoutGroup>();
-            rowHLG.spacing = 2f; rowHLG.childAlignment = TextAnchor.MiddleLeft;
-            rowHLG.childControlWidth = true; rowHLG.childForceExpandWidth = true;
-            rowHLG.childControlHeight = true; rowHLG.childForceExpandHeight = true;
-            var rowLE = tboxTargetDropdownRowGO.AddComponent<LayoutElement>();
-            rowLE.minWidth = 140f;
-            rowLE.preferredWidth = 220f;
-            rowLE.flexibleWidth = 1f;
-            rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 0f;
+            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: 2f, childForceExpandHeight: true);
+            var rowLE = UI.AddLE(tboxTargetDropdownRowGO, minWidth: 140f, minHeight: innerRowH, preferredWidth: 220f, preferredHeight: innerRowH, flexibleWidth: 1f, flexibleHeight: 0f);
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
             float sScale = ChromeScale;
@@ -1821,14 +1748,7 @@ namespace VPB
             outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
             outline.effectDistance = new Vector2(1f, -1f);
 
-            VerticalLayoutGroup vlg = tboxTargetMenuPanelGO.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.UpperCenter;
+            VerticalLayoutGroup vlg = UI.AddVLG(tboxTargetMenuPanelGO, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
 
             ContentSizeFitter csf = tboxTargetMenuPanelGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -1879,18 +1799,9 @@ namespace VPB
                 rowImg.color = isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f);
                 rowImg.raycastTarget = false; // children handle clicks
 
-                var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-                rowHLG.padding = new RectOffset(4, 4, 2, 2);
-                rowHLG.spacing = 4f;
-                rowHLG.childControlHeight = true;
-                rowHLG.childControlWidth = true;
-                rowHLG.childForceExpandHeight = true;
-                rowHLG.childForceExpandWidth = false;
-                rowHLG.childAlignment = TextAnchor.MiddleLeft;
+                var rowHLG = UI.AddHLG(rowGO, spacing: 4f, padding: UI.Pad(4, 4, 2, 2), childForceExpandWidth: false, childForceExpandHeight: true);
 
-                var rowLE = rowGO.AddComponent<LayoutElement>();
-                rowLE.preferredHeight = rowH;
-                rowLE.flexibleWidth = 1f;
+                var rowLE = UI.AddLE(rowGO, preferredHeight: rowH, flexibleWidth: 1f);
 
                 string rowLabel = (isCurrent ? "\u2713  " : "    ") + label;
                 GameObject selectBtn = UI.CreateUIButton(

@@ -137,15 +137,8 @@ namespace VPB
             // Bulk-select controls: Select All / Clear All / Multi (chips accumulate when on, single-select when off).
             GameObject bulkRow = new GameObject("BulkSelectRow");
             bulkRow.transform.SetParent(parent, false);
-            LayoutElement bulkLe = bulkRow.AddComponent<LayoutElement>();
-            bulkLe.preferredHeight = ImportSidebarBaseRowHeight;
-            bulkLe.flexibleWidth = 1f;
-            HorizontalLayoutGroup bulkHlg = bulkRow.AddComponent<HorizontalLayoutGroup>();
-            bulkHlg.childForceExpandWidth = true;
-            bulkHlg.childForceExpandHeight = true;
-            bulkHlg.childControlWidth = true;
-            bulkHlg.childControlHeight = true;
-            bulkHlg.spacing = ImportSidebarBaseRowSpacing;
+            LayoutElement bulkLe = UI.AddLE(bulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            HorizontalLayoutGroup bulkHlg = UI.AddHLG(bulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
 
             BuildImportSidebarBulkButton(bulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_types", "Select All"),
@@ -180,9 +173,7 @@ namespace VPB
             float gap = ImportSidebarBaseRowSpacing;
             float contentW = ImportSidebarBaseWidth - ImportSidebarScrollBarWidthRef - ImportSidebarInnerPadHRef;
             float cellW = Mathf.Floor((contentW - gap) * 0.5f);
-            LayoutElement le = grid.AddComponent<LayoutElement>();
-            le.preferredHeight = typeRadioRows * rowH + (typeRadioRows - 1) * gap;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(grid, preferredHeight: typeRadioRows * rowH + (typeRadioRows - 1) * gap, flexibleWidth: 1f);
 
             GridLayoutGroup g = grid.AddComponent<GridLayoutGroup>();
             g.cellSize = new Vector2(cellW, rowH);
@@ -223,9 +214,7 @@ namespace VPB
         {
             GameObject btnGO = new GameObject("BulkBtn_" + label);
             btnGO.transform.SetParent(parent, false);
-            LayoutElement btnLe = btnGO.AddComponent<LayoutElement>();
-            btnLe.preferredHeight = ImportSidebarBaseRowHeight;
-            btnLe.flexibleWidth = 1f;
+            LayoutElement btnLe = UI.AddLE(btnGO, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Image bg = AddImportSidebarRoundedBg(btnGO, bgColor);
             Button btn = btnGO.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -291,15 +280,9 @@ namespace VPB
 
             RectTransform rt = host.AddComponent<RectTransform>();
             importSidebarOptionsPanelHost = rt;
-            LayoutElement le = host.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(host, flexibleWidth: 1f);
             // Stack active panels vertically; ContentSizeFitter drives the host height to match content.
-            VerticalLayoutGroup hostVlg = host.AddComponent<VerticalLayoutGroup>();
-            hostVlg.childForceExpandWidth = true;
-            hostVlg.childForceExpandHeight = false;
-            hostVlg.childControlWidth = true;
-            hostVlg.childControlHeight = true;
-            hostVlg.spacing = 0f;
+            VerticalLayoutGroup hostVlg = UI.AddVLG(host, spacing: 0f);
             ContentSizeFitter hostCsf = host.AddComponent<ContentSizeFitter>();
             hostCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
@@ -326,12 +309,7 @@ namespace VPB
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = ImportSidebarBaseRowSpacing;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlHeight = true;
-            vlg.childControlWidth = true;
+            VerticalLayoutGroup vlg = UI.AddVLG(panel, spacing: ImportSidebarBaseRowSpacing);
 
             VerticalLayoutGroup vlgCaptured = vlg;
             innerPaneScaleActions.Add(s => { if (vlgCaptured != null) vlgCaptured.spacing = ImportSidebarBaseRowSpacing * s; });
@@ -502,9 +480,7 @@ namespace VPB
         {
             GameObject row = new GameObject("GroupHeader_" + label);
             row.transform.SetParent(parent, false);
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Image bg = AddImportSidebarRoundedBg(row, ImportSidebarGroupHeaderBg, raycastTarget: false);
             Text t = CreateImportSidebarLabel(row.transform, label, ImportSidebarBaseFontSize);
             t.alignment = TextAnchor.MiddleLeft;
@@ -521,9 +497,7 @@ namespace VPB
         {
             GameObject row = new GameObject("GroupNote");
             row.transform.SetParent(parent, false);
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight * 0.85f;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight * 0.85f, flexibleWidth: 1f);
             Text t = AddSimpleLabelText(row.transform, note, ImportSidebarBaseFontSize, new Color(0.62f, 0.64f, 0.68f, 1f));
             t.fontStyle = FontStyle.Italic;
             LayoutElement leC = le;
@@ -617,9 +591,7 @@ namespace VPB
             GameObject row = new GameObject("Toggle_" + label);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
@@ -659,19 +631,8 @@ namespace VPB
 
         private Text AddSimpleLabelText(Transform parent, string label, int size, Color color)
         {
-            GameObject go = new GameObject("Label");
-            go.transform.SetParent(parent, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-
-            Text t = go.AddComponent<Text>();
-            t.color = color;
-            t.fontSize = size;
-            t.alignment = TextAnchor.MiddleLeft;
-            t.text = label;
-            VPBUiFont.ApplyTo(t);
-            t.raycastTarget = false;
+            Text t = UI.CreateLabel(parent.gameObject, label, size, color, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            RectTransform rt = t.GetComponent<RectTransform>();
 
             RectTransform rtCaptured = rt;
             Text tCaptured = t;
@@ -692,15 +653,8 @@ namespace VPB
             // source plugin in one click, then refine per-row. Its visibility tracks the checklist (gate ON).
             importSidebarPluginBulkRow = new GameObject("PluginBulkRow");
             importSidebarPluginBulkRow.transform.SetParent(parent, false);
-            LayoutElement pluginBulkLe = importSidebarPluginBulkRow.AddComponent<LayoutElement>();
-            pluginBulkLe.preferredHeight = ImportSidebarBaseRowHeight;
-            pluginBulkLe.flexibleWidth = 1f;
-            HorizontalLayoutGroup pluginBulkHlg = importSidebarPluginBulkRow.AddComponent<HorizontalLayoutGroup>();
-            pluginBulkHlg.childForceExpandWidth = true;
-            pluginBulkHlg.childForceExpandHeight = true;
-            pluginBulkHlg.childControlWidth = true;
-            pluginBulkHlg.childControlHeight = true;
-            pluginBulkHlg.spacing = ImportSidebarBaseRowSpacing;
+            LayoutElement pluginBulkLe = UI.AddLE(importSidebarPluginBulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            HorizontalLayoutGroup pluginBulkHlg = UI.AddHLG(importSidebarPluginBulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
             BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_plugins", "Select All"),
                 "gallery.import.select_all_plugins_tip", "Import every plugin in the source",
@@ -721,8 +675,7 @@ namespace VPB
             importSidebarPluginChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
-            LayoutElement scrollLe = importSidebarPluginChecklistRoot.AddComponent<LayoutElement>();
-            scrollLe.flexibleWidth = 1f;
+            LayoutElement scrollLe = UI.AddLE(importSidebarPluginChecklistRoot, flexibleWidth: 1f);
             importSidebarPluginChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdatePluginChecklistHeight());
 
@@ -730,9 +683,7 @@ namespace VPB
 
             Text caption = AddSimpleLabelText(content,
                 "Plugins in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = caption.gameObject.AddComponent<LayoutElement>();
-            capLe.preferredHeight = ImportSidebarBaseRowHeight;
-            capLe.flexibleWidth = 1f;
+            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Text capCaptured = caption;
             LayoutElement capLeCaptured = capLe;
             innerPaneScaleActions.Add(s => {
@@ -754,9 +705,7 @@ namespace VPB
             GameObject row = new GameObject("PluginRow_" + index);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
@@ -879,15 +828,8 @@ namespace VPB
         {
             ui.BulkRow = new GameObject("CUABulkRow");
             ui.BulkRow.transform.SetParent(parent, false);
-            LayoutElement cuaBulkLe = ui.BulkRow.AddComponent<LayoutElement>();
-            cuaBulkLe.preferredHeight = ImportSidebarBaseRowHeight;
-            cuaBulkLe.flexibleWidth = 1f;
-            HorizontalLayoutGroup cuaBulkHlg = ui.BulkRow.AddComponent<HorizontalLayoutGroup>();
-            cuaBulkHlg.childForceExpandWidth = true;
-            cuaBulkHlg.childForceExpandHeight = true;
-            cuaBulkHlg.childControlWidth = true;
-            cuaBulkHlg.childControlHeight = true;
-            cuaBulkHlg.spacing = ImportSidebarBaseRowSpacing;
+            LayoutElement cuaBulkLe = UI.AddLE(ui.BulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            HorizontalLayoutGroup cuaBulkHlg = UI.AddHLG(ui.BulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
             BuildImportSidebarBulkButton(ui.BulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_cuas", "Select All"),
                 "gallery.import.select_all_cuas_tip", "Import every CUA in the source",
@@ -905,8 +847,7 @@ namespace VPB
             ui.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
-            LayoutElement scrollLe = ui.ChecklistRoot.AddComponent<LayoutElement>();
-            scrollLe.flexibleWidth = 1f;
+            LayoutElement scrollLe = UI.AddLE(ui.ChecklistRoot, flexibleWidth: 1f);
             ui.ChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdateCUAChecklistHeights());
 
@@ -914,9 +855,7 @@ namespace VPB
 
             Text caption = AddSimpleLabelText(content,
                 "CUAs in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = caption.gameObject.AddComponent<LayoutElement>();
-            capLe.preferredHeight = ImportSidebarBaseRowHeight;
-            capLe.flexibleWidth = 1f;
+            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Text capCaptured = caption;
             LayoutElement capLeCaptured = capLe;
             innerPaneScaleActions.Add(s => {
@@ -938,9 +877,7 @@ namespace VPB
             GameObject row = new GameObject("CUARow_" + index);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
@@ -1076,9 +1013,7 @@ namespace VPB
         {
             importSidebarSceneAtomSearchRow = new GameObject("SceneAtomSearchRow");
             importSidebarSceneAtomSearchRow.transform.SetParent(parent, false);
-            LayoutElement searchLe = importSidebarSceneAtomSearchRow.AddComponent<LayoutElement>();
-            searchLe.preferredHeight = ImportSidebarBaseRowHeight * 1.05f;
-            searchLe.flexibleWidth = 1f;
+            LayoutElement searchLe = UI.AddLE(importSidebarSceneAtomSearchRow, preferredHeight: ImportSidebarBaseRowHeight * 1.05f, flexibleWidth: 1f);
 
             importSidebarSceneAtomSearchInput = CreateSearchInput(
                 importSidebarSceneAtomSearchRow, ImportSidebarBaseWidth,
@@ -1171,15 +1106,8 @@ namespace VPB
         {
             importSidebarSceneAtomUi.BulkRow = new GameObject("SceneAtomBulkRow");
             importSidebarSceneAtomUi.BulkRow.transform.SetParent(parent, false);
-            LayoutElement bulkLe = importSidebarSceneAtomUi.BulkRow.AddComponent<LayoutElement>();
-            bulkLe.preferredHeight = ImportSidebarBaseRowHeight;
-            bulkLe.flexibleWidth = 1f;
-            HorizontalLayoutGroup bulkHlg = importSidebarSceneAtomUi.BulkRow.AddComponent<HorizontalLayoutGroup>();
-            bulkHlg.childForceExpandWidth = true;
-            bulkHlg.childForceExpandHeight = true;
-            bulkHlg.childControlWidth = true;
-            bulkHlg.childControlHeight = true;
-            bulkHlg.spacing = ImportSidebarBaseRowSpacing;
+            LayoutElement bulkLe = UI.AddLE(importSidebarSceneAtomUi.BulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            HorizontalLayoutGroup bulkHlg = UI.AddHLG(importSidebarSceneAtomUi.BulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
             BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
                 VPBTranslation.T("gallery.import.select_all_atoms", "Select All"),
                 "gallery.import.select_all_atoms_tip", "Select every importable atom in the source scene",
@@ -1197,8 +1125,7 @@ namespace VPB
             importSidebarSceneAtomUi.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
                 0f, 0f, Vector2.zero, scrollBarWidth: 12f, spacing: 2f, addBottomFlexSpacer: false);
-            LayoutElement scrollLe = importSidebarSceneAtomUi.ChecklistRoot.AddComponent<LayoutElement>();
-            scrollLe.flexibleWidth = 1f;
+            LayoutElement scrollLe = UI.AddLE(importSidebarSceneAtomUi.ChecklistRoot, flexibleWidth: 1f);
             importSidebarSceneAtomUi.ChecklistLe = scrollLe;
             innerPaneScaleActions.Add(s => UpdateSceneAtomChecklistHeight());
 
@@ -1206,9 +1133,7 @@ namespace VPB
 
             Text caption = AddSimpleLabelText(content,
                 "Atoms in source scene (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = caption.gameObject.AddComponent<LayoutElement>();
-            capLe.preferredHeight = ImportSidebarBaseRowHeight;
-            capLe.flexibleWidth = 1f;
+            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
             Text capCaptured = caption;
             LayoutElement capLeCaptured = capLe;
             innerPaneScaleActions.Add(s => {
@@ -1226,9 +1151,7 @@ namespace VPB
             GameObject emptyGO = new GameObject("SceneAtomEmptyHint");
             emptyGO.transform.SetParent(parent, false);
             importSidebarSceneAtomEmptyHintRow = emptyGO;
-            LayoutElement emptyLe = emptyGO.AddComponent<LayoutElement>();
-            emptyLe.preferredHeight = ImportSidebarBaseRowHeight * 1.2f;
-            emptyLe.flexibleWidth = 1f;
+            LayoutElement emptyLe = UI.AddLE(emptyGO, preferredHeight: ImportSidebarBaseRowHeight * 1.2f, flexibleWidth: 1f);
             importSidebarSceneAtomEmptyHint = AddSimpleLabelText(
                 emptyGO.transform,
                 "No importable atoms in this scene.",
@@ -1255,9 +1178,7 @@ namespace VPB
             GameObject row = new GameObject("SceneAtomRow_" + index);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = ImportSidebarBaseRowHeight;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 

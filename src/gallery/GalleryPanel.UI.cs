@@ -1020,15 +1020,9 @@ namespace VPB
             GameObject leftSection = new GameObject("LeftSection");
             leftSection.transform.SetParent(pageContainer.transform, false);
             _footerLeftSectionRT = leftSection.AddComponent<RectTransform>();
-            leftSection.AddComponent<LayoutElement>().flexibleWidth = 1;
+            UI.AddLE(leftSection, flexibleWidth: 1);
             
-            HorizontalLayoutGroup leftHLG = leftSection.AddComponent<HorizontalLayoutGroup>();
-            leftHLG.childControlWidth = false;
-            leftHLG.childControlHeight = false;
-            leftHLG.childForceExpandWidth = false;
-            leftHLG.childForceExpandHeight = false;
-            leftHLG.childAlignment = TextAnchor.MiddleLeft;
-            leftHLG.spacing = 10;
+            HorizontalLayoutGroup leftHLG = UI.AddHLG(leftSection, spacing: 10, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
             {
                 var hlg = leftHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1080,15 +1074,9 @@ namespace VPB
             GameObject centerSection = new GameObject("CenterSection");
             centerSection.transform.SetParent(pageContainer.transform, false);
             centerSection.AddComponent<RectTransform>();
-            centerSection.AddComponent<LayoutElement>().flexibleWidth = 1;
+            UI.AddLE(centerSection, flexibleWidth: 1);
             
-            HorizontalLayoutGroup centerHLG = centerSection.AddComponent<HorizontalLayoutGroup>();
-            centerHLG.childControlWidth = false;
-            centerHLG.childForceExpandWidth = false;
-            centerHLG.childControlHeight = false;
-            centerHLG.childForceExpandHeight = false;
-            centerHLG.childAlignment = TextAnchor.MiddleCenter;
-            centerHLG.spacing = 10;
+            HorizontalLayoutGroup centerHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
             {
                 var hlg = centerHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1118,9 +1106,7 @@ namespace VPB
                 footerFilterModeSpacerGO = new GameObject("FilterModeSpacer");
                 footerFilterModeSpacerGO.transform.SetParent(centerSection.transform, false);
                 footerFilterModeSpacerGO.AddComponent<RectTransform>();
-                var le = footerFilterModeSpacerGO.AddComponent<LayoutElement>();
-                le.preferredWidth = 12f;
-                le.minWidth = 12f;
+                var le = UI.AddLE(footerFilterModeSpacerGO, minWidth: 12f, preferredWidth: 12f);
                 footerFilterModeSpacerGO.SetActive(false);
             }
 
@@ -1142,15 +1128,9 @@ namespace VPB
             GameObject rightSection = new GameObject("RightSection");
             rightSection.transform.SetParent(pageContainer.transform, false);
             _footerRightSectionRT = rightSection.AddComponent<RectTransform>();
-            rightSection.AddComponent<LayoutElement>().flexibleWidth = 1;
+            UI.AddLE(rightSection, flexibleWidth: 1);
             
-            HorizontalLayoutGroup rightHLG = rightSection.AddComponent<HorizontalLayoutGroup>();
-            rightHLG.childControlWidth = false;
-            rightHLG.childControlHeight = false;
-            rightHLG.childForceExpandWidth = false;
-            rightHLG.childForceExpandHeight = false;
-            rightHLG.childAlignment = TextAnchor.MiddleRight;
-            rightHLG.spacing = 10;
+            HorizontalLayoutGroup rightHLG = UI.AddHLG(rightSection, spacing: 10, childAlignment: TextAnchor.MiddleRight, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
             {
                 var hlg = rightHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });

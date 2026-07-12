@@ -154,13 +154,7 @@ namespace VPB
             pbg.color = new Color(0.06f, 0.06f, 0.08f, 1f);
             pbg.raycastTarget = true;
 
-            VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
-            v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));
-            v.spacing = 8f * s;
-            v.childControlWidth = true;
-            v.childControlHeight = true;
-            v.childForceExpandWidth = true;
-            v.childForceExpandHeight = false;
+            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
             GameObject header = new GameObject("Header");
             header.transform.SetParent(panel.transform, false);
@@ -171,8 +165,7 @@ namespace VPB
             ht.color = Color.white;
             ht.text = VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)");
             try { VPBUiFont.ApplyTo(ht); } catch { }
-            LayoutElement hle = header.AddComponent<LayoutElement>();
-            hle.minHeight = 32f * s;
+            LayoutElement hle = UI.AddLE(header, minHeight: 32f * s);
 
             QmPosBuildAxisSliderRow(panel.transform, VPBTranslation.T("hook.qmpos.create_gallery", "Create Gallery"), bodyFont, s,
                 _qmPosCreateX, _qmPosCreateY, QmPosXMin, QmPosXMax, QmPosYMin, QmPosYMax,
@@ -190,8 +183,7 @@ namespace VPB
             HorizontalLayoutGroup srh = sameRow.AddComponent<HorizontalLayoutGroup>();
             srh.spacing = 8f * s;
             srh.childAlignment = TextAnchor.MiddleLeft;
-            LayoutElement srLe = sameRow.AddComponent<LayoutElement>();
-            srLe.minHeight = 34f * s;
+            LayoutElement srLe = UI.AddLE(sameRow, minHeight: 34f * s);
 
             GameObject sameCheckBtn = QmPosCreateTextButton(sameRow.transform, 36f * s, 30f * s, _qmPosUseSameInVR ? "✓" : " ", bodyFont, new Color(0.2f, 0.35f, 0.5f, 1f), () =>
             {
@@ -204,8 +196,7 @@ namespace VPB
             _qmPosSameVrCheckText = sameCheckTextTr != null ? sameCheckTextTr.GetComponent<Text>() : null;
 
             Text sl = UI.CreateLabel(sameRow, VPBTranslation.T("hook.qmpos.same_vr", "Use same position in VR mode"), bodyFont, Color.white, name: "SameVrLabel");
-            LayoutElement sll = sl.gameObject.AddComponent<LayoutElement>();
-            sll.flexibleWidth = 1f;
+            LayoutElement sll = UI.AddLE(sl.gameObject, flexibleWidth: 1f);
 
             _qmPosVrSection = new GameObject("VrSection");
             _qmPosVrSection.transform.SetParent(panel.transform, false);
@@ -214,8 +205,7 @@ namespace VPB
             vvg.childControlWidth = true;
             vvg.childControlHeight = true;
             vvg.childForceExpandWidth = true;
-            LayoutElement vsLe = _qmPosVrSection.AddComponent<LayoutElement>();
-            vsLe.flexibleWidth = 1f;
+            LayoutElement vsLe = UI.AddLE(_qmPosVrSection, flexibleWidth: 1f);
 
             QmPosBuildAxisSliderRow(_qmPosVrSection.transform, VPBTranslation.T("hook.qmpos.create_gallery_vr", "Create Gallery (VR)"), bodyFont, s,
                 _qmPosCreateXVR, _qmPosCreateYVR, QmPosXMin, QmPosXMax, QmPosYMin, QmPosYMax,
@@ -236,8 +226,7 @@ namespace VPB
             fh.childControlWidth = true;
             fh.childControlHeight = true;
             fh.childForceExpandWidth = true;
-            LayoutElement fLe = footer.AddComponent<LayoutElement>();
-            fLe.minHeight = 40f * s;
+            LayoutElement fLe = UI.AddLE(footer, minHeight: 40f * s);
 
             QmPosCreateTextButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.4f, 0.36f, 0.28f, 1f), () => HideQuickMenuPositionEditorModal(false));
             QmPosCreateTextButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.defaults", "Defaults"), bodyFont, new Color(0.28f, 0.28f, 0.32f, 1f), () =>
@@ -295,8 +284,7 @@ namespace VPB
             bvg.childControlWidth = true;
             bvg.childControlHeight = true;
             bvg.childForceExpandWidth = true;
-            LayoutElement ble = block.AddComponent<LayoutElement>();
-            ble.minHeight = 88f * s;
+            LayoutElement ble = UI.AddLE(block, minHeight: 88f * s);
 
             Text st = UI.CreateLabel(block, sectionTitle ?? "", bodyFont, new Color(0.85f, 0.9f, 1f, 1f), name: "SectionTitle");
 
@@ -341,18 +329,14 @@ namespace VPB
             h.childAlignment = TextAnchor.MiddleLeft;
             h.childControlWidth = true;
             h.childControlHeight = true;
-            LayoutElement rle = row.AddComponent<LayoutElement>();
-            rle.minHeight = 32f * s;
+            LayoutElement rle = UI.AddLE(row, minHeight: 32f * s);
 
             valueLabel = UI.CreateLabel(row, axis + ": " + Mathf.RoundToInt(value), fontSize, Color.white, name: "ValueLabel");
-            LayoutElement lblLe = valueLabel.gameObject.AddComponent<LayoutElement>();
-            lblLe.minWidth = 56f * s;
+            LayoutElement lblLe = UI.AddLE(valueLabel.gameObject, minWidth: 56f * s);
 
             GameObject sliderHost = new GameObject("Slider");
             sliderHost.transform.SetParent(row.transform, false);
-            LayoutElement sle = sliderHost.AddComponent<LayoutElement>();
-            sle.flexibleWidth = 1f;
-            sle.minHeight = 28f * s;
+            LayoutElement sle = UI.AddLE(sliderHost, minHeight: 28f * s, flexibleWidth: 1f);
 
             slider = sliderHost.AddComponent<Slider>();
             slider.minValue = min;

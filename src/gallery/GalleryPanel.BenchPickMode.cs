@@ -277,18 +277,8 @@ namespace VPB
             h.childForceExpandWidth = false;
             h.childControlHeight = true;
 
-            GameObject lblGo = new GameObject("Label");
-            lblGo.transform.SetParent(_benchPickBannerRoot.transform, false);
-            _benchPickBannerLabel = lblGo.AddComponent<Text>();
-            _benchPickBannerLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _benchPickBannerLabel.fontSize = font;
-            _benchPickBannerLabel.color = Color.white;
-            _benchPickBannerLabel.alignment = TextAnchor.MiddleLeft;
-            _benchPickBannerLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
-            try { VPBUiFont.ApplyTo(_benchPickBannerLabel); } catch { }
-            LayoutElement lblLe = lblGo.AddComponent<LayoutElement>();
-            lblLe.flexibleWidth = 1f;
-            lblLe.minWidth = 120f;
+            _benchPickBannerLabel = UI.CreateLabel(_benchPickBannerRoot, "", font, Color.white, TextAnchor.MiddleLeft, name: "Label");
+            LayoutElement lblLe = UI.AddLE(_benchPickBannerLabel.gameObject, minWidth: 120f, flexibleWidth: 1f);
 
             ScanWlCreateHeaderButton(_benchPickBannerRoot.transform, 100f * s, 38f * s,
                 VPBTranslation.T("bench.pick.done", "Done"),

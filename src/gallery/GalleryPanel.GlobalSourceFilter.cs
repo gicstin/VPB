@@ -186,33 +186,16 @@ namespace VPB
             rowBtn.onClick.AddListener(() => OnGlobalSourceFilterRowClicked(value));
 
             // Label on the left
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(row.transform, false);
-            Text labelText = labelGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(labelText);
-            labelText.text = label;
-            labelText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            labelText.color = Color.white;
-            labelText.alignment = TextAnchor.MiddleLeft;
-            labelText.raycastTarget = false;
-            RectTransform labelRT = labelGO.GetComponent<RectTransform>();
+            Text labelText = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            RectTransform labelRT = labelText.GetComponent<RectTransform>();
             labelRT.anchorMin = new Vector2(0f, 0f);
             labelRT.anchorMax = new Vector2(0.5f, 1f);
             labelRT.offsetMin = new Vector2(8f, 0f);
             labelRT.offsetMax = new Vector2(0f, 0f);
 
             // Count on the right
-            GameObject countGO = new GameObject("Count");
-            countGO.transform.SetParent(row.transform, false);
-            Text countText = countGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(countText);
-            countText.text = "";
-            countText.fontSize = GalleryUiDesignTokens.FontCaptionRef;
-            countText.color = new Color(1f, 1f, 1f, 0.75f);
-            countText.alignment = TextAnchor.MiddleRight;
-            countText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            countText.raycastTarget = false;
-            RectTransform countRT = countGO.GetComponent<RectTransform>();
+            Text countText = UI.CreateLabel(row, "", GalleryUiDesignTokens.FontCaptionRef, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleRight, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Count");
+            RectTransform countRT = countText.GetComponent<RectTransform>();
             countRT.anchorMin = new Vector2(0.5f, 0f);
             countRT.anchorMax = new Vector2(1f, 1f);
             countRT.offsetMin = new Vector2(0f, 0f);

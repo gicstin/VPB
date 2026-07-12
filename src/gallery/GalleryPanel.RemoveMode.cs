@@ -314,18 +314,8 @@ namespace VPB
                 prt.anchorMin = prt.anchorMax = Vector2.zero; // bottom-left origin = Input.mousePosition space
                 prt.pivot = new Vector2(0f, 1f);              // top-left corner pinned to the cursor
 
-                GameObject txtGO = new GameObject("Text");
-                txtGO.transform.SetParent(panel.transform, false);
-                Text txt = txtGO.AddComponent<Text>();
-                txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                txt.fontSize = 26;
-                txt.color = Color.white;
-                txt.alignment = TextAnchor.MiddleLeft;
-                txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-                txt.verticalOverflow = VerticalWrapMode.Overflow;
-                txt.raycastTarget = false;
-                RectTransform trt = txtGO.GetComponent<RectTransform>();
-                trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one;
+                Text txt = UI.CreateLabel(panel, "", 26, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
+                RectTransform trt = txt.GetComponent<RectTransform>();
                 trt.offsetMin = new Vector2(12f, 8f);
                 trt.offsetMax = new Vector2(-12f, -8f);
 

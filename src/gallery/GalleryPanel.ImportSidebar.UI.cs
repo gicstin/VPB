@@ -387,20 +387,8 @@ namespace VPB
 
         private Text CreateImportSidebarLabel(Transform parent, string text, int fontSize)
         {
-            GameObject go = new GameObject("Label");
-            go.transform.SetParent(parent, false);
-
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-
-            Text t = go.AddComponent<Text>();
-            t.text = text;
-            t.color = UI.TextPrimary;
-            t.fontSize = fontSize;
-            t.alignment = TextAnchor.MiddleLeft;
-            VPBUiFont.ApplyTo(t);
-            t.raycastTarget = false;
+            Text t = UI.CreateLabel(parent.gameObject, text, fontSize, UI.TextPrimary, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            RectTransform rt = t.GetComponent<RectTransform>();
 
             RectTransform rtCaptured = rt;
             Text tCaptured = t;

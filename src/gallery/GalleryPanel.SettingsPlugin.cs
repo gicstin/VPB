@@ -406,33 +406,16 @@ namespace VPB
 
             GameObject host = new GameObject("SettingsHotkeyHost");
             host.transform.SetParent(controls, false);
-            LayoutElement hle = host.AddComponent<LayoutElement>();
-            hle.flexibleWidth = 1f;
-            hle.preferredWidth = 220f * paneScale;
-            hle.minWidth = 120f * paneScale;
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * paneScale;
-            hle.preferredHeight = chipH;
-            hle.minHeight = chipH;
+            LayoutElement hle = UI.AddLE(host, minWidth: 120f * paneScale, minHeight: chipH, preferredWidth: 220f * paneScale, preferredHeight: chipH, flexibleWidth: 1f);
 
             Image bg = AddSettingsControlRoundedBg(host, capturing ? new Color(0.35f, 0.35f, 0.15f, 1f) : UI.ChromeDarker);
             Button hit = host.AddComponent<Button>();
             hit.targetGraphic = bg;
             UI.NeutralizeSelectableColorTint(hit);
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(host.transform, false);
-            Text it = tgo.AddComponent<Text>();
-            it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            Text it = UI.CreateLabel(host, displayText, GalleryUiDesignTokens.SettingsListRowDetailFontRef, capturing ? new Color(1f, 0.95f, 0.6f, 1f) : Color.white, TextAnchor.MiddleCenter, richText: false, name: "Text");
             GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, paneScale, GalleryUiDesignTokens.FontMinRef);
-            it.color = capturing ? new Color(1f, 0.95f, 0.6f, 1f) : Color.white;
-            it.alignment = TextAnchor.MiddleCenter;
-            it.supportRichText = false;
-            it.text = displayText;
-            RectTransform itRT = tgo.GetComponent<RectTransform>();
-            itRT.anchorMin = Vector2.zero;
-            itRT.anchorMax = Vector2.one;
-            itRT.sizeDelta = Vector2.zero;
-            try { VPBUiFont.ApplyTo(it); } catch { }
 
             string capturedKey = rowKey;
             hit.onClick.AddListener(() => BeginPluginHotkeyCapture(capturedKey));

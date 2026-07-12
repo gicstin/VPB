@@ -1049,19 +1049,10 @@ namespace VPB
                 ghostBorder.raycastTarget = false;
                 ghostBorder.color = new Color(1, 1, 1, 0.2f);
 
-                GameObject textGO = new GameObject("ActionText");
-                textGO.transform.SetParent(ghostObject.transform, false);
-                ghostText = textGO.AddComponent<Text>();
-                ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                ghostText.fontSize = GalleryUiDesignTokens.FontRef;
-                ghostText.fontStyle = FontStyle.Normal;
-                ghostText.color = Color.white;
-                ghostText.alignment = TextAnchor.UpperCenter;
-                ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                ghostText.verticalOverflow = VerticalWrapMode.Overflow;
-                textGO.AddComponent<Outline>().effectColor = Color.black;
+                ghostText = UI.CreateLabel(ghostObject, "", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.UpperCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, name: "ActionText");
+                ghostText.gameObject.AddComponent<Outline>().effectColor = Color.black;
 
-                RectTransform textRT = textGO.GetComponent<RectTransform>();
+                RectTransform textRT = ghostText.GetComponent<RectTransform>();
                 textRT.anchorMin = new Vector2(0.5f, 0);
                 textRT.anchorMax = new Vector2(0.5f, 0);
                 textRT.pivot = new Vector2(0.5f, 1);

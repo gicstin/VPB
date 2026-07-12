@@ -151,14 +151,7 @@ namespace VPB
             winOutline.effectDistance = new Vector2(2f, -2f);
             winOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
 
-            VerticalLayoutGroup vlg = window.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(20, 20, 22, 20);
-            vlg.spacing = 12;
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childForceExpandWidth = true;
+            VerticalLayoutGroup vlg = UI.AddVLG(window, spacing: 12, padding: UI.Pad(20, 20, 22, 20), childAlignment: TextAnchor.UpperCenter);
 
             GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Normal, Color.white, TextAnchor.UpperCenter, true);
             titleTextComponent = titleGo.GetComponent<Text>();
@@ -174,9 +167,7 @@ namespace VPB
             Text hintT = hintGo.GetComponent<Text>();
             hintT.horizontalOverflow = HorizontalWrapMode.Wrap;
             hintT.verticalOverflow = VerticalWrapMode.Truncate;
-            LayoutElement hintLe = hintGo.AddComponent<LayoutElement>();
-            hintLe.flexibleHeight = 0;
-            hintLe.preferredHeight = 52;
+            LayoutElement hintLe = UI.AddLE(hintGo, preferredHeight: 52, flexibleHeight: 0);
 
             previewImg = CreatePreviewStripe(window).GetComponent<Image>();
 
@@ -188,16 +179,8 @@ namespace VPB
 
             GameObject btnRow = new GameObject("ButtonRow");
             btnRow.transform.SetParent(window.transform, false);
-            HorizontalLayoutGroup hlg = btnRow.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = 14;
-            hlg.childAlignment = TextAnchor.MiddleCenter;
-            hlg.childControlWidth = true;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandWidth = true;
-            hlg.childForceExpandHeight = false;
-            LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 48;
+            HorizontalLayoutGroup hlg = UI.AddHLG(btnRow, spacing: 14, childAlignment: TextAnchor.MiddleCenter);
+            LayoutElement rowLe = UI.AddLE(btnRow, preferredHeight: 48, flexibleHeight: 0);
 
             CreateDialogButton(hlg.transform, "Cancel", Hide);
             CreateDialogButton(hlg.transform, "OK", () =>
@@ -213,9 +196,7 @@ namespace VPB
         {
             GameObject go = new GameObject("Preview");
             go.transform.SetParent(parent.transform, false);
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleHeight = 0;
-            le.preferredHeight = 52;
+            LayoutElement le = UI.AddLE(go, preferredHeight: 52, flexibleHeight: 0);
             Image img = go.AddComponent<Image>();
             img.color = Color.white;
             img.raycastTarget = false;
@@ -243,10 +224,7 @@ namespace VPB
             t.raycastTarget = false;
             try { VPBUiFont.ApplyTo(t); } catch { }
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleHeight = 0;
-            le.preferredHeight = boldLine ? 30 : 48;
-            le.minWidth = 1;
+            LayoutElement le = UI.AddLE(go, minWidth: 1, preferredHeight: boldLine ? 30 : 48, flexibleHeight: 0);
             return go;
         }
 
@@ -254,9 +232,7 @@ namespace VPB
         {
             GameObject go = new GameObject("Btn_" + label);
             go.transform.SetParent(row, false);
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
-            le.preferredHeight = 44f;
+            LayoutElement le = UI.AddLE(go, preferredHeight: 44f, flexibleWidth: 1f);
 
             Image img = UI.AddGalleryElementRoundedBg(go, new Color(0.26f, 0.26f, 0.3f, 1f));
             img.raycastTarget = true;
@@ -280,8 +256,7 @@ namespace VPB
             cb.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
             cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
             btn.colors = cb;
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn);
             btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
 
@@ -293,29 +268,16 @@ namespace VPB
         {
             GameObject row = new GameObject("Row_" + label);
             row.transform.SetParent(parent.transform, false);
-            LayoutElement rowLe = row.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 34;
+            LayoutElement rowLe = UI.AddLE(row, preferredHeight: 34, flexibleHeight: 0);
 
-            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 10;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = true;
-            h.childForceExpandHeight = false;
+            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 10);
 
             Text lt = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
-            LayoutElement labLe = lt.gameObject.AddComponent<LayoutElement>();
-            labLe.flexibleWidth = 0;
-            labLe.preferredWidth = 22;
+            LayoutElement labLe = UI.AddLE(lt.gameObject, preferredWidth: 22, flexibleWidth: 0);
 
             GameObject sliderHost = new GameObject("Slider");
             sliderHost.transform.SetParent(row.transform, false);
-            LayoutElement shLe = sliderHost.AddComponent<LayoutElement>();
-            shLe.flexibleWidth = 1f;
-            shLe.minWidth = 50;
-            shLe.preferredHeight = 30;
+            LayoutElement shLe = UI.AddLE(sliderHost, minWidth: 50, preferredHeight: 30, flexibleWidth: 1f);
 
             Slider s = sliderHost.AddComponent<Slider>();
             s.minValue = 0;
@@ -377,9 +339,7 @@ namespace VPB
         {
             GameObject go = new GameObject("ColorCodeInput");
             go.transform.SetParent(parent.transform, false);
-            LayoutElement rowLe = go.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 40;
+            LayoutElement rowLe = UI.AddLE(go, preferredHeight: 40, flexibleHeight: 0);
 
             Image bgImg = go.AddComponent<Image>();
             bgImg.color = new Color(0.07f, 0.07f, 0.08f, 1f);

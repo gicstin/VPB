@@ -419,9 +419,7 @@ namespace VPB
                     VPBUiFont.ApplyTo(rowT);
                 }
 
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = GalleryUiDesignTokens.PopupMenuRowHeightCompactRef;
-                le.flexibleWidth = 1f;
+                LayoutElement le = UI.AddLE(row, preferredHeight: GalleryUiDesignTokens.PopupMenuRowHeightCompactRef, flexibleWidth: 1f);
             }
 
             SyncSidePaneSortMenuLayout(ChromeScale);
@@ -529,9 +527,7 @@ namespace VPB
                     VPBUiFont.ApplyTo(rowT);
                 }
 
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 38f;
-                le.flexibleWidth = 1f;
+                LayoutElement le = UI.AddLE(row, preferredHeight: 38f, flexibleWidth: 1f);
             }
 
             AppendHideOldVersionsMenuRow();
@@ -595,9 +591,7 @@ namespace VPB
                 VPBUiFont.ApplyTo(rowT);
             }
 
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = 38f;
-            le.flexibleWidth = 1f;
+            LayoutElement le = UI.AddLE(row, preferredHeight: 38f, flexibleWidth: 1f);
         }
 
         private void ToggleFileSortDirection()

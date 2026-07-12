@@ -41,6 +41,14 @@ namespace VPB
         public static readonly Color AccentGreen = new Color(0.2f, 0.6f, 0.2f, 1f);
         public static readonly Color AccentRed = new Color(0.6f, 0.2f, 0.2f, 1f);
 
+        /// <summary>Background of centered modal panels (formerly inline new Color(0.06,0.06,0.08,1)).</summary>
+        public static readonly Color ModalPanel = new Color(0.06f, 0.06f, 0.08f, 1f);
+        // Standard gallery Button ColorBlock tints (formerly inlined per button). White normalColor keeps the
+        // RoundedRect fill unchanged; hover brightens, press darkens, disabled dims + fades.
+        public static readonly Color ButtonHighlight = new Color(1.2f, 1.2f, 1.2f, 1f);
+        public static readonly Color ButtonPressed = new Color(0.8f, 0.8f, 0.8f, 1f);
+        public static readonly Color ButtonDisabled = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+
         /// <summary>White with the given alpha — for hover/separator/overlay tints (replaces inline new Color(1,1,1,a)).</summary>
         public static Color White(float alpha) => new Color(1f, 1f, 1f, alpha);
         /// <summary>Black with the given alpha — for scrims/shadows (replaces inline new Color(0,0,0,a)).</summary>
@@ -1054,9 +1062,7 @@ namespace VPB
                 // Main grid only: lets short lists fill the viewport. Sub-tab lists stay tight to the last row.
                 GameObject spacer = new GameObject("BottomSpacer");
                 spacer.transform.SetParent(contentGO.transform, false);
-                LayoutElement le = spacer.AddComponent<LayoutElement>();
-                le.preferredHeight = 0;
-                le.flexibleHeight = 10000;
+                LayoutElement le = AddLE(spacer, preferredHeight: 0, flexibleHeight: 10000);
             }
 
             GameObject scrollbarGO = CreateScrollBar(scrollableContentGO, scrollBarWidth, verticalSize, Scrollbar.Direction.BottomToTop);
@@ -1331,6 +1337,22 @@ namespace VPB
         }
 
         /// <summary>
+        /// Adds a <see cref="LayoutElement"/>. Each dimension defaults to -1 (Unity's "ignore this constraint"
+        /// sentinel), so omitting an argument leaves that field unset exactly like a hand-rolled AddComponent.
+        /// </summary>
+        public static LayoutElement AddLE(GameObject go, float minWidth = -1f, float minHeight = -1f, float preferredWidth = -1f, float preferredHeight = -1f, float flexibleWidth = -1f, float flexibleHeight = -1f)
+        {
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            le.minWidth = minWidth;
+            le.minHeight = minHeight;
+            le.preferredWidth = preferredWidth;
+            le.preferredHeight = preferredHeight;
+            le.flexibleWidth = flexibleWidth;
+            le.flexibleHeight = flexibleHeight;
+            return le;
+        }
+
+        /// <summary>
         /// Creates a gallery text label. Bakes in the Arial builtin font, non-bold style, and VPBUiFont hook.
         /// Optional-parameter DEFAULTS mirror Unity's own <see cref="Text"/> defaults (Wrap/Truncate/UpperLeft,
         /// raycast+richtext on) so omitting an argument reproduces a hand-rolled AddComponent&lt;Text&gt; site exactly.
@@ -1361,23 +1383,54 @@ namespace VPB
         }
 
         /// <summary>
+        /// Turns off Unity's <see cref="Selectable"/> transition + keyboard/gamepad navigation on a button
+        /// (the pair written inline at dozens of sites). Optionally applies the standard gallery ColorBlock
+        /// (white normal, brighter hover, darker press, dimmed disabled) used by rounded chrome buttons.
+        /// </summary>
+        public static void ConfigButtonFlat(Button btn, bool applyColors = false)
+        {
+            if (btn == null) return;
+            if (applyColors)
+            {
+                ColorBlock cb = btn.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = ButtonHighlight;
+                cb.pressedColor = ButtonPressed;
+                cb.disabledColor = ButtonDisabled;
+                btn.colors = cb;
+            }
+            btn.transition = Selectable.Transition.None;
+            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+        }
+
+        /// <summary>
+        /// Creates a stretch-all click-to-dismiss dim layer (black at <paramref name="dimAlpha"/>, transition +
+        /// navigation off). Returns the dim GameObject. Used standalone for scrim/blocker overlays and as the
+        /// base of <see cref="CreateModalChrome"/>.
+        /// </summary>
+        public static GameObject CreateDimBlocker(GameObject parentGO, string name, UnityAction onDismiss, float dimAlpha = GalleryUiDesignTokens.ModalDimAlpha)
+        {
+            GameObject dim = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
+            Image dimImg = dim.AddComponent<Image>();
+            dimImg.color = Black(dimAlpha);
+            dimImg.raycastTarget = true;
+            Button dimBtn = dim.AddComponent<Button>();
+            ConfigButtonFlat(dimBtn);
+            if (onDismiss != null) dimBtn.onClick.AddListener(onDismiss);
+            return dim;
+        }
+
+        /// <summary>
         /// Builds the standard full-screen modal scaffold: a stretch-all root, a click-to-dismiss dim layer
         /// (black at <paramref name="dimAlpha"/>, transition/navigation off), and a centered panel of the given
         /// size + background. Returns the root; the panel is returned via <paramref name="panelGO"/> for the
         /// caller to attach its own layout group / click blocker / content.
         /// </summary>
-        public static GameObject CreateModalChrome(GameObject parentGO, string name, float panelWidth, float panelHeight, Color panelBg, UnityAction onDismiss, out GameObject panelGO, float dimAlpha = 0.72f)
+        public static GameObject CreateModalChrome(GameObject parentGO, string name, float panelWidth, float panelHeight, Color panelBg, UnityAction onDismiss, out GameObject panelGO, float dimAlpha = GalleryUiDesignTokens.ModalDimAlpha)
         {
             GameObject root = CreateChildRT(parentGO, name, AnchorPresets.stretchAll);
 
-            GameObject dim = CreateChildRT(root, "Dim", AnchorPresets.stretchAll);
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = Black(dimAlpha);
-            dimImg.raycastTarget = true;
-            Button dimBtn = dim.AddComponent<Button>();
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.navigation = new Navigation { mode = Navigation.Mode.None };
-            if (onDismiss != null) dimBtn.onClick.AddListener(onDismiss);
+            CreateDimBlocker(root, "Dim", onDismiss, dimAlpha);
 
             panelGO = CreateChildRT(root, "Panel", AnchorPresets.middleCenter, new Vector2(panelWidth, panelHeight));
             Image pbg = panelGO.AddComponent<Image>();
@@ -1398,30 +1451,12 @@ namespace VPB
             Button btn = buttonGO.AddComponent<Button>();
             if (onClick != null) btn.onClick.AddListener(onClick);
 
-            // Configure button colors to ensure dark background by default (avoiding white boxes)
-            ColorBlock cb = btn.colors;
-            cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f); // Slightly brighter on hover
-            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-            cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f); // Darker and more transparent when disabled
-            btn.colors = cb;
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
-            
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(buttonGO.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = TextPrimary;
-            t.alignment = TextAnchor.MiddleCenter;
+            // Standard gallery button ColorBlock + no transition/navigation (white normalColor keeps the
+            // RoundedRect fill; hover brightens, press darkens, disabled dims).
+            ConfigButtonFlat(btn, applyColors: true);
 
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
-            
+            CreateLabel(buttonGO, label, fontSize, TextPrimary, TextAnchor.MiddleCenter, name: "Text");
+
             // Add Hover Border
             buttonGO.AddComponent<UIHoverBorder>();
 
@@ -1449,8 +1484,7 @@ namespace VPB
             cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
             cb.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
             btn.colors = cb;
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            ConfigButtonFlat(btn);
             btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
             go.AddComponent<UIHoverBorder>();
@@ -1460,11 +1494,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(edgeLengthPx, edgeLengthPx);
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minWidth = le.preferredWidth = edgeLengthPx;
-            le.minHeight = le.preferredHeight = edgeLengthPx;
-            le.flexibleWidth = 0f;
-            le.flexibleHeight = 0f;
+            LayoutElement le = AddLE(go, minWidth: edgeLengthPx, minHeight: edgeLengthPx, preferredWidth: edgeLengthPx, preferredHeight: edgeLengthPx, flexibleWidth: 0f, flexibleHeight: 0f);
 
             // HorizontalLayoutGroup row height can exceed edgeLengthPx; match width to height so icon stays square.
             AspectRatioFitter arf = go.AddComponent<AspectRatioFitter>();
@@ -1681,19 +1711,10 @@ namespace VPB
             Image checkImg = AddGalleryElementRoundedBg(checkGO, Color.white, raycastTarget: false);
             toggle.graphic = checkImg;
 
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(toggleGO.transform, false);
-            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
-            labelRT.anchorMin = new Vector2(0, 0);
-            labelRT.anchorMax = new Vector2(1, 1);
+            Text t = CreateLabel(toggleGO, label, fontSize, Color.white, TextAnchor.MiddleLeft, name: "Label");
+            RectTransform labelRT = t.GetComponent<RectTransform>();
             labelRT.offsetMin = new Vector2(35, 0);
             labelRT.offsetMax = new Vector2(0, 0);
-            Text t = labelGO.AddComponent<Text>();
-            t.text = label;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
 
             toggle.onValueChanged.AddListener(onValueChanged);
             return toggleGO;
@@ -1740,19 +1761,10 @@ namespace VPB
             Image checkImg = AddGalleryElementRoundedBg(checkGO, Color.white, raycastTarget: false);
             toggle.graphic = checkImg;
 
-            GameObject labelGO = new GameObject("Label");
-            labelGO.transform.SetParent(toggleGO.transform, false);
-            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
-            labelRT.anchorMin = new Vector2(0, 0);
-            labelRT.anchorMax = new Vector2(1, 1);
+            Text t = CreateLabel(toggleGO, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Label");
+            RectTransform labelRT = t.GetComponent<RectTransform>();
             labelRT.offsetMin = new Vector2(35, 0);
             labelRT.offsetMax = new Vector2(0, 0);
-            Text t = labelGO.AddComponent<Text>();
-            t.text = label;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = GalleryUiDesignTokens.FontBodyRef;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
 
             toggle.onValueChanged.AddListener(onValueChanged);
             return toggleGO;
@@ -1865,21 +1877,11 @@ namespace VPB
             
             InputField inputField = inputGO.AddComponent<InputField>();
             
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(inputGO.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
-            t.color = InputFieldTextColor;
-            t.alignment = TextAnchor.MiddleLeft;
-            t.supportRichText = false;
-            
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
+            Text t = CreateLabel(inputGO, "", fontSize, InputFieldTextColor, TextAnchor.MiddleLeft, richText: false, name: "Text");
+            RectTransform textRT = t.GetComponent<RectTransform>();
             textRT.sizeDelta = new Vector2(-10, -10);
             textRT.anchoredPosition = new Vector2(5, 0);
-            
+
             inputField.textComponent = t;
             
             GameObject placeholderGO = new GameObject("Placeholder");
