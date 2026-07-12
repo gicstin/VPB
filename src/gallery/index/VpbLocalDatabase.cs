@@ -2469,6 +2469,29 @@ namespace VPB
 
         internal static string LastErrorForDiagnostics { get { return s_LastError; } }
 
+        /// <summary>
+        /// Refresh discovered new/removed .var paths after SQL restore already stamped the index valid.
+        /// Clears the skip gate and schedules an incremental (or full) index patch.
+        /// </summary>
+        internal static void NotifyPackageInventoryChangedFromRefresh(int added, int removed)
+        {
+            if (added <= 0 && removed <= 0) return;
+            lock (s_Sync)
+            {
+                s_ReadyScanBinary = long.MinValue;
+                s_SkipDeferredGallerySqlRebuild = false;
+                s_ReadyPkgInvSig = null;
+            }
+            InvalidatePackageDependencyBulkCache();
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag
+                    + " gallery SQL gate invalidated (refresh delta add=" + added + " remove=" + removed + ")");
+            }
+            catch { }
+            try { ScheduleGalleryIndexUpdateAfterScan(); } catch { }
+        }
+
         internal static void InvalidateReadyStateOnCategoriesChanged()
         {
             Gallery g = Gallery.singleton;
@@ -2933,6 +2956,16 @@ namespace VPB
                         }
                     }
                     catch { }
+                    if (liveCount > 0 && pkgCount > 0 && liveCount != pkgCount)
+                    {
+                        try
+                        {
+                            LogUtil.Log("[VPB.Gallery] sqlRestore rejected: live_count=" + liveCount
+                                + " != pkg_rows=" + pkgCount);
+                        }
+                        catch { }
+                        return false;
+                    }
                     if (liveCount > 0 && pkgCount > 0
                         && (pkgCount < (liveCount * 9) / 10
                             || pkgsInMem < Math.Max(8, pkgCount / 2)))
@@ -4130,7 +4163,10 @@ namespace VPB
             List<long> ticks;
             List<long> sizes;
             if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+            {
+                VpbPackageIndexDiagnostics.Log(uid, "sqlClassifySkip", "reason=no_zip_cache");
                 return 0;
+            }
 
             string varPath = pkg.Path ?? "";
             string varListPrefix = varPath.Length > 0 ? (varPath + ":/") : ":/";
@@ -4312,6 +4348,8 @@ namespace VPB
             if (pkg == null || insPkg == null) return;
             string uid = pkg.Uid ?? "";
             if (uid.Length == 0) return;
+
+            VpbPackageIndexDiagnostics.Log(uid, "sqlInsertPkg", "path='" + (pkg.Path ?? "") + "'");
 
             string cr = pkg.Creator ?? "";
             long wt = DateTime.MinValue.Ticks;
@@ -5030,6 +5068,7 @@ namespace VPB
             {
                 try { LogUtil.LogWarning("[VPB] VpbLocalDatabase: SQLite ready but stats log failed: " + ex.Message); } catch { }
             }
+            try { VpbPackageIndexDiagnostics.AuditTracedPackages("gallerySqlRebuild"); } catch { }
         }
 
         /// <summary>

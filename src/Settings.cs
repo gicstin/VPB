@@ -66,6 +66,7 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<string> IndexDiagUidSubstring;
         public ConfigEntry<bool> LogStartupTiming;
         public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
         public ConfigEntry<float> StartupDeferGallerySqlRebuildDelaySec;
@@ -179,6 +180,7 @@ namespace VPB
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
+            IndexDiagUidSubstring = config.Bind<string>("Logging", "IndexDiagUidSubstring", "", "When set (e.g. RunRudolf.AlternativeFuta), emit [VPB.IndexDiag] logs for that package through disk scan, registry, SQLite index, and gallery listing. Empty = off.");
             LogStartupTiming = config.Bind<bool>("Logging", "LogStartupTiming", false, "Emit [VPB.Startup.Timing] milestones and a cold-start summary (native/VPB package refresh, SyncVamX, bootstrap). Also enabled when LogStartupDetails is true.");
             StartupDeferGallerySqlRebuild = config.Bind<bool>("Startup", "DeferGallerySqlRebuildUntilReady", true, "Defer full gallery SQLite index rebuild until World UI / startup-ready milestone. Speeds cold start; gallery SQL queries wait until rebuild runs.");
             StartupDeferGallerySqlRebuildDelaySec = config.Bind<float>("Startup", "DeferGallerySqlRebuildDelaySec", 2f, "Seconds after READY before deferred gallery SQLite rebuild starts (0 = immediate). Gives UI/gallery a short window on restored index.");

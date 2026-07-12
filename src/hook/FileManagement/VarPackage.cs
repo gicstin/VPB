@@ -1373,6 +1373,7 @@ namespace VPB
 							if (vp.IsInvalid)
 							{
 								invalid = true;
+								VpbPackageIndexDiagnostics.Log(this.Uid, "scanCacheInvalid", "reason=manifest_IsInvalid path='" + (Path ?? "") + "'");
 								Scaned = true;
 								return;
 							}
@@ -1573,6 +1574,7 @@ namespace VPB
 								VarPackageMgr.singleton.SetCache(this.Uid, bad);
 							}
 							catch { }
+							VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=zip_scan path='" + (Path ?? "") + "'");
 							Scaned = true;
 							return;
 						}
@@ -1606,6 +1608,7 @@ namespace VPB
 				if (!flag)
 				{
 					invalid = true;
+					VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=no_meta_json path='" + (Path ?? "") + "'");
 				}
 				else
 				{

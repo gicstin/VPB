@@ -341,10 +341,19 @@ namespace VPB
                 string varPath = CleanFilePath(rawPath);
                 diff.PathHashSet.Add(varPath);
 
+                string candidateUid = packagePathToUid(varPath).Trim();
+                if (VpbPackageIndexDiagnostics.ShouldTrace(candidateUid))
+                {
+                    bool dupUid = existingUids != null && existingUids.Contains(candidateUid);
+                    bool dupPath = existingPaths != null && existingPaths.Contains(varPath);
+                    VpbPackageIndexDiagnostics.Log(candidateUid, "diffScan",
+                        "raw='" + rawPath + "' clean='" + varPath + "' dupUid=" + (dupUid ? "1" : "0")
+                        + " dupPath=" + (dupPath ? "1" : "0") + " skipFileIdDedup=" + (skipFileIdDedup ? "1" : "0"));
+                }
+
                 if (existingPaths != null && existingPaths.Contains(varPath))
                     continue;
 
-                string candidateUid = packagePathToUid(varPath).Trim();
                 if (!string.IsNullOrEmpty(candidateUid) && existingUids != null && existingUids.Contains(candidateUid))
                 {
                     List<string> dups;
@@ -354,6 +363,7 @@ namespace VPB
                         diff.DuplicateUidPaths.Add(candidateUid, dups);
                     }
                     dups.Add(varPath);
+                    VpbPackageIndexDiagnostics.Log(candidateUid, "diffSkipDupUid", "path='" + varPath + "'");
                     continue;
                 }
 
@@ -531,6 +541,15 @@ namespace VPB
 
             MergePackageRefreshDelta(diff.RemoveSet, diff.AddSet);
             LogDuplicateUidSummary(diff.DuplicateUidPaths);
+            try
+            {
+                int addN = diff.AddSet != null ? diff.AddSet.Count : 0;
+                int remN = diff.RemoveSet != null ? diff.RemoveSet.Count : 0;
+                if (addN > 0 || remN > 0)
+                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(addN, remN);
+            }
+            catch { }
+            try { VpbPackageIndexDiagnostics.AuditTracedPackages("ApplyPackageRefreshDiffCo"); } catch { }
         }
 
         public static string CurrentLoadDir
@@ -676,6 +695,10 @@ namespace VPB
 
             VarPackage registered = RegisterPackage(cleanPath);
             try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
+            if (registered != null)
+            {
+                try { VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(1, 0); } catch { }
+            }
             try
             {
                 LogUtil.Log("[VPB.HubDownload] RegisterHubDownloadedPackage path='" + cleanPath
@@ -737,6 +760,8 @@ namespace VPB
                         }
                         value.AddPackage(varPackage);
 
+                        VpbPackageIndexDiagnostics.Log(canonicalUid, "registerOk", "path='" + cleanPath + "'");
+
                         // Disabling a var package means creating a "disable" file in the same path
                         if (varPackage.Enabled)
                         {
@@ -796,14 +821,16 @@ namespace VPB
                         LogUtil.LogError("Duplicate package uid " + canonicalUid + ". Cannot register");
                     }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     LogUtil.LogError("VAR file " + vpath + " does not use integer version field in name <creator>.<name>.<version>");
+                    VpbPackageIndexDiagnostics.LogPathEvent(vpath, "registerReject", "reason=bad_version ex=" + ex.Message);
                 }
             }
             else
             {
                 LogUtil.LogError("VAR file " + vpath + " is not named with convention <creator>.<name>.<version>");
+                VpbPackageIndexDiagnostics.LogPathEvent(vpath, "registerReject", "reason=bad_name_segment_count segments=" + array.Length);
             }
 
             // Reaching here means it is invalid

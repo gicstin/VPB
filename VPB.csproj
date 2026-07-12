@@ -291,6 +291,7 @@
     <Compile Include="src\hook\VpbPerfHairHook.cs" />
     <Compile Include="src\util\VamStartupProfiler.cs" />
     <Compile Include="src\util\VamStartupOptimizations.cs" />
+    <Compile Include="src\util\VpbPackageIndexDiagnostics.cs" />
     <Compile Include="src\hook\VamStartupProfilerPatches.cs" />
     <Compile Include="src\hook\VamStartupOptimizationPatches.cs" />
     <Compile Include="src\util\LooseVapGenderProbe.cs" />

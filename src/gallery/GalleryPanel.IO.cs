@@ -275,11 +275,48 @@ namespace VPB
                     label = file.Name;
                     return true;
                 }
-                if (file is PackageListEntry ple && ple.Package != null)
+                if (file is PackageListEntry ple)
                 {
-                    pkg = ple.Package;
-                    label = ple.Package.Uid;
-                    return true;
+                    string uid = ple.GetPackageUidForGalleryUserTags();
+                    VarPackage resolved = ple.Package;
+                    if (resolved != null)
+                    {
+                        pkg = resolved;
+                        label = !string.IsNullOrEmpty(resolved.Uid) ? resolved.Uid : uid;
+                        return true;
+                    }
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        try
+                        {
+                            VarPackage live = FileManager.GetPackage(uid, ensureInstalled: false);
+                            if (live != null)
+                            {
+                                pkg = live;
+                                label = uid;
+                                VpbPackageIndexDiagnostics.Log(uid, "navResolve", "source=PackageListEntry_fallback");
+                                return true;
+                            }
+                        }
+                        catch { }
+                        VpbPackageIndexDiagnostics.Log(uid, "navResolveFail", "source=PackageListEntry");
+                    }
+                }
+                if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                {
+                    try
+                    {
+                        VarPackage live = FileManager.GetPackage(mple.RequestedUid, ensureInstalled: false);
+                        if (live != null)
+                        {
+                            pkg = live;
+                            label = mple.RequestedUid;
+                            VpbPackageIndexDiagnostics.Log(mple.RequestedUid, "navResolve", "source=MissingPackageListEntry");
+                            return true;
+                        }
+                    }
+                    catch { }
+                    VpbPackageIndexDiagnostics.Log(mple.RequestedUid, "navResolveFail", "source=MissingPackageListEntry");
                 }
             }
             catch { }
@@ -850,7 +887,11 @@ namespace VPB
                     try
                     {
                         var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
-                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
+                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row))
+                        {
+                            VpbPackageIndexDiagnostics.Log(uid, "galleryRowSkip", "reason=hide_filter sqlPath='" + (r.VarPath ?? "") + "'");
+                            continue;
+                        }
                         result.Add(row);
                     }
                     catch
@@ -870,11 +911,22 @@ namespace VPB
                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
                         result.Add(row);
                     }
-                    else result.Add(new MissingPackageListEntry(uid));
+                    else
+                    {
+                        VpbPackageIndexDiagnostics.Log(uid, "galleryBuildRow", "row=missing_no_registry");
+                        result.Add(new MissingPackageListEntry(uid));
+                    }
                 }
                 catch
                 {
                     result.Add(new MissingPackageListEntry(uid));
+                }
+                if (VpbPackageIndexDiagnostics.ShouldTrace(uid))
+                {
+                    bool added = result.Exists(e =>
+                        (e is PackageListEntry ple && string.Equals(ple.GetPackageUidForGalleryUserTags(), uid, StringComparison.OrdinalIgnoreCase))
+                        || (e is MissingPackageListEntry m && string.Equals(m.RequestedUid, uid, StringComparison.OrdinalIgnoreCase)));
+                    VpbPackageIndexDiagnostics.Log(uid, "galleryBuildRow", added ? "row=added" : "row=missing_entry");
                 }
             }
 
