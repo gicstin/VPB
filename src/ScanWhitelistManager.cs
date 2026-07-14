@@ -82,6 +82,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(jsonPath)) return;
 
+            bool createBlankConfig = false;
             lock (lockObj)
             {
                 _whitelistedFolders.Clear();
@@ -114,10 +115,17 @@ namespace VPB
                 // proactive scan. VPB on-demand registration still allows needed packages.
                 _enabled = true;
                 hasLoadedSuccessfully = true; // fresh start
-                if (!mainExists && !backupExists)
-                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — defaulting to enabled empty whitelist (fail-closed)");
+                createBlankConfig = !mainExists && !backupExists;
+                if (createBlankConfig)
+                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — creating blank enabled whitelist (fail-closed)");
                 else
                     LogUtil.LogWarning("[VPB ScanWhitelist] Config unreadable — defaulting to enabled empty whitelist (fail-closed)");
+            }
+
+            if (createBlankConfig)
+            {
+                try { Save(); } catch { }
+                LogUtil.Log("[VPB ScanWhitelist] Created blank scan_whitelist.json (enabled, no folders or UID overrides)");
             }
         }
 

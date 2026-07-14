@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Diagnostics;
@@ -90,6 +91,12 @@ namespace VPB
 
         private static readonly HashSet<string> s_RewriteLogOnceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RewriteLogLock = new object();
+        private const int PathRewriteProbeLogMax = 10;
+        private static int s_PathRewriteProbeLogged;
+        private static int s_PathRewriteProbeSilenced;
+        private static bool s_PathRewriteProbeSummaryLogged;
+        private static int s_CatalogMetaJsonProbeSuppressed;
+        private static bool s_CatalogMetaJsonProbeNoticeLogged;
 
         private static void LogRewriteOnce(string key, string message)
         {
@@ -99,6 +106,72 @@ namespace VPB
                 if (!s_RewriteLogOnceKeys.Add(key)) return;
             }
             LogUtil.Log(message);
+        }
+
+        /// <summary>
+        /// PluginAssist (and similar) probe meta.json using filesystem paths as fake UIDs
+        /// (AddonPackages/Foo.1.var:/meta.json). VPB manifest lookup cannot register these in VaM.
+        /// </summary>
+        private static bool IsCatalogMetaJsonFilesystemProbe(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return false;
+            string p = entryPath.Replace('\\', '/');
+            int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx <= 0 || colonIdx + 2 >= p.Length) return false;
+            string uid = p.Substring(0, colonIdx);
+            string internalPath = p.Substring(colonIdx + 2);
+            if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
+            if (!IsRawVarFilesystemPath(uid)) return false;
+            return string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void SuppressCatalogMetaJsonProbe()
+        {
+            int n = Interlocked.Increment(ref s_CatalogMetaJsonProbeSuppressed);
+            if (n != 1 || s_CatalogMetaJsonProbeNoticeLogged) return;
+            s_CatalogMetaJsonProbeNoticeLogged = true;
+            LogUtil.Log("[VPB OnDemand] PluginAssist catalog meta.json probes detected — suppressing path rewrite logs");
+        }
+
+        /// <summary>
+        /// Caps noisy path rewrite probe logs (PluginAssist catalog scans, identity rewrites).
+        /// </summary>
+        private static void LogPathRewriteProbeLimited(string reqPath, string rewrittenPath, string detailMessage)
+        {
+            if (string.IsNullOrEmpty(detailMessage)) return;
+            if (!string.IsNullOrEmpty(reqPath) && !string.IsNullOrEmpty(rewrittenPath)
+                && string.Equals(reqPath.Replace('\\', '/'), rewrittenPath.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                Interlocked.Increment(ref s_PathRewriteProbeSilenced);
+                return;
+            }
+
+            lock (s_RewriteLogLock)
+            {
+                if (s_PathRewriteProbeLogged < PathRewriteProbeLogMax)
+                {
+                    s_PathRewriteProbeLogged++;
+                    LogUtil.Log(detailMessage);
+                    return;
+                }
+                s_PathRewriteProbeSilenced++;
+                if (s_PathRewriteProbeSummaryLogged) return;
+                s_PathRewriteProbeSummaryLogged = true;
+                LogUtil.Log("[VPB OnDemand] Silenced further path rewrite probe logs (first "
+                    + PathRewriteProbeLogMax + " shown; "
+                    + s_PathRewriteProbeSilenced + " additional probe(s) skipped)");
+            }
+        }
+
+        private static void AppendPathRewriteProbeSummaryIfNeeded(StringBuilder sb)
+        {
+            if (sb == null) return;
+            int catalog = Interlocked.CompareExchange(ref s_CatalogMetaJsonProbeSuppressed, 0, 0);
+            int silenced = s_PathRewriteProbeSilenced;
+            lock (s_RewriteLogLock) { silenced = s_PathRewriteProbeSilenced; }
+            if (catalog <= 0 && silenced <= 0) return;
+            sb.Append(" path_rewrite_catalog_probes=").Append(catalog);
+            if (silenced > 0) sb.Append(" path_rewrite_probes_silenced=").Append(silenced);
         }
 
         private static string TryRewritePluginCslistPathByFilename(string entryPath)
@@ -181,6 +254,12 @@ namespace VPB
             if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
             if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(internalPath)) return null;
 
+            if (IsCatalogMetaJsonFilesystemProbe(p))
+            {
+                SuppressCatalogMetaJsonProbe();
+                return null;
+            }
+
             // If exact entry exists, no rewrite needed.
             try
             {
@@ -210,7 +289,7 @@ namespace VPB
                 if (string.Equals(nn, reqNorm, StringComparison.OrdinalIgnoreCase))
                 {
                     string rewrittenExact = uid + ":/" + nn;
-                    LogRewriteOnce("casepath|" + uid + "|" + reqNorm,
+                    LogPathRewriteProbeLimited(p, rewrittenExact,
                         "[VPB OnDemand] Rewrote missing entry by case-insensitive path match: req=" + p + " -> " + rewrittenExact);
                     return rewrittenExact;
                 }
@@ -246,7 +325,7 @@ namespace VPB
             if (string.IsNullOrEmpty(best)) return null;
 
             string rewritten = uid + ":/" + best;
-            LogRewriteOnce("nameloc|" + uid + "|" + reqFile,
+            LogPathRewriteProbeLimited(p, rewritten,
                 "[VPB OnDemand] Rewrote missing entry by filename within same package: req=" + p
                 + " -> " + rewritten + " (matches=" + matchCount + ")");
             return rewritten;
@@ -552,16 +631,31 @@ namespace VPB
         }
 
         /// <summary>
-        /// Called from the Harmony postfix on MVR.FileManagement.FileManager.GetPackage.
-        /// Attempts to register the requested package in VaM's FileManager if it exists
-        /// in VPB's registry but was excluded from VaM's scan.
-        /// Returns the VPB VarPackage path found, or null.
+        /// True for bare filesystem paths like "AddonPackages/Creator.Pkg.1.var".
+        /// These are catalog/index probes, not real package-entry requests — skip on-demand.
+        /// </summary>
+        internal static bool IsRawVarFilesystemPath(string request)
+        {
+            if (string.IsNullOrEmpty(request)) return false;
+            string p = request.Replace('\\', '/').Trim();
+            if (p.IndexOf(":/", StringComparison.Ordinal) >= 0) return false;
+            if (!p.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                && !p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
+                || p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Register a scan-excluded package in VaM's FileManager when a real runtime request
+        /// needs it (entry-path hooks, preset deps, script load). Returns the .var path or null.
         /// </summary>
         public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false)
         {
             if (string.IsNullOrEmpty(uid)) return null;
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
+            if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
 
             // Already registered this session?
             lock (s_RegisteredLock)
@@ -766,7 +860,7 @@ namespace VPB
                 if (!string.Equals(pkg.Uid, uid, StringComparison.OrdinalIgnoreCase)) return null;
 
                 string rewritten = pkg.Uid + p.Substring(colonIdx);
-                LogRewriteOnce("uidcase|" + uid,
+                LogPathRewriteProbeLimited(p, rewritten,
                     "[VPB OnDemand] Rewrote entry UID by case-insensitive package lookup: req=" + p + " -> " + rewritten);
                 return rewritten;
             }
@@ -780,6 +874,12 @@ namespace VPB
         public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
         {
             if (string.IsNullOrEmpty(entryPath)) return entryPath;
+
+            if (IsCatalogMetaJsonFilesystemProbe(entryPath))
+            {
+                SuppressCatalogMetaJsonProbe();
+                return entryPath;
+            }
 
             // First, normalize UID casing (VaM sometimes treats UID segment as case-sensitive).
             string uidCase = TryRewriteEntryPathUidByCaseInsensitiveLookup(entryPath);
@@ -1508,17 +1608,25 @@ namespace VPB
             }
 
             long vamNotReady = Interlocked.Read(ref s_StartupVamNotReadyDeferredCount);
-            LogUtil.Log("[VPB OnDemand][Startup" + (ready ? ":final" : ":checkpoint") + "] attempts=" + a
-                + " success=" + s
-                + " fail=" + f
-                + " skipped_recent_fail=" + sk
-                + " deferred_non_script=" + dn
-                + " allowed_script=" + ascr
-                + " deferred_script=" + ds
-                + " deferred_vam_not_ready=" + vamNotReady
-                + " invoke_ms_total=" + ms
-                + " cooldown_ms=" + FailedRetryCooldownMs
-                + " top_fail_uids=" + (string.IsNullOrEmpty(topFail) ? "(none)" : topFail));
+            var summary = new StringBuilder();
+            summary.Append("[VPB OnDemand][Startup").Append(ready ? ":final" : ":checkpoint").Append("] attempts=").Append(a)
+                .Append(" success=").Append(s)
+                .Append(" fail=").Append(f)
+                .Append(" skipped_recent_fail=").Append(sk)
+                .Append(" deferred_non_script=").Append(dn)
+                .Append(" allowed_script=").Append(ascr)
+                .Append(" deferred_script=").Append(ds)
+                .Append(" deferred_vam_not_ready=").Append(vamNotReady)
+                .Append(" invoke_ms_total=").Append(ms)
+                .Append(" cooldown_ms=").Append(FailedRetryCooldownMs)
+                .Append(" top_fail_uids=").Append(string.IsNullOrEmpty(topFail) ? "(none)" : topFail);
+            AppendPathRewriteProbeSummaryIfNeeded(summary);
+            int catalogProbes = Interlocked.CompareExchange(ref s_CatalogMetaJsonProbeSuppressed, 0, 0);
+            if (ready && catalogProbes > 0 && s_CatalogMetaJsonProbeNoticeLogged)
+            {
+                summary.Append(" catalog_meta_json_probes_suppressed=").Append(catalogProbes);
+            }
+            LogUtil.Log(summary.ToString());
         }
 
         /// <summary>

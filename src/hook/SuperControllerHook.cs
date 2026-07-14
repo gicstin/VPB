@@ -628,6 +628,32 @@ namespace VPB
             }
         }
 
+        static int s_ImgqEventLogged;
+        static int s_ImgqEventSilenced;
+        static bool s_ImgqEventSummaryLogged;
+        const int ImgqEventLogMax = 10;
+        static readonly object s_ImgqEventLogLock = new object();
+
+        static bool TryLogImgqEvent()
+        {
+            lock (s_ImgqEventLogLock)
+            {
+                if (s_ImgqEventLogged < ImgqEventLogMax)
+                {
+                    s_ImgqEventLogged++;
+                    return true;
+                }
+                s_ImgqEventSilenced++;
+                if (!s_ImgqEventSummaryLogged)
+                {
+                    s_ImgqEventSummaryLogged = true;
+                    LogUtil.Log("[VPB] Silenced further IMGQ logs (first " + ImgqEventLogMax
+                        + " shown; additional image queue events suppressed)");
+                }
+                return false;
+            }
+        }
+
         static void LogImageQueueEvent(string evt, ImageLoaderThreaded.QueuedImage qi, int queueCount, int numRealQueuedImages, bool moved)
         {
             if (qi == null) return;
@@ -639,6 +665,7 @@ namespace VPB
                 }
             }
             catch { }
+            if (!TryLogImgqEvent()) return;
             string scene = LogUtil.GetSceneLoadName();
             int pri = GetImagePriority(qi.imgPath);
             string cat = GetImageCategory(qi.imgPath);

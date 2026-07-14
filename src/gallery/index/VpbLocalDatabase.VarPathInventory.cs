@@ -14,6 +14,7 @@ namespace VPB
         const string MetaVarPathInventoryCountKey = "var_path_inventory_count_v1";
         const string MetaVarPathInventoryAddonRootMtimeKey = "var_path_inventory_addon_root_mtime_v1";
         const string MetaVarPathInventoryAllRootMtimeKey = "var_path_inventory_all_root_mtime_v1";
+        const string MetaRegistryWarmInvSigKey = "registry_warm_inv_sig_v1";
 
         struct VarPathRow
         {
@@ -334,6 +335,7 @@ namespace VPB
                             st.Step();
                         }
                         SaveVarPathInventoryRootMeta(conn, rows.Count);
+                        ClearRegistryWarmInventorySignature(conn);
                         conn.ExecUtf8("COMMIT;");
                     }
                     catch
@@ -454,6 +456,87 @@ namespace VPB
                 try { LogUtil.LogWarning("[VPB] TryRemoveVarPathInventory failed: " + ex.Message); } catch { }
                 return false;
             }
+        }
+
+        internal static bool TryLoadRegistryWarmInventorySignature(out string signature)
+        {
+            signature = null;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    signature = MetaGet(conn, MetaRegistryWarmInvSigKey);
+                }
+                return !string.IsNullOrEmpty(signature);
+            }
+            catch
+            {
+                signature = null;
+                return false;
+            }
+        }
+
+        /// <summary>Warm-restore sig: dedicated meta first, else last gallery rebuild fingerprint.</summary>
+        internal static bool TryLoadPackageInventorySignatureForWarmRestore(out string signature)
+        {
+            if (TryLoadRegistryWarmInventorySignature(out signature)) return true;
+            signature = null;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    signature = MetaGet(conn, "pkg_inv_sig");
+                    if (string.IsNullOrEmpty(signature)) return false;
+                    string galleryReady = MetaGet(conn, MetaGalleryReadyKey);
+                    if (!string.Equals(galleryReady ?? "", "1", StringComparison.Ordinal)) return false;
+                }
+                return true;
+            }
+            catch
+            {
+                signature = null;
+                return false;
+            }
+        }
+
+        internal static void TrySaveRegistryWarmInventorySignature(string signature)
+        {
+            if (string.IsNullOrEmpty(signature) || !VpbSqlite3.IsAvailable) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                    {
+                        st.BindText(1, MetaRegistryWarmInvSigKey);
+                        st.BindText(2, signature);
+                        st.Step();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] TrySaveRegistryWarmInventorySignature failed: " + ex.Message); } catch { }
+            }
+        }
+
+        static void ClearRegistryWarmInventorySignature(VpbSqlite3.Connection conn)
+        {
+            if (conn == null) return;
+            try
+            {
+                using (var st = conn.Prepare("DELETE FROM meta WHERE k = ?"))
+                {
+                    st.BindText(1, MetaRegistryWarmInvSigKey);
+                    st.Step();
+                }
+            }
+            catch { }
         }
     }
 }

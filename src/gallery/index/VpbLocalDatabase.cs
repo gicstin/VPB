@@ -2801,7 +2801,7 @@ namespace VPB
             return sig;
         }
 
-        private static string ComputePackageInventorySignatureFromUids(List<string> uids)
+        internal static string ComputePackageInventorySignatureFromUids(List<string> uids)
         {
             if (uids == null || uids.Count == 0) return "0";
             uids.Sort(StringComparer.Ordinal);

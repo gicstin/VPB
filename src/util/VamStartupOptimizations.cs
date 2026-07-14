@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 
@@ -367,6 +369,54 @@ namespace VPB
             if (string.IsNullOrEmpty(packageUidOrPath)) return false;
             if (TryShortCircuitAbsentVamXGetPackage(packageUidOrPath)) return false;
             return LooksLikeVarPackageLookup(packageUidOrPath);
+        }
+
+        private static readonly object s_GetPackageNotFoundLogLock = new object();
+        private static readonly HashSet<string> s_GetPackageNotFoundKeysLogged =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static int s_GetPackageNotFoundSilenced;
+        private static bool s_GetPackageNotFoundSummaryLogged;
+        private const int GetPackageNotFoundLogMax = 10;
+
+        static string NormalizeGetPackageNotFoundKey(string packageUidOrPath)
+        {
+            if (string.IsNullOrEmpty(packageUidOrPath)) return null;
+            string s = packageUidOrPath.Replace('\\', '/').Trim();
+            if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                || s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                s = Path.GetFileNameWithoutExtension(s);
+            if (s.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring("AddonPackages/".Length);
+            else if (s.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase))
+                s = s.Substring("AllPackages/".Length);
+            int colonIdx = s.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx > 0) s = s.Substring(0, colonIdx);
+            return string.IsNullOrEmpty(s) ? null : s;
+        }
+
+        /// <summary>Rate-limits GetPackage-not-found debug lines (LogStartupDetails).</summary>
+        public static bool TryLogGetPackageNotFound(string packageUidOrPath)
+        {
+            if (!ShouldLogGetPackageNotFound(packageUidOrPath)) return false;
+            string key = NormalizeGetPackageNotFoundKey(packageUidOrPath);
+            if (string.IsNullOrEmpty(key)) return false;
+            lock (s_GetPackageNotFoundLogLock)
+            {
+                if (s_GetPackageNotFoundKeysLogged.Contains(key)) return false;
+                if (s_GetPackageNotFoundKeysLogged.Count < GetPackageNotFoundLogMax)
+                {
+                    s_GetPackageNotFoundKeysLogged.Add(key);
+                    return true;
+                }
+                s_GetPackageNotFoundSilenced++;
+                if (!s_GetPackageNotFoundSummaryLogged)
+                {
+                    s_GetPackageNotFoundSummaryLogged = true;
+                    LogUtil.Log("[VPB] Silenced further GetPackage-not-found logs (first "
+                        + GetPackageNotFoundLogMax + " unique packages shown; additional missing lookups suppressed)");
+                }
+                return false;
+            }
         }
 
         static bool LooksLikeVarPackageLookup(string s)

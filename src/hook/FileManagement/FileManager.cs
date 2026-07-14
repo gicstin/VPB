@@ -463,18 +463,35 @@ namespace VPB
             bool usedPathCache,
             bool clean,
             bool removeOldVersion,
+            bool allowRegistryWarmRestore,
             PackageRefreshApplyState state)
         {
             HashSet<string> existingUidsSnap = SnapshotExistingPackageUids();
             PackageRefreshDiff diff = null;
+            List<string> warmRegisterPaths = null;
+            string warmMatchedSignature = null;
             ManualResetEvent diffReady = new ManualResetEvent(false);
             bool skipFileIdDedup = usedPathCache;
+            bool registryWarmRestore = false;
             List<string> pathsForDiff = allVarFiles;
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
-                    diff = BuildPackageRefreshDiff(pathsForDiff, skipFileIdDedup, existingUidsSnap);
+                    if (allowRegistryWarmRestore
+                        && usedPathCache
+                        && VamStartupOptimizations.UseCachedVarPathInventory
+                        && pathsForDiff != null
+                        && pathsForDiff.Count > 0
+                        && existingUidsSnap.Count == 0
+                        && TryPrepareRegistryWarmRestore(pathsForDiff, existingUidsSnap, out warmRegisterPaths, out warmMatchedSignature))
+                    {
+                        registryWarmRestore = true;
+                    }
+                    else
+                    {
+                        diff = BuildPackageRefreshDiff(pathsForDiff, skipFileIdDedup, existingUidsSnap);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -491,30 +508,55 @@ namespace VPB
                 yield return null;
             diffReady.Close();
 
-            AppendOldVersionRemovals(diff, removeOldVersion);
+            HashSet<string> addSet;
+            HashSet<VarPackage> removeSet;
+            Dictionary<string, List<string>> duplicateUidPaths;
+            HashSet<string> oldVersionPaths;
+
+            if (registryWarmRestore && warmRegisterPaths != null)
+            {
+                addSet = new HashSet<string>(warmRegisterPaths, StringComparer.OrdinalIgnoreCase);
+                removeSet = new HashSet<VarPackage>();
+                duplicateUidPaths = null;
+                oldVersionPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " registry warm restore paths="
+                        + warmRegisterPaths.Count + " sig=" + (warmMatchedSignature ?? ""));
+                }
+                catch { }
+            }
+            else
+            {
+                AppendOldVersionRemovals(diff, removeOldVersion);
+                addSet = diff.AddSet;
+                removeSet = diff.RemoveSet;
+                duplicateUidPaths = diff.DuplicateUidPaths;
+                oldVersionPaths = diff.OldVersionPaths;
+            }
 
             Stopwatch regSw = Stopwatch.StartNew();
-            EnsurePackageDictionaryCapacity(diff.AddSet.Count);
+            EnsurePackageDictionaryCapacity(addSet.Count);
 
-            foreach (VarPackage item2 in diff.RemoveSet)
+            foreach (VarPackage item2 in removeSet)
             {
                 UnregisterPackage(item2);
                 state.Flag = true;
             }
 
             int regCount = 0;
-            foreach (string item3 in diff.AddSet)
+            foreach (string item3 in addSet)
             {
                 RegisterPackage(item3, clean);
                 state.Flag = true;
                 regCount++;
-                if ((regCount & 511) == 0)
+                if (!registryWarmRestore && (regCount & 511) == 0)
                     yield return null;
             }
 
             if (removeOldVersion)
             {
-                foreach (string oldPath in diff.OldVersionPaths)
+                foreach (string oldPath in oldVersionPaths)
                     RemoveToInvalid(oldPath, "OldVersion");
             }
 
@@ -524,7 +566,9 @@ namespace VPB
                 try
                 {
                     LogUtil.Log(VamStartupOptimizations.LogTag + " RegisterPackage bulk count=" + regCount
-                        + " ms=" + regSw.ElapsedMilliseconds + " skipFileIdDedup=" + (skipFileIdDedup ? "1" : "0"));
+                        + " ms=" + regSw.ElapsedMilliseconds
+                        + " skipFileIdDedup=" + (skipFileIdDedup ? "1" : "0")
+                        + " warmRestore=" + (registryWarmRestore ? "1" : "0"));
                 }
                 catch { }
             }
@@ -532,23 +576,27 @@ namespace VPB
             {
                 VamStartupOptimizations.StartupDebug("registry phase done registered=" + regCount
                     + " ms=" + regSw.ElapsedMilliseconds
-                    + " manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0"));
+                    + " manifestReady=" + (VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady ? "1" : "0")
+                    + " warmRestore=" + (registryWarmRestore ? "1" : "0"));
             }
             catch { }
 
             // Registry is usable for gallery/init as soon as bulk RegisterPackage finishes — do not wait on delta merge.
             TryNotifyRegistryReadyForInit();
 
-            MergePackageRefreshDelta(diff.RemoveSet, diff.AddSet);
-            LogDuplicateUidSummary(diff.DuplicateUidPaths);
+            MergePackageRefreshDelta(removeSet, addSet);
+            if (!registryWarmRestore)
+                LogDuplicateUidSummary(duplicateUidPaths);
             try
             {
-                int addN = diff.AddSet != null ? diff.AddSet.Count : 0;
-                int remN = diff.RemoveSet != null ? diff.RemoveSet.Count : 0;
+                int addN = addSet != null ? addSet.Count : 0;
+                int remN = removeSet != null ? removeSet.Count : 0;
                 if (addN > 0 || remN > 0)
                     VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(addN, remN);
             }
             catch { }
+            if (regCount > 0 && (registryWarmRestore || usedPathCache))
+                TrySaveRegistryWarmSignatureFromLiveRegistry();
             try { VpbPackageIndexDiagnostics.AuditTracedPackages("ApplyPackageRefreshDiffCo"); } catch { }
         }
 
@@ -656,6 +704,88 @@ namespace VPB
                 if (c < '0' || c > '9') return false;
             }
             return int.TryParse(segment, out version);
+        }
+
+        internal static bool TryGetCanonicalUidFromVarPath(string vpath, out string canonicalUid)
+        {
+            canonicalUid = null;
+            if (string.IsNullOrEmpty(vpath)) return false;
+            string cleanPath = CleanFilePath(vpath);
+            string text = packagePathToUid(cleanPath).Trim();
+            string[] array = text.Split('.');
+            if (array.Length != 3) return false;
+            string creator = array[0];
+            string name = array[1];
+            if (string.IsNullOrEmpty(creator) || string.IsNullOrEmpty(name)) return false;
+            int version;
+            if (!TryParseVarVersionSegment(array[2], out version)) return false;
+            canonicalUid = creator + "." + name + "." + version;
+            return true;
+        }
+
+        static bool TryPrepareRegistryWarmRestore(
+            IList<string> rawPaths,
+            HashSet<string> existingUids,
+            out List<string> canonicalPaths,
+            out string matchedSignature)
+        {
+            canonicalPaths = null;
+            matchedSignature = null;
+            string storedSig;
+            if (!VpbLocalDatabase.TryLoadPackageInventorySignatureForWarmRestore(out storedSig)) return false;
+            if (rawPaths == null || rawPaths.Count == 0) return false;
+
+            var addByUid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            for (int pi = 0; pi < rawPaths.Count; pi++)
+            {
+                string rawPath = rawPaths[pi];
+                if (string.IsNullOrEmpty(rawPath)) continue;
+                string varPath = CleanFilePath(rawPath);
+
+                string candidateUid;
+                if (!TryGetCanonicalUidFromVarPath(varPath, out candidateUid)) continue;
+                if (existingUids != null && existingUids.Contains(candidateUid)) continue;
+
+                if (addByUid.TryGetValue(candidateUid, out string existingNewPath))
+                {
+                    string canonical = ChooseCanonicalDuplicatePath(existingNewPath, varPath);
+                    addByUid[candidateUid] = canonical;
+                }
+                else
+                {
+                    addByUid[candidateUid] = varPath;
+                }
+            }
+
+            if (addByUid.Count == 0) return false;
+
+            var uidList = new List<string>(addByUid.Count);
+            foreach (KeyValuePair<string, string> kv in addByUid)
+                uidList.Add(kv.Key);
+            string liveSig = VpbLocalDatabase.ComputePackageInventorySignatureFromUids(uidList);
+            if (!string.Equals(liveSig, storedSig, StringComparison.Ordinal)) return false;
+
+            canonicalPaths = new List<string>(addByUid.Count);
+            foreach (KeyValuePair<string, string> kv in addByUid)
+                canonicalPaths.Add(kv.Value);
+            matchedSignature = liveSig;
+            return true;
+        }
+
+        static void TrySaveRegistryWarmSignatureFromLiveRegistry()
+        {
+            try
+            {
+                Dictionary<string, VarPackage> snap;
+                lock (packagesLock)
+                {
+                    snap = packagesByUid;
+                }
+                if (snap == null || snap.Count == 0) return;
+                string sig = VpbLocalDatabase.ComputePackageInventorySignature(snap);
+                VpbLocalDatabase.TrySaveRegistryWarmInventorySignature(sig);
+            }
+            catch { }
         }
 
         static bool RefreshReasonNeedsFreshVarDiskEnum(string refreshReason)
@@ -1571,7 +1701,8 @@ namespace VPB
                 }
 
                 var applyState = new PackageRefreshApplyState { Flag = flag };
-                IEnumerator applyCo = ApplyPackageRefreshDiffCo(allVarFiles, usedPathCache, clean, removeOldVersion, applyState);
+                bool allowRegistryWarmRestore = init && usedPathCache && !removeOldVersion;
+                IEnumerator applyCo = ApplyPackageRefreshDiffCo(allVarFiles, usedPathCache, clean, removeOldVersion, allowRegistryWarmRestore, applyState);
                 while (true)
                 {
                     bool more;
@@ -3179,7 +3310,7 @@ namespace VPB
 				try
 				{
 					if (Settings.Instance != null && Settings.Instance.LogStartupDetails != null && Settings.Instance.LogStartupDetails.Value
-						&& VamStartupOptimizations.ShouldLogGetPackageNotFound(packageUidOrPath))
+						&& VamStartupOptimizations.TryLogGetPackageNotFound(packageUidOrPath))
 					{
 						LogUtil.Log("GetPackage not found: " + packageUidOrPath);
 					}
@@ -3195,16 +3326,17 @@ namespace VPB
 		{
 			if (package == null) return;
 
-			// Scan-whitelist check: if the package is physically in AddonPackages/ but was
-			// excluded from VaM's scan, register it in VaM's FileManager on-demand instead
-			// of moving it. This avoids unnecessary file I/O.
+			// Scan-whitelist: packages already in AddonPackages/ need no install/move work.
+			// Do not promote them into VaM's FileManager from GetPackage(ensureInstalled) —
+			// catalog plugins enumerate the whole library that way and would temp-whitelist
+			// every package. VaM registration stays on-demand via entry-path hooks and
+			// explicit preset/dependency callers.
 			if (ScanWhitelistManager.Instance.IsEnabled)
 			{
 				string normPath = (package.Path ?? "").Replace('\\', '/');
 				if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
 					&& ScanWhitelistManager.Instance.IsPackageScanExcluded(package.Uid, normPath))
 				{
-					VamOnDemandLoader.TryRegisterPackageOnDemand(package.Uid);
 					return;
 				}
 			}
