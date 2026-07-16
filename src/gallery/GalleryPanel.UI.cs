@@ -3369,18 +3369,20 @@ namespace VPB
         }
 
         // Reflect the persisted appearance clothing-apply-mode on the toolbox segmented row
-        // (Preset / Keep / Only). Single-select: the active mode's button is highlighted, the
+        // (Preset / Keep / Only / Merge). Single-select: the active mode's button is highlighted, the
         // others are dimmed.
         private void UpdateKeepClothingButtonState()
         {
             string m = AppearanceClothingApplyMode ?? "replace";
             bool keep = string.Equals(m, "keep", StringComparison.OrdinalIgnoreCase);
             bool only = string.Equals(m, "clothingonly", StringComparison.OrdinalIgnoreCase);
-            bool preset = !keep && !only;
+            bool merge = string.Equals(m, "mergeoutfit", StringComparison.OrdinalIgnoreCase);
+            bool preset = !keep && !only && !merge;
 
             StyleClothingModeButton(tboxClothesPresetImg, tboxClothesPresetText, preset, new Color(0.35f, 0.3f, 0.2f, 1f));
             StyleClothingModeButton(tboxClothesKeepImg, tboxClothesKeepText, keep, new Color(0.15f, 0.35f, 0.55f, 1f));
             StyleClothingModeButton(tboxClothesOnlyImg, tboxClothesOnlyText, only, new Color(0.15f, 0.45f, 0.28f, 1f));
+            StyleClothingModeButton(tboxClothesMergeImg, tboxClothesMergeText, merge, new Color(0.40f, 0.22f, 0.45f, 1f));
         }
 
         private static void StyleClothingModeButton(Image img, Text text, bool selected, Color selectedColor)

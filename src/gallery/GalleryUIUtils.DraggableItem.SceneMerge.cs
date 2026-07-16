@@ -203,6 +203,8 @@ namespace VPB
                     appearanceMode = "replace";
                 else if (string.Equals(appearanceMode, "merge", StringComparison.OrdinalIgnoreCase))
                     appearanceMode = "merge";
+                else if (string.Equals(appearanceMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                    appearanceMode = "mergeoutfit";
             }
             if (string.IsNullOrEmpty(appearanceMode))
             {
@@ -214,6 +216,8 @@ namespace VPB
                         appearanceMode = "keep";
                     else if (string.Equals(cfgMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
                         appearanceMode = "clothingOnly";
+                    else if (string.Equals(cfgMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                        appearanceMode = "mergeoutfit";
                     else
                         appearanceMode = "replace";
                 }
@@ -292,6 +296,18 @@ namespace VPB
                 return;
             }
 
+            // Merge Outfit: show per-item picker before undo capture (cancel must not push undo).
+            if (itemType == ItemType.Appearance
+                && string.Equals(appearanceMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Panel != null)
+                {
+                    Panel.ShowMergeOutfitPicker(FileEntry, atom);
+                    return;
+                }
+                LogUtil.LogWarning("[VPB] Merge Outfit: no gallery panel for picker; merging all clothing items.");
+            }
+
             // Capture state for Undo
             if (Panel != null)
             {
@@ -338,6 +354,8 @@ namespace VPB
                     clothingMode = ClothingApplyMode.ClothingOnly;
                 else if (string.Equals(appearanceMode, "merge", StringComparison.OrdinalIgnoreCase))
                     clothingMode = ClothingApplyMode.Merge;
+                else if (string.Equals(appearanceMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                    clothingMode = ClothingApplyMode.MergeOutfit;
 
                 VpbImport.LoadPreset(FileEntry, atom, VpbResourceType.Appearance, clothingMode);
                 return;
@@ -1173,6 +1191,8 @@ namespace VPB
                          line2 = "(keep body clothes)";
                      else if (string.Equals(cfg, "clothingonly", StringComparison.OrdinalIgnoreCase))
                          line2 = "(clothes only)";
+                     else if (string.Equals(cfg, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                         line2 = "(merge outfit — pick items)";
                      else
                          line2 = "(preset outfit)";
                      if (isValidTarget)

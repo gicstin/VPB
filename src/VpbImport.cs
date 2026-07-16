@@ -32,7 +32,25 @@ namespace VPB
         Keep,
         Replace,
         Merge,
-        ClothingOnly
+        ClothingOnly,
+        /// <summary>Keep body/skin/hair; merge selected clothing items from appearance onto current outfit.</summary>
+        MergeOutfit
+    }
+
+    internal enum AppearanceOutfitPickKind
+    {
+        Clothing = 0,
+        Hair = 1,
+        Skin = 2
+    }
+
+    /// <summary>One item listed from an appearance preset for the Merge Outfit picker.</summary>
+    internal sealed class AppearanceOutfitPickItem
+    {
+        public string Uid;
+        public string DisplayName;
+        public string CategoryLabel;
+        public AppearanceOutfitPickKind Kind;
     }
 
     internal static class VpbImport
@@ -175,6 +193,16 @@ namespace VPB
                         if (lpos != null) lpos.val = false;
 
                         string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
+
+                        if (clothingMode == ClothingApplyMode.MergeOutfit)
+                        {
+                            // Merge Outfit without a picker selection merges every enabled clothing item
+                            // from the appearance. Prefer GalleryPanel.ShowMergeOutfitPicker for choose-what.
+                            MergeAppearanceOutfitItems(sourceEntry, targetAtom, selectedUids: null, presetJC: preset);
+                            if (lpos != null) lpos.val = lposPre;
+                            if (psName != null) psName.val = psNamePre;
+                            break;
+                        }
 
                         if (clothingMode == ClothingApplyMode.ClothingOnly)
                         {
@@ -787,9 +815,11 @@ namespace VPB
         // Extracts worn clothing of the requested wear class (cosmetic vs real garment) from a person
         // JSON. uidMaterials/seenUidMat accumulate the non-positional (uid/asset-path) clothing material
         // storables shared across sources; those only bind to items that actually end up worn.
+        // When onlyUids is non-null, only entries whose clothing id is in that set are collected.
         private static void CollectClothingSliceItems(
             JSONClass source, bool wantCosmetic,
-            List<ClothingSliceItem> items, List<JSONClass> uidMaterials, HashSet<string> seenUidMat)
+            List<ClothingSliceItem> items, List<JSONClass> uidMaterials, HashSet<string> seenUidMat,
+            HashSet<string> onlyUids = null)
         {
             if (source == null || source["storables"] == null) return;
             JSONArray storables = source["storables"].AsArray;
@@ -840,6 +870,7 @@ namespace VPB
                 if (e == null) continue;
                 if (e["enabled"] != null && string.Equals(e["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase)) continue;
                 string euid = e["id"] != null ? e["id"].Value : "";
+                if (onlyUids != null && (string.IsNullOrEmpty(euid) || !onlyUids.Contains(euid))) continue;
                 string eiid = e["internalId"] != null ? e["internalId"].Value : "";
                 if (string.IsNullOrEmpty(eiid)) eiid = ClothingInternalIdFromUid(euid);
                 string norm = NormalizeStorablePrefix(eiid);
@@ -857,6 +888,8 @@ namespace VPB
                     continue;
 
                 string uid = entry["id"] != null ? entry["id"].Value : "";
+                if (onlyUids != null && (string.IsNullOrEmpty(uid) || !onlyUids.Contains(uid))) continue;
+
                 // Three-way split for Outfit Only: real garments and ACCESSORIES (glasses, hats,
                 // jewelry) load from the preset; true FACE cosmetics (eye overlays, makeup, lashes,
                 // decals) are kept from the target. Accessories are cosmetic-classified but part of
@@ -953,6 +986,343 @@ namespace VPB
             return int.TryParse(id.Substring(p, end - p), out n) ? n : -1;
         }
 
+        /// <summary>Synthetic uid for the appearance skin package in the Merge Outfit picker.</summary>
+        public const string MergeOutfitSkinUid = "__vpb_merge_skin__";
+
+        /// <summary>
+        /// Lists enabled clothing (and optionally hair/skin) items in an appearance preset for Merge Outfit.
+        /// </summary>
+        public static List<AppearanceOutfitPickItem> ListAppearanceOutfitItems(
+            FileEntry sourceEntry, JSONClass presetJC = null, bool includeSkinAndHair = false)
+        {
+            List<AppearanceOutfitPickItem> result = new List<AppearanceOutfitPickItem>();
+            JSONClass preset = ResolvePresetJson(sourceEntry, presetJC);
+            if (preset == null || preset["storables"] == null) return result;
+
+            JSONArray storables = preset["storables"].AsArray;
+            if (storables == null) return result;
+
+            JSONClass geometry = FindGeometryStorable(storables);
+            if (geometry != null)
+                AppendGeometryArrayPickItems(geometry, "clothing", AppearanceOutfitPickKind.Clothing, result);
+
+            if (includeSkinAndHair)
+            {
+                if (geometry != null)
+                    AppendGeometryArrayPickItems(geometry, "hair", AppearanceOutfitPickKind.Hair, result);
+                result.Add(new AppearanceOutfitPickItem
+                {
+                    Uid = MergeOutfitSkinUid,
+                    DisplayName = "Skin (from appearance)",
+                    CategoryLabel = "Skin",
+                    Kind = AppearanceOutfitPickKind.Skin
+                });
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Merge selected appearance clothing (and optional hair/skin) onto the target.
+        /// Null <paramref name="selectedUids"/> = merge all listed clothing only (not skin/hair).
+        /// </summary>
+        public static void MergeAppearanceOutfitItems(
+            FileEntry sourceEntry,
+            Atom targetAtom,
+            IEnumerable<string> selectedUids,
+            JSONClass presetJC = null)
+        {
+            if (targetAtom == null)
+            {
+                LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: targetAtom is null; aborting.");
+                return;
+            }
+
+            JSONClass preset = ResolvePresetJson(sourceEntry, presetJC);
+            if (preset == null)
+            {
+                LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: preset empty; aborting.");
+                return;
+            }
+
+            HashSet<string> onlyUids = null;
+            if (selectedUids != null)
+            {
+                onlyUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string u in selectedUids)
+                {
+                    if (!string.IsNullOrEmpty(u)) onlyUids.Add(u);
+                }
+                if (onlyUids.Count == 0)
+                {
+                    LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: no items selected; aborting.");
+                    return;
+                }
+            }
+
+            bool wantSkin = onlyUids != null && onlyUids.Contains(MergeOutfitSkinUid);
+            HashSet<string> clothingUids = null;
+            HashSet<string> hairUids = null;
+            if (onlyUids != null)
+            {
+                clothingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                hairUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                JSONClass geometry = null;
+                if (preset["storables"] != null)
+                    geometry = FindGeometryStorable(preset["storables"].AsArray);
+                HashSet<string> hairInPreset = CollectGeometryArrayUids(geometry, "hair");
+                foreach (string u in onlyUids)
+                {
+                    if (string.Equals(u, MergeOutfitSkinUid, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (hairInPreset.Contains(u)) hairUids.Add(u);
+                    else clothingUids.Add(u);
+                }
+            }
+
+            string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
+            bool any = false;
+
+            if (onlyUids == null || (clothingUids != null && clothingUids.Count > 0))
+            {
+                JSONClass clothingSlice = BuildSelectedClothingMergeSlice(preset, clothingUids);
+                if (clothingSlice != null)
+                {
+                    any |= TryMergePresetSlice(targetAtom, "ClothingPresets", clothingSlice, sourcePath);
+                }
+                else if (onlyUids == null)
+                {
+                    LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: no clothing items to merge.");
+                }
+            }
+
+            if (hairUids != null && hairUids.Count > 0)
+            {
+                JSONClass hairSlice = BuildSelectedHairMergeSlice(preset, hairUids);
+                if (hairSlice != null)
+                    any |= TryMergePresetSlice(targetAtom, "HairPresets", hairSlice, sourcePath);
+            }
+
+            if (wantSkin)
+            {
+                // SkinPresets merge of the appearance package — applies skin textures from the look.
+                any |= TryMergePresetSlice(targetAtom, "SkinPresets", preset, sourcePath);
+            }
+
+            if (!any)
+            {
+                LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: nothing merged.");
+                return;
+            }
+
+            if (targetAtom.type == "Person")
+            {
+                try { SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom); }
+                catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Post-apply fixup failed: {ex.Message}"); }
+            }
+        }
+
+        private static JSONClass FindGeometryStorable(JSONArray storables)
+        {
+            if (storables == null) return null;
+            foreach (JSONNode node in storables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null) continue;
+                string id = s["id"] != null ? s["id"].Value : "";
+                if (string.Equals(id, "geometry", StringComparison.OrdinalIgnoreCase))
+                    return s;
+            }
+            return null;
+        }
+
+        private static void AppendGeometryArrayPickItems(
+            JSONClass geometry, string arrayKey, AppearanceOutfitPickKind kind, List<AppearanceOutfitPickItem> result)
+        {
+            if (geometry == null || geometry[arrayKey] == null || geometry[arrayKey].AsArray == null) return;
+            JSONArray arr = geometry[arrayKey].AsArray;
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < arr.Count; i++)
+            {
+                JSONClass entry = arr[i].AsObject;
+                if (entry == null) continue;
+                if (entry["enabled"] != null
+                    && string.Equals(entry["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string uid = entry["id"] != null ? entry["id"].Value : "";
+                if (string.IsNullOrEmpty(uid) || !seen.Add(uid)) continue;
+
+                string internalId = entry["internalId"] != null ? entry["internalId"].Value : "";
+                if (string.IsNullOrEmpty(internalId)) internalId = ClothingInternalIdFromUid(uid);
+
+                string category = kind == AppearanceOutfitPickKind.Hair
+                    ? "Hair"
+                    : ClassifyOutfitPickCategory(uid);
+
+                result.Add(new AppearanceOutfitPickItem
+                {
+                    Uid = uid,
+                    DisplayName = !string.IsNullOrEmpty(internalId) ? internalId : uid,
+                    CategoryLabel = category,
+                    Kind = kind
+                });
+            }
+        }
+
+        private static HashSet<string> CollectGeometryArrayUids(JSONClass geometry, string arrayKey)
+        {
+            HashSet<string> set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (geometry == null || geometry[arrayKey] == null || geometry[arrayKey].AsArray == null) return set;
+            JSONArray arr = geometry[arrayKey].AsArray;
+            for (int i = 0; i < arr.Count; i++)
+            {
+                JSONClass entry = arr[i].AsObject;
+                if (entry == null || entry["id"] == null) continue;
+                string uid = entry["id"].Value;
+                if (!string.IsNullOrEmpty(uid)) set.Add(uid);
+            }
+            return set;
+        }
+
+        private static bool TryMergePresetSlice(Atom targetAtom, string storableName, JSONClass slice, string sourcePath)
+        {
+            if (targetAtom == null || slice == null || string.IsNullOrEmpty(storableName)) return false;
+            JSONStorable storable = targetAtom.GetStorableByID(storableName);
+            if (storable == null)
+            {
+                LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: " + storableName + " storable not found.");
+                return false;
+            }
+            MeshVR.PresetManager pm = storable.GetComponentInChildren<MeshVR.PresetManager>();
+            if (pm == null)
+            {
+                LogUtil.LogWarning("VpbImport.MergeAppearanceOutfitItems: " + storableName + " PresetManager not found.");
+                return false;
+            }
+
+            PresetParamsSnapshot snap = CapturePresetParamsSnapshot(targetAtom, storableName);
+            MaybeSetLastRestoredData(targetAtom, slice, updateLastRestoredData: true);
+            try
+            {
+                if (!string.IsNullOrEmpty(sourcePath))
+                    MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
+                InvokeLoadPresetFromJSON(pm, slice, mergeLoad: true);
+                return true;
+            }
+            finally
+            {
+                if (!string.IsNullOrEmpty(sourcePath))
+                    MVR.FileManagement.FileManager.PopLoadDir();
+                RestorePresetParamsSnapshot(targetAtom, snap);
+            }
+        }
+
+        // HairPresets merge slice: selected hair items only; keep existing hair when mergeLoad=true.
+        private static JSONClass BuildSelectedHairMergeSlice(JSONClass preset, HashSet<string> onlyUids)
+        {
+            if (preset == null || preset["storables"] == null || onlyUids == null || onlyUids.Count == 0)
+                return null;
+
+            JSONClass geometry = FindGeometryStorable(preset["storables"].AsArray);
+            if (geometry == null || geometry["hair"] == null || geometry["hair"].AsArray == null)
+                return null;
+
+            JSONArray hairSrc = geometry["hair"].AsArray;
+            JSONClass geomSlice = new JSONClass();
+            geomSlice["id"] = "geometry";
+            JSONArray hairOut = new JSONArray();
+            HashSet<string> emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < hairSrc.Count; i++)
+            {
+                JSONClass entry = hairSrc[i].AsObject;
+                if (entry == null) continue;
+                if (entry["enabled"] != null
+                    && string.Equals(entry["enabled"].Value, "false", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                string uid = entry["id"] != null ? entry["id"].Value : "";
+                if (string.IsNullOrEmpty(uid) || !onlyUids.Contains(uid)) continue;
+                hairOut.Add(entry);
+                string boolKey = "hair:" + uid;
+                if (geometry[boolKey] != null) geomSlice[boolKey] = geometry[boolKey];
+                emitted.Add(uid);
+            }
+            if (emitted.Count == 0) return null;
+            geomSlice["hair"] = hairOut;
+
+            // Include hair-related customization storables whose id matches a selected hair item.
+            JSONArray storablesOut = new JSONArray();
+            storablesOut.Add(geomSlice);
+            JSONArray allStorables = preset["storables"].AsArray;
+            HashSet<string> emittedIds = new HashSet<string>(StringComparer.Ordinal);
+            emittedIds.Add("geometry");
+            foreach (JSONNode node in allStorables)
+            {
+                JSONClass s = node as JSONClass;
+                if (s == null || s["id"] == null) continue;
+                string sid = s["id"].Value;
+                if (string.IsNullOrEmpty(sid) || !emittedIds.Add(sid)) continue;
+                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                bool match = false;
+                foreach (string uid in emitted)
+                {
+                    string iid = ClothingInternalIdFromUid(uid);
+                    if ((!string.IsNullOrEmpty(iid) && sid.IndexOf(iid, StringComparison.OrdinalIgnoreCase) >= 0)
+                        || sid.IndexOf(uid, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        match = true;
+                        break;
+                    }
+                }
+                if (match) storablesOut.Add(CloneJsonClassStatic(s));
+            }
+
+            JSONClass slice = new JSONClass();
+            slice["storables"] = storablesOut;
+            slice["setUnlistedParamsToDefault"] = "false";
+            return slice;
+        }
+
+        private static JSONClass ResolvePresetJson(FileEntry sourceEntry, JSONClass presetJC)
+        {
+            if (presetJC != null) return presetJC;
+            if (sourceEntry == null) return null;
+            try
+            {
+                string presetJson = FileManager.ReadAllText(sourceEntry);
+                return JSON.Parse(presetJson) as JSONClass;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning($"VpbImport: failed to load preset: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static string ClassifyOutfitPickCategory(string uid)
+        {
+            if (ClothingLoadingUtils.IsAccessoryClothingUidHeuristic(uid))
+                return "Accessory";
+            bool cosmetic = ClothingLoadingUtils.ClassifyClothingWearClass(uid) == ClothingLoadingUtils.ClothingWearClass.Cosmetic
+                || ClothingLoadingUtils.IsCosmeticClothingUidHeuristic(uid);
+            return cosmetic ? "Cosmetic" : "Garment";
+        }
+
+        // ClothingPresets merge slice: only selected (or all) clothing from the appearance, additive.
+        // setUnlistedParamsToDefault=false so existing worn items stay.
+        private static JSONClass BuildSelectedClothingMergeSlice(JSONClass preset, HashSet<string> onlyUids)
+        {
+            List<ClothingSliceItem> items = new List<ClothingSliceItem>();
+            List<JSONClass> uidMaterials = new List<JSONClass>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Garments + accessories, then face cosmetics — picker can include either.
+            CollectClothingSliceItems(preset, false, items, uidMaterials, seen, onlyUids);
+            CollectClothingSliceItems(preset, true, items, uidMaterials, seen, onlyUids);
+
+            if (items.Count == 0) return null;
+            return BuildClothingPresetSliceFromItems(items, uidMaterials, setUnlistedToDefault: false);
+        }
+
         // Builds a ClothingPresets-shaped slice worn as EXACTLY: the target's kept cosmetics (makeup /
         // skin overlays, from keepCosmeticsSource) followed by the preset's real garments. Positional
         // clothingItem#N material storables are reindexed to the combined worn order so textures/colors
@@ -970,7 +1340,12 @@ namespace VPB
             CollectClothingSliceItems(preset, false, items, uidMaterials, seen);
 
             if (items.Count == 0) return null;
+            return BuildClothingPresetSliceFromItems(items, uidMaterials, setUnlistedToDefault: true);
+        }
 
+        private static JSONClass BuildClothingPresetSliceFromItems(
+            List<ClothingSliceItem> items, List<JSONClass> uidMaterials, bool setUnlistedToDefault)
+        {
             JSONClass geomSlice = new JSONClass();
             geomSlice["id"] = "geometry";
             JSONArray clothingArr = new JSONArray();
@@ -1002,7 +1377,7 @@ namespace VPB
 
             JSONClass slice = new JSONClass();
             slice["storables"] = storablesOut;
-            slice["setUnlistedParamsToDefault"] = "true";
+            slice["setUnlistedParamsToDefault"] = setUnlistedToDefault ? "true" : "false";
             return slice;
         }
 

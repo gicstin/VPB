@@ -1683,7 +1683,7 @@ namespace VPB
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
             bool showSave = true;
 
-            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only)
+            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only / Merge Outfit)
             // lives in the toolbox. Shown while browsing the Appearance category, and in History mode
             // (mixed items) only when the selected item is actually an appearance preset — so it isn't
             // always on when History contains scenes, clothing, etc.

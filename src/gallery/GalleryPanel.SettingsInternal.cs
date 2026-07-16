@@ -753,8 +753,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.appearanceClothing", GroupKey = "interaction", Label = VPBTranslation.T("settings.appearance_clothing", "Appearance clothing"),
-                Tooltip = VPBTranslation.T("settings.tip.appearance_clothing", "Preset outfit, keep body clothes, or clothes-only apply mode."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "replace", "keep", "clothingonly" },
+                Tooltip = VPBTranslation.T("settings.tip.appearance_clothing", "Full look, keep outfit, outfit only, or merge outfit (pick items to add on top)."),
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "replace", "keep", "clothingonly", "mergeoutfit" },
                 GetString = () => VPBConfig.Instance.AppearanceClothingApplyMode,
                 SetString = v => { VPBConfig.Instance.AppearanceClothingApplyMode = v; RefreshAppearanceClothingSideButton(); VPBConfig.Instance.TriggerChange(); }
             });

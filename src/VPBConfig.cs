@@ -177,7 +177,7 @@ namespace VPB
         public bool GalleryManualRefreshOnly = true;
         public float GalleryOpacity = 1.0f;
         public bool DragDropReplaceMode = false;
-        /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only).</summary>
+        /// <summary>How gallery applies an appearance .vap: replace (full), keep (keep body garments), clothingOnly (garment outfit from preset only), mergeoutfit (keep body; pick clothing items to merge on top).</summary>
         private string _appearanceClothingApplyMode = "replace";
         public string AppearanceClothingApplyMode
         {
@@ -186,7 +186,7 @@ namespace VPB
             {
                 if (string.IsNullOrEmpty(value)) { _appearanceClothingApplyMode = "replace"; return; }
                 string v = value.Trim().ToLowerInvariant();
-                if (v == "keep" || v == "replace" || v == "clothingonly")
+                if (v == "keep" || v == "replace" || v == "clothingonly" || v == "mergeoutfit")
                     _appearanceClothingApplyMode = v;
                 else
                     _appearanceClothingApplyMode = "replace";

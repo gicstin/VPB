@@ -67,9 +67,11 @@ namespace VPB
         private Image tboxClothesPresetImg;
         private Image tboxClothesKeepImg;
         private Image tboxClothesOnlyImg;
+        private Image tboxClothesMergeImg;
         private Text tboxClothesPresetText;
         private Text tboxClothesKeepText;
         private Text tboxClothesOnlyText;
+        private Text tboxClothesMergeText;
 
         private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
         {
@@ -808,6 +810,11 @@ namespace VPB
                 "gallery.tooltip.clothes_only",
                 VPBTranslation.T("gallery.tooltip.clothes_only", "Load only the preset's outfit; keep your current body, skin and hair."),
                 out tboxClothesOnlyImg, out tboxClothesOnlyText);
+            TboxBuildClothingModeButton("mergeoutfit",
+                VPBTranslation.T("gallery.clothes.merge_short", "Merge Outfit"),
+                "gallery.tooltip.clothes_merge",
+                VPBTranslation.T("gallery.tooltip.clothes_merge", "Keep body, skin and hair. Pick clothing from the appearance to add on top of your current outfit."),
+                out tboxClothesMergeImg, out tboxClothesMergeText);
 
             UpdateKeepClothingButtonState();
 
@@ -1478,6 +1485,8 @@ namespace VPB
                         GalleryUiMetrics.ApplyFont(tboxClothesKeepText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     if (tboxClothesOnlyText != null)
                         GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesMergeText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesMergeText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 }
                 catch { }
             });
