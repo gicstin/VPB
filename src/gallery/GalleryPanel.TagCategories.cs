@@ -201,15 +201,11 @@ namespace VPB
             bodyFont = typ.Body;
             rowH = 42f * s;
 
-            GameObject overlay = UI.CreateChildRT(host.gameObject, "VPB_TagCategoryModal", AnchorPresets.stretchAll);
-            Image odim = UI.AddImage(overlay, new Color(0f, 0f, 0f, 0.55f));
-            Button obtn = overlay.AddComponent<Button>();
-            obtn.transition = Selectable.Transition.None;
-            obtn.onClick.AddListener(CloseTagCategoryEditorModal);
-
-            GameObject panel = UI.CreateChildRT(overlay, "Panel", AnchorPresets.middleCenter, new Vector2(470f * s, 60f));
-            Image pbg = UI.AddImage(panel, new Color(0.12f, 0.12f, 0.14f, 1f));
-            // Swallow clicks on the panel so they do not fall through to the overlay close button.
+            GameObject panel;
+            GameObject overlay = UI.CreateModalChrome(
+                host.gameObject, "VPB_TagCategoryModal", 470f * s, 60f,
+                new Color(0.12f, 0.12f, 0.14f, 1f), CloseTagCategoryEditorModal, out panel, dimAlpha: 0.55f);
+            // Swallow clicks on the panel so they do not fall through to the dim close button.
             Button pbtn = panel.AddComponent<Button>();
             pbtn.transition = Selectable.Transition.None;
 

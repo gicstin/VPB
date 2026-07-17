@@ -1792,7 +1792,7 @@ namespace VPB
             {
                 foreach (string pkgId in checkMissingPackageNames)
                 {
-                    JSONClass pkg = pkgsObj[pkgId].AsObject;
+                    JSONClass pkg = FindBestPackageInResponse(pkgsObj, pkgId);
                     if (pkg != null) serverPackages[pkgId] = pkg;
                 }
                 RenderMissingPackages(serverPackages, checkMissingPackageNames);
@@ -1962,11 +1962,9 @@ namespace VPB
                         {
                             foreach (string pkgId in batch)
                             {
-                                JSONClass pkg = pkgsObj[pkgId].AsObject;
+                                JSONClass pkg = FindBestPackageInResponse(pkgsObj, pkgId);
                                 if (pkg != null)
-                                {
                                     serverPackages[pkgId] = pkg;
-                                }
                             }
                         }
                     }
@@ -1987,59 +1985,174 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Bind Hub findPackages row to a concrete integer .var (esp. for Author.Name.latest).
+        /// Prefer latestUrl, keep valid download URLs even when resource_id is missing.
+        /// </summary>
+        public static JSONClass ResolveFindPackagesEntry(string requestedId, JSONClass serverPkg)
+        {
+            JSONClass j = serverPkg ?? new JSONClass();
+            if (string.IsNullOrEmpty(requestedId))
+            {
+                if (!IsHubUrlValid(j["downloadUrl"]) && !IsHubUrlValid(j["latestUrl"]))
+                    j["downloadUrl"] = "null";
+                return j;
+            }
+
+            bool requestLatest = requestedId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase);
+            string group = FileManager.PackageIDToPackageGroupID(requestedId);
+            if (string.IsNullOrEmpty(group)) group = requestedId;
+
+            string filename = j["filename"];
+            string version = j["version"];
+            string latestVersion = j["latest_version"];
+            string downloadUrl = j["downloadUrl"];
+            if (string.IsNullOrEmpty(downloadUrl)) downloadUrl = j["urlHosted"];
+            string latestUrl = j["latestUrl"];
+
+            int concreteVer = -1;
+            if (!string.IsNullOrEmpty(latestVersion) && latestVersion != "null")
+                int.TryParse(latestVersion, out concreteVer);
+            if (concreteVer < 0 && !string.IsNullOrEmpty(version) && version != "null"
+                && !string.Equals(version, "latest", StringComparison.OrdinalIgnoreCase))
+                int.TryParse(version, out concreteVer);
+            if (concreteVer < 0 && !string.IsNullOrEmpty(filename) && filename != "null")
+            {
+                Match fm = Regex.Match(filename, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
+                if (fm.Success) int.TryParse(fm.Groups[1].Value, out concreteVer);
+            }
+            // packages.json map: Author.Name → highest known Hub integer version.
+            if (concreteVer < 0 && singleton != null && singleton.packageGroupToLatestVersion != null)
+            {
+                int mapped;
+                if (singleton.packageGroupToLatestVersion.TryGetValue(group, out mapped) && mapped > 0)
+                    concreteVer = mapped;
+            }
+            if (concreteVer < 0 && !requestLatest)
+            {
+                string pinned = FileManager.PackageIDToPackageVersion(requestedId);
+                if (!string.IsNullOrEmpty(pinned)) int.TryParse(pinned, out concreteVer);
+            }
+
+            // .latest (and loose rows) → concrete Author.Name.N.var from Hub latest_version/filename.
+            if (concreteVer > 0)
+            {
+                string concreteFn = group + "." + concreteVer + ".var";
+                bool filenameBad = string.IsNullOrEmpty(filename) || filename == "null"
+                    || filename.IndexOf(".latest", StringComparison.OrdinalIgnoreCase) >= 0
+                    || !Regex.IsMatch(filename, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
+                if (requestLatest || filenameBad)
+                    j["filename"] = concreteFn;
+                j["version"] = concreteVer.ToString();
+                if (string.IsNullOrEmpty(latestVersion) || latestVersion == "null")
+                    j["latest_version"] = concreteVer.ToString();
+            }
+            else if (string.IsNullOrEmpty(filename) || filename == "null")
+            {
+                // Last resort: keep requested id (may still fail download — better than inventing .latest.var).
+                j["filename"] = requestedId.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                    ? requestedId
+                    : requestedId + ".var";
+            }
+
+            // Always keep latestUrl field if Hub sent it.
+            if (IsHubUrlValid(latestUrl))
+                j["latestUrl"] = latestUrl;
+
+            // Prefer latestUrl when asking for .latest / when downloadUrl is unusable.
+            if (requestLatest && IsHubUrlValid(latestUrl))
+                j["downloadUrl"] = latestUrl;
+            else if (!IsHubUrlValid(downloadUrl) && IsHubUrlValid(latestUrl))
+                j["downloadUrl"] = latestUrl;
+            else if (IsHubUrlValid(downloadUrl))
+                j["downloadUrl"] = downloadUrl;
+
+            // Do NOT wipe URL when resource_id is missing — Hub often omits it while latestUrl works.
+            if (!IsHubUrlValid(j["downloadUrl"]) && !IsHubUrlValid(j["latestUrl"]))
+            {
+                j["downloadUrl"] = "null";
+            }
+            else if (!IsHubUrlValid(j["downloadUrl"]) && IsHubUrlValid(j["latestUrl"]))
+            {
+                j["downloadUrl"] = j["latestUrl"];
+            }
+
+            return j;
+        }
+
+        public static bool IsHubUrlValid(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            if (url == "null") return false;
+            return true;
+        }
+
+        /// <summary>
+        /// findPackages may key by requested id OR by concrete version. Match group + highest version.
+        /// </summary>
+        public static JSONClass FindBestPackageInResponse(JSONClass pkgsObj, string requestedId)
+        {
+            if (pkgsObj == null || string.IsNullOrEmpty(requestedId)) return null;
+
+            JSONClass exact = pkgsObj[requestedId].AsObject;
+            if (exact != null) return exact;
+
+            string group = FileManager.PackageIDToPackageGroupID(requestedId);
+            if (string.IsNullOrEmpty(group)) return null;
+
+            JSONClass best = null;
+            int bestVer = -1;
+            foreach (string key in pkgsObj.Keys)
+            {
+                if (string.IsNullOrEmpty(key)) continue;
+                string keyGroup = FileManager.PackageIDToPackageGroupID(key);
+                if (!string.Equals(keyGroup, group, StringComparison.OrdinalIgnoreCase)) continue;
+
+                JSONClass candidate = pkgsObj[key].AsObject;
+                if (candidate == null) continue;
+
+                int ver = -1;
+                string lv = candidate["latest_version"];
+                if (!string.IsNullOrEmpty(lv) && lv != "null") int.TryParse(lv, out ver);
+                if (ver < 0)
+                {
+                    string v = candidate["version"];
+                    if (!string.IsNullOrEmpty(v) && v != "null"
+                        && !string.Equals(v, "latest", StringComparison.OrdinalIgnoreCase))
+                        int.TryParse(v, out ver);
+                }
+                if (ver < 0)
+                {
+                    string fn = candidate["filename"];
+                    if (!string.IsNullOrEmpty(fn) && fn != "null")
+                    {
+                        Match fm = Regex.Match(fn, "\\.([0-9]+)\\.var$", RegexOptions.IgnoreCase);
+                        if (fm.Success) int.TryParse(fm.Groups[1].Value, out ver);
+                    }
+                }
+                if (ver < 0)
+                {
+                    string pinned = FileManager.PackageIDToPackageVersion(key);
+                    if (!string.IsNullOrEmpty(pinned)) int.TryParse(pinned, out ver);
+                }
+
+                if (ver > bestVer || best == null)
+                {
+                    bestVer = ver;
+                    best = candidate;
+                }
+            }
+            return best;
+        }
+
         private void RenderMissingPackages(Dictionary<string, JSONClass> serverPackages, List<string> missingPackageNames)
         {
-            int filenameMismatchLogsRemaining = 3;
             foreach (string checkMissingPackageName in missingPackageNames)
             {
                 JSONClass jSONClass = null;
                 if (serverPackages != null)
-                {
                     serverPackages.TryGetValue(checkMissingPackageName, out jSONClass);
-                }
-                if (jSONClass == null)
-                {
-                    jSONClass = new JSONClass();
-                    jSONClass["filename"] = checkMissingPackageName;
-                    jSONClass["downloadUrl"] = "null";
-                }
-                else
-                {
-                    if (Regex.IsMatch(checkMissingPackageName, "[0-9]+$"))
-                    {
-                        string text3 = jSONClass["filename"];
-                        string expected = checkMissingPackageName + ".var";
-                        if (string.IsNullOrEmpty(text3) || text3 == "null" || !string.Equals(text3, expected, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (filenameMismatchLogsRemaining > 0)
-                            {
-                                filenameMismatchLogsRemaining--;
-                                LogUtil.LogWarning("[VPB] Hub missing-packages: server filename '" + text3 + "' does not match expected '" + expected + "' for '" + checkMissingPackageName + "'. Using package id.");
-                                if (filenameMismatchLogsRemaining == 0)
-                                {
-                                    LogUtil.LogWarning("[VPB] Hub missing-packages: suppressing further filename mismatch logs.");
-                                }
-                            }
-                            jSONClass["filename"] = checkMissingPackageName;
-                            jSONClass["file_size"] = "null";
-                            jSONClass["licenseType"] = "null";
-                            jSONClass["downloadUrl"] = "null";
-                        }
-                    }
-                    else
-                    {
-                        string text4 = jSONClass["filename"];
-                        if (text4 == null || text4 == "null")
-                        {
-                            jSONClass["filename"] = checkMissingPackageName;
-                        }
-                    }
-                    string text5 = jSONClass["resource_id"];
-                    if (text5 == null || text5 == "null")
-                    {
-                        jSONClass["downloadUrl"] = "null";
-                    }
-                }
+                jSONClass = ResolveFindPackagesEntry(checkMissingPackageName, jSONClass);
 
                 HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, true);
                 RectTransform rectTransform = CreateDownloadPrefabInstance();
@@ -2065,9 +2178,11 @@ namespace VPB
             {
                 return;
             }
+            DeferRefreshUntilQueueDrains();
             foreach (HubResourcePackageUI missingPackage in missingPackages)
             {
-                missingPackage.connectedItem.Download();
+                if (missingPackage != null && missingPackage.connectedItem != null)
+                    missingPackage.connectedItem.Download();
             }
         }
 
@@ -2218,21 +2333,8 @@ namespace VPB
             }
             foreach (string checkUpdateName in checkUpdateNames)
             {
-                JSONClass jSONClass = asObject2[checkUpdateName].AsObject;
-                if (jSONClass == null)
-                {
-                    jSONClass = new JSONClass();
-                    jSONClass["filename"] = checkUpdateName;
-                    jSONClass["downloadUrl"] = "null";
-                }
-                else
-                {
-                    string text3 = jSONClass["filename"];
-                    if (text3 == null || text3 == "null")
-                    {
-                        jSONClass["filename"] = checkUpdateName;
-                    }
-                }
+                JSONClass jSONClass = FindBestPackageInResponse(asObject2, checkUpdateName);
+                jSONClass = ResolveFindPackagesEntry(checkUpdateName, jSONClass);
                 HubResourcePackage hubResourcePackage = new HubResourcePackage(jSONClass, this, false);
                 RectTransform rectTransform = CreateDownloadPrefabInstance();
                 if (rectTransform != null)
@@ -2319,9 +2421,11 @@ namespace VPB
             {
                 return;
             }
+            DeferRefreshUntilQueueDrains();
             foreach (HubResourcePackageUI update in updates)
             {
-                update.connectedItem.Download();
+                if (update != null && update.connectedItem != null)
+                    update.connectedItem.Download();
             }
         }
 
@@ -2356,49 +2460,212 @@ namespace VPB
             GetBrowserCookiesRoutine = null;
         }
 
+        /// <summary>Parallel Hub downloads (gallery + Hub UI share this queue).</summary>
+        public const int MaxConcurrentDownloads = 3;
+
+        private int _activeDownloadCount;
+
         protected IEnumerator DownloadRoutine()
         {
             while (true)
             {
-                if (downloadQueue.Count > 0)
+                while (_activeDownloadCount < MaxConcurrentDownloads && downloadQueue != null && downloadQueue.Count > 0)
                 {
-                    isDownloadingJSON.val = true;
-                    downloadQueuedCountJSON.val = "Queued: " + downloadQueue.Count;
                     DownloadRequest request = downloadQueue.Dequeue();
-                    yield return BinaryGetRequest(request,request.url, request.startedCallback, request.successCallback, request.errorCallback, request.progressCallback, hubCookies);
+                    _activeDownloadCount++;
+                    StartCoroutine(DownloadOneRoutine(request));
+                }
 
-                    // Only refresh once after the entire queue drains; avoids heavy package rescans per file.
-                    if (downloadQueue.Count == 0)
-                    {
-                        TryRunDeferredRefreshAfterDownloads();
-                    }
-                }
-                else
-                {
-                    isDownloadingJSON.val = false;
-                    // In case the queue drained between frames, flush any pending refresh.
+                int queued = downloadQueue != null ? downloadQueue.Count : 0;
+                bool busy = _activeDownloadCount > 0 || queued > 0;
+                isDownloadingJSON.val = busy;
+                downloadQueuedCountJSON.val = "Queued: " + queued;
+
+                if (!busy)
                     TryRunDeferredRefreshAfterDownloads();
-                }
+
                 yield return null;
             }
         }
 
+        private IEnumerator DownloadOneRoutine(DownloadRequest request)
+        {
+            try
+            {
+                yield return BinaryGetRequest(
+                    request,
+                    request.url,
+                    request.startedCallback,
+                    request.successCallback,
+                    request.errorCallback,
+                    request.progressCallback,
+                    hubCookies);
+            }
+            finally
+            {
+                _activeDownloadCount = Math.Max(0, _activeDownloadCount - 1);
+            }
+        }
+
         private bool _deferredRefreshAfterDownloads;
+        private HashSet<string> _deferredDownloadUids;
+        private int _deferredDownloadRegisterCount;
+
+        /// <summary>True while Hub downloads should register only — no per-file full library refresh.</summary>
+        public bool ShouldDeferDownloadRefresh
+        {
+            get { return _deferredRefreshAfterDownloads; }
+        }
 
         public void DeferRefreshUntilQueueDrains()
         {
             _deferredRefreshAfterDownloads = true;
+            if (_deferredDownloadUids == null)
+                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public void NoteDeferredDownloadUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            if (_deferredDownloadUids == null)
+                _deferredDownloadUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _deferredDownloadUids.Add(uid);
+            _deferredDownloadRegisterCount++;
         }
 
         private void TryRunDeferredRefreshAfterDownloads()
         {
             if (!_deferredRefreshAfterDownloads) return;
             if (downloadQueue != null && downloadQueue.Count > 0) return;
+            if (_activeDownloadCount > 0) return;
 
             _deferredRefreshAfterDownloads = false;
 
-            try { FileManagerBridge.Refresh("hub_deferred_downloads", RefreshScope.Both); } catch { }
+            HashSet<string> uids = _deferredDownloadUids;
+            int registerCount = _deferredDownloadRegisterCount;
+            _deferredDownloadUids = null;
+            _deferredDownloadRegisterCount = 0;
+
+            // Packages already live via RegisterHubDownloadedPackage — avoid full AddonPackages walk.
+            try
+            {
+                if (registerCount > 0)
+                    VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(registerCount, 0);
+            }
+            catch { }
+            try { FileManager.InvalidateAllMissingDepsCounts(); } catch { }
+            try { DependencyGraph.Invalidate(); } catch { }
+
+            try
+            {
+                FileManagerBridge.Refresh(
+                    "hub_deferred_downloads",
+                    RefreshScope.InstallOnly,
+                    uids);
+            }
+            catch { }
+
+            try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
             RefreshResources();
+        }
+
+        /// <summary>
+        /// Resolve package ids via Hub <c>findPackages</c> (batched). No UI required.
+        /// Callback gets map of requested id → server package JSON (missing ids omitted or null downloadUrl).
+        /// </summary>
+        public void FindPackages(IList<string> packageNames, Action<Dictionary<string, JSONClass>> onComplete, Action<string> onError = null)
+        {
+            if (packageNames == null || packageNames.Count == 0)
+            {
+                if (onComplete != null) onComplete(new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase));
+                return;
+            }
+            StartCoroutine(FindPackagesBatchedNoUi(packageNames, onComplete, onError));
+        }
+
+        private IEnumerator FindPackagesBatchedNoUi(
+            IList<string> packageNames,
+            Action<Dictionary<string, JSONClass>> onComplete,
+            Action<string> onError)
+        {
+            const int batchSize = 200;
+            int attempts = 0;
+            float backoffSeconds = 1f;
+            var serverPackages = new Dictionary<string, JSONClass>(StringComparer.OrdinalIgnoreCase);
+            var names = new List<string>(packageNames.Count);
+            for (int i = 0; i < packageNames.Count; i++)
+            {
+                string n = packageNames[i];
+                if (!string.IsNullOrEmpty(n)) names.Add(n);
+            }
+
+            for (int i = 0; i < names.Count; i += batchSize)
+            {
+                int take = Math.Min(batchSize, names.Count - i);
+                List<string> batch = names.GetRange(i, take);
+
+                JSONClass req = new JSONClass();
+                req["source"] = "VaM";
+                req["action"] = "findPackages";
+                req["packages"] = string.Join(",", batch.ToArray());
+
+                bool done = false;
+                bool ok = false;
+                string err = null;
+                SimpleJSON.JSONNode respNode = null;
+
+                yield return StartCoroutine(PostRequest(apiUrl, req.ToString(),
+                    jsonNode => { ok = true; respNode = jsonNode; done = true; },
+                    e => { ok = false; err = e; done = true; }));
+
+                while (!done) yield return null;
+
+                if (!ok || respNode == null)
+                {
+                    attempts++;
+                    if (attempts >= 5)
+                    {
+                        string msg = !string.IsNullOrEmpty(err) ? err : "findPackages failed";
+                        LogUtil.LogError("[VPB] Hub findPackages (gallery): aborting after repeated errors: " + msg);
+                        if (onError != null) onError(msg);
+                        yield break;
+                    }
+                    yield return new WaitForSeconds(Math.Min(30f, backoffSeconds));
+                    backoffSeconds = Math.Min(30f, backoffSeconds * 2f);
+                    i -= batchSize;
+                    continue;
+                }
+
+                attempts = 0;
+                backoffSeconds = 1f;
+
+                JSONClass root = respNode.AsObject;
+                if (root != null)
+                {
+                    string status = root["status"];
+                    if (status != null && status == "error")
+                    {
+                        string hubErr = respNode["error"];
+                        LogUtil.LogError("[VPB] Hub findPackages returned error " + hubErr);
+                        if (onError != null) onError(hubErr ?? "findPackages error");
+                        yield break;
+                    }
+
+                    JSONClass pkgsObj = root["packages"].AsObject;
+                    if (pkgsObj != null)
+                    {
+                        foreach (string pkgId in batch)
+                        {
+                            JSONClass pkg = FindBestPackageInResponse(pkgsObj, pkgId);
+                            if (pkg != null) serverPackages[pkgId] = pkg;
+                        }
+                    }
+                }
+
+                yield return null;
+            }
+
+            if (onComplete != null) onComplete(serverPackages);
         }
 
         protected void OnPackageRefresh()

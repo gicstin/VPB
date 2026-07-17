@@ -125,46 +125,33 @@ namespace VPB
             GalleryModalTypography type = new GalleryModalTypography(s);
             int font = type.Body;
             float btnH = GalleryUiDesignTokens.ButtonSizeRef * s;
-            // Same height as other chrome buttons so gallery font fits; narrow width only.
-            float closeW = 64f * s;
+            float titleH = Mathf.Max(font + 6f * s, 22f * s);
 
             GameObject panel;
+            // Taller panel — more room for item rows (no redundant Close in header).
             _mergeOutfitModalRoot = UI.CreateModalChrome(
                 backgroundBoxGO, "VPB_MergeOutfitModal",
-                580f * s, 660f * s,
+                580f * s, 700f * s,
                 new Color(0.07f, 0.08f, 0.10f, 1f),
                 HideMergeOutfitPicker,
                 out panel);
 
             UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
-            // Header
+            // Title only — Cancel / dim dismiss cover close.
             GameObject header = new GameObject("HeaderRow");
             header.transform.SetParent(panel.transform, false);
             HorizontalLayoutGroup hh = header.AddComponent<HorizontalLayoutGroup>();
             hh.childAlignment = TextAnchor.MiddleLeft;
-            hh.spacing = 8f * s;
             hh.childControlWidth = true;
             hh.childControlHeight = true;
-            hh.childForceExpandWidth = false;
+            hh.childForceExpandWidth = true;
             hh.childForceExpandHeight = false;
-            UI.AddLE(header, minHeight: btnH, preferredHeight: btnH);
+            UI.AddLE(header, minHeight: titleH, preferredHeight: titleH);
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(header.transform, false);
-            _mergeOutfitTitleText = titleGo.AddComponent<Text>();
-            _mergeOutfitTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _mergeOutfitTitleText.color = Color.white;
-            _mergeOutfitTitleText.alignment = TextAnchor.MiddleLeft;
-            _mergeOutfitTitleText.text = VPBTranslation.T("gallery.merge_outfit.title", "Merge Outfit");
-            try { VPBUiFont.ApplyTo(_mergeOutfitTitleText); } catch { }
+            _mergeOutfitTitleText = UI.CreateEmphasisTitleLabel(header, VPBTranslation.T("gallery.merge_outfit.title", "Merge Outfit"), font);
             GalleryUiMetrics.ApplyFont(_mergeOutfitTitleText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            GalleryUiMetrics.ApplyEmphasisTitle(_mergeOutfitTitleText, font);
-            UI.AddLE(titleGo, flexibleWidth: 1f, preferredHeight: btnH);
-
-            MergeOutfitChromeButton(header.transform, closeW, btnH,
-                VPBTranslation.T("hook.close", "Close"), font, s,
-                new Color(0.44f, 0.36f, 0.20f, 1f), HideMergeOutfitPicker);
+            UI.AddLE(_mergeOutfitTitleText.gameObject, flexibleWidth: 1f, preferredHeight: titleH);
 
             // Hint
             _mergeOutfitHintText = UI.CreateLabel(panel,
@@ -228,7 +215,7 @@ namespace VPB
             // Scroll list
             GameObject scrollHost = new GameObject("ScrollHost");
             scrollHost.transform.SetParent(panel.transform, false);
-            UI.AddLE(scrollHost, flexibleHeight: 1f, minHeight: 260f * s);
+            UI.AddLE(scrollHost, flexibleHeight: 1f, minHeight: 320f * s);
             UI.AddImage(scrollHost, new Color(0.05f, 0.055f, 0.07f, 1f));
 
             GameObject viewport = new GameObject("Viewport");
@@ -410,10 +397,7 @@ namespace VPB
             int font = new GalleryModalTypography(s).Body;
             float rowH = GalleryUiDesignTokens.ButtonSizeRef * s;
 
-            for (int i = _mergeOutfitListParent.childCount - 1; i >= 0; i--)
-            {
-                try { UnityEngine.Object.Destroy(_mergeOutfitListParent.GetChild(i).gameObject); } catch { }
-            }
+            UI.DestroyAllChildren(_mergeOutfitListParent);
 
             if (_mergeOutfitItems == null || _mergeOutfitItems.Count == 0)
             {
@@ -564,36 +548,11 @@ namespace VPB
             Transform parent, float width, float height, string label, int fontSize, float chromeScale, Color bg, UnityAction onClick,
             bool flexibleWidth = false)
         {
-            GameObject go = new GameObject("Btn_" + (label ?? "x"));
-            go.transform.SetParent(parent, false);
-            Image img = UI.AddGalleryElementRoundedBg(go, bg);
-            Button b = go.AddComponent<Button>();
-            b.transition = Selectable.Transition.None;
-            b.targetGraphic = img;
-            if (onClick != null) b.onClick.AddListener(onClick);
-            try
-            {
-                UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
-                hb.ApplyBorderSettings();
-            }
-            catch { }
-
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.minHeight = le.preferredHeight = height;
-            le.flexibleHeight = 0f;
-            if (flexibleWidth || width <= 0f)
-            {
-                le.flexibleWidth = 1f;
-                le.minWidth = 0f;
-            }
-            else
-            {
-                le.minWidth = le.preferredWidth = width;
-                le.flexibleWidth = 0f;
-            }
-
-            Text t = UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, chromeScale, GalleryUiDesignTokens.FontMinRef);
+            float w = (flexibleWidth || width <= 0f) ? 0f : width;
+            GameObject go = UI.CreateChromeLayoutButton(parent, w, height, label, fontSize, bg, onClick);
+            Text t = go != null ? go.GetComponentInChildren<Text>() : null;
+            if (t != null)
+                GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, chromeScale, GalleryUiDesignTokens.FontMinRef);
             return go;
         }
     }

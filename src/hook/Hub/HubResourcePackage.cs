@@ -127,6 +127,12 @@ namespace VPB
 
         public Action CategoryChanged;
 
+        /// <summary>Fired after successful save + register into AddonPackages.</summary>
+        public Action OnDownloadSucceeded;
+
+        /// <summary>Fired on network/HTTP/save failure (message for logs/UI).</summary>
+        public Action<string> OnDownloadFailed;
+
         public bool IsDependency
         {
             get { return isDependencyJSON != null && isDependencyJSON.val; }
@@ -178,11 +184,14 @@ namespace VPB
         {
             get
             {
-                if (downloadUrl == null) return false;
-                if (downloadUrl == string.Empty) return false;
-                if (downloadUrl == "null") return false;
-                return true;
+                return IsUsableHubUrl(downloadUrl) || IsUsableHubUrl(latestUrl);
             }
+        }
+
+        private static bool IsUsableHubUrl(string url)
+        {
+            if (url == null || url == string.Empty || url == "null") return false;
+            return true;
         }
 
         public bool IsDownloading
@@ -228,32 +237,53 @@ namespace VPB
             if (!string.IsNullOrEmpty(resource_id) && resource_id != "null" && int.TryParse(resource_id, out ridInt) && ridInt > 0)
                 thumbnailUrl = $"https://1424104733.rsc.cdn77.org/data/resource_icons/{ridInt / 1000}/{ridInt}.jpg";
             string input = package["filename"];
+            if (string.IsNullOrEmpty(input) || input == "null")
+                input = package_id ?? "";
             input = Regex.Replace(input, ".var$", string.Empty);
             GroupName = Regex.Replace(input, "(.*)\\..*", "$1");
             Creator = Regex.Replace(GroupName, "(.*)\\..*", "$1");
             Version = package["version"];
-            if (Version == null)
+            string latestVersionRaw = package["latest_version"];
+            // Never keep Version="latest" / non-numeric — bind to Hub integer latest when possible.
+            int concreteVer = -1;
+            if (!string.IsNullOrEmpty(latestVersionRaw) && latestVersionRaw != "null")
+                int.TryParse(latestVersionRaw, out concreteVer);
+            if (concreteVer < 0 && !string.IsNullOrEmpty(Version) && Version != "null"
+                && !string.Equals(Version, "latest", StringComparison.OrdinalIgnoreCase))
+                int.TryParse(Version, out concreteVer);
+            if (concreteVer < 0)
+            {
+                Match verFromName = Regex.Match(input, "\\.([0-9]+)$");
+                if (verFromName.Success) int.TryParse(verFromName.Groups[1].Value, out concreteVer);
+            }
+            if (concreteVer > 0)
+            {
+                Version = concreteVer.ToString();
+                LatestVersion = concreteVer;
+                if (string.IsNullOrEmpty(GroupName) || GroupName == input)
+                    GroupName = Regex.Replace(input, "\\.[0-9]+$", string.Empty);
+                input = GroupName + "." + Version;
+            }
+            else if (Version == null)
             {
                 Version = Regex.Replace(input, ".*\\.([0-9]+)$", "$1");
+                LatestVersion = -1;
+            }
+            else if (string.Equals(Version, "latest", StringComparison.OrdinalIgnoreCase))
+            {
+                LatestVersion = -1;
+            }
+            else
+            {
+                int parsedLatest;
+                if (!string.IsNullOrEmpty(latestVersionRaw) && int.TryParse(latestVersionRaw, out parsedLatest))
+                    LatestVersion = parsedLatest;
+                else if (int.TryParse(Version, out parsedLatest))
+                    LatestVersion = parsedLatest;
+                else
+                    LatestVersion = -1;
             }
             resolvedVarName = GroupName + "." + Version + ".var";
-            string text = package["latest_version"];
-            if (text == null)
-            {
-                text = Version;
-            }
-            if (text != null)
-            {
-                int result;
-                if (int.TryParse(text, out result))
-                {
-                    LatestVersion = result;
-                }
-                else
-                {
-                    LatestVersion = -1;
-                }
-            }
             licenseTypeValue = package["licenseType"];
             Category = ExtractPackageCategory(package);
             string s = package["file_size"];
@@ -265,11 +295,14 @@ namespace VPB
                 downloadUrl = package["urlHosted"];
             }
             latestUrl = package["latestUrl"];
-            if (latestUrl == null)
+            if (!IsUsableHubUrl(latestUrl))
             {
                 latestUrl = downloadUrl;
             }
-            bool startingValue3 = downloadUrl == "null";
+            // Dependencies are always "get latest": prefer latestUrl when downloadUrl unusable.
+            if (isDependency && !IsUsableHubUrl(downloadUrl) && IsUsableHubUrl(latestUrl))
+                downloadUrl = latestUrl;
+            bool startingValue3 = !IsUsableHubUrl(downloadUrl) && !IsUsableHubUrl(latestUrl);
             promotionalUrl = package["promotional_link"];
             goToResourceAction = new JSONStorableAction("GoToResource", GoToResource);
             isDependencyJSON = new JSONStorableBool("isDependency", isDependency);
@@ -517,10 +550,46 @@ namespace VPB
                 }
                 catch { }
 
-                try { FileManager.RegisterHubDownloadedPackage(localPackagePath); } catch { }
+                VarPackage registered = null;
+                bool deferRefresh = browser != null && browser.ShouldDeferDownloadRefresh;
+                try
+                {
+                    // Batch Hub downloads: register live, skip per-file inventory notify + full refresh.
+                    registered = FileManager.RegisterHubDownloadedPackage(
+                        localPackagePath,
+                        notifyInventoryChange: !deferRefresh);
+                }
+                catch { }
 
-                // Register package before refresh so hub Refresh() does not reset alreadyHaveJSON.
-                try { FileManagerBridge.Refresh("hub_download", RefreshScope.Both); } catch { }
+                if (deferRefresh)
+                {
+                    try
+                    {
+                        if (registered != null && !string.IsNullOrEmpty(registered.Uid))
+                            browser.NoteDeferredDownloadUid(registered.Uid);
+                        else if (!string.IsNullOrEmpty(nameJSON != null ? nameJSON.val : null))
+                            browser.NoteDeferredDownloadUid(nameJSON.val);
+                    }
+                    catch { }
+                }
+                else
+                {
+                    // Single Hub download: light path (register already done) — no full library scan.
+                    try
+                    {
+                        var one = new List<string>(1);
+                        if (registered != null && !string.IsNullOrEmpty(registered.Uid))
+                            one.Add(registered.Uid);
+                        FileManager.InvalidateAllMissingDepsCounts();
+                        try { DependencyGraph.Invalidate(); } catch { }
+                        FileManagerBridge.Refresh("hub_download", RefreshScope.InstallOnly, one.Count > 0 ? one : null);
+                        try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+                        try { if (browser != null) browser.RefreshResources(); } catch { }
+                    }
+                    catch { }
+                }
+
+                try { if (OnDownloadSucceeded != null) OnDownloadSucceeded(); } catch { }
             }
             catch (Exception ex)
             {
@@ -528,6 +597,7 @@ namespace VPB
                 isDownloadQueuedJSON.val = false;
                 isDownloadingJSON.val = false;
                 ApplyDownloadButtonError("save: " + ex.Message);
+                try { if (OnDownloadFailed != null) OnDownloadFailed("save: " + ex.Message); } catch { }
             }
         }
 
@@ -537,6 +607,7 @@ namespace VPB
             isDownloadingJSON.val = false;
             ApplyDownloadButtonError(err);
             LogUtil.Log("Error while downloading " + Name + ": " + err);
+            try { if (OnDownloadFailed != null) OnDownloadFailed(err); } catch { }
         }
 
         // Short labels fit on the Download button; full reason goes to the log.
@@ -777,19 +848,27 @@ namespace VPB
         HubBrowse.DownloadRequest request;
         public void Download()
         {
-            if (browser != null && downloadUrl != null && downloadUrl != string.Empty && downloadUrl != "null" && !isDownloadQueuedJSON.val && (!alreadyHaveJSON.val || updateAvailableJSON.val))
-            {
-                if (!alreadyHaveJSON.val)
-                {
-                    isDownloadQueuedJSON.val = true;
-                    request=browser.QueueDownload(downloadUrl, promotionalUrl, DownloadStarted, DownloadProgress, DownloadComplete, DownloadError);
-                }
-                else if (updateAvailableJSON.val && latestUrl != null && latestUrl != string.Empty && latestUrl != "null")
-                {
-                    isDownloadQueuedJSON.val = true;
-                    request = browser.QueueDownload(latestUrl, promotionalUrl, DownloadStarted, DownloadProgress, DownloadComplete, DownloadError);
-                }
-            }
+            bool isDep = isDependencyJSON != null && isDependencyJSON.val;
+
+            if (browser == null || isDownloadQueuedJSON.val)
+                return;
+            if (alreadyHaveJSON.val && !updateAvailableJSON.val)
+                return;
+
+            // Deps / fresh install: prefer latestUrl (Hub .latest → integer latest). Updates also use latestUrl.
+            string url = null;
+            if (alreadyHaveJSON.val && updateAvailableJSON.val)
+                url = IsUsableHubUrl(latestUrl) ? latestUrl : downloadUrl;
+            else if (isDep)
+                url = IsUsableHubUrl(latestUrl) ? latestUrl : downloadUrl;
+            else
+                url = IsUsableHubUrl(downloadUrl) ? downloadUrl : latestUrl;
+
+            if (!IsUsableHubUrl(url))
+                return;
+
+            isDownloadQueuedJSON.val = true;
+            request = browser.QueueDownload(url, promotionalUrl, DownloadStarted, DownloadProgress, DownloadComplete, DownloadError);
         }
 
         public void Update()
@@ -826,7 +905,14 @@ namespace VPB
             VarPackage package = null;
             if (isDependencyJSON.val)
             {
+                // Prefer exact Hub integer id; fall back to group.latest so older installs count as present.
                 package = FileManager.GetPackage(nameJSON.val, ensureInstalled: false);
+                if (package == null)
+                {
+                    string depGroup = FileManager.PackageIDToPackageGroupID(nameJSON.val);
+                    if (!string.IsNullOrEmpty(depGroup))
+                        package = FileManager.GetPackage(depGroup + ".latest", ensureInstalled: false);
+                }
             }
             else
             {
@@ -837,17 +923,11 @@ namespace VPB
             if (package != null)
             {
                 alreadyHaveJSON.val = true;
-                if ((Version == "latest" || !isDependencyJSON.val) && LatestVersion != -1)
+                // Hub latest integer > local → need download (critical for .latest deps with older .var present).
+                if (LatestVersion != -1 && package.Version < LatestVersion)
                 {
-                    if (package.Version < LatestVersion)
-                    {
-                        updateAvailableJSON.val = true;
-                        updateMsgJSON.val = "Update";
-                    }
-                    else
-                    {
-                        updateAvailableJSON.val = false;
-                    }
+                    updateAvailableJSON.val = true;
+                    updateMsgJSON.val = "Update";
                 }
                 else
                 {

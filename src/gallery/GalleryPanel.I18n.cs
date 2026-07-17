@@ -137,10 +137,6 @@ namespace VPB
             if (leftPathBtnIconImage == null && leftPathBtnText != null)
                 leftPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
-            if (rightReplaceBtnIconImage == null && rightReplaceBtnText != null)
-                rightReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
-            if (leftReplaceBtnIconImage == null && leftReplaceBtnText != null)
-                leftReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly
@@ -156,7 +152,6 @@ namespace VPB
                 leftCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
 
             // Buttons stored as GOs – reach the Text child at refresh time
-            RefreshGoText(footerLoadRandomBtn, "gallery.footer.random_abbrev", "Rdm");
             if (rightSaveBtnIconImage == null) RefreshGoText(rightSaveBtnGO, "gallery.side.save", "Save");
             if (leftSaveBtnIconImage == null) RefreshGoText(leftSaveBtnGO, "gallery.side.save", "Save");
             if (rightRemoveAtomBtnIconImage == null) RefreshGoText(rightRemoveAtomBtn, "gallery.side.remove", "Remove");
@@ -200,7 +195,6 @@ namespace VPB
             UpdateTabs();
             UpdateFooterFollowStates();
             UpdateFooterHeightState();
-            UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterLayoutState();
             SyncRatingSortToggleState();

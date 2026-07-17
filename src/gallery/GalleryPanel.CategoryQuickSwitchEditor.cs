@@ -128,23 +128,12 @@ namespace VPB
             VPBConfig.Instance.TriggerChange();
         }
 
-        private static void DestroyAllChildren(Transform parent)
-        {
-            if (parent == null) return;
-            for (int i = parent.childCount - 1; i >= 0; i--)
-            {
-                Transform ch = parent.GetChild(i);
-                if (ch == null) continue;
-                try { UnityEngine.Object.Destroy(ch.gameObject); } catch { }
-            }
-        }
-
         private void RebuildCategoryQuickEditorRows()
         {
             if (_catQuickEditorVisibleParent == null || _catQuickEditorHiddenParent == null) return;
 
-            DestroyAllChildren(_catQuickEditorVisibleParent);
-            DestroyAllChildren(_catQuickEditorHiddenParent);
+            UI.DestroyAllChildren(_catQuickEditorVisibleParent);
+            UI.DestroyAllChildren(_catQuickEditorHiddenParent);
 
             var allNames = BuildAllCategoryNames();
             var nameSet = new HashSet<string>(allNames, StringComparer.OrdinalIgnoreCase);
@@ -258,24 +247,6 @@ namespace VPB
             UI.CreateLabel(btnGo, glyph ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Glyph");
         }
 
-        private static GameObject CreateHeaderButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
-        {
-            GameObject go = new GameObject("Button_" + (label ?? ""));
-            go.transform.SetParent(parent, false);
-            Image img = AddCategoryQuickRoundedBg(go, bg);
-            Button b = go.AddComponent<Button>();
-            b.targetGraphic = img;
-            UI.ConfigButtonFlat(b);
-            if (onClick != null) b.onClick.AddListener(onClick);
-            go.AddComponent<UIHoverBorder>();
-
-            LayoutElement le = UI.AddLE(go, minWidth: width, minHeight: height, preferredWidth: width, preferredHeight: height, flexibleWidth: 0f, flexibleHeight: 0f);
-
-            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter);
-
-            return go;
-        }
-
         private void ShowCategoryQuickEditor()
         {
             if (backgroundBoxGO == null) return;
@@ -305,18 +276,10 @@ namespace VPB
             UI.AddHLG(header, 8f * s, childForceExpandWidth: false);
             LayoutElement hle = UI.AddLE(header, minHeight: 54f * s, preferredHeight: 54f * s);
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(header.transform, false);
-            Text title = titleGo.AddComponent<Text>();
-            title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
-            title.color = Color.white;
-            title.alignment = TextAnchor.MiddleLeft;
-            title.text = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown");
-            try { VPBUiFont.ApplyTo(title); } catch { }
-            LayoutElement tle = UI.AddLE(titleGo, minWidth: 0f, flexibleWidth: 1f);
+            Text title = UI.CreateEmphasisTitleLabel(header, VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown"), headerFont);
+            LayoutElement tle = UI.AddLE(title.gameObject, minWidth: 0f, flexibleWidth: 1f);
 
-            GameObject resetBtn = CreateHeaderButton(header.transform, 160f * s, 44f * s, VPBTranslation.T("settings.category_quick.editor.reset", "Reset"), bodyFont, UI.ChromePanel, () =>
+            GameObject resetBtn = UI.CreateChromeLayoutButton(header.transform, 160f * s, 44f * s, VPBTranslation.T("settings.category_quick.editor.reset", "Reset"), bodyFont, UI.ChromePanel, () =>
             {
                 if (VPBConfig.Instance == null) return;
                 VPBConfig.Instance.GalleryCategoryQuickOrder = "";
@@ -326,14 +289,14 @@ namespace VPB
             });
             AddTooltipPlain(resetBtn, VPBTranslation.T("settings.category_quick.editor.reset_tip", "Reset to built-in defaults and clear hidden list (does not save until Save)."));
 
-            GameObject saveBtn = CreateHeaderButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.save", "Save"), bodyFont, new Color(0.22f, 0.42f, 0.58f, 1f), () =>
+            GameObject saveBtn = UI.CreateChromeLayoutButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.save", "Save"), bodyFont, new Color(0.22f, 0.42f, 0.58f, 1f), () =>
             {
                 SaveCategoryQuickEditorDraftToConfig();
                 HideCategoryQuickEditor();
                 try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
             });
 
-            GameObject closeBtn = CreateHeaderButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.cancel", "Cancel"), bodyFont, new Color(0.44f, 0.36f, 0.20f, 1f), () =>
+            GameObject closeBtn = UI.CreateChromeLayoutButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.cancel", "Cancel"), bodyFont, new Color(0.44f, 0.36f, 0.20f, 1f), () =>
             {
                 HideCategoryQuickEditor();
             });
@@ -345,31 +308,19 @@ namespace VPB
             Transform content = vp != null ? vp.Find("Content") : null;
             if (content == null) return;
 
-            GameObject visHeader = new GameObject("VisibleHeader");
-            visHeader.transform.SetParent(content, false);
-            Text vh = visHeader.AddComponent<Text>();
-            vh.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(vh, type.Body);
-            vh.color = new Color(0.85f, 0.9f, 1f, 1f);
-            vh.alignment = TextAnchor.MiddleLeft;
-            vh.text = VPBTranslation.T("settings.category_quick.editor.visible_header", "Shown in header menu (ordered)");
-            try { VPBUiFont.ApplyTo(vh); } catch { }
-            LayoutElement vhLe = UI.AddLE(visHeader, minHeight: 34f * s);
+            Text vh = UI.CreateEmphasisTitleLabel(content.gameObject,
+                VPBTranslation.T("settings.category_quick.editor.visible_header", "Shown in header menu (ordered)"),
+                type.Body, new Color(0.85f, 0.9f, 1f, 1f), name: "VisibleHeader");
+            LayoutElement vhLe = UI.AddLE(vh.gameObject, minHeight: 34f * s);
 
             GameObject visList = UI.CreateChildRT(content.gameObject, "VisibleList");
             UI.AddVLG(visList, 6f * s);
             _catQuickEditorVisibleParent = visList.transform;
 
-            GameObject hidHeader = new GameObject("HiddenHeader");
-            hidHeader.transform.SetParent(content, false);
-            Text hhT = hidHeader.AddComponent<Text>();
-            hhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(hhT, type.Body);
-            hhT.color = new Color(1f, 0.88f, 0.82f, 1f);
-            hhT.alignment = TextAnchor.MiddleLeft;
-            hhT.text = VPBTranslation.T("settings.category_quick.editor.hidden_header", "Hidden from header menu");
-            try { VPBUiFont.ApplyTo(hhT); } catch { }
-            LayoutElement hhLe = UI.AddLE(hidHeader, minHeight: 34f * s);
+            Text hhT = UI.CreateEmphasisTitleLabel(content.gameObject,
+                VPBTranslation.T("settings.category_quick.editor.hidden_header", "Hidden from header menu"),
+                type.Body, new Color(1f, 0.88f, 0.82f, 1f), name: "HiddenHeader");
+            LayoutElement hhLe = UI.AddLE(hhT.gameObject, minHeight: 34f * s);
 
             GameObject hidList = UI.CreateChildRT(content.gameObject, "HiddenList");
             UI.AddVLG(hidList, 6f * s);

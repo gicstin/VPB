@@ -51,7 +51,8 @@ namespace VPB
             {
                 if (VPBConfig.Instance == null) return;
                 VPBConfig.Instance.SuppressAppearanceScaleChange = value;
-                try { VPBConfig.Instance.Save(true, true); } catch { }
+                // Disk only — do not ConfigChanged (side-rail gap recompute).
+                try { VPBConfig.Instance.Save(false); } catch { }
                 RefreshSuppressScaleBtnVisual();
             }
         }

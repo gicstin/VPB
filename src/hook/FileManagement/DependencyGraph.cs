@@ -42,6 +42,16 @@ namespace VPB
 			}
 		}
 
+		/// <summary>Force graph drop without waiting for a full FileManager scan binary bump (Hub batch installs).</summary>
+		public static void Invalidate()
+		{
+			lock (_lock)
+			{
+				_cacheScanBinary = long.MinValue;
+				_byUid = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
+			}
+		}
+
 		public static void Rebuild()
 		{
 			OnPackageInventoryRefreshed();
@@ -231,6 +241,16 @@ namespace VPB
 				if (string.IsNullOrEmpty(depId)) continue;
 
 				VarPackage resolved = FileManager.GetPackageForDependency(depId, false);
+				// Exact meta pin satisfied by newer installed group version (Hub download-latest).
+				if (resolved == null && FileManager.IsDependencySatisfiedByInstalled(depId))
+				{
+					string group = FileManager.PackageIDToPackageGroupID(depId);
+					if (!string.IsNullOrEmpty(group))
+					{
+						try { resolved = FileManager.GetPackage(group + ".latest", false); }
+						catch { resolved = null; }
+					}
+				}
 				if (resolved != null)
 				{
 					depsSet.Add(resolved);

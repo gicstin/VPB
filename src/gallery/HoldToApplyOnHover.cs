@@ -45,7 +45,23 @@ namespace VPB
             if (eventData == null) return;
             bool isVR = XrUtils.IsVrActive();
             if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
+            // Don't start hold-to-apply when pressing the rating star / picker.
+            if (IsOverRatingChrome(eventData)) return;
             TryStartHold();
+        }
+
+        private static bool IsOverRatingChrome(PointerEventData eventData)
+        {
+            GameObject go = eventData.pointerCurrentRaycast.gameObject;
+            if (go == null) go = eventData.pointerEnter;
+            Transform t = go != null ? go.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (n == "Star" || n == "Rating" || n == "RatingSelector") return true;
+                t = t.parent;
+            }
+            return false;
         }
 
         public void OnPointerUp(PointerEventData eventData)

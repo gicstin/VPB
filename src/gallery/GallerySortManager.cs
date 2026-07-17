@@ -887,11 +887,8 @@ namespace VPB
                             int missingCount = 0;
                             foreach (var dep in deps)
                             {
-                                VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                                if (pkg == null)
-                                {
+                                if (!FileManager.IsDependencySatisfiedByInstalled(dep))
                                     missingCount++;
-                                }
                             }
                             return missingCount;
                         }
@@ -905,6 +902,47 @@ namespace VPB
             return 0;
         }
 
+        /// <summary>Missing dependency package ids for a gallery row (same rules as <see cref="GetMissingDepsCount"/>).</summary>
+        public static List<string> GetMissingDependencyIds(FileEntry file)
+        {
+            var missing = new List<string>();
+            try
+            {
+                VarPackage pkg = null;
+                if (file is VarFileEntry vfe) pkg = vfe.Package;
+                else if (file is PackageListEntry ple) pkg = ple.Package;
+
+                if (pkg != null)
+                {
+                    CollectUnsatisfiedDeps(pkg.RecursivePackageDependencies, missing);
+                    return missing;
+                }
+
+                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                {
+                    string pathLower = file.Path.ToLowerInvariant();
+                    if (pathLower.Contains("custom") || pathLower.Contains("saves"))
+                        CollectUnsatisfiedDeps(ExtractSceneDependencies(file), missing);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] GetMissingDependencyIds error: {ex}");
+            }
+            return missing;
+        }
+
+        private static void CollectUnsatisfiedDeps(IEnumerable<string> deps, List<string> into)
+        {
+            if (deps == null || into == null) return;
+            foreach (var dep in deps)
+            {
+                // Newer installed .var satisfies exact meta pins (Hub download-latest).
+                if (!string.IsNullOrEmpty(dep) && !FileManager.IsDependencySatisfiedByInstalled(dep))
+                    into.Add(dep);
+            }
+        }
+
         private static int CalculateMissingDeps(VarPackage package)
         {
             try
@@ -915,11 +953,9 @@ namespace VPB
                     int missingCount = 0;
                     foreach (var dep in deps)
                     {
-                        VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                        if (pkg == null)
-                        {
+                        // Newer installed .var satisfies exact meta pins (Hub download-latest).
+                        if (!FileManager.IsDependencySatisfiedByInstalled(dep))
                             missingCount++;
-                        }
                     }
                     return missingCount;
                 }

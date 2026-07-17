@@ -92,26 +92,10 @@ namespace VPB
             int headerFont = type.Title;
             int bodyFont = type.Body;
 
-            _scanWlModalRoot = new GameObject("VPB_ScanWhitelistModal");
-            _scanWlModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRt = _scanWlModalRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
-
-            Image dim = UI.AddImage(_scanWlModalRoot, new Color(0f, 0f, 0f, 0.72f));
-            Button dimBtn = _scanWlModalRoot.AddComponent<Button>();
-            UI.ConfigButtonFlat(dimBtn);
-            dimBtn.onClick.AddListener(HideScanWhitelistEditorModal);
-
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_scanWlModalRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(760f * s, 660f * s);
-            Image pbg = UI.AddImage(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
+            GameObject panel;
+            _scanWlModalRoot = UI.CreateModalChrome(
+                backgroundBoxGO, "VPB_ScanWhitelistModal", 760f * s, 660f * s,
+                new Color(0.06f, 0.06f, 0.08f, 1f), HideScanWhitelistEditorModal, out panel);
 
             VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
@@ -124,28 +108,14 @@ namespace VPB
             hh.childControlHeight = true;
             LayoutElement hle = UI.AddLE(header, minHeight: 48f * s, preferredHeight: 48f * s);
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(header.transform, false);
-            Text title = titleGo.AddComponent<Text>();
-            title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.color = Color.white;
-            title.alignment = TextAnchor.MiddleLeft;
-            title.text = VPBTranslation.T("hook.settings.scan_whitelist.window_title", "VaM Scan Whitelist");
-            try { VPBUiFont.ApplyTo(title); } catch { }
-            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
-            LayoutElement tle = UI.AddLE(titleGo, flexibleWidth: 1f);
+            Text title = UI.CreateEmphasisTitleLabel(header, VPBTranslation.T("hook.settings.scan_whitelist.window_title", "VaM Scan Whitelist"), headerFont);
+            LayoutElement tle = UI.AddLE(title.gameObject, flexibleWidth: 1f);
 
-            ScanWlCreateHeaderButton(header.transform, 100f * s, 40f * s, VPBTranslation.T("hook.close", "Close"), bodyFont, new Color(0.44f, 0.36f, 0.20f, 1f), HideScanWhitelistEditorModal);
+            UI.CreateChromeLayoutButton(header.transform, 100f * s, 40f * s, VPBTranslation.T("hook.close", "Close"), bodyFont, new Color(0.44f, 0.36f, 0.20f, 1f), HideScanWhitelistEditorModal);
 
-            _scanWlEmptyWarnGo = new GameObject("EmptyWarn");
-            _scanWlEmptyWarnGo.transform.SetParent(panel.transform, false);
-            Text warnT = _scanWlEmptyWarnGo.AddComponent<Text>();
-            warnT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            warnT.fontSize = bodyFont;
-            warnT.color = new Color(1f, 0.75f, 0.4f, 1f);
-            warnT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            warnT.text = VPBTranslation.T("hook.settings.scan_whitelist.empty_warning", "⚠ Warning: whitelist is enabled but empty — all packages will be excluded from VaM's scan!");
-            try { VPBUiFont.ApplyTo(warnT); } catch { }
+            Text warnT = UI.CreateLabel(panel, VPBTranslation.T("hook.settings.scan_whitelist.empty_warning", "⚠ Warning: whitelist is enabled but empty — all packages will be excluded from VaM's scan!"),
+                bodyFont, new Color(1f, 0.75f, 0.4f, 1f), TextAnchor.UpperLeft, HorizontalWrapMode.Wrap, name: "EmptyWarn");
+            _scanWlEmptyWarnGo = warnT.gameObject;
             LayoutElement warnLe = UI.AddLE(_scanWlEmptyWarnGo, minHeight: 44f * s);
             _scanWlEmptyWarnGo.SetActive(false);
 
@@ -157,7 +127,7 @@ namespace VPB
 
             bool enabled = false;
             try { enabled = ScanWhitelistManager.Instance.IsEnabled; } catch { }
-            ScanWlCreateHeaderButton(enableRow.transform, 40f * s, 32f * s, enabled ? "✓" : " ", bodyFont, new Color(0.2f, 0.35f, 0.5f, 1f), () =>
+            UI.CreateChromeLayoutButton(enableRow.transform, 40f * s, 32f * s, enabled ? "✓" : " ", bodyFont, new Color(0.2f, 0.35f, 0.5f, 1f), () =>
             {
                 try
                 {
@@ -265,25 +235,12 @@ namespace VPB
             int headerFont = type.Title;
             int bodyFont = type.Body;
 
-            Transform parent = _scanWlModalRoot != null ? _scanWlModalRoot.transform : backgroundBoxGO.transform;
+            GameObject parentGO = _scanWlModalRoot != null ? _scanWlModalRoot : backgroundBoxGO;
 
-            _scanWlDisableConfirmRoot = new GameObject("VPB_ScanWhitelistDisableConfirm");
-            _scanWlDisableConfirmRoot.transform.SetParent(parent, false);
-            RectTransform rootRt = _scanWlDisableConfirmRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
-
-            Image dim = UI.AddImage(_scanWlDisableConfirmRoot, new Color(0f, 0f, 0f, 0.55f));
-
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_scanWlDisableConfirmRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(520f * s, 280f * s);
-            Image pbg = UI.AddImage(panel, new Color(0.08f, 0.08f, 0.1f, 1f));
+            GameObject panel;
+            _scanWlDisableConfirmRoot = UI.CreateModalChrome(
+                parentGO, "VPB_ScanWhitelistDisableConfirm", 520f * s, 280f * s,
+                new Color(0.08f, 0.08f, 0.1f, 1f), null, out panel, dimAlpha: 0.55f);
 
             VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
             v.padding = new RectOffset(Mathf.RoundToInt(16f * s), Mathf.RoundToInt(16f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s));
@@ -292,14 +249,7 @@ namespace VPB
             v.childControlHeight = true;
             v.childForceExpandWidth = true;
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(panel.transform, false);
-            Text title = titleGo.AddComponent<Text>();
-            title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            title.color = Color.white;
-            title.text = VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.title", "Disable scan whitelist?");
-            try { VPBUiFont.ApplyTo(title); } catch { }
-            GalleryUiMetrics.ApplyEmphasisTitle(title, headerFont);
+            UI.CreateEmphasisTitleLabel(panel, VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.title", "Disable scan whitelist?"), headerFont);
 
             Text body = UI.CreateLabel(panel, VPBTranslation.T(
                 "hook.settings.scan_whitelist.disable_confirm.body",
@@ -315,8 +265,8 @@ namespace VPB
             brh.childForceExpandWidth = true;
             LayoutElement brLe = UI.AddLE(btnRow, minHeight: 40f * s);
 
-            ScanWlCreateHeaderButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.35f, 0.35f, 0.38f, 1f), HideScanWhitelistDisableConfirmModal);
-            ScanWlCreateHeaderButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.disable", "Disable"), bodyFont, new Color(0.55f, 0.28f, 0.28f, 1f), () =>
+            UI.CreateChromeLayoutButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.35f, 0.35f, 0.38f, 1f), HideScanWhitelistDisableConfirmModal);
+            UI.CreateChromeLayoutButton(btnRow.transform, 0f, 38f * s, VPBTranslation.T("hook.settings.scan_whitelist.disable_confirm.disable", "Disable"), bodyFont, new Color(0.55f, 0.28f, 0.28f, 1f), () =>
             {
                 try
                 {
@@ -455,7 +405,7 @@ namespace VPB
 
             input = ScanWlCreateInputField(row.transform, fontSize, s, 1f, placeholder);
             float addBtnW = ScanWlRemoveBtnWidthScale * s;
-            ScanWlCreateHeaderButton(row.transform, addBtnW, 34f * s, VPBTranslation.T("hook.add", "Add"), fontSize, new Color(0.22f, 0.42f, 0.58f, 1f), onAdd);
+            UI.CreateChromeLayoutButton(row.transform, addBtnW, 34f * s, VPBTranslation.T("hook.add", "Add"), fontSize, new Color(0.22f, 0.42f, 0.58f, 1f), onAdd);
         }
 
         private static void ScanWlAddPlaceholderRow(Transform parent, string text, int fontSize, float s)
@@ -466,95 +416,25 @@ namespace VPB
 
         private static void ScanWlAddRemovableRow(GalleryPanel panel, Transform parent, string label, int fontSize, float s, bool altStripe, UnityAction onRemove)
         {
-            float rowH = ScanWlRowHeightScale * s;
-            float removeW = ScanWlRemoveBtnWidthScale * s;
-
-            GameObject row = new GameObject("Row");
-            row.transform.SetParent(parent, false);
-            Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
-            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 8f * s, padding: UI.Pad(8, 6, 4, 4, s), childForceExpandWidth: false);
-            LayoutElement rle = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH);
-
-            Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
-            LayoutElement lle = UI.AddLE(lt.gameObject, minWidth: 0f, flexibleWidth: 1f);
-
-            GameObject removeBtn = ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, VPBTranslation.T("hook.remove", "Remove"),
-                fontSize, new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
-            if (panel != null)
+            GameObject removeBtn = UI.CreateRemovableStripeRow(
+                parent, label, fontSize, ScanWlRowHeightScale * s, ScanWlRemoveBtnWidthScale * s, 6f * s,
+                8f * s, UI.Pad(8, 6, 4, 4, s), altStripe,
+                VPBTranslation.T("hook.remove", "Remove"), onRemove);
+            if (panel == null || removeBtn == null) return;
+            try
             {
-                try
-                {
-                    panel.AddTooltipPlain(removeBtn, VPBTranslation.T("hook.settings.scan_whitelist.remove_tip", "Remove this entry from the whitelist"));
-                }
-                catch { }
+                panel.AddTooltipPlain(removeBtn, VPBTranslation.T("hook.settings.scan_whitelist.remove_tip", "Remove this entry from the whitelist"));
             }
+            catch { }
         }
 
         private static InputField ScanWlCreateInputField(Transform parent, int fontSize, float s, float flexWidth, string placeholderText = null)
         {
-            GameObject go = new GameObject("Input");
-            go.transform.SetParent(parent, false);
-            Image bg = UI.AddGalleryElementRoundedBg(go, new Color(0.12f, 0.12f, 0.14f, 1f));
-            LayoutElement le = UI.AddLE(go, minHeight: 34f * s, preferredHeight: 34f * s, flexibleWidth: flexWidth);
-
-            GameObject ta = new GameObject("TextArea");
-            ta.transform.SetParent(go.transform, false);
-            RectTransform taRt = ta.AddComponent<RectTransform>();
-            taRt.anchorMin = Vector2.zero;
-            taRt.anchorMax = Vector2.one;
-            taRt.offsetMin = new Vector2(6f * s, 2f * s);
-            taRt.offsetMax = new Vector2(-6f * s, -2f * s);
-
-            Text phT = UI.CreateLabel(ta, placeholderText ?? "", fontSize, new Color(0.45f, 0.45f, 0.48f, 1f), name: "Placeholder");
-
-            Text tcT = UI.CreateLabel(ta, "", fontSize, Color.white, name: "Text");
-
-            InputField input = go.AddComponent<InputField>();
-            input.textComponent = tcT;
-            input.placeholder = phT;
-            input.lineType = InputField.LineType.SingleLine;
-            return input;
+            return UI.CreateChromeLayoutInputField(
+                parent, fontSize, 34f * s, flexWidth, 6f * s, 2f * s,
+                new Color(0.12f, 0.12f, 0.14f, 1f), new Color(0.45f, 0.45f, 0.48f, 1f), placeholderText);
         }
 
-        private static GameObject ScanWlCreateHeaderButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
-        {
-            GameObject go = new GameObject("Btn");
-            go.transform.SetParent(parent, false);
-            Image img = UI.AddGalleryElementRoundedBg(go, bg);
-            Button b = go.AddComponent<Button>();
-            b.transition = Selectable.Transition.None;
-            b.targetGraphic = img;
-            if (onClick != null) b.onClick.AddListener(onClick);
-            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
-            try { hb.ApplyBorderSettings(); } catch { }
-
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            if (width > 0f)
-            {
-                le.minWidth = le.preferredWidth = width;
-                le.flexibleWidth = 0f;
-            }
-            else
-            {
-                le.flexibleWidth = 1f;
-                le.minWidth = 0f;
-            }
-            le.minHeight = le.preferredHeight = height;
-            le.flexibleHeight = 0f;
-
-            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
-            return go;
-        }
-
-        private static void ScanWlDestroyChildren(Transform parent)
-        {
-            if (parent == null) return;
-            for (int i = parent.childCount - 1; i >= 0; i--)
-            {
-                Transform ch = parent.GetChild(i);
-                if (ch == null) continue;
-                try { UnityEngine.Object.Destroy(ch.gameObject); } catch { }
-            }
-        }
+        private static void ScanWlDestroyChildren(Transform parent) => UI.DestroyAllChildren(parent);
     }
 }

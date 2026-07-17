@@ -39,8 +39,7 @@ namespace VPB
         private void RebuildSaveMenuPopupRows(Transform panel)
         {
             if (panel == null) return;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             List<SaveMenuOption> options = BuildSaveMenuOptions();
             if (options != null)

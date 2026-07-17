@@ -532,7 +532,9 @@ namespace VPB
                     RectTransform rt = rightSideButtons[i];
                     if (rt == null) continue;
                     bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
-                    rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                    float bw = square ? squareW : w;
+                    float bh = square ? squareW : h;
+                    rt.sizeDelta = new Vector2(bw, bh);
                     Text t = rt.GetComponentInChildren<Text>(true);
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
@@ -543,7 +545,9 @@ namespace VPB
                     RectTransform rt = leftSideButtons[i];
                     if (rt == null) continue;
                     bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
-                    rt.sizeDelta = new Vector2(square ? squareW : w, h);
+                    float bw = square ? squareW : w;
+                    float bh = square ? squareW : h;
+                    rt.sizeDelta = new Vector2(bw, bh);
                     Text t = rt.GetComponentInChildren<Text>(true);
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SideButtonFontRef, scale, GalleryUiDesignTokens.SideButtonFontMin);
@@ -595,23 +599,11 @@ namespace VPB
                 UpdateSideButtonPositions();
         }
 
-        /// <summary>Scales grid badges/labels from cell size — does not resize the cell.</summary>
+        /// <summary>Scales grid labels from cell size. Hover badges own their size — do not touch them here
+        /// (selection refresh used to re-apply CellOverlayScale and nearly double visible badges).</summary>
         internal void ApplyGridCellChromeScale(GameObject btnGO)
         {
             if (btnGO == null || layoutMode == GalleryLayoutMode.List || settingsListViewActive) return;
-
-            RectTransform rt = btnGO.GetComponent<RectTransform>();
-            float cellW = rt != null ? rt.rect.width : GalleryUiDesignTokens.GridCellRefSize;
-            float cellH = rt != null ? rt.rect.height : GalleryUiDesignTokens.GridCellRefSize;
-            float overlay = GalleryUiMetrics.CellOverlayScale(cellW, cellH);
-            float badge = GalleryUiDesignTokens.GridBadgeSizeRef * overlay;
-            int badgeFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.GridBadgeFontRef, overlay, 10);
-
-            ScaleGridBadge(btnGO.transform, "AutoInstallBadge", badge, badgeFont, 6f * overlay, -6f * overlay);
-            ScaleGridBadge(btnGO.transform, "HidePackageBadge", badge, badgeFont, 42f * overlay, -6f * overlay);
-            ScaleGridBadge(btnGO.transform, "ScanExcludedBadge", badge, badgeFont, 80f * overlay, -6f * overlay);
-            ScaleGridBadge(btnGO.transform, "UserTagsBadge", badge, badgeFont, 118f * overlay, -6f * overlay);
-
             ApplyGridLabelStripLayout(btnGO);
         }
 
@@ -634,7 +626,76 @@ namespace VPB
                 le.minHeight = size;
             }
             Text t = tr.GetComponentInChildren<Text>();
-            if (t != null) t.fontSize = fontSize;
+            if (t != null)
+            {
+                t.fontSize = fontSize;
+                t.transform.localScale = Vector3.one;
+            }
+        }
+
+        /// <summary>Bottom-left deps hover badge — wider than letter badges for "ab / xy".</summary>
+        private static void ScaleGridDepsBadge(Transform root, float badgeSize, int fontSize, float posX, float posY)
+        {
+            Transform tr = root.Find("DepsBadge");
+            if (tr == null) return;
+            // Height must clear font (letterBadge alone can still be tight); width fits "ab / xy".
+            float h = Mathf.Max(badgeSize, fontSize + 8f);
+            float w = Mathf.Max(badgeSize * 2.2f, fontSize * 3.2f);
+            RectTransform rt = tr as RectTransform;
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 0f);
+                rt.anchorMax = new Vector2(0f, 0f);
+                rt.pivot = new Vector2(0f, 0f);
+                rt.sizeDelta = new Vector2(w, h);
+                rt.anchoredPosition = new Vector2(posX, posY);
+            }
+            LayoutElement le = tr.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.preferredWidth = w;
+                le.minWidth = w;
+                le.preferredHeight = h;
+                le.minHeight = h;
+            }
+            Text t = tr.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.fontSize = fontSize;
+                t.transform.localScale = Vector3.one;
+            }
+        }
+
+        /// <summary>Hub dep download control — square, sits to the right of deps badge.</summary>
+        private static void ScaleGridDepsDownloadBtn(Transform root, float badgeSize, int fontSize, float posX, float posY)
+        {
+            Transform tr = root.Find("DepsDownloadBtn");
+            if (tr == null) return;
+            float h = Mathf.Max(16f, badgeSize);
+            float w = Mathf.Max(22f, badgeSize);
+            RectTransform rt = tr as RectTransform;
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 0f);
+                rt.anchorMax = new Vector2(0f, 0f);
+                rt.pivot = new Vector2(0f, 0f);
+                rt.sizeDelta = new Vector2(w, h);
+                rt.anchoredPosition = new Vector2(posX, posY);
+            }
+            LayoutElement le = tr.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.preferredWidth = w;
+                le.minWidth = w;
+                le.preferredHeight = h;
+                le.minHeight = h;
+            }
+            Text t = tr.GetComponentInChildren<Text>();
+            if (t != null)
+            {
+                t.fontSize = Mathf.Max(10, fontSize - 2);
+                t.transform.localScale = Vector3.one;
+            }
         }
     }
 }

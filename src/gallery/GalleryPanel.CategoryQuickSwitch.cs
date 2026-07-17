@@ -593,8 +593,7 @@ namespace VPB
             if (_categoryQuickMenuContentGO == null) return;
             try
             {
-                for (int i = _categoryQuickMenuContentGO.transform.childCount - 1; i >= 0; i--)
-                    UnityEngine.Object.Destroy(_categoryQuickMenuContentGO.transform.GetChild(i).gameObject);
+                UI.DestroyAllChildren(_categoryQuickMenuContentGO.transform);
 
                 var ordered = BuildOrderedCategoriesForQuickSwitch();
 

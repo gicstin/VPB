@@ -271,11 +271,11 @@ namespace VPB
             _benchPickBannerLabel = UI.CreateLabel(_benchPickBannerRoot, "", font, Color.white, TextAnchor.MiddleLeft, name: "Label");
             LayoutElement lblLe = UI.AddLE(_benchPickBannerLabel.gameObject, minWidth: 120f, flexibleWidth: 1f);
 
-            ScanWlCreateHeaderButton(_benchPickBannerRoot.transform, 100f * s, 38f * s,
+            UI.CreateChromeLayoutButton(_benchPickBannerRoot.transform, 100f * s, 38f * s,
                 VPBTranslation.T("bench.pick.done", "Done"),
                 font, new Color(0.22f, 0.52f, 0.30f, 1f), () => BenchExitPickMode(true));
 
-            ScanWlCreateHeaderButton(_benchPickBannerRoot.transform, 90f * s, 38f * s,
+            UI.CreateChromeLayoutButton(_benchPickBannerRoot.transform, 90f * s, 38f * s,
                 VPBTranslation.T("bench.pick.cancel", "Cancel"),
                 font, new Color(0.38f, 0.32f, 0.22f, 1f), () => BenchExitPickMode(false));
 

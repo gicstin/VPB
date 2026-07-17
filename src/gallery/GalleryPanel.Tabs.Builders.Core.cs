@@ -39,6 +39,9 @@ namespace VPB
                 if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 
                 string label = c.name + " (" + count + ")";
+                Sprite catIcon = GetCategoryTabIcon(c.name);
+                Color? catIconBackdrop = catIcon != null ? GetCategoryTabIconBackdrop(c.name) : (Color?)null;
+                TextAnchor labelAnchor = catIcon != null ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
 
                 CreateTabButton(container.transform, label, btnColor, isActive, () => {
                     if (LogGalleryCategoryTypeSwitchTiming)
@@ -65,8 +68,96 @@ namespace VPB
                     if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
                     ClearFiltersForNewCategory();
                     RefreshFilesAndTabs();
-                });
+                }, null, null, labelAnchor, 0f, 0f, catIcon, catIconBackdrop);
             }
+        }
+
+        /// <summary>Per-category left icon for side-rail Category mode (c_*.png). Falls back to gallery_category. Null when setting off.</summary>
+        private Sprite GetCategoryTabIcon(string categoryName)
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryShowCategoryIcons)
+                return null;
+
+            string path = null;
+            if (!string.IsNullOrEmpty(categoryName))
+            {
+                if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_scene.png";
+                else if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_subscene.png";
+                else if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_clothing.png";
+                else if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_hair.png";
+                else if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_pose.png";
+                else if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_appearance.png";
+                else if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_plugins.png";
+                else if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_skin.png";
+                else if (string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_all.png";
+            }
+
+            if (path != null)
+            {
+                Sprite s = UI.LoadIconSprite(path, UI.SideRailIconGlyphTint);
+                if (s != null) return s;
+            }
+            return galleryCategorySprite;
+        }
+
+        /// <summary>Colored chip behind category side-rail icons. Dark accents so white glyphs stay readable.</summary>
+        private static Color GetCategoryTabIconBackdrop(string categoryName)
+        {
+            if (string.IsNullOrEmpty(categoryName))
+                return new Color(0.28f, 0.18f, 0.22f, 1f);
+
+            if (string.Equals(categoryName, Gallery.EverythingCategoryName, StringComparison.OrdinalIgnoreCase))
+                return new Color(0.42f, 0.12f, 0.12f, 1f); // dark red
+            if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.28f, 0.12f, 0.38f, 1f); // dark purple
+            if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.26f, 0.48f, 1f); // dark blue
+            if (string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.45f, 0.12f, 0.32f, 1f); // dark magenta
+            if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.40f, 0.12f, 1f); // dark olive-lime
+            if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.10f, 0.36f, 0.38f, 1f); // dark teal
+            if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.34f, 0.18f, 1f); // dark green
+            if (string.Equals(categoryName, "CUA", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.34f, 0.12f, 1f); // dark olive
+            if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.22f, 0.20f, 0.42f, 1f); // dark indigo
+            if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.48f, 0.28f, 0.10f, 1f); // dark orange
+            if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.36f, 0.26f, 0.16f, 1f); // dark brown
+            if (string.Equals(categoryName, "Plugin Presets", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.42f, 0.18f, 0.32f, 1f); // dark pink
+            if (string.Equals(categoryName, "Morphs", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.16f, 0.40f, 1f); // dark violet
+            if (string.Equals(categoryName, "Hair Presets", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.16f, 0.34f, 0.28f, 1f); // dark teal-green
+            if (string.Equals(categoryName, "Body Physics", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.36f, 0.22f, 0.14f, 1f); // dark warm brown
+            if (string.Equals(categoryName, "Animation", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.28f, 0.38f, 1f); // dark steel
+            if (string.Equals(categoryName, "General", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.24f, 0.26f, 0.30f, 1f); // dark slate
+
+            // Unknown categories: stable dark hue from name hash (not launch-random).
+            int h = 0;
+            for (int i = 0; i < categoryName.Length; i++)
+                h = unchecked(h * 31 + char.ToLowerInvariant(categoryName[i]));
+            float hue = ((h % 360) + 360) % 360 / 360f;
+            return Color.HSVToRGB(hue, 0.55f, 0.38f);
         }
 
         private void BuildCreatorTabs(GameObject container, bool isLeft)

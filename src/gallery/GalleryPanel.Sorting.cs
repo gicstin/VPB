@@ -326,8 +326,7 @@ namespace VPB
             if (string.IsNullOrEmpty(context)) return;
 
             Transform panel = sidePaneSortMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             SortState current = GetSortState(context);
             if (current == null) current = new SortState(SortType.Name, SortDirection.Ascending);
@@ -436,8 +435,7 @@ namespace VPB
             if (fileSortTypeMenuPanelGO == null) return;
 
             Transform panel = fileSortTypeMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             SortState current = GetSortState("Files");
 
@@ -460,6 +458,7 @@ namespace VPB
             }
 
             AppendHideOldVersionsMenuRow();
+            AppendShowHiddenPackagesMenuRow();
             SyncFileSortTypeMenuLayout(ChromeScale);
         }
 
@@ -505,6 +504,25 @@ namespace VPB
                     catch { }
                     CloseFileSortTypeMenu();
                     try { RefreshFiles(); } catch { }
+                },
+                38f);
+        }
+
+        // Bottom-of-menu toggle: include packages marked hidden (.hide).
+        private void AppendShowHiddenPackagesMenuRow()
+        {
+            bool on = false;
+            try { on = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
+            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T(
+                on ? "gallery.sort.full.hide_hidden_items" : "gallery.sort.full.show_hidden_items",
+                on ? "Hide hidden items" : "Show hidden items");
+
+            UI.AddPopupMenuRow(
+                fileSortTypeMenuPanelGO, 248, 36, label, 14, on,
+                () =>
+                {
+                    ToggleGalleryShowHiddenPackages();
+                    CloseFileSortTypeMenu();
                 },
                 38f);
         }

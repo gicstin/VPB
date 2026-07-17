@@ -197,20 +197,11 @@ namespace VPB
             TextAnchor align,
             bool boldLine)
         {
-            GameObject go = new GameObject("Text_" + (boldLine ? "Title" : "Body"));
-            go.transform.SetParent(parent.transform, false);
-            Text t = go.AddComponent<Text>();
-            t.text = text;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
+            Text t = UI.CreateLabel(parent, text, fontSize, color, align, raycastTarget: false,
+                name: "Text_" + (boldLine ? "Title" : "Body"));
             t.fontStyle = style;
-            t.color = color;
-            t.alignment = align;
-            t.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-
-            LayoutElement le = UI.AddLE(go, minWidth: 1, preferredHeight: boldLine ? 30 : 48, flexibleHeight: 0);
-            return go;
+            UI.AddLE(t.gameObject, minWidth: 1, preferredHeight: boldLine ? 30 : 48, flexibleHeight: 0);
+            return t.gameObject;
         }
 
         private static void CreateDialogButton(Transform row, string label, UnityAction onClick)

@@ -251,6 +251,13 @@ namespace VPB
             if (btn == null) return;
             RoundedRect rr = btn.GetComponent<RoundedRect>();
             if (rr != null) rr.cornerRadiusFraction = frac;
+            // Category icon color chip (TabLeftIcon/Backdrop) — same fraction as rest of chrome.
+            Transform iconBackdrop = btn.transform.Find("TabLeftIcon/Backdrop");
+            if (iconBackdrop != null)
+            {
+                RoundedRect backdropRr = iconBackdrop.GetComponent<RoundedRect>();
+                if (backdropRr != null) backdropRr.cornerRadiusFraction = frac;
+            }
             ConfigureSideTabRowHoverBorder(btn);
         }
 
@@ -1239,7 +1246,7 @@ namespace VPB
             return ell;
         }
 
-        private GameObject CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f)
+        private GameObject CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f, Sprite leftIcon = null, Color? leftIconBackdrop = null)
         {
             GameObject btnGO = GetTabButton(parent);
             if (btnGO == null)
@@ -1281,10 +1288,23 @@ namespace VPB
             float s = ChromeScale;
             float insetL = Mathf.Max(0f, labelInsetLeft);
             float insetR = Mathf.Max(0f, labelInsetRight);
+            TextAnchor anchor = labelAnchor;
+            ClearTabLeftIcon(btnGO);
+            if (leftIcon != null)
+            {
+                // Backdrop circle needs extra room so glyph stays ~old 20px after inset pad.
+                float iconSize = (leftIconBackdrop.HasValue ? 28f : 20f) * s;
+                float iconLeft = 4f * s;
+                float gap = 6f * s;
+                insetL = Mathf.Max(insetL, iconLeft + iconSize + gap);
+                if (anchor == TextAnchor.MiddleCenter)
+                    anchor = TextAnchor.MiddleLeft;
+                ApplyTabLeftIcon(btnGO, leftIcon, iconLeft, iconSize, leftIconBackdrop);
+            }
 
             Text txt = btnGO.GetComponentInChildren<Text>();
             GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            txt.alignment = labelAnchor;
+            txt.alignment = anchor;
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             txt.verticalOverflow = VerticalWrapMode.Truncate;
             txt.resizeTextForBestFit = false;
@@ -1308,9 +1328,17 @@ namespace VPB
             le.flexibleWidth = 1;
 
             float pad = 10f * s;
-            // Use le.preferredWidth (already set to current scale) instead of btnRt.rect.width,
-            // which can be stale after scale changes and cause text to stay over-truncated.
-            float inner = le.preferredWidth - pad - insetL - insetR;
+            // Rows use flexibleWidth and stretch to the side-tab column. preferredWidth (170) is only
+            // a layout hint — using it alone clips labels early once a left icon takes inset space.
+            float rowW = le.preferredWidth;
+            float stretchW = (GalleryUiDesignTokens.SideTabColumnWidthRef
+                - 2f * GalleryUiDesignTokens.SideTabSideMarginRef
+                - GalleryUiDesignTokens.SideTabScrollBarWidthRef) * s;
+            if (stretchW > rowW) rowW = stretchW;
+            RectTransform btnRt = btnGO.GetComponent<RectTransform>();
+            if (btnRt != null && btnRt.rect.width > rowW + 0.5f)
+                rowW = btnRt.rect.width;
+            float inner = rowW - pad - insetL - insetR;
             if (inner <= 2f) inner = 125f * s;
             string shown = EllipsizeTextPreferredWidth(txt, label, inner);
             txt.text = shown;
@@ -1342,6 +1370,66 @@ namespace VPB
 
             if (targetList != null) targetList.Add(btnGO);
             return btnGO;
+        }
+
+        private static void ClearTabLeftIcon(GameObject buttonGO)
+        {
+            if (buttonGO == null) return;
+            try
+            {
+                Transform old = buttonGO.transform.Find("TabLeftIcon");
+                if (old != null)
+                    UnityEngine.Object.DestroyImmediate(old.gameObject);
+            }
+            catch { }
+        }
+
+        private static void ApplyTabLeftIcon(GameObject buttonGO, Sprite icon, float left, float size, Color? backdrop = null)
+        {
+            if (buttonGO == null || icon == null) return;
+            GameObject rootGO = new GameObject("TabLeftIcon");
+            rootGO.transform.SetParent(buttonGO.transform, false);
+            // Parenting under a RectTransform already installs RectTransform — do not AddComponent again.
+            RectTransform rootRT = rootGO.GetComponent<RectTransform>();
+            if (rootRT == null) rootRT = rootGO.AddComponent<RectTransform>();
+            // Overlay only — never feed ContentSizeFitter / VLG preferred height.
+            LayoutElement iconLe = rootGO.GetComponent<LayoutElement>();
+            if (iconLe == null) iconLe = rootGO.AddComponent<LayoutElement>();
+            iconLe.ignoreLayout = true;
+            rootRT.anchorMin = new Vector2(0f, 0.5f);
+            rootRT.anchorMax = new Vector2(0f, 0.5f);
+            rootRT.pivot = new Vector2(0f, 0.5f);
+            rootRT.anchoredPosition = new Vector2(left, 0f);
+            rootRT.sizeDelta = new Vector2(size, size);
+
+            if (backdrop.HasValue)
+            {
+                GameObject bgGO = new GameObject("Backdrop");
+                bgGO.transform.SetParent(rootGO.transform, false);
+                RoundedRect rr = bgGO.AddComponent<RoundedRect>();
+                rr.color = backdrop.Value;
+                rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+                rr.raycastTarget = false;
+                RectTransform bgRT = bgGO.GetComponent<RectTransform>();
+                bgRT.anchorMin = Vector2.zero;
+                bgRT.anchorMax = Vector2.one;
+                bgRT.offsetMin = Vector2.zero;
+                bgRT.offsetMax = Vector2.zero;
+            }
+
+            GameObject glyphGO = new GameObject("Glyph");
+            glyphGO.transform.SetParent(rootGO.transform, false);
+            Image img = glyphGO.AddComponent<Image>();
+            img.sprite = icon;
+            img.color = Color.white;
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            RectTransform rt = glyphGO.GetComponent<RectTransform>();
+            float pad = backdrop.HasValue ? size * 0.12f : 0f;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(pad, pad);
+            rt.offsetMax = new Vector2(-pad, -pad);
         }
 
         private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null)
@@ -1720,7 +1808,7 @@ namespace VPB
             gridLabelRT.offsetMin = Vector2.zero;
             gridLabelRT.offsetMax = Vector2.zero;
 
-            Image gridLabelBg = UI.AddImage(gridLabelGO, new Color(0f, 0f, 0f, 0.6f), false);
+            Image gridLabelBg = UI.AddImage(gridLabelGO, GalleryItemLabelBarBackdrop, false);
 
             Text gridLabelText = UI.CreateLabel(gridLabelGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
             GameObject gridLabelTextGO = gridLabelText.gameObject;
@@ -1750,8 +1838,8 @@ namespace VPB
             ContentSizeFitter cardCSF = cardGO.AddComponent<ContentSizeFitter>();
             cardCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Background
-            Image cardBg = UI.AddImage(cardGO, new Color(0, 0, 0, 0.8f), false);
+            // Background — same see-through bar as GridLabel / hover badges
+            Image cardBg = UI.AddImage(cardGO, GalleryItemLabelBarBackdrop, false);
 
             // Label
             Text labelText = UI.CreateLabel(cardGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, verticalWrap: VerticalWrapMode.Overflow, raycastTarget: false, name: "Label");
@@ -1904,8 +1992,8 @@ namespace VPB
             aiBadgeRT.pivot = new Vector2(0, 1);
             aiBadgeRT.sizeDelta = new Vector2(32, 32);
             aiBadgeRT.anchoredPosition = new Vector2(6, -6);
-            Image aiBadgeBg = UI.AddImage(aiBadgeGO, new Color(0f, 0.35f, 1f, 0.85f), false);
-            Text aiBadgeText = UI.CreateLabel(aiBadgeGO, "A", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            AddGalleryBadgeBackground(aiBadgeGO);
+            Text aiBadgeText = UI.CreateLabel(aiBadgeGO, "A", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterAutoInstall, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement aiBadgeLE = UI.AddLE(aiBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             aiBadgeGO.SetActive(false);
 
@@ -1918,8 +2006,8 @@ namespace VPB
             hideBadgeRT.pivot = new Vector2(0, 1);
             hideBadgeRT.sizeDelta = new Vector2(32, 32);
             hideBadgeRT.anchoredPosition = new Vector2(42, -6);
-            Image hideBadgeBg = UI.AddImage(hideBadgeGO, new Color(0.35f, 0.35f, 0.4f, 0.9f), false);
-            Text hideBadgeText = UI.CreateLabel(hideBadgeGO, "H", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            AddGalleryBadgeBackground(hideBadgeGO);
+            Text hideBadgeText = UI.CreateLabel(hideBadgeGO, "H", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterHide, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement hideBadgeLE = UI.AddLE(hideBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             hideBadgeGO.SetActive(false);
 
@@ -1933,8 +2021,8 @@ namespace VPB
             scanExBadgeRT.pivot = new Vector2(0, 1);
             scanExBadgeRT.sizeDelta = new Vector2(32, 32);
             scanExBadgeRT.anchoredPosition = new Vector2(80, -6);
-            Image scanExBadgeBg = UI.AddImage(scanExBadgeGO, new Color(0.25f, 0.4f, 0.55f, 0.9f), false);
-            Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            AddGalleryBadgeBackground(scanExBadgeGO);
+            Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterScanExcluded, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement scanExBadgeLE = UI.AddLE(scanExBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             scanExBadgeGO.SetActive(false);
 
@@ -1947,10 +2035,51 @@ namespace VPB
             userTagsBadgeRT.pivot = new Vector2(0, 1);
             userTagsBadgeRT.sizeDelta = new Vector2(32, 32);
             userTagsBadgeRT.anchoredPosition = new Vector2(118, -6);
-            Image userTagsBadgeBg = UI.AddImage(userTagsBadgeGO, new Color(0.14f, 0.42f, 0.48f, 0.9f), false);
-            Text userTagsBadgeText = UI.CreateLabel(userTagsBadgeGO, "T", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            AddGalleryBadgeBackground(userTagsBadgeGO);
+            Text userTagsBadgeText = UI.CreateLabel(userTagsBadgeGO, "T", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterUserTags, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement userTagsBadgeLE = UI.AddLE(userTagsBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             userTagsBadgeGO.SetActive(false);
+
+            // Deps badge (grid hover only; bottom-left). Rich text: green installed / red missing, or green N✓ when complete.
+            GameObject depsBadgeGO = new GameObject("DepsBadge");
+            depsBadgeGO.transform.SetParent(btnGO.transform, false);
+            RectTransform depsBadgeRT = depsBadgeGO.AddComponent<RectTransform>();
+            depsBadgeRT.anchorMin = new Vector2(0, 0);
+            depsBadgeRT.anchorMax = new Vector2(0, 0);
+            depsBadgeRT.pivot = new Vector2(0, 0);
+            depsBadgeRT.sizeDelta = new Vector2(72, 28);
+            depsBadgeRT.anchoredPosition = new Vector2(6, 6);
+            AddGalleryBadgeBackground(depsBadgeGO);
+            UI.CreateLabel(
+                depsBadgeGO, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, richText: true, name: "Text");
+            UI.AddLE(depsBadgeGO, minWidth: 48f, minHeight: 28f, preferredWidth: 72f, preferredHeight: 28f);
+            depsBadgeGO.SetActive(false);
+
+            // Hub dep download (grid hover; right of deps badge). Same translucent badge backdrop as others.
+            GameObject depsDlGO = new GameObject("DepsDownloadBtn");
+            depsDlGO.transform.SetParent(btnGO.transform, false);
+            RectTransform depsDlRT = depsDlGO.AddComponent<RectTransform>();
+            depsDlRT.anchorMin = new Vector2(0, 0);
+            depsDlRT.anchorMax = new Vector2(0, 0);
+            depsDlRT.pivot = new Vector2(0, 0);
+            depsDlRT.sizeDelta = new Vector2(28, 28);
+            depsDlRT.anchoredPosition = new Vector2(84, 6);
+            RoundedRect depsDlRr = AddGalleryBadgeBackground(depsDlGO);
+            UI.CreateLabel(
+                depsDlGO, "↓", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterDepsDownload, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate, raycastTarget: false, richText: false, name: "Text");
+            UI.AddLE(depsDlGO, minWidth: 24f, minHeight: 28f, preferredWidth: 28f, preferredHeight: 28f);
+            Button depsDlBtn = depsDlGO.AddComponent<Button>();
+            depsDlBtn.targetGraphic = depsDlRr;
+            depsDlBtn.transition = Selectable.Transition.ColorTint;
+            var depsDlColors = depsDlBtn.colors;
+            depsDlColors.normalColor = Color.white;
+            depsDlColors.highlightedColor = new Color(1f, 1f, 1f, 0.92f);
+            depsDlColors.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+            depsDlBtn.colors = depsDlColors;
+            depsDlGO.AddComponent<GalleryDepsDownloadHoverButton>();
+            depsDlGO.SetActive(false);
 
             // List-mode hover indicator: thin vertical line at left edge of thumbnail (white, semi-transparent)
             GameObject listHoverBarGO = new GameObject("ListHoverBar");
@@ -2219,6 +2348,536 @@ namespace VPB
             {
                 Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
                 if (tr != null) ApplyListRowBadgeSlot(tr as RectTransform);
+            }
+        }
+
+        /// <summary>Same black see-through fill as GridLabel / Card name bar.</summary>
+        private static readonly Color GalleryItemLabelBarBackdrop = new Color(0f, 0f, 0f, 0.6f);
+
+        // Former solid badge fills → letter colors (lifted for readability on translucent black).
+        private static readonly Color GalleryBadgeLetterAutoInstall = new Color(0.35f, 0.65f, 1f, 1f);
+        private static readonly Color GalleryBadgeLetterHide = new Color(0.78f, 0.78f, 0.84f, 1f);
+        private static readonly Color GalleryBadgeLetterScanExcluded = new Color(0.45f, 0.72f, 0.92f, 1f);
+        private static readonly Color GalleryBadgeLetterUserTags = new Color(0.35f, 0.88f, 0.92f, 1f);
+        private static readonly Color GalleryBadgeLetterDepsDownload = new Color(0.35f, 0.65f, 1f, 1f);
+
+        /// <summary>Badge fill with gallery corner radius + label-bar translucency.</summary>
+        private static RoundedRect AddGalleryBadgeBackground(GameObject go)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = GalleryItemLabelBarBackdrop;
+            // Raycast on — UIHoverBorder + tooltips need hits (text stays non-raycast).
+            rr.raycastTarget = true;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            EnsureGalleryBadgeHoverBorder(go, rr);
+            return rr;
+        }
+
+        /// <summary>Same yellow rim as CreateUIButton / star rating on hover.</summary>
+        private static void EnsureGalleryBadgeHoverBorder(GameObject go, Graphic target = null)
+        {
+            if (go == null) return;
+            UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+            if (hb == null) hb = go.AddComponent<UIHoverBorder>();
+            if (target != null) hb.targetGraphic = target;
+            else if (hb.targetGraphic == null) hb.targetGraphic = go.GetComponent<Graphic>();
+            try { hb.ApplyBorderSettings(); } catch { }
+        }
+
+        /// <summary>Force label-bar backdrop on badge / star chrome (pooled cells may still have old tints).</summary>
+        private static void ApplyGalleryBadgeLabelBarBackdrop(GameObject go)
+        {
+            if (go == null) return;
+            Image img = go.GetComponent<Image>();
+            if (img != null)
+            {
+                img.color = GalleryItemLabelBarBackdrop;
+                img.raycastTarget = true;
+            }
+            EnsureGalleryBadgeHoverBorder(go, img);
+        }
+
+        private static void ApplyGalleryBadgeLetterColor(string badgeName, Text label)
+        {
+            if (label == null || string.IsNullOrEmpty(badgeName)) return;
+            if (string.Equals(badgeName, "AutoInstallBadge", StringComparison.Ordinal))
+                label.color = GalleryBadgeLetterAutoInstall;
+            else if (string.Equals(badgeName, "HidePackageBadge", StringComparison.Ordinal))
+                label.color = GalleryBadgeLetterHide;
+            else if (string.Equals(badgeName, "ScanExcludedBadge", StringComparison.Ordinal))
+                label.color = GalleryBadgeLetterScanExcluded;
+            else if (string.Equals(badgeName, "UserTagsBadge", StringComparison.Ordinal))
+                label.color = GalleryBadgeLetterUserTags;
+        }
+
+        /// <summary>
+        /// Constant chrome-scaled sizes. <paramref name="edge"/> = same inset on all four sides
+        /// and the gutter between packed top-left badges.
+        /// </summary>
+        private void GetGridHoverBadgeMetrics(out float letterBadge, out float ratingBadge, out int badgeFont, out float edge)
+        {
+            badgeFont = UiMetrics.FontBody();
+            // Grow with chrome font — hard max used to clamp height at 34 while font hit 32+ at scale 2,
+            // so Truncate hid deps digits.
+            letterBadge = Mathf.Max(22f, badgeFont * 1.75f);
+            ratingBadge = Mathf.Max(28f, letterBadge * 1.3f);
+            // Match top / bottom / left / right — derived from badge size for scale-stable rhythm.
+            edge = Mathf.Max(4f, Mathf.Round(letterBadge * 0.2f));
+        }
+
+        /// <summary>Grid hover: pack visible letter badges into consecutive top-left slots.</summary>
+        private void ApplyGridHoverTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded, bool showUserTags)
+        {
+            if (btnGO == null) return;
+            GetGridHoverBadgeMetrics(out float badge, out _, out int badgeFont, out float edge);
+            float startX = edge;
+            float startY = -edge;
+            float stepX = badge + edge;
+
+            int slot = 0;
+            void Place(string name, bool show)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, name);
+                if (tr == null) return;
+                if (tr.parent != btnGO.transform)
+                    tr.SetParent(btnGO.transform, false);
+                EnsureGalleryBadgeRounded(tr.gameObject);
+                tr.gameObject.SetActive(show);
+                if (!show) return;
+                float posX = startX + (stepX * slot);
+                ScaleGridBadge(btnGO.transform, name, badge, badgeFont, posX, startY);
+                Text label = tr.GetComponentInChildren<Text>(true);
+                if (label != null)
+                {
+                    label.fontSize = badgeFont;
+                    label.transform.localScale = Vector3.one;
+                    ApplyGalleryBadgeLetterColor(name, label);
+                }
+                slot++;
+            }
+            Place("AutoInstallBadge", showAutoInstall);
+            Place("HidePackageBadge", showHide);
+            Place("ScanExcludedBadge", showWhitelistExcluded);
+            Place("UserTagsBadge", showUserTags);
+        }
+
+        /// <summary>Migrate pooled plain Image badges to RoundedRect (same corner fraction as gallery chrome).</summary>
+        private static void EnsureGalleryBadgeRounded(GameObject go)
+        {
+            if (go == null) return;
+            RoundedRect rr = go.GetComponent<RoundedRect>();
+            if (rr != null)
+            {
+                rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+                rr.color = GalleryItemLabelBarBackdrop;
+                rr.raycastTarget = true;
+                EnsureGalleryBadgeHoverBorder(go, rr);
+                return;
+            }
+            Image img = go.GetComponent<Image>();
+            if (img == null) return;
+            UnityEngine.Object.DestroyImmediate(img);
+            rr = go.AddComponent<RoundedRect>();
+            rr.color = GalleryItemLabelBarBackdrop;
+            rr.raycastTarget = true;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            EnsureGalleryBadgeHoverBorder(go, rr);
+        }
+
+        private void SetGridHoverBadgeTooltip(GameObject badgeGO, string tip)
+        {
+            if (badgeGO == null || string.IsNullOrEmpty(tip)) return;
+            Image img = badgeGO.GetComponent<Image>();
+            if (img != null) img.raycastTarget = true;
+            AddTooltipPlain(badgeGO, tip);
+        }
+
+        private const string GridHoverDepsInstalledColor = "#4CAF50";
+        private const string GridHoverDepsMissingColor = "#F44336";
+
+        /// <summary>
+        /// Deps for hover badge: packages use in-memory lists; loose local scenes use
+        /// <see cref="GallerySortManager.GetDepsCount"/> (SQL loose-scene cache, then one stream scan).
+        /// </summary>
+        private static bool TryGetDepsCountsForHover(FileEntry file, out int total, out int missing)
+        {
+            total = 0;
+            missing = 0;
+            try
+            {
+                VarPackage pkg = null;
+                if (file is VarFileEntry vfe) pkg = vfe.Package;
+                else if (file is PackageListEntry ple) pkg = ple.Package;
+                if (pkg != null)
+                {
+                    var deps = pkg.RecursivePackageDependencies;
+                    total = deps != null ? deps.Count : 0;
+                    if (total <= 0)
+                    {
+                        missing = 0;
+                        return true;
+                    }
+                    missing = GallerySortManager.GetMissingDepsCount(file);
+                    if (missing < 0) missing = 0;
+                    if (missing > total) missing = total;
+                    return true;
+                }
+
+                // Local Custom/Saves scenes (and other loose JSON): SQL L2 cache preferred; hover-only.
+                if (file == null || string.IsNullOrEmpty(file.Path)) return false;
+                string pathLower = file.Path.ToLowerInvariant();
+                if (!pathLower.EndsWith(".json")) return false;
+                if (!pathLower.Contains("custom") && !pathLower.Contains("saves")) return false;
+
+                total = GallerySortManager.GetDepsCount(file);
+                if (total <= 0)
+                {
+                    missing = 0;
+                    return true;
+                }
+                missing = GallerySortManager.GetMissingDepsCount(file);
+                if (missing < 0) missing = 0;
+                if (missing > total) missing = total;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        private const int GridHoverUserTagsTooltipLimit = 8;
+
+        /// <summary>Status tip for T badge: list applied tags (capped).</summary>
+        private string BuildGridHoverUserTagsTooltip(FileEntry file)
+        {
+            string head = VPBTranslation.T("gallery.badge.tip.user_tags", "User tags:");
+            try
+            {
+                if (file == null || !TryGetGalleryRowKeysForUserTags(file, out string pkgUid, out string internalPath))
+                    return head + " " + VPBTranslation.T("gallery.badge.tip.user_tags_present", "this item has user tags.");
+
+                string cat = currentCategoryTitle ?? "";
+                if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+                if (string.IsNullOrEmpty(cat))
+                    return head + " " + VPBTranslation.T("gallery.badge.tip.user_tags_present", "this item has user tags.");
+
+                var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                VpbLocalDatabase.TryGetGalleryUserTagsForRow(cat, pkgUid, internalPath, tags);
+
+                // ALL VAR package row may only have tags on child paths — union package tags.
+                if ((tags == null || tags.Count == 0)
+                    && VpbLocalDatabase.IsGalleryAllVarPseudoCategory(cat)
+                    && string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrEmpty(pkgUid))
+                {
+                    tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    VpbLocalDatabase.TryGetGalleryUserTagsForPackageAnyPath(pkgUid, tags);
+                }
+
+                if (tags == null || tags.Count == 0)
+                    return head + " " + VPBTranslation.T("gallery.badge.tip.user_tags_present", "this item has user tags.");
+
+                var sorted = new List<string>(tags);
+                sorted.Sort(StringComparer.OrdinalIgnoreCase);
+                int shown = Mathf.Min(GridHoverUserTagsTooltipLimit, sorted.Count);
+                var parts = new List<string>(shown);
+                for (int i = 0; i < shown; i++)
+                    parts.Add(sorted[i]);
+                string list = string.Join(", ", parts.ToArray());
+                if (sorted.Count > shown)
+                {
+                    return string.Format(
+                        VPBTranslation.T("gallery.badge.tip.user_tags_list_more", "User tags ({0}): {1} (+{2} more)"),
+                        sorted.Count, list, sorted.Count - shown);
+                }
+                return string.Format(
+                    VPBTranslation.T("gallery.badge.tip.user_tags_list", "User tags ({0}): {1}"),
+                    sorted.Count, list);
+            }
+            catch
+            {
+                return head + " " + VPBTranslation.T("gallery.badge.tip.user_tags_present", "this item has user tags.");
+            }
+        }
+
+        /// <summary>Grid hover: fill + show badges for one cell. Bind/scroll path must keep them off.</summary>
+        internal void ShowGridHoverBadges(GameObject btnGO, FileEntry file)
+        {
+            if (btnGO == null || file == null) return;
+            if (layoutMode != GalleryLayoutMode.Grid) return;
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridHoverBadgesEnabled)
+            {
+                HideGridHoverBadges(btnGO);
+                return;
+            }
+
+            bool showAutoInstall = file.IsAutoInstall();
+            bool showHide = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
+            bool showScanExcluded = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
+            bool showUserTags = IsGalleryUserTagBadgeVisible(file);
+            ApplyGridHoverTopLeftBadgeLayout(btnGO, showAutoInstall, showHide, showScanExcluded, showUserTags);
+
+            if (showAutoInstall)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
+                if (tr != null)
+                    SetGridHoverBadgeTooltip(tr.gameObject,
+                        VPBTranslation.T("gallery.badge.tip.auto_install", "Auto-install: package is in the auto-install list."));
+            }
+            if (showHide)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
+                if (tr != null)
+                    SetGridHoverBadgeTooltip(tr.gameObject,
+                        VPBTranslation.T("gallery.badge.tip.hidden", "Hidden: package is marked hidden in the gallery."));
+            }
+            if (showScanExcluded)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                if (tr != null)
+                    SetGridHoverBadgeTooltip(tr.gameObject,
+                        VPBTranslation.T("gallery.badge.tip.scan_excluded", "Scan whitelist: package is excluded from VaM's AddonPackages scan."));
+            }
+            if (showUserTags)
+            {
+                Transform tr = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
+                if (tr != null)
+                    SetGridHoverBadgeTooltip(tr.gameObject, BuildGridHoverUserTagsTooltip(file));
+            }
+
+            GetGridHoverBadgeMetrics(out float letterBadge, out float ratingBadge, out int badgeFont, out float edge);
+
+            Transform ratingTr = btnGO.transform.Find("Rating");
+            Transform selectorTr = btnGO.transform.Find("RatingSelector");
+            // Grid bind keeps RatingSelector inactive — must enable or star click does nothing.
+            if (selectorTr != null)
+            {
+                selectorTr.gameObject.SetActive(true);
+                selectorTr.SetAsLastSibling();
+            }
+            if (ratingTr != null)
+            {
+                ratingTr.gameObject.SetActive(true);
+                ratingTr.SetAsLastSibling();
+                RectTransform ratingRT = ratingTr as RectTransform;
+                if (ratingRT != null)
+                {
+                    // Outer box = star chrome; same edge inset as top-left / bottom-left badges.
+                    ratingRT.sizeDelta = new Vector2(ratingBadge, ratingBadge);
+                    ratingRT.anchoredPosition = new Vector2(-edge, -edge);
+                }
+                Transform starTr = ratingTr.Find("Star");
+                if (starTr != null)
+                {
+                    ApplyGalleryBadgeLabelBarBackdrop(starTr.gameObject);
+                    RectTransform starRT = starTr as RectTransform;
+                    if (starRT != null)
+                    {
+                        starRT.anchorMin = new Vector2(0.5f, 0.5f);
+                        starRT.anchorMax = new Vector2(0.5f, 0.5f);
+                        starRT.pivot = new Vector2(0.5f, 0.5f);
+                        starRT.anchoredPosition = Vector2.zero;
+                        starRT.sizeDelta = new Vector2(ratingBadge, ratingBadge);
+                    }
+                    Text starLabel = starTr.GetComponentInChildren<Text>(true);
+                    if (starLabel != null)
+                    {
+                        starLabel.fontSize = Mathf.Max(badgeFont + 2, Mathf.RoundToInt(badgeFont * 1.15f));
+                        starLabel.transform.localScale = Vector3.one;
+                    }
+                }
+                if (selectorTr != null)
+                {
+                    selectorTr.SetAsLastSibling();
+                    RectTransform selRT = selectorTr as RectTransform;
+                    if (selRT != null)
+                    {
+                        float selW = Mathf.Max(80f, ratingBadge * 2.1f);
+                        float selH = Mathf.Max(114f, ratingBadge * 2.9f);
+                        selRT.sizeDelta = new Vector2(selW, selH);
+                        // Drop below rating box with same edge gutter.
+                        selRT.anchoredPosition = new Vector2(-edge, -(ratingBadge + edge));
+                    }
+                }
+
+                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                if (rh != null)
+                {
+                    rh.panel = this;
+                    rh.SetShowDigitMode(true);
+                    // Don't close if picker already open (re-enter / tooltip child hops).
+                    if (!rh.IsSelectorOpen)
+                        rh.CloseSelector();
+                    int r = rh.CurrentRating;
+                    string rateTip = r <= 0
+                        ? VPBTranslation.T("gallery.badge.tip.rating_none", "Rating: unrated. Click to set 0–5.")
+                        : string.Format(
+                            VPBTranslation.T("gallery.badge.tip.rating", "Rating: {0} of 5. Click to change."),
+                            r);
+                    SetGridHoverBadgeTooltip(ratingTr.gameObject, rateTip);
+                    if (starTr != null) SetGridHoverBadgeTooltip(starTr.gameObject, rateTip);
+                }
+            }
+
+            Transform depsTr = btnGO.transform.Find("DepsBadge");
+            Transform depsDlTr = btnGO.transform.Find("DepsDownloadBtn");
+            int hoverMissing = 0;
+            float depsBottomY = edge;
+            float depsBadgeW = 0f;
+            if (depsTr != null)
+            {
+                bool showDeps = false;
+                string depsTip = null;
+                if (TryGetDepsCountsForHover(file, out int total, out int missing) && total > 0)
+                {
+                    hoverMissing = missing;
+                    int installed = total - missing;
+                    Text t = depsTr.GetComponentInChildren<Text>(true);
+                    if (t != null)
+                    {
+                        t.supportRichText = true;
+                        if (missing > 0)
+                        {
+                            t.text = string.Format(
+                                "<color={0}>{1}</color> / <color={2}>{3}</color>",
+                                GridHoverDepsInstalledColor, installed,
+                                GridHoverDepsMissingColor, missing);
+                            depsTip = string.Format(
+                                VPBTranslation.T(
+                                    "gallery.badge.tip.deps_partial",
+                                    "Dependencies: {0} installed (green), {1} missing (red). Total {2}."),
+                                installed, missing, total);
+                        }
+                        else
+                        {
+                            t.text = string.Format("<color={0}>{1} ✓</color>", GridHoverDepsInstalledColor, total);
+                            depsTip = string.Format(
+                                VPBTranslation.T(
+                                    "gallery.badge.tip.deps_complete",
+                                    "Dependencies: all {0} installed."),
+                                total);
+                        }
+                        showDeps = true;
+                    }
+                }
+                EnsureGalleryBadgeRounded(depsTr.gameObject);
+                ApplyGalleryBadgeLabelBarBackdrop(depsTr.gameObject);
+                depsTr.gameObject.SetActive(showDeps);
+                if (showDeps)
+                {
+                    RectTransform btnRT = btnGO.GetComponent<RectTransform>();
+                    float cellH = btnRT != null ? btnRT.rect.height : GalleryUiDesignTokens.GridCellRefSize;
+                    // Same edge from left; bottom edge matches top (above label strip / Card when present).
+                    float bottomY = edge;
+                    if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible())
+                        bottomY = (GetGridLabelFraction() * cellH) + edge;
+                    else
+                    {
+                        Transform cardTr = btnGO.transform.Find("Card");
+                        if (cardTr != null && cardTr.gameObject.activeSelf)
+                        {
+                            RectTransform cardRT = cardTr as RectTransform;
+                            float cardH = cardRT != null ? Mathf.Max(0f, cardRT.rect.height) : 0f;
+                            if (cardH < 1f) cardH = letterBadge;
+                            bottomY = cardH + edge;
+                        }
+                    }
+                    depsBottomY = bottomY;
+                    ScaleGridDepsBadge(btnGO.transform, letterBadge, badgeFont, edge, bottomY);
+                    RectTransform depsRT = depsTr as RectTransform;
+                    if (depsRT != null) depsBadgeW = depsRT.sizeDelta.x;
+                    Text depsLabel = depsTr.GetComponentInChildren<Text>(true);
+                    if (depsLabel != null)
+                    {
+                        depsLabel.fontSize = badgeFont;
+                        depsLabel.transform.localScale = Vector3.one;
+                    }
+                    depsTr.SetAsLastSibling();
+                    if (!string.IsNullOrEmpty(depsTip))
+                        SetGridHoverBadgeTooltip(depsTr.gameObject, depsTip);
+                }
+            }
+
+            // Open-Hub btn: only when missing > 0 (Hub detail has download-deps).
+            if (depsDlTr != null)
+            {
+                bool showDl = hoverMissing > 0;
+                depsDlTr.gameObject.SetActive(showDl);
+                if (showDl)
+                {
+                    string tip = VPBTranslation.T(
+                        "gallery.hubdep.tip.open_hub",
+                        "Open this item on Hub to download missing dependencies. Hold Ctrl and click to copy missing dependency names to clipboard.");
+
+                    Text dlText = depsDlTr.GetComponentInChildren<Text>(true);
+                    if (dlText != null)
+                    {
+                        dlText.text = "↓";
+                        dlText.color = GalleryBadgeLetterDepsDownload;
+                        dlText.fontSize = Mathf.Max(10, badgeFont - 2);
+                        dlText.transform.localScale = Vector3.one;
+                    }
+
+                    float gap = Mathf.Max(4f, edge * 0.5f);
+                    float dlX = edge + (depsBadgeW > 1f ? depsBadgeW : letterBadge * 2.2f) + gap;
+                    ScaleGridDepsDownloadBtn(btnGO.transform, letterBadge, badgeFont, dlX, depsBottomY);
+
+                    GalleryDepsDownloadHoverButton dlComp = depsDlTr.GetComponent<GalleryDepsDownloadHoverButton>();
+                    if (dlComp != null)
+                    {
+                        dlComp.panel = this;
+                        dlComp.file = file;
+                    }
+
+                    ApplyGalleryBadgeLabelBarBackdrop(depsDlTr.gameObject);
+                    depsDlTr.SetAsLastSibling();
+                    SetGridHoverBadgeTooltip(depsDlTr.gameObject, tip);
+                }
+            }
+
+            _gridHoverBadgeBtnGO = btnGO;
+            _gridHoverBadgeFile = file;
+        }
+
+        /// <summary>Grid hover exit / recycle: deactivate badge GOs on this cell. No-op outside grid.</summary>
+        /// <param name="force">Recycle/disable must force-close even if rating picker is open.</param>
+        internal void HideGridHoverBadges(GameObject btnGO, bool force = false)
+        {
+            if (btnGO == null || layoutMode != GalleryLayoutMode.Grid) return;
+            RatingHandler rh = null;
+            try { rh = btnGO.GetComponent<RatingHandler>(); } catch { }
+
+            // Keep rating chrome while picker is open — hover-exit used to kill ToggleSelector immediately.
+            if (!force && rh != null && rh.IsSelectorOpen)
+                return;
+
+            try
+            {
+                if (rh != null)
+                {
+                    rh.CloseSelector();
+                    rh.SetShowDigitMode(false);
+                }
+            }
+            catch { }
+
+            Transform selectorTr = btnGO.transform.Find("RatingSelector");
+            if (selectorTr != null && selectorTr.gameObject.activeSelf)
+                selectorTr.gameObject.SetActive(false);
+
+            Transform ratingTr = btnGO.transform.Find("Rating");
+            if (ratingTr != null && ratingTr.gameObject.activeSelf)
+                ratingTr.gameObject.SetActive(false);
+
+            foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn" })
+            {
+                Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeName);
+                if (t != null && t.gameObject.activeSelf)
+                    t.gameObject.SetActive(false);
+            }
+
+            if (_gridHoverBadgeBtnGO == btnGO)
+            {
+                _gridHoverBadgeBtnGO = null;
+                _gridHoverBadgeFile = null;
             }
         }
 
@@ -2524,6 +3183,8 @@ namespace VPB
                 HideChild("HidePackageBadge");
                 HideChild("ScanExcludedBadge");
                 HideChild("UserTagsBadge");
+                HideChild("DepsBadge");
+                HideChild("DepsDownloadBtn");
                 HideChild("ListHoverBar");
                 HideChild("ListSelectionBar");
 
@@ -2587,21 +3248,16 @@ namespace VPB
                     gridLabelTr.gameObject.SetActive(false);
             }
 
+            // CloseSelector first — grid picker may be reparented under backgroundBoxGO while open.
+            RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+            if (rhSel != null) rhSel.CloseSelector();
             Transform selectorTr = btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
                 if (isListMode)
-                {
                     selectorTr.gameObject.SetActive(true);
-                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
-                    if (rhSel != null) rhSel.CloseSelector();
-                }
                 else
-                {
-                    RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
-                    if (rhSel != null) rhSel.CloseSelector();
                     selectorTr.gameObject.SetActive(false);
-                }
             }
 
             // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
@@ -2788,10 +3444,11 @@ namespace VPB
             }
             else
             {
+                // Grid: badges stay off at bind (scroll perf). Hover path may revive via ShowGridHoverBadges.
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 
-                foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" })
+                foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn" })
                 {
                     Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeName);
                     if (t != null) t.gameObject.SetActive(false);
@@ -3046,6 +3703,8 @@ namespace VPB
                 if (rh != null && selector2Tr != null && starText != null)
                 {
                     rh.Init(file, starText, selector2Tr.gameObject);
+                    // Recycled grid-hover cells may leave digit mode on — list/bind always use ★.
+                    rh.SetShowDigitMode(false);
                 }
             }
             
@@ -3278,7 +3937,10 @@ namespace VPB
             while (p != null && p != rowRoot)
             {
                 string n = p.name ?? "";
-                if (string.Equals(n, "RatingSelector", StringComparison.Ordinal)) return true;
+                if (string.Equals(n, "RatingSelector", StringComparison.Ordinal)
+                    || string.Equals(n, "Rating", StringComparison.Ordinal)
+                    || string.Equals(n, "Star", StringComparison.Ordinal))
+                    return true;
                 p = p.parent;
             }
             return false;

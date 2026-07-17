@@ -60,7 +60,7 @@ namespace VPB
             {
                 if (VPBConfig.Instance != null)
                 {
-                    springScrollButtonEnabled = VPBConfig.Instance.SpringScrollButtonEnabled;
+                    springScrollButtonEnabled = VPBConfig.Instance.IsSpringScrollButtonEnabled();
                     holdToLaunchEnabled = VPBConfig.Instance.HoldToLaunchEnabled;
                     holdToLaunchPrevEnableDragDrop = VPBConfig.Instance.HoldToLaunchPrevEnableDragDrop;
                 }
@@ -1158,13 +1158,13 @@ namespace VPB
                 }
                 catch { }
 
-                // Right Toggle Buttons
+                // Right Toggle Buttons — sizes/spacing match GalleryUiDesignTokens (ApplySideButtonScale / UpdateSideButtonPositions).
                 int btnFontSize = GalleryUiDesignTokens.FontBodyRef;
-                float btnWidth = 120;
-                float btnHeight = 50;
-                const float sideIconBtn = 50f;
+                float btnWidth = GalleryUiDesignTokens.SideButtonWidthRef;
+                float btnHeight = GalleryUiDesignTokens.SideButtonHeightRef;
+                float sideIconBtn = GalleryUiDesignTokens.SideButtonSquareRef;
                 const float sideIconPad = 6f;
-                float spacing = 60f;
+                float spacing = GalleryUiDesignTokens.SideButtonSpacingRef;
                 float groupGap = 10f;
                 float startY = 320f;
 
@@ -1329,7 +1329,7 @@ namespace VPB
 
                 // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
                 {
-                    Color colorSceneImportRail = new Color(0.2f, 0.45f, 0.75f, 1f);
+                    Color colorSceneImportRail = ColorSceneImport;
                     float impW = sideIconBtn;
                     float impH = sideIconBtn;
                     Sprite impSpr = null;
@@ -1534,48 +1534,13 @@ namespace VPB
                     }
                     rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
                     rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
-                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
+                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
                 }
 
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
                 // toolbox (see EnsureTboxUI / tboxClothingModeRow), not a side tab.
 
-                // Replace Toggle (Right): one button cycles Add ↔ Replace (distinct icons when both assets exist)
-                {
-                    bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
-                    float rpW = replaceIcons ? sideIconBtn : btnWidth;
-                    float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject rightReplaceBtn = UI.CreateUIButton(rightSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
-                    rightReplaceBtnImage = rightReplaceBtn.GetComponent<Image>();
-                    rightReplaceBtnText = rightReplaceBtn.GetComponentInChildren<Text>(true);
-                    if (replaceIcons)
-                    {
-                        Sprite rpInit = DragDropReplaceMode
-                            ? (galleryReplaceSprite ?? galleryAddSprite)
-                            : (galleryAddSprite ?? galleryReplaceSprite);
-                        Color rpCol = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
-                        UI.AddIconToButton(rightReplaceBtn, rpInit, sideIconPad, rpCol);
-                        rightReplaceBtnIconImage = rightReplaceBtn.transform.Find("Icon") != null
-                            ? rightReplaceBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        if (rightReplaceBtnText != null)
-                        {
-                            rightReplaceBtnText.text = DragDropReplaceMode
-                                ? VPBTranslation.T("gallery.side.replace", "Replace")
-                                : VPBTranslation.T("gallery.side.add", "Add");
-                            rightReplaceBtnText.fontSize = btnFontSize;
-                            rightReplaceBtnText.gameObject.SetActive(true);
-                        }
-                        rightReplaceBtnImage.color = DragDropReplaceMode
-                            ? new Color(0.6f, 0.15f, 0.15f, 1f)
-                            : new Color(0.15f, 0.45f, 0.15f, 1f);
-                        rightReplaceBtnIconImage = null;
-                    }
-                    rightSideButtons.Add(rightReplaceBtn.GetComponent<RectTransform>());
-                    AddTooltip(rightReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
-                }
+                // Add/Replace toggle lives in the toolbox (next to Keep Scale).
 
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;
@@ -1870,7 +1835,7 @@ namespace VPB
 
                 // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
                 {
-                    Color colorSceneImportRailL = new Color(0.2f, 0.45f, 0.75f, 1f);
+                    Color colorSceneImportRailL = ColorSceneImport;
                     float impW = sideIconBtn;
                     float impH = sideIconBtn;
                     Sprite impSprL = null;
@@ -2064,48 +2029,13 @@ namespace VPB
                     }
                     leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
-                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Works for clothing, hair, CUA, lights, mirrors, and persons.");
+                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
                 }
 
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
                 // toolbox (see EnsureTboxUI / tboxClothingModeRow), not a side tab.
 
-                // Replace Toggle (Left)
-                {
-                    bool replaceIcons = galleryAddSprite != null || galleryReplaceSprite != null;
-                    float rpW = replaceIcons ? sideIconBtn : btnWidth;
-                    float rpH = replaceIcons ? sideIconBtn : btnHeight;
-                    GameObject leftReplaceBtn = UI.CreateUIButton(leftSideContainer, rpW, rpH, " ", 8, 0, startY - spacing * 13 - groupGap * 4, AnchorPresets.centre, ToggleReplaceMode);
-                    leftReplaceBtnImage = leftReplaceBtn.GetComponent<Image>();
-                    leftReplaceBtnText = leftReplaceBtn.GetComponentInChildren<Text>(true);
-                    if (replaceIcons)
-                    {
-                        Sprite rpInit = DragDropReplaceMode
-                            ? (galleryReplaceSprite ?? galleryAddSprite)
-                            : (galleryAddSprite ?? galleryReplaceSprite);
-                        Color rpCol = DragDropReplaceMode ? new Color(0.6f, 0.15f, 0.15f, 1f) : new Color(0.15f, 0.45f, 0.15f, 1f);
-                        UI.AddIconToButton(leftReplaceBtn, rpInit, sideIconPad, rpCol);
-                        leftReplaceBtnIconImage = leftReplaceBtn.transform.Find("Icon") != null
-                            ? leftReplaceBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        if (leftReplaceBtnText != null)
-                        {
-                            leftReplaceBtnText.text = DragDropReplaceMode
-                                ? VPBTranslation.T("gallery.side.replace", "Replace")
-                                : VPBTranslation.T("gallery.side.add", "Add");
-                            leftReplaceBtnText.fontSize = btnFontSize;
-                            leftReplaceBtnText.gameObject.SetActive(true);
-                        }
-                        leftReplaceBtnImage.color = DragDropReplaceMode
-                            ? new Color(0.6f, 0.15f, 0.15f, 1f)
-                            : new Color(0.15f, 0.45f, 0.15f, 1f);
-                        leftReplaceBtnIconImage = null;
-                    }
-                    leftSideButtons.Add(leftReplaceBtn.GetComponent<RectTransform>());
-                    AddTooltip(leftReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
-                }
+                // Add/Replace toggle lives in the toolbox (next to Keep Scale).
 
                 {
                     float saveW = gallerySaveSprite != null ? sideIconBtn : btnWidth;

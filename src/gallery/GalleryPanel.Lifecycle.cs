@@ -129,6 +129,8 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += ApplyVamMenuGateVisibility;
             VPBConfig.Instance.ConfigChanged += RefreshCategoryQuickSwitchOnConfigChanged;
             VPBConfig.Instance.ConfigChanged += OnGalleryTransparencyConfigChanged;
+            VPBConfig.Instance.ConfigChanged += ApplySpringScrollButtonFromConfig;
+            VPBConfig.Instance.ConfigChanged += SyncTboxPinnedFromConfig;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -143,6 +145,8 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= ApplyVamMenuGateVisibility;
             VPBConfig.Instance.ConfigChanged -= RefreshCategoryQuickSwitchOnConfigChanged;
             VPBConfig.Instance.ConfigChanged -= OnGalleryTransparencyConfigChanged;
+            VPBConfig.Instance.ConfigChanged -= ApplySpringScrollButtonFromConfig;
+            VPBConfig.Instance.ConfigChanged -= SyncTboxPinnedFromConfig;
         }
 
         private void OnGalleryTransparencyConfigChanged()
@@ -155,6 +159,9 @@ namespace VPB
             StopCo(ref _categoryQuickApplyCoroutine);
 
             RemoveModeDestroyPopup();
+
+            _gridHoverBadgeBtnGO = null;
+            _gridHoverBadgeFile = null;
 
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)

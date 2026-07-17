@@ -448,9 +448,9 @@ namespace VPB
 
         partial void UpdateImportToggleBtnVisual()
         {
-            Color active = new Color(0.2f, 0.45f, 0.75f, 0.9f);
-            Color gated = new Color(0.22f, 0.34f, 0.5f, 0.55f);
-            Color idle = UI.IconButtonBackdrop;
+            Color active = ColorSceneImport;
+            Color gated = new Color(ColorSceneImport.r, ColorSceneImport.g, ColorSceneImport.b, 0.45f);
+            Color idle = ColorSceneImport;
             void Apply(GameObject go, bool highlighted, bool gatedSide)
             {
                 if (go == null) return;

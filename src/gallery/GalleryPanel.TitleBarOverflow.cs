@@ -47,8 +47,7 @@ namespace VPB
         private void RebuildTitleBarOverflowMenuRows(Transform panel)
         {
             if (panel == null) return;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             bool ratingActive = !string.IsNullOrEmpty(currentRatingFilter);
             bool fpsActive = fpsText != null && fpsText.gameObject != null && fpsText.gameObject.activeSelf;

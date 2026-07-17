@@ -31,6 +31,7 @@ namespace VPB
         private GameObject tboxUnhideBtn;
         private GameObject tboxScanWhitelistTemporaryBtn;
         private GameObject tboxLoadBtn;
+        private GameObject tboxLoadRandomBtn;
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
@@ -39,6 +40,8 @@ namespace VPB
         private GameObject tboxOpenHubBtn;
         private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
+        private GameObject tboxReplaceBtn;
+        private Image tboxReplaceBtnIconImage;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
         private GameObject tboxGridRateBtn;
@@ -180,6 +183,7 @@ namespace VPB
             one(tboxCleanupAddExcludeBtn);
             one(tboxCleanupRemoveExcludeBtn);
             one(tboxLoadBtn);
+            one(tboxLoadRandomBtn);
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
@@ -187,6 +191,7 @@ namespace VPB
             one(tboxCopyPkgNamesBtn);
             one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
+            one(tboxReplaceBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
             one(tboxGridRateBtn);
@@ -229,6 +234,7 @@ namespace VPB
             d(tboxCleanupAddExcludeBtn);
             d(tboxCleanupRemoveExcludeBtn);
             d(tboxLoadBtn);
+            d(tboxLoadRandomBtn);
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
@@ -236,6 +242,7 @@ namespace VPB
             d(tboxCopyPkgNamesBtn);
             d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
+            d(tboxReplaceBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
             d(tboxGridRateBtn);
@@ -343,6 +350,7 @@ namespace VPB
                 if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
                 if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
                 if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
+                if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
                 if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
                 if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
                 if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
@@ -351,6 +359,7 @@ namespace VPB
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
                 if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
                 if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
+                if (vis(tboxReplaceBtn)) ltr.Add(tboxReplaceBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
             }
@@ -555,9 +564,6 @@ namespace VPB
         private RectTransform tboxRT;
         private CanvasGroup tboxLabelCG;        // fades OUT when expanding
         private CanvasGroup tboxButtonsCG;      // fades IN when expanding
-        private GameObject tboxPinBtn;
-        private RectTransform tboxPinBtnRT;
-        private Text tboxPinBtnText;
 
         // Row height: matches the collapsed bar height set by the layout system.
         // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
@@ -860,6 +866,32 @@ namespace VPB
             catch { }
             RefreshSuppressScaleBtnVisual();
 
+            tboxReplaceBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                ToggleReplaceMode
+            );
+            tboxReplaceBtn.name = "Tbox_ReplaceMode";
+            TboxConfigureActionButtonFlex(tboxReplaceBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
+            try
+            {
+                Sprite rpInit = DragDropReplaceMode
+                    ? (galleryReplaceSprite ?? galleryAddSprite)
+                    : (galleryAddSprite ?? galleryReplaceSprite);
+                if (rpInit != null)
+                {
+                    Color rpCol = DragDropReplaceMode
+                        ? new Color(0.6f, 0.15f, 0.15f, 1f)
+                        : new Color(0.15f, 0.45f, 0.15f, 1f);
+                    UI.AddIconToButton(tboxReplaceBtn, rpInit, padding: 6f, backdropOverride: rpCol);
+                    tboxReplaceBtnIconImage = tboxReplaceBtn.transform.Find("Icon")?.GetComponent<Image>();
+                }
+            }
+            catch { }
+            UpdateReplaceButtonState();
+
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.copy_names", "Copy Names"), tboxActionBtnFont,
@@ -1131,6 +1163,27 @@ namespace VPB
                 {
                     Text t = tboxLoadBtn.GetComponentInChildren<Text>(true);
                     if (t != null) t.text = VPBTranslation.T("gallery.tbox.load", "Load");
+                }
+            }
+            catch { }
+
+            tboxLoadRandomBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                LoadRandom
+            );
+            tboxLoadRandomBtn.name = "Tbox_LoadRandom";
+            TboxConfigureActionButtonFlex(tboxLoadRandomBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxLoadRandomBtn, "gallery.tooltip.load_random", "Load random item");
+            try
+            {
+                var randomIcon = UI.LoadIconSprite("vpb_icons/random.png", Color.white);
+                if (randomIcon != null) UI.AddIconToButton(tboxLoadRandomBtn, randomIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxLoadRandomBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.footer.random_abbrev", "Rdm");
                 }
             }
             catch { }
@@ -1410,50 +1463,6 @@ namespace VPB
             }
             catch { }
 
-            // ── Pin toggle (right edge, always visible) ───────────────────────────
-            float initChromeS = UiMetrics.ChromeScale;
-            if (initChromeS <= 0f) initChromeS = 1f;
-            float initPinSz = GalleryUiDesignTokens.TboxPinBtnSizeRef * initChromeS;
-            tboxPinBtn = UI.CreateUIButton(
-                tbox, initPinSz, initPinSz, "", 15,
-                0, 0, AnchorPresets.bottomRight,
-                () =>
-                {
-                    tboxPinned = !tboxPinned;
-                    if (VPBConfig.Instance != null)
-                    {
-                        VPBConfig.Instance.GalleryTboxToolbarPinned = tboxPinned;
-                        try { VPBConfig.Instance.Save(true, true); } catch { }
-                    }
-                    RefreshTboxPinVisual();
-                }
-            );
-            tboxPinBtn.name = "Tbox_Pin";
-            // Pin button is anchored to the bottom row (tooltip row), not the full bar
-            tboxPinBtnRT = tboxPinBtn.GetComponent<RectTransform>();
-            tboxPinBtnRT.anchorMin = new Vector2(1f, 0f);
-            tboxPinBtnRT.anchorMax = new Vector2(1f, 0f);
-            tboxPinBtnRT.pivot = new Vector2(1f, 0.5f);
-
-            tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
-
-            tboxPinOnSprite = UI.LoadIconSprite("vpb_icons/pin_on.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            tboxPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            { Sprite init = tboxPinOffSprite ?? tboxPinOnSprite; if (init != null) { UI.AddIconToButton(tboxPinBtn, init); tboxPinIconImage = tboxPinBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-
-            // Left border line on pin button (visual separator)
-            {
-                var sep = new GameObject("Separator");
-                sep.transform.SetParent(tboxPinBtn.transform, false);
-                var sepImg = UI.AddImage(sep, new Color(1f, 1f, 1f, 0.08f), false);
-                var sepRT = sep.GetComponent<RectTransform>();
-                sepRT.anchorMin = new Vector2(0f, 0.15f);
-                sepRT.anchorMax = new Vector2(0f, 0.85f);
-                sepRT.pivot = new Vector2(0f, 0.5f);
-                sepRT.anchoredPosition = Vector2.zero;
-                sepRT.sizeDelta = new Vector2(1f, 0f);
-            }
-
             // Thin separator line at the row boundary (between tooltip row and toolbox row)
             {
                 var rowSepGO = new GameObject("RowSeparator");
@@ -1491,36 +1500,33 @@ namespace VPB
                 catch { }
             });
 
-            if (VPBConfig.Instance != null)
-                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
-            RefreshTboxPinVisual();
-            AddTooltip(tboxPinBtn, "gallery.tooltip.tbox_pin", "Pin — keep toolbar expanded");
+            SyncTboxPinnedFromConfig();
 
             // Populate person atom buttons with whatever data is already loaded
             try { RefreshTboxPersonAtomButtons(); } catch { }
             try { SyncTboxFooterRowChrome(UiMetrics.ChromeScale); } catch { }
         }
 
-        /// <summary>Pin button + footer info row geometry; must run on scale changes and UpdateLayout.</summary>
+        /// <summary>Sync pin state from config (settings toggle; no toolbar pin chrome).</summary>
+        private void SyncTboxPinnedFromConfig()
+        {
+            if (VPBConfig.Instance != null)
+                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
+        }
+
+        /// <summary>Footer info row geometry; must run on scale changes and UpdateLayout.</summary>
         private void SyncTboxFooterRowChrome(float s)
         {
             if (tbox == null) return;
             if (s <= 0f) s = 1f;
             float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
-            float pinW = GalleryUiDesignTokens.TboxPinBtnSizeRef * s;
             tboxInfoRowHeight = rowH;
             if (tboxLabelLayerRT != null)
-                tboxLabelLayerRT.sizeDelta = new Vector2(-pinW, rowH);
+                tboxLabelLayerRT.sizeDelta = new Vector2(0f, rowH);
             if (tboxButtonsLayerRT != null)
             {
                 tboxButtonsLayerRT.anchoredPosition = new Vector2(0f, rowH);
-                tboxButtonsLayerRT.sizeDelta = new Vector2(-pinW, tboxButtonsLayerRT.sizeDelta.y);
-            }
-            if (tboxPinBtnRT != null)
-            {
-                tboxPinBtnRT.sizeDelta = new Vector2(pinW, pinW);
-                tboxPinBtnRT.anchoredPosition = new Vector2(0f, rowH * 0.5f);
-                ScaleButtonIconPadding(tboxPinBtnRT, s);
+                tboxButtonsLayerRT.sizeDelta = new Vector2(0f, tboxButtonsLayerRT.sizeDelta.y);
             }
             if (tboxRowSepRT != null)
                 tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
@@ -1533,23 +1539,6 @@ namespace VPB
             {
                 tboxClothingModeRowLE.minHeight = rowH;
                 tboxClothingModeRowLE.preferredHeight = rowH;
-            }
-        }
-
-        private void RefreshTboxPinVisual()
-        {
-            if (tboxPinBtnText == null) return;
-            if (tboxPinned)
-            {
-                tboxPinBtnText.text = "●";
-                tboxPinBtnText.color = new Color(0.45f, 0.75f, 0.90f, 1f); // teal accent
-                if (tboxPinIconImage != null && tboxPinOnSprite != null) tboxPinIconImage.sprite = tboxPinOnSprite;
-            }
-            else
-            {
-                tboxPinBtnText.text = "○";
-                tboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
-                if (tboxPinIconImage != null && tboxPinOffSprite != null) tboxPinIconImage.sprite = tboxPinOffSprite;
             }
         }
 
@@ -1763,8 +1752,7 @@ namespace VPB
             if (tboxTargetMenuPanelGO == null) return;
 
             Transform panel = tboxTargetMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             float sScale      = ChromeScale;
             Sprite renameSpr  = UI.LoadIconSprite("vpb_icons/rename.png", new Color(0.78f, 0.78f, 0.78f, 1f));
@@ -1935,15 +1923,7 @@ namespace VPB
             EnsureTboxUI();
             if (tbox == null) return;
 
-            if (VPBConfig.Instance != null)
-            {
-                bool cfgPin = VPBConfig.Instance.GalleryTboxToolbarPinned;
-                if (tboxPinned != cfgPin)
-                {
-                    tboxPinned = cfgPin;
-                    RefreshTboxPinVisual();
-                }
-            }
+            SyncTboxPinnedFromConfig();
 
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
@@ -2174,6 +2154,7 @@ namespace VPB
                 show(tboxUnhideBtn, false);
                 show(tboxScanWhitelistTemporaryBtn, false);
                 show(tboxLoadBtn, false);
+                show(tboxLoadRandomBtn, false);
                 show(tboxUnloadBtn, false);
                 show(tboxLoadDepsBtn, false);
                 show(tboxCacheTexturesBtn, false);
@@ -2182,6 +2163,7 @@ namespace VPB
                 show(tboxCopyPkgNamesBtn, false);
                 show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
+                show(tboxReplaceBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
                 show(tboxSelectAllBtn, false);
@@ -2216,6 +2198,7 @@ namespace VPB
             show(tboxUnhideBtn, !isCleanup);
             show(tboxScanWhitelistTemporaryBtn, !isCleanup);
             show(tboxLoadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
+            show(tboxLoadRandomBtn, !isCleanup);
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
@@ -2227,6 +2210,7 @@ namespace VPB
             show(tboxDeleteBtn, true);
             show(tboxOverwriteSceneBtn, !isCleanup);
             show(tboxSuppressScaleBtn, !isCleanup);
+            show(tboxReplaceBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
             show(tboxClearSelectionBtn, !isCleanup);
 
@@ -2659,22 +2643,27 @@ namespace VPB
 
         private void TboxOpenSelectedItemOnHub()
         {
+            if (selectedFiles == null || selectedFiles.Count != 1)
+            {
+                ShowTemporaryStatus("Select a single item.");
+                return;
+            }
+
+            OpenFileOnHub(selectedFiles[0]);
+        }
+
+        /// <summary>Open in-game Hub detail for this gallery row's package (deps download lives there).</summary>
+        public void OpenFileOnHub(FileEntry file)
+        {
             try
             {
-                if (selectedFiles == null || selectedFiles.Count != 1)
-                {
-                    ShowTemporaryStatus("Select a single item.");
-                    return;
-                }
-
-                var f = selectedFiles[0];
-                if (f == null)
+                if (file == null)
                 {
                     ShowTemporaryStatus("Nothing selected.");
                     return;
                 }
 
-                string uid = TryGetPackageUidForEntry(f);
+                string uid = TryGetPackageUidForEntry(file);
                 if (string.IsNullOrEmpty(uid))
                 {
                     ShowTemporaryStatus("This item has no Hub page.");
@@ -2707,6 +2696,41 @@ namespace VPB
             catch
             {
                 ShowTemporaryStatus("Failed to open Hub page. See log.");
+            }
+        }
+
+        /// <summary>Copy this item's missing dependency package ids to the system clipboard (newline-separated).</summary>
+        public void CopyMissingDependenciesToClipboard(FileEntry file)
+        {
+            try
+            {
+                if (file == null)
+                {
+                    ShowTemporaryStatus("Nothing selected.");
+                    return;
+                }
+
+                List<string> missing = GallerySortManager.GetMissingDependencyIds(file);
+                if (missing == null || missing.Count == 0)
+                {
+                    ShowTemporaryStatus(VPBTranslation.T(
+                        "gallery.hubdep.status.no_missing",
+                        "No missing dependencies."));
+                    return;
+                }
+
+                missing.Sort(StringComparer.OrdinalIgnoreCase);
+                GUIUtility.systemCopyBuffer = string.Join("\n", missing.ToArray());
+                ShowTemporaryStatus(string.Format(
+                    VPBTranslation.T(
+                        "gallery.hubdep.status.copied_missing",
+                        "Copied {0} missing dependency name(s) to clipboard."),
+                    missing.Count), 2f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] CopyMissingDependenciesToClipboard error: " + ex);
+                ShowTemporaryStatus("Failed to copy missing dependencies. See log.");
             }
         }
 

@@ -51,7 +51,7 @@ namespace VPB
                     VPBConfig.Instance.AppearanceClothingApplyMode = "clothingonly";
                 else if (string.Equals(clothingMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
                     VPBConfig.Instance.AppearanceClothingApplyMode = "mergeoutfit";
-                try { VPBConfig.Instance.Save(true, true); } catch { }
+                try { VPBConfig.Instance.Save(false); } catch { }
             }
             action(clothingMode);
         }

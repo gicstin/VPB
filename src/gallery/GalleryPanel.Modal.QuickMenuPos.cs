@@ -129,39 +129,15 @@ namespace VPB
             int headerFont = type.Title;
             int bodyFont = type.Body;
 
-            _qmPosModalRoot = new GameObject("VPB_QuickMenuPosModal");
-            _qmPosModalRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRt = _qmPosModalRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
-
-            Image dim = UI.AddImage(_qmPosModalRoot, new Color(0f, 0f, 0f, 0.72f));
-            Button dimBtn = _qmPosModalRoot.AddComponent<Button>();
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.onClick.AddListener(() => HideQuickMenuPositionEditorModal(false));
-
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_qmPosModalRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(560f * s, 420f * s);
-            Image pbg = UI.AddImage(panel, new Color(0.06f, 0.06f, 0.08f, 1f));
+            GameObject panel;
+            _qmPosModalRoot = UI.CreateModalChrome(
+                backgroundBoxGO, "VPB_QuickMenuPosModal", 560f * s, 420f * s,
+                new Color(0.06f, 0.06f, 0.08f, 1f), () => HideQuickMenuPositionEditorModal(false), out panel);
 
             VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 8f * s, padding: UI.Pad(14, 14, 14, 14, s));
 
-            GameObject header = new GameObject("Header");
-            header.transform.SetParent(panel.transform, false);
-            Text ht = header.AddComponent<Text>();
-            ht.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(ht, headerFont);
-            ht.fontStyle = FontStyle.Normal;
-            ht.color = Color.white;
-            ht.text = VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)");
-            try { VPBUiFont.ApplyTo(ht); } catch { }
-            LayoutElement hle = UI.AddLE(header, minHeight: 32f * s);
+            Text ht = UI.CreateEmphasisTitleLabel(panel, VPBTranslation.T("hook.qmpos.title", "Quick Menu Positions (Desktop)"), headerFont, name: "Header");
+            LayoutElement hle = UI.AddLE(ht.gameObject, minHeight: 32f * s);
 
             QmPosBuildAxisSliderRow(panel.transform, VPBTranslation.T("hook.qmpos.create_gallery", "Create Gallery"), bodyFont, s,
                 _qmPosCreateX, _qmPosCreateY, QmPosXMin, QmPosXMax, QmPosYMin, QmPosYMax,
@@ -181,7 +157,7 @@ namespace VPB
             srh.childAlignment = TextAnchor.MiddleLeft;
             LayoutElement srLe = UI.AddLE(sameRow, minHeight: 34f * s);
 
-            GameObject sameCheckBtn = QmPosCreateTextButton(sameRow.transform, 36f * s, 30f * s, _qmPosUseSameInVR ? "✓" : " ", bodyFont, new Color(0.2f, 0.35f, 0.5f, 1f), () =>
+            GameObject sameCheckBtn = UI.CreateChromeLayoutButton(sameRow.transform, 36f * s, 30f * s, _qmPosUseSameInVR ? "✓" : " ", bodyFont, new Color(0.2f, 0.35f, 0.5f, 1f), () =>
             {
                 _qmPosUseSameInVR = !_qmPosUseSameInVR;
                 SyncQmPosVrSectionVisibility();
@@ -224,8 +200,8 @@ namespace VPB
             fh.childForceExpandWidth = true;
             LayoutElement fLe = UI.AddLE(footer, minHeight: 40f * s);
 
-            QmPosCreateTextButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.4f, 0.36f, 0.28f, 1f), () => HideQuickMenuPositionEditorModal(false));
-            QmPosCreateTextButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.defaults", "Defaults"), bodyFont, new Color(0.28f, 0.28f, 0.32f, 1f), () =>
+            UI.CreateChromeLayoutButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.4f, 0.36f, 0.28f, 1f), () => HideQuickMenuPositionEditorModal(false));
+            UI.CreateChromeLayoutButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.defaults", "Defaults"), bodyFont, new Color(0.28f, 0.28f, 0.32f, 1f), () =>
             {
                 try
                 {
@@ -237,7 +213,7 @@ namespace VPB
                 }
                 catch { }
             });
-            QmPosCreateTextButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.save", "Save"), bodyFont, new Color(0.22f, 0.42f, 0.58f, 1f), () => HideQuickMenuPositionEditorModal(true));
+            UI.CreateChromeLayoutButton(footer.transform, 0f, 36f * s, VPBTranslation.T("hook.save", "Save"), bodyFont, new Color(0.22f, 0.42f, 0.58f, 1f), () => HideQuickMenuPositionEditorModal(true));
         }
 
         private void SyncQmPosVrSectionVisibility()
@@ -380,30 +356,5 @@ namespace VPB
             slider.targetGraphic = handleImg;
         }
 
-        private static GameObject QmPosCreateTextButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
-        {
-            GameObject go = new GameObject("Btn");
-            go.transform.SetParent(parent, false);
-            Image img = UI.AddGalleryElementRoundedBg(go, bg);
-            Button b = go.AddComponent<Button>();
-            b.transition = Selectable.Transition.None;
-            b.targetGraphic = img;
-            if (onClick != null) b.onClick.AddListener(onClick);
-            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
-            try { hb.ApplyBorderSettings(); } catch { }
-
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            if (width > 0f)
-            {
-                le.minWidth = le.preferredWidth = width;
-                le.flexibleWidth = 0f;
-            }
-            else
-                le.flexibleWidth = 1f;
-            le.minHeight = le.preferredHeight = height;
-
-            UI.CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
-            return go;
-        }
     }
 }

@@ -805,7 +805,10 @@ namespace VPB
         /// Register a hub direct-download .var immediately so hub UI Refresh() does not clear alreadyHave
         /// before the coalesced FileManager refresh finishes. Also appends path inventory for later cache hits.
         /// </summary>
-        public static VarPackage RegisterHubDownloadedPackage(string varPath)
+        /// <param name="notifyInventoryChange">
+        /// When false (batch Hub downloads), skip per-file gallery SQL gate invalidate — caller notifies once after queue drains.
+        /// </param>
+        public static VarPackage RegisterHubDownloadedPackage(string varPath, bool notifyInventoryChange = true)
         {
             if (string.IsNullOrEmpty(varPath)) return null;
             string cleanPath = CleanFilePath(varPath);
@@ -825,17 +828,32 @@ namespace VPB
 
             VarPackage registered = RegisterPackage(cleanPath);
             try { VpbLocalDatabase.TryAppendVarPathInventory(cleanPath); } catch { }
-            if (registered != null)
+            if (registered != null && notifyInventoryChange)
             {
                 try { VpbLocalDatabase.NotifyPackageInventoryChangedFromRefresh(1, 0); } catch { }
             }
             try
             {
                 LogUtil.Log("[VPB.HubDownload] RegisterHubDownloadedPackage path='" + cleanPath
-                    + "' uid='" + (registered != null ? registered.Uid : "") + "'");
+                    + "' uid='" + (registered != null ? registered.Uid : "")
+                    + "' notifyInv=" + (notifyInventoryChange ? "1" : "0"));
             }
             catch { }
             return registered;
+        }
+
+        /// <summary>Clear lazy MissingDepsCount caches so gallery badges recount after Hub installs.</summary>
+        public static void InvalidateAllMissingDepsCounts()
+        {
+            lock (packagesLock)
+            {
+                if (packagesByUid == null) return;
+                foreach (var kv in packagesByUid)
+                {
+                    VarPackage pkg = kv.Value;
+                    if (pkg != null) pkg.MissingDepsCount = -1;
+                }
+            }
         }
 
         protected static VarPackage RegisterPackage(string vpath, bool clean = false)
@@ -2447,6 +2465,50 @@ namespace VPB
 		{
 			string resolvedId = MaybeForceLatestDependency(dependencyId);
 			return GetPackage(resolvedId, ensureInstalled);
+		}
+
+		/// <summary>
+		/// True when a local package satisfies <paramref name="dependencyId"/> for gallery missing-deps /
+		/// Hub download. Exact pins (Author.Name.7) are satisfied by any newer installed version in the
+		/// same group — matches Hub download-latest behavior (meta may pin old .N while .latest is installed).
+		/// </summary>
+		public static bool IsDependencySatisfiedByInstalled(string dependencyId)
+		{
+			if (string.IsNullOrEmpty(dependencyId)) return false;
+			try
+			{
+				if (GetPackageForDependency(dependencyId, ensureInstalled: false) != null)
+					return true;
+
+				string group = PackageIDToPackageGroupID(dependencyId);
+				if (string.IsNullOrEmpty(group)) return false;
+
+				VarPackage newest = GetPackage(group + ".latest", ensureInstalled: false);
+				if (newest == null) return false;
+
+				if (dependencyId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+					return true;
+
+				Match min = Regex.Match(dependencyId, "\\.min([0-9]+)$", RegexOptions.IgnoreCase);
+				if (min.Success)
+				{
+					int reqMin;
+					if (int.TryParse(min.Groups[1].Value, out reqMin))
+						return newest.Version >= reqMin;
+					return true;
+				}
+
+				string ver = PackageIDToPackageVersion(dependencyId);
+				int exact;
+				if (!string.IsNullOrEmpty(ver) && int.TryParse(ver, out exact))
+					return newest.Version >= exact;
+
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
 		}
 
 		static bool TryRebuildDependentCountsFromBulkEdges(VarPackage[] snapshot)

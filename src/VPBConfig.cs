@@ -365,6 +365,8 @@ namespace VPB
         public float GalleryGridLabelFontSize = 18f;
         /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
         public bool GalleryGridLabelsAutoHideAtHighDensity = false;
+        /// <summary>When true, grid cells show rating/status/deps badges only while hovered (not during scroll).</summary>
+        public bool GalleryGridHoverBadgesEnabled = true;
         /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
         public float GalleryGridSpacingX = 0f;
         /// <summary>Grid: vertical spacing between thumbnail cells (pixels).</summary>
@@ -497,7 +499,8 @@ namespace VPB
         public Vector3 QuickMenuVrWatchOffset = new Vector3(0f, 0.05f, 0.04f);
 
         // Interaction toggles (persisted)
-        public bool SpringScrollButtonEnabled = true;
+        /// <summary>"Off", "Desktop Only", "VR Only", "Desktop &amp; VR". Default Desktop &amp; VR.</summary>
+        public string SpringScrollButtonMode = "Desktop & VR";
         public bool HoldToLaunchEnabled = false;
         /// <summary>Try-On Mode: apply presets non-destructively with a Keep/Compare/Revert bar.</summary>
         public bool TryOnModeEnabled = true;
@@ -586,6 +589,8 @@ namespace VPB
         public bool GalleryVrThumbstickScrollEnabled = true;
         /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
         public bool GalleryHideCreatorSideButtons = false;
+        /// <summary>When true (default), side-rail Category mode shows per-category left icons (c_*.png).</summary>
+        public bool GalleryShowCategoryIcons = true;
         /// <summary>When true, creator side/title lists merge names that differ only by case; label uses the variant with the most packages and counts are summed.</summary>
         public bool GalleryConsolidateCreatorNames = true;
         /// <summary>When true, BA migration prompt has been dismissed and will not appear again.</summary>
@@ -986,10 +991,12 @@ namespace VPB
             GalleryHideUnusedUserTagsInFilterMode = true;
             GalleryUserTagFilterCombineMode = "Compound";
             GalleryHideCreatorSideButtons = false;
+            GalleryShowCategoryIcons = true;
             GalleryConsolidateCreatorNames = true;
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
+            GalleryGridHoverBadgesEnabled = true;
             GalleryThumbPlaceholderLabelsEnabled = true;
             GalleryThumbPlaceholderSizeScale = 0.7f;
             PluginGalleryCategoryLabelsOnly = false;
@@ -1027,7 +1034,7 @@ namespace VPB
             GalleryScanWlTempBorderColorA = 1f;
             GalleryTboxToolbarPinned = false;
             UiLocale = "";
-            SpringScrollButtonEnabled = true;
+            SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
             TryOnModeEnabled = true;
             VerticalMoveKeysEnabled = true;
@@ -1207,6 +1214,8 @@ namespace VPB
                             GalleryVrThumbstickScrollEnabled = node["GalleryVrThumbstickScrollEnabled"].AsBool;
                         if (node["GalleryHideCreatorSideButtons"] != null)
                             GalleryHideCreatorSideButtons = node["GalleryHideCreatorSideButtons"].AsBool;
+                        if (node["GalleryShowCategoryIcons"] != null)
+                            GalleryShowCategoryIcons = node["GalleryShowCategoryIcons"].AsBool;
                         if (node["GalleryConsolidateCreatorNames"] != null)
                             GalleryConsolidateCreatorNames = node["GalleryConsolidateCreatorNames"].AsBool;
                         if (node["DesktopFixedMode"] != null) DesktopFixedMode = node["DesktopFixedMode"].AsBool;
@@ -1241,6 +1250,7 @@ namespace VPB
                         if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryGridLabelsAutoHideAtHighDensity"] != null) GalleryGridLabelsAutoHideAtHighDensity = node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool;
+                        if (node["GalleryGridHoverBadgesEnabled"] != null) GalleryGridHoverBadgesEnabled = node["GalleryGridHoverBadgesEnabled"].AsBool;
                         if (node["GalleryGridSpacingX"] != null) GalleryGridSpacingX = Mathf.Clamp(node["GalleryGridSpacingX"].AsFloat, 0f, 80f);
                         if (node["GalleryGridSpacingY"] != null) GalleryGridSpacingY = Mathf.Clamp(node["GalleryGridSpacingY"].AsFloat, 0f, 80f);
                         if (node["GalleryGridThumbnailPadding"] != null) GalleryGridThumbnailPadding = Mathf.Clamp(node["GalleryGridThumbnailPadding"].AsFloat, 0f, 40f);
@@ -1312,7 +1322,10 @@ namespace VPB
                         else InnerPaneScaleDesktop = InnerPaneScale;
                         if (node["GalleryUiScaleUnifiedMigrated"] != null) GalleryUiScaleUnifiedMigrated = node["GalleryUiScaleUnifiedMigrated"].AsBool;
                         MigrateGalleryUiScaleUnified();
-                        if (node["SpringScrollButtonEnabled"] != null) SpringScrollButtonEnabled = node["SpringScrollButtonEnabled"].AsBool;
+                        if (node["SpringScrollButtonMode"] != null)
+                            SpringScrollButtonMode = NormalizeSpringScrollButtonMode(node["SpringScrollButtonMode"].Value);
+                        else if (node["SpringScrollButtonEnabled"] != null)
+                            SpringScrollButtonMode = node["SpringScrollButtonEnabled"].AsBool ? "Desktop & VR" : "Off";
                         if (node["HoldToLaunchEnabled"] != null) HoldToLaunchEnabled = node["HoldToLaunchEnabled"].AsBool;
                         if (node["TryOnModeEnabled"] != null) TryOnModeEnabled = node["TryOnModeEnabled"].AsBool;
                         if (node["VerticalMoveKeysEnabled"] != null) VerticalMoveKeysEnabled = node["VerticalMoveKeysEnabled"].AsBool;
@@ -1566,6 +1579,7 @@ namespace VPB
                 node["GalleryScrollButtonsEnabled"].AsBool = GalleryScrollButtonsEnabled;
                 node["GalleryVrThumbstickScrollEnabled"].AsBool = GalleryVrThumbstickScrollEnabled;
                 node["GalleryHideCreatorSideButtons"].AsBool = GalleryHideCreatorSideButtons;
+                node["GalleryShowCategoryIcons"].AsBool = GalleryShowCategoryIcons;
                 node["GalleryConsolidateCreatorNames"].AsBool = GalleryConsolidateCreatorNames;
                 node["DesktopFixedMode"].AsBool = DesktopFixedMode;
                 node["DesktopFixedAutoCollapse"].AsBool = DesktopFixedAutoCollapse;
@@ -1596,6 +1610,7 @@ namespace VPB
                 node["GalleryGridLabelsEnabled"].AsBool = GalleryGridLabelsEnabled;
                 node["GalleryGridLabelFontSize"].AsFloat = GalleryGridLabelFontSize;
                 node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool = GalleryGridLabelsAutoHideAtHighDensity;
+                node["GalleryGridHoverBadgesEnabled"].AsBool = GalleryGridHoverBadgesEnabled;
                 node["GalleryGridSpacingX"].AsFloat = Mathf.Clamp(GalleryGridSpacingX, 0f, 80f);
                 node["GalleryGridSpacingY"].AsFloat = Mathf.Clamp(GalleryGridSpacingY, 0f, 80f);
                 node["GalleryGridThumbnailPadding"].AsFloat = Mathf.Clamp(GalleryGridThumbnailPadding, 0f, 40f);
@@ -1655,7 +1670,7 @@ namespace VPB
                 node["InnerPaneScaleVR"].AsFloat = InnerPaneScaleVR;
                 node["InnerPaneScaleDesktop"].AsFloat = InnerPaneScaleDesktop;
                 node["GalleryUiScaleUnifiedMigrated"].AsBool = GalleryUiScaleUnifiedMigrated;
-                node["SpringScrollButtonEnabled"].AsBool = SpringScrollButtonEnabled;
+                node["SpringScrollButtonMode"] = NormalizeSpringScrollButtonMode(SpringScrollButtonMode);
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
                 node["VerticalMoveKeysEnabled"].AsBool = VerticalMoveKeysEnabled;
@@ -1810,6 +1825,37 @@ namespace VPB
             if (setting == "VR") return isVR;
             if (setting == "Desktop") return !isVR;
 
+            return false;
+        }
+
+        private static readonly string[] s_SpringScrollButtonModeCanonical =
+            { "Off", "Desktop Only", "VR Only", "Desktop & VR" };
+
+        public static string NormalizeSpringScrollButtonMode(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "Desktop & VR";
+            string v = value.Trim();
+            for (int i = 0; i < s_SpringScrollButtonModeCanonical.Length; i++)
+            {
+                if (string.Equals(v, s_SpringScrollButtonModeCanonical[i], StringComparison.OrdinalIgnoreCase))
+                    return s_SpringScrollButtonModeCanonical[i];
+            }
+            // Legacy aliases
+            if (string.Equals(v, "Both", StringComparison.OrdinalIgnoreCase)) return "Desktop & VR";
+            if (string.Equals(v, "Desktop", StringComparison.OrdinalIgnoreCase)) return "Desktop Only";
+            if (string.Equals(v, "VR", StringComparison.OrdinalIgnoreCase)) return "VR Only";
+            return "Desktop & VR";
+        }
+
+        /// <summary>True when spring-scroll drag button should show for current desktop/VR context.</summary>
+        public bool IsSpringScrollButtonEnabled()
+        {
+            string mode = NormalizeSpringScrollButtonMode(SpringScrollButtonMode);
+            if (mode == "Off") return false;
+            if (mode == "Desktop & VR") return true;
+            bool isVR = IsVR;
+            if (mode == "VR Only") return isVR;
+            if (mode == "Desktop Only") return !isVR;
             return false;
         }
 

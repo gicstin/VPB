@@ -99,18 +99,10 @@ namespace VPB
             hh.childForceExpandWidth = false;
             LayoutElement hle = UI.AddLE(header, minHeight: 44f * s);
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(header.transform, false);
-            Text title = titleGo.AddComponent<Text>();
-            title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(title, titleFont);
-            title.fontStyle = FontStyle.Normal;
-            title.color = Color.white;
-            title.text = VPBTranslation.T("bench.simple.title", "Scene Load Test");
-            try { VPBUiFont.ApplyTo(title); } catch { }
-            LayoutElement tle = UI.AddLE(titleGo, flexibleWidth: 1f);
+            Text title = UI.CreateEmphasisTitleLabel(header, VPBTranslation.T("bench.simple.title", "Scene Load Test"), titleFont);
+            LayoutElement tle = UI.AddLE(title.gameObject, flexibleWidth: 1f);
 
-            ScanWlCreateHeaderButton(header.transform, 84f * s, 36f * s, VPBTranslation.T("hook.close", "Close"), bodyFont,
+            UI.CreateChromeLayoutButton(header.transform, 84f * s, 36f * s, VPBTranslation.T("hook.close", "Close"), bodyFont,
                 new Color(0.38f, 0.32f, 0.22f, 1f), HideBenchEditorModal);
 
             _benchHelpText = UI.CreateLabel(panel, VPBTranslation.T("bench.simple.help",
@@ -160,7 +152,7 @@ namespace VPB
             _benchStatusText = UI.CreateLabel(panel, "", bodyFont, new Color(0.65f, 0.82f, 1f, 1f), TextAnchor.MiddleLeft, name: "Status");
             LayoutElement stLe = UI.AddLE(_benchStatusText.gameObject, minHeight: 36f * s);
 
-            ScanWlCreateHeaderButton(panel.transform, 0f, 50f * s,
+            UI.CreateChromeLayoutButton(panel.transform, 0f, 50f * s,
                 VPBTranslation.T("bench.simple.run", "Run Test"),
                 titleFont,
                 new Color(0.22f, 0.52f, 0.30f, 1f), BenchModalRunTest);
@@ -174,23 +166,23 @@ namespace VPB
             LayoutElement subLe = UI.AddLE(subRow, minHeight: 34f * s);
             int subFont = bodyFont;
 
-            ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.set_baseline", "Baseline"),
                 subFont, new Color(0.24f, 0.38f, 0.52f, 1f), BenchModalSetBaseline);
 
-            ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.open_results", "Results"),
                 subFont, new Color(0.22f, 0.40f, 0.48f, 1f), BenchOpenLastResultsFolder);
 
-            ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.open_csv", "CSV"),
                 subFont, new Color(0.22f, 0.40f, 0.48f, 1f), BenchOpenLastCompareCsv);
 
-            ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.open_screenshots", "Shots"),
                 subFont, new Color(0.22f, 0.40f, 0.48f, 1f), BenchOpenLastScreenshotsFolder);
 
-            ScanWlCreateHeaderButton(subRow.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(subRow.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.advanced", "More…"),
                 subFont, new Color(0.22f, 0.24f, 0.28f, 1f), BenchToggleAdvanced);
 
@@ -273,7 +265,7 @@ namespace VPB
             _benchScenePathInput = BenchAddSimpleField(_benchAdvancedBlock.transform,
                 VPBTranslation.T("bench.simple.scene_path", "Scene path (manual)"),
                 "", bodyFont, s, null);
-            ScanWlCreateHeaderButton(_benchAdvancedBlock.transform, 180f * s, 34f * s,
+            UI.CreateChromeLayoutButton(_benchAdvancedBlock.transform, 180f * s, 34f * s,
                 VPBTranslation.T("bench.simple.add_path", "Add path"),
                 bodyFont, new Color(0.22f, 0.40f, 0.55f, 1f), () =>
                 {
@@ -314,7 +306,7 @@ namespace VPB
                     RebuildBenchEditorModal();
                 }, bodyFont, s);
 
-            ScanWlCreateHeaderButton(_benchAdvancedBlock.transform, 140f * s, 34f * s,
+            UI.CreateChromeLayoutButton(_benchAdvancedBlock.transform, 140f * s, 34f * s,
                 VPBTranslation.T("bench.simple.save", "Save settings"),
                 bodyFont, new Color(0.24f, 0.38f, 0.52f, 1f), BenchModalSaveOnly);
 
@@ -366,7 +358,7 @@ namespace VPB
         void BenchAddPresetButton(Transform parent, VpbBenchConfig cfg, VpbBenchPresetKind kind, int bodyFont, float s)
         {
             bool active = cfg.Preset == kind;
-            ScanWlCreateHeaderButton(parent, 0f, 38f * s, VpbBenchPresetUtil.Label(kind), bodyFont,
+            UI.CreateChromeLayoutButton(parent, 0f, 38f * s, VpbBenchPresetUtil.Label(kind), bodyFont,
                 active ? new Color(0.30f, 0.48f, 0.62f, 1f) : new Color(0.18f, 0.20f, 0.24f, 1f),
                 () =>
                 {
@@ -391,7 +383,7 @@ namespace VPB
             h.childForceExpandWidth = false;
             LayoutElement le = UI.AddLE(row, minHeight: 40f * s);
 
-            ScanWlCreateHeaderButton(row.transform, 36f * s, 34f * s, "◀", bodyFont,
+            UI.CreateChromeLayoutButton(row.transform, 36f * s, 34f * s, "◀", bodyFont,
                 new Color(0.22f, 0.24f, 0.28f, 1f), () =>
                 {
                     int idx = ids.IndexOf(cfg.BaselineId ?? "main");
@@ -406,7 +398,7 @@ namespace VPB
             Text nameText = UI.CreateLabel(row, (cfg.BaselineId ?? "main") + (hasBaseline ? "" : " (new)"), bodyFont, Color.white, TextAnchor.MiddleCenter, name: "Name");
             LayoutElement nle = UI.AddLE(nameText.gameObject, minWidth: 180f * s, preferredWidth: 220f * s);
 
-            ScanWlCreateHeaderButton(row.transform, 36f * s, 34f * s, "▶", bodyFont,
+            UI.CreateChromeLayoutButton(row.transform, 36f * s, 34f * s, "▶", bodyFont,
                 new Color(0.22f, 0.24f, 0.28f, 1f), () =>
                 {
                     int idx = ids.IndexOf(cfg.BaselineId ?? "main");
@@ -787,22 +779,9 @@ namespace VPB
 
         static void BenchAddRemovableRow(Transform parent, string label, int fontSize, float s, bool altStripe, UnityAction onRemove)
         {
-            float rowH = 34f * s;
-            float removeW = 48f * s;
-
-            GameObject row = new GameObject("Row");
-            row.transform.SetParent(parent, false);
-            Image rowBg = UI.AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
-            rowBg.raycastTarget = true;
-            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 6f * s, padding: UI.Pad(6, 4, 3, 3, s), childForceExpandWidth: false);
-            LayoutElement rle = UI.AddLE(row, minWidth: 0f, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
-
-            Text lt = UI.CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
-            LayoutElement lle = UI.AddLE(lt.gameObject, minWidth: 0f, flexibleWidth: 1f);
-
-            ScanWlCreateHeaderButton(row.transform, removeW, rowH - 6f * s, "×",
-                fontSize,
-                new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
+            UI.CreateRemovableStripeRow(
+                parent, label, fontSize, 34f * s, 48f * s, 6f * s,
+                6f * s, UI.Pad(6, 4, 3, 3, s), altStripe, "×", onRemove, flexibleRowWidth: true);
         }
 
         static string BenchShortenListLabel(string entry, int maxLen = 52)
@@ -850,12 +829,7 @@ namespace VPB
             Image img = UI.AddImage(block, new Color(1f, 1f, 1f, 0.004f));
         }
 
-        static void BenchDestroyChildren(Transform parent)
-        {
-            if (parent == null) return;
-            for (int i = parent.childCount - 1; i >= 0; i--)
-                try { UnityEngine.Object.Destroy(parent.GetChild(i).gameObject); } catch { }
-        }
+        static void BenchDestroyChildren(Transform parent) => UI.DestroyAllChildren(parent);
 
         static void BenchAddSimpleLabel(Transform parent, string text, int fontSize, float s)
         {
@@ -874,7 +848,7 @@ namespace VPB
             h.childForceExpandWidth = false;
             LayoutElement le = UI.AddLE(row, minHeight: 38f * s);
 
-            ScanWlCreateHeaderButton(row.transform, 38f * s, 34f * s, on ? "✓" : "",
+            UI.CreateChromeLayoutButton(row.transform, 38f * s, 34f * s, on ? "✓" : "",
                 fontSize, on ? new Color(0.28f, 0.50f, 0.34f, 1f) : new Color(0.20f, 0.22f, 0.26f, 1f),
                 () => onChanged(!on));
 
@@ -895,16 +869,16 @@ namespace VPB
             h.childControlWidth = true;
             LayoutElement le = UI.AddLE(row, minHeight: 34f * s);
 
-            ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(row.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.pick_scenes", "Pick…"),
                 actionFont, new Color(0.20f, 0.40f, 0.55f, 1f), BenchStartPickScenes);
             if (cfg != null && cfg.Scenes != null && cfg.Scenes.Count > 0)
             {
-                ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
+                UI.CreateChromeLayoutButton(row.transform, 0f, 32f * s,
                     VPBTranslation.T("bench.simple.clear_scenes_short", "Clear"),
                     actionFont, new Color(0.52f, 0.28f, 0.28f, 1f), () => BenchConfirmClearAllScenes(cfg));
             }
-            ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(row.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.add_selection_short", "Sel") + " (" + selCount + ")",
                 actionFont, new Color(0.20f, 0.40f, 0.55f, 1f), BenchAddScenesFromGallerySelection);
         }
@@ -921,12 +895,12 @@ namespace VPB
             h.childControlWidth = true;
             LayoutElement le = UI.AddLE(row, minHeight: 34f * s);
 
-            ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
+            UI.CreateChromeLayoutButton(row.transform, 0f, 32f * s,
                 VPBTranslation.T("bench.simple.pick_packages", "Pick…"),
                 actionFont, new Color(0.20f, 0.40f, 0.55f, 1f), BenchStartPickPackages);
             if (cand != null && cand.PackageUids != null && cand.PackageUids.Count > 0)
             {
-                ScanWlCreateHeaderButton(row.transform, 0f, 32f * s,
+                UI.CreateChromeLayoutButton(row.transform, 0f, 32f * s,
                     VPBTranslation.T("bench.simple.clear_packages_short", "Clear"),
                     actionFont, new Color(0.52f, 0.28f, 0.28f, 1f), () => BenchConfirmClearAllPackages(cand));
             }
@@ -1005,26 +979,11 @@ namespace VPB
             int titleFont = type.Title;
             int bodyFont = type.Body;
 
-            _benchConfirmRoot = new GameObject("VPB_BenchConfirm");
-            _benchConfirmRoot.transform.SetParent(_benchModalRoot.transform, false);
-            RectTransform rootRt = _benchConfirmRoot.AddComponent<RectTransform>();
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.offsetMin = Vector2.zero;
-            rootRt.offsetMax = Vector2.zero;
-
-            Image dim = UI.AddImage(_benchConfirmRoot, new Color(0f, 0f, 0f, 0.55f));
-            // Consume clicks on confirm overlay — do not pass through to bench dim close handler.
-            Button dimBlock = _benchConfirmRoot.AddComponent<Button>();
-            UI.ConfigButtonFlat(dimBlock);
-
-            GameObject panel = new GameObject("Panel");
-            panel.transform.SetParent(_benchConfirmRoot.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(480f * s, 220f * s);
-            Image confirmPbg = UI.AddImage(panel, new Color(0.08f, 0.09f, 0.11f, 1f));
+            // Dim Button with null dismiss consumes clicks — do not pass through to bench dim close.
+            GameObject panel;
+            _benchConfirmRoot = UI.CreateModalChrome(
+                _benchModalRoot, "VPB_BenchConfirm", 480f * s, 220f * s,
+                new Color(0.08f, 0.09f, 0.11f, 1f), null, out panel, dimAlpha: 0.55f);
 
             VerticalLayoutGroup v = panel.AddComponent<VerticalLayoutGroup>();
             v.padding = new RectOffset(Mathf.RoundToInt(14f * s), Mathf.RoundToInt(14f * s), Mathf.RoundToInt(12f * s), Mathf.RoundToInt(12f * s));
@@ -1032,15 +991,7 @@ namespace VPB
             v.childControlWidth = true;
             v.childForceExpandWidth = true;
 
-            GameObject titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(panel.transform, false);
-            Text titleText = titleGo.AddComponent<Text>();
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            GalleryUiMetrics.ApplyEmphasisTitle(titleText, titleFont);
-            titleText.fontStyle = FontStyle.Normal;
-            titleText.color = Color.white;
-            titleText.text = title ?? "";
-            try { VPBUiFont.ApplyTo(titleText); } catch { }
+            UI.CreateEmphasisTitleLabel(panel, title ?? "", titleFont);
 
             Text bodyText = UI.CreateLabel(panel, message ?? "", bodyFont, new Color(0.88f, 0.90f, 0.94f, 1f), TextAnchor.UpperLeft, verticalWrap: VerticalWrapMode.Overflow, name: "Body");
             LayoutElement bodyLe = UI.AddLE(bodyText.gameObject, minHeight: 72f * s, flexibleHeight: 1f);
@@ -1053,12 +1004,12 @@ namespace VPB
             brh.childControlWidth = true;
             LayoutElement brLe = UI.AddLE(btnRow, minHeight: 36f * s);
 
-            ScanWlCreateHeaderButton(btnRow.transform, 0f, 34f * s,
+            UI.CreateChromeLayoutButton(btnRow.transform, 0f, 34f * s,
                 VPBTranslation.T("hook.cancel", "Cancel"), bodyFont, new Color(0.35f, 0.35f, 0.38f, 1f), BenchHideConfirm);
             string okLabel = string.IsNullOrEmpty(confirmLabel)
                 ? VPBTranslation.T("bench.confirm.remove", "Remove")
                 : confirmLabel;
-            ScanWlCreateHeaderButton(btnRow.transform, 0f, 34f * s,
+            UI.CreateChromeLayoutButton(btnRow.transform, 0f, 34f * s,
                 okLabel, bodyFont, new Color(0.55f, 0.28f, 0.28f, 1f), () =>
                 {
                     BenchHideConfirm();

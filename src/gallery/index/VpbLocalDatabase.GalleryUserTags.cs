@@ -1314,6 +1314,35 @@ namespace VPB
             }
         }
 
+        /// <summary>Distinct user-tag names on any path inside a package (ALL VAR package-row tooltip).</summary>
+        internal static bool TryGetGalleryUserTagsForPackageAnyPath(string pkgUid, HashSet<string> outNames)
+        {
+            outNames?.Clear();
+            if (!VpbSqlite3.IsAvailable || outNames == null || string.IsNullOrEmpty(pkgUid)) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var st = conn.Prepare(
+                        "SELECT DISTINCT gt.name FROM gallery_item_user_tag gut INNER JOIN gallery_user_tag gt ON gt.tag_id=gut.tag_id WHERE gut.pkg_uid=?"))
+                    {
+                        st.BindText(1, pkgUid);
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string n = st.ColumnText(0);
+                            if (!string.IsNullOrEmpty(n)) outNames.Add(n);
+                        }
+                    }
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static bool TryHasAnyGalleryUserTagsForRow(VpbSqlite3.Connection conn, string categoryTitle, string pkgUid, string internalPath)
         {
             if (conn == null) return false;

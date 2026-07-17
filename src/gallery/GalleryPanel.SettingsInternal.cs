@@ -338,6 +338,7 @@ namespace VPB
             public float MovementThreshold;
             public float BringToFrontDistance;
             public bool EnableDragDrop;
+            public bool GalleryTboxToolbarPinned;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
             public bool VerticalMoveKeysEnabled;
@@ -354,8 +355,10 @@ namespace VPB
             public string GalleryUserTagFilterCombineMode;
             public float GalleryScrollButtonStepViewportFraction;
             public bool GalleryScrollButtonsEnabled;
+            public string SpringScrollButtonMode;
             public bool GalleryVrThumbstickScrollEnabled;
             public bool GalleryHideCreatorSideButtons;
+            public bool GalleryShowCategoryIcons;
             public bool GalleryConsolidateCreatorNames;
             public bool PluginGalleryGridThumbnails;
             public bool PluginGalleryCategoryLabelsOnly;
@@ -368,6 +371,7 @@ namespace VPB
             public float GalleryListHoverPreviewOffsetY;
             public bool GalleryGridLabelsEnabled;
             public bool GalleryGridLabelsAutoHideAtHighDensity;
+            public bool GalleryGridHoverBadgesEnabled;
             public float GalleryGridLabelFontSize;
             public float GalleryGridSpacingX;
             public float GalleryGridSpacingY;
@@ -712,6 +716,20 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "interaction.pinToolboxToolbar", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.pin_toolbox_toolbar", "Pin toolbox toolbar"),
+                Tooltip = VPBTranslation.T("settings.tip.pin_toolbox_toolbar", "Keep the selection toolbox expanded even when nothing is selected."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryTboxToolbarPinned,
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.GalleryTboxToolbarPinned = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    try { SyncTboxPinnedFromConfig(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "interaction.autoGenderFilter", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAutoGenderFilter,
@@ -880,6 +898,21 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryScrollButtonsEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "lists.springScrollButton", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.spring_scroll_button", "Spring scroll button"),
+                Tooltip = VPBTranslation.T("settings.tip.spring_scroll_button", "Shows the floating spring-scroll drag control next to the scrollbar. Off / Desktop Only / VR Only / Desktop & VR."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Off", "Desktop Only", "VR Only", "Desktop & VR" },
+                GetString = () => VPBConfig.NormalizeSpringScrollButtonMode(VPBConfig.Instance.SpringScrollButtonMode),
+                SetString = v =>
+                {
+                    VPBConfig.Instance.SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(v);
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                    try { ApplySpringScrollButtonFromConfig(); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.vrThumbstickScroll", GroupKey = "lists",
                 Label = VPBTranslation.T("settings.gallery_vr_thumbstick_scroll", "VR thumbstick gallery scroll"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_vr_thumbstick_scroll", "When the VR pointer is over a gallery pane, thumbstick up/down scrolls the list instead of moving in the world."),
@@ -905,6 +938,19 @@ namespace VPB
                     VPBConfig.Instance.GalleryHideCreatorSideButtons = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
                     VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.showCategoryIcons", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.gallery_show_category_icons", "Show category icons"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_show_category_icons", "Shows per-category icons on the left of each row in side-rail Category mode."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryShowCategoryIcons,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryShowCategoryIcons = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                    try { UpdateTabs(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -1121,6 +1167,12 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.grid_labels_enabled", "Show Creator.Package.Version labels under grid thumbnails."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.hoverBadges", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_badges", "Hover badges"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_hover_badges", "Show rating and status badges on grid hover. Off keeps dense grids faster."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryGridHoverBadgesEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "grid.autoHideHighDensity", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_auto_hide_high_density", "Hide labels at max grid density"),
@@ -1623,6 +1675,7 @@ namespace VPB
                 MovementThreshold = VPBConfig.Instance.MovementThreshold,
                 BringToFrontDistance = VPBConfig.Instance.BringToFrontDistance,
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
+                GalleryTboxToolbarPinned = VPBConfig.Instance.GalleryTboxToolbarPinned,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
@@ -1639,8 +1692,10 @@ namespace VPB
                 GalleryUserTagFilterCombineMode = VPBConfig.Instance.GalleryUserTagFilterCombineMode,
                 GalleryScrollButtonStepViewportFraction = VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
                 GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
+                SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(VPBConfig.Instance.SpringScrollButtonMode),
                 GalleryVrThumbstickScrollEnabled = VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
+                GalleryShowCategoryIcons = VPBConfig.Instance.GalleryShowCategoryIcons,
                 GalleryConsolidateCreatorNames = VPBConfig.Instance.GalleryConsolidateCreatorNames,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
                 PluginGalleryCategoryLabelsOnly = VPBConfig.Instance.PluginGalleryCategoryLabelsOnly,
@@ -1653,6 +1708,7 @@ namespace VPB
                 GalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY,
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
                 GalleryGridLabelsAutoHideAtHighDensity = VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
+                GalleryGridHoverBadgesEnabled = VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryGridSpacingX = VPBConfig.Instance.GalleryGridSpacingX,
                 GalleryGridSpacingY = VPBConfig.Instance.GalleryGridSpacingY,
@@ -2428,6 +2484,7 @@ namespace VPB
             VPBConfig.Instance.MovementThreshold = b.MovementThreshold;
             VPBConfig.Instance.BringToFrontDistance = b.BringToFrontDistance;
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
+            VPBConfig.Instance.GalleryTboxToolbarPinned = b.GalleryTboxToolbarPinned;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
@@ -2444,8 +2501,10 @@ namespace VPB
             VPBConfig.Instance.GalleryUserTagFilterCombineMode = b.GalleryUserTagFilterCombineMode;
             VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = b.GalleryScrollButtonStepViewportFraction;
             VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
+            VPBConfig.Instance.SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(b.SpringScrollButtonMode);
             VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = b.GalleryVrThumbstickScrollEnabled;
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
+            VPBConfig.Instance.GalleryShowCategoryIcons = b.GalleryShowCategoryIcons;
             VPBConfig.Instance.GalleryConsolidateCreatorNames = b.GalleryConsolidateCreatorNames;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
             VPBConfig.Instance.PluginGalleryCategoryLabelsOnly = b.PluginGalleryCategoryLabelsOnly;
@@ -2458,6 +2517,7 @@ namespace VPB
             VPBConfig.Instance.GalleryListHoverPreviewOffsetY = b.GalleryListHoverPreviewOffsetY;
             VPBConfig.Instance.GalleryGridLabelsEnabled = b.GalleryGridLabelsEnabled;
             VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = b.GalleryGridLabelsAutoHideAtHighDensity;
+            VPBConfig.Instance.GalleryGridHoverBadgesEnabled = b.GalleryGridHoverBadgesEnabled;
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryGridSpacingX = b.GalleryGridSpacingX;
             VPBConfig.Instance.GalleryGridSpacingY = b.GalleryGridSpacingY;

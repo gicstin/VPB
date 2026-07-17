@@ -1016,21 +1016,21 @@ namespace VPB
                 rt.sizeDelta = new Vector2(size, size);
                 rt.anchoredPosition = new Vector2(-8f * scale, 0f);
             }
+            LayoutElement iconLe = iconGo.GetComponent<LayoutElement>();
+            if (iconLe == null) iconLe = iconGo.AddComponent<LayoutElement>();
+            iconLe.ignoreLayout = true;
             iconGo.SetActive(true);
             iconGo.transform.SetAsLastSibling();
         }
 
+        /// <summary>
+        /// Sticky pin-strip row height only — must match virt/side-tab rows.
+        /// VLG spacing is separate; do not bake <see cref="GalleryUiDesignTokens.SideTabRowSpacingRef"/> here
+        /// (that was double-counting and made pin/filter toggles jump row gaps).
+        /// </summary>
         private float UserTagPinnedRowHeightPx()
         {
-            float s = ChromeScale;
-            float rowH = (GalleryUiDesignTokens.SideTabRowHeightRef + GalleryUiDesignTokens.SideTabRowSpacingRef) * s;
-            try
-            {
-                float virt = CreatorVirtRowHeight();
-                if (virt > 1f) rowH = virt;
-            }
-            catch { }
-            return rowH;
+            return SideTabRowHeightPx(ChromeScale);
         }
 
         private float UserTagsAvailPinnedStickyHeightPx()
@@ -1039,7 +1039,8 @@ namespace VPB
             if (n <= 0) return 0f;
             float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * GalleryUiDesignTokens.SideTabRowSpacingRef * s + 4f * s;
+            float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * gap + 4f * s;
         }
 
         private float UserTagsAppliedPinnedStickyHeightPx()
@@ -1048,7 +1049,8 @@ namespace VPB
             if (n <= 0) return 0f;
             float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * GalleryUiDesignTokens.SideTabRowSpacingRef * s + 4f * s;
+            float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * gap + 4f * s;
         }
 
         private GameObject EnsureUserTagsAvailPinnedStickyGO(bool isLeft)
@@ -1101,8 +1103,7 @@ namespace VPB
             GameObject strip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
             if (strip == null) return;
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagPinnedRebuild++;
-            for (int i = strip.transform.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+            UI.DestroyAllChildren(strip.transform);
 
             int count = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
             if (count == 0)
@@ -1138,8 +1139,7 @@ namespace VPB
         {
             GameObject strip = EnsureUserTagsAppliedPinnedStickyGO(isLeft);
             if (strip == null) return;
-            for (int i = strip.transform.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+            UI.DestroyAllChildren(strip.transform);
 
             int count = pinnedRows != null ? pinnedRows.Count : 0;
             if (count == 0)
@@ -1555,6 +1555,9 @@ namespace VPB
                 rt.sizeDelta = new Vector2(edge, edge);
                 rt.anchoredPosition = new Vector2(6f * scale, 0f);
             }
+            LayoutElement remLe = removeGo.GetComponent<LayoutElement>();
+            if (remLe == null) remLe = removeGo.AddComponent<LayoutElement>();
+            remLe.ignoreLayout = true;
             removeGo.SetActive(true);
             removeGo.transform.SetAsLastSibling();
             SyncUserTagSideChromeRoundedBg(removeGo);
@@ -1647,6 +1650,9 @@ namespace VPB
                 rt.sizeDelta = new Vector2(edge, edge);
                 rt.anchoredPosition = new Vector2(6f * scale, 0f);
             }
+            LayoutElement pinLe = pinGo.GetComponent<LayoutElement>();
+            if (pinLe == null) pinLe = pinGo.AddComponent<LayoutElement>();
+            pinLe.ignoreLayout = true;
             pinGo.SetActive(true);
             pinGo.transform.SetAsLastSibling();
             SyncUserTagSideChromeRoundedBg(pinGo);
@@ -2865,28 +2871,11 @@ namespace VPB
             float headerChromeSq = Mathf.Max(30f, 36f * s);
             float searchBarH = headerChromeSq;
 
-            GameObject dim = new GameObject("VPB_UserTagEditorOverlay");
-            dim.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform dimRT = dim.AddComponent<RectTransform>();
-            dimRT.anchorMin = Vector2.zero;
-            dimRT.anchorMax = Vector2.one;
-            dimRT.sizeDelta = Vector2.zero;
-            Image dimImg = UI.AddImage(dim, new Color(0f, 0f, 0f, 0.55f));
-            Button dimBtn = dim.AddComponent<Button>();
-            ColorBlock dcb = dimBtn.colors;
-            dcb.normalColor = Color.white;
-            dimBtn.colors = dcb;
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.onClick.AddListener(HideUserTagListEditor);
-
-            GameObject panel = new GameObject("UserTagEditorPanel");
-            panel.transform.SetParent(dim.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(620f * s, 720f * s);
-
-            Image pbg = UI.AddImage(panel, new Color(0.11f, 0.11f, 0.13f, 1f));
+            GameObject panel;
+            GameObject dim = UI.CreateModalChrome(
+                backgroundBoxGO, "VPB_UserTagEditorOverlay", 620f * s, 720f * s,
+                new Color(0.11f, 0.11f, 0.13f, 1f), HideUserTagListEditor, out panel, dimAlpha: 0.55f);
+            panel.name = "UserTagEditorPanel";
 
             UI.AddVLG(panel, 8f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
@@ -2917,24 +2906,16 @@ namespace VPB
             UserTagEditorSyncSortIcon();
             AddTooltipPlain(sortBtnGo, VPBTranslation.T("gallery.usertags.editor_sort_cycle_tip", "Sort list: tap to cycle name A→Z / Z→A / count high→low / low→high."));
 
-            GameObject filterGo = new GameObject("FilterInput");
-            filterGo.transform.SetParent(headerRow.transform, false);
-            Image fiBg = UI.AddGalleryElementRoundedBg(filterGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement fiLe = UI.AddLE(filterGo, minWidth: 0f, minHeight: searchBarH, flexibleWidth: 1f);
-
-            GameObject fta = new GameObject("TextArea");
-            fta.transform.SetParent(filterGo.transform, false);
-            RectTransform ftaRt = fta.AddComponent<RectTransform>();
-            ftaRt.anchorMin = Vector2.zero;
-            ftaRt.anchorMax = Vector2.one;
-            ftaRt.offsetMin = new Vector2(8f * s, 2f * s);
-            ftaRt.offsetMax = new Vector2(-8f * s, -2f * s);
-            Text fphT = UI.CreateLabel(fta, VPBTranslation.T("gallery.usertags.editor_filter_ph", "Filter list…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), TextAnchor.MiddleLeft, name: "Placeholder");
-            Text ftcT = UI.CreateLabel(fta, "", bodyFont, Color.white, TextAnchor.MiddleLeft);
-            _userTagEditorFilterInput = filterGo.AddComponent<InputField>();
-            _userTagEditorFilterInput.textComponent = ftcT;
-            _userTagEditorFilterInput.placeholder = fphT;
-            _userTagEditorFilterInput.lineType = InputField.LineType.SingleLine;
+            _userTagEditorFilterInput = UI.CreateChromeLayoutInputField(
+                headerRow.transform, bodyFont, searchBarH, 1f, 8f * s, 2f * s,
+                new Color(0.07f, 0.07f, 0.09f, 1f), new Color(0.42f, 0.42f, 0.45f, 1f),
+                VPBTranslation.T("gallery.usertags.editor_filter_ph", "Filter list…"), "FilterInput");
+            Text filterPh = _userTagEditorFilterInput.placeholder as Text;
+            if (filterPh != null) filterPh.alignment = TextAnchor.MiddleLeft;
+            if (_userTagEditorFilterInput.textComponent != null)
+                _userTagEditorFilterInput.textComponent.alignment = TextAnchor.MiddleLeft;
+            LayoutElement fiLe = _userTagEditorFilterInput.GetComponent<LayoutElement>();
+            if (fiLe != null) fiLe.minWidth = 0f;
             _userTagEditorFilterInput.onValueChanged.AddListener(_ => RebuildUserTagEditorRows());
 
             float clearSz = searchBarH;
@@ -3050,111 +3031,25 @@ namespace VPB
             arPadR.transform.SetParent(actionRow.transform, false);
             LayoutElement arPadRle = UI.AddLE(arPadR, minWidth: 0f, flexibleWidth: 1f);
 
-            _userTagEditorMergeModalGo = new GameObject("UserTagEditorMergeModal");
-            _userTagEditorMergeModalGo.transform.SetParent(dim.transform, false);
-            RectTransform mmRootRt = _userTagEditorMergeModalGo.AddComponent<RectTransform>();
-            mmRootRt.anchorMin = Vector2.zero;
-            mmRootRt.anchorMax = Vector2.one;
-            mmRootRt.sizeDelta = Vector2.zero;
-            Image mmDim = UI.AddImage(_userTagEditorMergeModalGo, new Color(0f, 0f, 0f, 0.5f));
-            _userTagEditorMergeModalGo.SetActive(false);
+            UserTagEditorBuildNameDialog(
+                dim.transform, "UserTagEditorMergeModal", "MergeDialogPanel", "MergeDialogInput", "MergeDialogButtons",
+                VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), "MergeTitle",
+                VPBTranslation.T("gallery.usertags.editor_merge_ph", "New tag name…"),
+                VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"),
+                VPBTranslation.T("gallery.usertags.editor_merge_confirm", "Merge"),
+                editorType.Prose, bodyFont, smallFont, s,
+                UserTagEditorCloseMergeDialog, UserTagEditorConfirmMergeFromDialog,
+                out _userTagEditorMergeModalGo, out _userTagEditorMergeModalTitleText, out _userTagEditorMergeModalInput);
 
-            GameObject mmPanel = new GameObject("MergeDialogPanel");
-            mmPanel.transform.SetParent(_userTagEditorMergeModalGo.transform, false);
-            RectTransform mmPanelRt = mmPanel.AddComponent<RectTransform>();
-            mmPanelRt.anchorMin = mmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            mmPanelRt.pivot = new Vector2(0.5f, 0.5f);
-            mmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image mmPbg = UI.AddImage(mmPanel, new Color(0.14f, 0.14f, 0.17f, 1f));
-            UI.AddVLG(mmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
-
-            _userTagEditorMergeModalTitleText = UI.CreateLabel(mmPanel, VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…"), editorType.Prose, Color.white, name: "MergeTitle");
-            LayoutElement mmTle = UI.AddLE(_userTagEditorMergeModalTitleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
-
-            GameObject mmInGo = new GameObject("MergeDialogInput");
-            mmInGo.transform.SetParent(mmPanel.transform, false);
-            Image mmIBg = UI.AddGalleryElementRoundedBg(mmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement mmILe = UI.AddLE(mmInGo, minHeight: 36f * s, flexibleWidth: 1f);
-            GameObject mmTa = new GameObject("TextArea");
-            mmTa.transform.SetParent(mmInGo.transform, false);
-            RectTransform mmTaRt = mmTa.AddComponent<RectTransform>();
-            mmTaRt.anchorMin = Vector2.zero;
-            mmTaRt.anchorMax = Vector2.one;
-            mmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
-            mmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            Text mmPhT = UI.CreateLabel(mmTa, VPBTranslation.T("gallery.usertags.editor_merge_ph", "New tag name…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), name: "Placeholder");
-            Text mmTxT = UI.CreateLabel(mmTa, "", bodyFont, Color.white);
-            _userTagEditorMergeModalInput = mmInGo.AddComponent<InputField>();
-            _userTagEditorMergeModalInput.textComponent = mmTxT;
-            _userTagEditorMergeModalInput.placeholder = mmPhT;
-            _userTagEditorMergeModalInput.lineType = InputField.LineType.SingleLine;
-
-            GameObject mmBtnRow = UI.CreateChildRT(mmPanel, "MergeDialogButtons");
-            UI.AddHLG(mmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
-            LayoutElement mmBRle = UI.AddLE(mmBtnRow, minHeight: 40f * s, flexibleWidth: 1f);
-
-            GameObject mmCancel = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseMergeDialog);
-            mmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement mmCL = UI.AddLE(mmCancel, minHeight: 38f * s, flexibleWidth: 1f);
-
-            GameObject mmOk = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_confirm", "Merge"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmMergeFromDialog);
-            mmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement mmOL = UI.AddLE(mmOk, minHeight: 38f * s, flexibleWidth: 1f);
-
-            _userTagEditorMergeModalGo.transform.SetAsLastSibling();
-
-            _userTagEditorRenameModalGo = new GameObject("UserTagEditorRenameModal");
-            _userTagEditorRenameModalGo.transform.SetParent(dim.transform, false);
-            RectTransform rmRootRt = _userTagEditorRenameModalGo.AddComponent<RectTransform>();
-            rmRootRt.anchorMin = Vector2.zero;
-            rmRootRt.anchorMax = Vector2.one;
-            rmRootRt.sizeDelta = Vector2.zero;
-            Image rmDim = UI.AddImage(_userTagEditorRenameModalGo, new Color(0f, 0f, 0f, 0.5f));
-            _userTagEditorRenameModalGo.SetActive(false);
-
-            GameObject rmPanel = new GameObject("RenameDialogPanel");
-            rmPanel.transform.SetParent(_userTagEditorRenameModalGo.transform, false);
-            RectTransform rmPanelRt = rmPanel.AddComponent<RectTransform>();
-            rmPanelRt.anchorMin = rmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            rmPanelRt.pivot = new Vector2(0.5f, 0.5f);
-            rmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image rmPbg = UI.AddImage(rmPanel, new Color(0.14f, 0.14f, 0.17f, 1f));
-            UI.AddVLG(rmPanel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
-
-            _userTagEditorRenameModalTitleText = UI.CreateLabel(rmPanel, VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…"), editorType.Prose, Color.white, name: "RenameTitle");
-            LayoutElement rmTle = UI.AddLE(_userTagEditorRenameModalTitleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
-
-            GameObject rmInGo = new GameObject("RenameDialogInput");
-            rmInGo.transform.SetParent(rmPanel.transform, false);
-            Image rmIBg = UI.AddGalleryElementRoundedBg(rmInGo, new Color(0.07f, 0.07f, 0.09f, 1f));
-            LayoutElement rmILe = UI.AddLE(rmInGo, minHeight: 36f * s, flexibleWidth: 1f);
-            GameObject rmTa = new GameObject("TextArea");
-            rmTa.transform.SetParent(rmInGo.transform, false);
-            RectTransform rmTaRt = rmTa.AddComponent<RectTransform>();
-            rmTaRt.anchorMin = Vector2.zero;
-            rmTaRt.anchorMax = Vector2.one;
-            rmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
-            rmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            Text rmPhT = UI.CreateLabel(rmTa, VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…"), bodyFont, new Color(0.42f, 0.42f, 0.45f, 1f), name: "Placeholder");
-            Text rmTxT = UI.CreateLabel(rmTa, "", bodyFont, Color.white);
-            _userTagEditorRenameModalInput = rmInGo.AddComponent<InputField>();
-            _userTagEditorRenameModalInput.textComponent = rmTxT;
-            _userTagEditorRenameModalInput.placeholder = rmPhT;
-            _userTagEditorRenameModalInput.lineType = InputField.LineType.SingleLine;
-
-            GameObject rmBtnRow = UI.CreateChildRT(rmPanel, "RenameDialogButtons");
-            UI.AddHLG(rmBtnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
-            LayoutElement rmBRle = UI.AddLE(rmBtnRow, minHeight: 40f * s, flexibleWidth: 1f);
-
-            GameObject rmCancel = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseRenameDialog);
-            rmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement rmCL = UI.AddLE(rmCancel, minHeight: 38f * s, flexibleWidth: 1f);
-
-            GameObject rmOk = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_rename_confirm", "Rename"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmRenameFromDialog);
-            rmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement rmOL = UI.AddLE(rmOk, minHeight: 38f * s, flexibleWidth: 1f);
-
-            _userTagEditorRenameModalGo.transform.SetAsLastSibling();
+            UserTagEditorBuildNameDialog(
+                dim.transform, "UserTagEditorRenameModal", "RenameDialogPanel", "RenameDialogInput", "RenameDialogButtons",
+                VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…"), "RenameTitle",
+                VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…"),
+                VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"),
+                VPBTranslation.T("gallery.usertags.editor_rename_confirm", "Rename"),
+                editorType.Prose, bodyFont, smallFont, s,
+                UserTagEditorCloseRenameDialog, UserTagEditorConfirmRenameFromDialog,
+                out _userTagEditorRenameModalGo, out _userTagEditorRenameModalTitleText, out _userTagEditorRenameModalInput);
 
             SetLayerRecursive(dim, backgroundBoxGO.layer);
 
@@ -3164,6 +3059,61 @@ namespace VPB
 
             _userTagEditorRoot = dim;
             _userTagEditorRoot.SetActive(false);
+        }
+
+        /// <summary>
+        /// Shared merge/rename name dialog: dim root, centered panel, title, single-line input, Cancel/OK row.
+        /// </summary>
+        private static void UserTagEditorBuildNameDialog(
+            Transform parent,
+            string rootName,
+            string panelName,
+            string inputName,
+            string buttonsName,
+            string title,
+            string titleObjectName,
+            string placeholder,
+            string cancelLabel,
+            string confirmLabel,
+            int titleFont,
+            int bodyFont,
+            int smallFont,
+            float s,
+            UnityAction onCancel,
+            UnityAction onConfirm,
+            out GameObject rootGo,
+            out Text titleText,
+            out InputField input)
+        {
+            GameObject panel;
+            rootGo = UI.CreateModalChrome(
+                parent.gameObject, rootName, 420f * s, 200f * s,
+                new Color(0.14f, 0.14f, 0.17f, 1f), null, out panel, dimAlpha: 0.5f);
+            panel.name = panelName;
+            rootGo.SetActive(false);
+            UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
+
+            titleText = UI.CreateLabel(panel, title, titleFont, Color.white, name: titleObjectName);
+            UI.AddLE(titleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
+
+            input = UI.CreateChromeLayoutInputField(
+                panel.transform, bodyFont, 36f * s, 1f, 8f * s, 4f * s,
+                new Color(0.07f, 0.07f, 0.09f, 1f), new Color(0.42f, 0.42f, 0.45f, 1f),
+                placeholder, inputName);
+
+            GameObject btnRow = UI.CreateChildRT(panel, buttonsName);
+            UI.AddHLG(btnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
+            UI.AddLE(btnRow, minHeight: 40f * s, flexibleWidth: 1f);
+
+            GameObject cancel = UI.CreateUIButton(btnRow, 0f, 0f, cancelLabel, smallFont, 0f, 0f, AnchorPresets.stretchAll, onCancel);
+            cancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
+            UI.AddLE(cancel, minHeight: 38f * s, flexibleWidth: 1f);
+
+            GameObject ok = UI.CreateUIButton(btnRow, 0f, 0f, confirmLabel, smallFont, 0f, 0f, AnchorPresets.stretchAll, onConfirm);
+            ok.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
+            UI.AddLE(ok, minHeight: 38f * s, flexibleWidth: 1f);
+
+            rootGo.transform.SetAsLastSibling();
         }
 
         private void UserTagEditorSetTitleCount(int totalInDatabase)
@@ -4027,8 +3977,7 @@ namespace VPB
         {
             if (_userTagEditorRowsParent == null) return;
 
-            for (int i = _userTagEditorRowsParent.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(_userTagEditorRowsParent.GetChild(i).gameObject);
+            UI.DestroyAllChildren(_userTagEditorRowsParent);
 
             if (!userTagsCached) CacheUserTagsSideTab();
             UserTagEditorSetTitleCount(cachedUserTagSideTab.Count);

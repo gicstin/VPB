@@ -1137,7 +1137,6 @@ namespace VPB
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxRemoveMode = -1;
-            int idxReplace = -1;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
             int idxRemoveAtom = -1;
@@ -1160,7 +1159,6 @@ namespace VPB
                     idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
                     // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
-                    idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
@@ -1244,7 +1242,6 @@ namespace VPB
                 new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
                 new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
                 new SideButtonLayoutEntry(idxRemoveMode, 0, 2), // Remove Item Mode (hover-to-remove tool)
-                new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
 
                 new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove (clothing context)
                 new SideButtonLayoutEntry(idxRemoveAtom, 0, 0), // Remove (scene context)
@@ -1697,14 +1694,20 @@ namespace VPB
                 if (showClothingMode) UpdateKeepClothingButtonState();
                 try { RefreshTboxFlexButtonLayout(); } catch { }
             }
-            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
-            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
-            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);
-            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
-            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(isScene);
-            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(isScene);
+            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(false);
+            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(false);
+            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(false);
+            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(false);
+            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(false);
+            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(false);
             if (rightSaveBtnGO != null) rightSaveBtnGO.SetActive(showSave);
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
+
+            // Keep remove-list siderail in sync while Remove Mode (bin) is on.
+            if (_removeModeActive)
+            {
+                try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
+            }
 
             // Update arrow indicators immediately (not only after submenu hover).
             bool anyClothingChanged = false;
@@ -1864,7 +1867,7 @@ namespace VPB
             return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
-        /// <summary>Square icon chrome on side rails: 50×50 when loaded sprites exist.</summary>
+        /// <summary>Square icon chrome on side rails: SideButtonSquareRef when loaded sprites exist.</summary>
         private bool UsesSquareChromeSideButton(RectTransform rt, List<RectTransform> list)
         {
             if (rt == null || list == null) return false;
@@ -1901,8 +1904,6 @@ namespace VPB
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
-                if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
-                    return true;
                 if (galleryRemoveSprite != null && rightRemoveAtomBtnIconImage != null && rightRemoveAtomBtn != null && go == rightRemoveAtomBtn)
                     return true;
                 if (galleryRemoveSprite != null && rightRemoveAllClothingBtnIconImage != null && rightRemoveAllClothingBtn != null && go == rightRemoveAllClothingBtn)
@@ -1924,8 +1925,6 @@ namespace VPB
                 if (leftHistoryBtnImage != null && go == leftHistoryBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
-                    return true;
-                if ((galleryAddSprite != null || galleryReplaceSprite != null) && leftReplaceBtnIconImage != null && leftReplaceBtnImage != null && go == leftReplaceBtnImage.gameObject)
                     return true;
                 if (galleryRemoveSprite != null && leftRemoveAtomBtnIconImage != null && leftRemoveAtomBtn != null && go == leftRemoveAtomBtn)
                     return true;

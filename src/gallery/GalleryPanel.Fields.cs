@@ -16,7 +16,7 @@ namespace VPB
         public Canvas canvas;
         public Text statusBarText;
         private bool _registeredWithSuperController;
-        private GameObject backgroundBoxGO;
+        internal GameObject backgroundBoxGO;
         private CanvasGroup backgroundCanvasGroup;
         private GameObject contentGO;
         private ScrollRect scrollRect;
@@ -219,7 +219,8 @@ namespace VPB
             set { 
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.DragDropReplaceMode = value;
-                    try { VPBConfig.Instance.Save(true, true); } catch { }
+                    // Disk only — Save(true) rebuilds side-rail layout for no reason.
+                    try { VPBConfig.Instance.Save(false); } catch { }
                 }
             }
         }
@@ -232,7 +233,7 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     VPBConfig.Instance.AppearanceClothingApplyMode = value;
-                    try { VPBConfig.Instance.Save(true, true); } catch { }
+                    try { VPBConfig.Instance.Save(false); } catch { }
                 }
             }
         }
@@ -245,7 +246,7 @@ namespace VPB
                 if (VPBConfig.Instance != null)
                 {
                     VPBConfig.Instance.KeepClothingWhenApplyingAppearance = value;
-                    try { VPBConfig.Instance.Save(true, true); } catch { }
+                    try { VPBConfig.Instance.Save(false); } catch { }
                 }
             }
         }
@@ -339,13 +340,6 @@ namespace VPB
         private float internalSettingsPreSessionScrollNormalized = 1f;
         /// <summary>Isolated list zoom while internal Settings panel open; does not persist to <see cref="ListRowHeight"/>.</summary>
         private float internalSettingsListRowHeightSession = 100f;
-
-        private Text rightReplaceBtnText;
-        private Image rightReplaceBtnImage;
-        private Image rightReplaceBtnIconImage;
-        private Text leftReplaceBtnText;
-        private Image leftReplaceBtnImage;
-        private Image leftReplaceBtnIconImage;
 
         private GameObject footerUndoBtnGO;
         private GameObject footerRedoBtnGO;
@@ -566,6 +560,9 @@ namespace VPB
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
 
+        // Grid hover cell currently showing deps / Hub download badge (for progress refresh).
+        private GameObject _gridHoverBadgeBtnGO;
+        private FileEntry _gridHoverBadgeFile;
         /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
         private System.Diagnostics.Stopwatch _paneLoadTimingStopwatch;
         private string _paneLoadTimingKind;
@@ -854,7 +851,7 @@ namespace VPB
         private int hoverCount = 0;
         private UIDraggable dragger;
         private GameObject pointerDotGO;
-        private PointerEventData currentPointerData;
+        internal PointerEventData currentPointerData;
 
         private RectTransform previewBorderRT;
         private float fpsTimer = 0f;
@@ -938,13 +935,6 @@ namespace VPB
         private Sprite footerAutoHideRightOnSprite;
         private Sprite footerAutoHideTopOffSprite;
         private Sprite footerAutoHideTopOnSprite;
-        private Image footerShowHiddenIconImage;
-        private Sprite footerShowHiddenOffSprite;
-        private Sprite footerShowHiddenOnSprite;
-        // Tbox pin icon swap
-        private Image  tboxPinIconImage;
-        private Sprite tboxPinOnSprite;
-        private Sprite tboxPinOffSprite;
 
         // Side buttons for dynamic positioning
         private List<RectTransform> rightSideButtons = new List<RectTransform>();
@@ -959,8 +949,6 @@ namespace VPB
         internal bool importSidebarInitAsClone;
 
         private Sprite galleryCreatorOffSprite;
-
-        private GameObject footerLoadRandomBtn;
 
         private QuickFiltersUI quickFiltersUI; // NEW
         
@@ -1017,11 +1005,8 @@ namespace VPB
         private GameObject leftUserTagScrollStepDownBtn;
         private GameObject rightUserTagScrollStepUpBtn;
         private GameObject rightUserTagScrollStepDownBtn;
-        private GameObject footerSpringScrollToggleBtn;
-        private Image footerSpringScrollToggleBtnImage;
-        private Image footerSpringScrollToggleIconImage;
 
-        // Floating-pane helper (VR): big spring scroll button next to scrollbar (toggleable, default ON).
+        // Floating-pane helper: big spring scroll button next to scrollbar (settings: Off / Desktop Only / VR Only / Desktop & VR).
         private bool springScrollButtonEnabled = true;
         private GameObject springScrollButtonGO;
 
@@ -1201,6 +1186,8 @@ namespace VPB
         public static readonly Color ColorPath = new Color(0.15f, 0.15f, 0.45f, 1f);
         public static readonly Color ColorHistory = new Color(0.50f, 0.20f, 0.50f, 1f);
         public static readonly Color ColorHistoryAccent = new Color(0.55f, 0.28f, 0.55f, 1f);
+        /// <summary>Scene Import side-rail button backdrop (idle + active).</summary>
+        public static readonly Color ColorSceneImport = new Color(0.72f, 0.58f, 0.18f, 1f);
         public static readonly Color ColorHub = new Color(0.20f, 0.50f, 0.35f, 1f);
         public static readonly Color ColorLicense = new Color(0.45f, 0.45f, 0.20f, 1f);
 
@@ -1272,10 +1259,6 @@ namespace VPB
         private Image footerWatchToggleIconImage;
         private Sprite footerWatchToggleOnSprite;
         private Sprite footerWatchToggleOffSprite;
-
-        private GameObject footerShowHiddenPackagesBtn;
-        private Text footerShowHiddenPackagesBtnText;
-        private Image footerShowHiddenPackagesBtnImage;
 
         private bool _userHidden = false;
         private bool _hiddenByMenuGate = false;

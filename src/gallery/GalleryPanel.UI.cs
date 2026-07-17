@@ -1016,16 +1016,13 @@ namespace VPB
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
             }
 
-            // Undo / Redo / Random (footer left; compact labels U/R/Rdm)
+            // Undo / Redo (footer left)
             footerUndoBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.undo_abbrev", "U") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Undo);
             footerUndoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/undo.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerUndoBtnGO, s); }
             footerRedoBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.redo_abbrev", "R") + " (0)", 14, 0, 0, AnchorPresets.middleCenter, Redo);
             footerRedoBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
             { var s = UI.LoadIconSprite("vpb_icons/redo.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerRedoBtnGO, s); }
-            footerLoadRandomBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.footer.random_abbrev", "Rdm"), 14, 0, 0, AnchorPresets.middleCenter, LoadRandom);
-            footerLoadRandomBtn.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
-            { var s = UI.LoadIconSprite("vpb_icons/random.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerLoadRandomBtn, s); }
 
             footerHubBtnGO = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,VPBTranslation.T("gallery.side.hub", "Hub"), 14, 0, 0, AnchorPresets.middleCenter, () => {
                 VamHookPlugin.singleton?.OpenHubBrowse();
@@ -1140,26 +1137,12 @@ namespace VPB
             { Sprite init = footerWatchToggleOnSprite ?? footerWatchToggleOffSprite; if (init != null) { UI.AddIconToButton(footerWatchToggleBtn, init); footerWatchToggleIconImage = footerWatchToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide the VR wrist watch");
 
-            footerShowHiddenPackagesBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleGalleryShowHiddenPackages);
-            footerShowHiddenPackagesBtnImage = footerShowHiddenPackagesBtn.GetComponent<Image>();
-            footerShowHiddenPackagesBtnText = footerShowHiddenPackagesBtn.GetComponentInChildren<Text>();
-            footerShowHiddenPackagesBtn.name = "Footer_ShowHiddenPackages";
-            footerShowHiddenOffSprite = UI.LoadIconSprite("vpb_icons/show_hidden_off.png", UI.BarIconGlyphTint);
-            footerShowHiddenOnSprite  = UI.LoadIconSprite("vpb_icons/show_hidden.png",     UI.BarIconGlyphTint);
-            { Sprite init = footerShowHiddenOffSprite ?? footerShowHiddenOnSprite; if (init != null) { UI.AddIconToButton(footerShowHiddenPackagesBtn, init); footerShowHiddenIconImage = footerShowHiddenPackagesBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
             gridSizeMinusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"-", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_out.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizeMinusBtn, s); }
             gridSizePlusBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"+", 24, 0, 0, AnchorPresets.middleCenter, () => AdjustGridColumns(-1));
             { var s = UI.LoadIconSprite("vpb_icons/zoom_in.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(gridSizePlusBtn, s); }
-
-            // Toggle big spring-scroll drag button (floating panes only; default ON)
-            footerSpringScrollToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"S", 20, 0, 0, AnchorPresets.middleCenter, ToggleSpringScrollButton);
-            footerSpringScrollToggleBtnImage = footerSpringScrollToggleBtn.GetComponent<Image>();
-            { var s = UI.LoadIconSprite("vpb_icons/scroll.png", UI.BarIconGlyphTint); if (s != null) { UI.AddIconToButton(footerSpringScrollToggleBtn, s); footerSpringScrollToggleIconImage = footerSpringScrollToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-            AddTooltip(footerSpringScrollToggleBtn, "gallery.tooltip.spring_scroll_toggle", "Toggle spring scroll drag button (floating)");
 
             // Toggle hold-to-launch/apply (hold trigger/button on item; duration in Settings)
             footerHoldToLaunchToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"H", 20, 0, 0, AnchorPresets.middleCenter, ToggleHoldToLaunch);
@@ -1223,7 +1206,6 @@ namespace VPB
             AddTooltip(gridSizeMinusBtn, "gallery.tooltip.grid_minus", "Decrease columns (Ctrl+scroll wheel over gallery)");
             AddHoverDelegate(gridSizePlusBtn);
             AddTooltip(gridSizePlusBtn, "gallery.tooltip.grid_plus", "Increase columns (Ctrl+scroll wheel over gallery)");
-            AddHoverDelegate(footerSpringScrollToggleBtn);
             AddHoverDelegate(footerMenuGateBtn);
             AddHoverDelegate(footerHoldToLaunchToggleBtn);
             AddHoverDelegate(footerBackBtn);
@@ -1234,8 +1216,6 @@ namespace VPB
             AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change");
             AddHoverDelegate(footerRedoBtnGO);
             AddTooltip(footerRedoBtnGO, "gallery.tooltip.redo", "Redo");
-            AddHoverDelegate(footerLoadRandomBtn);
-            AddTooltip(footerLoadRandomBtn, "gallery.tooltip.load_random", "Load random item");
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);
@@ -1244,7 +1224,6 @@ namespace VPB
             AddHoverDelegate(footerLayoutBtn);
             AddHoverDelegate(footerDockBtn);
             AddHoverDelegate(footerHeightBtn);
-            AddHoverDelegate(footerShowHiddenPackagesBtn);
             AddHoverDelegate(footerAutoHideBtn);
 
             // Register inner pane button scale actions (footer)
@@ -1252,28 +1231,23 @@ namespace VPB
             {
                 var uRT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponent<RectTransform>() : null;
                 var rRT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponent<RectTransform>() : null;
-                var rndRT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponent<RectTransform>() : null;
                 var uT = footerUndoBtnGO != null ? footerUndoBtnGO.GetComponentInChildren<Text>() : null;
                 var rT = footerRedoBtnGO != null ? footerRedoBtnGO.GetComponentInChildren<Text>() : null;
-                var rndT = footerLoadRandomBtn != null ? footerLoadRandomBtn.GetComponentInChildren<Text>() : null;
                 var hRT = footerHubBtnGO != null ? footerHubBtnGO.GetComponent<RectTransform>() : null;
                 var hT = footerHubBtnText;
                 innerPaneScaleActions.Add(s => {
                     if (uRT != null) uRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (rRT != null) rRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
-                    if (rndRT != null) rndRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     if (hRT != null) hRT.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s);
                     GalleryUiMetrics.ApplyFont(uT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(rT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                    GalleryUiMetrics.ApplyFont(rndT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     GalleryUiMetrics.ApplyFont(hT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 });
             }
             var footerBtnGOs = new GameObject[] {
                 footerFollowAngleBtn, footerFollowDistanceBtn, footerFollowHeightBtn,
-                footerMenuGateBtn, footerWatchToggleBtn, footerShowHiddenPackagesBtn,
+                footerMenuGateBtn, footerWatchToggleBtn,
                 gridSizeMinusBtn, gridSizePlusBtn,
-                footerSpringScrollToggleBtn,
                 footerHoldToLaunchToggleBtn,
                 footerLayoutBtn, footerHeightBtn, footerAutoHideBtn, footerDockBtn,
             };
@@ -1386,7 +1360,6 @@ namespace VPB
             UpdateFooterFollowStates();
             UpdateFooterLayoutState();
             UpdateFooterHeightState();
-            UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterVamMenuGateState();
             UpdateFooterVrWatchState();
@@ -1394,29 +1367,15 @@ namespace VPB
             try { UpdateUndoRedoButtonLabels(); } catch { }
         }
 
-        private void ToggleSpringScrollButton()
+        private void ApplySpringScrollButtonFromConfig()
         {
-            springScrollButtonEnabled = !springScrollButtonEnabled;
-            try
-            {
-                if (VPBConfig.Instance != null)
-                {
-                    VPBConfig.Instance.SpringScrollButtonEnabled = springScrollButtonEnabled;
-                    VPBConfig.Instance.Save(false);
-                }
-            }
-            catch { }
-
-            // Only create when enabling (never create just to immediately hide).
+            springScrollButtonEnabled = VPBConfig.Instance != null && VPBConfig.Instance.IsSpringScrollButtonEnabled();
             if (springScrollButtonEnabled)
             {
-                EnsureSpringScrollButtonExists();
+                try { EnsureSpringScrollButtonExists(); } catch { }
             }
-
             if (springScrollButtonGO != null)
-            {
                 springScrollButtonGO.SetActive(springScrollButtonEnabled);
-            }
             UpdateSpringScrollButtonToggleUI();
         }
 
@@ -1816,42 +1775,6 @@ namespace VPB
                 try { EnsureSpringScrollButtonExists(); } catch { }
             }
 
-            try
-            {
-                if (footerSpringScrollToggleBtn != null)
-                {
-                    var b = footerSpringScrollToggleBtn.GetComponent<Button>();
-                    if (b != null) b.interactable = true;
-                }
-            }
-            catch { }
-
-            if (footerSpringScrollToggleBtnImage != null)
-            {
-                footerSpringScrollToggleBtnImage.color = springScrollButtonEnabled
-                    ? new Color(0f, 0f, 0f, 0.5f)
-                    : new Color(0f, 0f, 0f, 0.25f);
-            }
-            if (footerSpringScrollToggleIconImage != null)
-            {
-                footerSpringScrollToggleIconImage.color = springScrollButtonEnabled
-                    ? new Color(1f, 1f, 1f, 1f)
-                    : UI.White(0.45f);
-            }
-
-            // If this pane is fixed (desktop overlay), keep the toggle disabled-looking.
-            try
-            {
-                if (isFixedLocally && footerSpringScrollToggleBtn != null)
-                {
-                    if (footerSpringScrollToggleBtnImage != null)
-                        footerSpringScrollToggleBtnImage.color = springScrollButtonEnabled
-                            ? new Color(0f, 0f, 0f, 0.5f)
-                            : new Color(0f, 0f, 0f, 0.25f);
-                }
-            }
-            catch { }
-
             // Resize to match fixed vs floating mode
             try
             {
@@ -2181,7 +2104,6 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             VPBConfig.Instance.GalleryShowHiddenPackages = !VPBConfig.Instance.GalleryShowHiddenPackages;
             VPBConfig.Instance.Save();
-            UpdateFooterShowHiddenPackagesState();
             GalleryFileListSnapshotCache.InvalidateAll();
             try
             {
@@ -2190,35 +2112,6 @@ namespace VPB
             }
             catch { }
             try { RefreshFiles(true); } catch { }
-        }
-
-        private void UpdateFooterShowHiddenPackagesState()
-        {
-            if (VPBConfig.Instance == null) return;
-
-            Color activeColor = UI.AccentBlue;
-            Color inactiveColor = UI.ChromeMid;
-
-            if (footerShowHiddenPackagesBtnImage != null)
-                footerShowHiddenPackagesBtnImage.color = VPBConfig.Instance.GalleryShowHiddenPackages ? activeColor : inactiveColor;
-
-            if (footerShowHiddenPackagesBtnText != null)
-                footerShowHiddenPackagesBtnText.text = "H";
-
-            if (footerShowHiddenIconImage != null)
-            {
-                Sprite target = VPBConfig.Instance.GalleryShowHiddenPackages ? footerShowHiddenOnSprite : footerShowHiddenOffSprite;
-                if (target != null) footerShowHiddenIconImage.sprite = target;
-            }
-
-            if (footerShowHiddenPackagesBtn != null)
-            {
-                var del = footerShowHiddenPackagesBtn.GetComponent<UIHoverDelegate>();
-                if (del != null) del.OnHoverChange = null;
-                // True = gallery list includes .hide-marked packages; false = omit them (stricter filter).
-                string modeText = VPBConfig.Instance.GalleryShowHiddenPackages ? "Show Hidden" : "Hide Hidden";
-                AddTooltipPlain(footerShowHiddenPackagesBtn, modeText);
-            }
         }
 
         private void ToggleAutoHideMode()
@@ -3336,31 +3229,24 @@ namespace VPB
                 ? (galleryReplaceSprite ?? galleryAddSprite)
                 : (galleryAddSprite ?? galleryReplaceSprite);
 
-            if (rightReplaceBtnIconImage != null && modeSprite != null)
-            {
-                if (rightReplaceBtnText != null) rightReplaceBtnText.gameObject.SetActive(false);
-                rightReplaceBtnIconImage.sprite = modeSprite;
-                rightReplaceBtnIconImage.enabled = true;
-            }
-            else if (rightReplaceBtnText != null)
-            {
-                rightReplaceBtnText.gameObject.SetActive(true);
-                rightReplaceBtnText.text = text;
-            }
-            if (rightReplaceBtnImage != null) rightReplaceBtnImage.color = color;
+            if (tboxReplaceBtn == null) return;
 
-            if (leftReplaceBtnIconImage != null && modeSprite != null)
+            Image bg = tboxReplaceBtn.GetComponent<Image>();
+            if (bg != null) bg.color = color;
+            if (tboxReplaceBtnIconImage != null && modeSprite != null)
             {
-                if (leftReplaceBtnText != null) leftReplaceBtnText.gameObject.SetActive(false);
-                leftReplaceBtnIconImage.sprite = modeSprite;
-                leftReplaceBtnIconImage.enabled = true;
+                tboxReplaceBtnIconImage.sprite = modeSprite;
+                tboxReplaceBtnIconImage.enabled = true;
             }
-            else if (leftReplaceBtnText != null)
+            else
             {
-                leftReplaceBtnText.gameObject.SetActive(true);
-                leftReplaceBtnText.text = text;
+                Text t = tboxReplaceBtn.GetComponentInChildren<Text>(true);
+                if (t != null)
+                {
+                    t.gameObject.SetActive(true);
+                    t.text = text;
+                }
             }
-            if (leftReplaceBtnImage != null) leftReplaceBtnImage.color = color;
         }
 
         public void RefreshAppearanceClothingSideButton()

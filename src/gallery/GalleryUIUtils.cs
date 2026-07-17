@@ -1388,6 +1388,69 @@ namespace VPB
         }
 
         /// <summary>
+        /// Modal/header title: <see cref="CreateLabel"/> + <see cref="GalleryUiMetrics.ApplyEmphasisTitle"/>.
+        /// </summary>
+        public static Text CreateEmphasisTitleLabel(GameObject parentGO, string text, int fontSize, Color? color = null,
+            TextAnchor alignment = TextAnchor.MiddleLeft, string name = "Title")
+        {
+            Text t = CreateLabel(parentGO, text, fontSize, color ?? Color.white, alignment, name: name);
+            GalleryUiMetrics.ApplyEmphasisTitle(t, fontSize);
+            return t;
+        }
+
+        /// <summary>
+        /// Destroys all children of <paramref name="parent"/> (reverse order).
+        /// </summary>
+        public static void DestroyAllChildren(Transform parent)
+        {
+            if (parent == null) return;
+            for (int i = parent.childCount - 1; i >= 0; i--)
+            {
+                Transform ch = parent.GetChild(i);
+                if (ch == null) continue;
+                try { UnityEngine.Object.Destroy(ch.gameObject); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Layout-group single-line input: rounded bg, padded TextArea, placeholder + text labels.
+        /// </summary>
+        public static InputField CreateChromeLayoutInputField(
+            Transform parent,
+            int fontSize,
+            float height,
+            float flexibleWidth,
+            float padX,
+            float padY,
+            Color bg,
+            Color placeholderColor,
+            string placeholderText = null,
+            string name = "Input")
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            AddGalleryElementRoundedBg(go, bg);
+            AddLE(go, minHeight: height, preferredHeight: height, flexibleWidth: flexibleWidth);
+
+            GameObject ta = new GameObject("TextArea");
+            ta.transform.SetParent(go.transform, false);
+            RectTransform taRt = ta.AddComponent<RectTransform>();
+            taRt.anchorMin = Vector2.zero;
+            taRt.anchorMax = Vector2.one;
+            taRt.offsetMin = new Vector2(padX, padY);
+            taRt.offsetMax = new Vector2(-padX, -padY);
+
+            Text phT = CreateLabel(ta, placeholderText ?? "", fontSize, placeholderColor, name: "Placeholder");
+            Text tcT = CreateLabel(ta, "", fontSize, Color.white, name: "Text");
+
+            InputField input = go.AddComponent<InputField>();
+            input.textComponent = tcT;
+            input.placeholder = phT;
+            input.lineType = InputField.LineType.SingleLine;
+            return input;
+        }
+
+        /// <summary>
         /// Turns off Unity's <see cref="Selectable"/> transition + keyboard/gamepad navigation on a button
         /// (the pair written inline at dozens of sites). Optionally applies the standard gallery ColorBlock
         /// (white normal, brighter hover, darker press, dimmed disabled) used by rounded chrome buttons.
@@ -1561,6 +1624,75 @@ namespace VPB
             buttonGO.AddComponent<UIHoverBorder>();
 
             return buttonGO;
+        }
+
+        /// <summary>
+        /// Layout-group chrome button: rounded fill, flat Button, hover border, fixed or flexible width.
+        /// Used by modal headers/footers (scan whitelist, bench, quick-menu pos, category quick editor, etc.).
+        /// Pass <paramref name="width"/> &lt;= 0 for flexibleWidth=1 (shares row with siblings).
+        /// </summary>
+        public static GameObject CreateChromeLayoutButton(Transform parent, float width, float height, string label, int fontSize, Color bg, UnityAction onClick)
+        {
+            GameObject go = new GameObject("Btn");
+            go.transform.SetParent(parent, false);
+            Image img = AddGalleryElementRoundedBg(go, bg);
+            Button b = go.AddComponent<Button>();
+            b.transition = Selectable.Transition.None;
+            b.targetGraphic = img;
+            if (onClick != null) b.onClick.AddListener(onClick);
+            UIHoverBorder hb = go.AddComponent<UIHoverBorder>();
+            try { hb.ApplyBorderSettings(); } catch { }
+
+            LayoutElement le = go.AddComponent<LayoutElement>();
+            if (width > 0f)
+            {
+                le.minWidth = le.preferredWidth = width;
+                le.flexibleWidth = 0f;
+            }
+            else
+            {
+                le.flexibleWidth = 1f;
+                le.minWidth = 0f;
+            }
+            le.minHeight = le.preferredHeight = height;
+            le.flexibleHeight = 0f;
+
+            CreateLabel(go, label ?? "", fontSize, Color.white, TextAnchor.MiddleCenter, name: "Text");
+            return go;
+        }
+
+        /// <summary>
+        /// Alternating stripe list row with trailing remove chrome button (scan whitelist / bench lists).
+        /// Returns the remove button so callers can attach tooltips.
+        /// </summary>
+        public static GameObject CreateRemovableStripeRow(
+            Transform parent,
+            string label,
+            int fontSize,
+            float rowH,
+            float removeW,
+            float removeHeightInset,
+            float spacing,
+            RectOffset padding,
+            bool altStripe,
+            string removeLabel,
+            UnityAction onRemove,
+            bool flexibleRowWidth = false)
+        {
+            GameObject row = new GameObject("Row");
+            row.transform.SetParent(parent, false);
+            Image rowBg = AddGalleryElementRoundedBg(row, altStripe ? new Color(0.11f, 0.11f, 0.14f, 1f) : new Color(0.09f, 0.09f, 0.11f, 1f));
+            rowBg.raycastTarget = true;
+            AddHLG(row, spacing: spacing, padding: padding, childForceExpandWidth: false);
+            if (flexibleRowWidth)
+                AddLE(row, minWidth: 0f, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+            else
+                AddLE(row, minHeight: rowH, preferredHeight: rowH);
+
+            Text lt = CreateLabel(row, label ?? "", fontSize, new Color(0.92f, 0.92f, 0.94f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Label");
+            AddLE(lt.gameObject, minWidth: 0f, flexibleWidth: 1f);
+
+            return CreateChromeLayoutButton(row.transform, removeW, rowH - removeHeightInset, removeLabel, fontSize, new Color(0.52f, 0.28f, 0.28f, 1f), onRemove);
         }
 
         /// <summary>

@@ -140,23 +140,10 @@ namespace VPB
 
         public void DisplayTextInput(string title, string initialValue, UnityAction<string> onConfirm)
         {
-            GameObject overlayGO = new GameObject("TextInputOverlay");
-            overlayGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
-            overlayRT.anchorMin = Vector2.zero;
-            overlayRT.anchorMax = Vector2.one;
-            overlayRT.sizeDelta = Vector2.zero;
-            
-            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.5f));
-            
-            // Panel
-            GameObject panelGO = new GameObject("Panel");
-            panelGO.transform.SetParent(overlayGO.transform, false);
-            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-            panelRT.sizeDelta = new Vector2(400, 200);
-            
-            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
-            
+            GameObject panelGO;
+            GameObject overlayGO = UI.CreateModalChrome(
+                backgroundBoxGO, "TextInputOverlay", 400f, 200f, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
+
             // Title
             Text titleText = UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -10), name: "Title");
 
@@ -219,25 +206,10 @@ namespace VPB
             catch { }
             if (overlayParent == null) overlayParent = backgroundBoxGO.transform;
 
-            GameObject overlayGO = new GameObject("PersonAtomRenameOverlay");
-            overlayGO.transform.SetParent(overlayParent, false);
-            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
-            overlayRT.anchorMin = Vector2.zero;
-            overlayRT.anchorMax = Vector2.one;
-            overlayRT.offsetMin = Vector2.zero;
-            overlayRT.offsetMax = Vector2.zero;
-
-            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.55f));
-
-            GameObject panelGO = new GameObject("Panel");
-            panelGO.transform.SetParent(overlayGO.transform, false);
-            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0.5f, 0.5f);
-            panelRT.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRT.pivot = new Vector2(0.5f, 0.5f);
-            panelRT.sizeDelta = new Vector2(440f, 300f);
-
-            Image panelImg = UI.AddImage(panelGO, new Color(0.12f, 0.12f, 0.12f, 1f));
+            GameObject panelGO;
+            GameObject overlayGO = UI.CreateModalChrome(
+                overlayParent.gameObject, "PersonAtomRenameOverlay", 440f, 300f,
+                new Color(0.12f, 0.12f, 0.12f, 1f), null, out panelGO, dimAlpha: 0.55f);
 
             UI.CreateLabel(panelGO, VPBTranslation.T("gallery.rename.title", "Rename Person Atom"), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-24f, 36f), anchoredPosition: new Vector2(0, -12f), name: "Title");
 
@@ -351,23 +323,10 @@ namespace VPB
 
         public void DisplayConfirm(string title, string message, UnityAction onConfirm)
         {
-            GameObject overlayGO = new GameObject("ConfirmOverlay");
-            overlayGO.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform overlayRT = overlayGO.AddComponent<RectTransform>();
-            overlayRT.anchorMin = Vector2.zero;
-            overlayRT.anchorMax = Vector2.one;
-            overlayRT.sizeDelta = Vector2.zero;
-            
-            Image overlayImg = UI.AddImage(overlayGO, new Color(0, 0, 0, 0.5f));
-            
-            // Panel
-            GameObject panelGO = new GameObject("Panel");
-            panelGO.transform.SetParent(overlayGO.transform, false);
-            RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-            panelRT.sizeDelta = new Vector2(500, 420);
-            
-            Image panelImg = UI.AddImage(panelGO, UI.ChromeDarker);
-            
+            GameObject panelGO;
+            GameObject overlayGO = UI.CreateModalChrome(
+                backgroundBoxGO, "ConfirmOverlay", 500f, 420f, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
+
             // Title
             UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -15), name: "Title");
 

@@ -209,6 +209,38 @@ namespace VPB
             }
         }
 
+        private GameObject BuildImportSidebarSelectClearBulkRow(
+            Transform parent,
+            string rowName,
+            string selectLabel, string selectTipKey, string selectTipDefault, UnityEngine.Events.UnityAction onSelect,
+            string clearLabel, string clearTipKey, string clearTipDefault, UnityEngine.Events.UnityAction onClear)
+        {
+            GameObject bulk = new GameObject(rowName);
+            bulk.transform.SetParent(parent, false);
+            LayoutElement bulkLe = UI.AddLE(bulk, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            UI.AddHLG(bulk, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
+            BuildImportSidebarBulkButton(bulk.transform, selectLabel, selectTipKey, selectTipDefault, ImportSidebarSelectAllBg, onSelect);
+            BuildImportSidebarBulkButton(bulk.transform, clearLabel, clearTipKey, clearTipDefault, ImportSidebarClearAllBg, onClear);
+            LayoutElement bulkLeC = bulkLe;
+            innerPaneScaleActions.Add(s => {
+                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
+            });
+            bulk.SetActive(false);
+            return bulk;
+        }
+
+        private void AddImportSidebarChecklistCaption(Transform content, string captionText)
+        {
+            Text caption = AddSimpleLabelText(content, captionText, ImportSidebarBaseFontSize, UI.PopupMutedText);
+            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            Text capCaptured = caption;
+            LayoutElement capLeCaptured = capLe;
+            innerPaneScaleActions.Add(s => {
+                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
+            });
+        }
+
         private GameObject BuildImportSidebarBulkButton(Transform parent, string label,
             string tipKey, string tipDefault, Color bgColor, UnityEngine.Events.UnityAction onClick)
         {
@@ -591,7 +623,8 @@ namespace VPB
             GameObject row = new GameObject("Toggle_" + label);
             row.transform.SetParent(parent, false);
 
-            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
+            // Lock min+preferred so [ ]/[x] text swap cannot change CSF/VLG row height.
+            LayoutElement le = UI.AddLE(row, minHeight: ImportSidebarBaseRowHeight, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
             Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
 
@@ -623,7 +656,12 @@ namespace VPB
             LayoutElement leCaptured = le;
             Text tCaptured = t;
             innerPaneScaleActions.Add(s => {
-                if (leCaptured != null) leCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
+                if (leCaptured != null)
+                {
+                    float h = ImportSidebarBaseRowHeight * s;
+                    leCaptured.minHeight = h;
+                    leCaptured.preferredHeight = h;
+                }
                 ApplyScaledFont(tCaptured, ImportSidebarBaseFontSize, s);
             });
             return row;
@@ -651,23 +689,12 @@ namespace VPB
         {
             // Select All / Clear All bulk row: a fixed peer above the scroll so the user can include/exclude every
             // source plugin in one click, then refine per-row. Its visibility tracks the checklist (gate ON).
-            importSidebarPluginBulkRow = new GameObject("PluginBulkRow");
-            importSidebarPluginBulkRow.transform.SetParent(parent, false);
-            LayoutElement pluginBulkLe = UI.AddLE(importSidebarPluginBulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            HorizontalLayoutGroup pluginBulkHlg = UI.AddHLG(importSidebarPluginBulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
-            BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
+            importSidebarPluginBulkRow = BuildImportSidebarSelectClearBulkRow(
+                parent, "PluginBulkRow",
                 VPBTranslation.T("gallery.import.select_all_plugins", "Select All"),
-                "gallery.import.select_all_plugins_tip", "Import every plugin in the source",
-                ImportSidebarSelectAllBg, ImportSidebarSelectAllPlugins);
-            BuildImportSidebarBulkButton(importSidebarPluginBulkRow.transform,
+                "gallery.import.select_all_plugins_tip", "Import every plugin in the source", ImportSidebarSelectAllPlugins,
                 VPBTranslation.T("gallery.import.clear_all_plugins", "Clear All"),
-                "gallery.import.clear_all_plugins_tip", "Exclude every plugin from import",
-                ImportSidebarClearAllBg, ImportSidebarClearAllPlugins);
-            LayoutElement pluginBulkLeC = pluginBulkLe;
-            innerPaneScaleActions.Add(s => {
-                if (pluginBulkLeC != null) pluginBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
-            });
-            importSidebarPluginBulkRow.SetActive(false);
+                "gallery.import.clear_all_plugins_tip", "Exclude every plugin from import", ImportSidebarClearAllPlugins);
 
             // Scroll view sits below the "Pick plugins" toggle. Its height is reserved per the live entry count
             // (UpdatePluginChecklistHeight) since the option panel is ContentSizeFitter-driven; the row list
@@ -680,51 +707,15 @@ namespace VPB
             innerPaneScaleActions.Add(s => UpdatePluginChecklistHeight());
 
             Transform content = importSidebarPluginChecklistRoot.GetComponent<ScrollRect>().content.transform;
-
-            Text caption = AddSimpleLabelText(content,
-                "Plugins in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            Text capCaptured = caption;
-            LayoutElement capLeCaptured = capLe;
-            innerPaneScaleActions.Add(s => {
-                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
-                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
-            });
+            AddImportSidebarChecklistCaption(content, "Plugins in source (check to import)");
 
             for (int i = 0; i < ImportSidebarMaxPluginRows; i++)
             {
-                GameObject row = CreateImportSidebarPluginRow(content, i);
+                GameObject row = CreateImportSidebarChecklistRow(content, "PluginRow_", i);
                 importSidebarPluginRowPool.Add(row);
                 row.SetActive(false);
             }
             importSidebarPluginChecklistRoot.SetActive(false);
-        }
-
-        private GameObject CreateImportSidebarPluginRow(Transform parent, int index)
-        {
-            GameObject row = new GameObject("PluginRow_" + index);
-            row.transform.SetParent(parent, false);
-
-            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-
-            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
-
-            Button btn = row.AddComponent<Button>();
-            btn.targetGraphic = bg;
-            UI.NeutralizeSelectableColorTint(btn);
-
-            Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
-            ConfigureImportSidebarChecklistLabel(label);
-            Text pluginTipLabel = label;
-            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(pluginTipLabel));
-
-            LayoutElement leCaptured = le;
-            Text txtCaptured = label;
-            innerPaneScaleActions.Add(s => {
-                if (leCaptured != null) leCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
-                ApplyScaledFont(txtCaptured, ImportSidebarBaseFontSize, s);
-            });
-            return row;
         }
 
         // Rebuilds the checkbox list from the selected source atom's plugins. Visible only for Plugins + gate on.
@@ -826,23 +817,12 @@ namespace VPB
 
         private void BuildImportSidebarCUAChecklist(Transform parent, ImportCUAChecklistHandles ui)
         {
-            ui.BulkRow = new GameObject("CUABulkRow");
-            ui.BulkRow.transform.SetParent(parent, false);
-            LayoutElement cuaBulkLe = UI.AddLE(ui.BulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            HorizontalLayoutGroup cuaBulkHlg = UI.AddHLG(ui.BulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
-            BuildImportSidebarBulkButton(ui.BulkRow.transform,
+            ui.BulkRow = BuildImportSidebarSelectClearBulkRow(
+                parent, "CUABulkRow",
                 VPBTranslation.T("gallery.import.select_all_cuas", "Select All"),
-                "gallery.import.select_all_cuas_tip", "Import every CUA in the source",
-                ImportSidebarSelectAllBg, ImportSidebarSelectAllCUAs);
-            BuildImportSidebarBulkButton(ui.BulkRow.transform,
+                "gallery.import.select_all_cuas_tip", "Import every CUA in the source", ImportSidebarSelectAllCUAs,
                 VPBTranslation.T("gallery.import.clear_all_cuas", "Clear All"),
-                "gallery.import.clear_all_cuas_tip", "Exclude every CUA from import",
-                ImportSidebarClearAllBg, ImportSidebarClearAllCUAs);
-            LayoutElement cuaBulkLeC = cuaBulkLe;
-            innerPaneScaleActions.Add(s => {
-                if (cuaBulkLeC != null) cuaBulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
-            });
-            ui.BulkRow.SetActive(false);
+                "gallery.import.clear_all_cuas_tip", "Exclude every CUA from import", ImportSidebarClearAllCUAs);
 
             ui.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
@@ -852,29 +832,20 @@ namespace VPB
             innerPaneScaleActions.Add(s => UpdateCUAChecklistHeights());
 
             Transform content = ui.ChecklistRoot.GetComponent<ScrollRect>().content.transform;
-
-            Text caption = AddSimpleLabelText(content,
-                "CUAs in source (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            Text capCaptured = caption;
-            LayoutElement capLeCaptured = capLe;
-            innerPaneScaleActions.Add(s => {
-                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
-                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
-            });
+            AddImportSidebarChecklistCaption(content, "CUAs in source (check to import)");
 
             for (int i = 0; i < ImportSidebarMaxCUARows; i++)
             {
-                GameObject row = CreateImportSidebarCUARow(content, i);
+                GameObject row = CreateImportSidebarChecklistRow(content, "CUARow_", i);
                 ui.RowPool.Add(row);
                 row.SetActive(false);
             }
             ui.ChecklistRoot.SetActive(false);
         }
 
-        private GameObject CreateImportSidebarCUARow(Transform parent, int index)
+        private GameObject CreateImportSidebarChecklistRow(Transform parent, string namePrefix, int index)
         {
-            GameObject row = new GameObject("CUARow_" + index);
+            GameObject row = new GameObject(namePrefix + index);
             row.transform.SetParent(parent, false);
 
             LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
@@ -887,8 +858,8 @@ namespace VPB
 
             Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
             ConfigureImportSidebarChecklistLabel(label);
-            Text cuaTipLabel = label;
-            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(cuaTipLabel));
+            Text tipLabel = label;
+            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(tipLabel));
 
             LayoutElement leCaptured = le;
             Text txtCaptured = label;
@@ -1104,23 +1075,12 @@ namespace VPB
 
         private void BuildImportSidebarSceneAtomChecklist(Transform parent)
         {
-            importSidebarSceneAtomUi.BulkRow = new GameObject("SceneAtomBulkRow");
-            importSidebarSceneAtomUi.BulkRow.transform.SetParent(parent, false);
-            LayoutElement bulkLe = UI.AddLE(importSidebarSceneAtomUi.BulkRow, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            HorizontalLayoutGroup bulkHlg = UI.AddHLG(importSidebarSceneAtomUi.BulkRow, spacing: ImportSidebarBaseRowSpacing, childForceExpandHeight: true);
-            BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
+            importSidebarSceneAtomUi.BulkRow = BuildImportSidebarSelectClearBulkRow(
+                parent, "SceneAtomBulkRow",
                 VPBTranslation.T("gallery.import.select_all_atoms", "Select All"),
-                "gallery.import.select_all_atoms_tip", "Select every importable atom in the source scene",
-                ImportSidebarSelectAllBg, ImportSidebarSelectAllSceneAtoms);
-            BuildImportSidebarBulkButton(importSidebarSceneAtomUi.BulkRow.transform,
+                "gallery.import.select_all_atoms_tip", "Select every importable atom in the source scene", ImportSidebarSelectAllSceneAtoms,
                 VPBTranslation.T("gallery.import.clear_all_atoms", "Clear All"),
-                "gallery.import.clear_all_atoms_tip", "Deselect every atom",
-                ImportSidebarClearAllBg, ImportSidebarClearAllSceneAtoms);
-            LayoutElement bulkLeC = bulkLe;
-            innerPaneScaleActions.Add(s => {
-                if (bulkLeC != null) bulkLeC.preferredHeight = ImportSidebarBaseRowHeight * s;
-            });
-            importSidebarSceneAtomUi.BulkRow.SetActive(false);
+                "gallery.import.clear_all_atoms_tip", "Deselect every atom", ImportSidebarClearAllSceneAtoms);
 
             importSidebarSceneAtomUi.ChecklistRoot = UI.CreateVScrollableContent(
                 parent.gameObject, new Color(0f, 0f, 0f, 0f), AnchorPresets.stretchAll,
@@ -1130,20 +1090,11 @@ namespace VPB
             innerPaneScaleActions.Add(s => UpdateSceneAtomChecklistHeight());
 
             Transform content = importSidebarSceneAtomUi.ChecklistRoot.GetComponent<ScrollRect>().content.transform;
-
-            Text caption = AddSimpleLabelText(content,
-                "Atoms in source scene (check to import)", ImportSidebarBaseFontSize, UI.PopupMutedText);
-            LayoutElement capLe = UI.AddLE(caption.gameObject, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-            Text capCaptured = caption;
-            LayoutElement capLeCaptured = capLe;
-            innerPaneScaleActions.Add(s => {
-                if (capLeCaptured != null) capLeCaptured.preferredHeight = ImportSidebarBaseRowHeight * s;
-                ApplyScaledFont(capCaptured, ImportSidebarBaseFontSize, s);
-            });
+            AddImportSidebarChecklistCaption(content, "Atoms in source scene (check to import)");
 
             for (int i = 0; i < ImportSidebarSceneAtomRowPoolInitial; i++)
             {
-                GameObject row = CreateImportSidebarSceneAtomRow(content, i);
+                GameObject row = CreateImportSidebarChecklistRow(content, "SceneAtomRow_", i);
                 importSidebarSceneAtomUi.RowPool.Add(row);
                 row.SetActive(false);
             }
@@ -1171,29 +1122,6 @@ namespace VPB
             if (le != null) le.preferredHeight = ImportSidebarBaseRowHeight * s;
             Text t = row.GetComponentInChildren<Text>();
             ApplyScaledFont(t, ImportSidebarBaseFontSize, s);
-        }
-
-        private GameObject CreateImportSidebarSceneAtomRow(Transform parent, int index)
-        {
-            GameObject row = new GameObject("SceneAtomRow_" + index);
-            row.transform.SetParent(parent, false);
-
-            LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
-
-            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
-
-            Button btn = row.AddComponent<Button>();
-            btn.targetGraphic = bg;
-            UI.NeutralizeSelectableColorTint(btn);
-
-            Text label = CreateImportSidebarLabel(row.transform, "", ImportSidebarBaseFontSize);
-            ConfigureImportSidebarChecklistLabel(label);
-            Text sceneAtomTipLabel = label;
-            AddDynamicTooltip(row, () => ImportChecklistRowTooltip(sceneAtomTipLabel));
-
-            GameObject rowCaptured = row;
-            innerPaneScaleActions.Add(s => ApplySceneAtomRowScale(rowCaptured, s));
-            return row;
         }
 
         private void RefreshSceneAtomChecklist()
@@ -1247,7 +1175,7 @@ namespace VPB
             while (importSidebarSceneAtomUi.RowPool.Count < cap)
             {
                 int i = importSidebarSceneAtomUi.RowPool.Count;
-                GameObject row = CreateImportSidebarSceneAtomRow(content, i);
+                GameObject row = CreateImportSidebarChecklistRow(content, "SceneAtomRow_", i);
                 importSidebarSceneAtomUi.RowPool.Add(row);
                 ApplySceneAtomRowScale(row, ChromeScale);
                 row.SetActive(false);

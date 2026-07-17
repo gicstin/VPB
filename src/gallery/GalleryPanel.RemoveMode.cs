@@ -224,6 +224,7 @@ namespace VPB
             _wrapGeomCache.Clear();
             RemoveModeFreezeAnimation(true);
             RemoveModeUpdateButtonVisual();
+            try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
         }
 
         private void RemoveModeExit()
@@ -236,15 +237,95 @@ namespace VPB
             RemoveModeHidePopup();
             RemoveModeFreezeAnimation(false);
             RemoveModeUpdateButtonVisual();
+            try { CloseRemoveSiderailsIfOpen(); } catch { }
+        }
+
+        /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>
+        private void EnsureRemoveSiderailOpenForCurrentCategory()
+        {
+            string title = currentCategoryTitle ?? "";
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (!isClothing && !isHair && !isScene)
+            {
+                CloseRemoveSiderailsIfOpen();
+                return;
+            }
+
+            ContentType want = isClothing ? ContentType.RemoveClothing
+                : (isHair ? ContentType.RemoveHair : ContentType.RemoveAtom);
+
+            bool useLeft = isFixedLocally;
+            if (useLeft)
+            {
+                if (leftActiveContent == want) return;
+                if (leftActiveContent != ContentType.RemoveClothing
+                    && leftActiveContent != ContentType.RemoveHair
+                    && leftActiveContent != ContentType.RemoveAtom)
+                    leftPrevActiveContent = leftActiveContent;
+                leftActiveContent = want;
+            }
+            else
+            {
+                if (rightActiveContent == want) return;
+                if (rightActiveContent != ContentType.RemoveClothing
+                    && rightActiveContent != ContentType.RemoveHair
+                    && rightActiveContent != ContentType.RemoveAtom)
+                    rightPrevActiveContent = rightActiveContent;
+                rightActiveContent = want;
+            }
+            CloseOtherSideIfSubmenu(useLeft);
+            UpdateLayout();
+            UpdateTabs();
+        }
+
+        /// <summary>Close remove-list siderails opened with Remove Mode.</summary>
+        private void CloseRemoveSiderailsIfOpen()
+        {
+            bool changed = false;
+            if (leftActiveContent == ContentType.RemoveClothing
+                || leftActiveContent == ContentType.RemoveHair
+                || leftActiveContent == ContentType.RemoveAtom)
+            {
+                leftActiveContent = leftPrevActiveContent;
+                changed = true;
+            }
+            if (rightActiveContent == ContentType.RemoveClothing
+                || rightActiveContent == ContentType.RemoveHair
+                || rightActiveContent == ContentType.RemoveAtom)
+            {
+                rightActiveContent = rightPrevActiveContent;
+                changed = true;
+            }
+            if (!changed) return;
+            UpdateLayout();
+            UpdateTabs();
         }
 
         private void RemoveModeUpdateButtonVisual()
         {
             Color c = _removeModeActive ? RemoveModeOutlineActive : RemoveModeOutlineIdle;
-            try { if (rightRemoveModeBtnOutline != null) rightRemoveModeBtnOutline.effectColor = c; } catch { }
-            try { if (leftRemoveModeBtnOutline != null) leftRemoveModeBtnOutline.effectColor = c; } catch { }
+            // Prefer UIHoverBorder selection rim — Unity Outline implements ILayoutElement and can
+            // nudge preferred size / fight StripLegacyOutline on chrome refresh.
+            try { ApplyRemoveModeRailHoverSelected(rightRemoveModeSideBtn, _removeModeActive, c); } catch { }
+            try { ApplyRemoveModeRailHoverSelected(leftRemoveModeSideBtn, _removeModeActive, c); } catch { }
+            try { if (rightRemoveModeBtnOutline != null) rightRemoveModeBtnOutline.enabled = false; } catch { }
+            try { if (leftRemoveModeBtnOutline != null) leftRemoveModeBtnOutline.enabled = false; } catch { }
             try { if (rightRemoveModeBtnIconImage != null) rightRemoveModeBtnIconImage.color = c; } catch { }
             try { if (leftRemoveModeBtnIconImage != null) leftRemoveModeBtnIconImage.color = c; } catch { }
+        }
+
+        private static void ApplyRemoveModeRailHoverSelected(GameObject btn, bool selected, Color rimColor)
+        {
+            if (btn == null) return;
+            UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
+            if (hb == null) return;
+            hb.isSelected = selected;
+            hb.hoverColor = rimColor;
+            try { hb.ApplyBorderSettings(); } catch { }
         }
 
         // Pauses all animation + sound while remove mode is active (VaM's built-in freeze, the same
@@ -266,6 +347,7 @@ namespace VPB
         }
 
         // Adds/styles the rail button outline (idle white). Called from button construction (Init).
+        // Kept for field wiring; live chrome uses UIHoverBorder.isSelected (see RemoveModeUpdateButtonVisual).
         private Outline RemoveModeAddRailOutline(GameObject btn)
         {
             if (btn == null) return null;
@@ -274,6 +356,18 @@ namespace VPB
             o.effectColor = RemoveModeOutlineIdle;
             o.effectDistance = new Vector2(2f, -2f);
             o.useGraphicAlpha = false;
+            o.enabled = false;
+            try
+            {
+                UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
+                if (hb != null)
+                {
+                    hb.isSelected = false;
+                    hb.hoverColor = RemoveModeOutlineIdle;
+                    hb.ApplyBorderSettings();
+                }
+            }
+            catch { }
             return o;
         }
 

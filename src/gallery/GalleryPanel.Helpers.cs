@@ -204,6 +204,8 @@ namespace VPB
         private void HandleLeftPointerUp(PointerEventData eventData)
         {
             if (Panel == null || File == null) return;
+            // Rating star / picker: do not treat as file select (would refresh visuals / steal click).
+            if (IsPointerOverRatingChrome(eventData)) return;
             var dragItem = GetComponent<UIDraggableItem>();
             if (dragItem != null && dragItem.IsLongPress) return;
             if (Panel.HoldToLaunchEnabled && dragItem != null && dragItem.LastPointerDownUnscaledTime >= 0f)
@@ -221,6 +223,25 @@ namespace VPB
             if (!PassesTapSlop(eventData)) return;
             Panel.OnFileClick(File);
         }
+
+        private static bool IsPointerOverRatingChrome(PointerEventData eventData)
+        {
+            if (eventData == null) return false;
+            GameObject go = eventData.pointerPress != null ? eventData.pointerPress : eventData.pointerEnter;
+            if (go == null && eventData.pointerCurrentRaycast.gameObject != null)
+                go = eventData.pointerCurrentRaycast.gameObject;
+            Transform t = go != null ? go.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (string.Equals(n, "Star", StringComparison.Ordinal)
+                    || string.Equals(n, "Rating", StringComparison.Ordinal)
+                    || string.Equals(n, "RatingSelector", StringComparison.Ordinal))
+                    return true;
+                t = t.parent;
+            }
+            return false;
+        }
     }
 
     public class RatingHandler : MonoBehaviour
@@ -235,6 +256,12 @@ namespace VPB
         private Image[] optionImages;
         private Text[] optionTexts;
         private GameObject[] borderGOs;
+        /// <summary>Grid hover: show 0–5 digit instead of colored ★ glyph.</summary>
+        private bool showDigitInsteadOfStar;
+        /// <summary>Host panel — grid picker reparents under background to escape ScrollRect mask.</summary>
+        public GalleryPanel panel;
+        private Transform _selectorHomeParent;
+        private int _selectorHomeSibling;
 
         public static readonly Color[] RatingColors = new Color[]
         {
@@ -285,19 +312,90 @@ namespace VPB
             UpdateDisplay();
         }
 
+        public bool IsSelectorOpen
+        {
+            get
+            {
+                if (selectorGO == null || !selectorGO.activeInHierarchy) return false;
+                if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
+                return selectorCG != null && selectorCG.alpha > 0.01f;
+            }
+        }
+
         private void SetSelectorVisible(bool visible)
         {
             if (selectorGO == null) return;
+            if (visible && !selectorGO.activeSelf)
+                selectorGO.SetActive(true);
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            // No nested Canvas/overrideSorting — breaks WorldSpace VaM raycasts (see CategoryQuickSwitch).
+            // Escape ScrollRect RectMask2D via maskable=false + ignoreParentGroups.
+            if (visible)
+            {
+                StripNestedSelectorCanvas(selectorGO);
+                TryReparentSelectorOutsideScroll(selectorGO);
+            }
+            else
+            {
+                RestoreSelectorHomeParent(selectorGO);
+            }
+            selectorCG.ignoreParentGroups = visible;
             selectorCG.alpha = visible ? 1f : 0f;
             selectorCG.interactable = visible;
             selectorCG.blocksRaycasts = visible;
+            if (visible)
+                selectorGO.transform.SetAsLastSibling();
+        }
+
+        private void TryReparentSelectorOutsideScroll(GameObject selectorGO)
+        {
+            if (selectorGO == null || panel == null) return;
+            if (panel.layoutMode != GalleryLayoutMode.Grid) return;
+            GameObject host = panel.backgroundBoxGO;
+            if (host == null) return;
+            Transform home = selectorGO.transform.parent;
+            if (home == host.transform) return;
+            _selectorHomeParent = home;
+            _selectorHomeSibling = selectorGO.transform.GetSiblingIndex();
+            // Keep world pose so it stays under the star after leaving the masked scroll content.
+            // (VaM Unity has no Graphic.maskable — reparent is the mask escape.)
+            selectorGO.transform.SetParent(host.transform, true);
+        }
+
+        private void RestoreSelectorHomeParent(GameObject selectorGO)
+        {
+            if (selectorGO == null || _selectorHomeParent == null) return;
+            try
+            {
+                selectorGO.transform.SetParent(_selectorHomeParent, true);
+                int max = Mathf.Max(0, _selectorHomeParent.childCount - 1);
+                selectorGO.transform.SetSiblingIndex(Mathf.Clamp(_selectorHomeSibling, 0, max));
+            }
+            catch { }
+            _selectorHomeParent = null;
+            _selectorHomeSibling = 0;
+        }
+
+        /// <summary>Remove leftover nested Canvas/GraphicRaycaster from earlier escape attempts (pooled cells).</summary>
+        private static void StripNestedSelectorCanvas(GameObject selectorGO)
+        {
+            if (selectorGO == null) return;
+            try
+            {
+                GraphicRaycaster gr = selectorGO.GetComponent<GraphicRaycaster>();
+                if (gr != null) UnityEngine.Object.Destroy(gr);
+                Canvas nested = selectorGO.GetComponent<Canvas>();
+                if (nested != null) UnityEngine.Object.Destroy(nested);
+            }
+            catch { }
         }
 
         public void ToggleSelector()
         {
             if (selectorGO == null) return;
+            if (!selectorGO.activeSelf)
+                selectorGO.SetActive(true);
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             bool nextState = selectorCG == null || selectorCG.alpha <= 0.01f;
             SetSelectorVisible(nextState);
@@ -337,11 +435,28 @@ namespace VPB
             UpdateDisplay();
         }
 
+        /// <summary>Grid hover badges: digit label. List mode keeps colored ★.</summary>
+        public void SetShowDigitMode(bool digit)
+        {
+            if (showDigitInsteadOfStar == digit) return;
+            showDigitInsteadOfStar = digit;
+            UpdateDisplay();
+        }
+
+        public int CurrentRating => currentRating;
+
         private void UpdateDisplay()
         {
             Color c = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
             if (starIconText != null)
+            {
+                if (showDigitInsteadOfStar)
+                    starIconText.text = currentRating.ToString();
+                else
+                    starIconText.text = "★";
+                // Digit and ★ both use rating color scale.
                 starIconText.color = c;
+            }
             if (starIconImage != null)
                 starIconImage.color = c;
 

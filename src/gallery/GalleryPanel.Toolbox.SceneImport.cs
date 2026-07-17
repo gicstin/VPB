@@ -101,7 +101,8 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             VPBConfig.Instance.SuppressAppearanceScaleChange =
                 !VPBConfig.Instance.SuppressAppearanceScaleChange;
-            try { VPBConfig.Instance.Save(true, true); } catch { }
+            // Disk only — Save(true) fires ConfigChanged → ApplyInnerPaneScale/UpdateLayout → side-rail gap jump.
+            try { VPBConfig.Instance.Save(false); } catch { }
             RefreshSuppressScaleBtnVisual();
             RefreshImportSidebarOptionToggles();
             ShowTemporaryStatus(
