@@ -938,6 +938,8 @@ namespace VPB
                     VPBConfig.Instance.GalleryHideCreatorSideButtons = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
                     VPBConfig.Instance.TriggerChange();
+                    try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+                    try { UpdateSideButtonPositions(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {

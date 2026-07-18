@@ -99,12 +99,19 @@ namespace VPB
         private GameObject _categoryQuickMenuContentGO;
         private bool _categoryQuickMenuOpen;
         private bool _categoryQuickMenuDirty = true;
+        // Dirty-gate for ApplyCategoryQuickChromeLayout (idle Update must not walk menu rows).
+        private float _categoryQuickLayoutLastScale = float.NaN;
+        private bool _categoryQuickLayoutLastFlush;
+        private bool _categoryQuickLayoutLastMenuOpen;
+        private int _categoryQuickLayoutLastRowCount = -1;
         private string _categoryQuickMenuLastPath;
         private string _categoryQuickMenuLastExtension;
         private Coroutine _categoryQuickApplyCoroutine;
         private Image _categoryQuickArrowImage;
         private RectTransform _categoryQuickArrowIconRT;
         private LayoutElement _categoryQuickArrowLE;
+        private bool _categoryQuickCompact;
+        private bool _categoryQuickLayoutLastCompact;
 
         public List<Gallery.Category> categories = new List<Gallery.Category>();
         private Dictionary<string, string> packageCategoryLabelCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -317,6 +324,10 @@ namespace VPB
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
         private Image leftCreatorBtnIconImage;
+        /// <summary>Root GO for left creator rail button (null when hide-creator setting destroyed it).</summary>
+        private GameObject leftCreatorSideBtnGO;
+        /// <summary>Root GO for right creator rail button (null when hide-creator setting destroyed it).</summary>
+        private GameObject rightCreatorSideBtnGO;
         private Text leftPathBtnText;
         private Image leftPathBtnImage;
         private Image leftPathBtnIconImage;
@@ -538,11 +549,10 @@ namespace VPB
 
         private GameObject globalSourceFilterBtn;
         private Text globalSourceFilterBtnText;
-        private GameObject globalSourceFilterDropdown;
-        private GameObject globalSourceFilterDropdownBlocker;
-        private Text globalSourceFilterRowAllCountText;
-        private Text globalSourceFilterRowLocalCountText;
-        private Text globalSourceFilterRowVarCountText;
+        private Image globalSourceFilterBtnIcon;
+        private bool _globalSourceFilterCompact;
+        private GameObject globalSourceFilterMenuRoot;
+        private GameObject globalSourceFilterMenuPanelGO;
 
         private string currentPackagePathFilter = "";
         private PosePeopleFilter posePeopleFilter = PosePeopleFilter.All;
@@ -838,6 +848,10 @@ namespace VPB
         private GameObject rightSideContainer;
         private GameObject leftSideHoverStrip;
         private GameObject rightSideHoverStrip;
+        /// <summary>Thin bars between Layout / Browse / Tools (and tools context) on each rail.</summary>
+        private GameObject[] _leftSideZoneSeps;
+        private GameObject[] _rightSideZoneSeps;
+        private const int SideRailZoneSepSlots = 3;
         /// <summary>Full-height invisible hit targets beside side buttons (half legacy 130px width).</summary>
         private const float GallerySideHoverStripWidth = GalleryUiDesignTokens.SideHoverStripWidthRef;
         private const float GallerySideHoverStripOffset = GalleryUiDesignTokens.SideHoverStripOffsetRef;
@@ -898,6 +912,15 @@ namespace VPB
         private RectTransform _titleBarHelpBtnRT;
         private RectTransform _titleBarMinimizeBtnRT;
         private RectTransform _titleBarCloseBtnRT;
+
+        // Dirty-gate for ApplyTitleBarResponsiveLayout (idle Update must not ForceUpdateCanvases).
+        private float _titleBarLayoutLastScale = float.NaN;
+        private float _titleBarLayoutLastW = float.NaN;
+        private float _titleBarLayoutLastFpsW = float.NaN;
+        private bool _titleBarLayoutLastOverflow;
+        private bool _titleBarLayoutLastCatShown;
+        private bool _titleBarLayoutLastFlushLeft;
+        private bool _titleBarLayoutLastHasSource;
 
         // Fixed desktop dock "Top": side rail buttons live on footer bar.
         private GameObject _footerSideButtonsGroupGO;

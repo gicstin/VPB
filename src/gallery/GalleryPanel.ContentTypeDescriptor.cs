@@ -49,12 +49,12 @@ namespace VPB
                 };
             }
 
-            Add(ContentType.Category, "gallery.search.categories", "Categories...", SideFilterFieldKind.Category);
-            Add(ContentType.Creator, "gallery.search.creators", "Search Creators...", SideFilterFieldKind.Creator);
-            Add(ContentType.UserTags, "gallery.search.user_tags", "Search your tags...", SideFilterFieldKind.UserTags);
-            Add(ContentType.UserTagsApplied, "gallery.search.user_tags_applied", "Search applied tags...");
-            Add(ContentType.Path, "gallery.search.paths", "Search Paths...", SideFilterFieldKind.Path);
-            Add(ContentType.Tags, "gallery.search.tags", "Search Tags...");
+            Add(ContentType.Category, "gallery.search.categories", "Filter category list...", SideFilterFieldKind.Category);
+            Add(ContentType.Creator, "gallery.search.creators", "Filter creator list...", SideFilterFieldKind.Creator);
+            Add(ContentType.UserTags, "gallery.search.user_tags", "Filter tag list...", SideFilterFieldKind.UserTags);
+            Add(ContentType.UserTagsApplied, "gallery.search.user_tags_applied", "Filter applied tags...");
+            Add(ContentType.Path, "gallery.search.paths", "Filter path list...", SideFilterFieldKind.Path);
+            Add(ContentType.Tags, "gallery.search.tags", "Filter tags...");
             Add(ContentType.RemoveClothing, "gallery.search.clothing", "Filter Clothing...", SideFilterFieldKind.RemoveClothing, suppressSideSort: true);
             Add(ContentType.RemoveHair, "gallery.search.hair", "Filter Hair...", SideFilterFieldKind.RemoveHair, suppressSideSort: true);
             Add(ContentType.RemoveAtom, "gallery.search.atoms", "Filter Atoms...", SideFilterFieldKind.RemoveAtom, suppressSideSort: true);
@@ -73,7 +73,7 @@ namespace VPB
             ContentTypeDescriptorEntry entry;
             if (ContentTypeDescriptors.TryGetValue(type, out entry))
                 return VPBTranslation.T(entry.PlaceholderKey, entry.PlaceholderFallback);
-            return VPBTranslation.T("gallery.search.main", "Search...");
+            return VPBTranslation.T("gallery.search.main", "Search grid...");
         }
 
         internal static bool ContentTypeSuppressesSideSearch(ContentType type)

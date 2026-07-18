@@ -125,13 +125,13 @@ namespace VPB
                 rightSubClearBtnText.text = VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected");
 
             if (rightCategoryBtnIconImage == null && rightCategoryBtnText != null)
-                rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
             if (leftCategoryBtnIconImage == null && leftCategoryBtnText != null)
-                leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
             if (rightCreatorBtnIconImage == null && rightCreatorBtnText != null)
-                rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
             if (leftCreatorBtnIconImage == null && leftCreatorBtnText != null)
-                leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
             if (rightPathBtnIconImage == null && rightPathBtnText != null)
                 rightPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             if (leftPathBtnIconImage == null && leftPathBtnText != null)

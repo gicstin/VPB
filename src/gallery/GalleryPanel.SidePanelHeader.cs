@@ -219,8 +219,8 @@ namespace VPB
         {
             switch (content)
             {
-                case ContentType.Category: return VPBTranslation.T("gallery.side.category", "Category");
-                case ContentType.Creator: return VPBTranslation.T("gallery.side.creator", "Creator");
+                case ContentType.Category: return VPBTranslation.T("gallery.side.category", "Categories");
+                case ContentType.Creator: return VPBTranslation.T("gallery.side.creator", "Creators");
                 case ContentType.UserTags: return VPBTranslation.T("gallery.side.tags", "User Tags");
                 case ContentType.Path: return VPBTranslation.T("gallery.side.path", "Path");
                 case ContentType.History: return VPBTranslation.T("gallery.history.title", "History");

@@ -26,9 +26,11 @@ Open a side column, then search or sort inside it:
 Tap the **colored header bar** at the top of a side column to collapse that list.
 
 ### Title bar search and filters
-- **Search** (center) — filters the current grid. Compact mode shows a {{icon:search|search icon}}; click to type.
+- **Search** (center) — filters the **grid** (`Search grid...`). Compact mode shows a {{icon:search|search icon}}; click to type.
+- **Side-column search** — filters only the **open list** (categories / creators / tags / paths), not the grid.
 - {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset.
-- **Creator filter** — limit grid to one or more creators (title bar, or **…** overflow when narrow).
+- **Creator filter** (title bar) — multi-select authors to limit the **grid** (or **…** overflow when narrow). Rail {{icon:creator|Creator}} opens the **creator list**.
+- **Category** — title name/menu = **quick switch**; rail {{icon:category|Category}} opens the **full category list**.
 - **Source filter** — All, Local, or VAR packages.
 - {{icon:star|Rated only (★)}} — show only starred items.
 - **Sort** — **Az** opens sort type; arrow toggles ascending/descending.
@@ -38,6 +40,12 @@ When filters are active, the **footer** shows **Back** (undo one step) and **Cle
 
 ### Narrow title bar
 On small widths, language, presets, creator, source, ★, and FPS move into the **…** overflow menu next to Settings.
+
+### Narrow footer bar
+When the footer runs out of room, chips collapse one-by-one into the **…** menu (utilities → follow → zoom → quality → Hub/Undo). Extreme narrow: only **…** remains (plus resize grips / filter Back·Clear). Menu rows show icons; the panel shifts inward if it would clip the edge.
+
+### Short side rails
+When pane height is tight, side-rail **zone gaps close first**, then spacing packs flush, then chips move into a side **…** menu (Floating/Fixed stays). Same fit applies to the top-dock footer side-button strip.
 
 ### Language
 The language button on the title bar (e.g. EN) switches UI text. Help content loads from `vpb_help/{language}.md` when that file exists, otherwise English.
@@ -138,7 +146,8 @@ A **tip strip** under the title bar shows basics until you dismiss it (×).
 - **Follow** (footer) — angle, distance, and eye height keep the panel facing you.
 
 ### Side rails and Settings
-- Side lists open from colored rail buttons. **Pin** keeps a column open.
+- Side lists open from rail buttons in three clusters: **Layout** (float/follow/clone), **Browse** (import/tags/category/creator/path/history), **Tools** (remove/apply/save). Thin separators mark zones when side-button gaps are on.
+- Open facet shows a brighter selection rim (plus header label on the column).
 - **Right-click** a rail button to open that panel on the opposite edge.
 - {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options.
 

@@ -14,9 +14,10 @@ namespace VPB
         private GameObject footerPerfPlusBtn;
         private Image footerPerfPlusBtnImage;
 
-        private void CreateFooterPerfControls(GameObject leftSection)
+        private void CreateFooterPerfControls(GameObject parent)
         {
-            footerPerfToggleBtn = UI.CreateUIButton(leftSection, 40, 40, VpbPerfController.GetToggleLabel(), 16, 0, 0,
+            float chip = GalleryUiDesignTokens.ButtonSizeRef;
+            footerPerfToggleBtn = UI.CreateUIButton(parent, chip, chip, VpbPerfController.GetToggleLabel(), 16, 0, 0,
                 AnchorPresets.middleCenter, ToggleFooterPerfMode);
             footerPerfToggleBtn.name = "Footer_PerfToggle";
             footerPerfToggleBtnImage = footerPerfToggleBtn.GetComponent<Image>();
@@ -51,13 +52,13 @@ namespace VPB
             }
             catch { }
 
-            footerPerfMinusBtn = UI.CreateUIButton(leftSection, 40, 40, "-", 24, 0, 0,
+            footerPerfMinusBtn = UI.CreateUIButton(parent, chip, chip, "-", 24, 0, 0,
                 AnchorPresets.middleCenter, FooterPerfStepDown);
             footerPerfMinusBtn.name = "Footer_PerfMinus";
             footerPerfMinusBtnImage = footerPerfMinusBtn.GetComponent<Image>();
             UI.ApplyBarIconFromPath(footerPerfMinusBtn, "vpb_icons/photo_down.png");
 
-            footerPerfPlusBtn = UI.CreateUIButton(leftSection, 40, 40, "+", 24, 0, 0,
+            footerPerfPlusBtn = UI.CreateUIButton(parent, chip, chip, "+", 24, 0, 0,
                 AnchorPresets.middleCenter, FooterPerfStepUp);
             footerPerfPlusBtn.name = "Footer_PerfPlus";
             footerPerfPlusBtnImage = footerPerfPlusBtn.GetComponent<Image>();

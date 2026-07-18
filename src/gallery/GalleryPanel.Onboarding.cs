@@ -252,7 +252,7 @@ namespace VPB
             {
                 ph.text = settingsMode
                     ? VPBTranslation.T("gallery.search.settings", "Filter settings...")
-                    : VPBTranslation.T("gallery.search.main", "Search...");
+                    : VPBTranslation.T("gallery.search.main", "Search grid...");
             }
 
             string tSearch = titleSearchInput.text ?? "";

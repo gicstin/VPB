@@ -13,9 +13,6 @@ namespace VPB
 
         private const int GlobalSourceFilterButtonWidth = 100;
         private const float GlobalSourceFilterButtonHeight = GalleryUiDesignTokens.TitleBarChipRef;
-        private const int GlobalSourceFilterDropdownWidth = 160;
-        private const int GlobalSourceFilterDropdownRowHeight = 36;
-        private const int GlobalSourceFilterDropdownPadding = 8;
         // Title-bar center-relative X for the button. Sits in the right-side button cluster, just left of
         // the settings gear (which is at -324). Center-anchored so it tracks the cluster as the panel resizes
         // rather than colliding with the left-anchored category chrome on wider gallery widths.
@@ -52,7 +49,17 @@ namespace VPB
                 ? globalSourceFilterBtn.GetComponentInChildren<Text>(true)
                 : null;
             if (globalSourceFilterBtnText != null)
-                globalSourceFilterBtnText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            {
+                // Stay inside chip without RectMask2D (mask clipped UIHoverBorder rim top/bottom).
+                globalSourceFilterBtnText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                globalSourceFilterBtnText.verticalOverflow = VerticalWrapMode.Truncate;
+                globalSourceFilterBtnText.alignment = TextAnchor.MiddleCenter;
+                RectTransform textRT = globalSourceFilterBtnText.rectTransform;
+                textRT.anchorMin = Vector2.zero;
+                textRT.anchorMax = Vector2.one;
+                textRT.offsetMin = new Vector2(6f, 2f);
+                textRT.offsetMax = new Vector2(-6f, -2f);
+            }
 
             RectTransform btnRT = globalSourceFilterBtn != null ? globalSourceFilterBtn.GetComponent<RectTransform>() : null;
             if (btnRT != null)
@@ -62,6 +69,12 @@ namespace VPB
                 btnRT.pivot = new Vector2(0.5f, 0.5f);
                 // Initial X is a one-frame fallback before ApplyTitleBarResponsiveLayout reassigns based on current title-bar width.
                 btnRT.anchoredPosition = new Vector2(GlobalSourceFilterButtonCenterRelativeX, 0f);
+            }
+            // Remove legacy mask if present — it clipped the yellow hover rim.
+            if (globalSourceFilterBtn != null)
+            {
+                RectMask2D staleMask = globalSourceFilterBtn.GetComponent<RectMask2D>();
+                if (staleMask != null) UnityEngine.Object.Destroy(staleMask);
             }
 
             Button btn = globalSourceFilterBtn != null ? globalSourceFilterBtn.GetComponent<Button>() : null;
@@ -84,168 +97,183 @@ namespace VPB
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.global_source_filter",
                 "Source filter (All / Local / .var). Applies to every category. (Right-click to reset to All)");
 
+            // Compact: package glyph (not filter.png — that is filter-presets). Tabler "package".
+            try
+            {
+                Sprite sp = UI.LoadIconSprite("vpb_icons/gallery_source.png", UI.BarIconGlyphTint);
+                if (sp != null && globalSourceFilterBtn != null)
+                {
+                    GameObject iconGO = new GameObject("Icon");
+                    iconGO.transform.SetParent(globalSourceFilterBtn.transform, false);
+                    globalSourceFilterBtnIcon = UI.AddImage(iconGO, Color.white, false);
+                    globalSourceFilterBtnIcon.sprite = sp;
+                    globalSourceFilterBtnIcon.preserveAspect = true;
+                    RectTransform irt = iconGO.GetComponent<RectTransform>();
+                    irt.anchorMin = Vector2.zero;
+                    irt.anchorMax = Vector2.one;
+                    float pad = GalleryUiDesignTokens.SearchIconButtonPadRef;
+                    irt.sizeDelta = new Vector2(-pad * 2f, -pad * 2f);
+                    irt.anchoredPosition = Vector2.zero;
+                    iconGO.SetActive(false);
+                }
+            }
+            catch { }
+
             // Matches settings/lang/qf/creator chips: layout only — fonts via RescaleTitleBarChromeInternal.
             {
                 var rt = btnRT;
                 innerPaneScaleActions.Add(s =>
                 {
-                    if (rt != null) rt.sizeDelta = new Vector2(GlobalSourceFilterButtonWidth * s, GlobalSourceFilterButtonHeight * s);
+                    if (rt == null) return;
+                    float w = _globalSourceFilterCompact
+                        ? GalleryUiDesignTokens.TitleBarChipRef * s
+                        : GlobalSourceFilterButtonWidth * s;
+                    rt.sizeDelta = new Vector2(w, GlobalSourceFilterButtonHeight * s);
                 });
             }
+        }
+
+        /// <summary>Narrow title bar: icon-only chip. Wide: labeled "Source: …" button.</summary>
+        private void SetGlobalSourceFilterCompactMode(bool compact, float paneScale)
+        {
+            if (paneScale <= 0f) paneScale = 1f;
+            _globalSourceFilterCompact = compact;
+
+            if (globalSourceFilterBtnText != null)
+            {
+                if (globalSourceFilterBtnText.gameObject.activeSelf == compact)
+                    globalSourceFilterBtnText.gameObject.SetActive(!compact);
+                globalSourceFilterBtnText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                globalSourceFilterBtnText.verticalOverflow = VerticalWrapMode.Truncate;
+            }
+
+            if (globalSourceFilterBtnIcon != null)
+            {
+                GameObject iconGO = globalSourceFilterBtnIcon.gameObject;
+                if (iconGO.activeSelf != compact)
+                    iconGO.SetActive(compact);
+            }
+
+            if (globalSourceFilterBtn == null) return;
+            RectTransform rt = globalSourceFilterBtn.GetComponent<RectTransform>();
+            if (rt == null) return;
+            float w = compact
+                ? GalleryUiDesignTokens.TitleBarChipRef * paneScale
+                : GlobalSourceFilterButtonWidth * paneScale;
+            float h = GlobalSourceFilterButtonHeight * paneScale;
+            rt.sizeDelta = new Vector2(w, h);
+            if (compact)
+                ScaleButtonIconPadding(rt, paneScale);
         }
 
         private void BuildGlobalSourceFilterDropdown(GameObject backgroundBoxGO)
         {
-            // Invisible click-outside blocker. Active only while dropdown is open.
-            globalSourceFilterDropdownBlocker = UI.CreateChildRT(backgroundBoxGO, "GlobalSourceFilterBlocker", AnchorPresets.stretchAll);
-            {
-                Image img = UI.AddImage(globalSourceFilterDropdownBlocker, new Color(0f, 0f, 0f, 0.001f));
-                Button blockerBtn = globalSourceFilterDropdownBlocker.AddComponent<Button>();
-                blockerBtn.targetGraphic = img;
-                blockerBtn.transition = Selectable.Transition.None;
-                blockerBtn.onClick.AddListener(() => HideGlobalSourceFilterDropdown());
-            }
-            globalSourceFilterDropdownBlocker.SetActive(false);
+            // Same CreatePopupMenuRoot / CreatePopupMenuPanel path as language + sort menus.
+            globalSourceFilterMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "GlobalSourceFilterMenu", HideGlobalSourceFilterDropdown);
+            globalSourceFilterMenuRoot.SetActive(false);
 
-            // Dropdown root
-            // Anchor top-center of the gallery panel; offset to match the button's center-relative X.
-            // The dropdown's top-center sits directly below the source button.
-            globalSourceFilterDropdown = UI.CreateChildRT(backgroundBoxGO, "GlobalSourceFilterDropdown", AnchorPresets.topMiddle,
-                new Vector2(GlobalSourceFilterDropdownWidth, GlobalSourceFilterDropdownRowHeight * 3 + GlobalSourceFilterDropdownPadding * 2),
-                new Vector2(GlobalSourceFilterButtonCenterRelativeX, -70f));
-            globalSourceFilterDropdown.transform.SetAsLastSibling();
-            RectTransform ddRT = globalSourceFilterDropdown.GetComponent<RectTransform>();
-
-            Image ddImg = UI.AddImage(globalSourceFilterDropdown, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
-
-            // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
-            // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
-            // canvases) or broke raycast (z-position offset). Matching TitleCreatorDropdown's pattern: stay in
-            // the parent gallery canvas, rely on hierarchy sibling order (SetAsLastSibling on show) to render
-            // above rows. Within a single canvas, sibling order is the render order.
-
-            // Three rows
-            globalSourceFilterRowAllCountText   = AddGlobalSourceFilterRow(globalSourceFilterDropdown, 0, "All",   VPBConfig.GlobalSourceFilterValue.All);
-            globalSourceFilterRowLocalCountText = AddGlobalSourceFilterRow(globalSourceFilterDropdown, 1, "Local", VPBConfig.GlobalSourceFilterValue.Local);
-            globalSourceFilterRowVarCountText   = AddGlobalSourceFilterRow(globalSourceFilterDropdown, 2, ".var",  VPBConfig.GlobalSourceFilterValue.Var);
-
-            // Root sizeDelta tracks pane scale. Position is re-synced to the current button X on every Show call,
-            // because the responsive title-bar layout repositions the button per frame as panel width changes.
-            {
-                var rt = ddRT;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (rt != null)
-                        rt.sizeDelta = new Vector2(GlobalSourceFilterDropdownWidth * s,
-                                                   (GlobalSourceFilterDropdownRowHeight * 3 + GlobalSourceFilterDropdownPadding * 2) * s);
-                });
-            }
-
-            globalSourceFilterDropdown.SetActive(false);
-        }
-
-        private Text AddGlobalSourceFilterRow(GameObject parent, int rowIndex, string label, VPBConfig.GlobalSourceFilterValue value)
-        {
-            GameObject row = UI.CreateChildRT(parent, "Row_" + label, AnchorPresets.hStretchTop,
-                new Vector2(-GlobalSourceFilterDropdownPadding * 2, GlobalSourceFilterDropdownRowHeight),
-                new Vector2(0f, -(GlobalSourceFilterDropdownPadding + rowIndex * GlobalSourceFilterDropdownRowHeight)));
-            RectTransform rt = row.GetComponent<RectTransform>();
-
-            Image rowImg = UI.AddImage(row, new Color(0f, 0f, 0f, 0.0f));
-
-            Button rowBtn = row.AddComponent<Button>();
-            rowBtn.targetGraphic = rowImg;
-            ColorBlock cb = rowBtn.colors;
-            cb.normalColor = new Color(1f, 1f, 1f, 0f);
-            cb.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
-            cb.pressedColor = new Color(1f, 1f, 1f, 0.16f);
-            cb.disabledColor = cb.normalColor;
-            rowBtn.colors = cb;
-            rowBtn.onClick.AddListener(() => OnGlobalSourceFilterRowClicked(value));
-
-            // Label on the left
-            Text labelText = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
-            RectTransform labelRT = labelText.GetComponent<RectTransform>();
-            labelRT.anchorMin = new Vector2(0f, 0f);
-            labelRT.anchorMax = new Vector2(0.5f, 1f);
-            labelRT.offsetMin = new Vector2(8f, 0f);
-            labelRT.offsetMax = new Vector2(0f, 0f);
-
-            // Count on the right
-            Text countText = UI.CreateLabel(row, "", GalleryUiDesignTokens.FontCaptionRef, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleRight, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Count");
-            RectTransform countRT = countText.GetComponent<RectTransform>();
-            countRT.anchorMin = new Vector2(0.5f, 0f);
-            countRT.anchorMax = new Vector2(1f, 1f);
-            countRT.offsetMin = new Vector2(0f, 0f);
-            countRT.offsetMax = new Vector2(-8f, 0f);
-
-            // Per-row scale action: positions/size + label/count fonts and side paddings all track pane scale,
-            // so the popup keeps the same visual proportions as the rest of the title-bar cluster.
-            {
-                var rRT = rt;
-                var lRT = labelRT;
-                var lT = labelText;
-                var cRT = countRT;
-                var cT = countText;
-                int idx = rowIndex;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (rRT != null)
-                    {
-                        rRT.anchoredPosition = new Vector2(0f, -(GlobalSourceFilterDropdownPadding + idx * GlobalSourceFilterDropdownRowHeight) * s);
-                        rRT.sizeDelta = new Vector2(-GlobalSourceFilterDropdownPadding * 2 * s, GlobalSourceFilterDropdownRowHeight * s);
-                    }
-                    if (lRT != null) lRT.offsetMin = new Vector2(8f * s, 0f);
-                    if (lT != null) GalleryUiMetrics.ApplyFont(lT, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-                    if (cRT != null) cRT.offsetMax = new Vector2(-8f * s, 0f);
-                    if (cT != null) GalleryUiMetrics.ApplyFont(cT, GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
-                });
-            }
-
-            return countText;
+            globalSourceFilterMenuPanelGO = UI.CreatePopupMenuPanel(
+                globalSourceFilterMenuRoot,
+                "GlobalSourceFilterMenuPanel",
+                AnchorPresets.topMiddle,
+                new Vector2(GalleryUiDesignTokens.PopupMenuPanelWidthRef, 50f),
+                new Vector2(GlobalSourceFilterButtonCenterRelativeX, -72f));
         }
 
         private void ToggleGlobalSourceFilterDropdown()
         {
-            if (globalSourceFilterDropdown == null) return;
-            if (globalSourceFilterDropdown.activeSelf) HideGlobalSourceFilterDropdown();
+            if (globalSourceFilterMenuRoot == null) return;
+            if (globalSourceFilterMenuRoot.activeSelf) HideGlobalSourceFilterDropdown();
             else ShowGlobalSourceFilterDropdown();
         }
 
         private void ShowGlobalSourceFilterDropdown()
         {
-            if (globalSourceFilterDropdown == null) return;
-            RecomputeGlobalSourceFilterRowCounts();
-            // Sync popup X to whatever X the responsive layout last assigned to the button (panel width / scale
-            // changes move the button between frames). Y is the scaled drop distance below the title bar.
-            SyncGlobalSourceFilterDropdownPositionToButton();
-            // Blocker first (last sibling = above gallery rows, absorbs raycasts behind the dropdown),
-            // then dropdown above the blocker. Matches TitleCreatorDropdown's working VR pattern.
-            if (globalSourceFilterDropdownBlocker != null)
-            {
-                globalSourceFilterDropdownBlocker.SetActive(true);
-                try { globalSourceFilterDropdownBlocker.transform.SetAsLastSibling(); } catch { }
-            }
-            try { globalSourceFilterDropdown.transform.SetAsLastSibling(); } catch { }
-            globalSourceFilterDropdown.SetActive(true);
-        }
-
-        private void SyncGlobalSourceFilterDropdownPositionToButton()
-        {
-            if (globalSourceFilterBtn == null || globalSourceFilterDropdown == null) return;
-            RectTransform btnRT = globalSourceFilterBtn.GetComponent<RectTransform>();
-            RectTransform ddRT = globalSourceFilterDropdown.GetComponent<RectTransform>();
-            if (btnRT == null || ddRT == null) return;
-            float s = ChromeScale;
-            if (s <= 0f) s = 1f;
-            ddRT.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -GalleryUiDesignTokens.TitleBarHeightRef * s);
+            if (globalSourceFilterMenuRoot == null) return;
+            RebuildGlobalSourceFilterMenuOptions();
+            try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
+            try { globalSourceFilterMenuRoot.transform.SetAsLastSibling(); } catch { }
+            globalSourceFilterMenuRoot.SetActive(true);
         }
 
         private void HideGlobalSourceFilterDropdown()
         {
-            if (globalSourceFilterDropdown == null) return;
-            globalSourceFilterDropdown.SetActive(false);
-            if (globalSourceFilterDropdownBlocker != null) globalSourceFilterDropdownBlocker.SetActive(false);
+            if (globalSourceFilterMenuRoot == null) return;
+            globalSourceFilterMenuRoot.SetActive(false);
+        }
+
+        private void RebuildGlobalSourceFilterMenuOptions()
+        {
+            if (globalSourceFilterMenuPanelGO == null) return;
+
+            UI.DestroyAllChildren(globalSourceFilterMenuPanelGO.transform);
+
+            int allCount = 0, localCount = 0, varCount = 0;
+            ComputeGlobalSourceFilterRowCounts(out allCount, out localCount, out varCount);
+
+            AddGlobalSourceFilterMenuRow(
+                VPBConfig.GlobalSourceFilterValue.All,
+                "All",
+                allCount,
+                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.All);
+            AddGlobalSourceFilterMenuRow(
+                VPBConfig.GlobalSourceFilterValue.Local,
+                "Local",
+                localCount,
+                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local);
+            AddGlobalSourceFilterMenuRow(
+                VPBConfig.GlobalSourceFilterValue.Var,
+                ".var",
+                varCount,
+                currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var);
+
+            try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
+            LayoutRebuilder.ForceRebuildLayoutImmediate(globalSourceFilterMenuPanelGO.GetComponent<RectTransform>());
+        }
+
+        private void AddGlobalSourceFilterMenuRow(
+            VPBConfig.GlobalSourceFilterValue value,
+            string name,
+            int count,
+            bool isActive)
+        {
+            // Language/sort pattern: checkmark prefix + left-aligned rounded PopupRow chrome.
+            string label = (isActive ? "\u2713  " : "    ") + name + " (" + count + ")";
+            UI.AddPopupMenuRow(
+                globalSourceFilterMenuPanelGO,
+                GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                label,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                isActive,
+                () => OnGlobalSourceFilterRowClicked(value),
+                GalleryUiDesignTokens.PopupMenuRowHeightRef);
+        }
+
+        private void RescaleGlobalSourceFilterMenuInternal(float s)
+        {
+            if (globalSourceFilterMenuPanelGO == null) return;
+            if (s <= 0f) s = 1f;
+
+            ScaleVerticalPopupMenuRows(
+                globalSourceFilterMenuPanelGO,
+                s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.PopupMenuPanelWidthRef);
+
+            RectTransform panelRT = globalSourceFilterMenuPanelGO.GetComponent<RectTransform>();
+            if (panelRT == null) return;
+            panelRT.anchorMin = new Vector2(0.5f, 1f);
+            panelRT.anchorMax = new Vector2(0.5f, 1f);
+            panelRT.pivot = new Vector2(0.5f, 1f);
+            if (globalSourceFilterBtn == null) return;
+            RectTransform btnRT = globalSourceFilterBtn.GetComponent<RectTransform>();
+            if (btnRT == null) return;
+            float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+            panelRT.anchoredPosition = new Vector2(
+                btnRT.anchoredPosition.x,
+                -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
         }
 
         private void OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue value)
@@ -280,7 +308,6 @@ namespace VPB
 
         private void UpdateGlobalSourceFilterButtonLabel()
         {
-            if (globalSourceFilterBtnText == null) return;
             string label;
             switch (currentGlobalSourceFilter)
             {
@@ -288,7 +315,8 @@ namespace VPB
                 case VPBConfig.GlobalSourceFilterValue.Var:   label = "Source: .var";  break;
                 default:                                       label = "Source: All";   break;
             }
-            globalSourceFilterBtnText.text = label;
+            if (globalSourceFilterBtnText != null)
+                globalSourceFilterBtnText.text = label;
 
             // Accent tint when filter is non-default so the user can see at a glance that a filter is active.
             Image backdrop = globalSourceFilterBtn != null ? globalSourceFilterBtn.GetComponent<Image>() : null;
@@ -299,40 +327,34 @@ namespace VPB
             }
         }
 
-        private void RecomputeGlobalSourceFilterRowCounts()
+        private void ComputeGlobalSourceFilterRowCounts(out int allCount, out int localCount, out int varCount)
         {
-            if (globalSourceFilterRowAllCountText == null) return;
-
             // Walk the current filtered file list and bucket by isVar. Counts reflect the user's current
             // category + filter context. When the global filter is non-All, the "other" bucket appears as
             // 0 because items outside the active source are not in lastFilteredFiles. Sum still equals the
             // visible row count, so users can compare visible-now vs picking-another-mode at a glance.
-            int allCount = 0, localCount = 0, varCount = 0;
-            if (lastFilteredFiles != null)
+            allCount = 0;
+            localCount = 0;
+            varCount = 0;
+            if (lastFilteredFiles == null) return;
+            for (int i = 0; i < lastFilteredFiles.Count; i++)
             {
-                for (int i = 0; i < lastFilteredFiles.Count; i++)
-                {
-                    FileEntry e = lastFilteredFiles[i];
-                    if (e == null) continue;
-                    allCount++;
-                    if (IsVarBacked(e)) varCount++;
-                    else localCount++;
-                }
+                FileEntry e = lastFilteredFiles[i];
+                if (e == null) continue;
+                allCount++;
+                if (IsVarBacked(e)) varCount++;
+                else localCount++;
             }
-
-            globalSourceFilterRowAllCountText.text   = "(" + allCount + ")";
-            globalSourceFilterRowLocalCountText.text = "(" + localCount + ")";
-            globalSourceFilterRowVarCountText.text   = "(" + varCount + ")";
         }
 
         // Called from category-switch handlers, settings-panel open, etc. to dismiss the dropdown.
         public void HideGlobalSourceFilterDropdownIfOpen()
         {
-            if (globalSourceFilterDropdown != null && globalSourceFilterDropdown.activeSelf)
+            if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
                 HideGlobalSourceFilterDropdown();
         }
 
-        // Source-of-truth helper. Used by RecomputeGlobalSourceFilterRowCounts here and by the
+        // Source-of-truth helper. Used by ComputeGlobalSourceFilterRowCounts here and by the
         // early gate in GalleryPanel.IO.cs PassesFilters. Partial class lets PassesFilters call it directly.
         internal static bool IsVarBacked(FileEntry entry)
         {

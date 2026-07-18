@@ -40,7 +40,9 @@ namespace VPB
 
             GameObject panel = UI.CreatePopupMenuPanel(
                 _titleBarOverflowMenuGO, "OverflowMenuPanel",
-                AnchorPresets.topMiddle, new Vector2(220f, 50f), new Vector2(-200f, -72f));
+                AnchorPresets.topMiddle,
+                new Vector2(GalleryUiDesignTokens.OverflowMenuPanelWidthRef, 50f),
+                new Vector2(-200f, -72f));
             RebuildTitleBarOverflowMenuRows(panel.transform);
         }
 
@@ -52,17 +54,64 @@ namespace VPB
             bool ratingActive = !string.IsNullOrEmpty(currentRatingFilter);
             bool fpsActive = fpsText != null && fpsText.gameObject != null && fpsText.gameObject.activeSelf;
 
-            AddOverflowMenuRow(panel, VPBTranslation.T("i18n.switcher.tooltip", "Language"), () => { CloseTitleBarOverflowMenu(); ToggleLanguageMenu(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.filter_presets", "Filter presets"), () => { CloseTitleBarOverflowMenu(); ToggleQuickFilters(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.creator_filter", "Creator filter"), () => { CloseTitleBarOverflowMenu(); ToggleTitleCreatorDropdown(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.source_filter", "Source filter"), () => { CloseTitleBarOverflowMenu(); ToggleGlobalSourceFilterDropdown(); });
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.rated_only", "Rated only"), () => { CloseTitleBarOverflowMenu(); ToggleRatingSort(); }, ratingActive);
-            AddOverflowMenuRow(panel, VPBTranslation.T("gallery.title.fps_counter", "FPS counter"), () => { CloseTitleBarOverflowMenu(); QuickMenu_ToggleFpsCounter(); }, fpsActive);
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.overflow_language", "Language"),
+                () => { CloseTitleBarOverflowMenu(); ToggleLanguageMenu(); },
+                icon: UI.GetButtonIconSprite(languageSwitcherBtnGO) ?? UI.LoadIconSprite("vpb_icons/language.png", Color.white),
+                tipKey: "i18n.switcher.tooltip", tipDefault: "Language / 语言 / 言語");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.filter_presets", "Filter presets"),
+                () => { CloseTitleBarOverflowMenu(); ToggleQuickFilters(); },
+                icon: UI.GetButtonIconSprite(_titleBarQfToggleBtnRT != null ? _titleBarQfToggleBtnRT.gameObject : null)
+                    ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.filter_presets", tipDefault: "Filter Presets");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.creator_filter", "Creator filter"),
+                () => { CloseTitleBarOverflowMenu(); ToggleTitleCreatorDropdown(); },
+                icon: UI.GetButtonIconSprite(titleCreatorBtn)
+                    ?? UI.LoadIconSprite("vpb_icons/gallery_creator.png", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.creator_filter",
+                tipDefault: "Multi-select creators → filter grid. Right-click clear.");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.source_filter", "Source filter"),
+                () => { CloseTitleBarOverflowMenu(); ToggleGlobalSourceFilterDropdown(); },
+                icon: UI.GetButtonIconSprite(globalSourceFilterBtn)
+                    ?? UI.LoadIconSprite("vpb_icons/gallery_source.png", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.global_source_filter",
+                tipDefault: "Source filter (All / Local / .var). Applies to every category. (Right-click to reset to All)");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.rated_only", "Rated only"),
+                () => { CloseTitleBarOverflowMenu(); ToggleRatingSort(); },
+                ratingActive,
+                icon: UI.GetButtonIconSprite(ratingSortToggleBtn)
+                    ?? (ratingActive ? ratingStarNormalSprite : ratingStarOffSprite)
+                    ?? UI.LoadIconSprite("vpb_icons/star.png", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.rated_only",
+                tipDefault: "Show Only Rated Items (right-click to clear)");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.fps_counter", "FPS counter"),
+                () => { CloseTitleBarOverflowMenu(); QuickMenu_ToggleFpsCounter(); },
+                fpsActive,
+                tipKey: "gallery.tooltip.fps_counter",
+                tipDefault: "Show or hide the FPS counter");
         }
 
-        private static void AddOverflowMenuRow(Transform panel, string label, UnityAction onClick, bool active = false)
+        private void AddOverflowMenuRow(
+            Transform panel, string label, UnityAction onClick, bool active = false, Sprite icon = null,
+            string tipKey = null, string tipDefault = null)
         {
-            UI.AddStretchPopupMenuRow(panel, label, onClick, active);
+            GameObject row = UI.AddStretchPopupMenuRow(panel, label, onClick, active, icon: icon);
+            if (row == null) return;
+            if (!string.IsNullOrEmpty(tipKey))
+                AddTooltip(row, tipKey, tipDefault ?? label);
+            else if (!string.IsNullOrEmpty(tipDefault))
+                AddTooltipPlain(row, tipDefault);
         }
 
         private void ToggleTitleBarOverflowMenu()
@@ -73,17 +122,7 @@ namespace VPB
             {
                 Transform panel = _titleBarOverflowMenuGO.transform.Find("OverflowMenuPanel");
                 if (panel != null) RebuildTitleBarOverflowMenuRows(panel);
-                try
-                {
-                    var panelRT = panel as RectTransform;
-                    if (panelRT != null && _titleBarOverflowBtnRT != null)
-                    {
-                        float cs = ChromeScale;
-                        float yOff = -(GalleryUiDesignTokens.TitleBarHeightRef + GalleryUiDesignTokens.PopupMenuAnchorGapRef * cs) * cs;
-                        panelRT.anchoredPosition = new Vector2(_titleBarOverflowBtnRT.anchoredPosition.x, yOff);
-                    }
-                }
-                catch { }
+                try { RescaleTitleBarOverflowMenuInternal(ChromeScale); } catch { }
                 _titleBarOverflowMenuGO.transform.SetAsLastSibling();
             }
             _titleBarOverflowMenuGO.SetActive(_titleBarOverflowOpen);
@@ -95,6 +134,23 @@ namespace VPB
             if (_titleBarOverflowMenuGO != null) _titleBarOverflowMenuGO.SetActive(false);
         }
 
+        private void PositionTitleBarOverflowMenuPanel(RectTransform panelRT)
+        {
+            if (panelRT == null || _titleBarOverflowBtnRT == null || _titleBarOverflowMenuGO == null) return;
+            RectTransform overlayRT = _titleBarOverflowMenuGO.GetComponent<RectTransform>();
+            if (overlayRT == null) return;
+
+            float s = ChromeScale <= 0f ? 1f : ChromeScale;
+            float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+            panelRT.anchorMin = new Vector2(0.5f, 1f);
+            panelRT.anchorMax = new Vector2(0.5f, 1f);
+            panelRT.pivot = new Vector2(0.5f, 1f);
+            panelRT.anchoredPosition = new Vector2(
+                _titleBarOverflowBtnRT.anchoredPosition.x,
+                -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            UI.ClampPopupMenuPanelX(panelRT, overlayRT, 8f * s);
+        }
+
         private void RescaleTitleBarOverflowMenuInternal(float s)
         {
             if (_titleBarOverflowMenuGO == null) return;
@@ -103,15 +159,10 @@ namespace VPB
             if (panel == null) return;
             ScaleVerticalPopupMenuRows(panel.gameObject, s,
                 GalleryUiDesignTokens.PopupMenuRowHeightRef,
-                GalleryUiDesignTokens.PopupMenuOverflowFontRef);
-            RectTransform panelRT = panel as RectTransform;
-            if (panelRT != null && _titleBarOverflowBtnRT != null)
-            {
-                float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
-                panelRT.anchoredPosition = new Vector2(
-                    _titleBarOverflowBtnRT.anchoredPosition.x,
-                    -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
-            }
+                GalleryUiDesignTokens.PopupMenuOverflowFontRef,
+                GalleryUiDesignTokens.OverflowMenuPanelWidthRef);
+            if (_titleBarOverflowOpen)
+                PositionTitleBarOverflowMenuPanel(panel as RectTransform);
         }
 
         private bool TitleBarUsesOverflowMenu(bool hasSourceFilter, float titleBarWidth, float paneScale)

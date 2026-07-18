@@ -5,6 +5,14 @@ namespace VPB
     {
         public const float VamUiScaleDesignBaseline = 1.5f;
 
+        // ── Golden ratio (major splits + decorative aspects only; not spacing/type) ──
+        /// <summary>φ ≈ 1.618 — aspect ratios and scale accents.</summary>
+        public const float GoldenRatio = 1.618f;
+        /// <summary>1/φ ≈ 0.618 — major share of a unit split (e.g. desktop dock width).</summary>
+        public const float GoldenRatioMajor = 1f / GoldenRatio;
+        /// <summary>1/φ² ≈ 0.382 — minor share of a unit split (e.g. category side sub-pane).</summary>
+        public const float GoldenRatioMinor = 1f - GoldenRatioMajor;
+
         // ── Typography (single prose size + glyph sizing) ─────────────────────
         /// <summary>All gallery chrome prose. Hierarchy = color / alpha, not weight or fontSize (all text is non-bold).</summary>
         public const int FontRef = 16;
@@ -107,6 +115,12 @@ namespace VPB
         public const float SideButtonContainerWidthRef = 130f;
         public const float SideButtonContainerOffsetRef = 140f;
         public const float SideButtonSpacingRef = 38f;
+        /// <summary>Extra gap between Layout / Browse / Tools rail zones when EnableButtonGaps is on.</summary>
+        public const float SideButtonGroupGapRef = 12f;
+        /// <summary>gapTier multiplier at zone starts in <c>GetSideButtonsLayout</c>.</summary>
+        public const int SideButtonZoneGapTier = 2;
+        public const float SideButtonZoneSepHeightRef = 1f;
+        public const float SideButtonZoneSepWidthRef = 20f;
         public const float SideButtonSubmenuWidthFactorRef = 1.6f;
         public const float SideButtonEdgeInsetRef = 6f;
         public const int SideButtonFontRef = FontRef;
@@ -161,11 +175,15 @@ namespace VPB
         public const float PopupMenuRowSpacingRef = 4f;
         public const float PopupMenuRowHeightRef = ButtonSizeRef;
         public const float PopupMenuRowHeightCompactRef = ButtonSizeRef;
+        public const float PopupMenuRowTextPadXRef = 10f;
+        public const float PopupMenuRowIconSizeRef = 22f;
+        public const float PopupMenuRowIconGapRef = 8f;
         public const int PopupMenuRowFontRef = FontRef;
         public const int PopupMenuRowFontLargeRef = FontRef;
         public const int PopupMenuOverflowFontRef = FontRef;
         public const float PopupMenuAnchorGapRef = 2f;
         public const float PopupMenuPanelWidthRef = 230f;
+        public const float OverflowMenuPanelWidthRef = 300f;
         public const float FileSortMenuPanelWidthRef = 248f;
         public const float SidePaneSortMenuPanelWidthRef = 228f;
         public const float TitleCreatorDropdownWidthRef = 330f;
@@ -179,7 +197,7 @@ namespace VPB
         // Spring scroll drag button (on main grid scrollbar)
         public const float SpringScrollBtnWidthFixedRef = 50f;
         public const float SpringScrollBtnWidthFloatRef = 100f;
-        public const float SpringScrollBtnAspectRef = 1.618f;
+        public const float SpringScrollBtnAspectRef = GoldenRatio;
         public const float SpringScrollBtnIconInsetRef = 24f;
 
         // Toolbox action buttons — sized to match the side-rail / title-chip family
@@ -203,8 +221,8 @@ namespace VPB
         // exactly (no overlap, no gap) regardless of scale.
         public const float SideTabTopOffsetRef = TitleBarHeightRef;
         public const float SideTabSplitSeamRef = 5f;
-        /// <summary>Bottom sub-pane share in category split view (top pane gets the remainder).</summary>
-        public const float CategorySideSubPaneHeightFraction = 1f / 3f;
+        /// <summary>Bottom sub-pane share in category split view (golden minor; top gets major remainder).</summary>
+        public const float CategorySideSubPaneHeightFraction = GoldenRatioMinor;
         public const float SideTabScrollBottomPadRef = 8f;
         public const float GalleryMainBottomFallbackRef = 120f;
     }

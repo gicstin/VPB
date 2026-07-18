@@ -993,7 +993,10 @@ namespace VPB
             }
             footerHLG.childControlWidth = true;
             footerHLG.childControlHeight = true;
-            footerHLG.childForceExpandWidth = true;
+            // Left/right shrink-wrap; center takes remaining gap (not equal ⅓ panel thirds).
+            footerHLG.childForceExpandWidth = false;
+            footerHLG.childForceExpandHeight = true;
+            footerHLG.childAlignment = TextAnchor.MiddleLeft;
 
             // Fixed dock "Top": side rail buttons group (overlays footer, centered in free space).
             _footerSideButtonsGroupGO = UI.CreateChildRT(pageContainer, "SideButtonsGroup", AnchorPresets.middleCenter, new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef));
@@ -1004,13 +1007,13 @@ namespace VPB
             }
             _footerSideButtonsGroupGO.SetActive(false);
 
-            // --- Left Section (Follow Controls) ---
+            // --- Left Section (Undo / Hub / Follow) ---
             GameObject leftSection = new GameObject("LeftSection");
             leftSection.transform.SetParent(pageContainer.transform, false);
             _footerLeftSectionRT = leftSection.AddComponent<RectTransform>();
-            UI.AddLE(leftSection, flexibleWidth: 1);
+            UI.AddLE(leftSection, flexibleWidth: 0f);
             
-            HorizontalLayoutGroup leftHLG = UI.AddHLG(leftSection, spacing: 10, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
+            HorizontalLayoutGroup leftHLG = UI.AddHLG(leftSection, spacing: 10, childAlignment: TextAnchor.MiddleLeft, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = leftHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1037,8 +1040,6 @@ namespace VPB
             });
             { var s = UI.LoadIconSprite("vpb_icons/hub.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerHubBtnGO, s); }
 
-            CreateFooterPerfControls(leftSection);
-
             // Follow Quick Toggles
             footerFollowAngleBtn = UI.CreateUIButton(leftSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"∡", 20, 0, 0, AnchorPresets.middleCenter, () => ToggleFollowQuick("Angle"));
             footerFollowAngleImage = footerFollowAngleBtn.GetComponent<Image>();
@@ -1055,16 +1056,35 @@ namespace VPB
             { var s = UI.LoadIconSprite("vpb_icons/eye_height.png", UI.BarIconGlyphTint); if (s != null) UI.AddIconToButton(footerFollowHeightBtn, s); }
             AddTooltip(footerFollowHeightBtn, "gallery.tooltip.follow_eye_height", "Follow Eye Height");
 
-            // --- Center Section (Pagination) ---
+            // --- Center Section (fills gap between left/right packs; quality ± + filter chrome) ---
             GameObject centerSection = new GameObject("CenterSection");
             centerSection.transform.SetParent(pageContainer.transform, false);
             centerSection.AddComponent<RectTransform>();
-            UI.AddLE(centerSection, flexibleWidth: 1);
+            UI.AddLE(centerSection, flexibleWidth: 1f);
             
-            HorizontalLayoutGroup centerHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
+            HorizontalLayoutGroup centerHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = centerHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
+            }
+
+            // Quality selector + step buttons as one centered group.
+            // ContentSizeFitter shrink-wraps — without it Unity's default 100×100 RT drops the pack low.
+            {
+                GameObject perfGroup = new GameObject("FooterPerfGroup");
+                perfGroup.transform.SetParent(centerSection.transform, false);
+                RectTransform perfRT = perfGroup.AddComponent<RectTransform>();
+                perfRT.anchorMin = perfRT.anchorMax = new Vector2(0.5f, 0.5f);
+                perfRT.pivot = new Vector2(0.5f, 0.5f);
+                HorizontalLayoutGroup perfHLG = UI.AddHLG(perfGroup, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+                ContentSizeFitter perfFit = perfGroup.AddComponent<ContentSizeFitter>();
+                perfFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                perfFit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                {
+                    var hlg = perfHLG;
+                    innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
+                }
+                CreateFooterPerfControls(perfGroup);
             }
 
             // Filter Mode Label (shown in filter mode, left of clear button)
@@ -1113,9 +1133,9 @@ namespace VPB
             GameObject rightSection = new GameObject("RightSection");
             rightSection.transform.SetParent(pageContainer.transform, false);
             _footerRightSectionRT = rightSection.AddComponent<RectTransform>();
-            UI.AddLE(rightSection, flexibleWidth: 1);
+            UI.AddLE(rightSection, flexibleWidth: 0f);
             
-            HorizontalLayoutGroup rightHLG = UI.AddHLG(rightSection, spacing: 10, childAlignment: TextAnchor.MiddleRight, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false);
+            HorizontalLayoutGroup rightHLG = UI.AddHLG(rightSection, spacing: 10, childAlignment: TextAnchor.MiddleRight, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
                 var hlg = rightHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
@@ -1129,13 +1149,14 @@ namespace VPB
             { Sprite init = footerMenuGateOffSprite ?? footerMenuGateOnSprite; if (init != null) { UI.AddIconToButton(footerMenuGateBtn, init); footerMenuGateIconImage = footerMenuGateBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerMenuGateBtn, "gallery.tooltip.vam_menu_gate", "Show only when VaM menu is visible");
 
-            // VR wrist watch show/hide toggle
+            // VR wrist watch show/hide toggle (footer chrome only in VR; desktop hides via UpdateFooterVrWatchState).
             footerWatchToggleBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"W", 20, 0, 0, AnchorPresets.middleCenter, ToggleVrWatchVisible);
             footerWatchToggleBtnImage = footerWatchToggleBtn.GetComponent<Image>();
             footerWatchToggleOnSprite  = UI.LoadIconSprite("vpb_icons/device_watch.png",     Color.white);
             footerWatchToggleOffSprite = UI.LoadIconSprite("vpb_icons/device_watch_off.png", Color.white);
             { Sprite init = footerWatchToggleOnSprite ?? footerWatchToggleOffSprite; if (init != null) { UI.AddIconToButton(footerWatchToggleBtn, init); footerWatchToggleIconImage = footerWatchToggleBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
             AddTooltip(footerWatchToggleBtn, "gallery.tooltip.vr_watch_toggle", "Show/hide the VR wrist watch");
+            footerWatchToggleBtn.SetActive(false);
 
             // Sidebar toggle lives on the side-rail Scene Import button (above Tags); no footer button.
 
@@ -1200,6 +1221,8 @@ namespace VPB
                 if (init != null) { UI.AddIconToButton(footerAutoHideBtn, init); footerAutoHideIconImage = footerAutoHideBtn.transform.Find("Icon")?.GetComponent<Image>(); }
             }
 
+            try { EnsureFooterOverflowChrome(rightSection); } catch { }
+
             // --- Context Actions (Category-aware) ---
 
             AddHoverDelegate(gridSizeMinusBtn);
@@ -1250,6 +1273,7 @@ namespace VPB
                 gridSizeMinusBtn, gridSizePlusBtn,
                 footerHoldToLaunchToggleBtn,
                 footerLayoutBtn, footerHeightBtn, footerAutoHideBtn, footerDockBtn,
+                _footerOverflowBtnGO,
             };
             for (int i = 0; i < footerBtnGOs.Length; i++)
             {
@@ -1277,6 +1301,8 @@ namespace VPB
 
             UpdateSpringScrollButtonToggleUI();
             UpdateHoldToLaunchToggleUI();
+
+            innerPaneScaleActions.Add(s => { try { ApplyFooterOverflowLayout(s); } catch { } });
 
             // Scale the back button
             {
@@ -1363,6 +1389,8 @@ namespace VPB
             UpdateFooterAutoHideState();
             UpdateFooterVamMenuGateState();
             UpdateFooterVrWatchState();
+            try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
+            try { ApplyFooterModeButtonVisibility(); } catch { }
             UpdatePaginationText();
             try { UpdateUndoRedoButtonLabels(); } catch { }
         }
@@ -1781,7 +1809,7 @@ namespace VPB
                 if (springScrollButtonGO != null)
                 {
                     float w = isFixedLocally ? 50f : 100f;
-                    float h = w * 1.618f;
+                    float h = w * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
                     var ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
                     if (ssb != null) ssb.SetSize(w, h);
                 }
@@ -2149,6 +2177,7 @@ namespace VPB
         private void ToggleVrWatchVisible()
         {
             if (VPBConfig.Instance == null) return;
+            if (!XrUtils.IsVrActive()) return;
             VPBConfig.Instance.QuickMenuVrWatchVisible = !VPBConfig.Instance.QuickMenuVrWatchVisible;
             VPBConfig.Instance.Save();
             UpdateFooterVrWatchState();
@@ -2156,7 +2185,14 @@ namespace VPB
 
         private void UpdateFooterVrWatchState()
         {
-            if (VPBConfig.Instance == null) return;
+            bool isVR = XrUtils.IsVrActive();
+            bool watchCollapsed = false;
+            try { watchCollapsed = _footerOverflowCollapsed != null && _footerOverflowCollapsed.Contains(footerWatchToggleBtn); } catch { }
+            bool showWatch = isVR && !watchCollapsed;
+            if (footerWatchToggleBtn != null && footerWatchToggleBtn.activeSelf != showWatch)
+                footerWatchToggleBtn.SetActive(showWatch);
+            if (!isVR || VPBConfig.Instance == null) return;
+
             Color activeColor = UI.AccentBlue;
             Color inactiveColor = UI.ChromeMid;
             bool on = VPBConfig.Instance.QuickMenuVrWatchVisible;
@@ -2412,18 +2448,14 @@ namespace VPB
 
             if (leftDesktopModeBtnImage != null) leftDesktopModeBtnImage.color = color;
 
-            if (footerFollowAngleBtn != null) footerFollowAngleBtn.SetActive(!fixedMode);
-            if (footerFollowDistanceBtn != null) footerFollowDistanceBtn.SetActive(!fixedMode);
-            if (footerFollowHeightBtn != null) footerFollowHeightBtn.SetActive(!fixedMode);
-            if (footerDockBtn != null) footerDockBtn.SetActive(fixedMode);
-            if (footerHeightBtn != null) footerHeightBtn.SetActive(fixedMode);
-            if (footerAutoHideBtn != null) footerAutoHideBtn.SetActive(fixedMode);
+            ApplyFooterModeButtonVisibility();
 
             SyncSideFollowRailButtonsVisibility();
 
             UpdateSideButtonPositions();
             UpdateFooterDockButtonState();
             UpdateFooterAutoHideState();
+            try { UpdateFooterVrWatchState(); } catch { }
         }
 
         private void UpdateFooterDockButtonState()
@@ -2446,6 +2478,24 @@ namespace VPB
         private void SyncSideFollowRailButtonsVisibility()
         {
             bool show = !isFixedLocally;
+            if (show && _sideRailOverflowCollapsedIdx != null && _sideRailOverflowCollapsedIdx.Count > 0)
+            {
+                // Keep hidden if height-fit overflow already ate this slot.
+                int followIdx = -1;
+                try
+                {
+                    List<RectTransform> refList = rightSideButtons != null && rightSideButtons.Count > 0 ? rightSideButtons : leftSideButtons;
+                    if (refList != null)
+                    {
+                        Text ft = rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText;
+                        if (ft != null)
+                            followIdx = refList.FindIndex(rt => rt != null && rt.GetComponentInChildren<Text>(true) == ft);
+                    }
+                }
+                catch { }
+                if (followIdx >= 0 && _sideRailOverflowCollapsedIdx.Contains(followIdx))
+                    show = false;
+            }
             if (rightFollowBtnImage != null) rightFollowBtnImage.gameObject.SetActive(show);
             if (leftFollowBtnImage != null) leftFollowBtnImage.gameObject.SetActive(show);
         }
@@ -3186,7 +3236,10 @@ namespace VPB
 
             try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
-            UpdateLayout();
+            // Chrome only — do not sync CacheCreators / CacheCategoryCounts / CacheUserTags here.
+            // Those scans stall the main thread so rail buttons (incl. Creator) look like they spawn late.
+            // UpdateTabs builders fill the cache for the open facet only.
+            UpdateLayout(false, false);
             UpdateTabs();
 
             // Leaving Settings via re-toggling Settings button or switching side panes must restore toolbox actions.

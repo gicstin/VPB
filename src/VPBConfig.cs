@@ -706,7 +706,7 @@ namespace VPB
         public string DesktopFixedEnforcedDockSide = "Right";
         public int DesktopFixedHeightMode = 0; // 0: Full, 1: Custom
         public float DesktopCustomHeight = 0.5f;
-        public float DesktopCustomWidth = 1.618f / 2.618f;
+        public float DesktopCustomWidth = GalleryUiDesignTokens.GoldenRatioMajor;
         public bool EnableAutoFixedGallery = true;
         public float ListRowHeight = 100f;
         public int GridColumnCount = 4;
@@ -976,7 +976,7 @@ namespace VPB
             DesktopFixedEnforcedDockSide = "Right";
             DesktopFixedHeightMode = 0;
             DesktopCustomHeight = 0.5f;
-            DesktopCustomWidth = 1.618f / 2.618f;
+            DesktopCustomWidth = GalleryUiDesignTokens.GoldenRatioMajor;
             EnableAutoFixedGallery = true;
             ListRowHeight = 100f;
             GridColumnCount = 4;
@@ -1426,7 +1426,7 @@ namespace VPB
 
                         // Migration/validation: clamp fixed-mode anchors so panel never becomes unusably tiny.
                         // Prevents "stuck" desktop UI when DesktopCustomHeight/Width are out of range.
-                        float w = ClampDesktopFixedAnchor01(DesktopCustomWidth, 0.05f, 0.85f, 1.618f / 2.618f);
+                        float w = ClampDesktopFixedAnchor01(DesktopCustomWidth, 0.05f, 0.85f, GalleryUiDesignTokens.GoldenRatioMajor);
                         float h = ClampDesktopFixedAnchor01(DesktopCustomHeight, 0.05f, 0.85f, 0.5f);
                         if (Mathf.Abs(DesktopCustomWidth - w) > 0.0001f) { DesktopCustomWidth = w; changed = true; }
                         if (Mathf.Abs(DesktopCustomHeight - h) > 0.0001f) { DesktopCustomHeight = h; changed = true; }

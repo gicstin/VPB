@@ -495,13 +495,7 @@ namespace VPB
 
         void OnEnable()
         {
-            if (hoverBorderGO != null)
-            {
-                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
-                else hoverBorderGO.SetActive(isSelected);
-                return;
-            }
-            RefreshRimActive();
+            SyncIndicatorVisibility();
         }
 
         void OnDisable()
@@ -514,24 +508,28 @@ namespace VPB
         public void OnPointerEnter(PointerEventData eventData)
         {
             hovering = true;
-            if (hoverBorderGO != null)
-            {
-                hoverBorderGO.SetActive(true);
-                return;
-            }
-            RefreshRimActive();
+            SyncIndicatorVisibility();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             hovering = false;
+            SyncIndicatorVisibility();
+        }
+
+        /// <summary>Show/hide rim or <see cref="hoverBorderGO"/> from hover + selection; tint indicator to <see cref="hoverColor"/>.</summary>
+        public void SyncIndicatorVisibility()
+        {
             if (hoverBorderGO != null)
             {
-                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
-                else if (!isSelected) hoverBorderGO.SetActive(false);
+                bool show = hovering || (isSelected && !hoverIndicatorUsesSeparateSelectionVisual);
+                if (hoverBorderGO.activeSelf != show) hoverBorderGO.SetActive(show);
+                Graphic g = hoverBorderGO.GetComponent<Graphic>();
+                if (g != null && g.color != hoverColor) g.color = hoverColor;
                 return;
             }
             RefreshRimActive();
+            ApplyRimTint();
         }
 
         private void RefreshRimActive()
@@ -649,13 +647,19 @@ namespace VPB
     }
 
     /// <summary>
-    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> every frame so dynamic UI and Unity defaults
-    /// cannot bring back ColorTint hover fill.
+    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> on a throttle so dynamic UI and Unity defaults
+    /// cannot bring back ColorTint hover fill, without paying full-tree cost every frame.
     /// </summary>
     public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
     {
+        private const float IntervalSeconds = 0.5f;
+        private float _nextApplyUnscaledTime;
+
         private void LateUpdate()
         {
+            float now = Time.unscaledTime;
+            if (now < _nextApplyUnscaledTime) return;
+            _nextApplyUnscaledTime = now + IntervalSeconds;
             UI.ApplyGalleryPaneHoverPolicy(gameObject);
         }
     }
@@ -1025,6 +1029,12 @@ namespace VPB
         // Adaptive Config
         public bool isAdaptive = false;
         public float minCellSize = 200f;
+        /// <summary>
+        /// Hard floor for grid cells when fixed column count is set. Below this, effective
+        /// columns drop (then cell size clamps) so a tiny pane cannot spawn 1px thumbs.
+        /// Softer than <see cref="minCellSize"/> so preferred columns stay until pane is truly narrow.
+        /// </summary>
+        private const float AbsoluteMinCellSize = 80f;
         public int fixedColumns = 0;
         public float targetAspectRatio = 1.0f;
         public bool useFixedHeight = false;
@@ -1101,13 +1111,15 @@ namespace VPB
                     layoutDirty = true;
                 else if (fixedColumns > 0)
                 {
-                    int cols = Mathf.Max(1, fixedColumns);
+                    int cols = ResolveColumnCount(usableWidth);
                     // Match PositionItem: left pad + (cols-1) gaps + right pad = (cols+1)*spacingX
                     float inner = usableWidth - (cols + 1) * spacingX;
                     if (inner > 0.01f)
                     {
                         float newCellW = inner / cols;
-                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f)
+                        if (!useFixedHeight && newCellW < AbsoluteMinCellSize)
+                            newCellW = AbsoluteMinCellSize;
+                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f || cols != colCount)
                             layoutDirty = true;
                     }
                     else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
@@ -1157,6 +1169,35 @@ namespace VPB
             if (isAdaptive) _needsLayoutUpdate = true;
         }
 
+        /// <summary>
+        /// Effective column count for current viewport. Honors fixedColumns when set; in grid
+        /// mode drops columns so cells stay &gt;= <see cref="AbsoluteMinCellSize"/>.
+        /// </summary>
+        private int ResolveColumnCount(float usableWidth)
+        {
+            int cols = fixedColumns;
+            if (cols <= 0)
+            {
+                // Side pads = spacingX (same as PositionItem / vertical totalHeight).
+                cols = Mathf.FloorToInt((usableWidth - spacingX) / (minCellSize + spacingX));
+                if (cols < 1) cols = 1;
+                return cols;
+            }
+
+            cols = Mathf.Max(1, cols);
+            // List mode (useFixedHeight): keep requested columns. Grid: never shrink below floor.
+            if (!useFixedHeight)
+            {
+                while (cols > 1)
+                {
+                    float w = (usableWidth - (cols + 1) * spacingX) / cols;
+                    if (w >= AbsoluteMinCellSize) break;
+                    cols--;
+                }
+            }
+            return cols;
+        }
+
         /// <param name="deferFinalRefresh">When true, updates dimensions and content height only — caller must end with <see cref="Refresh"/> or <see cref="SetItemCountAtScroll"/> / <see cref="SetItemCount"/> without defer.</param>
         private void RecalculateLayout(bool deferFinalRefresh = false)
         {
@@ -1184,17 +1225,19 @@ namespace VPB
             lastRectWidth = wasZero ? 0f : usableWidth; // Store 0 if we defaulted, to allow next change to trigger
             lastFixedColumns = fixedColumns;
             
-            int cols = fixedColumns;
-            if (cols <= 0)
-            {
-                // Side pads = spacingX (same as PositionItem / vertical totalHeight).
-                cols = Mathf.FloorToInt((usableWidth - spacingX) / (minCellSize + spacingX));
-                if (cols < 1) cols = 1;
-            }
+            int cols = ResolveColumnCount(usableWidth);
 
             // Width must match PositionItem: x = col*(w+sx)+sx  →  cols*w + (cols+1)*sx ≤ usableWidth
             float cellWidth = (usableWidth - (cols + 1) * spacingX) / cols;
-            if (cellWidth < 10f) cellWidth = 10f; // Sanity check
+            if (!useFixedHeight)
+            {
+                // Floor even when cols==1 and viewport still narrower — prevents 1px thumbs / huge visible set.
+                if (cellWidth < AbsoluteMinCellSize) cellWidth = AbsoluteMinCellSize;
+            }
+            else if (cellWidth < 10f)
+            {
+                cellWidth = 10f;
+            }
 
             float cellHeight;
             if (useFixedHeight)

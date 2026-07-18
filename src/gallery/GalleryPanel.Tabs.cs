@@ -246,6 +246,12 @@ namespace VPB
             return (GalleryUiDesignTokens.SideTabRowHeightRef + GalleryUiDesignTokens.SideTabRowSpacingRef) * s;
         }
 
+        /// <summary>Virtualized side-tab row stride (button height + gap). Same for creators and user tags.</summary>
+        private float SideTabVirtRowStridePx()
+        {
+            return CreatorVirtRowHeight();
+        }
+
         private static void SyncRoundedFractionOnTabButton(GameObject btn, float frac)
         {
             if (btn == null) return;
@@ -914,7 +920,7 @@ namespace VPB
             string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
                 ? GetUserTagPickRowTooltipFilter()
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
-            float rowH = UserTagPinnedRowHeightPx();
+            float rowH = SideTabVirtRowStridePx();
             if (rowH <= 1f) rowH = 37f;
 
             RectTransform viewport = sr.viewport != null ? sr.viewport : (sr.transform as RectTransform);
@@ -955,6 +961,7 @@ namespace VPB
             EnsureUserTagVirtPool(isLeft, holderGo.transform, visible);
 
             List<GameObject> pool = isLeft ? _leftUserTagVirtButtons : _rightUserTagVirtButtons;
+            float btnH = SideTabRowHeightPx(ChromeScale);
             for (int i = 0; i < pool.Count; i++)
             {
                 int idx = firstIdx + i;
@@ -968,7 +975,7 @@ namespace VPB
                     if (rt != null)
                     {
                         float s = ChromeScale;
-                        ApplySideTabVirtRowHorizontalLayout(rt, s, SideTabRowHeightPx(s));
+                        ApplySideTabVirtRowHorizontalLayout(rt, s, btnH);
                         float y = -idx * rowH;
                         rt.anchoredPosition = new Vector2(0f, y);
                     }
@@ -1480,7 +1487,7 @@ namespace VPB
             GameObject placeholder = new GameObject("Placeholder");
             placeholder.transform.SetParent(textArea.transform, false);
             Text placeholderText = placeholder.AddComponent<Text>();
-            placeholderText.text = VPBTranslation.T("gallery.search.main", "Search...");
+            placeholderText.text = VPBTranslation.T("gallery.search.main", "Search grid...");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             placeholderText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             placeholderText.color = UI.InputFieldPlaceholderColor;

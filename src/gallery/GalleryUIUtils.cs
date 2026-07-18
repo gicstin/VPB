@@ -108,7 +108,7 @@ namespace VPB
 
         /// <summary>
         /// Gallery pane: no ColorTint fill on any <see cref="Selectable"/>; buttons get
-        /// <see cref="UIHoverBorder"/>. Run once at init and continuously via <see cref="GalleryPaneChromeEnforcer"/>
+        /// <see cref="UIHoverBorder"/>. Run once at init and on a throttle via <see cref="GalleryPaneChromeEnforcer"/>
         /// so tabs/redraws cannot restore default hover fill.
         /// </summary>
         public static void ApplyGalleryPaneHoverPolicy(GameObject root)
@@ -129,28 +129,44 @@ namespace VPB
                     {
                         if (IsFilterChipDismissButton(s.transform)) continue;
                         var hb = s.GetComponent<UIHoverBorder>();
-                        if (hb == null) hb = s.gameObject.AddComponent<UIHoverBorder>();
-                        // Global default for buttons that don't override (file rows override per-row already)
-                        hb.hoverColor = border;
-                        if (IsUnderImportSidebarScrollViewport(s.transform))
-                            hb.inward = true;
-                        hb.ApplyBorderSettings();
+                        bool added = hb == null;
+                        if (added) hb = s.gameObject.AddComponent<UIHoverBorder>();
+                        // Only stamp default border color on newly added borders — never overwrite
+                        // side-rail selected tints / custom hover colors (that caused a 0.5s pulse).
+                        ApplyHoverBorderPolicyIfChanged(hb, border, IsUnderImportSidebarScrollViewport(s.transform), assignDefaultColor: added);
                     }
                 }
 
-                // Also apply color to non-Button hover borders (resize handles, input fields, etc).
+                // Non-Button hover borders (resize handles, input fields): inward only — do not clobber color.
                 var hbs = root.GetComponentsInChildren<UIHoverBorder>(true);
                 for (int i = 0; i < hbs.Length; i++)
                 {
                     var hb = hbs[i];
                     if (hb == null) continue;
-                    hb.hoverColor = border;
-                    if (IsUnderImportSidebarScrollViewport(hb.transform))
-                        hb.inward = true;
-                    hb.ApplyBorderSettings();
+                    ApplyHoverBorderPolicyIfChanged(hb, border, IsUnderImportSidebarScrollViewport(hb.transform), assignDefaultColor: false);
                 }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Ensure inward + optional default color. Never rewrite an existing custom <see cref="UIHoverBorder.hoverColor"/>.
+        /// </summary>
+        private static void ApplyHoverBorderPolicyIfChanged(UIHoverBorder hb, Color border, bool wantInward, bool assignDefaultColor)
+        {
+            if (hb == null) return;
+            bool needApply = false;
+            if (assignDefaultColor)
+            {
+                hb.hoverColor = border;
+                needApply = true;
+            }
+            if (wantInward && !hb.inward)
+            {
+                hb.inward = true;
+                needApply = true;
+            }
+            if (needApply) hb.ApplyBorderSettings();
         }
 
         /// <summary>Obsolete name — use <see cref="ApplyGalleryPaneHoverPolicy"/>.</summary>
@@ -1563,6 +1579,7 @@ namespace VPB
                 rowT.fontStyle = FontStyle.Normal;
                 rowT.alignment = TextAnchor.MiddleLeft;
                 VPBUiFont.ApplyTo(rowT);
+                ApplyPopupMenuRowTextPadding(rowT, 1f);
             }
 
             AddLE(row, preferredHeight: preferredHeight, flexibleWidth: 1f);
@@ -1570,7 +1587,8 @@ namespace VPB
         }
 
         /// <summary>
-        /// Stretch-width popup row (overflow/save menus): left-aligned white text.
+        /// Stretch-width popup row (overflow/save menus): left-aligned label with inner text pad.
+        /// Optional leading <paramref name="icon"/> (does not hide label).
         /// </summary>
         public static GameObject AddStretchPopupMenuRow(
             Transform panel,
@@ -1578,10 +1596,13 @@ namespace VPB
             UnityAction onClick,
             bool isActive = false,
             bool enabled = true,
-            float rowHeight = 36f)
+            float rowHeight = 0f,
+            Sprite icon = null)
         {
             if (panel == null || onClick == null) return null;
-            GameObject row = CreateUIButton(panel.gameObject, 0f, rowHeight, label, 15, 0f, 0f, AnchorPresets.stretchAll, onClick);
+            if (rowHeight <= 0f) rowHeight = GalleryUiDesignTokens.PopupMenuRowHeightRef;
+            int fontSize = GalleryUiDesignTokens.PopupMenuOverflowFontRef;
+            GameObject row = CreateUIButton(panel.gameObject, 0f, rowHeight, label, fontSize, 0f, 0f, AnchorPresets.stretchAll, onClick);
             if (row == null) return null;
 
             Image img = row.GetComponent<Image>();
@@ -1592,15 +1613,112 @@ namespace VPB
             Button btn = row.GetComponent<Button>();
             if (btn != null) btn.interactable = enabled;
 
+            float leftExtraRef = 0f;
+            if (icon != null)
+            {
+                float iconSz = GalleryUiDesignTokens.PopupMenuRowIconSizeRef;
+                float pad = GalleryUiDesignTokens.PopupMenuRowTextPadXRef;
+                GameObject iconGO = new GameObject("RowIcon");
+                iconGO.transform.SetParent(row.transform, false);
+                Image iconImg = AddImage(iconGO, Color.white);
+                iconImg.sprite = icon;
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                RectTransform irt = iconGO.GetComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0f, 0.5f);
+                irt.anchorMax = new Vector2(0f, 0.5f);
+                irt.pivot = new Vector2(0f, 0.5f);
+                irt.sizeDelta = new Vector2(iconSz, iconSz);
+                irt.anchoredPosition = new Vector2(pad, 0f);
+                leftExtraRef = iconSz + GalleryUiDesignTokens.PopupMenuRowIconGapRef;
+            }
+
             Text t = row.GetComponentInChildren<Text>();
             if (t != null)
             {
+                t.gameObject.SetActive(true);
                 t.alignment = TextAnchor.MiddleLeft;
-                t.color = enabled ? Color.white : new Color(1f, 1f, 1f, 0.5f);
+                t.fontStyle = FontStyle.Normal;
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.color = enabled
+                    ? (isActive ? PopupText : PopupMutedText)
+                    : new Color(1f, 1f, 1f, 0.5f);
+                try { VPBUiFont.ApplyTo(t); } catch { }
+                ApplyPopupMenuRowTextPadding(t, 1f, leftExtraRef);
             }
 
             AddLE(row, preferredHeight: rowHeight, flexibleWidth: 1f);
             return row;
+        }
+
+        /// <summary>Inset popup-row label from left/right edges (scale with chrome). <paramref name="leftExtraRef"/> is unscaled (icon slot).</summary>
+        public static void ApplyPopupMenuRowTextPadding(Text t, float scale, float leftExtraRef = 0f)
+        {
+            if (t == null) return;
+            RectTransform rt = t.rectTransform;
+            if (rt == null) return;
+            if (scale <= 0f) scale = 1f;
+            float pad = GalleryUiDesignTokens.PopupMenuRowTextPadXRef * scale;
+            float left = pad + leftExtraRef * scale;
+            rt.offsetMin = new Vector2(left, 0f);
+            rt.offsetMax = new Vector2(-pad, 0f);
+        }
+
+        /// <summary>Keep a popup panel's X inside its stretch overlay so edge anchors do not clip.</summary>
+        public static void ClampPopupMenuPanelX(RectTransform panelRT, RectTransform overlayRT, float pad)
+        {
+            if (panelRT == null || overlayRT == null) return;
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT); } catch { }
+            float panelW = panelRT.rect.width;
+            if (panelW < 1f) panelW = panelRT.sizeDelta.x;
+            if (panelW < 1f) return;
+            if (pad < 0f) pad = 0f;
+
+            Rect o = overlayRT.rect;
+            float pivotX = panelRT.pivot.x;
+            float minX = o.xMin + pad + panelW * pivotX;
+            float maxX = o.xMax - pad - panelW * (1f - pivotX);
+            Vector2 pos = panelRT.anchoredPosition;
+            if (maxX < minX)
+                pos.x = (o.xMin + o.xMax) * 0.5f;
+            else
+                pos.x = Mathf.Clamp(pos.x, minX, maxX);
+            panelRT.anchoredPosition = pos;
+        }
+
+        /// <summary>
+        /// Keep panel Y inside overlay. <paramref name="bottomFloorLocalY"/> is min allowed Y for panel bottom
+        /// (e.g. top of tooltip/info bar) in overlay local space; null = overlay bottom + pad.
+        /// </summary>
+        public static void ClampPopupMenuPanelY(RectTransform panelRT, RectTransform overlayRT, float pad, float? bottomFloorLocalY = null)
+        {
+            if (panelRT == null || overlayRT == null) return;
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(panelRT); } catch { }
+            float panelH = panelRT.rect.height;
+            if (panelH < 1f) panelH = panelRT.sizeDelta.y;
+            if (panelH < 1f) return;
+            if (pad < 0f) pad = 0f;
+
+            Rect o = overlayRT.rect;
+            float pivotY = panelRT.pivot.y;
+            float floor = bottomFloorLocalY.HasValue ? bottomFloorLocalY.Value : (o.yMin + pad);
+            float minY = floor + panelH * pivotY;
+            float maxY = o.yMax - pad - panelH * (1f - pivotY);
+            Vector2 pos = panelRT.anchoredPosition;
+            if (maxY < minY)
+                pos.y = minY; // prefer clearing bottom chrome when space is tight
+            else
+                pos.y = Mathf.Clamp(pos.y, minY, maxY);
+            panelRT.anchoredPosition = pos;
+        }
+
+        public static Sprite GetButtonIconSprite(GameObject buttonGO)
+        {
+            if (buttonGO == null) return null;
+            Transform iconTr = buttonGO.transform.Find("Icon");
+            if (iconTr == null) return null;
+            Image img = iconTr.GetComponent<Image>();
+            return img != null ? img.sprite : null;
         }
 
         public static GameObject CreateUIButton(GameObject parentGO, float width, float height, string label, int fontSize, float xOffset, float yOffset, int anchorPreset, UnityAction onClick)

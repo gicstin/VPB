@@ -144,7 +144,10 @@ namespace VPB
                         if (activeTrigger != null)
                         {
                             RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
-                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
+                            // Overlay MUST pass null — leftover worldCamera triggers ScreenPointToRay spam.
+                            Camera cam = null;
+                            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                                cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
                             isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
                         if (isHoveringTrigger || isHoveringTriggerManual) SetCollapsed(false);
@@ -161,7 +164,9 @@ namespace VPB
                         if (activeTrigger != null)
                         {
                             RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
-                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
+                            Camera cam = null;
+                            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                                cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
                             isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
@@ -194,6 +199,7 @@ namespace VPB
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {
                         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                        canvas.worldCamera = null;
                         canvas.transform.localScale = Vector3.one;
                         
                         if (dragger != null) dragger.enabled = false;
@@ -551,7 +557,12 @@ namespace VPB
             {
                 float iscale = ChromeScale;
                 try { ApplyTitleBarResponsiveLayout(iscale); } catch { }
+                try { ApplyFooterOverflowLayout(iscale); } catch { }
                 try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
+            }
+            else if (IsVisible && paginationRT != null)
+            {
+                try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             }
 
             try { ValidateHoverPreviewActive(); } catch { }

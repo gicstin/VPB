@@ -67,6 +67,7 @@ namespace VPB
             }
             SyncCategoryQuickSwitchChrome();
             try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
+            try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             try { ApplyInAppHelpPanelLayout(ChromeScale); } catch { }
             UpdateSideContextActions();
 
@@ -394,6 +395,7 @@ namespace VPB
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
+            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
 
             float paneScale = ChromeScale;
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }

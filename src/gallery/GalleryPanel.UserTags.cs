@@ -2982,7 +2982,7 @@ namespace VPB
                     "gallery.usertags.editor_limits_hint",
                     "Up to 10 000 distinct names per paste; library holds up to 10 000 tag names; each item may have up to 100 tags.");
 
-            float actSq = 1.618f * headerChromeSq;
+            float actSq = GalleryUiDesignTokens.GoldenRatio * headerChromeSq;
 
             GameObject actionRow = new GameObject("ActionRow");
             actionRow.transform.SetParent(panel.transform, false);

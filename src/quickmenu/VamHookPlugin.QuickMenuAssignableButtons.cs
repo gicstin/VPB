@@ -1830,8 +1830,10 @@ namespace VPB
             try
             {
                 if (rt == null) return;
-                if (Camera.main == null) return;
+                RectTransform parent = rt.parent as RectTransform;
+                if (parent == null) return;
 
+                // Parent-local clamp — avoid Camera.main ScreenToWorldPoint (frustum spam on edges / VR).
                 Vector3[] corners = new Vector3[4];
                 rt.GetWorldCorners(corners);
 
@@ -1839,32 +1841,26 @@ namespace VPB
                 float minY = float.PositiveInfinity, maxY = float.NegativeInfinity;
                 for (int i = 0; i < 4; i++)
                 {
-                    Vector3 sp = Camera.main.WorldToScreenPoint(corners[i]);
-                    if (sp.x < minX) minX = sp.x;
-                    if (sp.x > maxX) maxX = sp.x;
-                    if (sp.y < minY) minY = sp.y;
-                    if (sp.y > maxY) maxY = sp.y;
+                    Vector3 local = parent.InverseTransformPoint(corners[i]);
+                    if (local.x < minX) minX = local.x;
+                    if (local.x > maxX) maxX = local.x;
+                    if (local.y < minY) minY = local.y;
+                    if (local.y > maxY) maxY = local.y;
                 }
 
+                const float pad = 6f;
+                Rect pr = parent.rect;
                 float dx = 0f;
                 float dy = 0f;
-                const float pad = 6f;
-                float sw = Screen.width;
-                float sh = Screen.height;
 
-                if (minX < pad) dx = (pad - minX);
-                else if (maxX > (sw - pad)) dx = (sw - pad - maxX);
+                if (minX < pr.xMin + pad) dx = (pr.xMin + pad) - minX;
+                else if (maxX > pr.xMax - pad) dx = (pr.xMax - pad) - maxX;
 
-                if (minY < pad) dy = (pad - minY);
-                else if (maxY > (sh - pad)) dy = (sh - pad - maxY);
+                if (minY < pr.yMin + pad) dy = (pr.yMin + pad) - minY;
+                else if (maxY > pr.yMax - pad) dy = (pr.yMax - pad) - maxY;
 
                 if (Mathf.Abs(dx) < 0.5f && Mathf.Abs(dy) < 0.5f) return;
-
-                Vector3 wp = rt.position;
-                Vector3 sp0 = Camera.main.WorldToScreenPoint(wp);
-                Vector3 sp1 = new Vector3(sp0.x + dx, sp0.y + dy, sp0.z);
-                Vector3 wp1 = Camera.main.ScreenToWorldPoint(sp1);
-                rt.position = wp1;
+                rt.anchoredPosition += new Vector2(dx, dy);
             }
             catch { }
         }

@@ -87,7 +87,8 @@ namespace VPB
             if (Application.isPlaying)
             {
                 canvas.renderMode = isFixedLocally ? RenderMode.ScreenSpaceOverlay : RenderMode.WorldSpace;
-                canvas.worldCamera = Camera.main;
+                // Overlay hit-tests require null cam; keep worldCamera only for WorldSpace.
+                canvas.worldCamera = isFixedLocally ? null : Camera.main;
                 canvas.sortingOrder = -10000;
                 // Position will be set in Show()
                 canvas.transform.localScale = isFixedLocally ? Vector3.one : new Vector3(0.001f, 0.001f, 0.001f);
@@ -515,7 +516,8 @@ namespace VPB
 
             // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }
-            { var rt = titleRT; innerPaneScaleActions.Add(s => { if (rt) rt.anchoredPosition = new Vector2(60f * s, 10f * s); rt.sizeDelta = new Vector2(300f * s, 40f * s); }); }
+            // Title lives inside CategoryQuickSwitch chrome (stretch + MiddleLeft) — do not re-apply
+            // legacy free-float (60,10)/(300×40); that top-shifts "Scenes" when pane goes wide.
             { var rt = fpsRT; innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(100f * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             { var go = languageSwitcherBtnGO; var t = _langBtnText; innerPaneScaleActions.Add(s => { if (go) { var rt = go.GetComponent<RectTransform>(); rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); } if (t) { t.resizeTextMaxSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * s); t.resizeTextMinSize = Mathf.RoundToInt(GalleryUiDesignTokens.FontMinRef * s); } }); }
             { var rt = titleSearchRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
@@ -1316,7 +1318,7 @@ namespace VPB
                         rightCategoryBtnImage.color = ColorCategory;
                         if (rightCategoryBtnText != null)
                         {
-                            rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                            rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
                             rightCategoryBtnText.fontSize = btnFontSize;
                             rightCategoryBtnText.gameObject.SetActive(true);
                         }
@@ -1324,7 +1326,7 @@ namespace VPB
                     }
                     rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
-                    AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Open category list.");
+                    AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
                 // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
@@ -1388,37 +1390,9 @@ namespace VPB
                     AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator (Green)
-                {
-                    float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
-                    float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
-
-                    GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => {
-                        if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
-                    });
-                    rightCreatorBtnImage = rightCreatorBtn.GetComponent<Image>();
-                    rightCreatorBtnText = rightCreatorBtn.GetComponentInChildren<Text>(true);
-                    if (galleryCreatorSprite != null)
-                    {
-                        UI.AddIconToButton(rightCreatorBtn, galleryCreatorSprite, sideIconPad, ColorCreator);
-                        rightCreatorBtnIconImage = rightCreatorBtn.transform.Find("Icon") != null
-                            ? rightCreatorBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        rightCreatorBtnImage.color = ColorCreator;
-                        if (rightCreatorBtnText != null)
-                        {
-                            rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
-                            rightCreatorBtnText.fontSize = btnFontSize;
-                            rightCreatorBtnText.gameObject.SetActive(true);
-                        }
-                        rightCreatorBtnIconImage = null;
-                    }
-                    rightSideButtons.Add(rightCreatorBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
-                    AddTooltip(rightCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
-                }
+                // Creator — skip create when hide-creator setting on (destroyed until setting off).
+                if (!HideCreatorSideRailButtonsRequested())
+                    CreateRightCreatorSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1822,7 +1796,7 @@ namespace VPB
                         leftCategoryBtnImage.color = ColorCategory;
                         if (leftCategoryBtnText != null)
                         {
-                            leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                            leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
                             leftCategoryBtnText.fontSize = btnFontSize;
                             leftCategoryBtnText.gameObject.SetActive(true);
                         }
@@ -1830,7 +1804,7 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
-                    AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Open category list.");
+                    AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
                 // Scene Import — above Tags (sidebar toggle; layout positions dynamically)
@@ -1890,35 +1864,9 @@ namespace VPB
                     AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator (Green)
-                {
-                    float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
-                    float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
-
-                    GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, startY - spacing * 7 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
-                    leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
-                    leftCreatorBtnText = leftCreatorBtn.GetComponentInChildren<Text>(true);
-                    if (galleryCreatorSprite != null)
-                    {
-                        UI.AddIconToButton(leftCreatorBtn, galleryCreatorSprite, sideIconPad, ColorCreator);
-                        leftCreatorBtnIconImage = leftCreatorBtn.transform.Find("Icon") != null
-                            ? leftCreatorBtn.transform.Find("Icon").GetComponent<Image>() : null;
-                    }
-                    else
-                    {
-                        leftCreatorBtnImage.color = ColorCreator;
-                        if (leftCreatorBtnText != null)
-                        {
-                            leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
-                            leftCreatorBtnText.fontSize = btnFontSize;
-                            leftCreatorBtnText.gameObject.SetActive(true);
-                        }
-                        leftCreatorBtnIconImage = null;
-                    }
-                    leftSideButtons.Add(leftCreatorBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
-                    AddTooltip(leftCreatorBtn, "gallery.tooltip.creator_list", "Open creator list.");
-                }
+                // Creator — skip create when hide-creator setting on (destroyed until setting off).
+                if (!HideCreatorSideRailButtonsRequested())
+                    CreateLeftCreatorSideRailButton();
 
                 // Path (Blue)
                 {
@@ -2402,8 +2350,9 @@ namespace VPB
             SubscribeLocaleChanged();
             RefreshLocalizedUi();
 
-            // Aggressive: kill ColorTint on all Selectables + border on buttons; re-run every LateUpdate via enforcer
-            // so UI rebuilt after init cannot restore default hover fill.
+            // Kill ColorTint on all Selectables + border on buttons; enforcer re-runs on a throttle
+            // so UI rebuilt after init cannot restore default hover fill. Enforcer must not rewrite
+            // existing UIHoverBorder.hoverColor (side-rail selected tints) or rims pulse / cost FPS.
             UI.ApplyGalleryPaneHoverPolicy(backgroundBoxGO);
             if (backgroundBoxGO.GetComponent<GalleryPaneChromeEnforcer>() == null)
                 backgroundBoxGO.AddComponent<GalleryPaneChromeEnforcer>();

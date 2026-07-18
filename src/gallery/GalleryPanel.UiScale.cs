@@ -105,6 +105,7 @@ namespace VPB
             try { RescalePopupMenusInternal(chromeS); } catch { }
             try { RescaleFooterInfoBarInternal(chromeS); } catch { }
             try { ApplyTitleBarResponsiveLayoutInternal(chromeS); } catch { }
+            try { ApplyFooterOverflowLayout(chromeS); } catch { }
         }
 
         /// <summary>Scales hover-path tooltip text and collapsed tbox label fonts.</summary>
@@ -189,16 +190,36 @@ namespace VPB
                     rt.sizeDelta = new Vector2(panelWidthRef * s, rt.sizeDelta.y);
             }
             float rowH = rowHeightRef * s;
+            float iconSz = GalleryUiDesignTokens.PopupMenuRowIconSizeRef * s;
+            float iconPad = GalleryUiDesignTokens.PopupMenuRowTextPadXRef * s;
             for (int i = 0; i < panel.childCount; i++)
             {
                 Transform ch = panel.GetChild(i);
                 if (ch == null) continue;
                 LayoutElement le = ch.GetComponent<LayoutElement>();
                 if (le != null)
+                {
                     le.preferredHeight = rowH;
+                    le.minHeight = rowH;
+                }
+                float leftExtraRef = 0f;
+                Transform iconTr = ch.Find("RowIcon");
+                if (iconTr != null)
+                {
+                    RectTransform irt = iconTr as RectTransform;
+                    if (irt != null)
+                    {
+                        irt.sizeDelta = new Vector2(iconSz, iconSz);
+                        irt.anchoredPosition = new Vector2(iconPad, 0f);
+                    }
+                    leftExtraRef = GalleryUiDesignTokens.PopupMenuRowIconSizeRef + GalleryUiDesignTokens.PopupMenuRowIconGapRef;
+                }
                 Text t = ch.GetComponentInChildren<Text>(true);
                 if (t != null)
+                {
                     GalleryUiMetrics.ApplyFont(t, fontRef, s, GalleryUiDesignTokens.FontMinRef);
+                    UI.ApplyPopupMenuRowTextPadding(t, s, leftExtraRef);
+                }
             }
         }
 
@@ -210,13 +231,19 @@ namespace VPB
             try { ApplyCategoryQuickMenuRowsLayout(s); } catch { }
             try { ApplyTitleCreatorDropdownLayout(s); } catch { }
             try { RescaleTitleBarOverflowMenuInternal(s); } catch { }
+            try { RescaleFooterOverflowMenuInternal(s); } catch { }
+            try { RescaleSideRailOverflowMenuInternal(s); } catch { }
             try { RescaleLanguageMenuInternal(s); } catch { }
+            try { RescaleGlobalSourceFilterMenuInternal(s); } catch { }
+            try { quickFiltersUI?.ApplyLayout(s); } catch { }
             try { RescaleSaveMenuPopupInternal(s); } catch { }
             if (tboxTargetMenuOpen)
             {
                 try { RebuildTboxTargetMenuOptions(); } catch { }
             }
         }
+
+        internal RectTransform QuickFiltersToggleBtnRT => _titleBarQfToggleBtnRT;
 
         private static void ApplyTitleBarChipScale(RectTransform rt, Text txt, int fontRef, float scale, int minFont = GalleryUiDesignTokens.FontMinRef, bool glyph = false)
         {
@@ -270,7 +297,14 @@ namespace VPB
             {
                 RectTransform rt = globalSourceFilterBtn.GetComponent<RectTransform>();
                 if (rt != null)
-                    rt.sizeDelta = new Vector2(GlobalSourceFilterButtonWidth * s, GlobalSourceFilterButtonHeight * s);
+                {
+                    float sourceW = _globalSourceFilterCompact
+                        ? GalleryUiDesignTokens.TitleBarChipRef * s
+                        : GlobalSourceFilterButtonWidth * s;
+                    rt.sizeDelta = new Vector2(sourceW, GlobalSourceFilterButtonHeight * s);
+                    if (_globalSourceFilterCompact)
+                        ScaleButtonIconPadding(rt, s);
+                }
                 if (globalSourceFilterBtnText != null)
                     GalleryUiMetrics.ApplyFont(globalSourceFilterBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             }

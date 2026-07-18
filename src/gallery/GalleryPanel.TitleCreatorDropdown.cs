@@ -67,7 +67,7 @@ namespace VPB
                 };
             }
 
-            AddTooltip(titleCreatorBtn, "gallery.tooltip.creator_filter", "Creator filter (multi-select). Left-click open. Right-click clear.");
+            AddTooltip(titleCreatorBtn, "gallery.tooltip.creator_filter", "Multi-select creators → filter grid. Right-click clear.");
 
             // Click-outside blocker (behind dropdown, above grid)
             titleCreatorDropdownBlocker = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdownBlocker", AnchorPresets.stretchAll);
