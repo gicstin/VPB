@@ -161,6 +161,7 @@ namespace VPB
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             RefreshGoText(tboxLoadBtn, "gallery.tbox.load", "Load");
             RefreshGoText(tboxUnloadBtn, "gallery.tbox.unload", "Unload");
             RefreshGoText(tboxLoadDepsBtn, "gallery.tbox.load_deps", "Load Deps");

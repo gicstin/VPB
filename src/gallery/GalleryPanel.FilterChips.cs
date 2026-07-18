@@ -74,6 +74,7 @@ namespace VPB
 
         private bool HasActiveBrowseFilters()
         {
+            if (IsFilterActive) return true;
             if (!string.IsNullOrEmpty(nameFilter) && nameFilter.Trim().Length > 0) return true;
             if (activeTags != null && activeTags.Count > 0) return true;
             return HasActiveBrowseFiltersExcludingTitleSearch();
@@ -194,6 +195,10 @@ namespace VPB
             Subfilter,
             UserTag,
             UntaggedOnly,
+            PackageDeps,
+            PackageDependents,
+            PackageMissing,
+            PackageFilterBack,
             ClearAll,
         }
 
@@ -209,6 +214,10 @@ namespace VPB
                 case FilterChipKind.Subfilter: return ColorSubfilterFilter;
                 case FilterChipKind.UserTag: return ColorUserTagFilter;
                 case FilterChipKind.UntaggedOnly: return ColorUserTagFilter;
+                case FilterChipKind.PackageDeps: return DetailStripColorDeps;
+                case FilterChipKind.PackageDependents: return DetailStripColorDependents;
+                case FilterChipKind.PackageMissing: return DetailStripColorMissingBad;
+                case FilterChipKind.PackageFilterBack: return new Color(0.28f, 0.42f, 0.62f, 1f);
                 case FilterChipKind.ClearAll: return ColorCategory;
                 default: return ColorTitleSearchFilterActive;
             }
@@ -233,21 +242,21 @@ namespace VPB
             if (parent == null || spec.OnDismiss == null) return null;
             if (s <= 0f) s = 1f;
 
-            bool isClearAll = spec.Kind == FilterChipKind.ClearAll;
+            bool isCompactAction = spec.Kind == FilterChipKind.ClearAll || spec.Kind == FilterChipKind.PackageFilterBack;
             Color accent = ResolveFilterChipAccent(spec.Kind);
 
-            GameObject chip = new GameObject(isClearAll ? "FilterChipClearAll" : "FilterChip_" + spec.Kind);
+            GameObject chip = new GameObject(isCompactAction ? "FilterChip_" + spec.Kind : "FilterChip_" + spec.Kind);
             chip.transform.SetParent(parent, false);
 
-            Image bg = AddFilterChipRoundedBg(chip, new Color(accent.r, accent.g, accent.b, isClearAll ? 0.94f : 0.96f));
+            Image bg = AddFilterChipRoundedBg(chip, new Color(accent.r, accent.g, accent.b, isCompactAction ? 0.94f : 0.96f));
 
             int padLeft = Mathf.RoundToInt(10f * s);
             int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
             float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
             HorizontalLayoutGroup row = UI.AddHLG(chip,
-                spacing: isClearAll ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s,
-                padding: isClearAll
+                spacing: isCompactAction ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s,
+                padding: isCompactAction
                     ? new RectOffset(padLeft, padLeft, padV, padV)
                     : new RectOffset(padLeft, 0, padV, padV),
                 childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
@@ -266,7 +275,7 @@ namespace VPB
             LayoutElement labelLE = UI.AddLE(labelGO, preferredHeight: innerH, flexibleHeight: 0f);
 
             UnityAction dismiss = spec.OnDismiss;
-            if (!isClearAll)
+            if (!isCompactAction)
             {
                 // Clicking anywhere on the chip (label area) dismisses it — child dismiss button
                 // consumes its own click so the parent only fires when the label area is hit.
@@ -311,7 +320,14 @@ namespace VPB
                 Button chipBtn = chip.AddComponent<Button>();
                 UI.NeutralizeSelectableColorTint(chipBtn);
                 chipBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
-                try { AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters"); } catch { }
+                if (spec.Kind == FilterChipKind.PackageFilterBack)
+                {
+                    try { AddTooltip(chip, "gallery.tooltip.filter_back", "Back"); } catch { }
+                }
+                else
+                {
+                    try { AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters"); } catch { }
+                }
             }
 
             chip.AddComponent<UIHoverBorder>();
@@ -327,6 +343,9 @@ namespace VPB
         private void CollectActiveFilterChipSpecs(List<ActiveFilterChipSpec> specs)
         {
             if (specs == null) return;
+
+            // Package dep/dependent/missing mode — primary constraint; list first.
+            CollectPackageFilterChipSpecs(specs);
 
             string search = nameFilter != null ? nameFilter.Trim() : "";
             if (search.Length > 0)
@@ -503,7 +522,14 @@ namespace VPB
                 }
             }
 
-            if (specs.Count >= 2)
+            // Back is navigation within package-filter mode — don't count it toward Clear all.
+            int clearAllEligible = 0;
+            for (int i = 0; i < specs.Count; i++)
+            {
+                if (specs[i].Kind != FilterChipKind.PackageFilterBack)
+                    clearAllEligible++;
+            }
+            if (clearAllEligible >= 2)
             {
                 specs.Add(new ActiveFilterChipSpec
                 {
@@ -512,6 +538,46 @@ namespace VPB
                     OnDismiss = () =>
                     {
                         try { ClearAllBrowseFiltersKeepCategory(); } catch { RefreshFiles(true); }
+                    }
+                });
+            }
+        }
+
+        private void CollectPackageFilterChipSpecs(List<ActiveFilterChipSpec> specs)
+        {
+            if (specs == null || !IsFilterActive) return;
+
+            string modeLabel = GetFilterModeLabel;
+            if (string.IsNullOrEmpty(modeLabel))
+                modeLabel = VPBTranslation.T("gallery.filter_chip.package_filter", "Filter");
+
+            FilterChipKind kind;
+            if (string.Equals(modeLabel, "Missing", StringComparison.OrdinalIgnoreCase))
+                kind = FilterChipKind.PackageMissing;
+            else if (currentPackageFilterMode == PackageFilterMode.Dependents)
+                kind = FilterChipKind.PackageDependents;
+            else
+                kind = FilterChipKind.PackageDeps;
+
+            specs.Add(new ActiveFilterChipSpec
+            {
+                Label = modeLabel + ": " + GetFilterModeCount,
+                Kind = kind,
+                OnDismiss = () =>
+                {
+                    try { ClearPackageFilter(); } catch { }
+                }
+            });
+
+            if (_filterStack.Count > 1)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = VPBTranslation.T("gallery.filter_chip.back", "Back"),
+                    Kind = FilterChipKind.PackageFilterBack,
+                    OnDismiss = () =>
+                    {
+                        try { NavigateBack(); } catch { }
                     }
                 });
             }

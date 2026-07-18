@@ -22,6 +22,7 @@ namespace VPB
         /// <summary>Clear title search + browse filters; keep current category path.</summary>
         public void ClearAllBrowseFiltersKeepCategory()
         {
+            try { if (IsFilterActive) ClearPackageFilter(); } catch { }
             currentRatingFilter = "";
             try { activeTags?.Clear(); } catch { }
             try { ClearTitleBarSearchAndSyncChrome(); } catch { }

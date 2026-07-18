@@ -237,6 +237,7 @@ namespace VPB
             try { RescaleGlobalSourceFilterMenuInternal(s); } catch { }
             try { quickFiltersUI?.ApplyLayout(s); } catch { }
             try { RescaleSaveMenuPopupInternal(s); } catch { }
+            try { DetailStripSyncTagMenuLayout(s); } catch { }
             if (tboxTargetMenuOpen)
             {
                 try { RebuildTboxTargetMenuOptions(); } catch { }

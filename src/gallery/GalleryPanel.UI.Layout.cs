@@ -370,6 +370,14 @@ namespace VPB
 
         private float ResolveSideTabSubFilterRowAnchorY(bool isLeft)
         {
+            // Prefer live split from sub-pane (may rise when InfoBar is tall).
+            GameObject sub = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
+            if (sub != null && sub.activeSelf)
+            {
+                RectTransform subRT = sub.GetComponent<RectTransform>();
+                if (subRT != null && subRT.anchorMax.y > 0.05f && subRT.anchorMax.y < 0.95f)
+                    return subRT.anchorMax.y;
+            }
             ContentType? ac = isLeft ? leftActiveContent : rightActiveContent;
             return ac.HasValue ? SideTabSubFilterRowAnchorY(ac.Value) : 0.5f;
         }
@@ -487,6 +495,9 @@ namespace VPB
             contentScrollRT.offsetMin = new Vector2(leftOffset, gridBottomInset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
 
+            // Category/subcategory split: raise split line when tall InfoBar would crush sub-pane.
+            try { SyncSideTabSplitAgainstBottomChrome(tabBottomInset, tabTopOffset); } catch { }
+
             if (leftTabScrollGO != null && leftTabScrollGO.activeSelf)
             {
                 RectTransform rt = leftTabScrollGO.GetComponent<RectTransform>();
@@ -526,6 +537,68 @@ namespace VPB
             }
 
             try { ApplyUserTagsStickyScrollChrome(tabTopOffset); } catch { }
+        }
+
+        /// <summary>
+        /// When InfoBar/detail-strip grows, fixed φ-split subcategory pane can shrink below usable height.
+        /// Raise split (grow sub-pane) so category tags/subcategory lists stay scrollable above footer.
+        /// </summary>
+        private void SyncSideTabSplitAgainstBottomChrome(float tabBottomInset, float tabTopOffset)
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            if (backgroundBoxGO == null) return;
+            RectTransform bg = backgroundBoxGO.GetComponent<RectTransform>();
+            if (bg == null) return;
+            float parentH = bg.rect.height;
+            if (parentH < 120f) return;
+
+            float minSubH = GalleryUiDesignTokens.SideTabSubPaneMinHeightRef * s;
+            float minMainH = GalleryUiDesignTokens.SideTabMainPaneMinHeightRef * s;
+            float subTopReserve = -SubTabScrollPaneTopOffset();
+            if (subTopReserve < 0f) subTopReserve = 0f;
+            float mainTopReserve = -tabTopOffset;
+            if (mainTopReserve < 0f) mainTopReserve = 0f;
+            float seam = SideTabSplitSeamInset();
+
+            AdjustOneSideTabSplit(leftTabScrollGO, leftSubTabScrollGO, leftActiveContent,
+                tabBottomInset, tabTopOffset, parentH, minSubH, minMainH, subTopReserve, mainTopReserve, seam);
+            AdjustOneSideTabSplit(rightTabScrollGO, rightSubTabScrollGO, rightActiveContent,
+                tabBottomInset, tabTopOffset, parentH, minSubH, minMainH, subTopReserve, mainTopReserve, seam);
+
+            try { SyncSideTabSubFilterRowChrome(s); } catch { }
+        }
+
+        private static void AdjustOneSideTabSplit(
+            GameObject mainScroll, GameObject subScroll, ContentType? activeContent,
+            float tabBottomInset, float tabTopOffset, float parentH,
+            float minSubH, float minMainH, float subTopReserve, float mainTopReserve, float seam)
+        {
+            if (mainScroll == null || subScroll == null || !subScroll.activeSelf) return;
+            RectTransform mainRT = mainScroll.GetComponent<RectTransform>();
+            RectTransform subRT = subScroll.GetComponent<RectTransform>();
+            if (mainRT == null || subRT == null) return;
+            // Only adjust true split stacks (sub pane not full-height).
+            if (subRT.anchorMax.y >= 0.95f) return;
+
+            float ideal = activeContent.HasValue
+                ? SideTabSplitSubPaneTopAnchorY(activeContent.Value)
+                : subRT.anchorMax.y;
+            float minSplit = (tabBottomInset + subTopReserve + minSubH) / parentH;
+            float maxSplit = 1f - (mainTopReserve + seam + minMainH) / parentH;
+            float splitY = ideal;
+            if (splitY < minSplit) splitY = minSplit;
+            if (maxSplit > 0.2f && splitY > maxSplit) splitY = maxSplit;
+            if (minSplit > maxSplit)
+                splitY = Mathf.Clamp(minSplit, 0.22f, 0.72f);
+            else
+                splitY = Mathf.Clamp(splitY, 0.22f, 0.72f);
+
+            float x = mainRT.anchorMin.x;
+            mainRT.anchorMin = new Vector2(x, splitY);
+            mainRT.anchorMax = new Vector2(x, 1f);
+            subRT.anchorMin = new Vector2(x, 0f);
+            subRT.anchorMax = new Vector2(x, splitY);
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)

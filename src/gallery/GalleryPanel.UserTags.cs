@@ -109,6 +109,10 @@ namespace VPB
             userTagAppliedRemoveSelection.Clear();
             userTagAppliedRemoveAnchor = null;
             updatePanelForSelection();
+            // Detail strip tags line must refresh when selection (or applied tags) change.
+            // Skip during thumb scrub — commit path rebuilds strip once on idle.
+            if (_detailStripScrubActive) return;
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
         }
 
         private void ClearUntaggedTaggedPinKeys()
@@ -2056,6 +2060,7 @@ namespace VPB
 
             CacheAppliedUserTagsForSelection();
             try { SyncUntaggedTaggedPinKeysAfterMutate(remove, updatedRows); } catch { }
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
 
             bool filterModeRemove = remove && _userTagAvailMode == UserTagAvailMode.FilterByTags;
 

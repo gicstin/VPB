@@ -1847,6 +1847,27 @@ namespace VPB
 							try { this.PackageDependencies = directList; } catch { }
 							svp.RecursivePackageDependencies = depends.ToList();
 
+							try
+							{
+								var descNode = asObject["description"];
+								if (descNode != null)
+								{
+									string d = descNode.Value;
+									if (!string.IsNullOrEmpty(d)) Description = d.Trim();
+								}
+							}
+							catch { }
+							try
+							{
+								var promoNode = asObject["promotionalLink"];
+								if (promoNode != null)
+								{
+									string p = promoNode.Value;
+									if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
+								}
+							}
+							catch { }
+
 							if (!FileManager.IsBulkDeepScanActive)
 								FindMissingDependenciesRecursive(asObject);
 						}

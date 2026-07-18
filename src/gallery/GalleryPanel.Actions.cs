@@ -1265,6 +1265,7 @@ namespace VPB
 
             if (!applyToSelection)
             {
+                try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
                 HashSet<string> untaggedSelBefore = _userTagAvailMode == UserTagAvailMode.FilterUntagged
                     ? SnapshotSelectionIdentityKeys(this)
                     : null;
@@ -1657,6 +1658,15 @@ namespace VPB
 
         private void RefreshSelectionVisuals()
         {
+            RefreshSelectionVisualsCore(runHeavySideEffects: true);
+        }
+
+        /// <summary>
+        /// Grid selection chrome only. Heavy side effects (user-tags pane + toolbox/context menu)
+        /// are optional — skip during detail-strip thumb scrub for scroll performance.
+        /// </summary>
+        private void RefreshSelectionVisualsCore(bool runHeavySideEffects)
+        {
             // Iterate over active buttons in the recycling grid content
             if (recyclingGrid != null && recyclingGrid.content != null)
             {
@@ -1714,11 +1724,14 @@ namespace VPB
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
+            if (!runHeavySideEffects) return;
             // Keep toolbox grid-rate selector open during selection visual refresh.
             // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
             // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
             // some modes where RefreshSelectionVisuals is triggered frequently.
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
+            // Immediate detail-strip / toolbox height sync (avoid waiting for the 250ms poll).
+            try { UpdateSelectionContextMenu(); } catch { }
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)

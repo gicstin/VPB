@@ -51,15 +51,6 @@ namespace VPB
         private GameObject tboxSettingsSaveBtn;
         private GameObject tboxSettingsCancelBtn;
 
-        // Dependency filter controls in toolbox
-        private GameObject tboxFilterModeRowGO;
-        private RectTransform tboxFilterModeRowRT;
-        private LayoutElement tboxFilterModeRowLE;
-        private HorizontalLayoutGroup tboxFilterModeRowHLG;
-        private GameObject tboxFilterBackBtn;
-        private GameObject tboxFilterClearBtn;
-        private Text tboxFilterModeText;
-
         // Appearance clothing-apply-mode segmented row (Preset / Keep / Only). Shown in the
         // toolbox only while the Appearance category is active; single-select, one click.
         private GameObject tboxClothingModeRowGO;
@@ -543,9 +534,6 @@ namespace VPB
             }
 
             float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
-            // Add filter row height when active
-            if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                band += tboxInfoRowHeight + tboxBtnRowGap;
             // Add appearance clothing-mode row height when active
             if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                 band += tboxInfoRowHeight + tboxBtnRowGap;
@@ -734,49 +722,6 @@ namespace VPB
             tboxBtnRow2LE = UI.AddLE(tboxBtnRow2GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
             tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow2GO.SetActive(false);
-
-            // ── Dependency Filter Mode Row ─────────────────────────────────────
-            tboxFilterModeRowGO = new GameObject("TboxFilterModeRow");
-            tboxFilterModeRowGO.transform.SetParent(flexGO.transform, false);
-            tboxFilterModeRowGO.transform.SetAsFirstSibling();
-            tboxFilterModeRowRT = tboxFilterModeRowGO.AddComponent<RectTransform>();
-            tboxFilterModeRowRT.anchorMin = Vector2.zero;
-            tboxFilterModeRowRT.anchorMax = Vector2.one;
-            tboxFilterModeRowRT.sizeDelta = Vector2.zero;
-            tboxFilterModeRowLE = UI.AddLE(tboxFilterModeRowGO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
-            tboxFilterModeRowHLG = UI.AddHLG(tboxFilterModeRowGO, spacing: 12f, padding: UI.Pad(8, 8, 0, 0), childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childForceExpandWidth: false, childForceExpandHeight: true);
-            tboxFilterModeRowGO.SetActive(false);
-
-            // Filter Mode Label
-            {
-                var filterLabelGO = new GameObject("FilterModeLabel");
-                filterLabelGO.transform.SetParent(tboxFilterModeRowGO.transform, false);
-                tboxFilterModeText = filterLabelGO.AddComponent<Text>();
-                tboxFilterModeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                tboxFilterModeText.fontSize = GalleryUiDesignTokens.FontBodyRef;
-                tboxFilterModeText.fontStyle = FontStyle.Normal;
-                tboxFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);
-                tboxFilterModeText.alignment = TextAnchor.MiddleCenter;
-                tboxFilterModeText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                tboxFilterModeText.verticalOverflow = VerticalWrapMode.Truncate;
-                tboxFilterModeText.raycastTarget = false;
-                var labelRT = filterLabelGO.GetComponent<RectTransform>();
-                labelRT.sizeDelta = new Vector2(200, innerRowH);
-            }
-
-            // Back Button
-            tboxFilterBackBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_back", "Back"), 16, 0, 0, AnchorPresets.stretchAll, NavigateBack);
-            tboxFilterBackBtn.name = "TboxFilterBackBtn";
-            tboxFilterBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterBackBtn, s, padding: 6f); }
-            AddTooltip(tboxFilterBackBtn, "gallery.tooltip.filter_back", VPBTranslation.T("gallery.tooltip.filter_back", "Back"));
-
-            // Clear Filter Button
-            tboxFilterClearBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_clear", "Clear"), 16, 0, 0, AnchorPresets.stretchAll, ClearPackageFilter);
-            tboxFilterClearBtn.name = "TboxFilterClearBtn";
-            tboxFilterClearBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
-            AddTooltip(tboxFilterClearBtn, "gallery.tooltip.filter_clear", VPBTranslation.T("gallery.tooltip.filter_clear", "Clear Filter"));
 
             // ── Appearance Clothing Mode Row (Preset / Keep / Only) ────────────
             // Segmented single-select control, shown only while the Appearance category is
@@ -1530,16 +1475,12 @@ namespace VPB
             }
             if (tboxRowSepRT != null)
                 tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
-            if (tboxFilterModeRowLE != null)
-            {
-                tboxFilterModeRowLE.minHeight = rowH;
-                tboxFilterModeRowLE.preferredHeight = rowH;
-            }
             if (tboxClothingModeRowLE != null)
             {
                 tboxClothingModeRowLE.minHeight = rowH;
                 tboxClothingModeRowLE.preferredHeight = rowH;
             }
+            try { DetailStripLayout(); } catch { }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1964,9 +1905,6 @@ namespace VPB
                 tboxIsHovered = false;
                 tboxButtonLayoutRows = 1;
                 float collapsedHeight = tboxInfoRowHeight;
-                // Account for filter row when active even when collapsed
-                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                    collapsedHeight += tboxInfoRowHeight + tboxBtnRowGap;
                 if (tboxButtonsLayerRT != null)
                     tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, collapsedHeight);
             }
@@ -2001,18 +1939,20 @@ namespace VPB
                 float innerH = TboxActionButtonInnerHeight();
                 float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
                     + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap * (tboxButtonLayoutRows - 1) : 0f);
-                // Add filter row height when active
-                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                    btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 // Add appearance clothing-mode row height when active
                 if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
                     btnBand += tboxInfoRowHeight + tboxBtnRowGap;
                 // Reserve a row at the very top of the toolbox for the active Try-On bar so
                 // it becomes part of the toolbox layout instead of floating over the buttons.
                 btnBand += TryOnToolboxReservedHeight();
-                float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
+                // Detail strip stays visible whenever there is a selection (not gated on expand),
+                // so click-to-select reveals identity without requiring InfoBar hover.
+                try { DetailStripRefresh(); } catch { }
+                float detailH = DetailStripReservedHeight();
+                float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
                 if (_tryOnActive) TryOnLayoutBar();
+                try { DetailStripLayout(); } catch { }
                 // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
                 // button doesn't overlap the toolbox when it expands to two rows.
                 if (importSidebarActive && importSidebarRT != null)
@@ -2067,6 +2007,17 @@ namespace VPB
                         contentScrollRT.offsetMax.x,
                         contentScrollRT.offsetMax.y,
                         tabTop);
+                }
+            }
+            catch { }
+            // Side-rail stacks use live footer inset — re-fit only when inset changes (not every frame).
+            try
+            {
+                float botInset = GalleryMainAreaBottomInset();
+                if (Mathf.Abs(botInset - _sideRailLastBottomInset) > 0.5f)
+                {
+                    _sideRailLastBottomInset = botInset;
+                    UpdateSideButtonPositions();
                 }
             }
             catch { }
@@ -2136,9 +2087,6 @@ namespace VPB
                 // Settings mode: only show SAVE/CANCEL. Hide all other toolbox actions and person target buttons.
                 show(tboxSettingsCancelBtn, true);
                 show(tboxSettingsSaveBtn, true);
-                show(tboxFilterModeRowGO, false);
-                show(tboxFilterBackBtn, false);
-                show(tboxFilterClearBtn, false);
                 for (int i = 0; i < tboxPersonAtomBtns.Count; i++) show(tboxPersonAtomBtns[i], false);
                 try { CloseTboxTargetMenu(); } catch { }
 

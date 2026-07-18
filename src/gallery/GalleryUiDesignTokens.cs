@@ -103,6 +103,11 @@ namespace VPB
         public const float FooterBarHeightRef = 44f;
         public const float FooterInfoRowHeightRef = 36f;
         public const float FooterToolboxTopRef = 80f;
+        /// <summary>Selection detail strip min/max height (content-driven between these).</summary>
+        public const float FooterDetailStripMinHeightRef = 96f;
+        public const float FooterDetailStripHeightRef = 300f;
+        /// <summary>Detail-strip thumb edge (square); grows with strip up to this.</summary>
+        public const float FooterDetailStripThumbMaxRef = 128f;
         public const float FilterChipRowHeightRef = ButtonSizeRef;
         public const float FilterChipRowMarginRef = 6f;
         public const float FilterChipDismissSizeRef = ButtonSizeRef - 4f;
@@ -223,6 +228,10 @@ namespace VPB
         public const float SideTabSplitSeamRef = 5f;
         /// <summary>Bottom sub-pane share in category split view (golden minor; top gets major remainder).</summary>
         public const float CategorySideSubPaneHeightFraction = GoldenRatioMinor;
+        /// <summary>Min usable height for subcategory/tags pane when InfoBar grows.</summary>
+        public const float SideTabSubPaneMinHeightRef = 110f;
+        /// <summary>Min usable height for upper category pane when split is raised for tall InfoBar.</summary>
+        public const float SideTabMainPaneMinHeightRef = 90f;
         public const float SideTabScrollBottomPadRef = 8f;
         public const float GalleryMainBottomFallbackRef = 120f;
     }

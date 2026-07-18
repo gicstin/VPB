@@ -39,6 +39,7 @@ namespace VPB
             }
 
             try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
+            try { DetailStripScrubTick(); } catch { }
 
             try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
             try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
@@ -711,6 +712,9 @@ namespace VPB
             if (move == 0 && moveH == 0) return;
             
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
+
+            // Click/keyboard selection may resize detail strip again after thumb-scrub lock.
+            try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
 
             // Find current index in currentFilteredFiles (visible page)
             int currentIndex = -1;

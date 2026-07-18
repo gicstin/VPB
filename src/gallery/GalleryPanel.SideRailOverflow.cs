@@ -19,6 +19,7 @@ namespace VPB
         private readonly List<int> _sideRailOverflowCollapsedIdx = new List<int>(16);
         private float _sideRailFitSpacing = GalleryUiDesignTokens.SideButtonSpacingRef;
         private float _sideRailFitGroupGap;
+        private float _sideRailLastBottomInset = -1f;
 
         private void EnsureSideRailOverflowChrome()
         {
@@ -79,13 +80,18 @@ namespace VPB
             if (bg == null) return 400f;
             float h = bg.rect.height;
             if (h < 8f) return 400f;
-            float chrome = (GalleryUiDesignTokens.TitleBarHeightRef
-                + GalleryUiDesignTokens.FooterBarHeightRef
-                + GalleryUiDesignTokens.FooterInfoRowHeightRef
-                + 20f) * scale;
+            // Live InfoBar/detail-strip inset — fixed FooterInfoRowHeight under-counts tall strips.
+            float topChrome = (GalleryUiDesignTokens.TitleBarHeightRef + 20f) * scale;
+            float bottomChrome = GalleryMainAreaBottomInset();
+            if (bottomChrome < 8f)
+            {
+                bottomChrome = (GalleryUiDesignTokens.FooterBarHeightRef
+                    + GalleryUiDesignTokens.FooterInfoRowHeightRef
+                    + 20f) * scale;
+            }
             float btnH = GalleryUiDesignTokens.SideButtonSquareRef * scale;
             // Room for first↔last center span (total stack extent is span + btnH).
-            return Mathf.Max(btnH, h - chrome - btnH);
+            return Mathf.Max(btnH, h - topChrome - bottomChrome - btnH);
         }
 
         private int CountVisibleSideRailButtons()

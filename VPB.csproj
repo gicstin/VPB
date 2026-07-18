@@ -439,6 +439,7 @@
     <Compile Include="src\gallery\GalleryPanel.Transparency.cs" />
     <Compile Include="src\gallery\GalleryPanel.RemoveMode.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
+    <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />

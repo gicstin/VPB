@@ -1992,40 +1992,11 @@ namespace VPB
         public void UpdatePaginationText()
         {
             {
-                bool showClearFilter = IsFilterActive;
-                bool showBackBtn = IsFilterActive;
-                // Hide footer filter controls when in dependency filter mode (moved to toolbox)
+                // Package dep/dependent filter chrome lives in ActiveFilterChipBar (not footer/toolbox).
                 if (footerBackBtn != null) footerBackBtn.SetActive(false);
                 if (footerClearFilterBtn != null) footerClearFilterBtn.SetActive(false);
                 if (footerFilterModeText != null) footerFilterModeText.gameObject.SetActive(false);
                 if (footerFilterModeSpacerGO != null) footerFilterModeSpacerGO.SetActive(false);
-
-                // Show toolbox filter controls when in dependency filter mode
-                if (tboxFilterModeRowGO != null) tboxFilterModeRowGO.SetActive(showClearFilter);
-                if (tboxFilterBackBtn != null) tboxFilterBackBtn.SetActive(showBackBtn);
-                if (tboxFilterClearBtn != null) tboxFilterClearBtn.SetActive(showClearFilter);
-
-                // Refresh toolbox layout to account for filter row height change
-                try { RefreshTboxFlexButtonLayout(); } catch { }
-
-                if (showClearFilter && tboxFilterClearBtn != null)
-                {
-                    var btn = tboxFilterClearBtn.GetComponent<Button>();
-                    if (btn != null)
-                    {
-                        btn.onClick.RemoveAllListeners();
-                        btn.onClick.AddListener(ClearPackageFilter);
-                    }
-                    if (tboxFilterModeText != null)
-                    {
-                        tboxFilterModeText.text = string.IsNullOrEmpty(GetFilterModeLabel) ? "" : $"{GetFilterModeLabel} ({GetFilterModeCount})";
-                        // Set color to red for Missing filter, yellow for other filters
-                        if (GetFilterModeLabel == "Missing")
-                            tboxFilterModeText.color = new Color(1f, 0.2f, 0.2f, 1f);  // Red
-                        else
-                            tboxFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);   // Yellow
-                    }
-                }
 
                 // Keep the hover-path count fallback in sync with filter/search refreshes.
                 try { RefreshHoverPathCountTextIfNeeded(); } catch { }

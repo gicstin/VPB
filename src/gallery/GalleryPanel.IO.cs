@@ -443,9 +443,9 @@ namespace VPB
             {
                 try { uids.Add(targetUid); } catch { }
             }
-            if (FileManager.PackagesByUid == null || string.IsNullOrEmpty(targetUid)) return uids;
+            if (string.IsNullOrEmpty(targetUid)) return uids;
 
-            // Prefer SQLite reverse edges when available.
+            // Prefer SQLite reverse edges when available (same source as count when ready).
             try
             {
                 var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -453,6 +453,18 @@ namespace VPB
                 {
                     foreach (var d in fromSql) if (!string.IsNullOrEmpty(d)) uids.Add(d);
                     return uids;
+                }
+            }
+            catch { }
+
+            // Match ResolveDependentCount: when SQL stale/unavailable, use graph/bulk edges.
+            try
+            {
+                HashSet<string> deps;
+                if (DependencyGraph.TryGetTransitiveDependents(targetUid, out deps) && deps != null)
+                {
+                    foreach (var d in deps)
+                        if (!string.IsNullOrEmpty(d)) uids.Add(d);
                 }
             }
             catch { }
@@ -595,6 +607,7 @@ namespace VPB
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
             ScrollGalleryToTop();
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         public void ApplySearchWithinFilter(string query)
@@ -5146,6 +5159,7 @@ namespace VPB
             try { UpdateTabs(); } catch { }
             try { UpdatePaginationText(); } catch { }
             ScrollGalleryToTop();
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         /// <summary>Clear all filter levels and restore the original unfiltered list.</summary>
@@ -5213,6 +5227,7 @@ namespace VPB
                 }
                 catch { }
             }
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         /// <summary>Returns whether a filter is currently active.</summary>

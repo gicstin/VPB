@@ -13,6 +13,7 @@ namespace VPB
         // Detach slot for the latest tooltip closure; re-binds use it to avoid stacking on the multicast delegate.
         public Action<bool> TooltipHandler;
         private bool isHovered = false;
+        public bool IsHovered { get { return isHovered; } }
 
         public void OnPointerEnter(PointerEventData d) 
         {

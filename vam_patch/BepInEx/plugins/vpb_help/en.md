@@ -100,6 +100,13 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
 
+**Detail strip** — select a row for an info card above the toolbox: thumb + status badges (A/H/W/T), facts, and clickable chips.
+- **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
+- **Creator** — filter by creator.
+- **Tag** or tags line — quick-tag menu (existing tags, remove with ✓, or **New tag…**).
+- **Copy** or path / title — copy path or display name.
+- Badges match grid meaning (auto-install, hidden, scan-excluded, has tags).
+
 ### Common toolbox actions
 Availability depends on category and selection:
 
