@@ -343,7 +343,6 @@ namespace VPB
             RemoveModeDestroyPopup();
 
             _gridHoverBadgeBtnGO = null;
-            _gridHoverBadgeFile = null;
 
             // Re-enable saving on teardown so the cache isn't left permanently paused.
             if (GalleryThumbnailCache.Instance != null)

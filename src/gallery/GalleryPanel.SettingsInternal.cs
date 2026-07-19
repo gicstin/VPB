@@ -322,6 +322,7 @@ namespace VPB
             public bool EnableGalleryFade;
             public bool EnableGalleryTranslucency;
             public bool GalleryManualRefreshOnly;
+            public bool GalleryDetailStripSideInfoEnabled;
             public float GalleryOpacity;
             public float SideButtonScaleVR;
             public float SideButtonScaleDesktop;
@@ -603,6 +604,21 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.gallery_manual_refresh_only", "When enabled, package scans do not update the file grid until you press Refresh in the gallery. Reduces scroll jumps and load when the package index changes often."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryManualRefreshOnly,
                 SetBool = v => { VPBConfig.Instance.GalleryManualRefreshOnly = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.detailStripSideInfo", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.detail_strip_side_info", "Show description & package tags"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.detail_strip_side_info",
+                    "When on (default), a wide selection detail strip can show a right column with the package description and native package tags. Turn off to keep the strip compact — description stays under the actions when available."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = v;
+                    try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.galleryUiScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_vr", "Gallery UI Scale (VR)"),
@@ -1171,12 +1187,6 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "grid.hoverBadges", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_badges", "Hover badges"),
-                Tooltip = VPBTranslation.T("settings.tip.grid_hover_badges", "Show rating and status badges on grid hover. Off keeps dense grids faster."),
-                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
-                SetBool = v => { VPBConfig.Instance.GalleryGridHoverBadgesEnabled = v; VPBConfig.Instance.TriggerChange(); }
-            });
-            defs.Add(new InternalSettingDefinition {
                 Key = "grid.autoHideHighDensity", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_auto_hide_high_density", "Hide labels at max grid density"),
                 Tooltip = VPBTranslation.T("settings.tip.grid_labels_auto_hide_high_density", "When grid is at 11 or 12 columns (minus pressed to limit), hide label strips."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
@@ -1661,6 +1671,7 @@ namespace VPB
                 EnableGalleryFade = VPBConfig.Instance.EnableGalleryFade,
                 EnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency,
                 GalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly,
+                GalleryDetailStripSideInfoEnabled = VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
                 GalleryOpacity = VPBConfig.Instance.GalleryOpacity,
                 SideButtonScaleVR = VPBConfig.Instance.SideButtonScaleVR,
                 SideButtonScaleDesktop = VPBConfig.Instance.SideButtonScaleDesktop,
@@ -2470,6 +2481,7 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryFade = b.EnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = b.GalleryManualRefreshOnly;
+            VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = b.GalleryDetailStripSideInfoEnabled;
             VPBConfig.Instance.GalleryOpacity = b.GalleryOpacity;
             VPBConfig.Instance.SideButtonScaleVR = b.SideButtonScaleVR;
             VPBConfig.Instance.SideButtonScaleDesktop = b.SideButtonScaleDesktop;
@@ -2572,6 +2584,7 @@ namespace VPB
                 categoriesCached = false;
                 RebuildGridLayout();
                 RefreshFiles(true);
+                try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             }
             ApplyGalleryTransparencyToAllPanels();
             try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }

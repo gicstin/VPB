@@ -303,7 +303,7 @@ namespace VPB
             if (!_tryOnActive || _tryOnBarGO == null) return 0f;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            return TryOnRowHeight(s) + tboxBtnRowGap;
+            return TryOnRowHeight(s) + TboxBtnRowGapScaled();
         }
 
         // Pin the bar to the top edge of the toolbox interior, filling the reserved row.

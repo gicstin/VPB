@@ -108,16 +108,21 @@ namespace VPB
             try { ApplyFooterOverflowLayout(chromeS); } catch { }
         }
 
-        /// <summary>Scales hover-path tooltip text and collapsed tbox label fonts.</summary>
+        /// <summary>Scales hover-path tooltip text, collapsed tbox labels, and detail strip chrome.</summary>
         private void RescaleFooterInfoBarInternal(float s)
         {
             if (s <= 0f) s = 1f;
+            // Same global chrome font as rest of gallery UI.
             if (hoverPathText != null)
                 GalleryUiMetrics.ApplyFont(hoverPathText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxLabel != null)
                 GalleryUiMetrics.ApplyFont(tboxLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxHintLabel != null)
                 GalleryUiMetrics.ApplyFont(tboxHintLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            try { SyncTboxFooterRowChrome(s); } catch { }
+            try { DetailStripRescaleForUiScale(s); } catch { }
+            // Recompute InfoBar offsetMax now — wait for Update tick leaves stale height / black band.
+            try { UpdateSelectionContextMenu(); } catch { }
         }
 
         /// <summary>Grid label strip: anchor fraction from config; font is the single gallery chrome font.</summary>
@@ -523,11 +528,55 @@ namespace VPB
                 le.preferredHeight = GalleryUiDesignTokens.SideTabRowHeightRef * s;
             }
 
+            RescaleTabLeftIcon(btnGO, s);
+
             ConfigureSideTabRowHoverBorder(btnGO);
 
             RectTransform rt = btnGO.GetComponent<RectTransform>();
             if (rt != null && rt.anchorMin.y >= 0.99f && rt.anchorMax.y >= 0.99f)
                 rt.sizeDelta = new Vector2(rt.sizeDelta.x, GalleryUiDesignTokens.SideTabRowHeightRef * s);
+        }
+
+        /// <summary>
+        /// Live-scale category/side-tab left icons from <c>ApplyTabLeftIcon</c>.
+        /// Create-time refs: 28 (+backdrop) / 20, left 4, gap 6.
+        /// </summary>
+        private static void RescaleTabLeftIcon(GameObject btnGO, float s)
+        {
+            if (btnGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform iconTr = btnGO.transform.Find("TabLeftIcon");
+            if (iconTr == null) return;
+
+            RectTransform iconRT = iconTr as RectTransform;
+            if (iconRT == null) return;
+
+            bool hasBackdrop = iconTr.Find("Backdrop") != null;
+            float iconSize = (hasBackdrop ? 28f : 20f) * s;
+            float iconLeft = 4f * s;
+            float gap = 6f * s;
+
+            iconRT.anchoredPosition = new Vector2(iconLeft, iconRT.anchoredPosition.y);
+            iconRT.sizeDelta = new Vector2(iconSize, iconSize);
+
+            Transform glyphTr = iconTr.Find("Glyph");
+            if (glyphTr != null)
+            {
+                RectTransform glyphRT = glyphTr as RectTransform;
+                if (glyphRT != null)
+                {
+                    float pad = hasBackdrop ? iconSize * 0.12f : 0f;
+                    glyphRT.offsetMin = new Vector2(pad, pad);
+                    glyphRT.offsetMax = new Vector2(-pad, -pad);
+                }
+            }
+
+            Text txt = btnGO.GetComponentInChildren<Text>();
+            if (txt == null) return;
+            RectTransform txtRT = txt.GetComponent<RectTransform>();
+            if (txtRT == null) return;
+            float insetL = iconLeft + iconSize + gap;
+            txtRT.offsetMin = new Vector2(insetL, txtRT.offsetMin.y);
         }
 
         internal void RescaleInitChromeTextsInternal(GalleryUiMetrics metrics)
@@ -634,103 +683,11 @@ namespace VPB
                 UpdateSideButtonPositions();
         }
 
-        /// <summary>Scales grid labels from cell size. Hover badges own their size — do not touch them here
-        /// (selection refresh used to re-apply CellOverlayScale and nearly double visible badges).</summary>
+        /// <summary>Scales grid labels from cell size.</summary>
         internal void ApplyGridCellChromeScale(GameObject btnGO)
         {
             if (btnGO == null || layoutMode == GalleryLayoutMode.List || settingsListViewActive) return;
             ApplyGridLabelStripLayout(btnGO);
-        }
-
-        private static void ScaleGridBadge(Transform root, string name, float size, int fontSize, float posX, float posY)
-        {
-            Transform tr = root.Find(name);
-            if (tr == null) return;
-            RectTransform rt = tr as RectTransform;
-            if (rt != null)
-            {
-                rt.sizeDelta = new Vector2(size, size);
-                rt.anchoredPosition = new Vector2(posX, posY);
-            }
-            LayoutElement le = tr.GetComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.preferredWidth = size;
-                le.minWidth = size;
-                le.preferredHeight = size;
-                le.minHeight = size;
-            }
-            Text t = tr.GetComponentInChildren<Text>();
-            if (t != null)
-            {
-                t.fontSize = fontSize;
-                t.transform.localScale = Vector3.one;
-            }
-        }
-
-        /// <summary>Bottom-left deps hover badge — wider than letter badges for "ab / xy".</summary>
-        private static void ScaleGridDepsBadge(Transform root, float badgeSize, int fontSize, float posX, float posY)
-        {
-            Transform tr = root.Find("DepsBadge");
-            if (tr == null) return;
-            // Height must clear font (letterBadge alone can still be tight); width fits "ab / xy".
-            float h = Mathf.Max(badgeSize, fontSize + 8f);
-            float w = Mathf.Max(badgeSize * 2.2f, fontSize * 3.2f);
-            RectTransform rt = tr as RectTransform;
-            if (rt != null)
-            {
-                rt.anchorMin = new Vector2(0f, 0f);
-                rt.anchorMax = new Vector2(0f, 0f);
-                rt.pivot = new Vector2(0f, 0f);
-                rt.sizeDelta = new Vector2(w, h);
-                rt.anchoredPosition = new Vector2(posX, posY);
-            }
-            LayoutElement le = tr.GetComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.preferredWidth = w;
-                le.minWidth = w;
-                le.preferredHeight = h;
-                le.minHeight = h;
-            }
-            Text t = tr.GetComponentInChildren<Text>();
-            if (t != null)
-            {
-                t.fontSize = fontSize;
-                t.transform.localScale = Vector3.one;
-            }
-        }
-
-        /// <summary>Hub dep download control — square, sits to the right of deps badge.</summary>
-        private static void ScaleGridDepsDownloadBtn(Transform root, float badgeSize, int fontSize, float posX, float posY)
-        {
-            Transform tr = root.Find("DepsDownloadBtn");
-            if (tr == null) return;
-            float h = Mathf.Max(16f, badgeSize);
-            float w = Mathf.Max(22f, badgeSize);
-            RectTransform rt = tr as RectTransform;
-            if (rt != null)
-            {
-                rt.anchorMin = new Vector2(0f, 0f);
-                rt.anchorMax = new Vector2(0f, 0f);
-                rt.pivot = new Vector2(0f, 0f);
-                rt.sizeDelta = new Vector2(w, h);
-                rt.anchoredPosition = new Vector2(posX, posY);
-            }
-            LayoutElement le = tr.GetComponent<LayoutElement>();
-            if (le != null)
-            {
-                le.preferredWidth = w;
-                le.minWidth = w;
-                le.preferredHeight = h;
-                le.minHeight = h;
-            }
-            Text t = tr.GetComponentInChildren<Text>();
-            if (t != null)
-            {
-                t.fontSize = Mathf.Max(10, fontSize - 2);
-                t.transform.localScale = Vector3.one;
-            }
         }
     }
 }

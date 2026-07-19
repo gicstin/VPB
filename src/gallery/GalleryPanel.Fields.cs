@@ -572,7 +572,6 @@ namespace VPB
 
         // Grid hover cell currently showing deps / Hub download badge (for progress refresh).
         private GameObject _gridHoverBadgeBtnGO;
-        private FileEntry _gridHoverBadgeFile;
         /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
         private System.Diagnostics.Stopwatch _paneLoadTimingStopwatch;
         private string _paneLoadTimingKind;

@@ -117,7 +117,13 @@ namespace VPB
             public float flexW;
         }
         private readonly Dictionary<GameObject, TboxBaseWidthSpec> tboxBaseWidthSpec = new Dictionary<GameObject, TboxBaseWidthSpec>(64);
-        private const float tboxBtnRowGap = 4f;
+        private const float tboxBtnRowGapRef = 4f;
+        private float TboxBtnRowGapScaled()
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            return tboxBtnRowGapRef * s;
+        }
 
         private static void TboxConfigureActionButtonFlex(GameObject go, float minW, float prefW, float innerRowH)
         {
@@ -277,10 +283,22 @@ namespace VPB
             if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = innerH; tboxBtnRow2LE.preferredHeight = innerH; }
             TboxSetAllFlexActionButtonHeights(innerH);
 
+            // Details is one-row top-left chrome — pad only that band; wrap rows use full width.
+            try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
+
             Canvas.ForceUpdateCanvases();
-            float avail = tboxButtonsFlexRootRT.rect.width;
-            if (avail < 8f)
-                avail = (tboxLastFlexAvailW > 8f) ? tboxLastFlexAvailW : 640f;
+            float availFull = tboxButtonsFlexRootRT.rect.width;
+            if (availFull < 8f)
+                availFull = (tboxLastFlexAvailW > 8f) ? tboxLastFlexAvailW : 640f;
+
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float detailsReserve = DetailStripExpandLeftReserve(s);
+            bool clothingTop = tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf;
+            // Top action row shares vertical space with Details only when clothing row is off.
+            float availRow0 = (detailsReserve > 0f && !clothingTop)
+                ? Mathf.Max(8f, availFull - detailsReserve)
+                : availFull;
 
             const float gap = 10f;
 
@@ -323,7 +341,8 @@ namespace VPB
             }
             else
             {
-                // Person atom target buttons appear leftmost in the toolbar
+                // Person atom target buttons appear leftmost in the flex pack.
+                // Details restore is fixed chrome on the buttons layer (not flex-packed).
                 foreach (var go in tboxPersonAtomBtns) { if (vis(go)) ltr.Add(go); }
                 // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
                 if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
@@ -391,11 +410,12 @@ namespace VPB
             List<GameObject> row1rtl = new List<GameObject>();
             List<GameObject> row2rtl = new List<GameObject>();
 
-            void ApplySlotWidths(List<GameObject> row, int slotCount)
+            void ApplySlotWidths(List<GameObject> row, int slotCount, float rowAvail)
             {
                 if (row == null || row.Count == 0) return;
                 if (slotCount <= 0) return;
-                float unitW = (avail - gap * (slotCount - 1)) / slotCount;
+                if (rowAvail < 8f) rowAvail = availFull;
+                float unitW = (rowAvail - gap * (slotCount - 1)) / slotCount;
                 for (int i = 0; i < row.Count; i++)
                 {
                     GameObject go = row[i];
@@ -426,10 +446,18 @@ namespace VPB
                     unitMinW = Mathf.Max(unitMinW, mw / Mathf.Max(1, w));
             }
             if (unitMinW < 8f) unitMinW = 56f;
-            int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((avail + gap) / (unitMinW + gap)));
+            // Wrap against the tighter top band when Details is reserving left on row0.
+            float wrapAvail = availRow0;
+            int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((wrapAvail + gap) / (unitMinW + gap)));
+            int maxSlotsPerLowerRow = Mathf.Max(1, Mathf.FloorToInt((availFull + gap) / (unitMinW + gap)));
             int rowsNeed = Mathf.CeilToInt(totalSlots / Mathf.Max(1f, (float)maxSlotsPerRow));
             if (rowsNeed < 1) rowsNeed = 1;
             if (rowsNeed > 3) rowsNeed = 3;
+            // If lower rows are wider, a 2-row split may fit more on row1 — recompute after first pass if needed.
+            if (rowsNeed == 1 && totalSlots > maxSlotsPerRow)
+                rowsNeed = 2;
+            if (rowsNeed >= 2 && totalSlots > maxSlotsPerRow + maxSlotsPerLowerRow)
+                rowsNeed = 3;
 
             int row0SlotsTarget = totalSlots;
             int row1SlotsTarget = 0;
@@ -443,7 +471,7 @@ namespace VPB
             {
                 row0SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(totalSlots / 3f));
                 int rem = totalSlots - row0SlotsTarget;
-                row1SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(rem / 2f));
+                row1SlotsTarget = Mathf.Min(maxSlotsPerLowerRow, Mathf.CeilToInt(rem / 2f));
                 row2SlotsTarget = totalSlots - row0SlotsTarget - row1SlotsTarget;
             }
 
@@ -495,19 +523,19 @@ namespace VPB
             if (row1rtl.Count > 0) tboxButtonLayoutRows = 2;
             if (row2rtl.Count > 0) tboxButtonLayoutRows = 3;
 
-            // Apply widths per row based on slot counts actually used in row.
+            // Apply widths per row — row0 may be narrower beside Details; lower rows full-bleed.
             if (tboxButtonLayoutRows == 1)
-                ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0));
+                ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0), availRow0);
             else if (tboxButtonLayoutRows == 2)
             {
-                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
-                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0), availRow0);
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1), availFull);
             }
             else
             {
-                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
-                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
-                ApplySlotWidths(row2rtl, Mathf.Max(1, usedSlots2));
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0), availRow0);
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1), availFull);
+                ApplySlotWidths(row2rtl, Mathf.Max(1, usedSlots2), availFull);
             }
 
             TboxDetachAllActionButtonsForLayout();
@@ -533,12 +561,16 @@ namespace VPB
                 TboxPopulateRowFromRtlPack(tboxBtnRow2HLG, row2rtl);
             }
 
-            float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
+            float rowGap = TboxBtnRowGapScaled();
+            float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (rowGap * (tboxButtonLayoutRows - 1)) : 0f);
             // Add appearance clothing-mode row height when active
             if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
-                band += tboxInfoRowHeight + tboxBtnRowGap;
+                band += tboxInfoRowHeight + rowGap;
             if (tboxButtonsLayerRT != null)
                 tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
+
+            // Clothing / row pads depend on which top band is active.
+            try { DetailStripApplyToolboxFlexLeftInset(s); } catch { }
 
             LayoutRebuilder.MarkLayoutForRebuild(tboxButtonsFlexRootRT);
             tboxLastFlexAvailW = tboxButtonsFlexRootRT.rect.width;
@@ -679,7 +711,7 @@ namespace VPB
             tboxButtonsFlexRootRT.offsetMin = new Vector2(8f, 0f);
             tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f, 0f);
             tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
-            var flexVlg = UI.AddVLG(flexGO, spacing: tboxBtnRowGap, childAlignment: TextAnchor.UpperRight);
+            var flexVlg = UI.AddVLG(flexGO, spacing: TboxBtnRowGapScaled(), childAlignment: TextAnchor.UpperRight);
 
             // Hold buttons between relayout passes (sibling of flex root — not in the VLG).
             var stashGO = new GameObject("TboxBtnStash");
@@ -1465,13 +1497,38 @@ namespace VPB
             if (tbox == null) return;
             if (s <= 0f) s = 1f;
             float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
+            float pinGutter = 48f * s;
+            float gap = TboxBtnRowGapScaled();
             tboxInfoRowHeight = rowH;
             if (tboxLabelLayerRT != null)
-                tboxLabelLayerRT.sizeDelta = new Vector2(0f, rowH);
+            {
+                tboxLabelLayerRT.sizeDelta = new Vector2(-pinGutter, rowH);
+                Transform labelRow = tboxLabelLayerRT.Find("TboxLabelRow");
+                if (labelRow != null)
+                {
+                    HorizontalLayoutGroup labelHlg = labelRow.GetComponent<HorizontalLayoutGroup>();
+                    if (labelHlg != null)
+                    {
+                        labelHlg.spacing = 12f * s;
+                        labelHlg.padding = UI.Pad(8, 8, 0, 0, s);
+                    }
+                }
+            }
             if (tboxButtonsLayerRT != null)
             {
                 tboxButtonsLayerRT.anchoredPosition = new Vector2(0f, rowH);
-                tboxButtonsLayerRT.sizeDelta = new Vector2(0f, tboxButtonsLayerRT.sizeDelta.y);
+                tboxButtonsLayerRT.sizeDelta = new Vector2(-pinGutter, tboxButtonsLayerRT.sizeDelta.y);
+            }
+            if (tboxButtonsFlexRootRT != null)
+            {
+                tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f * s, 0f);
+                try { DetailStripApplyToolboxFlexLeftInset(s); } catch
+                {
+                    tboxButtonsFlexRootRT.offsetMin = new Vector2(8f * s, 0f);
+                }
+                VerticalLayoutGroup flexVlg = tboxButtonsFlexRoot != null
+                    ? tboxButtonsFlexRoot.GetComponent<VerticalLayoutGroup>() : null;
+                if (flexVlg != null) flexVlg.spacing = gap;
             }
             if (tboxRowSepRT != null)
                 tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
@@ -1481,6 +1538,7 @@ namespace VPB
                 tboxClothingModeRowLE.preferredHeight = rowH;
             }
             try { DetailStripLayout(); } catch { }
+            try { DetailStripSyncExpandButtonChrome(s); } catch { }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1937,22 +1995,24 @@ namespace VPB
                 }
 
                 float innerH = TboxActionButtonInnerHeight();
+                float gap = TboxBtnRowGapScaled();
                 float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
-                    + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap * (tboxButtonLayoutRows - 1) : 0f);
+                    + (tboxButtonLayoutRows > 1 ? gap * (tboxButtonLayoutRows - 1) : 0f);
                 // Add appearance clothing-mode row height when active
                 if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
-                    btnBand += tboxInfoRowHeight + tboxBtnRowGap;
+                    btnBand += tboxInfoRowHeight + gap;
                 // Reserve a row at the very top of the toolbox for the active Try-On bar so
                 // it becomes part of the toolbox layout instead of floating over the buttons.
                 btnBand += TryOnToolboxReservedHeight();
-                // Detail strip stays visible whenever there is a selection (not gated on expand),
-                // so click-to-select reveals identity without requiring InfoBar hover.
+                // Detail strip: visible on selection when expanded (not gated on toolbox hover).
+                // User can collapse to Info button in pin gutter; preference persists in VPB.cfg.
                 try { DetailStripRefresh(); } catch { }
                 float detailH = DetailStripReservedHeight();
                 float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
                 tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
                 if (_tryOnActive) TryOnLayoutBar();
                 try { DetailStripLayout(); } catch { }
+                try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
                 // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
                 // button doesn't overlap the toolbox when it expands to two rows.
                 if (importSidebarActive && importSidebarRT != null)
@@ -2029,6 +2089,7 @@ namespace VPB
             sb.Append(cleanupModeActive ? 'C' : 'c');
             sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
             sb.Append(activeContentType == ContentType.History ? 'H' : 'h');
+            sb.Append(DetailStripIsExpanded() ? 'D' : 'd');
             try { sb.Append(ScanWhitelistManager.Instance.IsEnabled ? 'W' : 'w'); }
             catch { sb.Append('w'); }
 
@@ -2116,6 +2177,7 @@ namespace VPB
                 show(tboxRemoveHistoryBtn, false);
                 show(tboxSelectAllBtn, false);
                 show(tboxClearSelectionBtn, false);
+                show(_detailStripExpandBtnGO, false);
 
                 try { RefreshSceneImportSideButtonVisibility(); } catch { }
                 try { UpdateSideButtonPositions(); } catch { }
@@ -2347,6 +2409,12 @@ namespace VPB
             try { canOverwriteScene = TryGetSceneOverwriteSaveContext(out _); } catch { canOverwriteScene = false; }
             if (tboxOverwriteSceneBtn != null)
                 SetTboxButtonEnabledVisual(tboxOverwriteSceneBtn, canOverwriteScene);
+
+            // Details restore: leftmost toolbox action when strip collapsed + selection.
+            bool showDetailsExpand = selectedFiles != null
+                && selectedFiles.Count > 0
+                && !DetailStripIsExpanded();
+            show(_detailStripExpandBtnGO, showDetailsExpand);
 
             try { RefreshSceneImportSideButtonVisibility(); } catch { }
             try { UpdateSideButtonPositions(); } catch { }

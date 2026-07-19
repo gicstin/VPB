@@ -717,107 +717,33 @@ namespace VPB
         public GameObject card;
         public GalleryPanel panel;
         public FileEntry file;
-        private Coroutine _gridBadgeExitCo;
-        
+
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (_gridBadgeExitCo != null)
-            {
-                StopCoroutine(_gridBadgeExitCo);
-                _gridBadgeExitCo = null;
-            }
-            // Card overlay only shows in grid mode when always-on labels are OFF
+            // Name Card only when always-on grid labels are OFF. Detail strip owns badges/rating/deps.
             bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible()
                                 && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
             if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 card.SetActive(true);
             if (panel != null && file != null) panel.SetHoverPath(file);
-            if (panel != null && file != null && panel.layoutMode == GalleryLayoutMode.Grid)
-                panel.ShowGridHoverBadges(gameObject, file);
+            if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
+                panel.HideGridHoverBadges(gameObject, force: true);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            // Defer: child badges + rating popup hang outside/inside; exit fires before enter on sibling.
+            if (card) card.SetActive(false);
             if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
-            {
-                if (_gridBadgeExitCo != null) StopCoroutine(_gridBadgeExitCo);
-                _gridBadgeExitCo = StartCoroutine(DeferredGridBadgeExit());
-                return;
-            }
-
-            if (card) card.SetActive(false);
-            if (panel != null) panel.RestoreSelectedHoverPath();
-        }
-
-        private System.Collections.IEnumerator DeferredGridBadgeExit()
-        {
-            yield return null;
-            _gridBadgeExitCo = null;
-
-            // Picker open: never tear down (hangs outside cell; exit fires when moving onto it).
-            RatingHandler rh = GetComponent<RatingHandler>();
-            if (rh != null && rh.IsSelectorOpen)
-                yield break;
-
-            Vector2 pos = Input.mousePosition;
-            try
-            {
-                if (panel != null && panel.currentPointerData != null)
-                    pos = panel.currentPointerData.position;
-            }
-            catch { }
-
-            if (IsScreenPointInsideCell(pos) || IsScreenPointOverOpenRatingSelector(pos))
-                yield break;
-
-            if (card) card.SetActive(false);
-            if (panel != null) panel.HideGridHoverBadges(gameObject, force: false);
+                panel.HideGridHoverBadges(gameObject, force: true);
             if (panel != null) panel.RestoreSelectedHoverPath();
         }
 
         void OnDisable()
         {
-            if (_gridBadgeExitCo != null)
-            {
-                StopCoroutine(_gridBadgeExitCo);
-                _gridBadgeExitCo = null;
-            }
-            // Recycle / deactivate must clear hover badges so pooled grid cells stay clean.
+            // Recycle / deactivate must clear any leftover badge GOs on pooled cells.
             if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 panel.HideGridHoverBadges(gameObject, force: true);
             if (card != null) card.SetActive(false);
-        }
-
-        Camera ResolveUiCamera()
-        {
-            try
-            {
-                if (panel != null && panel.canvas != null && panel.canvas.renderMode != RenderMode.ScreenSpaceOverlay)
-                    return panel.canvas.worldCamera != null ? panel.canvas.worldCamera : Camera.main;
-            }
-            catch { }
-            return null;
-        }
-
-        bool IsScreenPointInsideCell(Vector2 screenPos)
-        {
-            var rt = transform as RectTransform;
-            if (rt == null) return false;
-            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, ResolveUiCamera()); }
-            catch { return false; }
-        }
-
-        bool IsScreenPointOverOpenRatingSelector(Vector2 screenPos)
-        {
-            Transform sel = transform.Find("RatingSelector");
-            if (sel == null || !sel.gameObject.activeInHierarchy) return false;
-            var cg = sel.GetComponent<CanvasGroup>();
-            if (cg != null && cg.alpha <= 0.01f) return false;
-            var rt = sel as RectTransform;
-            if (rt == null) return false;
-            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, ResolveUiCamera()); }
-            catch { return false; }
         }
     }
 

@@ -16,7 +16,8 @@ namespace VPB
     public partial class GalleryPanel
     {
         private const int DetailStripMaxTagsShown = 8;
-        private const int DetailStripMetaMaxRows = 3;
+        /// <summary>Meta wrap rows. Was 3 — at high ChromeScale wider glyphs dropped Version/Gender/Flags/dates.</summary>
+        private const int DetailStripMetaMaxRows = 6;
         private const float DetailStripTagMenuWidthRef = 300f;
         private const float DetailStripTagMenuHeightRef = 320f;
         private const float DetailStripTagMenuScrollHeightRef = 220f;
@@ -69,10 +70,22 @@ namespace VPB
         private GameObject _detailStripBadgeTags;
         private GameObject _detailStripTitleRowGO;
         private Text _detailStripTitle;
+        /// <summary>Collapse control left of title (expanded strip only).</summary>
+        private GameObject _detailStripCollapseBtnGO;
+        private Image _detailStripCollapseIconImage;
+        /// <summary>Expand control in toolbox label row: icon + label (collapsed strip + selection).</summary>
+        private GameObject _detailStripExpandBtnGO;
+        private Image _detailStripExpandIconImage;
+        private Text _detailStripExpandLabel;
+        private LayoutElement _detailStripExpandBtnLE;
+        private Sprite _detailStripCollapseSprite;
+        private Sprite _detailStripExpandSprite;
         private GameObject _detailStripStarsGO;
         private Image[] _detailStripStarImages;
         private int _detailStripStarRating;
         private int _detailStripStarHover;
+        /// <summary>Right mouse held on preview thumb — wheel adjusts rating instead of selection scrub.</summary>
+        private bool _detailStripThumbRightHeld;
         private GameObject _detailStripMetaHost;
         private LayoutElement _detailStripMetaHostLE;
         private GameObject[] _detailStripMetaRows;
@@ -104,6 +117,16 @@ namespace VPB
         private static readonly Color DetailStripStarPreviewColor = new Color(0.95f, 0.82f, 0.42f, 0.72f);
         private Text _detailStripTags;
         private Text _detailStripPath;
+        /// <summary>Wide-pane right column: scrollable description + native package tags.</summary>
+        private GameObject _detailStripSideColGO;
+        private LayoutElement _detailStripSideColLE;
+        private GameObject _detailStripSideDescScrollGO;
+        private LayoutElement _detailStripSideDescScrollLE;
+        private ScrollRect _detailStripSideDescScrollRect;
+        private RectTransform _detailStripSideDescContentRT;
+        private Text _detailStripSideDesc;
+        private LayoutElement _detailStripSideDescLE;
+        private Text _detailStripSideNativeTags;
         private string _detailStripCacheKey = "";
         private FileEntry _detailStripThumbFile;
         private FileEntry _detailStripBoundFile;
@@ -125,8 +148,13 @@ namespace VPB
         private float _detailStripLayoutScale = -1f;
         private float _detailStripMetaAvailWidth = -1f;
         private float _detailStripMeasuredHeight = -1f;
+        private bool _detailStripInRefreshGeometry;
         private bool _detailStripWantPath;
         private bool _detailStripWantDesc;
+        private bool _detailStripWantNativeTags;
+        private bool _detailStripSideVisible;
+        /// <summary>Identity key for last <see cref="DetailStripRefreshSideContent"/> fill (scrub/sameKey skip otherwise).</summary>
+        private string _detailStripSideContentKey = "";
         // Thumb-wheel selection scrub: coalesce steps, lite UI while spinning, soft commit on idle.
         private bool _detailStripScrubActive;
         private int _detailStripScrubPendingSteps;
@@ -140,25 +168,149 @@ namespace VPB
         private bool DetailStripScrubBlocksRebuild =>
             _detailStripScrubActive || _detailStripScrubHeightLocked;
 
+        /// <summary>Hard floor: min thumb edge. Design 96×s is comfort target via measure, not empty band.</summary>
+        private static float DetailStripHardMinHeight(float s)
+        {
+            if (s <= 0f) s = 1f;
+            return 44f * s;
+        }
+
+        /// <summary>
+        /// Max strip height preserves design row capacity (300/18 ≈ 16.7 rows). Scaling only
+        /// FooterDetailStripHeightRef×s while lineH grew (glyph pad) hid Path/Desc at ~1.6.
+        /// </summary>
+        private static float DetailStripMaxHeight(float s)
+        {
+            if (s <= 0f) s = 1f;
+            float lineH = DetailStripLineHeight(s);
+            float designLine = GalleryUiDesignTokens.FooterDetailStripLineHeightRef;
+            if (designLine < 1f) designLine = 18f;
+            float designRows = GalleryUiDesignTokens.FooterDetailStripHeightRef / designLine;
+            return lineH * designRows + 12f * s;
+        }
+
         private float DetailStripRowHeight(float s)
         {
             if (s <= 0f) s = 1f;
-            float minH = GalleryUiDesignTokens.FooterDetailStripMinHeightRef * s;
-            float maxH = GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
+            float hardMin = DetailStripHardMinHeight(s);
+            float maxH = DetailStripMaxHeight(s);
             if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
-                return Mathf.Clamp(_detailStripScrubLockedHeight, minH, maxH);
+                return Mathf.Clamp(_detailStripScrubLockedHeight, hardMin, maxH);
             if (_detailStripMeasuredHeight > 8f)
-                return Mathf.Clamp(_detailStripMeasuredHeight, minH, maxH);
-            return minH;
+                return Mathf.Clamp(_detailStripMeasuredHeight, hardMin, maxH);
+            return Mathf.Clamp(GalleryUiDesignTokens.FooterDetailStripMinHeightRef * s, hardMin, maxH);
+        }
+
+        private static float DetailStripLineHeight(float s)
+        {
+            if (s <= 0f) s = 1f;
+            // Match global chrome font metrics (ScaledFontSize + FontMin); pad for Arial line box.
+            int fontPx = GalleryUiMetrics.ScaledFontSize(
+                GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            float designLine = GalleryUiDesignTokens.FooterDetailStripLineHeightRef * s;
+            return Mathf.Max(designLine, fontPx + 4f * s);
+        }
+
+        private static void DetailStripDisableVerticalCsf(Component c)
+        {
+            if (c == null) return;
+            ContentSizeFitter csf = c.GetComponent<ContentSizeFitter>();
+            if (csf != null) csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+        }
+
+        /// <summary>Same font path as rest of gallery chrome (<see cref="GalleryUiMetrics.ApplyFont"/>).</summary>
+        private static void DetailStripApplyFont(Text txt, float s, int designPt = GalleryUiDesignTokens.FontBodyRef)
+        {
+            if (txt == null) return;
+            if (s <= 0f) s = 1f;
+            if (designPt <= 0) designPt = GalleryUiDesignTokens.FontBodyRef;
+            GalleryUiMetrics.ApplyFont(txt, designPt, s, GalleryUiDesignTokens.FontMinRef);
+        }
+
+        /// <summary>Count active meta rows (ignore host active — host may be off from a prior empty sync).</summary>
+        private int DetailStripActiveMetaRowCount()
+        {
+            int metaN = 0;
+            if (_detailStripMetaRows == null) return 0;
+            for (int i = 0; i < _detailStripMetaRows.Length; i++)
+            {
+                if (_detailStripMetaRows[i] != null && _detailStripMetaRows[i].activeSelf)
+                    metaN++;
+            }
+            return metaN;
+        }
+
+        /// <summary>Active meta rows × current lineH — never trust a stale LayoutElement height.</summary>
+        private float DetailStripMetaHostHeight(float s)
+        {
+            float lineH = DetailStripLineHeight(s);
+            int metaN = DetailStripActiveMetaRowCount();
+            if (metaN <= 0) return 0f;
+            float gap = 2f * s;
+            return lineH * metaN + gap * Mathf.Max(0, metaN - 1);
+        }
+
+        private void DetailStripSyncMetaHostHeight(float s)
+        {
+            if (_detailStripMetaHostLE == null || _detailStripMetaHost == null) return;
+            float h = DetailStripMetaHostHeight(s);
+            float lineH = DetailStripLineHeight(s);
+            // Keep host active always — SetActive(false) + height check that required host
+            // active was a deadlock (meta never came back after scale/empty sync).
+            if (!_detailStripMetaHost.activeSelf)
+                _detailStripMetaHost.SetActive(true);
+            if (h < 0.5f)
+            {
+                _detailStripMetaHostLE.minHeight = 0f;
+                _detailStripMetaHostLE.preferredHeight = 0f;
+                _detailStripMetaHostLE.flexibleHeight = 0f;
+                return;
+            }
+            _detailStripMetaHostLE.minHeight = lineH;
+            _detailStripMetaHostLE.preferredHeight = h;
+            _detailStripMetaHostLE.flexibleHeight = 0f;
+        }
+
+        private static void DetailStripSetRowHeight(GameObject go, float lineH)
+        {
+            if (go == null) return;
+            LayoutElement le = go.GetComponent<LayoutElement>();
+            if (le == null) return;
+            le.preferredHeight = lineH;
+            le.minHeight = lineH;
+        }
+
+        private static void DetailStripSetLayoutGroup(GameObject go, float spacing, RectOffset padding)
+        {
+            if (go == null) return;
+            HorizontalLayoutGroup hlg = go.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = spacing;
+                if (padding != null) hlg.padding = padding;
+                return;
+            }
+            VerticalLayoutGroup vlg = go.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null)
+            {
+                vlg.spacing = spacing;
+                if (padding != null) vlg.padding = padding;
+            }
+        }
+
+        private bool DetailStripIsExpanded()
+        {
+            return VPBConfig.Instance == null || VPBConfig.Instance.GalleryDetailStripExpanded;
         }
 
         private float DetailStripReservedHeight()
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return 0f;
+            if (!DetailStripIsExpanded()) return 0f;
             if (_detailStripGO == null) return 0f;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            return DetailStripRowHeight(s) + tboxBtnRowGap;
+            return DetailStripRowHeight(s) + TboxBtnRowGapScaled();
         }
 
         private void DetailStripEnsure()
@@ -173,12 +325,23 @@ namespace VPB
                 || _detailStripTitleRowGO == null
                 || _detailStripStarsGO == null
                 || _detailStripStarImages == null
+                || _detailStripCollapseBtnGO == null
+                || (_detailStripCollapseBtnGO != null && _detailStripTitle != null
+                    && _detailStripCollapseBtnGO.transform.GetSiblingIndex()
+                        > _detailStripTitle.transform.GetSiblingIndex())
                 || _detailStripUnhideLink == null
                 || _detailStripDeleteLink == null
                 || _detailStripAutoLoadLink == null
                 || _detailStripNoAutoLoadLink == null
                 || _detailStripOldVersLink == null
                 || _detailStripDesc == null
+                || _detailStripSideColGO == null
+                || _detailStripSideDescScrollGO == null
+                || _detailStripSideDesc == null
+                || _detailStripSideNativeTags == null
+                || (_detailStripSideDescScrollGO != null
+                    && _detailStripSideDescScrollGO.GetComponent<UIScrollWheelHandler>() == null)
+                || DetailStripTextColMissingMask(_detailStripGO)
                 || _detailStripActionRows == null
                 || _detailStripBadgeRowGO == null
                 || (_detailStripBadgeRowGO != null && _detailStripTitleRowGO != null
@@ -190,7 +353,9 @@ namespace VPB
                 || _detailStripThumbColGO == null
                 || DetailStripStripForcesChildHeight(_detailStripGO)
                 || DetailStripStripNeedsUpperLeftAlign(_detailStripGO)
+                || DetailStripStripHasLegacyOuterPad(_detailStripGO)
                 || (_detailStripActionRows != null && _detailStripActionRows.Length < DetailStripActionMaxRows)
+                || (_detailStripMetaRows != null && _detailStripMetaRows.Length < DetailStripMetaMaxRows)
                 || (_detailStripThumbColGO != null && _detailStripThumbColGO.GetComponent<UIScrollWheelHandler>() == null)
                 || DetailStripActionsHostHasLegacyDirectChild("Link_Tag")
                 || DetailStripActionsHostHasLegacyDirectChild("Chip_Deps")
@@ -202,6 +367,27 @@ namespace VPB
                 DetailStripClearUiRefs();
                 _detailStripLayoutScale = -1f;
             }
+
+            // Expand button is fixed top-left chrome on buttons layer (not flex-packed).
+            if (_detailStripExpandBtnGO != null
+                && (_detailStripExpandLabel == null
+                    || _detailStripExpandBtnGO.GetComponent<UIScrollWheelHandler>() == null
+                    || tboxButtonsLayerRT == null
+                    || _detailStripExpandBtnGO.transform.parent != tboxButtonsLayerRT))
+            {
+                try
+                {
+                    if (tboxBaseWidthSpec != null && _detailStripExpandBtnGO != null)
+                        tboxBaseWidthSpec.Remove(_detailStripExpandBtnGO);
+                }
+                catch { }
+                try { UnityEngine.Object.Destroy(_detailStripExpandBtnGO); } catch { }
+                _detailStripExpandBtnGO = null;
+                _detailStripExpandIconImage = null;
+                _detailStripExpandLabel = null;
+                _detailStripExpandBtnLE = null;
+            }
+            DetailStripEnsureExpandButton();
 
             // Tag menu: rebuild if missing scroll / bottom-search layout.
             if (_detailStripTagMenuRoot != null && (
@@ -223,7 +409,11 @@ namespace VPB
                 DetailStripInvalidateTagMenuCaches();
             }
 
-            if (_detailStripGO != null) return;
+            if (_detailStripGO != null)
+            {
+                try { DetailStripSyncThumbInteractions(); } catch { }
+                return;
+            }
             EnsureTboxUI();
             if (tbox == null) return;
 
@@ -231,17 +421,18 @@ namespace VPB
             if (s <= 0f) s = 1f;
             float rowH = DetailStripRowHeight(s);
 
+            // Full-bleed in InfoBar — thumb sits flush; text owns its own pad.
             GameObject strip = UI.CreateChildRT(
-                tbox, "VPB_DetailStrip", AnchorPresets.hStretchTop, new Vector2(-(16f * s), rowH));
+                tbox, "VPB_DetailStrip", AnchorPresets.hStretchTop, new Vector2(0f, rowH));
             _detailStripGO = strip;
             _detailStripRT = strip.GetComponent<RectTransform>();
             _detailStripBg = UI.AddImage(strip, new Color(0.07f, 0.07f, 0.09f, 0.98f), raycastTarget: true);
 
-            // UpperLeft: thumb stays top — MiddleLeft recenters thumb when TextCol reflows (bounce).
+            // No HLG pad — preview uses full strip edge; gap to text via spacing only.
             UI.AddHLG(
                 strip,
-                spacing: 10f * s,
-                padding: UI.Pad(8, 8, 6, 6, s),
+                spacing: 8f * s,
+                padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.UpperLeft,
                 childForceExpandWidth: false,
                 childForceExpandHeight: false);
@@ -256,8 +447,8 @@ namespace VPB
             UI.AddImage(_detailStripThumbGO, new Color(0.12f, 0.12f, 0.14f, 1f), raycastTarget: true);
             GameObject thumbImgGO = UI.CreateChildRT(_detailStripThumbGO, "Image", AnchorPresets.stretchAll);
             RectTransform thumbImgRT = thumbImgGO.GetComponent<RectTransform>();
-            thumbImgRT.offsetMin = new Vector2(2f * s, 2f * s);
-            thumbImgRT.offsetMax = new Vector2(-2f * s, -2f * s);
+            thumbImgRT.offsetMin = Vector2.zero;
+            thumbImgRT.offsetMax = Vector2.zero;
             _detailStripThumb = thumbImgGO.AddComponent<RawImage>();
             _detailStripThumb.color = Color.white;
             _detailStripThumb.raycastTarget = true;
@@ -265,30 +456,40 @@ namespace VPB
             UIScrollWheelHandler thumbScroll = thumbCol.AddComponent<UIScrollWheelHandler>();
             thumbScroll.Sensitivity = 1f;
             thumbScroll.OnScrollValue = DetailStripOnThumbScroll;
-            AddTooltipPlain(thumbCol, VPBTranslation.T(
-                "gallery.detail.tip.thumb_scroll", "Scroll: previous / next selection"));
+            DetailStripSyncThumbInteractions();
 
             GameObject textCol = UI.CreateChildRT(strip, "TextCol", AnchorPresets.stretchAll);
             UI.AddLE(textCol, flexibleWidth: 1f, minWidth: 80f * s, flexibleHeight: 0f);
-            UI.AddVLG(textCol, spacing: 2f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            // Clip path/title Overflow so long strings never paint over SideCol.
+            if (textCol.GetComponent<RectMask2D>() == null)
+                textCol.AddComponent<RectMask2D>();
+            // Small left pad so collapse hover rim is not clipped by RectMask2D at thumb seam.
+            // Main gap to thumb stays HLG spacing on strip.
+            UI.AddVLG(textCol, spacing: 2f * s, padding: UI.Pad(2, 8, 6, 6, s),
                 childAlignment: TextAnchor.UpperLeft,
                 childControlWidth: true, childControlHeight: true,
                 childForceExpandWidth: true, childForceExpandHeight: false);
 
-            float lineH = 18f * s;
+            float lineH = DetailStripLineHeight(s);
 
             // Title left + subtle 5-star rating right.
             _detailStripTitleRowGO = UI.CreateChildRT(textCol, "TitleRow", AnchorPresets.stretchAll);
-            UI.AddHLG(_detailStripTitleRowGO, spacing: 8f * s, padding: UI.Pad(0, 0, 0, 0, s),
+            UI.AddHLG(_detailStripTitleRowGO, spacing: 6f * s, padding: UI.Pad(0, 0, 0, 0, s),
                 childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false, childForceExpandHeight: true);
-            UI.AddLE(_detailStripTitleRowGO, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 1f);
+            UI.AddLE(_detailStripTitleRowGO, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 1f, minWidth: 0f);
+            DetailStripNormalizeRowRect(_detailStripTitleRowGO);
+
+            // Collapse first — left of item name (reading order / proximity).
+            DetailStripCreateCollapseButton(_detailStripTitleRowGO, s, lineH);
 
             _detailStripTitle = UI.CreateLabel(
                 _detailStripTitleRowGO, "", GalleryUiDesignTokens.FontRef, new Color(1f, 1f, 1f, 0.95f),
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: true, richText: true, name: "Title");
-            GalleryUiMetrics.ApplyFont(_detailStripTitle, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            UI.AddLE(_detailStripTitle.gameObject, preferredHeight: lineH, minHeight: lineH, flexibleWidth: 1f);
+            DetailStripApplyFont(_detailStripTitle, s);
+            // preferredWidth 0 — same as flex Path/Tags; bare preferred-size drifts left at low scale.
+            UI.AddLE(_detailStripTitle.gameObject, preferredHeight: lineH, minHeight: lineH,
+                flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
             DetailStripBindClick(_detailStripTitle.gameObject, DetailStripOnTitleClick);
             AddDynamicTooltip(_detailStripTitle.gameObject, () =>
             {
@@ -429,10 +630,163 @@ namespace VPB
                 return path + "\n" + tip;
             });
 
+            // Wide-pane right column — scrollable description + native tags (collapses when narrow).
+            float sideW = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
+            GameObject sideCol = UI.CreateChildRT(strip, "SideCol", AnchorPresets.stretchAll);
+            _detailStripSideColGO = sideCol;
+            _detailStripSideColLE = UI.AddLE(sideCol,
+                minWidth: sideW, preferredWidth: sideW,
+                minHeight: 0f, preferredHeight: 0f,
+                flexibleWidth: 0f, flexibleHeight: 0f);
+            UI.AddVLG(sideCol, spacing: 2f * s, padding: UI.Pad(10, 8, 6, 6, s),
+                childAlignment: TextAnchor.UpperLeft,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: true, childForceExpandHeight: false);
+
+            DetailStripCreateSideDescScroll(sideCol, s, lineH * 3f);
+
+            _detailStripSideNativeTags = DetailStripCreateSideBlock(
+                sideCol, "SideNativeTags", DetailStripColorTag, s, lineH, wrap: true);
+            AddDynamicTooltip(_detailStripSideNativeTags.gameObject, () =>
+                VPBTranslation.T(
+                    "gallery.detail.tip.native_tags",
+                    "Native package tags from meta.json (clothing / hair regions)."));
+
+            sideCol.SetActive(false);
+            _detailStripSideVisible = false;
+
+            DetailStripEnsureExpandButton();
+
             // T badge also opens tag menu
             DetailStripBindClick(_detailStripBadgeTags, DetailStripOnTagClick);
 
             strip.SetActive(false);
+        }
+
+        private void DetailStripCreateSideDescScroll(GameObject sideCol, float s, float viewportH)
+        {
+            if (s <= 0f) s = 1f;
+            float sbW = GalleryUiDesignTokens.FooterDetailStripSideScrollBarWidthRef * s;
+            float lineH = DetailStripLineHeight(s);
+
+            GameObject scrollGO = UI.CreateChildRT(sideCol, "SideDescScroll", AnchorPresets.stretchAll);
+            _detailStripSideDescScrollGO = scrollGO;
+            // flexibleHeight fills SideCol after tags; preferredHeight is a floor only.
+            _detailStripSideDescScrollLE = UI.AddLE(scrollGO,
+                preferredHeight: lineH, minHeight: lineH,
+                flexibleWidth: 1f, flexibleHeight: 1f);
+            // Raycast target so wheel works over empty padded areas too.
+            Image scrollHit = UI.AddImage(scrollGO, new Color(0f, 0f, 0f, 0.01f), raycastTarget: true);
+            if (scrollHit != null) scrollHit.raycastTarget = true;
+
+            GameObject viewport = new GameObject("Viewport");
+            viewport.transform.SetParent(scrollGO.transform, false);
+            RectTransform vpRT = viewport.AddComponent<RectTransform>();
+            vpRT.anchorMin = Vector2.zero;
+            vpRT.anchorMax = Vector2.one;
+            vpRT.pivot = new Vector2(0.5f, 0.5f);
+            vpRT.offsetMin = Vector2.zero;
+            vpRT.offsetMax = new Vector2(-sbW, 0f);
+            Image vpHit = viewport.AddComponent<Image>();
+            vpHit.color = new Color(0f, 0f, 0f, 0.01f);
+            vpHit.raycastTarget = true;
+            viewport.AddComponent<RectMask2D>();
+
+            GameObject content = new GameObject("Content");
+            content.transform.SetParent(viewport.transform, false);
+            RectTransform contentRT = content.AddComponent<RectTransform>();
+            contentRT.anchorMin = new Vector2(0f, 1f);
+            contentRT.anchorMax = new Vector2(1f, 1f);
+            contentRT.pivot = new Vector2(0.5f, 1f);
+            contentRT.anchoredPosition = Vector2.zero;
+            contentRT.sizeDelta = new Vector2(0f, 0f);
+            _detailStripSideDescContentRT = contentRT;
+            UI.AddVLG(content, spacing: 0f, padding: UI.Pad(0, 0, 0, 0, s),
+                childAlignment: TextAnchor.UpperLeft,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: true, childForceExpandHeight: false);
+            ContentSizeFitter csf = content.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            Text t = UI.CreateLabel(
+                content, "", GalleryUiDesignTokens.FontRef, DetailStripColorDesc,
+                TextAnchor.UpperLeft, HorizontalWrapMode.Wrap, VerticalWrapMode.Overflow,
+                raycastTarget: true, richText: true, name: "SideDesc");
+            DetailStripApplyFont(t, s);
+            _detailStripSideDesc = t;
+            _detailStripSideDescLE = UI.AddLE(t.gameObject,
+                preferredHeight: lineH, minHeight: lineH,
+                flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
+
+            DetailStripBindClick(t.gameObject, DetailStripOnDescriptionClick);
+            AddDynamicTooltip(t.gameObject, () =>
+            {
+                string full = DetailStripResolveDescription(_detailStripBoundFile);
+                if (string.IsNullOrEmpty(full))
+                    return VPBTranslation.T("gallery.detail.tip.desc_empty", "No short description in meta.json");
+                return full + "\n" + VPBTranslation.T("gallery.detail.tip.desc_click", "Click: copy description");
+            });
+
+            ScrollRect sr = scrollGO.AddComponent<ScrollRect>();
+            sr.content = contentRT;
+            sr.viewport = vpRT;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.scrollSensitivity = 40f * s;
+            sr.verticalScrollbar = null;
+            _detailStripSideDescScrollRect = sr;
+
+            // Explicit wheel handlers — parent gallery scroll often wins GetEventHandler otherwise.
+            UIScrollWheelHandler textWheel = t.gameObject.AddComponent<UIScrollWheelHandler>();
+            textWheel.Sensitivity = 1f;
+            textWheel.OnScrollValue = DetailStripOnSideDescWheel;
+            UIScrollWheelHandler vpWheel = viewport.AddComponent<UIScrollWheelHandler>();
+            vpWheel.Sensitivity = 1f;
+            vpWheel.OnScrollValue = DetailStripOnSideDescWheel;
+            UIScrollWheelHandler wheel = scrollGO.AddComponent<UIScrollWheelHandler>();
+            wheel.Sensitivity = 1f;
+            wheel.OnScrollValue = DetailStripOnSideDescWheel;
+
+            GameObject sbGO = UI.CreateScrollBar(scrollGO, sbW, viewportH, Scrollbar.Direction.BottomToTop);
+            Scrollbar sb = sbGO != null ? sbGO.GetComponent<Scrollbar>() : null;
+            if (sb != null)
+            {
+                ScrollbarSync sync = sbGO.AddComponent<ScrollbarSync>();
+                sync.scrollRect = sr;
+                sync.scrollbar = sb;
+                sync.minSizePixels = 18f * s;
+            }
+        }
+
+        private void DetailStripOnSideDescWheel(float dy)
+        {
+            ScrollRect sr = _detailStripSideDescScrollRect;
+            if (sr == null || !sr.isActiveAndEnabled) return;
+            RectTransform content = sr.content;
+            RectTransform viewport = sr.viewport;
+            if (content == null || viewport == null) return;
+            float overflow = content.rect.height - viewport.rect.height;
+            if (overflow <= 1f) return;
+            float step = (dy * Mathf.Max(48f, sr.scrollSensitivity)) / overflow;
+            sr.verticalNormalizedPosition = Mathf.Clamp01(sr.verticalNormalizedPosition + step);
+        }
+
+        private static Text DetailStripCreateSideBlock(
+            GameObject parent, string name, Color color, float s, float height, bool wrap)
+        {
+            Text t = UI.CreateLabel(
+                parent, "", GalleryUiDesignTokens.FontRef, color,
+                TextAnchor.UpperLeft,
+                wrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow,
+                VerticalWrapMode.Truncate,
+                raycastTarget: true, richText: true, name: name);
+            DetailStripApplyFont(t, s);
+            UI.AddLE(t.gameObject,
+                preferredHeight: height, minHeight: DetailStripLineHeight(s),
+                flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
+            return t;
         }
 
         private void DetailStripClearUiRefs()
@@ -449,10 +803,14 @@ namespace VPB
             _detailStripBadgeTags = null;
             _detailStripTitleRowGO = null;
             _detailStripTitle = null;
+            _detailStripCollapseBtnGO = null;
+            _detailStripCollapseIconImage = null;
+            // Expand button is InfoBar chrome — keep alive across strip rebuilds.
             _detailStripStarsGO = null;
             _detailStripStarImages = null;
             _detailStripStarRating = 0;
             _detailStripStarHover = 0;
+            _detailStripThumbRightHeld = false;
             _detailStripMetaHost = null;
             _detailStripMetaHostLE = null;
             _detailStripMetaRows = null;
@@ -476,6 +834,15 @@ namespace VPB
             _detailStripDesc = null;
             _detailStripTags = null;
             _detailStripPath = null;
+            _detailStripSideColGO = null;
+            _detailStripSideColLE = null;
+            _detailStripSideDescScrollGO = null;
+            _detailStripSideDescScrollLE = null;
+            _detailStripSideDescScrollRect = null;
+            _detailStripSideDescContentRT = null;
+            _detailStripSideDesc = null;
+            _detailStripSideDescLE = null;
+            _detailStripSideNativeTags = null;
             _detailStripCacheKey = "";
             _detailStripThumbFile = null;
             _detailStripBoundFile = null;
@@ -484,6 +851,9 @@ namespace VPB
             _detailStripMeasuredHeight = -1f;
             _detailStripWantPath = false;
             _detailStripWantDesc = false;
+            _detailStripWantNativeTags = false;
+            _detailStripSideVisible = false;
+            _detailStripSideContentKey = "";
         }
 
         private static Text DetailStripCreateFlexLine(GameObject parent, string name, Color color, float s, bool clickable, float height)
@@ -499,7 +869,7 @@ namespace VPB
                 row, "", GalleryUiDesignTokens.FontRef, color,
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: clickable, richText: true, name: name);
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            DetailStripApplyFont(t, s);
             UI.AddLE(t.gameObject, preferredHeight: height, minHeight: height,
                 flexibleWidth: 1f, minWidth: 0f, preferredWidth: 0f);
             DetailStripNormalizeRowRect(row);
@@ -570,6 +940,333 @@ namespace VPB
             }
         }
 
+        private void DetailStripCreateCollapseButton(GameObject parent, float s, float lineH)
+        {
+            if (parent == null) return;
+            if (s <= 0f) s = 1f;
+            float sz = Mathf.Clamp(lineH, 16f * s, 22f * s);
+            _detailStripCollapseBtnGO = UI.CreateUIButton(
+                parent, sz, sz, "",
+                GalleryUiDesignTokens.FontMinRef,
+                0f, 0f, AnchorPresets.middleLeft,
+                DetailStripToggleExpanded);
+            _detailStripCollapseBtnGO.name = "DetailStrip_Collapse";
+            _detailStripCollapseBtnGO.transform.SetAsFirstSibling();
+            LayoutElement le = _detailStripCollapseBtnGO.GetComponent<LayoutElement>();
+            if (le == null) le = _detailStripCollapseBtnGO.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = sz;
+            le.minHeight = le.preferredHeight = sz;
+            le.flexibleWidth = 0f;
+            le.flexibleHeight = 0f;
+
+            try
+            {
+                if (_detailStripCollapseSprite == null)
+                    _detailStripCollapseSprite = UI.LoadIconSprite("vpb_icons/chevron_down.png", new Color(0.78f, 0.78f, 0.80f, 1f));
+                if (_detailStripCollapseSprite != null)
+                {
+                    UI.AddIconToButton(
+                        _detailStripCollapseBtnGO, _detailStripCollapseSprite,
+                        padding: Mathf.Max(2f, 3f * s),
+                        backdropOverride: new Color(0.14f, 0.14f, 0.17f, 0.92f));
+                    Transform iconTr = _detailStripCollapseBtnGO.transform.Find("Icon");
+                    if (iconTr != null) _detailStripCollapseIconImage = iconTr.GetComponent<Image>();
+                }
+                else
+                {
+                    Text t = _detailStripCollapseBtnGO.GetComponentInChildren<Text>(true);
+                    if (t != null)
+                    {
+                        t.gameObject.SetActive(true);
+                        t.text = "▾";
+                        t.color = new Color(0.78f, 0.78f, 0.80f, 1f);
+                    }
+                }
+            }
+            catch { }
+
+            AddTooltip(
+                _detailStripCollapseBtnGO,
+                "gallery.detail.tip.collapse",
+                "Hide details — reclaim grid space. Show again from Details in toolbox.");
+        }
+
+        private static float DetailStripExpandButtonWidth(float s)
+        {
+            if (s <= 0f) s = 1f;
+            return 108f * s;
+        }
+
+        /// <summary>Left reserve for Details on the top toolbox band only (lower wrap rows stay full-bleed).</summary>
+        private float DetailStripExpandLeftReserve(float s)
+        {
+            if (s <= 0f) s = 1f;
+            if (_detailStripExpandBtnGO == null || !_detailStripExpandBtnGO.activeSelf) return 0f;
+            return DetailStripExpandButtonWidth(s) + 10f * s;
+        }
+
+        private void DetailStripEnsureExpandButton()
+        {
+            if (_detailStripExpandBtnGO != null) return;
+            EnsureTboxUI();
+            if (tboxButtonsLayerRT == null) return;
+
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float innerH = TboxActionButtonInnerHeight();
+            float iconSz = 16f * s;
+            float btnW = DetailStripExpandButtonWidth(s);
+            string label = VPBTranslation.T("gallery.detail.expand", "Details");
+
+            // Fixed top-left chrome — one action-row tall; wrap rows 2+ use space under it.
+            _detailStripExpandBtnGO = new GameObject("DetailStrip_Expand");
+            _detailStripExpandBtnGO.transform.SetParent(tboxButtonsLayerRT, false);
+            Image bg = UI.AddGalleryElementRoundedBg(_detailStripExpandBtnGO, new Color(0.16f, 0.20f, 0.30f, 0.96f));
+            RectTransform rt = _detailStripExpandBtnGO.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.sizeDelta = new Vector2(btnW, innerH);
+                rt.anchoredPosition = new Vector2(8f * s, -2f * s);
+            }
+
+            Button btn = _detailStripExpandBtnGO.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.targetGraphic = bg;
+            btn.onClick.AddListener(DetailStripToggleExpanded);
+            try
+            {
+                UIHoverBorder hb = _detailStripExpandBtnGO.AddComponent<UIHoverBorder>();
+                hb.ApplyBorderSettings();
+            }
+            catch { }
+
+            UI.AddHLG(
+                _detailStripExpandBtnGO,
+                spacing: 6f * s,
+                padding: UI.Pad(8, 10, 0, 0, s),
+                childAlignment: TextAnchor.MiddleCenter,
+                childForceExpandWidth: false,
+                childForceExpandHeight: true);
+
+            GameObject iconGO = new GameObject("Icon");
+            iconGO.transform.SetParent(_detailStripExpandBtnGO.transform, false);
+            _detailStripExpandIconImage = UI.AddImage(iconGO, Color.white, raycastTarget: false);
+            _detailStripExpandIconImage.preserveAspect = true;
+            UI.AddLE(iconGO, minWidth: iconSz, preferredWidth: iconSz, minHeight: iconSz, preferredHeight: iconSz, flexibleWidth: 0f);
+
+            try
+            {
+                if (_detailStripExpandSprite == null)
+                    _detailStripExpandSprite = UI.LoadIconSprite("vpb_icons/chevron_up.png", new Color(0.85f, 0.88f, 0.95f, 1f));
+                if (_detailStripExpandSprite != null)
+                    _detailStripExpandIconImage.sprite = _detailStripExpandSprite;
+            }
+            catch { }
+
+            _detailStripExpandLabel = UI.CreateLabel(
+                _detailStripExpandBtnGO, label, GalleryUiDesignTokens.FontBodyRef,
+                new Color(0.92f, 0.94f, 0.98f, 1f), TextAnchor.MiddleLeft,
+                raycastTarget: false, name: "Label");
+            GalleryUiMetrics.ApplyFont(
+                _detailStripExpandLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+
+            _detailStripExpandBtnLE = UI.AddLE(
+                _detailStripExpandBtnGO,
+                minWidth: btnW, preferredWidth: btnW,
+                minHeight: innerH, preferredHeight: innerH, flexibleWidth: 0f);
+
+            UIScrollWheelHandler wheel = _detailStripExpandBtnGO.AddComponent<UIScrollWheelHandler>();
+            wheel.Sensitivity = 1f;
+            wheel.OnScrollValue = DetailStripOnThumbScroll;
+
+            _detailStripExpandBtnGO.SetActive(false);
+
+            AddTooltip(
+                _detailStripExpandBtnGO,
+                "gallery.detail.tip.expand",
+                "Show selection details above toolbox. Scroll: previous / next selection.");
+            DetailStripSyncExpandButtonChrome(s);
+        }
+
+        private void DetailStripToggleExpanded()
+        {
+            DetailStripSetExpanded(!DetailStripIsExpanded());
+        }
+
+        private void DetailStripSetExpanded(bool expanded)
+        {
+            if (VPBConfig.Instance != null)
+            {
+                if (VPBConfig.Instance.GalleryDetailStripExpanded == expanded)
+                {
+                    DetailStripSyncCollapseExpandChrome();
+                    return;
+                }
+                VPBConfig.Instance.GalleryDetailStripExpanded = expanded;
+                // Persist across restart (same pattern as toolbox pin).
+                try { VPBConfig.Instance.Save(false); } catch { }
+            }
+
+            if (!expanded)
+            {
+                try { DetailStripCloseTagMenu(); } catch { }
+                if (_detailStripGO != null) _detailStripGO.SetActive(false);
+            }
+            else
+            {
+                // Force populate on re-open (strip may have been soft-hidden).
+                _detailStripCacheKey = "";
+            }
+
+            try { DetailStripRefresh(); } catch { }
+            DetailStripSyncCollapseExpandChrome();
+        }
+
+        private void DetailStripSyncCollapseExpandChrome()
+        {
+            int sel = selectedFiles != null ? selectedFiles.Count : 0;
+            bool hasSel = sel > 0;
+            bool expanded = DetailStripIsExpanded();
+            bool stripUp = expanded
+                && _detailStripGO != null
+                && _detailStripGO.activeSelf;
+
+            if (_detailStripExpandBtnGO != null)
+            {
+                bool want = hasSel && !expanded;
+                bool changed = _detailStripExpandBtnGO.activeSelf != want;
+                if (changed) _detailStripExpandBtnGO.SetActive(want);
+                if (changed)
+                {
+                    if (want)
+                        try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
+                    else
+                        try { DetailStripApplyToolboxFlexLeftInset(ChromeScale); } catch { }
+                    try { RefreshTboxFlexButtonLayout(); } catch { }
+                }
+                if (want)
+                    _detailStripExpandBtnGO.transform.SetAsLastSibling();
+            }
+            if (_detailStripCollapseBtnGO != null)
+            {
+                _detailStripCollapseBtnGO.SetActive(hasSel && stripUp);
+                if (_detailStripCollapseBtnGO.activeSelf)
+                    _detailStripCollapseBtnGO.transform.SetAsFirstSibling();
+            }
+        }
+
+        private void DetailStripSyncCollapseButtonChrome(float s, float lineH)
+        {
+            if (_detailStripCollapseBtnGO == null) return;
+            if (s <= 0f) s = 1f;
+            float sz = Mathf.Clamp(lineH, 16f * s, 22f * s);
+            LayoutElement le = _detailStripCollapseBtnGO.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minWidth = le.preferredWidth = sz;
+                le.minHeight = le.preferredHeight = sz;
+            }
+            RectTransform rt = _detailStripCollapseBtnGO.GetComponent<RectTransform>();
+            if (rt != null) rt.sizeDelta = new Vector2(sz, sz);
+            Transform iconTr = _detailStripCollapseBtnGO.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                RectTransform iconRT = iconTr as RectTransform;
+                if (iconRT != null)
+                {
+                    float pad = Mathf.Max(2f, 3f * s);
+                    iconRT.offsetMin = new Vector2(pad, pad);
+                    iconRT.offsetMax = new Vector2(-pad, -pad);
+                }
+            }
+        }
+
+        private void DetailStripSyncExpandButtonChrome(float s)
+        {
+            if (_detailStripExpandBtnGO == null) return;
+            if (s <= 0f) s = 1f;
+            float innerH = TboxActionButtonInnerHeight();
+            float iconSz = 16f * s;
+            float btnW = DetailStripExpandButtonWidth(s);
+            float pad = 8f * s;
+
+            if (tboxButtonsLayerRT != null && _detailStripExpandBtnGO.transform.parent != tboxButtonsLayerRT)
+                _detailStripExpandBtnGO.transform.SetParent(tboxButtonsLayerRT, false);
+
+            RectTransform rt = _detailStripExpandBtnGO.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.sizeDelta = new Vector2(btnW, innerH);
+                rt.anchoredPosition = new Vector2(pad, -2f * s);
+            }
+
+            HorizontalLayoutGroup hlg = _detailStripExpandBtnGO.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = 6f * s;
+                hlg.padding = UI.Pad(8, 10, 0, 0, s);
+            }
+            if (_detailStripExpandBtnLE != null)
+            {
+                _detailStripExpandBtnLE.minWidth = _detailStripExpandBtnLE.preferredWidth = btnW;
+                _detailStripExpandBtnLE.minHeight = _detailStripExpandBtnLE.preferredHeight = innerH;
+                _detailStripExpandBtnLE.flexibleWidth = 0f;
+            }
+            if (_detailStripExpandIconImage != null)
+            {
+                LayoutElement iconLe = _detailStripExpandIconImage.GetComponent<LayoutElement>();
+                if (iconLe != null)
+                {
+                    iconLe.minWidth = iconLe.preferredWidth = iconSz;
+                    iconLe.minHeight = iconLe.preferredHeight = iconSz;
+                }
+            }
+            if (_detailStripExpandLabel != null)
+            {
+                _detailStripExpandLabel.text = VPBTranslation.T("gallery.detail.expand", "Details");
+                GalleryUiMetrics.ApplyFont(
+                    _detailStripExpandLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            }
+
+            DetailStripApplyToolboxFlexLeftInset(s);
+        }
+
+        private static void DetailStripSetHlgLeftPad(HorizontalLayoutGroup hlg, float leftPad, int rightPad)
+        {
+            if (hlg == null) return;
+            RectOffset p = hlg.padding;
+            int left = Mathf.Max(0, Mathf.RoundToInt(leftPad));
+            hlg.padding = new RectOffset(left, rightPad >= 0 ? rightPad : p.right, p.top, p.bottom);
+        }
+
+        /// <summary>
+        /// Flex root stays full-bleed. Only the top band beside Details gets a left pad —
+        /// wrap rows 2+ reclaim the void under the one-row Details chrome.
+        /// </summary>
+        private void DetailStripApplyToolboxFlexLeftInset(float s)
+        {
+            if (tboxButtonsFlexRootRT == null) return;
+            if (s <= 0f) s = 1f;
+            tboxButtonsFlexRootRT.offsetMin = new Vector2(8f * s, tboxButtonsFlexRootRT.offsetMin.y);
+            if (tboxButtonsFlexRootRT.offsetMax.x > -1f)
+                tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f * s, tboxButtonsFlexRootRT.offsetMax.y);
+
+            float detailsPad = DetailStripExpandLeftReserve(s);
+            bool clothingTop = tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf;
+            // Clothing sits above action rows when active — it shares the Details vertical band.
+            float clothingLeft = detailsPad > 0f ? detailsPad : 8f * s;
+            DetailStripSetHlgLeftPad(tboxClothingModeRowHLG, clothingTop ? clothingLeft : 8f * s, -1);
+            DetailStripSetHlgLeftPad(tboxBtnRow0HLG, (!clothingTop && detailsPad > 0f) ? detailsPad : 0f, 0);
+            DetailStripSetHlgLeftPad(tboxBtnRow1HLG, 0f, 0);
+            DetailStripSetHlgLeftPad(tboxBtnRow2HLG, 0f, 0);
+        }
+
         private void DetailStripRefreshStars()
         {
             if (_detailStripStarsGO == null) return;
@@ -621,36 +1318,9 @@ namespace VPB
         {
             if (selectedFiles == null || selectedFiles.Count == 0) return;
             starValue = Mathf.Clamp(starValue, 0, 5);
+            // Same star again clears rating (0).
             int next = (starValue > 0 && starValue == _detailStripStarRating) ? 0 : starValue;
-
-            int applied = 0;
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                FileEntry f = selectedFiles[i];
-                if (f == null) continue;
-                try
-                {
-                    if (RatingsManager.Instance != null)
-                    {
-                        RatingsManager.Instance.SetRating(f, next);
-                        applied++;
-                    }
-                }
-                catch { }
-            }
-            if (applied == 0) return;
-
-            _detailStripStarRating = next;
-            DetailStripPaintStars();
-            try
-            {
-                if (tboxGridRateHandler != null)
-                    tboxGridRateHandler.SetDisplayOnly(next);
-            }
-            catch { }
-            try { TboxAfterGridRateChanged(); } catch { }
-            // Keep strip cache in sync with rating so later refresh does not skip.
-            _detailStripCacheKey = BuildDetailStripCacheKey();
+            DetailStripApplyStarRating(next);
         }
 
         private GameObject DetailStripCreateBadge(GameObject parent, string letter, Color letterColor, float s, string tip)
@@ -661,7 +1331,7 @@ namespace VPB
             AddGalleryBadgeBackground(go);
             Text t = UI.CreateLabel(go, letter, GalleryUiDesignTokens.FontMinRef, letterColor, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Text");
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontMinRef, s, 8);
+            DetailStripApplyFont(t, s, GalleryUiDesignTokens.FontMinRef);
             Image img = go.GetComponent<Image>();
             if (img != null) img.raycastTarget = true;
             AddTooltipPlain(go, tip);
@@ -677,11 +1347,13 @@ namespace VPB
                 parent, label, GalleryUiDesignTokens.FontRef, linkColor,
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: true, richText: true, name: "Link_" + name);
-            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            DetailStripApplyFont(t, s);
             ContentSizeFitter csf = t.gameObject.AddComponent<ContentSizeFitter>();
             csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            UI.AddLE(t.gameObject, flexibleWidth: 0f, flexibleHeight: 0f);
+            // Vertical PreferredSize fights row LE at high scale (~1.6) → Truncate clip.
+            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+            float lineH = DetailStripLineHeight(s);
+            UI.AddLE(t.gameObject, minHeight: lineH, preferredHeight: lineH, flexibleWidth: 0f, flexibleHeight: 0f);
 
             AddTooltip(t.gameObject, tipKey, tipDefault);
             DetailStripBindClick(t.gameObject, onClick);
@@ -725,11 +1397,12 @@ namespace VPB
                 parent, "·", GalleryUiDesignTokens.FontRef, new Color(0.50f, 0.50f, 0.54f, 0.90f),
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: false, name: "Sep");
-            GalleryUiMetrics.ApplyFont(sep, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            DetailStripApplyFont(sep, s);
             ContentSizeFitter csf = sep.gameObject.AddComponent<ContentSizeFitter>();
             csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            UI.AddLE(sep.gameObject, flexibleWidth: 0f);
+            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+            float lineH = DetailStripLineHeight(s);
+            UI.AddLE(sep.gameObject, minHeight: lineH, preferredHeight: lineH, flexibleWidth: 0f, flexibleHeight: 0f);
             return sep.gameObject;
         }
 
@@ -749,6 +1422,136 @@ namespace VPB
             et.triggers.Add(entry);
         }
 
+        /// <summary>Tooltip + double-click launch on preview thumb (safe to call on existing strip).</summary>
+        private void DetailStripSyncThumbInteractions()
+        {
+            GameObject thumbCol = _detailStripThumbColGO;
+            if (thumbCol == null && _detailStripGO != null)
+            {
+                Transform t = _detailStripGO.transform.Find("ThumbCol");
+                if (t != null) thumbCol = t.gameObject;
+            }
+            if (thumbCol == null) return;
+
+            // Status bar is one line tall — keep tip as a single line (newlines truncate).
+            AddTooltip(
+                thumbCol,
+                "gallery.detail.tip.thumb",
+                "Scroll: prev/next · Hold right + scroll: rate · Double-click: launch / apply");
+
+            // EventTrigger implements IScrollHandler and swallows wheel if placed on the hit
+            // target above UIScrollWheelHandler — never put EventTrigger on Thumb/Image children.
+            DetailStripStripEventTrigger(_detailStripThumbGO);
+            if (_detailStripThumb != null)
+                DetailStripStripEventTrigger(_detailStripThumb.gameObject);
+
+            DetailStripEnsureThumbScroll(thumbCol);
+            DetailStripEnsureThumbScroll(_detailStripThumbGO);
+            if (_detailStripThumb != null)
+                DetailStripEnsureThumbScroll(_detailStripThumb.gameObject);
+
+            DetailStripBindThumbInput(thumbCol);
+        }
+
+        private static void DetailStripStripEventTrigger(GameObject go)
+        {
+            if (go == null) return;
+            EventTrigger et = go.GetComponent<EventTrigger>();
+            if (et != null)
+            {
+                try { UnityEngine.Object.Destroy(et); } catch { }
+            }
+        }
+
+        private void DetailStripEnsureThumbScroll(GameObject go)
+        {
+            if (go == null) return;
+            UIScrollWheelHandler wheel = go.GetComponent<UIScrollWheelHandler>();
+            if (wheel == null) wheel = go.AddComponent<UIScrollWheelHandler>();
+            wheel.Sensitivity = 1f;
+            wheel.OnScrollValue = DetailStripOnThumbScroll;
+        }
+
+        /// <summary>Double-click + right-hold tracking on thumb column (no EventTrigger / IScrollHandler).</summary>
+        private void DetailStripBindThumbInput(GameObject go)
+        {
+            if (go == null) return;
+            DetailStripThumbClickRelay relay = go.GetComponent<DetailStripThumbClickRelay>();
+            if (relay == null) relay = go.AddComponent<DetailStripThumbClickRelay>();
+            relay.OnDoubleClick = DetailStripOnThumbDoubleClick;
+            relay.OnRightHoldChanged = held => _detailStripThumbRightHeld = held;
+            _detailStripThumbRightHeld = relay.RightHeld;
+            DetailStripStripEventTrigger(go);
+        }
+
+        private void DetailStripOnThumbDoubleClick()
+        {
+            if (IsSettingsPanelOpen()) return;
+            if (_benchPickModeActive) return;
+            FileEntry file = _detailStripBoundFile;
+            if (file == null && selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[0];
+            if (file == null) return;
+            ApplyFileEntryNow(file);
+        }
+
+        private bool DetailStripThumbRateScrollActive()
+        {
+            if (!_detailStripThumbRightHeld) return false;
+            // RMB released outside thumb without PointerUp on relay.
+            if (!Input.GetMouseButton(1))
+            {
+                _detailStripThumbRightHeld = false;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Scroll up → +1 star, down → −1 (0–5). Applies to whole selection.</summary>
+        private void DetailStripNudgeRatingFromScroll(float scrollDelta)
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return;
+            int step = scrollDelta > 0f ? 1 : -1;
+            int next = Mathf.Clamp(_detailStripStarRating + step, 0, 5);
+            if (next == _detailStripStarRating) return;
+            DetailStripApplyStarRating(next);
+        }
+
+        private void DetailStripApplyStarRating(int next)
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return;
+            next = Mathf.Clamp(next, 0, 5);
+
+            int applied = 0;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                try
+                {
+                    if (RatingsManager.Instance != null)
+                    {
+                        RatingsManager.Instance.SetRating(f, next);
+                        applied++;
+                    }
+                }
+                catch { }
+            }
+            if (applied == 0) return;
+
+            _detailStripStarRating = next;
+            _detailStripStarHover = 0;
+            DetailStripPaintStars();
+            try
+            {
+                if (tboxGridRateHandler != null)
+                    tboxGridRateHandler.SetDisplayOnly(next);
+            }
+            catch { }
+            try { TboxAfterGridRateChanged(); } catch { }
+            _detailStripCacheKey = BuildDetailStripCacheKey();
+        }
+
         private static void DetailStripUnbindClick(GameObject go)
         {
             if (go == null) return;
@@ -762,6 +1565,12 @@ namespace VPB
 
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
+
+            bool scaleChanged = Mathf.Abs(_detailStripLayoutScale - s) > 0.001f;
+            // Stale absolute px from prior scale → black gutters / clip after UI-scale change.
+            if (scaleChanged && !_detailStripScrubHeightLocked)
+                _detailStripMeasuredHeight = -1f;
+
             float rowH = DetailStripRowHeight(s);
 
             float topInset = (tboxExpandT > 0.05f) ? TryOnToolboxReservedHeight() : 0f;
@@ -769,79 +1578,334 @@ namespace VPB
             _detailStripRT.anchorMax = new Vector2(1f, 1f);
             _detailStripRT.pivot = new Vector2(0.5f, 1f);
             _detailStripRT.anchoredPosition = new Vector2(0f, -topInset);
-            _detailStripRT.sizeDelta = new Vector2(-(16f * s), rowH);
+            _detailStripRT.sizeDelta = new Vector2(0f, rowH);
             // During scrub lock: never re-drive thumb LE/anchors (HLG fight = vertical bounce).
             if (!_detailStripScrubHeightLocked)
                 DetailStripSyncThumbSize(s, rowH);
 
-            bool scaleChanged = Mathf.Abs(_detailStripLayoutScale - s) > 0.001f;
             if (!scaleChanged) return;
             _detailStripLayoutScale = s;
+            DetailStripApplyChromeScale(s);
 
-            float lineH = 18f * s;
-            // Title: prefer shrink/ellipsis width over painting into badges/stars.
+            // Remeasure after chrome rescale (same selection would otherwise skip Refresh).
+            if (!_detailStripInRefreshGeometry
+                && _detailStripGO != null && _detailStripGO.activeSelf && !DetailStripScrubBlocksRebuild)
+                DetailStripRefreshGeometry();
+        }
+
+        /// <summary>Re-apply every scale-dependent strip metric so ChromeScale stays consistent.</summary>
+        private void DetailStripApplyChromeScale(float s)
+        {
+            if (s <= 0f) s = 1f;
+            float lineH = DetailStripLineHeight(s);
+            RectOffset zeroPad = UI.Pad(0, 0, 0, 0, s);
+
+            DetailStripSetLayoutGroup(_detailStripGO, 8f * s, UI.Pad(0, 0, 0, 0, s));
+
+            if (_detailStripThumbGO != null)
+            {
+                Transform imgTr = _detailStripThumbGO.transform.Find("Image");
+                RectTransform imgRT = imgTr as RectTransform;
+                if (imgRT != null)
+                {
+                    imgRT.offsetMin = Vector2.zero;
+                    imgRT.offsetMax = Vector2.zero;
+                }
+            }
+
+            Transform textColTr = _detailStripGO != null ? _detailStripGO.transform.Find("TextCol") : null;
+            if (textColTr != null)
+            {
+                DetailStripSetLayoutGroup(textColTr.gameObject, 2f * s, UI.Pad(2, 8, 6, 6, s));
+                LayoutElement textColLe = textColTr.GetComponent<LayoutElement>();
+                if (textColLe != null)
+                {
+                    textColLe.minWidth = 80f * s;
+                    textColLe.flexibleHeight = 0f;
+                }
+            }
+
+            if (_detailStripSideColGO != null)
+            {
+                DetailStripSetLayoutGroup(_detailStripSideColGO, 2f * s, UI.Pad(10, 8, 6, 6, s));
+                float sideMin = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
+                if (_detailStripSideColLE != null)
+                {
+                    _detailStripSideColLE.minWidth = sideMin;
+                    if (_detailStripSideColLE.preferredWidth < sideMin)
+                        _detailStripSideColLE.preferredWidth = sideMin;
+                    _detailStripSideColLE.flexibleWidth = 0f;
+                    _detailStripSideColLE.flexibleHeight = 0f;
+                }
+            }
+            DetailStripApplyFont(_detailStripSideDesc, s);
+            DetailStripApplyFont(_detailStripSideNativeTags, s);
+            DetailStripSyncSideBlockChrome(_detailStripSideNativeTags, null, s, lineH, wrapBlock: true);
+            if (_detailStripSideDescScrollRect != null)
+                _detailStripSideDescScrollRect.scrollSensitivity = 40f * s;
+            if (_detailStripSideDescScrollGO != null)
+            {
+                Transform vpTr = _detailStripSideDescScrollGO.transform.Find("Viewport");
+                RectTransform vpRT = vpTr as RectTransform;
+                if (vpRT != null)
+                {
+                    float sbW = GalleryUiDesignTokens.FooterDetailStripSideScrollBarWidthRef * s;
+                    vpRT.offsetMax = new Vector2(-sbW, 0f);
+                }
+                Transform sbTr = _detailStripSideDescScrollGO.transform.Find("Scrollbar");
+                RectTransform sbRT = sbTr as RectTransform;
+                if (sbRT != null)
+                {
+                    float sbW = GalleryUiDesignTokens.FooterDetailStripSideScrollBarWidthRef * s;
+                    sbRT.sizeDelta = new Vector2(sbW, sbRT.sizeDelta.y);
+                }
+            }
+
+            DetailStripSetRowHeight(_detailStripTitleRowGO, lineH);
+            DetailStripSetLayoutGroup(_detailStripTitleRowGO, 6f * s, zeroPad);
+            LayoutElement titleRowLe = _detailStripTitleRowGO != null
+                ? _detailStripTitleRowGO.GetComponent<LayoutElement>() : null;
+            if (titleRowLe != null) titleRowLe.flexibleHeight = 0f;
             if (_detailStripTitle != null)
             {
-                GalleryUiMetrics.ApplyFont(_detailStripTitle, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+                DetailStripApplyFont(_detailStripTitle, s);
                 LayoutElement titleLe = _detailStripTitle.GetComponent<LayoutElement>();
                 if (titleLe != null)
                 {
                     titleLe.minWidth = 0f;
                     titleLe.preferredWidth = 0f;
                     titleLe.flexibleWidth = 1f;
+                    titleLe.preferredHeight = lineH;
+                    titleLe.minHeight = lineH;
+                    titleLe.flexibleHeight = 0f;
                 }
             }
-            if (_detailStripCopyLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripCopyLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripDeleteLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripDeleteLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripHubLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripHubLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripCacheLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripCacheLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripAutoLoadLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripAutoLoadLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripNoAutoLoadLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripNoAutoLoadLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripHideLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripHideLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripUnhideLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripUnhideLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripTempWlLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripTempWlLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripOldVersLink != null)
-                GalleryUiMetrics.ApplyFont(_detailStripOldVersLink, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripDesc != null)
-                GalleryUiMetrics.ApplyFont(_detailStripDesc, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripTags != null)
-                GalleryUiMetrics.ApplyFont(_detailStripTags, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (_detailStripPath != null)
-                GalleryUiMetrics.ApplyFont(_detailStripPath, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+
+            if (_detailStripBadgeRowGO != null)
+            {
+                DetailStripSetRowHeight(_detailStripBadgeRowGO, lineH);
+                DetailStripSetLayoutGroup(_detailStripBadgeRowGO, 3f * s, zeroPad);
+                RectTransform badgeRT = _detailStripBadgeRowGO.GetComponent<RectTransform>();
+                if (badgeRT != null)
+                    badgeRT.sizeDelta = new Vector2(80f * s, lineH);
+            }
+            DetailStripSyncBadgeChrome(_detailStripBadgeAuto, s);
+            DetailStripSyncBadgeChrome(_detailStripBadgeHide, s);
+            DetailStripSyncBadgeChrome(_detailStripBadgeScan, s);
+            DetailStripSyncBadgeChrome(_detailStripBadgeTags, s);
+            DetailStripSyncStarsChrome(s, lineH);
+            DetailStripSyncCollapseButtonChrome(s, lineH);
+            DetailStripSyncExpandButtonChrome(s);
+
+            DetailStripSetLayoutGroup(_detailStripMetaHost, 2f * s, zeroPad);
             if (_detailStripMetaRows != null)
             {
                 for (int ri = 0; ri < _detailStripMetaRows.Length; ri++)
                 {
                     GameObject row = _detailStripMetaRows[ri];
                     if (row == null) continue;
+                    DetailStripSetRowHeight(row, lineH);
+                    DetailStripSetLayoutGroup(row, 8f * s, zeroPad);
                     LayoutElement rowLe = row.GetComponent<LayoutElement>();
-                    if (rowLe != null) { rowLe.preferredHeight = lineH; rowLe.minHeight = lineH; }
+                    if (rowLe != null) rowLe.flexibleHeight = 0f;
+                    ContentSizeFitter[] csfs = row.GetComponentsInChildren<ContentSizeFitter>(true);
+                    for (int ci = 0; ci < csfs.Length; ci++)
+                    {
+                        if (csfs[ci] != null)
+                            csfs[ci].verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                    }
                     Text[] msgs = row.GetComponentsInChildren<Text>(true);
                     for (int ti = 0; ti < msgs.Length; ti++)
                     {
-                        if (msgs[ti] != null)
-                            GalleryUiMetrics.ApplyFont(msgs[ti], GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+                        Text msg = msgs[ti];
+                        if (msg == null) continue;
+                        DetailStripApplyFont(msg, s);
+                        LayoutElement le = msg.GetComponent<LayoutElement>();
+                        if (le == null) continue;
+                        le.minHeight = lineH;
+                        le.preferredHeight = lineH;
+                        le.flexibleHeight = 0f;
                     }
                 }
             }
+            DetailStripSyncMetaHostHeight(s);
+
+            DetailStripSetLayoutGroup(_detailStripActionsRowGO, 2f * s, zeroPad);
+            LayoutElement actionsLe = _detailStripActionsRowGO != null
+                ? _detailStripActionsRowGO.GetComponent<LayoutElement>() : null;
+            if (actionsLe != null) actionsLe.flexibleHeight = 0f;
+            if (_detailStripActionRows != null)
+            {
+                for (int ari = 0; ari < _detailStripActionRows.Length; ari++)
+                {
+                    GameObject arow = _detailStripActionRows[ari];
+                    if (arow == null) continue;
+                    DetailStripSetRowHeight(arow, lineH);
+                    DetailStripSetLayoutGroup(arow, 8f * s, zeroPad);
+                }
+            }
+
+            DetailStripSyncLinkChrome(_detailStripCopyLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripDeleteLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripHubLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripCacheLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripAutoLoadLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripNoAutoLoadLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripHideLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripUnhideLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripTempWlLink, s, lineH);
+            DetailStripSyncLinkChrome(_detailStripOldVersLink, s, lineH);
+            DetailStripApplyFont(_detailStripDesc, s);
+            DetailStripApplyFont(_detailStripTags, s);
+            DetailStripApplyFont(_detailStripPath, s);
+
+            DetailStripSyncFlexLineChrome(_detailStripDesc, lineH, s);
+            DetailStripSyncFlexLineChrome(_detailStripTags, lineH, s);
+            DetailStripSyncFlexLineChrome(_detailStripPath, lineH, s);
+
+            // After pad/spacing/font rescale — clear stale horizontal insets on every band.
+            DetailStripNormalizeTextColRows();
+        }
+
+        private static void DetailStripSyncSideBlockChrome(
+            Text block, LayoutElement le, float s, float lineH, bool wrapBlock)
+        {
+            if (block == null) return;
+            DetailStripApplyFont(block, s);
+            if (le == null) le = block.GetComponent<LayoutElement>();
+            if (le == null) return;
+            le.minHeight = lineH;
+            if (wrapBlock)
+            {
+                int maxLines = GalleryUiDesignTokens.FooterDetailStripSideTagsMaxLines;
+                if (maxLines < 1) maxLines = 1;
+                if (le.preferredHeight < lineH)
+                    le.preferredHeight = lineH * maxLines;
+            }
+            else
+            {
+                le.preferredHeight = lineH;
+            }
+            le.flexibleHeight = 0f;
+            le.flexibleWidth = 1f;
+            le.minWidth = 0f;
+            le.preferredWidth = 0f;
+        }
+
+        private static void DetailStripSyncLinkChrome(Text link, float s, float lineH)
+        {
+            if (link == null) return;
+            DetailStripApplyFont(link, s);
+            DetailStripDisableVerticalCsf(link);
+            LayoutElement le = link.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minHeight = lineH;
+                le.preferredHeight = lineH;
+                le.flexibleHeight = 0f;
+            }
+        }
+
+        private static void DetailStripSyncFlexLineChrome(Text line, float lineH, float s)
+        {
+            if (line == null || line.transform.parent == null) return;
+            GameObject row = line.transform.parent.gameObject;
+            DetailStripSetRowHeight(row, lineH);
+            DetailStripSetLayoutGroup(row, 0f, UI.Pad(0, 0, 0, 0, s));
+            LayoutElement rowLe = row.GetComponent<LayoutElement>();
+            if (rowLe != null)
+            {
+                rowLe.flexibleHeight = 0f;
+                rowLe.minWidth = 0f;
+                rowLe.flexibleWidth = 1f;
+            }
+            LayoutElement textLe = line.GetComponent<LayoutElement>();
+            if (textLe != null)
+            {
+                textLe.preferredHeight = lineH;
+                textLe.minHeight = lineH;
+                textLe.flexibleHeight = 0f;
+                textLe.minWidth = 0f;
+                textLe.preferredWidth = 0f;
+                textLe.flexibleWidth = 1f;
+            }
+            DetailStripNormalizeRowRect(row);
+        }
+
+        private void DetailStripSyncBadgeChrome(GameObject badge, float s)
+        {
+            if (badge == null) return;
+            float sz = 18f * s;
+            LayoutElement le = badge.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minWidth = sz;
+                le.preferredWidth = sz;
+                le.minHeight = sz;
+                le.preferredHeight = sz;
+            }
+            RectTransform rt = badge.GetComponent<RectTransform>();
+            if (rt != null) rt.sizeDelta = new Vector2(sz, sz);
+            Text t = badge.GetComponentInChildren<Text>(true);
+            DetailStripApplyFont(t, s, GalleryUiDesignTokens.FontMinRef);
+        }
+
+        private void DetailStripSyncStarsChrome(float s, float lineH)
+        {
+            if (_detailStripStarsGO == null) return;
+            float starSz = 14f * s;
+            float gap = 2f * s;
+            float rowW = starSz * 5f + gap * 4f;
+            LayoutElement le = _detailStripStarsGO.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.minWidth = rowW;
+                le.preferredWidth = rowW;
+                le.preferredHeight = lineH;
+                le.minHeight = lineH;
+            }
+            RectTransform starsRT = _detailStripStarsGO.GetComponent<RectTransform>();
+            if (starsRT != null) starsRT.sizeDelta = new Vector2(rowW, lineH);
+            DetailStripSetLayoutGroup(_detailStripStarsGO, gap, UI.Pad(0, 0, 0, 0, s));
+            if (_detailStripStarImages == null) return;
+            for (int i = 0; i < _detailStripStarImages.Length; i++)
+            {
+                Image img = _detailStripStarImages[i];
+                if (img == null) continue;
+                GameObject starGO = img.gameObject;
+                LayoutElement starLe = starGO.GetComponent<LayoutElement>();
+                if (starLe != null)
+                {
+                    starLe.minWidth = starSz;
+                    starLe.preferredWidth = starSz;
+                    starLe.minHeight = starSz;
+                    starLe.preferredHeight = starSz;
+                }
+                RectTransform srt = starGO.GetComponent<RectTransform>();
+                if (srt != null) srt.sizeDelta = new Vector2(starSz, starSz);
+            }
+        }
+
+        /// <summary>Called from gallery UI-scale path so strip tracks pane × host at any factor.</summary>
+        internal void DetailStripRescaleForUiScale(float s)
+        {
+            if (s <= 0f) s = 1f;
+            try { DetailStripSyncExpandButtonChrome(s); } catch { }
+            if (_detailStripGO == null) return;
+            _detailStripLayoutScale = -1f;
+            if (!_detailStripScrubHeightLocked)
+                _detailStripMeasuredHeight = -1f;
+            DetailStripLayout();
         }
 
         private static float DetailStripThumbEdge(float s, float stripH)
         {
             if (s <= 0f) s = 1f;
-            float maxEdge = GalleryUiDesignTokens.FooterDetailStripThumbMaxRef * s;
+            // Full strip height — preview flush, no pad around image.
             float minEdge = 44f * s;
-            // Square edge tracks strip height (minus padding), never stretched by HLG.
-            return Mathf.Clamp(stripH - 12f * s, minEdge, maxEdge);
+            float maxEdge = GalleryUiDesignTokens.FooterDetailStripThumbMaxRef * s;
+            float edge = stripH > 1f ? stripH : minEdge;
+            return Mathf.Clamp(edge, minEdge, maxEdge);
         }
 
         private static bool DetailStripStripForcesChildHeight(GameObject strip)
@@ -856,6 +1920,22 @@ namespace VPB
             if (strip == null) return false;
             HorizontalLayoutGroup hlg = strip.GetComponent<HorizontalLayoutGroup>();
             return hlg != null && hlg.childAlignment != TextAnchor.UpperLeft;
+        }
+
+        private static bool DetailStripStripHasLegacyOuterPad(GameObject strip)
+        {
+            if (strip == null) return false;
+            HorizontalLayoutGroup hlg = strip.GetComponent<HorizontalLayoutGroup>();
+            if (hlg == null) return false;
+            RectOffset p = hlg.padding;
+            return p != null && (p.left > 0 || p.top > 0 || p.bottom > 0 || p.right > 0);
+        }
+
+        private static bool DetailStripTextColMissingMask(GameObject strip)
+        {
+            if (strip == null) return false;
+            Transform t = strip.transform.Find("TextCol");
+            return t != null && t.GetComponent<RectMask2D>() == null;
         }
 
         /// <summary>Direct-child only (legacy flat action row). Do not use for Link_Hub under ActionRow0.</summary>
@@ -881,7 +1961,6 @@ namespace VPB
             }
             if (thumbCol == null) return;
             float thumbSize = DetailStripThumbEdge(s, stripH);
-            // Only LayoutElement — do not rewrite anchors/pivot (fights HLG → thumb jumps).
             LayoutElement le = thumbCol.GetComponent<LayoutElement>();
             if (le != null)
             {
@@ -892,48 +1971,59 @@ namespace VPB
                 le.flexibleWidth = 0f;
                 le.flexibleHeight = 0f;
             }
+            // Keep RectTransform square too — HLG alone can leave stale tall sizeDelta.
+            RectTransform rt = thumbCol.GetComponent<RectTransform>();
+            if (rt != null)
+                rt.sizeDelta = new Vector2(thumbSize, thumbSize);
         }
 
         /// <summary>Pack actions by width, measure content, resize strip (shorter when wide / fewer rows).</summary>
         private void DetailStripRefreshGeometry()
         {
-            float s = ChromeScale;
-            if (s <= 0f) s = 1f;
+            if (_detailStripInRefreshGeometry) return;
+            _detailStripInRefreshGeometry = true;
             try
             {
-                if (_detailStripPath != null && _detailStripPath.transform.parent != null)
-                    DetailStripNormalizeRowRect(_detailStripPath.transform.parent.gameObject);
-                if (_detailStripTags != null && _detailStripTags.transform.parent != null)
-                    DetailStripNormalizeRowRect(_detailStripTags.transform.parent.gameObject);
-                if (_detailStripDesc != null && _detailStripDesc.transform.parent != null)
-                    DetailStripNormalizeRowRect(_detailStripDesc.transform.parent.gameObject);
+                float s = ChromeScale;
+                if (s <= 0f) s = 1f;
+                try { DetailStripNormalizeTextColRows(); } catch { }
+                // Side column first — packs + meta avail width subtract its column.
+                try { DetailStripSyncSideColumn(s); } catch { }
+                try { DetailStripPackActionRows(s); } catch { }
+                try { DetailStripSyncMetaHostHeight(s); } catch { }
+                // Restore optional lines, then hide only if still over budget (never squash row heights).
+                try
+                {
+                    DetailStripSetFlexLineActive(_detailStripPath, _detailStripWantPath);
+                    DetailStripApplyDescPlacement();
+                    DetailStripHideOverflowLines(s, DetailStripGeometryBudgetHeight(s));
+                }
+                catch { }
+                float h = DetailStripComputeContentHeight(s);
+                // Scrub session: keep outer strip height stable (no tbox jump / layout thrash).
+                if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
+                    h = _detailStripScrubLockedHeight;
+                _detailStripMeasuredHeight = h;
+                DetailStripLayout();
+                // Side desc viewport was sized with pre-measure height — refill to final strip edge.
+                try { DetailStripSyncSideColumn(s); } catch { }
+                // Pack/side sync can reintroduce stretchAll horizontal drift — re-align once.
+                try { DetailStripNormalizeTextColRows(); } catch { }
+                // Force side-rail + subcategory list re-fit (tall strip eats bottom chrome).
+                if (!_detailStripScrubHeightLocked)
+                    _sideRailLastBottomInset = -1f;
             }
-            catch { }
-            try { DetailStripPackActionRows(s); } catch { }
-            // Restore optional lines, then hide only if still over budget (never squash row heights).
-            try
+            finally
             {
-                DetailStripSetFlexLineActive(_detailStripPath, _detailStripWantPath);
-                DetailStripSetFlexLineActive(_detailStripDesc, _detailStripWantDesc);
-                DetailStripHideOverflowLines(s, DetailStripGeometryBudgetHeight(s));
+                _detailStripInRefreshGeometry = false;
             }
-            catch { }
-            float h = DetailStripComputeContentHeight(s);
-            // Scrub session: keep outer strip height stable (no tbox jump / layout thrash).
-            if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
-                h = _detailStripScrubLockedHeight;
-            _detailStripMeasuredHeight = h;
-            DetailStripLayout();
-            // Force side-rail + subcategory list re-fit (tall strip eats bottom chrome).
-            if (!_detailStripScrubHeightLocked)
-                _sideRailLastBottomInset = -1f;
         }
 
         private float DetailStripGeometryBudgetHeight(float s)
         {
             if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
                 return _detailStripScrubLockedHeight;
-            return GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
+            return DetailStripMaxHeight(s);
         }
 
         /// <summary>
@@ -942,7 +2032,7 @@ namespace VPB
         /// </summary>
         private void DetailStripHideOverflowLines(float s, float maxH)
         {
-            if (maxH < 8f) maxH = GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
+            if (maxH < 8f) maxH = DetailStripMaxHeight(s);
             float h = DetailStripComputeContentHeight(s);
             if (h <= maxH + 0.5f) return;
 
@@ -980,7 +2070,7 @@ namespace VPB
 
         private float DetailStripComputeContentHeight(float s)
         {
-            float lineH = 18f * s;
+            float lineH = DetailStripLineHeight(s);
             float gap = 2f * s;
             float vPad = 12f * s;
             float total = vPad;
@@ -993,19 +2083,9 @@ namespace VPB
                 parts++;
             }
 
-            float metaH = 0f;
-            if (_detailStripMetaHostLE != null && _detailStripMetaHost != null && _detailStripMetaHost.activeSelf)
-                metaH = Mathf.Max(lineH, _detailStripMetaHostLE.preferredHeight);
-            else
-            {
-                int metaN = 0;
-                if (_detailStripMetaRows != null)
-                {
-                    for (int i = 0; i < _detailStripMetaRows.Length; i++)
-                        if (_detailStripMetaRows[i] != null && _detailStripMetaRows[i].activeSelf) metaN++;
-                }
-                if (metaN > 0) metaH = lineH * metaN + gap * Mathf.Max(0, metaN - 1);
-            }
+            // Derive from live row count — stale LayoutElement preferredHeight after scale-down
+            // left a tall empty meta band (black gap between title and actions).
+            float metaH = DetailStripMetaHostHeight(s);
             if (metaH > 0.5f)
             {
                 if (parts > 0) total += gap;
@@ -1049,9 +2129,11 @@ namespace VPB
                 parts++;
             }
 
-            float minH = GalleryUiDesignTokens.FooterDetailStripMinHeightRef * s;
-            float maxH = GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
-            return Mathf.Clamp(Mathf.Max(total, minH), minH, maxH);
+            // Side column scrolls — never grow strip past left-column content.
+
+            float hardMin = DetailStripHardMinHeight(s);
+            float maxH = DetailStripMaxHeight(s);
+            return Mathf.Clamp(Mathf.Max(total, hardMin), hardMin, maxH);
         }
 
         private static void DetailStripNormalizeRowRect(GameObject row)
@@ -1059,9 +2141,40 @@ namespace VPB
             if (row == null) return;
             RectTransform rt = row.GetComponent<RectTransform>();
             if (rt == null) return;
-            // stretchAll children in a VLG can pick up a negative left offset on wrap rows.
+            // stretchAll children in a VLG can pick up a negative/stale left offset on wrap
+            // rows or after UI-scale changes — title vs path then misalign at low scale.
+            rt.anchorMin = new Vector2(0f, rt.anchorMin.y);
+            rt.anchorMax = new Vector2(1f, rt.anchorMax.y);
+            rt.pivot = new Vector2(0.5f, rt.pivot.y);
             rt.offsetMin = new Vector2(0f, rt.offsetMin.y);
             rt.offsetMax = new Vector2(0f, rt.offsetMax.y);
+            Vector2 ap = rt.anchoredPosition;
+            if (Mathf.Abs(ap.x) > 0.01f)
+                rt.anchoredPosition = new Vector2(0f, ap.y);
+        }
+
+        /// <summary>Re-align every TextCol band to the same left/right edge (scale-safe).</summary>
+        private void DetailStripNormalizeTextColRows()
+        {
+            DetailStripNormalizeRowRect(_detailStripTitleRowGO);
+            DetailStripNormalizeRowRect(_detailStripMetaHost);
+            if (_detailStripMetaRows != null)
+            {
+                for (int i = 0; i < _detailStripMetaRows.Length; i++)
+                    DetailStripNormalizeRowRect(_detailStripMetaRows[i]);
+            }
+            DetailStripNormalizeRowRect(_detailStripActionsRowGO);
+            if (_detailStripActionRows != null)
+            {
+                for (int i = 0; i < _detailStripActionRows.Length; i++)
+                    DetailStripNormalizeRowRect(_detailStripActionRows[i]);
+            }
+            if (_detailStripDesc != null && _detailStripDesc.transform.parent != null)
+                DetailStripNormalizeRowRect(_detailStripDesc.transform.parent.gameObject);
+            if (_detailStripTags != null && _detailStripTags.transform.parent != null)
+                DetailStripNormalizeRowRect(_detailStripTags.transform.parent.gameObject);
+            if (_detailStripPath != null && _detailStripPath.transform.parent != null)
+                DetailStripNormalizeRowRect(_detailStripPath.transform.parent.gameObject);
         }
 
         private static bool DetailStripFlexLineVisible(Text line)
@@ -1144,7 +2257,7 @@ namespace VPB
             }
             if (actN < 1) actN = 1;
 
-            float lineH = 18f * s;
+            float lineH = DetailStripLineHeight(s);
             LayoutElement hostLe = _detailStripActionsRowGO != null
                 ? _detailStripActionsRowGO.GetComponent<LayoutElement>() : null;
             if (hostLe != null)
@@ -1270,6 +2383,7 @@ namespace VPB
         {
             if (_detailStripGO != null) _detailStripGO.SetActive(false);
             _detailStripCacheKey = "";
+            _detailStripSideContentKey = "";
             _detailStripThumbFile = null;
             _detailStripBoundFile = null;
             _detailStripBoundCreator = "";
@@ -1283,14 +2397,17 @@ namespace VPB
                 _detailStripThumb.texture = null;
                 _detailStripThumb.color = new Color(1f, 1f, 1f, 0.15f);
             }
+            if (_detailStripExpandBtnGO != null) _detailStripExpandBtnGO.SetActive(false);
+            if (_detailStripCollapseBtnGO != null) _detailStripCollapseBtnGO.SetActive(false);
         }
 
         private void DetailStripRefresh()
         {
             DetailStripEnsure();
-            if (_detailStripGO == null) return;
+            DetailStripEnsureExpandButton();
 
             // Entire scrub session (active wheel OR height-locked): never hide/populate/reflow.
+            // Side meta is filled on scrub commit (see DetailStripCommitScrub).
             if (DetailStripScrubBlocksRebuild)
                 return;
 
@@ -1302,18 +2419,50 @@ namespace VPB
                 return;
             }
 
+            // Collapsed: strip height 0; Info expand button stays in toolbox gutter.
+            if (!DetailStripIsExpanded())
+            {
+                try { DetailStripCloseTagMenu(); } catch { }
+                if (_detailStripGO != null) _detailStripGO.SetActive(false);
+                DetailStripSyncCollapseExpandChrome();
+                return;
+            }
+
+            if (_detailStripGO == null) return;
+
             string key = BuildDetailStripCacheKey();
             bool same = string.Equals(key, _detailStripCacheKey, StringComparison.Ordinal);
             if (same && _detailStripGO.activeSelf)
             {
-                // Reflow meta / geometry when pane width changes (pack rows, restore hidden lines).
+                DetailStripSyncCollapseExpandChrome();
+                // Scrub/enrich updates cache key without side fill — catch stale side here.
+                bool sideRefreshed = false;
+                if (DetailStripSideContentNeedsRefresh())
+                {
+                    try
+                    {
+                        DetailStripRefreshSideMetaForSelection();
+                        sideRefreshed = true;
+                    }
+                    catch { }
+                }
+                if (sideRefreshed) return;
+
+                // Meta vanished after scale sync — force rebuild even when cache key matches.
+                bool metaMissing = DetailStripActiveMetaRowCount() <= 0
+                    || (_detailStripMetaHost != null && !_detailStripMetaHost.activeSelf);
                 try
                 {
-                    float avail = DetailStripEstimateMetaAvailWidth();
-                    if (_detailStripMetaAvailWidth < 0f || Mathf.Abs(avail - _detailStripMetaAvailWidth) > 8f)
+                    if (metaMissing)
                         DetailStripReflowMetaForCurrentSelection();
-                    else if (Mathf.Abs(avail - _detailStripMetaAvailWidth) > 2f)
-                        DetailStripRefreshGeometry();
+                    else
+                    {
+                        float avail = DetailStripEstimateMetaAvailWidth();
+                        if (_detailStripMetaAvailWidth < 0f || Mathf.Abs(avail - _detailStripMetaAvailWidth) > 8f)
+                            DetailStripReflowMetaForCurrentSelection();
+                        else if (Mathf.Abs(avail - _detailStripMetaAvailWidth) > 2f)
+                            DetailStripRefreshGeometry();
+                    }
                 }
                 catch { }
                 return;
@@ -1325,6 +2474,39 @@ namespace VPB
                 DetailStripPopulateSingle(selectedFiles[0], reloadThumb: true);
             else
                 DetailStripPopulateMulti(sel, reloadThumb: true);
+            DetailStripSyncCollapseExpandChrome();
+        }
+
+        private string DetailStripSideContentKeyForSelection()
+        {
+            if (selectedFiles == null || selectedFiles.Count == 0) return "";
+            bool historyBrowse = activeContentType == ContentType.History;
+            FileEntry f = selectedFiles[0];
+            if (f == null) return "";
+            if (selectedFiles.Count == 1)
+                return GetSelectionIdentityKey(f, historyBrowse);
+            return "M" + selectedFiles.Count + "|" + GetSelectionIdentityKey(f, historyBrowse);
+        }
+
+        private bool DetailStripSideContentNeedsRefresh()
+        {
+            return !string.Equals(
+                DetailStripSideContentKeyForSelection(),
+                _detailStripSideContentKey ?? "",
+                StringComparison.Ordinal);
+        }
+
+        /// <summary>Description + native tags for current selection (hydrate meta.json).</summary>
+        private void DetailStripRefreshSideMetaForSelection()
+        {
+            FileEntry file = null;
+            if (selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[0];
+            if (file == null) file = _detailStripBoundFile;
+            DetailStripRefreshDescription(file);
+            DetailStripRefreshSideContent(file);
+            DetailStripRefreshTagsLineForPlacement();
+            DetailStripRefreshGeometry();
         }
 
         private void DetailStripShowChrome()
@@ -1396,15 +2578,8 @@ namespace VPB
 
             DetailStripSetToolLinksEnabled(true);
             DetailStripRefreshDescription(file);
-
-            if (_detailStripTags != null)
-            {
-                string tagsLine = DetailStripResolveTagsLine(file);
-                _detailStripTags.text = !string.IsNullOrEmpty(tagsLine)
-                    ? string.Format(VPBTranslation.T("gallery.detail.tags_fmt", "Tags: {0}"), tagsLine)
-                    : VPBTranslation.T("gallery.detail.no_tags", "No tags — click to add");
-                DetailStripSetFlexLineActive(_detailStripTags, true);
-            }
+            DetailStripRefreshSideContent(file);
+            DetailStripRefreshTagsLineForPlacement();
 
             if (_detailStripPath != null)
             {
@@ -1437,8 +2612,6 @@ namespace VPB
 
             long totalSize = 0;
             int missingTotal = 0;
-            HashSet<string> sharedUserTags = null;
-            bool tagsMixed = false;
             string sharedCreator = null;
             bool creatorMixed = false;
 
@@ -1456,31 +2629,7 @@ namespace VPB
                     else if (!string.Equals(sharedCreator, c ?? "", StringComparison.OrdinalIgnoreCase))
                         creatorMixed = true;
                 }
-
-                HashSet<string> rowTags = DetailStripCollectUserTags(f);
-                if (sharedUserTags == null)
-                    sharedUserTags = new HashSet<string>(rowTags, StringComparer.OrdinalIgnoreCase);
-                else
-                    sharedUserTags.IntersectWith(rowTags);
             }
-
-            try
-            {
-                string firstFp = null;
-                for (int i = 0; i < selectedFiles.Count; i++)
-                {
-                    FileEntry f = selectedFiles[i];
-                    if (f == null) continue;
-                    string fp = DetailStripUserTagsFingerprint(f);
-                    if (firstFp == null) firstFp = fp;
-                    else if (!string.Equals(firstFp, fp, StringComparison.Ordinal))
-                    {
-                        tagsMixed = true;
-                        break;
-                    }
-                }
-            }
-            catch { }
 
             if (!creatorMixed) _detailStripBoundCreator = sharedCreator ?? "";
             else _detailStripBoundCreator = "";
@@ -1499,38 +2648,31 @@ namespace VPB
                 first, deps, mShow, dependents, sel, totalSize, creatorMixed));
 
             DetailStripSetToolLinksEnabled(first != null);
-            DetailStripRefreshDescription(sel == 1 ? first : null);
-
-            if (_detailStripTags != null)
-            {
-                string tagsText;
-                if (tagsMixed)
-                {
-                    string shared = DetailStripFormatTagNames(sharedUserTags);
-                    tagsText = !string.IsNullOrEmpty(shared)
-                        ? string.Format(VPBTranslation.T("gallery.detail.shared_tags", "Tags (shared): {0}"), shared)
-                        : VPBTranslation.T("gallery.detail.mixed_tags", "Mixed tags — click to tag");
-                }
-                else if (sharedUserTags != null && sharedUserTags.Count > 0)
-                    tagsText = string.Format(
-                        VPBTranslation.T("gallery.detail.tags_fmt", "Tags: {0}"),
-                        DetailStripFormatTagNames(sharedUserTags));
-                else
-                    tagsText = VPBTranslation.T("gallery.detail.no_tags", "No tags — click to add");
-
-                string applies = VPBTranslation.T("gallery.detail.tags_applies_all", "applies to all selected");
-                _detailStripTags.text = string.IsNullOrEmpty(tagsText)
-                    ? applies
-                    : (tagsText + " · " + applies);
-                DetailStripSetFlexLineActive(_detailStripTags, true);
-            }
+            // First-item description still useful for multi (same as deps chips / thumb).
+            DetailStripRefreshDescription(first);
+            DetailStripRefreshSideContent(first);
+            DetailStripRefreshTagsLineForPlacement();
 
             if (_detailStripPath != null)
             {
-                // Multi: no separate hint row — path list is via Copy action.
-                _detailStripPath.text = "";
-                _detailStripWantPath = false;
-                DetailStripSetFlexLineActive(_detailStripPath, false);
+                // Multi: show first-item path (Copy still dumps all paths).
+                if (first != null)
+                {
+                    string pathLine = DetailStripResolvePathLine(first);
+                    string hint = VPBTranslation.T(
+                        "gallery.detail.multi_path_hint", "first item — Copy for all paths");
+                    _detailStripPath.text = string.IsNullOrEmpty(pathLine)
+                        ? hint
+                        : (pathLine + " · " + hint);
+                    _detailStripWantPath = true;
+                    DetailStripSetFlexLineActive(_detailStripPath, true);
+                }
+                else
+                {
+                    _detailStripPath.text = "";
+                    _detailStripWantPath = false;
+                    DetailStripSetFlexLineActive(_detailStripPath, false);
+                }
             }
             else _detailStripWantPath = false;
 
@@ -1798,7 +2940,8 @@ namespace VPB
 
             DetailStripAppendTimestampFields(fields, file);
 
-            if (file != null && selectedCount <= 1)
+            // Version / gender / flags from bound file (first item when multi) — always offer when present.
+            if (file != null)
             {
                 string version = DetailStripResolveVersion(file);
                 if (!string.IsNullOrEmpty(version))
@@ -1808,6 +2951,9 @@ namespace VPB
                     DetailStripResolveVersionStatus(file, out status, out verColor);
                     string verValue = !string.IsNullOrEmpty(status) ? (version + " " + status) : version;
                     string verSnap = verValue;
+                    string verTip = selectedCount > 1
+                        ? VPBTranslation.T("gallery.detail.tip.version_first", "First selected item version")
+                        : string.Format(VPBTranslation.T("gallery.detail.tip.version_fmt", "Copy version {0}"), verValue);
                     fields.Add(new DetailStripMetaField
                     {
                         Label = VPBTranslation.T("gallery.detail.label_version", "Version"),
@@ -1816,7 +2962,7 @@ namespace VPB
                         Enabled = true,
                         ValueColor = verColor,
                         OnClick = () => DetailStripCopyMetaValue(verSnap, VPBTranslation.T("gallery.detail.copied_version", "Copied version")),
-                        Tip = string.Format(VPBTranslation.T("gallery.detail.tip.version_fmt", "Copy version {0}"), verValue)
+                        Tip = verTip
                     });
                 }
 
@@ -1905,6 +3051,401 @@ namespace VPB
             catch { }
         }
 
+        private bool DetailStripWantSideContent()
+        {
+            return _detailStripWantDesc || _detailStripWantNativeTags;
+        }
+
+        private float DetailStripComputeSideWidth(float s)
+        {
+            if (s <= 0f) s = 1f;
+            float minCol = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
+            float maxCol = GalleryUiDesignTokens.FooterDetailStripSideMaxColWidthRef * s;
+            float leftReserve = GalleryUiDesignTokens.FooterDetailStripSideLeftReserveRef * s;
+            float stripW = 0f;
+            try
+            {
+                if (_detailStripRT != null && _detailStripRT.rect.width > 8f)
+                    stripW = _detailStripRT.rect.width;
+            }
+            catch { }
+            if (stripW < 8f) return minCol;
+
+            float stripH = _detailStripRT != null && _detailStripRT.rect.height > 8f
+                ? _detailStripRT.rect.height
+                : DetailStripRowHeight(s);
+            float thumb = DetailStripThumbEdge(s, stripH);
+            float gap = 8f * s;
+            float textAvail = Mathf.Max(0f, stripW - thumb - gap);
+            float ideal = textAvail * GalleryUiDesignTokens.GoldenRatioMinor;
+            float sideW = Mathf.Clamp(ideal, minCol, maxCol);
+            if (textAvail - sideW < leftReserve)
+                sideW = Mathf.Max(minCol, textAvail - leftReserve);
+            return Mathf.Clamp(sideW, minCol, maxCol);
+        }
+
+        private bool DetailStripCanShowSide(float s)
+        {
+            if (!DetailStripWantSideContent()) return false;
+            try
+            {
+                if (VPBConfig.Instance != null && !VPBConfig.Instance.GalleryDetailStripSideInfoEnabled)
+                    return false;
+            }
+            catch { }
+            if (s <= 0f) s = 1f;
+            float stripW = 0f;
+            try
+            {
+                if (_detailStripRT != null && _detailStripRT.rect.width > 8f)
+                    stripW = _detailStripRT.rect.width;
+            }
+            catch { }
+
+            float openMin = GalleryUiDesignTokens.FooterDetailStripSideMinWidthRef * s;
+            float hyst = GalleryUiDesignTokens.FooterDetailStripSideHysteresisRef * s;
+            if (hyst < 8f) hyst = 8f;
+            float closeMin = Mathf.Max(openMin * 0.55f, openMin - hyst);
+
+            float sideW = DetailStripComputeSideWidth(s);
+            float stripH = _detailStripRT != null && _detailStripRT.rect.height > 8f
+                ? _detailStripRT.rect.height
+                : DetailStripRowHeight(s);
+            float thumb = DetailStripThumbEdge(s, stripH);
+            float gap = 8f * s;
+            float leftReserve = GalleryUiDesignTokens.FooterDetailStripSideLeftReserveRef * s;
+            float leftRemain = stripW - thumb - gap - sideW - gap;
+
+            // Sticky band: open needs full threshold; stay open until clearly narrower.
+            // Prevents 1–2 Hz flicker when pane width sits on the collapse edge.
+            if (_detailStripSideVisible)
+            {
+                if (stripW < closeMin) return false;
+                if (leftRemain < leftReserve - hyst) return false;
+                return true;
+            }
+
+            if (stripW < openMin) return false;
+            if (leftRemain < leftReserve) return false;
+            return true;
+        }
+
+        private float DetailStripEstimateWrappedLines(string text, float width, float s)
+        {
+            if (string.IsNullOrEmpty(text) || width < 8f) return 1f;
+            if (s <= 0f) s = 1f;
+            float charW = Mathf.Max(5f, GalleryUiDesignTokens.FontRef * 0.52f * s);
+            int charsPerLine = Mathf.Max(8, Mathf.FloorToInt(width / charW));
+            int lines = Mathf.CeilToInt(text.Length / (float)charsPerLine);
+            // Count hard newlines as extra breaks.
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] == '\n') lines++;
+            }
+            return Mathf.Max(1f, lines);
+        }
+
+        private void DetailStripApplyDescPlacement()
+        {
+            // Narrow: single truncated Desc under actions. Wide: scroll viewport in SideCol.
+            bool showLeft = _detailStripWantDesc && !_detailStripSideVisible;
+            DetailStripSetFlexLineActive(_detailStripDesc, showLeft);
+            if (_detailStripSideDescScrollGO != null)
+                _detailStripSideDescScrollGO.SetActive(_detailStripSideVisible && _detailStripWantDesc);
+        }
+
+        private void DetailStripSyncSideColumn(float s)
+        {
+            if (_detailStripSideColGO == null) return;
+            if (s <= 0f) s = 1f;
+
+            bool show = DetailStripCanShowSide(s);
+            float sideW = show ? DetailStripComputeSideWidth(s) : 0f;
+            float stripH = DetailStripRowHeight(s);
+            try
+            {
+                if (_detailStripRT != null && _detailStripRT.rect.height > stripH + 0.5f)
+                    stripH = _detailStripRT.rect.height;
+            }
+            catch { }
+            if (_detailStripSideColLE != null && show)
+            {
+                _detailStripSideColLE.minWidth = GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s;
+                _detailStripSideColLE.preferredWidth = sideW;
+                _detailStripSideColLE.minHeight = stripH;
+                _detailStripSideColLE.preferredHeight = stripH;
+                _detailStripSideColLE.flexibleWidth = 0f;
+                _detailStripSideColLE.flexibleHeight = 0f;
+            }
+            RectTransform sideRT = _detailStripSideColGO.GetComponent<RectTransform>();
+            if (sideRT != null && show)
+                sideRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, stripH);
+
+            if (_detailStripSideVisible != show)
+            {
+                _detailStripSideVisible = show;
+                _detailStripSideColGO.SetActive(show);
+                DetailStripRefreshTagsLineForPlacement();
+            }
+            else if (show && !_detailStripSideColGO.activeSelf)
+            {
+                _detailStripSideColGO.SetActive(true);
+            }
+            else if (!show && _detailStripSideColGO.activeSelf)
+            {
+                _detailStripSideColGO.SetActive(false);
+            }
+
+            DetailStripApplyDescPlacement();
+            DetailStripApplySideFieldVisibility(show, s, sideW, stripH);
+
+            if (show)
+            {
+                try
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(sideRT != null ? sideRT : _detailStripSideColGO.GetComponent<RectTransform>());
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>Sync side field active/height. Desc scroll uses flexibleHeight to fill SideCol.</summary>
+        private void DetailStripApplySideFieldVisibility(bool show, float s, float sideW, float stripH)
+        {
+            float lineH = DetailStripLineHeight(s);
+            float innerW = show
+                ? Mathf.Max(40f * s, sideW - 18f * s - GalleryUiDesignTokens.FooterDetailStripSideScrollBarWidthRef * s)
+                : 120f * s;
+
+            if (_detailStripSideNativeTags != null)
+            {
+                bool on = show && _detailStripWantNativeTags && !string.IsNullOrEmpty(_detailStripSideNativeTags.text);
+                if (!on)
+                {
+                    if (!_detailStripWantNativeTags) _detailStripSideNativeTags.text = "";
+                    _detailStripSideNativeTags.gameObject.SetActive(false);
+                }
+                else
+                {
+                    string tags = _detailStripSideNativeTags.text ?? "";
+                    int maxTagLines = GalleryUiDesignTokens.FooterDetailStripSideTagsMaxLines;
+                    if (maxTagLines < 1) maxTagLines = 1;
+                    float lines = Mathf.Clamp(DetailStripEstimateWrappedLines(tags, innerW, s), 1f, maxTagLines);
+                    float tagsH = lineH * lines;
+                    LayoutElement tagLe = _detailStripSideNativeTags.GetComponent<LayoutElement>();
+                    if (tagLe != null)
+                    {
+                        tagLe.minHeight = lineH;
+                        tagLe.preferredHeight = tagsH;
+                        tagLe.flexibleHeight = 0f;
+                    }
+                    _detailStripSideNativeTags.gameObject.SetActive(true);
+                }
+            }
+
+            if (_detailStripSideDescScrollGO != null)
+            {
+                bool on = show && _detailStripWantDesc && _detailStripSideDesc != null
+                    && !string.IsNullOrEmpty(_detailStripSideDesc.text);
+                if (!on)
+                {
+                    if (!_detailStripWantDesc && _detailStripSideDesc != null)
+                        _detailStripSideDesc.text = "";
+                    _detailStripSideDescScrollGO.SetActive(false);
+                }
+                else
+                {
+                    // Fill leftover SideCol height (tags keep preferred; scroll takes flex remainder).
+                    if (_detailStripSideDescScrollLE != null)
+                    {
+                        _detailStripSideDescScrollLE.minHeight = lineH;
+                        _detailStripSideDescScrollLE.preferredHeight = lineH;
+                        _detailStripSideDescScrollLE.flexibleHeight = 1f;
+                    }
+
+                    string desc = _detailStripSideDesc.text ?? "";
+                    float contentLines = Mathf.Max(1f, DetailStripEstimateWrappedLines(desc, innerW, s));
+                    float contentH = lineH * contentLines;
+                    if (_detailStripSideDescLE != null)
+                    {
+                        _detailStripSideDescLE.minHeight = lineH;
+                        _detailStripSideDescLE.preferredHeight = contentH;
+                    }
+                    if (_detailStripSideDescContentRT != null)
+                        _detailStripSideDescContentRT.sizeDelta = new Vector2(0f, contentH);
+
+                    _detailStripSideDescScrollGO.SetActive(true);
+                    if (_detailStripSideDescScrollRect != null)
+                    {
+                        _detailStripSideDescScrollRect.scrollSensitivity = 40f * s;
+                        _detailStripSideDescScrollRect.verticalNormalizedPosition = 1f;
+                    }
+                }
+            }
+        }
+
+        private void DetailStripRefreshSideContent(FileEntry file)
+        {
+            // Always clear first — prevents previous selection's package tags/desc sticking.
+            DetailStripClearSideContentFields();
+
+            VarPackage pkg = null;
+            try { pkg = TryResolvePackageForThumbPlaceholder(file); } catch { pkg = null; }
+            try { if (pkg != null) pkg.TryEnsureMetaJsonLiteFields(); } catch { }
+
+            string desc = DetailStripResolveDescription(file);
+            _detailStripWantDesc = !string.IsNullOrEmpty(desc);
+
+            HashSet<string> native = DetailStripCollectNativeTags(file);
+            string nativeFmt = DetailStripFormatTagNames(native);
+            _detailStripWantNativeTags = !string.IsNullOrEmpty(nativeFmt);
+
+            if (_detailStripSideDesc != null)
+            {
+                if (_detailStripWantDesc)
+                    _detailStripSideDesc.text = desc;
+            }
+
+            if (_detailStripSideNativeTags != null)
+            {
+                if (_detailStripWantNativeTags)
+                {
+                    _detailStripSideNativeTags.text = string.Format(
+                        VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"),
+                        nativeFmt);
+                }
+            }
+
+            _detailStripSideContentKey = DetailStripSideContentKeyForSelection();
+        }
+
+        private void DetailStripClearSideContentFields()
+        {
+            // Wipe previous selection visuals before refill (flags set by caller after resolve).
+            if (_detailStripSideDesc != null)
+                _detailStripSideDesc.text = "";
+            if (_detailStripSideDescScrollGO != null)
+                _detailStripSideDescScrollGO.SetActive(false);
+            if (_detailStripSideNativeTags != null)
+            {
+                _detailStripSideNativeTags.text = "";
+                _detailStripSideNativeTags.gameObject.SetActive(false);
+            }
+        }
+
+        private void DetailStripRefreshTagsLineForPlacement()
+        {
+            if (_detailStripTags == null) return;
+            FileEntry file = _detailStripBoundFile;
+            if (file == null && selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[0];
+
+            int sel = selectedFiles != null ? selectedFiles.Count : 0;
+            if (sel > 1)
+            {
+                // Multi path already formats shared/mixed — rebuild lightly from user tags only when side open.
+                HashSet<string> shared = null;
+                bool mixed = false;
+                string firstFp = null;
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry f = selectedFiles[i];
+                    if (f == null) continue;
+                    HashSet<string> row = DetailStripCollectUserTags(f);
+                    if (shared == null) shared = new HashSet<string>(row, StringComparer.OrdinalIgnoreCase);
+                    else shared.IntersectWith(row);
+                    string fp = DetailStripUserTagsFingerprint(f);
+                    if (firstFp == null) firstFp = fp;
+                    else if (!string.Equals(firstFp, fp, StringComparison.Ordinal)) mixed = true;
+                }
+
+                string tagsText;
+                if (mixed)
+                {
+                    string sharedFmt = DetailStripFormatTagNames(shared);
+                    tagsText = !string.IsNullOrEmpty(sharedFmt)
+                        ? string.Format(VPBTranslation.T("gallery.detail.shared_tags", "Tags (shared): {0}"), sharedFmt)
+                        : VPBTranslation.T("gallery.detail.mixed_tags", "Mixed tags — click to tag");
+                }
+                else if (shared != null && shared.Count > 0)
+                {
+                    tagsText = string.Format(
+                        VPBTranslation.T("gallery.detail.tags_fmt", "Tags: {0}"),
+                        DetailStripFormatTagNames(shared));
+                }
+                else
+                    tagsText = VPBTranslation.T("gallery.detail.no_tags", "No tags — click to add");
+
+                // When side collapsed, append native tags from first item into line.
+                if (!_detailStripSideVisible && file != null)
+                {
+                    string regions = DetailStripResolveRegionTags(file);
+                    if (!string.IsNullOrEmpty(regions))
+                        tagsText = tagsText + "  ·  " + regions;
+                }
+
+                string applies = VPBTranslation.T("gallery.detail.tags_applies_all", "applies to all selected");
+                _detailStripTags.text = tagsText + " · " + applies;
+                DetailStripSetFlexLineActive(_detailStripTags, true);
+                return;
+            }
+
+            if (file == null)
+            {
+                DetailStripSetFlexLineActive(_detailStripTags, false);
+                return;
+            }
+
+            bool includeNative = !_detailStripSideVisible;
+            string tagsLine = DetailStripResolveTagsLine(file, includeNative);
+            _detailStripTags.text = !string.IsNullOrEmpty(tagsLine)
+                ? string.Format(VPBTranslation.T("gallery.detail.tags_fmt", "Tags: {0}"), tagsLine)
+                : VPBTranslation.T("gallery.detail.no_tags", "No tags — click to add");
+            DetailStripSetFlexLineActive(_detailStripTags, true);
+        }
+
+        private static HashSet<string> DetailStripCollectNativeTags(FileEntry file)
+        {
+            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (file == null) return regions;
+            try
+            {
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null)
+                {
+                    DetailStripAddNativeTagTokens(regions, vfe.ClothingTags);
+                    DetailStripAddNativeTagTokens(regions, vfe.HairTags);
+                }
+
+                VarPackage pkg = TryResolvePackageForThumbPlaceholder(file);
+                if (pkg != null)
+                {
+                    try { pkg.TryEnsureMetaJsonLiteFields(); } catch { }
+                    DetailStripAddNativeTagTokens(regions, pkg.PackageMetaTags);
+                    DetailStripAddNativeTagTokens(regions, pkg.ClothingTags);
+                    DetailStripAddNativeTagTokens(regions, pkg.HairTags);
+                }
+            }
+            catch { }
+            return regions;
+        }
+
+        private static void DetailStripAddNativeTagTokens(HashSet<string> dest, List<string> rawList)
+        {
+            if (dest == null || rawList == null) return;
+            for (int i = 0; i < rawList.Count; i++)
+            {
+                string raw = rawList[i];
+                if (string.IsNullOrEmpty(raw)) continue;
+                string[] parts = raw.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
+                for (int p = 0; p < parts.Length; p++)
+                {
+                    string t = parts[p] != null ? parts[p].Trim() : "";
+                    if (!string.IsNullOrEmpty(t)) dest.Add(t);
+                }
+            }
+        }
+
         private float DetailStripEstimateMetaAvailWidth()
         {
             float s = ChromeScale;
@@ -1914,8 +3455,20 @@ namespace VPB
             {
                 if (_detailStripRT != null && _detailStripRT.rect.width > 8f)
                 {
-                    float thumb = 52f * s;
-                    avail = Mathf.Max(120f * s, _detailStripRT.rect.width - thumb - 36f * s);
+                    float stripH = _detailStripRT.rect.height > 8f
+                        ? _detailStripRT.rect.height
+                        : DetailStripRowHeight(s);
+                    float thumb = DetailStripThumbEdge(s, stripH);
+                    float gap = 8f * s;
+                    float textPad = 8f * s;
+                    avail = Mathf.Max(120f * s, _detailStripRT.rect.width - thumb - gap - textPad);
+                    if (_detailStripSideVisible && _detailStripSideColLE != null)
+                    {
+                        float sideW = Mathf.Max(
+                            GalleryUiDesignTokens.FooterDetailStripSideMinColWidthRef * s,
+                            _detailStripSideColLE.preferredWidth);
+                        avail = Mathf.Max(120f * s, avail - sideW - gap);
+                    }
                 }
             }
             catch { }
@@ -1965,7 +3518,7 @@ namespace VPB
             if (_detailStripMetaRows == null) return;
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            float lineH = 18f * s;
+            float lineH = DetailStripLineHeight(s);
             float sepW = 10f * s;
 
             for (int ri = 0; ri < _detailStripMetaRows.Length; ri++)
@@ -1979,13 +3532,12 @@ namespace VPB
 
             if (fields == null || fields.Count == 0)
             {
-                if (_detailStripMetaHostLE != null)
-                {
-                    _detailStripMetaHostLE.preferredHeight = lineH;
-                    _detailStripMetaHostLE.minHeight = lineH;
-                }
+                DetailStripSyncMetaHostHeight(s);
                 return;
             }
+
+            if (_detailStripMetaHost != null && !_detailStripMetaHost.activeSelf)
+                _detailStripMetaHost.SetActive(true);
 
             float avail = DetailStripEstimateMetaAvailWidth();
             _detailStripMetaAvailWidth = avail;
@@ -2016,14 +3568,16 @@ namespace VPB
                 if (i > 0) clusterW += sepW;
             }
 
+            // Reserve one row for deps cluster when present; use remaining for flow fields.
             int maxFlowRows = cluster.Count > 0 ? DetailStripMetaMaxRows - 1 : DetailStripMetaMaxRows;
             if (maxFlowRows < 1) maxFlowRows = 1;
-            int flowRowCount = 1;
-            if (flowTotal > avail * 0.98f)
-                flowRowCount = Mathf.Clamp(Mathf.CeilToInt(flowTotal / Mathf.Max(1f, avail)), 1, maxFlowRows);
-            // Prefer 2 balanced rows when content is dense enough.
-            if (flow.Count >= 4 && flowTotal > avail * 0.55f && maxFlowRows >= 2)
+            int needed = Mathf.Max(1, Mathf.CeilToInt(flowTotal / Mathf.Max(1f, avail * 0.98f)));
+            int flowRowCount = Mathf.Clamp(needed, 1, maxFlowRows);
+            // Prefer at least 2 rows when many fields so Version/Gender/Flags are not jammed off-screen.
+            if (flow.Count >= 4 && maxFlowRows >= 2)
                 flowRowCount = Mathf.Max(flowRowCount, 2);
+            if (flow.Count >= 6 && maxFlowRows >= 3)
+                flowRowCount = Mathf.Max(flowRowCount, 3);
 
             var packed = DetailStripBalancePackIndices(flowWidths, avail, sepW, flowRowCount);
             int rowIdx = 0;
@@ -2077,19 +3631,7 @@ namespace VPB
                 }
             }
 
-            int activeRows = 0;
-            for (int ri = 0; ri < _detailStripMetaRows.Length; ri++)
-            {
-                if (_detailStripMetaRows[ri] != null && _detailStripMetaRows[ri].activeSelf)
-                    activeRows++;
-            }
-            if (activeRows < 1) activeRows = 1;
-            if (_detailStripMetaHostLE != null)
-            {
-                float gap = 2f * s;
-                _detailStripMetaHostLE.preferredHeight = lineH * activeRows + gap * Mathf.Max(0, activeRows - 1);
-                _detailStripMetaHostLE.minHeight = lineH;
-            }
+            DetailStripSyncMetaHostHeight(s);
         }
 
         private static float DetailStripEstimateFieldWidth(DetailStripMetaField field, float s)
@@ -2124,55 +3666,36 @@ namespace VPB
             var result = new List<List<int>>();
             if (widths == null || widths.Length == 0) return result;
             rowCount = Mathf.Clamp(rowCount, 1, DetailStripMetaMaxRows);
-            if (rowCount == 1)
-            {
-                // Still wrap hard overflows into extra rows up to max.
-                var one = new List<List<int>>();
-                var cur = new List<int>();
-                float x = 0f;
-                for (int i = 0; i < widths.Length; i++)
-                {
-                    float add = widths[i] + (cur.Count > 0 ? sepW : 0f);
-                    if (cur.Count > 0 && x + add > avail && one.Count + 1 < DetailStripMetaMaxRows)
-                    {
-                        one.Add(cur);
-                        cur = new List<int>();
-                        x = 0f;
-                        add = widths[i];
-                    }
-                    cur.Add(i);
-                    x += add;
-                }
-                if (cur.Count > 0) one.Add(cur);
-                return one;
-            }
-
+            // Hard wrap: never jam fields past avail when another meta row is free.
+            var cur = new List<int>();
+            float x = 0f;
             float total = 0f;
             for (int i = 0; i < widths.Length; i++)
             {
                 total += widths[i];
                 if (i > 0) total += sepW;
             }
-            float target = total / rowCount;
-            var current = new List<int>();
-            float x2 = 0f;
+            float target = total / Mathf.Max(1, rowCount);
+
             for (int i = 0; i < widths.Length; i++)
             {
-                float add = widths[i] + (current.Count > 0 ? sepW : 0f);
-                bool canOpenNew = result.Count + 1 < rowCount;
-                bool overTarget = current.Count > 0 && x2 + add > target && x2 >= target * 0.55f;
-                bool overAvail = current.Count > 0 && x2 + add > avail;
-                if (canOpenNew && (overTarget || overAvail))
+                float add = widths[i] + (cur.Count > 0 ? sepW : 0f);
+                bool underRowCap = result.Count + 1 < DetailStripMetaMaxRows;
+                bool underTargetCap = result.Count + 1 < rowCount;
+                bool overAvail = cur.Count > 0 && x + add > avail;
+                bool overTarget = cur.Count > 0 && x + add > target && x >= target * 0.55f;
+                // Always wrap on avail overflow if a row remains; also balance toward rowCount.
+                if (underRowCap && (overAvail || (underTargetCap && overTarget)))
                 {
-                    result.Add(current);
-                    current = new List<int>();
-                    x2 = 0f;
+                    result.Add(cur);
+                    cur = new List<int>();
+                    x = 0f;
                     add = widths[i];
                 }
-                current.Add(i);
-                x2 += add;
+                cur.Add(i);
+                x += add;
             }
-            if (current.Count > 0) result.Add(current);
+            if (cur.Count > 0) result.Add(cur);
             return result;
         }
 
@@ -2182,10 +3705,12 @@ namespace VPB
                 row, "·", GalleryUiDesignTokens.FontRef, new Color(0.42f, 0.42f, 0.46f, 0.90f),
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: false, name: "Sep");
-            GalleryUiMetrics.ApplyFont(sep, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            DetailStripApplyFont(sep, s);
             ContentSizeFitter scsf = sep.gameObject.AddComponent<ContentSizeFitter>();
             scsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            scsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            scsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+            float sepLineH = DetailStripLineHeight(s);
+            UI.AddLE(sep.gameObject, minHeight: sepLineH, preferredHeight: sepLineH, flexibleWidth: 0f, flexibleHeight: 0f);
         }
 
         /// <summary>Muted label + colored value. Soft-caps long values (author) without stretching row.</summary>
@@ -2200,11 +3725,11 @@ namespace VPB
                     row, field.Label + ": ", GalleryUiDesignTokens.FontRef, DetailStripMetaMutedColor,
                     TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                     raycastTarget: false, richText: false, name: "MetaLabel");
-                GalleryUiMetrics.ApplyFont(label, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+                DetailStripApplyFont(label, s);
                 ContentSizeFitter lcsf = label.gameObject.AddComponent<ContentSizeFitter>();
                 lcsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-                lcsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                UI.AddLE(label.gameObject, flexibleWidth: 0f, preferredHeight: lineH);
+                lcsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+                UI.AddLE(label.gameObject, flexibleWidth: 0f, flexibleHeight: 0f, minHeight: lineH, preferredHeight: lineH);
                 totalW += Mathf.Max(label.preferredWidth, 8f * s);
             }
 
@@ -2220,11 +3745,11 @@ namespace VPB
                 row, valueText, GalleryUiDesignTokens.FontRef, valueCol,
                 TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
                 raycastTarget: true, richText: false, name: "MetaValue");
-            GalleryUiMetrics.ApplyFont(value, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            DetailStripApplyFont(value, s);
             ContentSizeFitter vcsf = value.gameObject.AddComponent<ContentSizeFitter>();
             vcsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            vcsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            UI.AddLE(value.gameObject, flexibleWidth: 0f, preferredHeight: lineH);
+            vcsf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
+            UI.AddLE(value.gameObject, flexibleWidth: 0f, flexibleHeight: 0f, minHeight: lineH, preferredHeight: lineH);
             totalW += Mathf.Max(value.preferredWidth, 8f * s);
 
             string tip = field.Tip ?? valueText;
@@ -2339,8 +3864,14 @@ namespace VPB
         private void DetailStripOnThumbScroll(float scrollDelta)
         {
             if (Mathf.Abs(scrollDelta) < 0.01f) return;
-            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
             if (IsSettingsPanelOpen()) return;
+            // Hold right on preview + wheel → nudge star rating (does not scrub selection).
+            if (DetailStripThumbRateScrollActive())
+            {
+                DetailStripNudgeRatingFromScroll(scrollDelta);
+                return;
+            }
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
             // Unity scroll up is positive → previous item (matches typical list feel).
             int step = scrollDelta > 0f ? -1 : 1;
             DetailStripBeginScrubHeightLock();
@@ -2425,6 +3956,9 @@ namespace VPB
                 DetailStripEnsure();
                 if (_detailStripGO == null) return;
             }
+            // Collapsed: selection already nudged; keep strip hidden (scrub from Details button).
+            if (!DetailStripIsExpanded())
+                return;
             if (!_detailStripGO.activeSelf) _detailStripGO.SetActive(true);
 
             _detailStripBoundFile = file;
@@ -2471,14 +4005,36 @@ namespace VPB
 
         private void DetailStripCommitScrub()
         {
-            // Keep height lock; only clear "active wheel" so enrich can run. Rebuild still blocked.
+            // Keep height lock; only clear "active wheel" so enrich can run. Full strip rebuild still blocked.
             _detailStripScrubActive = false;
             _detailStripScrubPendingSteps = 0;
             FileEntry file = _detailStripBoundFile;
             if (file == null && selectedFiles != null && selectedFiles.Count > 0)
                 file = selectedFiles[0];
+
+            // Collapsed scrub (Details button): selection already moved — skip strip enrich.
+            if (!DetailStripIsExpanded())
+            {
+                try { UpdatePaginationText(); } catch { }
+                try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
+                DetailStripEndScrubHeightLock();
+                return;
+            }
+
             // Enrich when idle: patch existing texts in place (no destroy / SetActive / LoadThumbnail).
             try { DetailStripEnrichScrubFields(file); } catch { }
+            // Side meta (desc/native/promo) skipped during scrub spin + sameKey — hydrate now.
+            try
+            {
+                _detailStripSideContentKey = "";
+                DetailStripRefreshDescription(file);
+                DetailStripRefreshSideContent(file);
+                DetailStripRefreshTagsLineForPlacement();
+                float s = ChromeScale;
+                if (s <= 0f) s = 1f;
+                DetailStripSyncSideColumn(s);
+            }
+            catch { }
             try { UpdatePaginationText(); } catch { }
             try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
         }
@@ -2513,7 +4069,7 @@ namespace VPB
 
             if (_detailStripTags != null && DetailStripFlexLineVisible(_detailStripTags))
             {
-                string tagsLine = DetailStripResolveTagsLine(file);
+                string tagsLine = DetailStripResolveTagsLine(file, includeNative: !_detailStripSideVisible);
                 string tagsText = !string.IsNullOrEmpty(tagsLine)
                     ? string.Format(VPBTranslation.T("gallery.detail.tags_fmt", "Tags: {0}"), tagsLine)
                     : VPBTranslation.T("gallery.detail.no_tags", "No tags — click to add");
@@ -2537,7 +4093,56 @@ namespace VPB
                     if (!string.Equals(_detailStripDesc.text, shown, StringComparison.Ordinal))
                         _detailStripDesc.text = shown;
                 }
+                else
+                    _detailStripDesc.text = "";
             }
+            // Side column lite patch during scrub spin; full hydrate on CommitScrub.
+            try
+            {
+                if (_detailStripSideVisible)
+                {
+                    string desc = DetailStripResolveDescription(file);
+                    if (_detailStripSideDesc != null)
+                    {
+                        if (!string.IsNullOrEmpty(desc))
+                        {
+                            if (!string.Equals(_detailStripSideDesc.text, desc, StringComparison.Ordinal))
+                                _detailStripSideDesc.text = desc;
+                            if (_detailStripSideDescScrollGO != null)
+                                _detailStripSideDescScrollGO.SetActive(true);
+                            _detailStripWantDesc = true;
+                        }
+                        else
+                        {
+                            _detailStripSideDesc.text = "";
+                            if (_detailStripSideDescScrollGO != null)
+                                _detailStripSideDescScrollGO.SetActive(false);
+                            _detailStripWantDesc = false;
+                        }
+                    }
+                    if (_detailStripSideNativeTags != null)
+                    {
+                        string nativeFmt = DetailStripFormatTagNames(DetailStripCollectNativeTags(file));
+                        if (!string.IsNullOrEmpty(nativeFmt))
+                        {
+                            string shown = string.Format(
+                                VPBTranslation.T("gallery.detail.native_tags_fmt", "Package tags: {0}"),
+                                nativeFmt);
+                            if (!string.Equals(_detailStripSideNativeTags.text, shown, StringComparison.Ordinal))
+                                _detailStripSideNativeTags.text = shown;
+                            _detailStripSideNativeTags.gameObject.SetActive(true);
+                            _detailStripWantNativeTags = true;
+                        }
+                        else
+                        {
+                            _detailStripSideNativeTags.text = "";
+                            _detailStripSideNativeTags.gameObject.SetActive(false);
+                            _detailStripWantNativeTags = false;
+                        }
+                    }
+                }
+            }
+            catch { }
 
             // Thumb: retry grid copy after settle (still never LoadThumbnail — that blanks).
             try { DetailStripTryCopyThumbFromVisibleGrid(file, _detailStripScrubIndex); } catch { }
@@ -3440,14 +5045,17 @@ namespace VPB
 
         // ── Data helpers ──────────────────────────────────────────────────────
 
-        private string DetailStripResolveTagsLine(FileEntry file)
+        private string DetailStripResolveTagsLine(FileEntry file, bool includeNative = true)
         {
             if (file == null) return "";
             var parts = new List<string>(3);
             string user = DetailStripFormatTagNames(DetailStripCollectUserTags(file));
             if (!string.IsNullOrEmpty(user)) parts.Add(user);
-            string regions = DetailStripResolveRegionTags(file);
-            if (!string.IsNullOrEmpty(regions)) parts.Add(regions);
+            if (includeNative)
+            {
+                string regions = DetailStripResolveRegionTags(file);
+                if (!string.IsNullOrEmpty(regions)) parts.Add(regions);
+            }
             if (parts.Count == 0) return "";
             return string.Join("  ·  ", parts.ToArray());
         }
@@ -3514,20 +5122,8 @@ namespace VPB
 
         private static string DetailStripResolveRegionTags(FileEntry file)
         {
-            VarFileEntry vfe = file as VarFileEntry;
-            if (vfe == null) return "";
-            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            try
-            {
-                if (vfe.ClothingTags != null)
-                    for (int i = 0; i < vfe.ClothingTags.Count; i++)
-                        if (!string.IsNullOrEmpty(vfe.ClothingTags[i])) regions.Add(vfe.ClothingTags[i]);
-                if (vfe.HairTags != null)
-                    for (int i = 0; i < vfe.HairTags.Count; i++)
-                        if (!string.IsNullOrEmpty(vfe.HairTags[i])) regions.Add(vfe.HairTags[i]);
-            }
-            catch { }
-            if (regions.Count == 0) return "";
+            HashSet<string> regions = DetailStripCollectNativeTags(file);
+            if (regions == null || regions.Count == 0) return "";
             string joined = DetailStripFormatTagNames(regions);
             if (string.IsNullOrEmpty(joined)) return "";
             return VPBTranslation.T("gallery.detail.regions_prefix", "Regions: ") + joined;
@@ -3858,21 +5454,24 @@ namespace VPB
 
         private void DetailStripRefreshDescription(FileEntry file)
         {
-            if (_detailStripDesc == null) return;
             string desc = DetailStripResolveDescription(file);
             if (string.IsNullOrEmpty(desc))
             {
-                _detailStripDesc.text = "";
+                if (_detailStripDesc != null) _detailStripDesc.text = "";
                 _detailStripWantDesc = false;
-                DetailStripSetFlexLineActive(_detailStripDesc, false);
+                DetailStripApplyDescPlacement();
                 return;
             }
             const int maxChars = 110;
-            _detailStripDesc.text = desc.Length > maxChars
-                ? desc.Substring(0, maxChars - 1) + "…"
-                : desc;
+            if (_detailStripDesc != null)
+            {
+                _detailStripDesc.text = desc.Length > maxChars
+                    ? desc.Substring(0, maxChars - 1) + "…"
+                    : desc;
+            }
             _detailStripWantDesc = true;
-            DetailStripSetFlexLineActive(_detailStripDesc, true);
+            // Visibility decided by side column (wide) vs left flex line (narrow).
+            DetailStripApplyDescPlacement();
         }
 
         private static string DetailStripResolveDescription(FileEntry file)
@@ -3881,7 +5480,9 @@ namespace VPB
             try
             {
                 VarPackage pkg = TryResolvePackageForThumbPlaceholder(file);
-                if (pkg != null && !string.IsNullOrEmpty(pkg.Description))
+                if (pkg == null) return "";
+                try { pkg.TryEnsureMetaJsonLiteFields(); } catch { }
+                if (!string.IsNullOrEmpty(pkg.Description))
                     return pkg.Description.Trim();
             }
             catch { }

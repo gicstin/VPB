@@ -105,9 +105,25 @@ namespace VPB
         public const float FooterToolboxTopRef = 80f;
         /// <summary>Selection detail strip min/max height (content-driven between these).</summary>
         public const float FooterDetailStripMinHeightRef = 96f;
-        public const float FooterDetailStripHeightRef = 300f;
-        /// <summary>Detail-strip thumb edge (square); grows with strip up to this.</summary>
-        public const float FooterDetailStripThumbMaxRef = 128f;
+        /// <summary>Design max height at scale 1 — room for meta wrap + path/desc/tags/actions.</summary>
+        public const float FooterDetailStripHeightRef = 520f;
+        /// <summary>Design line height used with <see cref="FooterDetailStripHeightRef"/> for row budget.</summary>
+        public const float FooterDetailStripLineHeightRef = 18f;
+        /// <summary>Detail-strip thumb edge (square); tracks strip height so no letterbox gap under preview.</summary>
+        public const float FooterDetailStripThumbMaxRef = FooterDetailStripHeightRef;
+        /// <summary>Min strip width before right info column (desc + native tags) opens.</summary>
+        public const float FooterDetailStripSideMinWidthRef = 600f;
+        /// <summary>Hysteresis band so side open/close does not flicker at the threshold.</summary>
+        public const float FooterDetailStripSideHysteresisRef = 64f;
+        /// <summary>Right info column width clamp (design px at scale 1).</summary>
+        public const float FooterDetailStripSideMinColWidthRef = 180f;
+        public const float FooterDetailStripSideMaxColWidthRef = 340f;
+        /// <summary>Left text column must keep at least this width when side is open.</summary>
+        public const float FooterDetailStripSideLeftReserveRef = 240f;
+        /// <summary>Scrollbar width for detail-strip description scroll viewport.</summary>
+        public const float FooterDetailStripSideScrollBarWidthRef = 8f;
+        /// <summary>Max wrapped lines for native tags under description scroll.</summary>
+        public const int FooterDetailStripSideTagsMaxLines = 2;
         public const float FilterChipRowHeightRef = ButtonSizeRef;
         public const float FilterChipRowMarginRef = 6f;
         public const float FilterChipDismissSizeRef = ButtonSizeRef - 4f;

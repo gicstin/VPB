@@ -365,8 +365,8 @@ namespace VPB
         public float GalleryGridLabelFontSize = 18f;
         /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
         public bool GalleryGridLabelsAutoHideAtHighDensity = false;
-        /// <summary>When true, grid cells show rating/status/deps badges only while hovered (not during scroll).</summary>
-        public bool GalleryGridHoverBadgesEnabled = true;
+        /// <summary>Legacy. Detail strip owns badges/rating/deps; grid hover shows name label only.</summary>
+        public bool GalleryGridHoverBadgesEnabled = false;
         /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
         public float GalleryGridSpacingX = 0f;
         /// <summary>Grid: vertical spacing between thumbnail cells (pixels).</summary>
@@ -473,6 +473,13 @@ namespace VPB
 
         /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
         public bool GalleryTboxToolbarPinned = false;
+        /// <summary>When true (default), selection detail strip is shown above the toolbox; when false, collapses to Details button in toolbox.</summary>
+        public bool GalleryDetailStripExpanded = true;
+        /// <summary>
+        /// When true (default), wide detail strip may show the right column (package description + native tags).
+        /// When false, that column stays hidden; short description stays in the left stack when present.
+        /// </summary>
+        public bool GalleryDetailStripSideInfoEnabled = true;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -996,7 +1003,7 @@ namespace VPB
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
-            GalleryGridHoverBadgesEnabled = true;
+            GalleryGridHoverBadgesEnabled = false;
             GalleryThumbPlaceholderLabelsEnabled = true;
             GalleryThumbPlaceholderSizeScale = 0.7f;
             PluginGalleryCategoryLabelsOnly = false;
@@ -1033,6 +1040,8 @@ namespace VPB
             GalleryScanWlTempBorderColorB = 1f;
             GalleryScanWlTempBorderColorA = 1f;
             GalleryTboxToolbarPinned = false;
+            GalleryDetailStripExpanded = true;
+            GalleryDetailStripSideInfoEnabled = true;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1284,6 +1293,8 @@ namespace VPB
                         if (node["GalleryScanWlTempBorderColorB"] != null) GalleryScanWlTempBorderColorB = Mathf.Clamp01(node["GalleryScanWlTempBorderColorB"].AsFloat);
                         if (node["GalleryScanWlTempBorderColorA"] != null) GalleryScanWlTempBorderColorA = Mathf.Clamp01(node["GalleryScanWlTempBorderColorA"].AsFloat);
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
+                        if (node["GalleryDetailStripExpanded"] != null) GalleryDetailStripExpanded = node["GalleryDetailStripExpanded"].AsBool;
+                        if (node["GalleryDetailStripSideInfoEnabled"] != null) GalleryDetailStripSideInfoEnabled = node["GalleryDetailStripSideInfoEnabled"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1644,6 +1655,8 @@ namespace VPB
                 node["GalleryScanWlTempBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorB);
                 node["GalleryScanWlTempBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorA);
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
+                node["GalleryDetailStripExpanded"].AsBool = GalleryDetailStripExpanded;
+                node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

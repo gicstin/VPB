@@ -100,7 +100,8 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
 
-**Detail strip** — select a row for an info card above the toolbox: thumb + status badges (A/H/W/T), facts, and clickable chips.
+**Detail strip** — select a row for an info card above the toolbox: thumb + status badges (A/H/W/T), facts, and clickable chips. Collapse with the chevron left of the item name; expand again from the Details button (top-left in the toolbox action row). Hover the preview thumb: scroll wheel steps selection; hold right-click and scroll to raise/lower the star rating; double-click to launch or apply. Preference is remembered.
+- **Wide pane** — right column shows package description (meta.json, scrollable) and native clothing/hair tags. Narrow pane collapses that column; short description stays under actions. Turn off **Show description & package tags** in Settings → Visuals to keep the strip compact.
 - **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
 - **Creator** — filter by creator.
 - **Tag** or tags line — quick-tag menu (existing tags, remove with ✓, or **New tag…**).
@@ -197,6 +198,7 @@ Change defaults in **Settings → Hotkeys**:
 - **Delete / Backspace** — delete eligible selection
 - **Ctrl+Z / Ctrl+R** — undo / redo
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
+- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from Ctrl+scroll grid zoom)
 - **Escape** — close menus, search popup, help panel
 - **?** (title bar) — open this help
 

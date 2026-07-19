@@ -1354,17 +1354,6 @@ namespace VPB
             hoverPathCanvasGroup.blocksRaycasts = false;
             hoverPathCanvasGroup.interactable = false;
             var hoverPathTextRT2 = hoverPathTextGO.GetComponent<RectTransform>();
-            // Scale action keeps text wrapper in sync with row height
-            {
-                var hpRT = hoverPathTextRT2;
-                var hpText = hoverPathText;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (hpRT != null) hpRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s);
-                    if (hpText != null)
-                        GalleryUiMetrics.ApplyFont(hpText, GalleryUiDesignTokens.FooterHoverPathFontRef, s, 12);
-                });
-            }
 
             hoverPathText = hoverPathTextGO.AddComponent<Text>();
             hoverPathText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -1379,8 +1368,18 @@ namespace VPB
             hoverPathText.lineSpacing = 0.9f;
             hoverPathText.text = "";
             hoverPathText.raycastTarget = false;
-            
-            // RectTransform already configured above on hoverPathTextRT2
+
+            // Scale action keeps text wrapper + font in sync with ChromeScale (register after Text exists).
+            {
+                var hpRT = hoverPathTextRT2;
+                var hpText = hoverPathText;
+                innerPaneScaleActions.Add(s =>
+                {
+                    if (hpRT != null) hpRT.sizeDelta = new Vector2(0f, GalleryUiDesignTokens.FooterInfoRowHeightRef * s);
+                    if (hpText != null)
+                        GalleryUiMetrics.ApplyFont(hpText, GalleryUiDesignTokens.FooterHoverPathFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                });
+            }
 
             UpdateSideButtonsVisibility();
             UpdateFooterFollowStates();
@@ -1969,8 +1968,8 @@ namespace VPB
                 oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -2000f, 2000f);
             }
 
-            float x = (10f + ox) * s;
-            float y = GalleryMainAreaBottomInset() + ((6f + oy) * s);
+            float x = (20f + ox) * s;
+            float y = GalleryMainAreaBottomInset() + ((12f + oy) * s);
 
             hoverPreviewRT.anchoredPosition = new Vector2(x, y);
             hoverPreviewRT.sizeDelta = new Vector2(size, size);

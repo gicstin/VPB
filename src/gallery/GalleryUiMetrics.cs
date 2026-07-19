@@ -137,7 +137,51 @@ namespace VPB
             if (txt == null) return;
             txt.fontSize = ScaledFontSize(designPt, scale, minPt);
             float extra = FontExtraScale(scale, designPt, minPt);
+            // Below FontMin floor, extra < 1 keeps glyphs tracking chrome scale. Default
+            // stretch pivot (0.5,0.5) then insets left-aligned rows from both edges —
+            // detail strip name/path and other HLG/VLG labels look offset under ~0.7.
+            // Scale from reading edge; stretch corners stay fixed (offsets own the rect).
+            if (Mathf.Abs(extra - 1f) > 0.001f)
+            {
+                RectTransform rt = txt.rectTransform;
+                if (rt != null)
+                    rt.pivot = PivotFromTextAnchor(txt.alignment);
+            }
             txt.transform.localScale = new Vector3(extra, extra, 1f);
+        }
+
+        /// <summary>Pivot matching <see cref="Text.alignment"/> so localScale shrinks from the reading edge.</summary>
+        public static Vector2 PivotFromTextAnchor(TextAnchor alignment)
+        {
+            float x = 0.5f;
+            float y = 0.5f;
+            switch (alignment)
+            {
+                case TextAnchor.UpperLeft:
+                case TextAnchor.MiddleLeft:
+                case TextAnchor.LowerLeft:
+                    x = 0f;
+                    break;
+                case TextAnchor.UpperRight:
+                case TextAnchor.MiddleRight:
+                case TextAnchor.LowerRight:
+                    x = 1f;
+                    break;
+            }
+            switch (alignment)
+            {
+                case TextAnchor.UpperLeft:
+                case TextAnchor.UpperCenter:
+                case TextAnchor.UpperRight:
+                    y = 1f;
+                    break;
+                case TextAnchor.LowerLeft:
+                case TextAnchor.LowerCenter:
+                case TextAnchor.LowerRight:
+                    y = 0f;
+                    break;
+            }
+            return new Vector2(x, y);
         }
 
         public void ApplyTitleFont(Text txt, int minPt = GalleryUiDesignTokens.FontMinRef)

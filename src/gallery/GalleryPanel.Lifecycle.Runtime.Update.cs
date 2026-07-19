@@ -606,6 +606,55 @@ namespace VPB
             }
         }
 
+        /// <summary>Frame stamp so multi-pane Update does not apply UI-scale hotkey more than once.</summary>
+        private static int _uiScaleHotkeyHandledFrame = -1;
+
+        /// <summary>
+        /// Ctrl+Alt+= / Ctrl+Alt+KeypadPlus → scale up; Ctrl+Alt+- / Ctrl+Alt+KeypadMinus → scale down.
+        /// Avoids Ctrl+/- / Ctrl+scroll (grid column / list thumb zoom). Step 0.1; persists desktop/VR value.
+        /// </summary>
+        private bool TryHandleGalleryUiScaleHotkey()
+        {
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+            if (!ctrl || !alt) return false;
+
+            float delta = 0f;
+            if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
+                delta = 0.1f;
+            else if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
+                delta = -0.1f;
+            else
+                return false;
+
+            int frame = Time.frameCount;
+            if (_uiScaleHotkeyHandledFrame == frame)
+                return true;
+            _uiScaleHotkeyHandledFrame = frame;
+
+            var cfg = VPBConfig.Instance;
+            if (cfg == null) return true;
+
+            float before = cfg.InnerPaneScale;
+            float after = Mathf.Clamp(Mathf.Round((before + delta) * 10f) / 10f, VPBConfig.MinUiScale, VPBConfig.MaxUiScale);
+            if (!Mathf.Approximately(before, after))
+            {
+                cfg.InnerPaneScale = after;
+                try { cfg.TriggerChange(); } catch { }
+                try { cfg.Save(false); } catch { }
+            }
+
+            try
+            {
+                ShowTemporaryStatus(string.Format(
+                    VPBTranslation.T("gallery.status.ui_scale", "UI scale: {0:0.0}"),
+                    cfg.InnerPaneScale), 1.25f);
+            }
+            catch { }
+
+            return true;
+        }
+
         private void HandleKeyboardInput()
         {
             if (IsPluginHotkeyCaptureActive())
@@ -632,8 +681,13 @@ namespace VPB
             if (IsVisible && TryConsumeCategoryQuickNumberKey())
                 return;
 
+            // Ctrl+Alt+= / Ctrl+Alt+- — UI chrome scale (not Ctrl+scroll grid zoom).
+            if (TryHandleGalleryUiScaleHotkey())
+                return;
+
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
             if (ctrl && Input.GetKeyDown(KeyCode.R))
             {
                 if (activeContentType == ContentType.History)

@@ -965,6 +965,12 @@ namespace VPB
 			get;
 			protected set;
 		}
+
+		/// <summary>Top-level meta.json <c>tags</c> (comma-separated), when present. Distinct from clothing/hair item tags.</summary>
+		public List<string> PackageMetaTags;
+
+		/// <summary>True after <see cref="TryEnsureMetaJsonLiteFields"/> ran (success or miss).</summary>
+		private bool _metaJsonLiteLoaded;
 		public List<string> PackageDependencies
 		{
 			get;
@@ -1188,8 +1194,100 @@ namespace VPB
 			ClothingTags = null;
 			HairFileEntryNames = null;
 			HairTags = null;
+			PackageMetaTags = null;
+			Description = null;
+			PromotionalLink = null;
+			_metaJsonLiteLoaded = false;
 			RecursivePackageDependencies = null;
 			PackageDependencies = null;
+		}
+
+		/// <summary>
+		/// Cache-hit scan restores clothing/hair tags but skips meta.json prose.
+		/// Call before UI reads <see cref="Description"/> / <see cref="PromotionalLink"/> / <see cref="PackageMetaTags"/>.
+		/// </summary>
+		public bool TryEnsureMetaJsonLiteFields()
+		{
+			if (_metaJsonLiteLoaded)
+				return !string.IsNullOrEmpty(Description)
+					|| !string.IsNullOrEmpty(PromotionalLink)
+					|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
+
+			_metaJsonLiteLoaded = true;
+			try
+			{
+				if (string.IsNullOrEmpty(Path) || !File.Exists(Path))
+					return false;
+
+				int cp = GetZipNameCodePageForVar(Path);
+				using (ZipFile zf = OpenZipFileForRead(Path, cp))
+				{
+					if (zf == null) return false;
+					ZipEntry entry = zf.GetEntry("meta.json");
+					if (entry == null || entry.IsDirectory) return false;
+					using (Stream stream = zf.GetInputStream(entry))
+					using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+					{
+						string aJSON = reader.ReadToEnd();
+						if (string.IsNullOrEmpty(aJSON)) return false;
+						JSONNode root = JSON.Parse(aJSON);
+						JSONClass asObject = root != null ? root.AsObject : null;
+						if (asObject == null) return false;
+
+						try
+						{
+							JSONNode descNode = asObject["description"];
+							if (descNode != null)
+							{
+								string d = descNode.Value;
+								if (!string.IsNullOrEmpty(d)) Description = d.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
+							JSONNode promoNode = asObject["promotionalLink"];
+							if (promoNode != null)
+							{
+								string p = promoNode.Value;
+								if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
+							JSONNode tagsNode = asObject["tags"];
+							if (tagsNode != null)
+							{
+								string raw = tagsNode.Value;
+								if (!string.IsNullOrEmpty(raw))
+								{
+									var list = new List<string>();
+									string[] parts = raw.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
+									for (int i = 0; i < parts.Length; i++)
+									{
+										string t = parts[i] != null ? parts[i].Trim() : "";
+										if (!string.IsNullOrEmpty(t) && !list.Contains(t))
+											list.Add(t);
+									}
+									if (list.Count > 0) PackageMetaTags = list;
+								}
+							}
+						}
+						catch { }
+					}
+				}
+			}
+			catch
+			{
+				return false;
+			}
+
+			return !string.IsNullOrEmpty(Description)
+				|| !string.IsNullOrEmpty(PromotionalLink)
+				|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
 		}
 		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
 		// zero references, so a later sig check is a positive hit instead of a re-parse.

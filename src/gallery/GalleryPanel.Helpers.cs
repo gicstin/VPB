@@ -607,6 +607,59 @@ namespace VPB
         }
     }
 
+    /// <summary>
+    /// Thumb preview input: left double-click + right-hold tracking for wheel rating.
+    /// Does not implement <see cref="IScrollHandler"/> (unlike EventTrigger), so wheel reaches
+    /// <see cref="UIScrollWheelHandler"/> on the same hierarchy.
+    /// </summary>
+    public sealed class DetailStripThumbClickRelay : MonoBehaviour,
+        IPointerClickHandler, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+    {
+        public Action OnDoubleClick;
+        public Action<bool> OnRightHoldChanged;
+
+        public bool RightHeld { get; private set; }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData.clickCount < 2) return;
+            try { OnDoubleClick?.Invoke(); } catch { }
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
+            SetRightHeld(true);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
+            SetRightHeld(false);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            // Keep hold if RMB still down (wheel can jitter exit); clear when released.
+            if (!RightHeld) return;
+            if (!Input.GetMouseButton(1))
+                SetRightHeld(false);
+        }
+
+        private void OnDisable()
+        {
+            SetRightHeld(false);
+        }
+
+        private void SetRightHeld(bool held)
+        {
+            if (RightHeld == held) return;
+            RightHeld = held;
+            try { OnRightHoldChanged?.Invoke(held); } catch { }
+        }
+    }
+
     /// <summary>Mouse wheel on gallery footer quality toggle steps level up/down.</summary>
     public sealed class FooterPerfToggleScroll : MonoBehaviour, IScrollHandler
     {
