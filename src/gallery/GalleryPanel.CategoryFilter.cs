@@ -52,6 +52,10 @@ namespace VPB
 
         private void RestoreCategoryFilterState(string categoryTitle, string path)
         {
+            // Drop pending keystroke search refresh — otherwise it fires mid category load (double RefreshFiles).
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+
             string key = MakeCategoryFilterKey(categoryTitle, path);
 
             CategoryFilterState state = null;
@@ -90,10 +94,9 @@ namespace VPB
             // the first SetNameFilter call after RefreshFiles captures the correct unfiltered base.
             topSearchBaseFiles = null;
             string restoredSearch = state.NameFilter ?? "";
-            nameFilter = restoredSearch;
-            nameFilterLower = restoredSearch.ToLowerInvariant();
-            nameFilterTerms = SplitSearchTerms(restoredSearch);
-            if (titleSearchInput != null) titleSearchInput.text = restoredSearch;
+            AssignNameFilterState(restoredSearch);
+            // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, restoredSearch, _titleBarSearchOnValueChanged); } catch { }
 
             currentCreator = state.Creator ?? "";
             _currentCreatorSetSrc = null;
@@ -154,10 +157,10 @@ namespace VPB
 
         private void ClearFiltersForNewCategory()
         {
-            nameFilter = "";
-            nameFilterLower = "";
-            nameFilterTerms = new string[0];
-            if (titleSearchInput != null) titleSearchInput.text = "";
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+            ClearNameFilterState();
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged); } catch { }
 
             // Category navigation reset: creator selection is a filter and should not silently carry
             // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).

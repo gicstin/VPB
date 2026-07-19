@@ -589,6 +589,15 @@ namespace VPB
         private string nameFilterLower = "";
         // Tokenized search terms (lowercased, whitespace-split). Enables multi-term search like "acid timeline".
         private string[] nameFilterTerms = new string[0];
+        /// <summary>Parsed title-bar search (bare OR tags; <c>tag:</c>/<c>creator:</c>/time).</summary>
+        private GallerySearchQuery nameFilterQuery = GallerySearchQuery.Empty;
+        private Coroutine _titleSearchSqlDebounceCo;
+        private Coroutine _titleSearchInMemoryDebounceCo;
+        private bool _keepTopSearchBaseAcrossRefresh;
+        private bool _searchUserTagVocabEmptyKnown;
+        private bool _searchUserTagVocabEmpty;
+        private Dictionary<string, HashSet<string>> _searchTagKeysCache;
+        private string _searchTagKeysCacheFor;
 
         // Tagging
         private List<string> currentPaths = new List<string>();

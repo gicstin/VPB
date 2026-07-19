@@ -233,6 +233,28 @@ namespace VPB
             out ClothingChipCounts counts,
             HashSet<string> excludedUserTags = null)
         {
+            return TryQueryClothingChipCounts(
+                creatorFilter, loadedState, GallerySearchQuery.FromLegacyNameTerms(nameTerms),
+                pathExclusions, pathInclusions, activeTags, activeUserTags,
+                userTagsUntaggedOnly, userTagsRequireAll, sourceMode, hideOldVersions,
+                out counts, excludedUserTags);
+        }
+
+        internal static bool TryQueryClothingChipCounts(
+            string creatorFilter,
+            int loadedState,
+            GallerySearchQuery searchQuery,
+            List<string> pathExclusions,
+            List<string> pathInclusions,
+            HashSet<string> activeTags,
+            HashSet<string> activeUserTags,
+            bool userTagsUntaggedOnly,
+            bool userTagsRequireAll,
+            int sourceMode,
+            bool hideOldVersions,
+            out ClothingChipCounts counts,
+            HashSet<string> excludedUserTags = null)
+        {
             counts = new ClothingChipCounts();
             if (!VpbSqlite3.IsAvailable) return false;
 
@@ -256,10 +278,11 @@ namespace VPB
 
                     var ctx = BuildGalleryCategoryWhere(
                         conn, "Clothing", creatorFilter, loadedState,
-                        nameTerms, pathExclusions, pathInclusions,
+                        searchQuery ?? GallerySearchQuery.Empty, pathExclusions, pathInclusions,
                         activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
 
                     string afterClothFragments = ctx.LoadedAndFragment + ctx.NameAndFragment
+                        + ctx.SearchTimeAndFragment
                         + ctx.ExclusionAndFragment + ctx.InclusionAndFragment
                         + ctx.TagAndFragment + ctx.UserTagAndFragment + ctx.ExcludedUserTagAndFragment;
 

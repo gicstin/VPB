@@ -1487,7 +1487,7 @@ namespace VPB
             GameObject placeholder = new GameObject("Placeholder");
             placeholder.transform.SetParent(textArea.transform, false);
             Text placeholderText = placeholder.AddComponent<Text>();
-            placeholderText.text = VPBTranslation.T("gallery.search.main", "Search grid...");
+            placeholderText.text = VPBTranslation.T("gallery.search.main", "Search name, #tag, OR, badge…");
             placeholderText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
             placeholderText.fontSize = GalleryUiDesignTokens.FontBodyRef;
             placeholderText.color = UI.InputFieldPlaceholderColor;

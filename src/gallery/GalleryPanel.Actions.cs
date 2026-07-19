@@ -1096,163 +1096,247 @@ namespace VPB
         {
             string f = val ?? "";
             if (f == nameFilter) return;
-            nameFilter = f;
-            nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
-            nameFilterTerms = SplitSearchTerms(f);
+            AssignNameFilterState(f);
 
             try
             {
-            // In package filter mode, keep search scoped to the current filtered list
-            // (do not refresh the whole gallery, which would clear filter mode).
-            if (IsFilterActive)
-            {
-                ApplySearchWithinFilter(f);
-                return;
-            }
+                CancelTitleSearchSqlDebounce();
+                CancelTitleSearchInMemoryDebounce();
 
-            // Outside filter mode: perform top search in-memory so clearing search can instantly
-            // restore the full list without a rebuild (prevents stalls).
-            if (topSearchBaseFiles == null)
-            {
-                if (!_topSearchBaseIsClean)
+                // In package filter mode, keep search scoped to the current filtered list
+                // (do not refresh the whole gallery, which would clear filter mode).
+                if (IsFilterActive)
                 {
-                    // currentFilteredFiles may already be filtered (e.g. restored from per-category
-                    // memory after a SQL-filtered RefreshFiles). The unfiltered base is unknown.
-                    if (nameFilterTerms == null || nameFilterTerms.Length == 0)
-                    {
-                        // Clearing search — rebuild from scratch to get the full unfiltered list.
-                        RefreshFiles();
-                        return;
-                    }
-                    // Narrowing search — RefreshFiles will apply nameFilterTerms via SQL.
-                    RefreshFiles();
+                    ApplySearchWithinFilter(f);
+                    SyncBrowseFilterChipChrome();
                     return;
                 }
-                topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
-            }
 
-            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
-            {
-                currentFilteredFiles.Clear();
-                currentFilteredFiles.AddRange(topSearchBaseFiles);
-                topSearchBaseFiles = null;
-                _topSearchBaseIsClean = true;
-            }
-            else
-            {
-                // Fast path for package list rows (dependency filters): query SQLite for matching packages,
-                // then rebuild results in the same order as the base list.
-                bool isPackageList = false;
-                try
+                bool active = HasActiveNameFilter();
+
+                // Outside filter mode: in-memory when base list known; SQL (debounced) for time
+                // windows or when base is dirty. Bare terms OR into user tags via one key lookup.
+                if (topSearchBaseFiles == null)
                 {
-                    if (topSearchBaseFiles.Count > 0)
+                    if (!_topSearchBaseIsClean)
                     {
-                        var head = topSearchBaseFiles[0];
-                        isPackageList = head is PackageListEntry || head is MissingPackageListEntry;
+                        if (!active)
+                        {
+                            RefreshFiles();
+                            return;
+                        }
+                        // Narrowing — SQL applies full search AST (name/tag/time).
+                        ScheduleTitleSearchSqlRefresh();
+                        return;
                     }
+                    topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
                 }
-                catch { isPackageList = false; }
 
-                if (isPackageList)
+                if (!active)
                 {
-                    var allowedUids = new List<string>(topSearchBaseFiles.Count);
-                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
-                    {
-                        var e = topSearchBaseFiles[i];
-                        if (e == null) continue;
-                        // PackageListEntry.Name is "<uid>.var" for both live and indexed rows.
-                        string n = null;
-                        try { n = e.Name; } catch { n = null; }
-                        if (string.IsNullOrEmpty(n)) continue;
-                        if (n.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
-                            n = n.Substring(0, n.Length - 4);
-                        if (!string.IsNullOrEmpty(n))
-                            allowedUids.Add(n);
-                    }
-
-                    var pkgRows = new List<VpbLocalDatabase.PackageRow>();
-                    bool gotSql = false;
-                    try
-                    {
-                        gotSql = VpbLocalDatabase.TryQueryPackageRowsForUidsWithAllTerms(allowedUids, nameFilterTerms, pkgRows);
-                    }
-                    catch { gotSql = false; }
-
-                    if (gotSql)
-                    {
-                        var byUid = new Dictionary<string, VpbLocalDatabase.PackageRow>(pkgRows.Count, StringComparer.OrdinalIgnoreCase);
-                        for (int i = 0; i < pkgRows.Count; i++)
-                        {
-                            var r = pkgRows[i];
-                            if (!string.IsNullOrEmpty(r.PackageUid))
-                                byUid[r.PackageUid] = r;
-                        }
-
-                        currentFilteredFiles.Clear();
-                        for (int i = 0; i < allowedUids.Count; i++)
-                        {
-                            var uid = allowedUids[i];
-                            if (string.IsNullOrEmpty(uid)) continue;
-                            if (!byUid.TryGetValue(uid, out var r)) continue;
-                            DateTime wt = DateTime.MinValue;
-                            if (r.LastWriteTicksOrInvalid != long.MinValue)
-                            {
-                                try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
-                            }
-                            currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
-                        }
-                    }
-                    else
-                    {
-                        // Fallback: tokenized in-memory filter.
-                        var filtered = new List<FileEntry>();
-                        for (int i = 0; i < topSearchBaseFiles.Count; i++)
-                        {
-                            var e = topSearchBaseFiles[i];
-                            if (e == null) continue;
-                            if (MatchesFileEntryByScope(e, nameFilterTerms))
-                                filtered.Add(e);
-                        }
-                        currentFilteredFiles.Clear();
-                        currentFilteredFiles.AddRange(filtered);
-                    }
+                    currentFilteredFiles.Clear();
+                    currentFilteredFiles.AddRange(topSearchBaseFiles);
+                    topSearchBaseFiles = null;
+                    _topSearchBaseIsClean = true;
+                    FinishTitleSearchUiRefresh();
+                }
+                else if (nameFilterQuery.RequiresSqlRefresh)
+                {
+                    // Time / loaded / tagged windows need SQL; keep snapshot for instant clear.
+                    ScheduleTitleSearchSqlRefresh();
+                    return;
                 }
                 else
                 {
-                    // Default: tokenized in-memory search (AND semantics across terms).
-                    var filtered = new List<FileEntry>();
-                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                    // Debounce name/tag in-memory filter — per-keystroke full-list scans stall VaM.
+                    ScheduleTitleSearchInMemoryApply();
+                    return;
+                }
+            }
+            finally
+            {
+                // Avoid chip rebuild + UpdateLayout on every keystroke; debounce with search apply.
+                if (!HasActiveNameFilter() || nameFilterQuery.RequiresSqlRefresh)
+                    SyncBrowseFilterChipChrome();
+            }
+        }
+
+        private void CancelTitleSearchSqlDebounce()
+        {
+            if (_titleSearchSqlDebounceCo == null) return;
+            try { StopCoroutine(_titleSearchSqlDebounceCo); } catch { }
+            _titleSearchSqlDebounceCo = null;
+        }
+
+        private void CancelTitleSearchInMemoryDebounce()
+        {
+            if (_titleSearchInMemoryDebounceCo == null) return;
+            try { StopCoroutine(_titleSearchInMemoryDebounceCo); } catch { }
+            _titleSearchInMemoryDebounceCo = null;
+        }
+
+        private void ScheduleTitleSearchInMemoryApply()
+        {
+            CancelTitleSearchInMemoryDebounce();
+            CancelTitleSearchSqlDebounce();
+            if (!isActiveAndEnabled)
+            {
+                ApplyTitleSearchToBaseListInMemory();
+                FinishTitleSearchUiRefresh();
+                SyncBrowseFilterChipChrome();
+                return;
+            }
+            _titleSearchInMemoryDebounceCo = StartCoroutine(TitleSearchInMemoryDebounceRoutine());
+        }
+
+        private IEnumerator TitleSearchInMemoryDebounceRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.12f);
+            _titleSearchInMemoryDebounceCo = null;
+            // Query may have changed again; apply current AST.
+            if (topSearchBaseFiles == null) yield break;
+            if (nameFilterQuery != null && nameFilterQuery.RequiresSqlRefresh)
+            {
+                ScheduleTitleSearchSqlRefresh();
+                yield break;
+            }
+            ApplyTitleSearchToBaseListInMemory();
+            FinishTitleSearchUiRefresh();
+            SyncBrowseFilterChipChrome();
+        }
+
+        private void ScheduleTitleSearchSqlRefresh()
+        {
+            CancelTitleSearchSqlDebounce();
+            CancelTitleSearchInMemoryDebounce();
+            if (!isActiveAndEnabled)
+            {
+                RunTitleSearchSqlRefreshNow();
+                return;
+            }
+            _titleSearchSqlDebounceCo = StartCoroutine(TitleSearchSqlDebounceRoutine());
+        }
+
+        private IEnumerator TitleSearchSqlDebounceRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.15f);
+            _titleSearchSqlDebounceCo = null;
+            RunTitleSearchSqlRefreshNow();
+        }
+
+        private void RunTitleSearchSqlRefreshNow()
+        {
+            // Preserve in-memory base so clearing search can restore without rebuild.
+            if (topSearchBaseFiles != null)
+                _keepTopSearchBaseAcrossRefresh = true;
+            else if (_topSearchBaseIsClean && currentFilteredFiles != null)
+            {
+                topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+                _keepTopSearchBaseAcrossRefresh = true;
+            }
+            try { RefreshFiles(); }
+            catch { }
+            finally { SyncBrowseFilterChipChrome(); }
+        }
+
+        private void ApplyTitleSearchToBaseListInMemory()
+        {
+            if (topSearchBaseFiles == null) return;
+            var query = nameFilterQuery ?? GallerySearchQuery.Empty;
+
+            bool isPackageList = false;
+            try
+            {
+                if (topSearchBaseFiles.Count > 0)
+                {
+                    var head = topSearchBaseFiles[0];
+                    isPackageList = head is PackageListEntry || head is MissingPackageListEntry;
+                }
+            }
+            catch { isPackageList = false; }
+
+            if (isPackageList && query.TagInclude.Count == 0 && query.TagExclude.Count == 0
+                && query.CreatorTerms.Count == 0 && query.BroadTerms.Count > 0)
+            {
+                // Package UID SQL fast path (name terms only).
+                var allowedUids = new List<string>(topSearchBaseFiles.Count);
+                for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                {
+                    var e = topSearchBaseFiles[i];
+                    if (e == null) continue;
+                    string n = null;
+                    try { n = e.Name; } catch { n = null; }
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (n.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                        n = n.Substring(0, n.Length - 4);
+                    if (!string.IsNullOrEmpty(n))
+                        allowedUids.Add(n);
+                }
+
+                var pkgRows = new List<VpbLocalDatabase.PackageRow>();
+                bool gotSql = false;
+                try
+                {
+                    gotSql = VpbLocalDatabase.TryQueryPackageRowsForUidsWithAllTerms(allowedUids, query.BroadTermsArray(), pkgRows);
+                }
+                catch { gotSql = false; }
+
+                if (gotSql)
+                {
+                    var byUid = new Dictionary<string, VpbLocalDatabase.PackageRow>(pkgRows.Count, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < pkgRows.Count; i++)
                     {
-                        var e = topSearchBaseFiles[i];
-                        if (e == null) continue;
-                        if (MatchesFileEntryByScope(e, nameFilterTerms))
-                            filtered.Add(e);
+                        var r = pkgRows[i];
+                        if (!string.IsNullOrEmpty(r.PackageUid))
+                            byUid[r.PackageUid] = r;
                     }
+
                     currentFilteredFiles.Clear();
-                    currentFilteredFiles.AddRange(filtered);
+                    for (int i = 0; i < allowedUids.Count; i++)
+                    {
+                        var uid = allowedUids[i];
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        VpbLocalDatabase.PackageRow r;
+                        if (!byUid.TryGetValue(uid, out r)) continue;
+                        DateTime wt = DateTime.MinValue;
+                        if (r.LastWriteTicksOrInvalid != long.MinValue)
+                        {
+                            try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
+                        }
+                        currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
+                    }
+                    return;
                 }
             }
 
+            // Name/path first; tag-key SQL only when terms warrant it (cached).
+            var tagKeys = GetSearchTagKeysCached();
+            var filtered = new List<FileEntry>(Math.Min(topSearchBaseFiles.Count, 256));
+            for (int i = 0; i < topSearchBaseFiles.Count; i++)
+            {
+                var e = topSearchBaseFiles[i];
+                if (e == null) continue;
+                if (MatchesFileEntryBySearchQuery(e, query, tagKeys))
+                    filtered.Add(e);
+            }
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(filtered);
+        }
+
+        private void FinishTitleSearchUiRefresh()
+        {
             if (recyclingGrid != null)
             {
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                // Search should start at the top of results; otherwise the previous scroll position
-                // can clamp to the bottom when the filtered list is shorter.
                 ScrollGalleryToTop();
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
 
-            // Refresh creator side tab if open so it shows only creators applicable to search results.
             bool creatorTabOpen = (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Creator)
                                || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
             if (creatorTabOpen)
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
-            }
-            finally
-            {
-                SyncBrowseFilterChipChrome();
-            }
         }
 
         private bool PrepareFileEntryGestureSelection(FileEntry file)

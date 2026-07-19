@@ -26,7 +26,8 @@ Open a side column, then search or sort inside it:
 Tap the **colored header bar** at the top of a side column to collapse that list.
 
 ### Title bar search and filters
-- **Search** (center) — filters the **grid** (`Search grid...`). Compact mode shows a {{icon:search|search icon}}; click to type.
+- **Search** (center) — universal grid filter (`Search name, #tag, badge…`). Compact mode shows a {{icon:search|search icon}}; click to type.
+- Bare words, tags, badges, loaded/starred, **AND** / **OR** / **IF** — full syntax in **Advanced search** (help nav).
 - **Side-column search** — filters only the **open list** (categories / creators / tags / paths), not the grid.
 - {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset.
 - **Creator filter** (title bar) — multi-select authors to limit the **grid** (or **…** overflow when narrow). Rail {{icon:creator|Creator}} opens the **creator list**.
@@ -49,6 +50,49 @@ When pane height is tight, side-rail **zone gaps close first**, then spacing pac
 
 ### Language
 The language button on the title bar (e.g. EN) switches UI text. Help content loads from `vpb_help/{language}.md` when that file exists, otherwise English.
+
+## Advanced search
+
+Title-bar search is a **universal filter**. Bare words match name/path/creator/uid **or** user-tag text.
+
+### Boolean logic (AND / OR / IF)
+
+- **AND** (default) — every term in a group must match. Space or the word `AND` means the same thing: `dress AND #wet` ≡ `dress #wet`.
+- **OR** — either side may match: `tag:wet OR tag:shiny`. Groups on each side of `OR` are still AND inside: `dress #wet OR #shiny` = (dress and #wet) or (#shiny).
+- **IF** — optional preface before a status/badge word. Same as writing the status alone: `IF loaded` ≡ `loaded`. Use it when you think “only IF this is true…”.
+
+### Text and tags
+- Bare words — `dress man` (each word must match somewhere; AND)
+- User tag — `tag:wet` or `#wet`
+- **Multiple tags** (comma list) — `tag:wet,shiny,-nsfw` or `#wet,#shiny,-nsfw` or shorthand `wet,shiny,-nsfw`
+  - plain name = must have that tag
+  - `-name` = must **not** have that tag
+- Exclude tag — `-tag:nsfw` or `-#nsfw`
+- Creator — `creator:Acid` or `@Acid` (comma list OK: `@Acid,@Other`)
+
+### Status and badges
+Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist excluded, **T** user tags.
+
+- `loaded` / `installed` — under AddonPackages (or local loose files)
+- `unloaded` — not loaded (e.g. AllPackages)
+- `starred` / `rated` / `badge:star` — has a star rating
+- `tagged` / `badge:t` — has user-tag badge **T**
+- `untagged` — no user tags
+- `autoinstall` / `badge:a` — auto-install badge **A**
+- `hidden` / `badge:h` — hide badge **H**
+- `whitelist` / `badge:w` — scan-excluded badge **W**
+
+### Examples
+- `tag:fav,outfit,-nsfw` — has fav and outfit tags, not nsfw
+- `#wet OR #shiny` — either tag
+- `dress AND IF loaded` — name/path contains dress, and package is loaded
+- `tag:fav loaded` — fav tag and installed
+- `badge:a starred` — auto-install + rated
+- `@Acid OR @Other` — either creator
+
+Combine freely with category, creator chips, and {{icon:filter|Filter presets}}.
+
+For **recently used** items, use the {{icon:history|History}} side view (not title-bar search).
 
 ## Tags
 

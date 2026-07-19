@@ -40,13 +40,13 @@ namespace VPB
 
         private static readonly string[] InAppHelpAnchorIds =
         {
-            "filtering", "tags", "import", "cleanup", "selection", "layout",
+            "filtering", "advanced-search", "tags", "import", "cleanup", "selection", "layout",
             "save-and-apply", "hotkeys", "advanced"
         };
 
         private static readonly string[] InAppHelpAnchorDefaults =
         {
-            "Filtering", "Tags", "Import", "Cleanup", "Selection", "Layout",
+            "Filtering", "Advanced search", "Tags", "Import", "Cleanup", "Selection", "Layout",
             "Save and Apply", "Hotkeys", "Advanced"
         };
 

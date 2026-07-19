@@ -279,6 +279,405 @@ namespace VPB
             }
         }
 
+        private bool HasActiveNameFilter()
+        {
+            return nameFilterQuery != null && !nameFilterQuery.IsEmpty;
+        }
+
+        /// <summary>
+        /// Fallback package-scan match when category SQL index unavailable.
+        /// Structured-only queries (tag:/creator:/status) cannot be evaluated here → reject.
+        /// </summary>
+        private static bool MatchesPackageFallbackSearch(GallerySearchQuery query, string packageUid, string packagePath, string internalPath)
+        {
+            if (query == null || query.IsEmpty) return true;
+            if (query.Branches == null || query.Branches.Count == 0) return true;
+
+            for (int bi = 0; bi < query.Branches.Count; bi++)
+            {
+                GallerySearchBranch br = query.Branches[bi];
+                if (br == null || br.IsEmpty) continue;
+                bool structured = (br.TagInclude != null && br.TagInclude.Count > 0)
+                    || (br.TagExclude != null && br.TagExclude.Count > 0)
+                    || (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                    || br.Status != GallerySearchQuery.StatusFlags.None;
+                string[] broad = br.BroadTerms != null && br.BroadTerms.Count > 0
+                    ? br.BroadTerms.ToArray()
+                    : new string[0];
+                bool hasBroad = broad.Length > 0;
+                if (structured && !hasBroad) continue; // this OR-branch cannot match on fallback
+                if (!hasBroad) continue;
+                if (!MatchesPackageByScope(packageUid, packagePath, internalPath, broad)) continue;
+                if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                {
+                    string creator = "";
+                    if (!string.IsNullOrEmpty(packageUid))
+                    {
+                        int dot = packageUid.IndexOf('.');
+                        if (dot > 0) creator = packageUid.Substring(0, dot);
+                    }
+                    bool creatorOk = true;
+                    for (int i = 0; i < br.CreatorTerms.Count; i++)
+                    {
+                        string t = br.CreatorTerms[i];
+                        if (string.IsNullOrEmpty(t)) continue;
+                        if (creator.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            creatorOk = false;
+                            break;
+                        }
+                    }
+                    if (!creatorOk) continue;
+                }
+                if (br.TagInclude != null && br.TagInclude.Count > 0) continue;
+                if (br.TagExclude != null && br.TagExclude.Count > 0) continue;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Keep <see cref="nameFilter"/> / terms / parsed AST in sync.</summary>
+        private void AssignNameFilterState(string raw)
+        {
+            string f = raw ?? "";
+            nameFilter = f;
+            nameFilterLower = f.Length == 0 ? "" : f.ToLowerInvariant();
+            nameFilterQuery = GallerySearchQuery.Parse(f);
+            nameFilterTerms = nameFilterQuery != null ? nameFilterQuery.BroadTermsArray() : new string[0];
+            _searchTagKeysCache = null;
+            _searchTagKeysCacheFor = null;
+        }
+
+        private void ClearNameFilterState()
+        {
+            nameFilter = "";
+            nameFilterLower = "";
+            nameFilterQuery = GallerySearchQuery.Empty;
+            nameFilterTerms = new string[0];
+            _searchTagKeysCache = null;
+            _searchTagKeysCacheFor = null;
+        }
+
+        private Dictionary<string, HashSet<string>> GetSearchTagKeysCached()
+        {
+            string key = nameFilter ?? "";
+            if (_searchTagKeysCache != null && string.Equals(_searchTagKeysCacheFor, key, StringComparison.Ordinal))
+                return _searchTagKeysCache;
+            _searchTagKeysCache = BuildTagKeyLookupForSearch(nameFilterQuery ?? GallerySearchQuery.Empty);
+            _searchTagKeysCacheFor = key;
+            return _searchTagKeysCache;
+        }
+
+        /// <summary>VAR / package-list rows come from category SQL (loaded/tagged already applied).</summary>
+        private static bool IsGallerySqlIndexedSearchEntry(FileEntry entry)
+        {
+            if (entry == null) return false;
+            if (entry is VarFileEntry) return true;
+            if (entry is PackageListEntry) return true;
+            return false;
+        }
+
+        private static string TryGetFileEntryCreatorHint(FileEntry file)
+        {
+            // Never resolve Package here — deferred gallery rows would stall the search keystroke path.
+            if (file == null) return "";
+            try
+            {
+                string uid = null;
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null)
+                {
+                    try { uid = vfe.GetRowPackageUid(); } catch { uid = null; }
+                }
+                if (string.IsNullOrEmpty(uid))
+                {
+                    PackageListEntry ple = file as PackageListEntry;
+                    if (ple != null)
+                    {
+                        try { uid = ple.GetPackageUidForGalleryUserTags(); } catch { uid = null; }
+                    }
+                }
+                if (string.IsNullOrEmpty(uid))
+                {
+                    try { uid = file.Uid; } catch { uid = null; }
+                }
+                if (string.IsNullOrEmpty(uid)) return "";
+                int cut = uid.IndexOf(":/", StringComparison.Ordinal);
+                if (cut > 0) uid = uid.Substring(0, cut);
+                int dot = uid.IndexOf('.');
+                if (dot > 0) return uid.Substring(0, dot);
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>
+        /// In-memory match for parsed title-bar search. OR of AND-branches.
+        /// <paramref name="tagKeysByTerm"/> maps each tag substring → row keys (<c>pkg\0path</c>).
+        /// When <paramref name="skipSqlOwnedPredicates"/> is true (post-SQL VAR rows), loaded/tagged
+        /// already applied in SQL are not re-checked here.
+        /// </summary>
+        private bool MatchesFileEntryBySearchQuery(
+            FileEntry file,
+            GallerySearchQuery query,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            bool skipSqlOwnedPredicates = false)
+        {
+            if (query == null || query.IsEmpty) return true;
+            if (file == null) return false;
+            if (query.Branches == null || query.Branches.Count == 0) return true;
+
+            string rowKey = null;
+            try
+            {
+                string pkg, ip;
+                if (TryGetGalleryRowKeysForUserTags(file, out pkg, out ip))
+                    rowKey = VpbLocalDatabase.MakeGalleryRowKey(pkg, ip);
+            }
+            catch { rowKey = null; }
+
+            for (int bi = 0; bi < query.Branches.Count; bi++)
+            {
+                GallerySearchBranch br = query.Branches[bi];
+                if (br == null || br.IsEmpty) continue;
+                if (MatchesFileEntrySearchBranch(file, br, tagKeysByTerm, rowKey, skipSqlOwnedPredicates))
+                    return true;
+            }
+            return false;
+        }
+
+        private bool MatchesFileEntrySearchBranch(
+            FileEntry file,
+            GallerySearchBranch br,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            string rowKey,
+            bool skipSqlOwnedPredicates)
+        {
+            if (br == null) return true;
+
+            bool needUserTagProbe = !skipSqlOwnedPredicates
+                && (br.HasFlag(GallerySearchQuery.StatusFlags.Tagged)
+                    || br.HasFlag(GallerySearchQuery.StatusFlags.Untagged));
+            bool hasUserTag = false;
+            if (needUserTagProbe)
+                hasUserTag = IsGalleryUserTagBadgeVisible(file);
+
+            if (br.TagInclude != null)
+            {
+                for (int i = 0; i < br.TagInclude.Count; i++)
+                {
+                    string t = br.TagInclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    HashSet<string> keys = null;
+                    if (tagKeysByTerm == null || !tagKeysByTerm.TryGetValue(t, out keys) || keys == null
+                        || string.IsNullOrEmpty(rowKey) || !keys.Contains(rowKey))
+                        return false;
+                }
+            }
+            if (br.TagExclude != null)
+            {
+                for (int i = 0; i < br.TagExclude.Count; i++)
+                {
+                    string t = br.TagExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    HashSet<string> keys = null;
+                    if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
+                        && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
+                        return false;
+                }
+            }
+
+            if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+            {
+                string creator = TryGetFileEntryCreatorHint(file) ?? "";
+                for (int i = 0; i < br.CreatorTerms.Count; i++)
+                {
+                    string t = br.CreatorTerms[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    if (creator.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0)
+                        return false;
+                }
+            }
+
+            if (!skipSqlOwnedPredicates)
+            {
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Loaded))
+                {
+                    if (!IsFileEntryLoadedForSearch(file)) return false;
+                }
+                else if (br.HasFlag(GallerySearchQuery.StatusFlags.Unloaded))
+                {
+                    if (IsFileEntryLoadedForSearch(file)) return false;
+                }
+
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Tagged) && !hasUserTag)
+                    return false;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Untagged) && hasUserTag)
+                    return false;
+            }
+
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.Starred))
+            {
+                int r = 0;
+                try { r = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(file) : 0; }
+                catch { r = 0; }
+                if (r <= 0) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.AutoInstall))
+            {
+                bool ai = false;
+                try { ai = file.IsAutoInstall(); } catch { ai = false; }
+                if (!ai) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.Hidden))
+            {
+                bool hid = false;
+                try { hid = PackageHidePrefs.IsGalleryHideBadgeVisible(file); } catch { hid = false; }
+                if (!hid) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.ScanExcluded))
+            {
+                bool w = false;
+                try { w = ScanWhitelistManager.IsScanExcludedBadgeVisible(file); } catch { w = false; }
+                if (!w) return false;
+            }
+
+            if (br.BroadTerms == null || br.BroadTerms.Count == 0)
+                return true;
+
+            string creatorHint = TryGetFileEntryCreatorHint(file) ?? "";
+            string uidHint = "";
+            try { uidHint = file.Uid ?? ""; } catch { uidHint = ""; }
+
+            for (int i = 0; i < br.BroadTerms.Count; i++)
+            {
+                string t = br.BroadTerms[i];
+                if (string.IsNullOrEmpty(t)) continue;
+
+                string scope = VPBConfig.Instance != null
+                    ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                    : "PathAndName";
+                string pretty = GetPrettyEntryDisplayName(file);
+                bool namePathOk;
+                if (scope == "NameStartsWith")
+                    namePathOk = !string.IsNullOrEmpty(pretty) && pretty.StartsWith(t, StringComparison.OrdinalIgnoreCase);
+                else if (scope == "NameOnly")
+                    namePathOk = !string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0;
+                else
+                {
+                    string path = null;
+                    try { path = file.Path; } catch { path = null; }
+                    namePathOk = (!string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                        || (!string.IsNullOrEmpty(path) && path.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+                }
+                if (namePathOk) continue;
+                if (!string.IsNullOrEmpty(creatorHint) && creatorHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+                if (!string.IsNullOrEmpty(uidHint) && uidHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+
+                HashSet<string> keys = null;
+                if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
+                    && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
+                    continue;
+
+                return false;
+            }
+            return true;
+        }
+
+        private static bool IsFileEntryLoadedForSearch(FileEntry file)
+        {
+            if (file == null) return false;
+            try
+            {
+                SystemFileEntry sfe = file as SystemFileEntry;
+                if (sfe != null && !sfe.isVar) return true; // loose files always "loaded"
+            }
+            catch { }
+            try
+            {
+                string path = null;
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null)
+                {
+                    try
+                    {
+                        if (vfe.Package != null) path = vfe.Package.Path;
+                    }
+                    catch { }
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        // Indexed rows: treat as loaded unless we know otherwise via Package resolve.
+                        return true;
+                    }
+                }
+                PackageListEntry ple = file as PackageListEntry;
+                if (ple != null)
+                {
+                    try { path = ple.Path; } catch { path = null; }
+                }
+                if (string.IsNullOrEmpty(path)) return true;
+                return VpbLocalDatabase.ComputePackageLoadedFlagFromVarPath(path) != 0;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>One SQLite connection for all tag substrings; reused across base-list filter.</summary>
+        private Dictionary<string, HashSet<string>> BuildTagKeyLookupForSearch(GallerySearchQuery query)
+        {
+            var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            if (query == null || query.IsEmpty) return map;
+            if (!VpbSqlite3.IsAvailable) return map;
+
+            // Explicit tag: always. Broad terms only when length≥2 (avoid LIKE '%x%' on every letter).
+            var need = new List<string>();
+            bool hasExplicitTag = (query.TagInclude != null && query.TagInclude.Count > 0)
+                || (query.TagExclude != null && query.TagExclude.Count > 0);
+            if (query.TagInclude != null)
+                for (int i = 0; i < query.TagInclude.Count; i++)
+                    if (!string.IsNullOrEmpty(query.TagInclude[i])) need.Add(query.TagInclude[i]);
+            if (query.TagExclude != null)
+                for (int i = 0; i < query.TagExclude.Count; i++)
+                    if (!string.IsNullOrEmpty(query.TagExclude[i])) need.Add(query.TagExclude[i]);
+            if (query.BroadTerms != null)
+            {
+                for (int i = 0; i < query.BroadTerms.Count; i++)
+                {
+                    string t = query.BroadTerms[i];
+                    if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
+                    need.Add(t);
+                }
+            }
+            if (need.Count == 0) return map;
+
+            // No user tags in DB → skip connection (cache empty probe).
+            if (hasExplicitTag)
+                _searchUserTagVocabEmpty = false;
+            else
+            {
+                if (!_searchUserTagVocabEmptyKnown)
+                {
+                    _searchUserTagVocabEmptyKnown = true;
+                    _searchUserTagVocabEmpty = true;
+                    try
+                    {
+                        var probe = new List<string>();
+                        if (VpbLocalDatabase.TryReadAllGalleryUserTagNames(probe) && probe.Count > 0)
+                            _searchUserTagVocabEmpty = false;
+                    }
+                    catch { _searchUserTagVocabEmpty = true; }
+                }
+                if (_searchUserTagVocabEmpty) return map;
+            }
+
+            string cat = currentCategoryTitle ?? "";
+            if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+            try { VpbLocalDatabase.TryCollectRowKeysWithUserTagSubstringsPerTerm(cat, need, map); }
+            catch { map.Clear(); }
+            return map;
+        }
+
         /// <summary>
         /// Package-level overload for sites that pass raw strings (no FileEntry available). Package uid is the name field; internalPath optionally folded into the path field for PathAndName mode.
         /// </summary>
@@ -2563,7 +2962,7 @@ namespace VPB
                     catch { }
 
                     if (!VpbLocalDatabase.TryQueryClothingChipCounts(
-                        creator, loadedState, nameFilterTerms,
+                        creator, loadedState, nameFilterQuery ?? GallerySearchQuery.Empty,
                         null, null, // pathExclusions/pathInclusions: both null for Clothing
                         activeTags, utNames, utUntaggedOnly, utRequireAll,
                         sourceFilterMode, hideOldVersions, out chips, utExcludeNames)) return;

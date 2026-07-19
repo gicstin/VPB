@@ -73,7 +73,7 @@ namespace VPB
             ContentTypeDescriptorEntry entry;
             if (ContentTypeDescriptors.TryGetValue(type, out entry))
                 return VPBTranslation.T(entry.PlaceholderKey, entry.PlaceholderFallback);
-            return VPBTranslation.T("gallery.search.main", "Search grid...");
+            return VPBTranslation.T("gallery.search.main", "Search name, #tag, OR, badge…");
         }
 
         internal static bool ContentTypeSuppressesSideSearch(ContentType type)

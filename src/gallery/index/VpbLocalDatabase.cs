@@ -5972,7 +5972,8 @@ namespace VPB
             // Append clothAnd, then any additional per-query suffix (ORDER BY / LIMIT).
             public string CreatorAndFragment;  // " AND (p.creator = ? ...)" or ""
             public string LoadedAndFragment;   // " AND ifnull(p.loaded,0)..." or ""
-            public string NameAndFragment;     // " AND (m.list_path LIKE ? ...) ..." or ""
+            public string NameAndFragment;     // title-bar search AST (broad OR + tag:/creator:) or ""
+            public string SearchTimeAndFragment; // time window (int64 binds after text) or ""
             public string ExclusionAndFragment;// " AND m.internal_path NOT LIKE ? ..." or ""
             public string InclusionAndFragment;// " AND (m.internal_path LIKE ? ...) " or ""
             public string TagAndFragment;      // " AND m.list_path LIKE ? ..." or ""
@@ -5988,6 +5989,7 @@ namespace VPB
             public List<string> TagBindValues;
             public List<string> UserTagBindValues;
             public List<string> ExcludedUserTagBindValues;
+            public List<long> SearchInt64BindValues; // time lower bounds after all text binds
 
             public bool IsEverything;
             public bool PkgHasLoadedCol;
@@ -6003,6 +6005,27 @@ namespace VPB
             string creatorFilter,
             int loadedState,
             string[] nameTerms,
+            List<string> pathExclusions,
+            List<string> pathInclusions,
+            HashSet<string> activeTags,
+            HashSet<string> activeUserTags,
+            bool userTagsUntaggedOnly,
+            bool userTagsRequireAll,
+            HashSet<string> excludedUserTags = null)
+        {
+            return BuildGalleryCategoryWhere(
+                conn, categoryTitle, creatorFilter, loadedState,
+                GallerySearchQuery.FromLegacyNameTerms(nameTerms),
+                pathExclusions, pathInclusions,
+                activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+        }
+
+        internal static GalleryCategoryWhereContext BuildGalleryCategoryWhere(
+            VpbSqlite3.Connection conn,
+            string categoryTitle,
+            string creatorFilter,
+            int loadedState,
+            GallerySearchQuery searchQuery,
             List<string> pathExclusions,
             List<string> pathInclusions,
             HashSet<string> activeTags,
@@ -6038,25 +6061,11 @@ namespace VPB
                 ctx.CreatorAndFragment = "";
             }
 
-            // name search
+            // title-bar search (bare terms OR into tags; tag:/creator:/time structured)
             ctx.NameBindValues = new List<string>();
-            if (nameTerms != null && nameTerms.Length > 0)
-            {
-                var sbN = new StringBuilder();
-                for (int i = 0; i < nameTerms.Length; i++)
-                {
-                    if (string.IsNullOrEmpty(nameTerms[i])) continue;
-                    sbN.Append(" AND (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
-                    string esc = "%" + EscapeLike(nameTerms[i]) + "%";
-                    ctx.NameBindValues.Add(esc);
-                    ctx.NameBindValues.Add(esc);
-                }
-                ctx.NameAndFragment = sbN.ToString();
-            }
-            else
-            {
-                ctx.NameAndFragment = "";
-            }
+            ctx.SearchInt64BindValues = new List<long>();
+            ctx.SearchTimeAndFragment = "";
+            AppendGallerySearchQueryToWhere(ctx, searchQuery ?? GallerySearchQuery.Empty, categoryTitle, ctx.IsEverything);
 
             // path exclusions
             ctx.ExclusionBindValues = new List<string>();
@@ -6140,7 +6149,7 @@ namespace VPB
         }
 
         // Applies binds from a GalleryCategoryWhereContext to a prepared statement, starting at bind slot `bindStart`.
-        // Order: category (if not everything), creator, nameTerms, exclusions, inclusions, tags, userTags.
+        // Order: category (if not everything), creator, name/search text, exclusions, inclusions, tags, userTags, search int64 (time).
         // Returns next available bind slot.
         internal static int BindGalleryCategoryWhere(VpbSqlite3.Statement stmt, GalleryCategoryWhereContext ctx, int bindStart)
         {
@@ -6150,6 +6159,9 @@ namespace VPB
                 for (int i = 0; i < ctx.CreatorBindValues.Count; i++) stmt.BindText(b++, ctx.CreatorBindValues[i] ?? "");
             if (ctx.NameBindValues != null)
                 for (int i = 0; i < ctx.NameBindValues.Count; i++) stmt.BindText(b++, ctx.NameBindValues[i] ?? "");
+            // SearchTimeAndFragment sits immediately after NameAndFragment in SQL.
+            if (ctx.SearchInt64BindValues != null)
+                for (int i = 0; i < ctx.SearchInt64BindValues.Count; i++) stmt.BindInt64(b++, ctx.SearchInt64BindValues[i]);
             if (ctx.ExclusionBindValues != null)
                 for (int i = 0; i < ctx.ExclusionBindValues.Count; i++) stmt.BindText(b++, ctx.ExclusionBindValues[i] ?? "");
             if (ctx.InclusionBindValues != null)
@@ -6184,6 +6196,32 @@ namespace VPB
             bool userTagsUntaggedOnly = false,
             bool userTagsRequireAll = false,
             HashSet<string> excludedUserTags = null)
+        {
+            return TryQueryGalleryCategoryRows(
+                categoryTitle, currentExtension, creatorFilter, outRows, out stats,
+                clothingSubfilterForSql, loadedState,
+                GallerySearchQuery.FromLegacyNameTerms(nameTerms),
+                pathExclusions, pathInclusions, activeTags, activeUserTags, sortState,
+                userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
+        }
+
+        internal static bool TryQueryGalleryCategoryRows(
+            string categoryTitle,
+            string currentExtension,
+            string creatorFilter,
+            List<Row> outRows,
+            out GalleryCategoryQueryStats stats,
+            GalleryPanel.ClothingSubfilter clothingSubfilterForSql,
+            int loadedState,
+            GallerySearchQuery searchQuery,
+            List<string> pathExclusions,
+            List<string> pathInclusions,
+            HashSet<string> activeTags,
+            HashSet<string> activeUserTags,
+            SortState sortState,
+            bool userTagsUntaggedOnly,
+            bool userTagsRequireAll,
+            HashSet<string> excludedUserTags)
         {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
@@ -6253,7 +6291,7 @@ namespace VPB
                 {
                     var ctx = BuildGalleryCategoryWhere(
                         conn, categoryTitle, creatorFilter, loadedState,
-                        nameTerms, pathExclusions, pathInclusions,
+                        searchQuery ?? GallerySearchQuery.Empty, pathExclusions, pathInclusions,
                         activeTags, activeUserTags, userTagsUntaggedOnly, userTagsRequireAll, excludedUserTags);
 
                     string clothSqlAnd = BuildClothingSubfilterSqlAnd(conn, categoryTitle, clothingSubfilterForSql);
@@ -6289,6 +6327,7 @@ namespace VPB
                     sbSql.Append(ctx.CreatorAndFragment);
                     sbSql.Append(clothSqlAnd);
                     sbSql.Append(ctx.LoadedAndFragment).Append(ctx.NameAndFragment)
+                         .Append(ctx.SearchTimeAndFragment)
                          .Append(ctx.ExclusionAndFragment).Append(ctx.InclusionAndFragment)
                          .Append(ctx.TagAndFragment).Append(ctx.UserTagAndFragment)
                          .Append(ctx.ExcludedUserTagAndFragment)
@@ -6406,6 +6445,16 @@ namespace VPB
             List<Row> outRows,
             out GalleryCategoryQueryStats stats)
         {
+            return TryQueryGalleryHistoryRows(mode, GallerySearchQuery.FromLegacyNameTerms(nameTerms), outRows, out stats);
+        }
+
+        /// <summary>History browse SQL (<c>item_usage</c>, <c>pkg</c>, <c>cat_mem</c>).</summary>
+        internal static bool TryQueryGalleryHistoryRows(
+            GalleryHistoryFilterMode mode,
+            GallerySearchQuery searchQuery,
+            List<Row> outRows,
+            out GalleryCategoryQueryStats stats)
+        {
             stats = new GalleryCategoryQueryStats();
             outRows.Clear();
             if (!VpbSqlite3.IsAvailable)
@@ -6432,6 +6481,8 @@ namespace VPB
                     string kindSql = BuildGalleryHistoryKindSqlAnd(mode);
                     string orderSql = BuildGalleryHistoryOrderSql(mode);
 
+                    var textBinds = new List<string>();
+                    var int64Binds = new List<long>();
                     var sb = new StringBuilder(768);
                     sb.Append(
                         "SELECT i.item_key, p.uid, " +
@@ -6444,16 +6495,7 @@ namespace VPB
                         ", i.use_count, i.last_used, ifnull(p.first_scanned, 0) ");
                     AppendGalleryHistoryJoinFromWhere(sb);
                     sb.Append(kindSql);
-
-                    if (nameTerms != null && nameTerms.Length > 0)
-                    {
-                        for (int t = 0; t < nameTerms.Length; t++)
-                        {
-                            if (string.IsNullOrEmpty(nameTerms[t])) continue;
-                            sb.Append(" AND (ifnull(COALESCE(mx.list_path, mr.list_path),'') LIKE ? ESCAPE '\\' OR ifnull(COALESCE(mx.internal_path, mr.internal_path),'') LIKE ? ESCAPE '\\' OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\')");
-                        }
-                    }
-
+                    AppendGalleryHistorySearchSql(sb, textBinds, int64Binds, searchQuery ?? GallerySearchQuery.Empty);
                     sb.Append(orderSql);
 
                     List<string> dbgSampleKeys = LogHistoryUsageDebug ? new List<string>(18) : null;
@@ -6461,17 +6503,10 @@ namespace VPB
                     using (var stmt = conn.Prepare(sb.ToString()))
                     {
                         int bind = 1;
-                        if (nameTerms != null && nameTerms.Length > 0)
-                        {
-                            for (int t = 0; t < nameTerms.Length; t++)
-                            {
-                                if (string.IsNullOrEmpty(nameTerms[t])) continue;
-                                string esc = "%" + EscapeLike(nameTerms[t]) + "%";
-                                stmt.BindText(bind++, esc);
-                                stmt.BindText(bind++, esc);
-                                stmt.BindText(bind++, esc);
-                            }
-                        }
+                        for (int t = 0; t < textBinds.Count; t++)
+                            stmt.BindText(bind++, textBinds[t] ?? "");
+                        for (int t = 0; t < int64Binds.Count; t++)
+                            stmt.BindInt64(bind++, int64Binds[t]);
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -6499,7 +6534,7 @@ namespace VPB
 
                     // Local (non-package) history items, e.g. loose Saves/scene scenes, have no pkg
                     // row so the INNER JOIN above skips them. Append them from item_usage directly.
-                    AppendLocalHistoryRows(conn, mode, nameTerms, outRows);
+                    AppendLocalHistoryRows(conn, mode, searchQuery ?? GallerySearchQuery.Empty, outRows);
                     SortHistoryRows(outRows, mode);
 
                     if (LogHistoryUsageDebug)
@@ -6563,7 +6598,7 @@ namespace VPB
         /// The row carries an empty <see cref="Row.PackageUid"/>; the list builder turns it into a
         /// loose <c>SystemFileEntry</c> from <see cref="Row.ItemUsageKey"/>.
         /// </summary>
-        private static void AppendLocalHistoryRows(VpbSqlite3.Connection conn, GalleryHistoryFilterMode mode, string[] nameTerms, List<Row> outRows)
+        private static void AppendLocalHistoryRows(VpbSqlite3.Connection conn, GalleryHistoryFilterMode mode, GallerySearchQuery searchQuery, List<Row> outRows)
         {
             if (conn == null || outRows == null) return;
             try
@@ -6575,26 +6610,48 @@ namespace VPB
                 sb.Append(GalleryHistoryUsagePkgKeySql);
                 sb.Append(")");
                 sb.Append(kindSql);
-                if (nameTerms != null && nameTerms.Length > 0)
+
+                var textBinds = new List<string>();
+                // Loose rows: path/key text only (no pkg join for creator/tags).
+                if (searchQuery != null && !searchQuery.IsEmpty && searchQuery.Branches != null)
                 {
-                    for (int t = 0; t < nameTerms.Length; t++)
+                    bool anyBranch = false;
+                    var branchSql = new StringBuilder();
+                    for (int bi = 0; bi < searchQuery.Branches.Count; bi++)
                     {
-                        if (string.IsNullOrEmpty(nameTerms[t])) continue;
-                        sb.Append(" AND i.item_key LIKE ? ESCAPE '\\'");
+                        GallerySearchBranch br = searchQuery.Branches[bi];
+                        if (br == null || br.IsEmpty) continue;
+                        // Tag/creator structured parts cannot match loose rows.
+                        if ((br.TagInclude != null && br.TagInclude.Count > 0)
+                            || (br.TagExclude != null && br.TagExclude.Count > 0)
+                            || (br.CreatorTerms != null && br.CreatorTerms.Count > 0))
+                            continue;
+                        if (anyBranch) branchSql.Append(" OR ");
+                        anyBranch = true;
+                        branchSql.Append("(1=1");
+                        if (br.BroadTerms != null)
+                        {
+                            for (int t = 0; t < br.BroadTerms.Count; t++)
+                            {
+                                string term = br.BroadTerms[t];
+                                if (string.IsNullOrEmpty(term)) continue;
+                                branchSql.Append(" AND i.item_key LIKE ? ESCAPE '\\'");
+                                textBinds.Add("%" + EscapeLike(term) + "%");
+                            }
+                        }
+                        branchSql.Append(')');
                     }
+                    if (!anyBranch)
+                        sb.Append(" AND 0");
+                    else
+                        sb.Append(" AND (").Append(branchSql).Append(')');
                 }
 
                 using (var stmt = conn.Prepare(sb.ToString()))
                 {
                     int bind = 1;
-                    if (nameTerms != null && nameTerms.Length > 0)
-                    {
-                        for (int t = 0; t < nameTerms.Length; t++)
-                        {
-                            if (string.IsNullOrEmpty(nameTerms[t])) continue;
-                            stmt.BindText(bind++, "%" + EscapeLike(nameTerms[t]) + "%");
-                        }
-                    }
+                    for (int t = 0; t < textBinds.Count; t++)
+                        stmt.BindText(bind++, textBinds[t] ?? "");
 
                     while (stmt.Step() == VpbSqlite3.SqliteRow)
                     {

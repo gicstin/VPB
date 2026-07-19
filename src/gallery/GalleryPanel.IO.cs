@@ -535,7 +535,7 @@ namespace VPB
         private void PushFilterFrame()
         {
             bool fromTopSearch = false;
-            try { fromTopSearch = nameFilterTerms != null && nameFilterTerms.Length > 0; } catch { }
+            try { fromTopSearch = HasActiveNameFilter(); } catch { }
 
             _filterStack.Push(new FilterFrame
             {
@@ -582,10 +582,8 @@ namespace VPB
                 // Clear the top search box so it's ready for in-filter searching
                 try
                 {
-                    nameFilter = "";
-                    nameFilterLower = "";
-                    nameFilterTerms = new string[0];
-                    if (titleSearchInput != null) titleSearchInput.text = "";
+                    ClearNameFilterState();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged);
                 }
                 catch { }
             }
@@ -638,8 +636,9 @@ namespace VPB
         private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchQuery)
         {
             var source = baseList ?? new List<FileEntry>();
-            string[] terms = SplitSearchTerms(searchQuery);
-            bool needSearch = terms != null && terms.Length > 0;
+            var query = GallerySearchQuery.Parse(searchQuery);
+            bool needSearch = query != null && !query.IsEmpty;
+            var tagKeys = needSearch ? BuildTagKeyLookupForSearch(query) : null;
             var result = new List<FileEntry>();
 
             for (int i = 0; i < source.Count; i++)
@@ -658,7 +657,7 @@ namespace VPB
                     continue;
                 }
 
-                if (MatchesFileEntryByScope(e, terms))
+                if (MatchesFileEntryBySearchQuery(e, query, tagKeys))
                     result.Add(e);
             }
             return result;
@@ -744,8 +743,8 @@ namespace VPB
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
                 && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-            string[] nameTerms = nameFilterTerms;
-            bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
+            GallerySearchQuery searchQ = nameFilterQuery ?? GallerySearchQuery.Empty;
+            bool hasNameFilt = searchQ != null && !searchQ.IsEmpty;
 
             foreach (var uid in uids)
             {
@@ -833,7 +832,7 @@ namespace VPB
                     if (!pathOk) continue;
 
                     // Name filter
-                    if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                    if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
                     var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -1457,9 +1456,13 @@ namespace VPB
                     if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
                         return false;
                 }
-                if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                    if (!MatchesFileEntryByScope(entry, nameFilterTerms))
+                if (HasActiveNameFilter())
+                {
+                    bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
+                    if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
+                            skipSqlOwnedPredicates: skipSqlOwned))
                         return false;
+                }
                 if (activeTags != null && activeTags.Count > 0)
                 {
                     bool tagMatch = false;
@@ -1664,10 +1667,15 @@ namespace VPB
                 if (IsVarBacked(entry)) return false;
             }
 
-            // Name Filter
-            if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                if (!MatchesFileEntryByScope(entry, nameFilterTerms))
+            // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
+            // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
+            if (HasActiveNameFilter())
+            {
+                bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
+                if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
+                        skipSqlOwnedPredicates: skipSqlOwned))
                     return false;
+            }
 
             // Tag Filter
             if (activeTags != null && activeTags.Count > 0)
@@ -1788,11 +1796,24 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false, string refreshDebugSource = null)
         {
+            // Category switch / full reload owns this refresh — kill keystroke debounce so it cannot
+            // start a second RefreshFiles after we begin loading.
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+
             // Clear any active dependency filter when refreshing
             ClearPackageFilter();
             // Reset in-memory top search base; RefreshFiles rebuilds the list.
-            topSearchBaseFiles = null;
-            _topSearchBaseIsClean = false;
+            // Title-bar SQL search may keep the snapshot so clear-search stays instant.
+            if (_keepTopSearchBaseAcrossRefresh)
+            {
+                _keepTopSearchBaseAcrossRefresh = false;
+            }
+            else
+            {
+                topSearchBaseFiles = null;
+                _topSearchBaseIsClean = false;
+            }
 
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
@@ -1956,8 +1977,8 @@ namespace VPB
                     : currentExtension.Split('|');
                 bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
                     && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-                string[] nameTerms = nameFilterTerms;
-                bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
+                GallerySearchQuery searchQ = nameFilterQuery ?? GallerySearchQuery.Empty;
+                bool hasNameFilt = searchQ != null && !searchQ.IsEmpty;
 
                 var newEntries = new List<FileEntry>();
                 var existingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2045,7 +2066,7 @@ namespace VPB
                         if (!pathOk) continue;
 
                         // Name filter
-                        if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                        if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
                         DateTime entryTime = pkg.LastWriteTime;
                         if (ticks != null && i < ticks.Count && ticks[i] != 0L)
@@ -2564,6 +2585,14 @@ namespace VPB
             lastHistoryQueryHadNameFilter = nameTermsSnapshot != null && nameTermsSnapshot.Length > 0;
         }
 
+        private void SyncHistoryBrowseFailureFlagsFromStats(ContentType contentSnap, VpbLocalDatabase.GalleryCategoryQueryStats stats, GallerySearchQuery searchSnapshot)
+        {
+            string[] legacy = searchSnapshot != null && !searchSnapshot.IsEmpty
+                ? new string[] { "1" }
+                : new string[0];
+            SyncHistoryBrowseFailureFlagsFromStats(contentSnap, stats, legacy);
+        }
+
         private IEnumerator RefreshHistoryListInPlaceRoutine(bool keepScroll)
         {
             yield return null;
@@ -2578,7 +2607,8 @@ namespace VPB
 
             string localId = currentLoadingGroupId;
             var histMode = galleryHistoryFilterMode;
-            string[] nameTerms = nameFilterTerms;
+            GallerySearchQuery searchSnap = nameFilterQuery ?? GallerySearchQuery.Empty;
+            string[] nameTerms = searchSnap.BroadTermsArray();
 
             int wantsLoadedStateForIndexMain = -1;
             try
@@ -2593,7 +2623,7 @@ namespace VPB
             var workerDone = new int[1];
             bool historyQuerySucceeded = false;
             string historyRejectReason = null;
-            bool hadNameFilter = nameTerms != null && nameTerms.Length > 0;
+            bool hadNameFilter = searchSnap != null && !searchSnap.IsEmpty;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -2606,7 +2636,7 @@ namespace VPB
                     }
                     var idxRows = new List<VpbLocalDatabase.Row>();
                     VpbLocalDatabase.GalleryCategoryQueryStats histStats;
-                    if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, nameTerms, idxRows, out histStats))
+                    if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, searchSnap, idxRows, out histStats))
                     {
                         historyRejectReason = histStats.RejectReason ?? "history_query_failed";
                         idxRows.Clear();
@@ -2881,8 +2911,9 @@ namespace VPB
             }
             
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            string[] nameTerms = nameFilterTerms;
-            bool hasNameFilter = nameTerms != null && nameTerms.Length > 0;
+            GallerySearchQuery searchQuerySnap = nameFilterQuery ?? GallerySearchQuery.Empty;
+            string[] nameTerms = searchQuerySnap.BroadTermsArray();
+            bool hasNameFilter = searchQuerySnap != null && !searchQuerySnap.IsEmpty;
 
             int tagScanRefreshSeq = GalleryFileRefreshSequence;
             TagParallelWaiter tagParallelWaiterForThisRun = null;
@@ -3255,7 +3286,7 @@ namespace VPB
                         {
                             bool hr = VpbLocalDatabase.TryQueryGalleryHistoryRows(
                                 histFilterSnap,
-                                nameTerms,
+                                searchQuerySnap,
                                 idxRows,
                                 out catQueryStats);
                             if (!hr)
@@ -3298,16 +3329,16 @@ namespace VPB
                                 idxRows,
                                 out catQueryStats,
                                 sqliteWorkerClothingSub,
-                                loadedState: wantsLoadedStateForIndexMain,
-                                nameTerms: nameTerms,
-                                pathExclusions: pathExclusions,
-                                pathInclusions: pathInclusionsForSql,
-                                activeTags: activeTags,
-                                activeUserTags: userTagNamesForGridSqlSnap,
-                                sortState: fileListSortSnapForWorker,
-                                userTagsUntaggedOnly: userTagGridFilterUntaggedSnap,
-                                userTagsRequireAll: userTagFilterIsolateSnap,
-                                excludedUserTags: excludedUserTagNamesForGridSqlSnap);
+                                wantsLoadedStateForIndexMain,
+                                searchQuerySnap,
+                                pathExclusions,
+                                pathInclusionsForSql,
+                                activeTags,
+                                userTagNamesForGridSqlSnap,
+                                fileListSortSnapForWorker,
+                                userTagGridFilterUntaggedSnap,
+                                userTagFilterIsolateSnap,
+                                excludedUserTagNamesForGridSqlSnap);
                             }
                         }
                         else
@@ -3551,10 +3582,9 @@ namespace VPB
                                             if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                                 !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
                                                 continue;
-                                            if (hasNameFilter)
-                                            {
-                                                if (!MatchesPackageByScope(pkg.Uid ?? "", pkg.Path ?? "", null, nameTerms)) continue;
-                                            }
+                                            if (hasNameFilter
+                                                && !MatchesPackageFallbackSearch(searchQuerySnap, pkg.Uid ?? "", pkg.Path ?? "", null))
+                                                continue;
                                             if (utCatMemKeyHits != null)
                                             {
                                                 string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg.Uid, "meta.json");
@@ -3638,10 +3668,9 @@ namespace VPB
                                         && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
                                         continue;
 
-                                    if (hasNameFilter)
-                                    {
-                                        if (!MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
-                                    }
+                                    if (hasNameFilter
+                                        && !MatchesPackageFallbackSearch(searchQuerySnap, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath))
+                                        continue;
 
                                     if (utCatMemKeyHits != null)
                                     {
@@ -3743,7 +3772,7 @@ namespace VPB
                         sqliteBulkConsumed = true;
                         _refreshSqliteBulkIncludedUserTagGridFilter = refreshDrainUtSqlFilterApplied[0] != 0;
                         if (activeContentSnap == ContentType.History)
-                            SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, nameTerms);
+                            SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, searchQuerySnap);
                         long bulkBudgetMs = maxMsPerFrame;
                         int bc = bulk.Count;
                         if (bc >= 16000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 160L);
@@ -4158,7 +4187,7 @@ namespace VPB
             currentFilteredFiles.AddRange(lastFilteredFiles);
             // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
             // as a trustworthy unfiltered base for in-memory search.
-            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+            if (!HasActiveNameFilter())
                 _topSearchBaseIsClean = true;
 
             if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds;
@@ -4725,7 +4754,7 @@ namespace VPB
             try { if (_userTagAvailMode != UserTagAvailMode.Tag) return false; } catch { }
             try
             {
-                if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
+                if (HasActiveNameFilter()) return false;
             }
             catch { return false; }
             if (activeContentType == ContentType.History) return false;
@@ -5146,10 +5175,8 @@ namespace VPB
 
             try
             {
-                nameFilter = frame.savedNameFilter;
-                nameFilterLower = string.IsNullOrEmpty(frame.savedNameFilter) ? "" : frame.savedNameFilter.ToLowerInvariant();
-                nameFilterTerms = SplitSearchTerms(frame.savedNameFilter);
-                if (titleSearchInput != null) titleSearchInput.text = frame.savedNameFilter;
+                AssignNameFilterState(frame.savedNameFilter);
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, frame.savedNameFilter ?? "", _titleBarSearchOnValueChanged);
             }
             catch { }
 
@@ -5196,10 +5223,8 @@ namespace VPB
             {
                 try
                 {
-                    nameFilter = "";
-                    nameFilterLower = "";
-                    nameFilterTerms = new string[0];
-                    if (titleSearchInput != null) titleSearchInput.text = "";
+                    ClearNameFilterState();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged);
                 }
                 catch { }
                 try
@@ -5220,10 +5245,8 @@ namespace VPB
             {
                 try
                 {
-                    nameFilter = bottom.savedNameFilter;
-                    nameFilterLower = string.IsNullOrEmpty(bottom.savedNameFilter) ? "" : bottom.savedNameFilter.ToLowerInvariant();
-                    nameFilterTerms = SplitSearchTerms(bottom.savedNameFilter);
-                    if (titleSearchInput != null) titleSearchInput.text = bottom.savedNameFilter;
+                    AssignNameFilterState(bottom.savedNameFilter);
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, bottom.savedNameFilter ?? "", _titleBarSearchOnValueChanged);
                 }
                 catch { }
             }

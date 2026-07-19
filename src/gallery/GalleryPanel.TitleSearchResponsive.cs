@@ -439,7 +439,7 @@ namespace VPB
             var compactIconImg = _titleSearchCompactGO.transform.Find("Icon")?.GetComponent<Image>();
             if (compactIconImg != null) compactIconImg.color = Color.white;
             _titleSearchCompactRT = crt;
-            try { AddTooltip(_titleSearchCompactGO, "gallery.search.main", "Search grid (name/path)."); } catch { }
+            try { AddTooltip(_titleSearchCompactGO, "gallery.search.main", "Search name, #tag, OR, badge…"); } catch { }
             AddRightClickDelegate(_titleSearchCompactGO, ClearTitleBarSearch);
         }
 

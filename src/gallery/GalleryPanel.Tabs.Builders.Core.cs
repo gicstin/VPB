@@ -185,7 +185,7 @@ namespace VPB
 
                 // Build set of creators present in current filtered file list when name search active.
                 HashSet<string> creatorsInResults = null;
-                bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
+                bool hasNameFilter = HasActiveNameFilter();
                 if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                 {
                     creatorsInResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
