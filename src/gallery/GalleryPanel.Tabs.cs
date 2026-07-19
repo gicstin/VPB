@@ -2391,7 +2391,146 @@ namespace VPB
             try { hb.ApplyBorderSettings(); } catch { }
         }
 
-        /// <summary>Grid recycle / safety: deactivate badge GOs on this cell. No-op outside grid.</summary>
+        private static void ApplyGalleryBadgeLabelBarBackdrop(GameObject go)
+        {
+            if (go == null) return;
+            Image img = go.GetComponent<Image>();
+            if (img != null)
+            {
+                img.color = GalleryItemLabelBarBackdrop;
+                img.raycastTarget = true;
+            }
+            EnsureGalleryBadgeHoverBorder(go, img);
+        }
+
+        private void GetGridHoverRatingMetrics(out float ratingBadge, out int digitFont, out float edge)
+        {
+            int badgeFont = UiMetrics.FontBody();
+            digitFont = Mathf.Max(badgeFont + 2, Mathf.RoundToInt(badgeFont * 1.15f));
+            // Square chrome hugs digit/★ — old letterBadge*1.3 left empty band above/below glyph.
+            ratingBadge = Mathf.Max(24f, digitFont + 6f);
+            edge = Mathf.Max(4f, Mathf.Round(ratingBadge * 0.15f));
+        }
+
+        private void SetGridHoverBadgeTooltip(GameObject badgeGO, string tip)
+        {
+            if (badgeGO == null || string.IsNullOrEmpty(tip)) return;
+            Image img = badgeGO.GetComponent<Image>();
+            if (img != null) img.raycastTarget = true;
+            AddTooltipPlain(badgeGO, tip);
+        }
+
+        /// <summary>Grid hover: show top-right rating star for quick rate. Other badges stay on detail strip.</summary>
+        internal void ShowGridHoverBadges(GameObject btnGO, FileEntry file)
+        {
+            if (btnGO == null || file == null) return;
+            if (layoutMode != GalleryLayoutMode.Grid) return;
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryGridHoverBadgesEnabled)
+            {
+                HideGridHoverBadges(btnGO);
+                return;
+            }
+
+            GetGridHoverRatingMetrics(out float ratingBadge, out int digitFont, out float edge);
+
+            Transform ratingTr = btnGO.transform.Find("Rating");
+            Transform selectorTr = btnGO.transform.Find("RatingSelector");
+            // Grid bind keeps RatingSelector inactive — must enable or star click does nothing.
+            if (selectorTr != null)
+            {
+                selectorTr.gameObject.SetActive(true);
+                selectorTr.SetAsLastSibling();
+            }
+            if (ratingTr != null)
+            {
+                ratingTr.gameObject.SetActive(true);
+                ratingTr.SetAsLastSibling();
+                RectTransform ratingRT = ratingTr as RectTransform;
+                if (ratingRT != null)
+                {
+                    ratingRT.sizeDelta = new Vector2(ratingBadge, ratingBadge);
+                    ratingRT.anchoredPosition = new Vector2(-edge, -edge);
+                }
+                Transform starTr = ratingTr.Find("Star");
+                if (starTr != null)
+                {
+                    ApplyGalleryBadgeLabelBarBackdrop(starTr.gameObject);
+                    RectTransform starRT = starTr as RectTransform;
+                    if (starRT != null)
+                    {
+                        starRT.anchorMin = new Vector2(0.5f, 0.5f);
+                        starRT.anchorMax = new Vector2(0.5f, 0.5f);
+                        starRT.pivot = new Vector2(0.5f, 0.5f);
+                        starRT.anchoredPosition = Vector2.zero;
+                        starRT.sizeDelta = new Vector2(ratingBadge, ratingBadge);
+                    }
+                    Text starLabel = starTr.GetComponentInChildren<Text>(true);
+                    if (starLabel != null)
+                    {
+                        starLabel.fontSize = digitFont;
+                        starLabel.transform.localScale = Vector3.one;
+                    }
+                }
+                if (selectorTr != null)
+                {
+                    selectorTr.SetAsLastSibling();
+                    // 2×3 grid: panel size from cell size so option backdrops hug the digits.
+                    float cellW = Mathf.Max(28f, ratingBadge * 0.95f);
+                    float cellH = Mathf.Max(26f, digitFont + 8f);
+                    float gap = 2f;
+                    float pad = 1f;
+                    RectTransform selRT = selectorTr as RectTransform;
+                    if (selRT != null)
+                    {
+                        float selW = pad + cellW + gap + cellW + pad;
+                        float selH = pad + cellH + gap + cellH + gap + cellH + pad;
+                        selRT.sizeDelta = new Vector2(selW, selH);
+                        selRT.anchoredPosition = new Vector2(-edge, -(ratingBadge + edge));
+                    }
+                    GridLayoutGroup glg = selectorTr.GetComponent<GridLayoutGroup>();
+                    if (glg != null)
+                    {
+                        glg.cellSize = new Vector2(cellW, cellH);
+                        glg.spacing = new Vector2(gap, gap);
+                        glg.padding = new RectOffset(
+                            Mathf.RoundToInt(pad), Mathf.RoundToInt(pad),
+                            Mathf.RoundToInt(pad), Mathf.RoundToInt(pad));
+                    }
+                    int optFont = Mathf.Max(14, digitFont);
+                    for (int i = 0; i < selectorTr.childCount; i++)
+                    {
+                        Transform opt = selectorTr.GetChild(i);
+                        if (opt == null) continue;
+                        RectTransform optRT = opt as RectTransform;
+                        if (optRT != null) optRT.sizeDelta = new Vector2(cellW, cellH);
+                        Text optLabel = opt.GetComponentInChildren<Text>(true);
+                        if (optLabel != null) optLabel.fontSize = optFont;
+                    }
+                }
+
+                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                if (rh != null)
+                {
+                    rh.panel = this;
+                    rh.SetShowDigitMode(true);
+                    // Don't close if picker already open (re-enter / tooltip child hops).
+                    if (!rh.IsSelectorOpen)
+                        rh.CloseSelector();
+                    int r = rh.CurrentRating;
+                    string rateTip = r <= 0
+                        ? VPBTranslation.T("gallery.badge.tip.rating_none", "Rating: unrated. Click to set 0–5.")
+                        : string.Format(
+                            VPBTranslation.T("gallery.badge.tip.rating", "Rating: {0} of 5. Click to change."),
+                            r);
+                    SetGridHoverBadgeTooltip(ratingTr.gameObject, rateTip);
+                    if (starTr != null) SetGridHoverBadgeTooltip(starTr.gameObject, rateTip);
+                }
+            }
+
+            _gridHoverBadgeBtnGO = btnGO;
+        }
+
+        /// <summary>Grid hover exit / recycle: deactivate rating star on this cell. No-op outside grid.</summary>
         /// <param name="force">Recycle/disable must force-close even if rating picker is open.</param>
         internal void HideGridHoverBadges(GameObject btnGO, bool force = false)
         {
@@ -2995,7 +3134,7 @@ namespace VPB
             }
             else
             {
-                // Grid: badges stay off (detail strip owns them; hover shows name Card only).
+                // Grid: badges stay off at bind (scroll perf). Hover may revive rating via ShowGridHoverBadges.
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 

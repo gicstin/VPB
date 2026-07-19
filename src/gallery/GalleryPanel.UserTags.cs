@@ -2061,6 +2061,7 @@ namespace VPB
             CacheAppliedUserTagsForSelection();
             try { SyncUntaggedTaggedPinKeysAfterMutate(remove, updatedRows); } catch { }
             try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
 
             bool filterModeRemove = remove && _userTagAvailMode == UserTagAvailMode.FilterByTags;
 

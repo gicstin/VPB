@@ -570,7 +570,7 @@ namespace VPB
         private readonly Dictionary<string, string> _hubThumbnailUrlCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool _cacheRetryPending = false;
 
-        // Grid hover cell currently showing deps / Hub download badge (for progress refresh).
+        // Grid hover cell currently showing rating star.
         private GameObject _gridHoverBadgeBtnGO;
         /// <summary>When set, logs elapsed time when the first file-list load finishes after create/clone pane.</summary>
         private System.Diagnostics.Stopwatch _paneLoadTimingStopwatch;

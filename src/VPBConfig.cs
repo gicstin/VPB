@@ -365,8 +365,8 @@ namespace VPB
         public float GalleryGridLabelFontSize = 18f;
         /// <summary>When true with always-on labels, hide label strip at 11–12 columns (highest grid density).</summary>
         public bool GalleryGridLabelsAutoHideAtHighDensity = false;
-        /// <summary>Legacy. Detail strip owns badges/rating/deps; grid hover shows name label only.</summary>
-        public bool GalleryGridHoverBadgesEnabled = false;
+        /// <summary>Grid hover: show top-right rating star for quick rate. Other status badges stay on detail strip.</summary>
+        public bool GalleryGridHoverBadgesEnabled = true;
         /// <summary>Grid: horizontal spacing between thumbnail cells (pixels).</summary>
         public float GalleryGridSpacingX = 0f;
         /// <summary>Grid: vertical spacing between thumbnail cells (pixels).</summary>
@@ -1010,7 +1010,7 @@ namespace VPB
             GalleryGridLabelsEnabled = true;
             GalleryGridLabelFontSize = 18f;
             GalleryGridLabelsAutoHideAtHighDensity = false;
-            GalleryGridHoverBadgesEnabled = false;
+            GalleryGridHoverBadgesEnabled = true;
             GalleryThumbPlaceholderLabelsEnabled = true;
             GalleryThumbPlaceholderSizeScale = 0.7f;
             PluginGalleryCategoryLabelsOnly = false;
