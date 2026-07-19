@@ -966,11 +966,20 @@ namespace VPB
 			protected set;
 		}
 
+		/// <summary>Top-level meta.json <c>licenseType</c> when present (CC BY, etc.).</summary>
+		public string LicenseType
+		{
+			get;
+			protected set;
+		}
+
 		/// <summary>Top-level meta.json <c>tags</c> (comma-separated), when present. Distinct from clothing/hair item tags.</summary>
 		public List<string> PackageMetaTags;
 
 		/// <summary>True after <see cref="TryEnsureMetaJsonLiteFields"/> ran (success or miss).</summary>
 		private bool _metaJsonLiteLoaded;
+		/// <summary>True after lite parse included <see cref="LicenseType"/> (migration for in-memory packages).</summary>
+		private bool _metaJsonLiteLicensePass;
 		public List<string> PackageDependencies
 		{
 			get;
@@ -1197,23 +1206,28 @@ namespace VPB
 			PackageMetaTags = null;
 			Description = null;
 			PromotionalLink = null;
+			LicenseType = null;
 			_metaJsonLiteLoaded = false;
+			_metaJsonLiteLicensePass = false;
 			RecursivePackageDependencies = null;
 			PackageDependencies = null;
 		}
 
 		/// <summary>
 		/// Cache-hit scan restores clothing/hair tags but skips meta.json prose.
-		/// Call before UI reads <see cref="Description"/> / <see cref="PromotionalLink"/> / <see cref="PackageMetaTags"/>.
+		/// Call before UI reads <see cref="Description"/> / <see cref="PromotionalLink"/> /
+		/// <see cref="LicenseType"/> / <see cref="PackageMetaTags"/>.
 		/// </summary>
 		public bool TryEnsureMetaJsonLiteFields()
 		{
-			if (_metaJsonLiteLoaded)
+			if (_metaJsonLiteLoaded && _metaJsonLiteLicensePass)
 				return !string.IsNullOrEmpty(Description)
 					|| !string.IsNullOrEmpty(PromotionalLink)
+					|| !string.IsNullOrEmpty(LicenseType)
 					|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
 
 			_metaJsonLiteLoaded = true;
+			_metaJsonLiteLicensePass = true;
 			try
 			{
 				if (string.IsNullOrEmpty(Path) || !File.Exists(Path))
@@ -1258,6 +1272,19 @@ namespace VPB
 
 						try
 						{
+							JSONNode licenseNode = asObject["licenseType"];
+							if (licenseNode != null)
+							{
+								string lic = licenseNode.Value;
+								if (!string.IsNullOrEmpty(lic)
+									&& !string.Equals(lic, "null", StringComparison.OrdinalIgnoreCase))
+									LicenseType = lic.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
 							JSONNode tagsNode = asObject["tags"];
 							if (tagsNode != null)
 							{
@@ -1287,6 +1314,7 @@ namespace VPB
 
 			return !string.IsNullOrEmpty(Description)
 				|| !string.IsNullOrEmpty(PromotionalLink)
+				|| !string.IsNullOrEmpty(LicenseType)
 				|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
 		}
 		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with

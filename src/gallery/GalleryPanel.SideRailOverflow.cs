@@ -80,15 +80,14 @@ namespace VPB
             if (bg == null) return 400f;
             float h = bg.rect.height;
             if (h < 8f) return 400f;
-            // Live InfoBar/detail-strip inset — fixed FooterInfoRowHeight under-counts tall strips.
+            if (scale <= 0f) scale = 1f;
+            // Stable pane chrome only — NOT live InfoBar/detail-strip height.
+            // Detail-strip resize grows the toolbox into the grid; window height is unchanged.
+            // Using GalleryMainAreaBottomInset() here squeezed rail gaps / overflow as the strip grew.
             float topChrome = (GalleryUiDesignTokens.TitleBarHeightRef + 20f) * scale;
-            float bottomChrome = GalleryMainAreaBottomInset();
-            if (bottomChrome < 8f)
-            {
-                bottomChrome = (GalleryUiDesignTokens.FooterBarHeightRef
-                    + GalleryUiDesignTokens.FooterInfoRowHeightRef
-                    + 20f) * scale;
-            }
+            float bottomChrome = (GalleryUiDesignTokens.FooterBarHeightRef
+                + GalleryUiDesignTokens.FooterToolboxTopRef
+                + 20f) * scale;
             float btnH = GalleryUiDesignTokens.SideButtonSquareRef * scale;
             // Room for first↔last center span (total stack extent is span + btnH).
             return Mathf.Max(btnH, h - topChrome - bottomChrome - btnH);

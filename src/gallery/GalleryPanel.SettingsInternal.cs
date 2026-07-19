@@ -323,6 +323,8 @@ namespace VPB
             public bool EnableGalleryTranslucency;
             public bool GalleryManualRefreshOnly;
             public bool GalleryDetailStripSideInfoEnabled;
+            public bool GalleryDetailStripThumbOnRight;
+            public float GalleryDetailStripHeightRef;
             public float GalleryOpacity;
             public float SideButtonScaleVR;
             public float SideButtonScaleDesktop;
@@ -617,6 +619,23 @@ namespace VPB
                 {
                     VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = v;
                     try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.detailStripThumbSide", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.detail_strip_thumb_side", "Detail preview side"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.detail_strip_thumb_side",
+                    "Place the selection detail-strip image preview on the left or right. Drag the thin bar at the top of the strip to resize height; the preview stays square."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Left", "Right" },
+                GetString = () => VPBConfig.Instance.GalleryDetailStripThumbOnRight ? "Right" : "Left",
+                SetString = v =>
+                {
+                    bool right = string.Equals(v, "Right", StringComparison.OrdinalIgnoreCase);
+                    VPBConfig.Instance.GalleryDetailStripThumbOnRight = right;
+                    try { DetailStripApplyLayoutPrefs(); } catch { }
                     VPBConfig.Instance.TriggerChange();
                 }
             });
@@ -1672,6 +1691,8 @@ namespace VPB
                 EnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency,
                 GalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly,
                 GalleryDetailStripSideInfoEnabled = VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
+                GalleryDetailStripThumbOnRight = VPBConfig.Instance.GalleryDetailStripThumbOnRight,
+                GalleryDetailStripHeightRef = VPBConfig.Instance.GalleryDetailStripHeightRef,
                 GalleryOpacity = VPBConfig.Instance.GalleryOpacity,
                 SideButtonScaleVR = VPBConfig.Instance.SideButtonScaleVR,
                 SideButtonScaleDesktop = VPBConfig.Instance.SideButtonScaleDesktop,
@@ -2482,6 +2503,8 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = b.GalleryManualRefreshOnly;
             VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = b.GalleryDetailStripSideInfoEnabled;
+            VPBConfig.Instance.GalleryDetailStripThumbOnRight = b.GalleryDetailStripThumbOnRight;
+            VPBConfig.Instance.GalleryDetailStripHeightRef = b.GalleryDetailStripHeightRef;
             VPBConfig.Instance.GalleryOpacity = b.GalleryOpacity;
             VPBConfig.Instance.SideButtonScaleVR = b.SideButtonScaleVR;
             VPBConfig.Instance.SideButtonScaleDesktop = b.SideButtonScaleDesktop;

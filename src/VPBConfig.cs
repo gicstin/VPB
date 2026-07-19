@@ -480,6 +480,13 @@ namespace VPB
         /// When false, that column stays hidden; short description stays in the left stack when present.
         /// </summary>
         public bool GalleryDetailStripSideInfoEnabled = true;
+        /// <summary>When true, selection detail-strip preview sits on the right; when false (default), left.</summary>
+        public bool GalleryDetailStripThumbOnRight = false;
+        /// <summary>
+        /// User detail-strip height in design px at scale 1. 0 = auto (content-fit).
+        /// Clamped between FooterDetailStripMinHeightRef and FooterDetailStripHeightRef when applied.
+        /// </summary>
+        public float GalleryDetailStripHeightRef = 0f;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1042,6 +1049,8 @@ namespace VPB
             GalleryTboxToolbarPinned = false;
             GalleryDetailStripExpanded = true;
             GalleryDetailStripSideInfoEnabled = true;
+            GalleryDetailStripThumbOnRight = false;
+            GalleryDetailStripHeightRef = 0f;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1295,6 +1304,9 @@ namespace VPB
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryDetailStripExpanded"] != null) GalleryDetailStripExpanded = node["GalleryDetailStripExpanded"].AsBool;
                         if (node["GalleryDetailStripSideInfoEnabled"] != null) GalleryDetailStripSideInfoEnabled = node["GalleryDetailStripSideInfoEnabled"].AsBool;
+                        if (node["GalleryDetailStripThumbOnRight"] != null) GalleryDetailStripThumbOnRight = node["GalleryDetailStripThumbOnRight"].AsBool;
+                        if (node["GalleryDetailStripHeightRef"] != null)
+                            GalleryDetailStripHeightRef = Mathf.Max(0f, node["GalleryDetailStripHeightRef"].AsFloat);
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1657,6 +1669,8 @@ namespace VPB
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryDetailStripExpanded"].AsBool = GalleryDetailStripExpanded;
                 node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;
+                node["GalleryDetailStripThumbOnRight"].AsBool = GalleryDetailStripThumbOnRight;
+                node["GalleryDetailStripHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripHeightRef);
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

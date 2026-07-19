@@ -608,6 +608,35 @@ namespace VPB
     }
 
     /// <summary>
+    /// Top-edge drag on the selection detail strip to change height.
+    /// Forwards pointer events; panel converts screen → local and clamps min/max.
+    /// </summary>
+    public sealed class DetailStripHeightDragRelay : MonoBehaviour,
+        IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public Action<PointerEventData> OnBegin;
+        public Action<PointerEventData> OnMove;
+        public Action OnEnd;
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            try { OnBegin?.Invoke(eventData); } catch { }
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            try { OnMove?.Invoke(eventData); } catch { }
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            try { OnEnd?.Invoke(); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Thumb preview input: left double-click + right-hold tracking for wheel rating.
     /// Does not implement <see cref="IScrollHandler"/> (unlike EventTrigger), so wheel reaches
     /// <see cref="UIScrollWheelHandler"/> on the same hierarchy.

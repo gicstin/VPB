@@ -103,14 +103,36 @@ namespace VPB
         public const float FooterBarHeightRef = 44f;
         public const float FooterInfoRowHeightRef = 36f;
         public const float FooterToolboxTopRef = 80f;
-        /// <summary>Selection detail strip min/max height (content-driven between these).</summary>
-        public const float FooterDetailStripMinHeightRef = 96f;
-        /// <summary>Design max height at scale 1 — room for meta wrap + path/desc/tags/actions.</summary>
-        public const float FooterDetailStripHeightRef = 520f;
+        /// <summary>
+        /// Drag floor ≈ title + actions + tags + path (no meta). Smaller than old 96 comfort.
+        /// </summary>
+        public const float FooterDetailStripMinHeightRef = 80f;
+        /// <summary>Design max height at scale 1 for user drag / content clamp.</summary>
+        public const float FooterDetailStripHeightRef = 400f;
         /// <summary>Design line height used with <see cref="FooterDetailStripHeightRef"/> for row budget.</summary>
         public const float FooterDetailStripLineHeightRef = 18f;
-        /// <summary>Detail-strip thumb edge (square); tracks strip height so no letterbox gap under preview.</summary>
+        /// <summary>
+        /// Min hit height for detail-strip action links + meta rows (design px at scale 1).
+        /// Larger than <see cref="FooterDetailStripLineHeightRef"/>; below full <see cref="ButtonSizeRef"/>.
+        /// </summary>
+        /// <summary>Hit pad for actions/meta — above line height, below full button (dense strip).</summary>
+        public const float FooterDetailStripHitHeightRef = 22f;
+        /// <summary>Equal gap between detail-strip text bands (title / meta / actions / flex lines).</summary>
+        public const float FooterDetailStripBandGapRef = 1f;
+        /// <summary>Detail-strip thumb edge cap (square); must stay ≥ strip max so preview stays flush.</summary>
         public const float FooterDetailStripThumbMaxRef = FooterDetailStripHeightRef;
+        /// <summary>Top drag grip hit height (sits above strip content, not over it).</summary>
+        public const float FooterDetailStripResizeGripRef = 14f;
+        /// <summary>Center grab-handle size inside the resize grip.</summary>
+        public const float FooterDetailStripResizePillWRef = 56f;
+        public const float FooterDetailStripResizePillHRef = 5f;
+        /// <summary>
+        /// When strip height reaches this (design px), description + package tags prefer
+        /// main-column rows over the wide side column.
+        /// </summary>
+        public const float FooterDetailStripStackSideMinHeightRef = 220f;
+        /// <summary>Max wrapped description lines in the main column when stacking by height.</summary>
+        public const int FooterDetailStripLeftDescMaxLines = 5;
         /// <summary>Min strip width before right info column (desc + native tags) opens.</summary>
         public const float FooterDetailStripSideMinWidthRef = 600f;
         /// <summary>Hysteresis band so side open/close does not flicker at the threshold.</summary>

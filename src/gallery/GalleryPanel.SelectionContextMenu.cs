@@ -2070,13 +2070,17 @@ namespace VPB
                 }
             }
             catch { }
-            // Side-rail stacks use live footer inset — re-fit only when inset changes (not every frame).
+            // Side-rail fit uses stable pane chrome (not live InfoBar/detail-strip height).
             try
             {
-                float botInset = GalleryMainAreaBottomInset();
-                if (Mathf.Abs(botInset - _sideRailLastBottomInset) > 0.5f)
+                float s = ChromeScale;
+                if (s <= 0f) s = 1f;
+                float stableBot = (GalleryUiDesignTokens.FooterBarHeightRef
+                    + GalleryUiDesignTokens.FooterToolboxTopRef
+                    + 20f) * s;
+                if (Mathf.Abs(stableBot - _sideRailLastBottomInset) > 0.5f)
                 {
-                    _sideRailLastBottomInset = botInset;
+                    _sideRailLastBottomInset = stableBot;
                     UpdateSideButtonPositions();
                 }
             }
