@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -2762,7 +2761,13 @@ namespace VPB
             {
                 if (earlyBuildCreators)
                 {
-                    cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
+                    cachedCreators.Clear();
+                    if (earlyNewCreators != null && earlyNewCreators.Count > 0)
+                    {
+                        if (cachedCreators.Capacity < earlyNewCreators.Count)
+                            cachedCreators.Capacity = earlyNewCreators.Count;
+                        cachedCreators.AddRange(earlyNewCreators);
+                    }
                     creatorsCached = true;
                     unchecked { creatorSideTabDataRevision++; }
                 }
@@ -2983,6 +2988,9 @@ namespace VPB
             List<FileEntry> snapList = null;
             bool fileListFromCache = false;
             bool fileListFromSibling = false;
+            // Always build into reusable scratch — snapshot cache Put clones; never store _refreshBuildFiles itself.
+            _refreshBuildFiles.Clear();
+            List<FileEntry> files = _refreshBuildFiles;
             if (!bypassFileListCache && canFileListCache && Gallery.singleton != null)
             {
                 var panels = Gallery.singleton.Panels;
@@ -2993,15 +3001,18 @@ namespace VPB
                     string ok;
                     if (!o.TryBuildFileListSnapshotCacheKey(out ok) || !string.Equals(ok, fileListSnapKey, StringComparison.Ordinal)) continue;
                     if (o.currentFilteredFiles == null || o.currentFilteredFiles.Count == 0) continue;
-                    snapList = new List<FileEntry>(o.currentFilteredFiles);
+                    if (files.Capacity < o.currentFilteredFiles.Count)
+                        files.Capacity = o.currentFilteredFiles.Count;
+                    files.AddRange(o.currentFilteredFiles);
+                    snapList = files;
                     fileListFromCache = true;
                     fileListFromSibling = true;
                     break;
                 }
             }
             if (!bypassFileListCache && !fileListFromCache && canFileListCache)
-                fileListFromCache = GalleryFileListSnapshotCache.TryGet(fileListSnapKey, out snapList);
-            List<FileEntry> files = (fileListFromCache && snapList != null) ? snapList : new List<FileEntry>();
+                fileListFromCache = GalleryFileListSnapshotCache.TryCopyInto(fileListSnapKey, files);
+            if (fileListFromCache) snapList = files;
             if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
                 GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
 
@@ -3114,8 +3125,9 @@ namespace VPB
                                     }
                                 }
                             }
-                            earlyNewCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
-                                                     .OrderBy(c => c.Name).ToList();
+                            var creatorList = new List<CreatorCacheEntry>(counts.Count > 0 ? counts.Count : 16);
+                            FillCreatorCacheEntriesSorted(counts, creatorList);
+                            earlyNewCreators = creatorList;
                         }
 
                         if (_buildCats && _bCategories != null)
@@ -3848,7 +3860,8 @@ namespace VPB
                 deepFilesCountAfterDrain = files != null ? files.Count : 0;
             }
 
-            List<string> pathsToSearch = new List<string>();
+            _refreshPathsToSearch.Clear();
+            List<string> pathsToSearch = _refreshPathsToSearch;
             Gallery.CollectLooseDiskSearchRoots(pathsToSearch, currentPaths, currentPath);
 
             if (activeContentType == ContentType.Category)
@@ -3890,8 +3903,12 @@ namespace VPB
                             }
                         }
                         sbKey.Append("|paths=");
-                        var p2 = new List<string>(pathsToSearch);
-                        p2.Sort(StringComparer.OrdinalIgnoreCase);
+                        _refreshPathKeySortScratch.Clear();
+                        if (_refreshPathKeySortScratch.Capacity < pathsToSearch.Count)
+                            _refreshPathKeySortScratch.Capacity = pathsToSearch.Count;
+                        _refreshPathKeySortScratch.AddRange(pathsToSearch);
+                        _refreshPathKeySortScratch.Sort(StringComparer.OrdinalIgnoreCase);
+                        List<string> p2 = _refreshPathKeySortScratch;
                         for (int i = 0; i < p2.Count; i++)
                         {
                             if (i != 0) sbKey.Append(';');
@@ -3912,7 +3929,8 @@ namespace VPB
                         }
                         sysCacheSig = sbSig.ToString();
 
-                        sysCachedRows = new List<VpbLocalDatabase.SystemFileRow>();
+                        _refreshSysCachedRowsScratch.Clear();
+                        sysCachedRows = _refreshSysCachedRowsScratch;
                         sysCacheHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysCachedRows);
                     }
                     catch { sysCacheHit = false; sysCachedRows = null; }
@@ -3922,7 +3940,10 @@ namespace VPB
                     if (sysCacheHit && sysCachedRows != null)
                     {
                         bool prunedMissingCachedRows = false;
-                        List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = new List<VpbLocalDatabase.SystemFileRow>(sysCachedRows.Count);
+                        _refreshSysRowsToKeepScratch.Clear();
+                        if (_refreshSysRowsToKeepScratch.Capacity < sysCachedRows.Count)
+                            _refreshSysRowsToKeepScratch.Capacity = sysCachedRows.Count;
+                        List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = _refreshSysRowsToKeepScratch;
                         string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                         bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                         for (int i = 0; i < sysCachedRows.Count; i++)
@@ -3995,7 +4016,8 @@ namespace VPB
                     }
                     else
                     {
-                        var sysRowsForWrite = new List<VpbLocalDatabase.SystemFileRow>(256);
+                        _refreshSysRowsForWriteScratch.Clear();
+                        List<VpbLocalDatabase.SystemFileRow> sysRowsForWrite = _refreshSysRowsForWriteScratch;
                         string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                         bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                     string[] diskExtsForLoose = Gallery.DiskScanExtensionsOrEverything(currentExtension, extensions);
@@ -4005,17 +4027,17 @@ namespace VPB
 
                         foreach (var ext in diskExtsForLoose)
                         {
-                            string[] sysFiles = new string[0];
+                            _refreshSysFilePathScratch.Clear();
                             try
                             {
-                                List<string> sysFileList = new List<string>();
-                                FileManager.SafeGetFiles(searchPath, "*." + ext, sysFileList);
-                                sysFiles = sysFileList.ToArray();
+                                FileManager.SafeGetFiles(searchPath, "*." + ext, _refreshSysFilePathScratch);
                             }
-                            catch { }
+                            catch { continue; }
 
-                            foreach (var sysPath in sysFiles)
+                            for (int sfi = 0; sfi < _refreshSysFilePathScratch.Count; sfi++)
                             {
+                                string sysPath = _refreshSysFilePathScratch[sfi];
+                                if (string.IsNullOrEmpty(sysPath)) continue;
                                 if (skipVpbGeneratedLocalScenes && LocalSceneGallerySupport.IsVpbGeneratedLocalScenePath(sysPath))
                                 {
                                     LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(sysPath);

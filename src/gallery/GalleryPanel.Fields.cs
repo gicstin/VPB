@@ -1182,6 +1182,21 @@ namespace VPB
         private float pendingHistoryUndoUntilRealtime = 0f;
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 
+        /// <summary>Scratch build list for <see cref="RefreshFilesRoutine"/> — Clear+reuse; never share with snapshot cache storage.</summary>
+        private readonly List<FileEntry> _refreshBuildFiles = new List<FileEntry>(4096);
+        /// <summary>Scratch for loose-disk search roots during refresh.</summary>
+        private readonly List<string> _refreshPathsToSearch = new List<string>(16);
+        /// <summary>Scratch for SafeGetFiles during refresh loose-file scan.</summary>
+        private readonly List<string> _refreshSysFilePathScratch = new List<string>(512);
+        /// <summary>Scratch for sys-cache row filter during refresh.</summary>
+        private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysRowsToKeepScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
+        /// <summary>Scratch for writing sys-file cache during refresh.</summary>
+        private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysRowsForWriteScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
+        /// <summary>Scratch for SQLite sys-file cache read during refresh.</summary>
+        private readonly List<VpbLocalDatabase.SystemFileRow> _refreshSysCachedRowsScratch = new List<VpbLocalDatabase.SystemFileRow>(256);
+        /// <summary>Scratch sorted copy of search roots for sys-cache key/sig.</summary>
+        private readonly List<string> _refreshPathKeySortScratch = new List<string>(16);
+
         /// <summary>Post-drain file list before hide-strip (same as <see cref="lastFilteredFiles"/> after full refresh). Used to toggle &quot;show hidden&quot; without re-running <see cref="GalleryPanel.RefreshFilesRoutine"/>.</summary>
         private List<FileEntry> galleryFilesPreHideSnapshot = new List<FileEntry>();
 

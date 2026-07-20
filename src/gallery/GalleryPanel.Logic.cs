@@ -1256,6 +1256,55 @@ namespace VPB
             counts["Appearance"] += total;
         }
 
+        /// <summary>
+        /// Fill dest from count map, sort by name (culture, matches former LINQ OrderBy).
+        /// Clear+reuse dest — no Select/ToList alloc. Safe on worker threads if dest is thread-local.
+        /// </summary>
+        internal static void FillCreatorCacheEntriesSorted(Dictionary<string, int> counts, List<CreatorCacheEntry> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (counts == null || counts.Count == 0) return;
+            if (dest.Capacity < counts.Count) dest.Capacity = counts.Count;
+            foreach (KeyValuePair<string, int> kv in counts)
+            {
+                CreatorCacheEntry e;
+                e.Name = kv.Key;
+                e.Count = kv.Value;
+                dest.Add(e);
+            }
+            dest.Sort(CompareCreatorCacheEntryByName);
+        }
+
+        private static int CompareCreatorCacheEntryByName(CreatorCacheEntry a, CreatorCacheEntry b)
+        {
+            return string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
+        }
+
+        /// <summary>
+        /// Fill dest from count map, sort path OrdinalIgnoreCase (matches former LINQ OrderBy).
+        /// </summary>
+        internal static void FillPathCacheEntriesSorted(Dictionary<string, int> counts, List<PathCacheEntry> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (counts == null || counts.Count == 0) return;
+            if (dest.Capacity < counts.Count) dest.Capacity = counts.Count;
+            foreach (KeyValuePair<string, int> kv in counts)
+            {
+                PathCacheEntry e;
+                e.Path = kv.Key;
+                e.Count = kv.Value;
+                dest.Add(e);
+            }
+            dest.Sort(ComparePathCacheEntryByPathIgnoreCase);
+        }
+
+        private static int ComparePathCacheEntryByPathIgnoreCase(PathCacheEntry a, PathCacheEntry b)
+        {
+            return string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+        }
+
         private void CacheCreators()
         {
             if (FileManager.PackagesByUid == null) return;
@@ -1334,8 +1383,7 @@ namespace VPB
                 }
             }
 
-            cachedCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
-                                   .OrderBy(c => c.Name).ToList();
+            FillCreatorCacheEntriesSorted(counts, cachedCreators);
             creatorsCached = true;
             unchecked { creatorSideTabDataRevision++; }
         }
@@ -1467,9 +1515,7 @@ namespace VPB
                 : (IList<FileEntry>)lastFilteredFiles;
             AddPathCountsFromEntries(counts, source, includeVarRows: !sqlOk, includeLooseRows: true);
 
-            cachedPaths = counts.Select(kv => new PathCacheEntry { Path = kv.Key, Count = kv.Value })
-                               .OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase)
-                               .ToList();
+            FillPathCacheEntriesSorted(counts, cachedPaths);
             pathsCached = true;
         }
 
