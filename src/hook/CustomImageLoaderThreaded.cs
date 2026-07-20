@@ -1139,9 +1139,14 @@ namespace VPB
 
 				if (tex != null && !hadError)
 				{
-					bool savedToGalleryCache = loadedFromCache || loadedFromGalleryCache;
-					TrySaveGalleryThumbnail(ref savedToGalleryCache);
-					TryWriteVaMDiskCache(savedToGalleryCache);
+					// Disk I/O + GetRawTextureData during scroll hitch — gallery already queues delayed cache jobs.
+					bool skipDiskWhileScroll = isThumbnail && IsGalleryScrollHot;
+					if (!skipDiskWhileScroll)
+					{
+						bool savedToGalleryCache = loadedFromCache || loadedFromGalleryCache;
+						TrySaveGalleryThumbnail(ref savedToGalleryCache);
+						TryWriteVaMDiskCache(savedToGalleryCache);
+					}
 				}
 
                 if (raw != null)
@@ -1813,6 +1818,28 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Gallery posts scroll unscaled time. Used only to skip disk I/O in Finish while scrolling —
+        /// decode + GPU upload + callbacks keep running (needed for spring-scroll prefetch).
+        /// </summary>
+        private static float s_galleryScrollUnscaledTime = -1000f;
+        private const float GalleryScrollHotWindowSec = 1.0f;
+        private const long PostProcessBudgetMs = 8;
+
+        public static void NotifyGalleryScrollUnscaledTime(float unscaledTime)
+        {
+            s_galleryScrollUnscaledTime = unscaledTime;
+        }
+
+        public static bool IsGalleryScrollHot
+        {
+            get
+            {
+                try { return (Time.unscaledTime - s_galleryScrollUnscaledTime) < GalleryScrollHotWindowSec; }
+                catch { return false; }
+            }
+        }
+
 		protected Dictionary<string, Texture2D> textureCache;
 
 		protected Dictionary<string, Texture2D> immediateTextureCache;
@@ -2310,82 +2337,21 @@ namespace VPB
 
 		protected void PostProcessImageQueue()
 		{
-            // Limit processing time to avoid UI freezes (target 8ms budget)
+            // 8ms budget — keep Finish/callback during scroll so spring-scroll prefetch stays useful.
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-            long maxTicks = 8 * 10000; // 8ms
+            long maxTicks = PostProcessBudgetMs * 10000L;
 
-            // 1. Process dispatched (in-flight) images that are done
             for (int i = dispatchedImages.Count - 1; i >= 0; i--)
             {
                 if (sw.ElapsedTicks > maxTicks) break;
 
                 QueuedImage value = dispatchedImages[i];
-                if (value.processed || value.cancel)
-                {
-                    dispatchedImages.RemoveAt(i);
-                    
-                    if (value.cancel)
-                    {
-                        if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
-						{
-                            DispatchPendingThumbnailCallbacks(value);
-						}
-                        pool.Return(value);
-                        continue;
-                    }
-
-                    if (!value.isThumbnail)
-                    {
-                        progress++;
-                        numRealQueuedImages--;
-                        
-                        if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
-                        {
-                            LogUtil.Log(ByteArrayPool.GetStatus());
-                        }
-
-                        if (numRealQueuedImages == 0)
-                        {
-                            progress = 0;
-                            progressMax = 0;
-                            if (progressHUD != null) progressHUD.SetActive(false);
-                            if(ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
-                        }
-                        else
-                        {
-                            if (progressHUD != null) progressHUD.SetActive(true);
-                            if (progressSlider != null)
-                            {
-                                progressSlider.maxValue = progressMax;
-                                progressSlider.value = progress;
-                            }
-                        }
-                    }
-
-                    value.Finish();
-
-                    if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
-                    {
-                        if (value.isThumbnail)
-                        {
-                            if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
-                        }
-                        else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
-                        {
-                            textureCache.Add(value.cacheSignature, value.tex);
-                            textureTrackedCache.Add(value.tex, true);
-                            if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
-                        }
-                    }
-                    value.DoCallback();
-                    if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
-                    // else if (value.isThumbnail) LogUtil.Log("[VPB-Debug] Finished: " + value.imgPath);
-                    pool.Return(value);
-                }
+                if (value == null) continue;
+                if (!(value.processed || value.cancel)) continue;
+                CompleteDispatchedImageAt(i, value);
             }
 
-            // 2. Cleanup canceled items from the pending queue (Peek only)
-            // We can't easily iterate the PriorityQueue, but we can peek the top.
+            // Cleanup canceled items from the pending queue (Peek only)
             while (queuedImages != null && queuedImages.Count > 0)
             {
                 if (queuedImages.Peek().cancel)
@@ -2417,6 +2383,67 @@ namespace VPB
 				loadFlag = null;
 			}
 		}
+
+        /// <summary>Finish + cache + callback + pool. Index must be valid; removes from <see cref="dispatchedImages"/>.</summary>
+        private void CompleteDispatchedImageAt(int index, QueuedImage value)
+        {
+            if (value == null || index < 0 || index >= dispatchedImages.Count) return;
+            dispatchedImages.RemoveAt(index);
+
+            if (value.cancel)
+            {
+                if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
+                    DispatchPendingThumbnailCallbacks(value);
+                pool.Return(value);
+                return;
+            }
+
+            if (!value.isThumbnail)
+            {
+                progress++;
+                numRealQueuedImages--;
+
+                if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
+                    LogUtil.Log(ByteArrayPool.GetStatus());
+
+                if (numRealQueuedImages == 0)
+                {
+                    progress = 0;
+                    progressMax = 0;
+                    if (progressHUD != null) progressHUD.SetActive(false);
+                    if (ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
+                }
+                else
+                {
+                    if (progressHUD != null) progressHUD.SetActive(true);
+                    if (progressSlider != null)
+                    {
+                        progressSlider.maxValue = progressMax;
+                        progressSlider.value = progress;
+                    }
+                }
+            }
+
+            value.Finish();
+
+            if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
+            {
+                if (value.isThumbnail)
+                {
+                    if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
+                }
+                else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
+                {
+                    textureCache.Add(value.cacheSignature, value.tex);
+                    textureTrackedCache.Add(value.tex, true);
+                    if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
+                }
+            }
+            // Callbacks must stay RawImage/bind-only (gallery closure). Do not rebind UI listeners here.
+            value.DoCallback();
+            if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
+            pool.Return(value);
+        }
 
 		protected void UseCachedTex(QueuedImage qi, Texture2D tex)
 		{

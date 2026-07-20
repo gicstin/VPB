@@ -87,6 +87,7 @@ namespace VPB
                 // the cache write-lock while the user is interacting; the cost is we defer
                 // persistence, but current-session display is unaffected (images stay in memory).
                 bool isScrollingRecently = (Time.unscaledTime - lastScrollTime) < 1.0f;
+                try { CustomImageLoaderThreaded.NotifyGalleryScrollUnscaledTime(lastScrollTime); } catch { }
                 bool isThumbnailLoading  = CustomImageLoaderThreaded.singleton != null &&
                                            CustomImageLoaderThreaded.singleton.PendingThumbnailCount > 0;
                 bool savingActive = !isScrollingRecently && !isThumbnailLoading;
