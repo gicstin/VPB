@@ -23,6 +23,7 @@ namespace VPB
         private Camera dragCam;
         private Button btn;
         private bool wasBtnEnabled;
+        private ScrollRect _pausedScroll;
 
         void Awake()
         {
@@ -31,12 +32,39 @@ namespace VPB
             btn = GetComponent<Button>();
         }
 
+        private void OnDisable()
+        {
+            if (_pausedScroll != null)
+            {
+                _pausedScroll.enabled = true;
+                _pausedScroll = null;
+            }
+        }
+
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
+            if (target == null) target = transform as RectTransform;
+            // Resolve parent from target at drag start — Awake may run before callers assign target.
+            parent = target != null ? target.parent : transform.parent;
             startIndex = target.GetSiblingIndex();
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
+
+            // ScrollRect ancestors steal vertical drag — park them for the reorder.
+            _pausedScroll = null;
+            Transform walk = parent;
+            while (walk != null)
+            {
+                ScrollRect sr = walk.GetComponent<ScrollRect>();
+                if (sr != null && sr.enabled)
+                {
+                    _pausedScroll = sr;
+                    _pausedScroll.enabled = false;
+                    break;
+                }
+                walk = walk.parent;
+            }
             
             // Disable button during drag to prevent accidental click on release
             if (btn != null)
@@ -48,7 +76,7 @@ namespace VPB
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (parent == null || dragCam == null) return;
+            if (parent == null || dragCam == null || target == null) return;
 
             // Find which index we should be at based on vertical position
             int currentIndex = target.GetSiblingIndex();
@@ -90,10 +118,16 @@ namespace VPB
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            if (_pausedScroll != null)
+            {
+                _pausedScroll.enabled = true;
+                _pausedScroll = null;
+            }
+
             // Restore button state
             if (btn != null) btn.enabled = wasBtnEnabled;
 
-            if (target.GetSiblingIndex() != startIndex)
+            if (target != null && target.GetSiblingIndex() != startIndex)
             {
                 if (OnReorder != null) OnReorder();
             }

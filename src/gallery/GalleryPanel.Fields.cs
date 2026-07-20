@@ -668,7 +668,8 @@ namespace VPB
         private static readonly Color UserTagFilterActiveColor = new Color(0.18f, 0.38f, 0.62f, 1f);
         private static readonly Color UserTagFilterExcludedColor = new Color(0.62f, 0.20f, 0.22f, 1f);
         private static readonly Color UserTagDropGlowColor = new Color(0.35f, 0.95f, 0.55f, 1f);
-        private const float UserTagVisualPulseSeconds = 0.45f;
+        private const float UserTagVisualPulseSeconds = 0.65f;
+        private const string UserTagDropFlashName = "VPB_UserTagDropFlash";
 
         /// <summary>Dim overlay on gallery pane + centered panel for <see cref="GalleryPanel.ShowUserTagListEditor"/>.</summary>
         private GameObject _userTagEditorRoot;

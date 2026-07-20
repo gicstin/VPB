@@ -941,6 +941,9 @@ namespace VPB
                 selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
                 tboxGridRateHandler = tboxGridRateBtn.AddComponent<RatingHandler>();
+                // Reparent open selector to backgroundBoxGO (RatingHandler) so it stacks above
+                // VPB_DetailStrip — strip is a later sibling under InfoBar and covers upward overflow.
+                tboxGridRateHandler.panel = this;
                 Image[] grOptImages = new Image[6];
                 Text[] grOptTexts = new Text[6];
                 GameObject[] grOptBorders = new GameObject[6];
@@ -2515,6 +2518,7 @@ namespace VPB
             {
                 try { stableId = !string.IsNullOrEmpty(eligible[0].Uid) ? eligible[0].Uid : eligible[0].Path; } catch { stableId = null; }
             }
+            tboxGridRateHandler.panel = this;
             tboxGridRateHandler.Init(stableId ?? "", txt, tboxGridRateSelectorGO);
             tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
             if (tboxGridRateIconImage != null)

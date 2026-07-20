@@ -660,6 +660,17 @@ namespace VPB
             if (IsPluginHotkeyCaptureActive())
                 return;
 
+            if (DetailStripIsTagMenuOpen()
+                && (Input.GetKeyDown(KeyCode.UpArrow)
+                    || Input.GetKeyDown(KeyCode.DownArrow)
+                    || Input.GetKeyDown(KeyCode.Space)))
+            {
+                KeyCode k = Input.GetKeyDown(KeyCode.UpArrow) ? KeyCode.UpArrow
+                    : (Input.GetKeyDown(KeyCode.DownArrow) ? KeyCode.DownArrow : KeyCode.Space);
+                if (DetailStripTagMenuHandleListKey(k))
+                    return;
+            }
+
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
@@ -675,6 +686,14 @@ namespace VPB
             if (Input.GetKeyDown(KeyCode.Escape) && _categoryQuickMenuOpen)
             {
                 SetCategoryQuickMenuVisible(false);
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape)
+                && _detailStripTagMenuRoot != null
+                && _detailStripTagMenuRoot.activeSelf)
+            {
+                DetailStripCloseTagMenu();
                 return;
             }
 

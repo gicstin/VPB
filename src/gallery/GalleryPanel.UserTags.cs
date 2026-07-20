@@ -849,6 +849,7 @@ namespace VPB
             _userTagDropPulseKey = GetSelectionIdentityKey(galleryRowHit, false);
             _userTagDropPulseUntil = Time.unscaledTime + UserTagVisualPulseSeconds;
             EnsureUserTagVisualPulse();
+            RefreshUserTagDropVisualForFile(galleryRowHit);
             ApplyUserTagsToFileEntries(new List<string>(tags), new List<FileEntry> { galleryRowHit }, remove: false);
         }
 
@@ -861,25 +862,88 @@ namespace VPB
             return !string.IsNullOrEmpty(k) && string.Equals(k, _userTagDropPulseKey, StringComparison.OrdinalIgnoreCase);
         }
 
+        private float GetUserTagDropFlashAlpha(FileEntry file)
+        {
+            if (file == null) return 0f;
+            bool hover = _userTagDragHoverFile != null && ReferenceEquals(_userTagDragHoverFile, file);
+            bool dropPulse = Time.unscaledTime < _userTagDropPulseUntil
+                && !string.IsNullOrEmpty(_userTagDropPulseKey)
+                && string.Equals(GetSelectionIdentityKey(file, false), _userTagDropPulseKey, StringComparison.OrdinalIgnoreCase);
+            if (dropPulse)
+            {
+                // Brief bright flash then fade — clear "applied" cue.
+                float remaining = _userTagDropPulseUntil - Time.unscaledTime;
+                float u = Mathf.Clamp01(remaining / UserTagVisualPulseSeconds); // 1 → 0
+                return Mathf.Lerp(0.08f, 0.55f, u * u);
+            }
+            if (hover) return 0.22f;
+            return 0f;
+        }
+
         private void ApplyUserTagDropVisual(GameObject btnGO, FileEntry file)
         {
-            if (btnGO == null || !IsUserTagDropVisualActive(file)) return;
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
-            if (hoverBorder != null)
+            if (btnGO == null) return;
+            bool active = IsUserTagDropVisualActive(file);
+            float flashAlpha = GetUserTagDropFlashAlpha(file);
+
+            // Full-cell flash so apply/hover is obvious (border alone is easy to miss).
+            Transform flashTr = btnGO.transform.Find(UserTagDropFlashName);
+            GameObject flashGO = flashTr != null ? flashTr.gameObject : null;
+            if (active)
             {
-                hoverBorder.enabled = true;
-                hoverBorder.hoverColor = UserTagDropGlowColor;
-                hoverBorder.isSelected = true;
-                hoverBorder.borderSize = Mathf.Max(hoverBorder.borderSize, 4f);
-                hoverBorder.ApplyBorderSettings();
+                Color flashCol = new Color(
+                    UserTagDropGlowColor.r, UserTagDropGlowColor.g, UserTagDropGlowColor.b, flashAlpha);
+                if (flashGO == null)
+                {
+                    flashGO = new GameObject(UserTagDropFlashName);
+                    flashGO.transform.SetParent(btnGO.transform, false);
+                    flashGO.transform.SetAsLastSibling();
+                    UI.AddImage(flashGO, flashCol, raycastTarget: false);
+                    RectTransform frt = flashGO.GetComponent<RectTransform>();
+                    if (frt != null)
+                    {
+                        frt.anchorMin = Vector2.zero;
+                        frt.anchorMax = Vector2.one;
+                        frt.offsetMin = Vector2.zero;
+                        frt.offsetMax = Vector2.zero;
+                    }
+                    LayoutElement fle = flashGO.GetComponent<LayoutElement>();
+                    if (fle == null) fle = flashGO.AddComponent<LayoutElement>();
+                    fle.ignoreLayout = true;
+                }
+                else
+                {
+                    flashGO.SetActive(true);
+                    flashGO.transform.SetAsLastSibling();
+                    Image flashImg = flashGO.GetComponent<Image>();
+                    if (flashImg != null)
+                    {
+                        flashImg.raycastTarget = false;
+                        flashImg.color = flashCol;
+                    }
+                }
+
+                UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+                if (hoverBorder != null)
+                {
+                    hoverBorder.enabled = true;
+                    hoverBorder.hoverColor = UserTagDropGlowColor;
+                    hoverBorder.isSelected = true;
+                    hoverBorder.borderSize = Mathf.Max(hoverBorder.borderSize, 4f);
+                    hoverBorder.ApplyBorderSettings();
+                }
+                Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+                GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
+                if (innerBorderGO != null)
+                {
+                    SetBorderThickness(innerBorderGO, Mathf.Max(EffectiveGridSelectedBorderWidth(), 4f));
+                    SetGalleryInnerBorderEdgeTint(innerBorderGO, UserTagDropGlowColor);
+                    innerBorderGO.SetActive(true);
+                }
             }
-            Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
-            GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
-            if (innerBorderGO != null)
+            else if (flashGO != null)
             {
-                SetBorderThickness(innerBorderGO, Mathf.Max(EffectiveGridSelectedBorderWidth(), 4f));
-                SetGalleryInnerBorderEdgeTint(innerBorderGO, UserTagDropGlowColor);
-                innerBorderGO.SetActive(true);
+                flashGO.SetActive(false);
             }
         }
 
@@ -4092,6 +4156,8 @@ namespace VPB
         public string PrimaryTag;
         /// <summary>When true, drag originates from Applied list — drop targets remove control only (not apply zones).</summary>
         public bool IsAppliedRowDrag;
+        /// <summary>Quick-tagger Applied column: same pick-drag can reorder in-list via insert line.</summary>
+        public bool DetailStripAppliedReorder;
         private CanvasGroup _cg;
         private bool _pressed;
         private bool _dragging;
@@ -4152,7 +4218,27 @@ namespace VPB
             {
                 UpdateGhostPosition();
                 if (!IsAppliedRowDrag)
-                    RefreshUserTagApplyDragHoverStatus();
+                {
+                    bool reorderHint = false;
+                    if (DetailStripAppliedReorder && Panel != null)
+                    {
+                        try { reorderHint = Panel.DetailStripUpdateAppliedReorderHint(PrimaryTag, (Vector2)Input.mousePosition); }
+                        catch { reorderHint = false; }
+                        try
+                        {
+                            bool overAvail = !reorderHint
+                                && Panel.DetailStripScreenPosOverAvailableList((Vector2)Input.mousePosition);
+                            Panel.DetailStripSetTagMenuRemoveDragHint(true, overAvail);
+                        }
+                        catch { }
+                    }
+                    if (reorderHint)
+                    {
+                        try { Panel.dragHoverItem(null, null); } catch { }
+                    }
+                    else
+                        RefreshUserTagApplyDragHoverStatus();
+                }
                 if (!_releaseProcessed && Input.GetMouseButtonUp(0))
                     EndManualDrag(null);
                 return;
@@ -4217,7 +4303,8 @@ namespace VPB
             if (list.Count == 0) return;
 
             UserTagDragSession.PendingTags = list;
-            UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag;
+            // Applied-column quick-tagger: treat as remove-mode so strip/gallery apply zones ignore the drag.
+            UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag || DetailStripAppliedReorder;
             _dragging = true;
 
             if (_cg != null)
@@ -4228,6 +4315,10 @@ namespace VPB
 
             CreateGhostLabel(list);
             UpdateGhostPosition();
+            if (DetailStripAppliedReorder && Panel != null)
+            {
+                try { Panel.DetailStripSetTagMenuRemoveDragHint(true, false); } catch { }
+            }
         }
 
         private void EndManualDrag(PointerEventData eventData)
@@ -4241,15 +4332,22 @@ namespace VPB
 
         private void TryDropToRemoveZone(PointerEventData eventData)
         {
-            if (Panel == null) return;
+            TryDropToRemoveZoneAt(
+                (eventData != null) ? eventData.position : (Vector2)Input.mousePosition,
+                eventData);
+        }
+
+        private bool TryDropToRemoveZoneAt(Vector2 screenPos, PointerEventData eventData)
+        {
+            if (Panel == null) return false;
             List<string> tags = UserTagDragSession.PendingTags;
-            if (tags == null || tags.Count == 0) return;
+            if (tags == null || tags.Count == 0) return false;
 
             EventSystem es = EventSystem.current;
-            if (es == null) return;
+            if (es == null) return false;
 
             var ped = eventData ?? new PointerEventData(es);
-            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            ped.position = screenPos;
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
             for (int i = 0; i < _raycastHits.Count; i++)
@@ -4260,9 +4358,10 @@ namespace VPB
                 if (dz != null && dz.Panel == Panel)
                 {
                     Panel.UserTagRemoveDroppedTags(tags);
-                    break;
+                    return true;
                 }
             }
+            return false;
         }
 
         private void TryDropToApplyZone(PointerEventData eventData)
@@ -4272,6 +4371,21 @@ namespace VPB
             if (tags == null || tags.Count == 0) return;
 
             EventSystem es = EventSystem.current;
+            Vector2 screenPos = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+
+            // Quick-tagger Applied: reorder in-list, or drop on Available → remove.
+            if (DetailStripAppliedReorder)
+            {
+                try
+                {
+                    if (Panel.DetailStripTryCommitAppliedReorder(PrimaryTag, screenPos))
+                        return;
+                }
+                catch { }
+                TryDropToRemoveZoneAt(screenPos, eventData);
+                return;
+            }
+
             if (es == null)
             {
                 Panel.UserTagApplyDroppedTags(tags);
@@ -4279,7 +4393,7 @@ namespace VPB
             }
 
             var ped = eventData ?? new PointerEventData(es);
-            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            ped.position = screenPos;
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
             for (int i = 0; i < _raycastHits.Count; i++)
@@ -4348,6 +4462,8 @@ namespace VPB
             ConsumedByDrag = false;
             _releaseProcessed = false;
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
+            try { if (Panel != null) Panel.DetailStripClearAppliedReorderHint(); } catch { }
+            try { if (Panel != null) Panel.DetailStripSetTagMenuRemoveDragHint(false, false); } catch { }
             if (_cg != null)
             {
                 _cg.alpha = 1f;
@@ -4369,29 +4485,79 @@ namespace VPB
             if (root == null) return;
             _rootCanvas = root;
 
+            float s = 1f;
+            try { if (Panel != null && Panel.ChromeScale > 0f) s = Panel.ChromeScale; } catch { }
+            float pad = Mathf.Round(10f * s);
+
             _ghost = new GameObject("VPB_UserTagDragGhost");
             _ghost.layer = root.gameObject.layer;
             _ghostRT = _ghost.AddComponent<RectTransform>();
             _ghostRT.SetParent(root.transform, false);
-            _ghostRT.anchorMin = new Vector2(0f, 0f);
-            _ghostRT.anchorMax = new Vector2(0f, 0f);
-            _ghostRT.pivot = new Vector2(0f, 0f);
-            _ghostRT.sizeDelta = new Vector2(240f, 34f);
+            _ghostRT.anchorMin = new Vector2(0.5f, 0.5f);
+            _ghostRT.anchorMax = new Vector2(0.5f, 0.5f);
+            _ghostRT.pivot = new Vector2(0.5f, 0.5f);
+            _ghostRT.sizeDelta = Vector2.zero;
 
-            Image bg = UI.AddImage(_ghost, new Color(0.15f, 0.15f, 0.18f, 0.85f), false);
+            UI.AddImage(_ghost, new Color(0.12f, 0.12f, 0.14f, 0.94f), raycastTarget: false);
+            UI.AddHLG(
+                _ghost,
+                spacing: 0f,
+                padding: UI.Pad(pad, pad, pad * 0.7f, pad * 0.7f),
+                childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: false,
+                childControlHeight: false,
+                childForceExpandWidth: false,
+                childForceExpandHeight: false);
+            ContentSizeFitter rootCsf = _ghost.AddComponent<ContentSizeFitter>();
+            rootCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            _ghostText = UI.CreateLabel(_ghost, tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count),
-                GalleryUiDesignTokens.FontBodyRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow);
-            RectTransform trt = _ghostText.GetComponent<RectTransform>();
-            trt.offsetMin = new Vector2(10f, 6f);
-            trt.offsetMax = new Vector2(-10f, -6f);
+            string label = tags.Count == 1
+                ? (VPBTranslation.T("gallery.usertags.drag_ghost_one", "Tag: ") + tags[0])
+                : string.Format(VPBTranslation.T("gallery.usertags.drag_ghost_many", "Tags: {0}"), tags.Count);
+            _ghostText = UI.CreateLabel(
+                _ghost,
+                label,
+                GalleryUiDesignTokens.FontRef,
+                UI.PopupText,
+                TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Overflow,
+                VerticalWrapMode.Overflow,
+                raycastTarget: false,
+                richText: true,
+                anchorPreset: AnchorPresets.middleCenter);
+            if (_ghostText != null)
+            {
+                try { GalleryUiMetrics.ApplyFont(_ghostText, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef); }
+                catch { }
+                _ghostText.alignment = TextAnchor.MiddleCenter;
+                _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                _ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+                ContentSizeFitter textCsf = _ghostText.gameObject.GetComponent<ContentSizeFitter>();
+                if (textCsf == null) textCsf = _ghostText.gameObject.AddComponent<ContentSizeFitter>();
+                textCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                // Stretch insets from CreateLabel fight preferred-size fit — clear them.
+                RectTransform trt = _ghostText.rectTransform;
+                if (trt != null)
+                {
+                    trt.anchorMin = new Vector2(0.5f, 0.5f);
+                    trt.anchorMax = new Vector2(0.5f, 0.5f);
+                    trt.pivot = new Vector2(0.5f, 0.5f);
+                    trt.anchoredPosition = Vector2.zero;
+                    trt.sizeDelta = Vector2.zero;
+                }
+            }
+
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(_ghostRT); } catch { }
         }
 
         private void UpdateGhostPosition()
         {
             if (_ghostRT == null) return;
             Vector2 pos = Input.mousePosition;
-            _ghostRT.position = new Vector3(pos.x + 14f, pos.y + 14f, 0f);
+            // Center ghost on cursor so label sits on drop placeholder.
+            _ghostRT.position = new Vector3(pos.x, pos.y, 0f);
             _ghostRT.SetAsLastSibling();
         }
     }

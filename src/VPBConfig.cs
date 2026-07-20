@@ -487,6 +487,10 @@ namespace VPB
         /// Clamped between FooterDetailStripMinHeightRef and FooterDetailStripHeightRef when applied.
         /// </summary>
         public float GalleryDetailStripHeightRef = 0f;
+        /// <summary>When true, restore last quick-tag popup anchored position (canvas-local).</summary>
+        public bool GalleryDetailStripTagMenuPosSaved = false;
+        public float GalleryDetailStripTagMenuPosX = 0f;
+        public float GalleryDetailStripTagMenuPosY = 0f;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1051,6 +1055,9 @@ namespace VPB
             GalleryDetailStripSideInfoEnabled = true;
             GalleryDetailStripThumbOnRight = false;
             GalleryDetailStripHeightRef = 0f;
+            GalleryDetailStripTagMenuPosSaved = false;
+            GalleryDetailStripTagMenuPosX = 0f;
+            GalleryDetailStripTagMenuPosY = 0f;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1307,6 +1314,12 @@ namespace VPB
                         if (node["GalleryDetailStripThumbOnRight"] != null) GalleryDetailStripThumbOnRight = node["GalleryDetailStripThumbOnRight"].AsBool;
                         if (node["GalleryDetailStripHeightRef"] != null)
                             GalleryDetailStripHeightRef = Mathf.Max(0f, node["GalleryDetailStripHeightRef"].AsFloat);
+                        if (node["GalleryDetailStripTagMenuPosSaved"] != null)
+                            GalleryDetailStripTagMenuPosSaved = node["GalleryDetailStripTagMenuPosSaved"].AsBool;
+                        if (node["GalleryDetailStripTagMenuPosX"] != null)
+                            GalleryDetailStripTagMenuPosX = node["GalleryDetailStripTagMenuPosX"].AsFloat;
+                        if (node["GalleryDetailStripTagMenuPosY"] != null)
+                            GalleryDetailStripTagMenuPosY = node["GalleryDetailStripTagMenuPosY"].AsFloat;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1671,6 +1684,9 @@ namespace VPB
                 node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;
                 node["GalleryDetailStripThumbOnRight"].AsBool = GalleryDetailStripThumbOnRight;
                 node["GalleryDetailStripHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripHeightRef);
+                node["GalleryDetailStripTagMenuPosSaved"].AsBool = GalleryDetailStripTagMenuPosSaved;
+                node["GalleryDetailStripTagMenuPosX"].AsFloat = GalleryDetailStripTagMenuPosX;
+                node["GalleryDetailStripTagMenuPosY"].AsFloat = GalleryDetailStripTagMenuPosY;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();
