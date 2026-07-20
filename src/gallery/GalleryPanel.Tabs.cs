@@ -2117,6 +2117,7 @@ namespace VPB
             if (hoverBorderComp != null) hoverBorderComp.hoverBorderGO = listHoverBarGO;
 
             SetLayerRecursive(btnGO, 5);
+            FileButtonBinder.Attach(btnGO);
             return btnGO;
         }
 
@@ -2297,6 +2298,13 @@ namespace VPB
         private static Transform FindGalleryBadgeTransform(Transform btnRoot, string badgeName)
         {
             if (btnRoot == null || string.IsNullOrEmpty(badgeName)) return null;
+            FileButtonBinder binder = btnRoot.GetComponent<FileButtonBinder>();
+            if (binder != null)
+            {
+                binder.Ensure();
+                Transform cached = binder.GetBadge(badgeName);
+                if (cached != null) return cached;
+            }
             Transform t = btnRoot.Find(badgeName);
             if (t != null) return t;
             return btnRoot.Find("ListRow/ListBadges/" + badgeName);
@@ -2315,15 +2323,16 @@ namespace VPB
         private void EnsureGalleryBadgeParentForLayoutMode(GameObject btnGO, bool listMode)
         {
             if (btnGO == null) return;
-            Transform listBadges = btnGO.transform.Find("ListRow/ListBadges");
+            FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
+            Transform listBadges = b != null ? b.listBadgesTr : btnGO.transform.Find("ListRow/ListBadges");
             if (listBadges == null) return;
 
-            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
+            string[] names = FileButtonBinder.TopLeftBadgeNames;
             Transform targetParent = listMode ? listBadges : btnGO.transform;
 
-            foreach (string n in names)
+            for (int i = 0; i < names.Length; i++)
             {
-                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                Transform tr = b != null ? b.GetBadge(names[i]) : FindGalleryBadgeTransform(btnGO.transform, names[i]);
                 if (tr != null) tr.SetParent(targetParent, false);
             }
 
@@ -2331,7 +2340,7 @@ namespace VPB
             {
                 for (int i = 0; i < names.Length; i++)
                 {
-                    Transform tr = listBadges.Find(names[i]);
+                    Transform tr = b != null ? b.GetBadge(names[i]) : listBadges.Find(names[i]);
                     if (tr != null) tr.SetSiblingIndex(i);
                 }
             }
@@ -2339,7 +2348,7 @@ namespace VPB
             {
                 for (int i = 0; i < names.Length; i++)
                 {
-                    Transform tr = btnGO.transform.Find(names[i]);
+                    Transform tr = b != null ? b.GetBadge(names[i]) : btnGO.transform.Find(names[i]);
                     if (tr != null) ApplyTopLeftBadgeSlot(tr as RectTransform, i);
                 }
             }
@@ -2349,11 +2358,11 @@ namespace VPB
         private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded, bool showUserTags)
         {
             if (btnGO == null) return;
-
-            string[] names = { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge" };
-            foreach (string n in names)
+            FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
+            string[] names = FileButtonBinder.TopLeftBadgeNames;
+            for (int i = 0; i < names.Length; i++)
             {
-                Transform tr = FindGalleryBadgeTransform(btnGO.transform, n);
+                Transform tr = b != null ? b.GetBadge(names[i]) : FindGalleryBadgeTransform(btnGO.transform, names[i]);
                 if (tr != null) ApplyListRowBadgeSlot(tr as RectTransform);
             }
         }
@@ -2560,9 +2569,10 @@ namespace VPB
             if (ratingTr != null && ratingTr.gameObject.activeSelf)
                 ratingTr.gameObject.SetActive(false);
 
-            foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn" })
+            string[] badgeNames = FileButtonBinder.GridBadgeHideNames;
+            for (int bi = 0; bi < badgeNames.Length; bi++)
             {
-                Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeName);
+                Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeNames[bi]);
                 if (t != null && t.gameObject.activeSelf)
                     t.gameObject.SetActive(false);
             }
@@ -2653,28 +2663,29 @@ namespace VPB
                 LogUtil.LogError("[VPB] UpdateFileButtonVisuals: file is null");
                 return;
             }
-            
-            // Image
-            Image img = btnGO.GetComponent<Image>();
+
+            FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
+            Image img = b != null ? b.image : btnGO.GetComponent<Image>();
             string selKey = GetSelectionIdentityKey(file, false);
             bool isSelected = (!string.IsNullOrEmpty(selKey) && selectedFilePaths.Contains(selKey));
 
             bool isListRow = layoutMode == GalleryLayoutMode.List || settingsListViewActive;
-            if (isListRow)
+            if (img != null)
             {
-                bool isMaster = false;
-                try { isMaster = IsFilterActive && IsFilterMasterEntry(file); } catch { isMaster = false; }
-                img.color = isMaster ? new Color(0.1f, 0.25f, 0.45f, 0.55f) : new Color(0f, 0f, 0f, 0.4f);
+                if (isListRow)
+                {
+                    bool isMaster = false;
+                    try { isMaster = IsFilterActive && IsFilterMasterEntry(file); } catch { isMaster = false; }
+                    img.color = isMaster ? new Color(0.1f, 0.25f, 0.45f, 0.55f) : new Color(0f, 0f, 0f, 0.4f);
+                }
+                else if (isSelected)
+                    img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
+                else
+                    img.color = Color.gray;
             }
-            else if (isSelected)
-                img.color = new Color(0.7f, 0.7f, 0.2f, 1f);
-            else
-                img.color = Color.gray;
 
-            Transform listHoverNt = btnGO.transform.Find("ListHoverBar");
-            if (listHoverNt != null) listHoverNt.gameObject.SetActive(false);
-            Transform listSelNt = btnGO.transform.Find("ListSelectionBar");
-            if (listSelNt != null) listSelNt.gameObject.SetActive(false);
+            FileButtonBinder.SetActive(b != null ? b.listHoverBarTr : null, false);
+            FileButtonBinder.SetActive(b != null ? b.listSelectionBarTr : null, false);
 
             float hoverW = EffectiveGridHoverBorderWidth();
             float selW = EffectiveGridSelectedBorderWidth();
@@ -2682,13 +2693,13 @@ namespace VPB
             bool inwardCell = EffectiveGridBorderInwardForGalleryCell();
             Color borderTint = EffectiveGalleryGridBorderColor();
 
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+            UIHoverBorder hoverBorder = b != null ? b.hoverBorder : btnGO.GetComponent<UIHoverBorder>();
             if (hoverBorder != null)
             {
                 hoverBorder.enabled = true;
                 hoverBorder.hoverColor = borderTint;
             }
-            Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+            Transform innerBorderTr = b != null ? b.gridInnerBorderTr : btnGO.transform.Find("GridInnerBorder");
             GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
             bool useInner = inwardCell && innerBorderGO != null;
 
@@ -2740,9 +2751,11 @@ namespace VPB
                 return;
             }
 
+            FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
+
             // File rows pooled/reused across modes (including Settings).
             // Clear prior hover handlers (e.g. settings tooltips) so they don't leak into other categories.
-            var hoverDelReset = btnGO.GetComponent<UIHoverDelegate>();
+            UIHoverDelegate hoverDelReset = b != null ? b.hoverDelegate : btnGO.GetComponent<UIHoverDelegate>();
             if (hoverDelReset != null)
             {
                 hoverDelReset.OnHoverChange = null;
@@ -2750,6 +2763,7 @@ namespace VPB
             }
             // Restore baseline hover tracking for this row.
             AddHoverDelegate(btnGO);
+            if (b != null) b.hoverDelegate = btnGO.GetComponent<UIHoverDelegate>();
 
             // Identity key (Path preferred; fall back to Uid). Needed because some rows (e.g. ALL VAR package list)
             // can arrive from SQLite without a resolved/installed var path hint.
@@ -2760,13 +2774,14 @@ namespace VPB
                 // Still clear thumbnail so pooled rows don't show stale previews
                 try
                 {
-                    Transform thumbTrBad = btnGO.transform.Find("Thumbnail");
-                    if (thumbTrBad == null) thumbTrBad = btnGO.transform.Find("ThumbContainer/Thumbnail");
-                    if (thumbTrBad != null)
+                    RawImage ri = b != null ? b.thumbRaw : null;
+                    if (ri == null)
                     {
-                        RawImage ri = thumbTrBad.GetComponent<RawImage>();
-                        if (ri != null) LoadThumbnail(file, ri);
+                        Transform thumbTrBad = btnGO.transform.Find("Thumbnail");
+                        if (thumbTrBad == null) thumbTrBad = btnGO.transform.Find("ThumbContainer/Thumbnail");
+                        if (thumbTrBad != null) ri = thumbTrBad.GetComponent<RawImage>();
                     }
+                    if (ri != null) LoadThumbnail(file, ri);
                 }
                 catch { }
                 return;
@@ -2775,17 +2790,15 @@ namespace VPB
             btnGO.name = "FileButton_" + (file.Name ?? idKey ?? "Unknown");
 
             // Recycled row defaults (TextArea settings rows disable root raycast — restore before rebind)
-            {
-                Button rb0 = btnGO.GetComponent<Button>();
-                if (rb0 != null) rb0.interactable = true;
-                Image ri0 = btnGO.GetComponent<Image>();
-                if (ri0 != null) ri0.raycastTarget = true;
-                var lu0 = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-                if (lu0 != null) lu0.enabled = true;
-            }
+            Button rb0 = b != null ? b.button : btnGO.GetComponent<Button>();
+            if (rb0 != null) rb0.interactable = true;
+            Image ri0 = b != null ? b.image : btnGO.GetComponent<Image>();
+            if (ri0 != null) ri0.raycastTarget = true;
+            UIFileEntryLeftReleaseSelect lu0 = b != null ? b.leftRelease : btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+            if (lu0 != null) lu0.enabled = true;
 
             // Update mapping
-            Image img = btnGO.GetComponent<Image>();
+            Image img = ri0;
             if (img != null)
             {
                 // Map by identity key so empty Path rows don't collide
@@ -2803,13 +2816,18 @@ namespace VPB
             UpdateFileButtonVisuals(btnGO, file);
 
             // Button + row pointer routing (left/right/middle)
-            UIFileEntryLeftReleaseSelect leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-            if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
+            UIFileEntryLeftReleaseSelect leftUp = b != null ? b.leftRelease : null;
+            if (leftUp == null)
+            {
+                leftUp = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
+                if (leftUp == null) leftUp = btnGO.AddComponent<UIFileEntryLeftReleaseSelect>();
+                if (b != null) b.leftRelease = leftUp;
+            }
             leftUp.Panel = this;
             leftUp.File = file;
             leftUp.enabled = true;
 
-            Button btn = btnGO.GetComponent<Button>();
+            Button btn = rb0;
             if (btn != null) btn.onClick.RemoveAllListeners();
 
             bool isListMode = (layoutMode == GalleryLayoutMode.List);
@@ -2818,21 +2836,21 @@ namespace VPB
             if (isSettingsRow)
             {
                 // Special settings list-row mode: no package affordances (thumb/rating/badges/meta columns).
-                Transform listRowTrSpecial = btnGO.transform.Find("ListRow");
+                Transform listRowTrSpecial = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
                 if (listRowTrSpecial != null)
                 {
                     listRowTrSpecial.gameObject.SetActive(true);
-                    RectTransform listRowRT = listRowTrSpecial as RectTransform;
+                    RectTransform listRowRT = b != null && b.listRowRT != null ? b.listRowRT : listRowTrSpecial as RectTransform;
                     if (listRowRT != null)
                     {
                         listRowRT.offsetMin = new Vector2(8, 0);
                         listRowRT.offsetMax = new Vector2(-8, 0);
                     }
 
-                    Transform nameTr = listRowTrSpecial.Find("Name");
+                    Transform nameTr = b != null ? b.listNameTr : listRowTrSpecial.Find("Name");
                     if (nameTr != null)
                     {
-                        Text t = nameTr.GetComponent<Text>();
+                        Text t = b != null && b.listNameText != null ? b.listNameText : nameTr.GetComponent<Text>();
                         if (t != null)
                         {
                             t.text = file.Name ?? "";
@@ -2840,47 +2858,38 @@ namespace VPB
                         }
                     }
 
-                    Transform detailsTr = listRowTrSpecial.Find("Details");
+                    Transform detailsTr = b != null ? b.listDetailsTr : listRowTrSpecial.Find("Details");
                     if (detailsTr != null) detailsTr.gameObject.SetActive(false);
                 }
 
                 ConfigureInternalSettingsRowUI(btnGO, file);
 
                 {
-                    Button rootBt = btnGO.GetComponent<Button>();
-                    if (rootBt != null)
+                    if (btn != null)
                     {
-                        rootBt.onClick.RemoveAllListeners();
-                        rootBt.interactable = false;
+                        btn.onClick.RemoveAllListeners();
+                        btn.interactable = false;
                     }
                     if (img != null) img.raycastTarget = false;
-                    var leftUpSettings = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-                    if (leftUpSettings != null) leftUpSettings.enabled = false;
+                    if (leftUp != null) leftUp.enabled = false;
                 }
 
-                void HideChild(string p)
-                {
-                    Transform tr = FindGalleryBadgeTransform(btnGO.transform, p);
-                    if (tr == null) tr = btnGO.transform.Find(p);
-                    if (tr != null) tr.gameObject.SetActive(false);
-                }
+                FileButtonBinder.SetActive(b != null ? b.gridLabelTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.thumbTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.ratingTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.ratingSelectorTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.autoInstallBadgeTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.hidePackageBadgeTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.scanExcludedBadgeTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.userTagsBadgeTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.depsBadgeTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.depsDownloadBtnTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.listHoverBarTr : null, false);
+                FileButtonBinder.SetActive(b != null ? b.listSelectionBarTr : null, false);
 
-                HideChild("GridLabel");
-                HideChild("Thumbnail");
-                HideChild("Rating");
-                HideChild("RatingSelector");
-                HideChild("AutoInstallBadge");
-                HideChild("HidePackageBadge");
-                HideChild("ScanExcludedBadge");
-                HideChild("UserTagsBadge");
-                HideChild("DepsBadge");
-                HideChild("DepsDownloadBtn");
-                HideChild("ListHoverBar");
-                HideChild("ListSelectionBar");
-
-                UIHoverReveal hoverSpecial = btnGO.GetComponent<UIHoverReveal>();
+                UIHoverReveal hoverSpecial = b != null ? b.hoverReveal : btnGO.GetComponent<UIHoverReveal>();
                 if (hoverSpecial != null) hoverSpecial.file = null;
-                var holdSpecial = btnGO.GetComponent<HoldToApplyOnHover>();
+                HoldToApplyOnHover holdSpecial = b != null ? b.holdToApply : btnGO.GetComponent<HoldToApplyOnHover>();
                 if (holdSpecial != null) holdSpecial.enabled = false;
                 return;
             }
@@ -2888,10 +2897,10 @@ namespace VPB
             EnsureFileEntryPointerForwarding(btnGO, leftUp);
 
             // Reset any settings-only controls on recycled rows when binding normal files.
-            Transform listRowTrReset = btnGO.transform.Find("ListRow");
+            Transform listRowTrReset = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
             if (listRowTrReset != null)
             {
-                Transform detailsTrReset = listRowTrReset.Find("Details");
+                Transform detailsTrReset = b != null ? b.listDetailsTr : listRowTrReset.Find("Details");
                 if (detailsTrReset != null)
                 {
                     for (int i = 0; i < detailsTrReset.childCount; i++)
@@ -2915,13 +2924,13 @@ namespace VPB
             EnsureGalleryBadgeParentForLayoutMode(btnGO, isListMode);
 
             // List Row + Rating selector visibility (List/Table mode)
-            Transform listRowTr = btnGO.transform.Find("ListRow");
+            Transform listRowTr = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
             if (listRowTr != null)
             {
                 listRowTr.gameObject.SetActive(isListMode);
                 if (isListMode)
                 {
-                    RectTransform listRowRT = listRowTr as RectTransform;
+                    RectTransform listRowRT = b != null && b.listRowRT != null ? b.listRowRT : listRowTr as RectTransform;
                     if (listRowRT != null)
                     {
                         float leftPad = listThumbSize + 15f;
@@ -2933,15 +2942,15 @@ namespace VPB
 
             if (isListMode)
             {
-                Transform gridLabelTr = btnGO.transform.Find("GridLabel");
+                Transform gridLabelTr = b != null ? b.gridLabelTr : btnGO.transform.Find("GridLabel");
                 if (gridLabelTr != null && gridLabelTr.gameObject.activeSelf)
                     gridLabelTr.gameObject.SetActive(false);
             }
 
             // CloseSelector first — grid picker may be reparented under backgroundBoxGO while open.
-            RatingHandler rhSel = btnGO.GetComponent<RatingHandler>();
+            RatingHandler rhSel = b != null ? b.ratingHandler : btnGO.GetComponent<RatingHandler>();
             if (rhSel != null) rhSel.CloseSelector();
-            Transform selectorTr = btnGO.transform.Find("RatingSelector");
+            Transform selectorTr = b != null ? b.ratingSelectorTr : btnGO.transform.Find("RatingSelector");
             if (selectorTr != null)
             {
                 if (isListMode)
@@ -2951,12 +2960,12 @@ namespace VPB
             }
 
             // Card Container (Hidden in List mode, Visible in Grid mode? No, Card is for VerticalCard mode which is removed or mapped to Grid if we had it)
-            // Wait, Grid mode uses the old style overlay? Or does Grid mode use Card? 
+            // Wait, Grid mode uses the old style overlay? Or does Grid mode use Card?
             // In the previous code, Grid mode had "Card" active only if VerticalCard.
             // layoutMode == GalleryLayoutMode.Grid means standard grid which usually has hover reveal or overlay.
             // Let's check CreateNewFileButtonGO. CardGO is hidden by default.
-            
-            Transform cardTr = btnGO.transform.Find("Card");
+
+            Transform cardTr = b != null ? b.cardTr : btnGO.transform.Find("Card");
             if (cardTr != null)
             {
                 // In the new 2-mode system, Grid usually implies the simple thumbnail + optional overlay.
@@ -2964,20 +2973,24 @@ namespace VPB
                 // But typically Grid = just thumbnail with hover name.
                 // VerticalCard was the one with persistent text below.
                 // Since we only have Grid and List, let's assume Grid means "Thumbnail Grid".
-                
+
                 // So Card is hidden in both Grid (standard) and List.
                 cardTr.gameObject.SetActive(false);
             }
 
             // Thumbnail
-            Transform thumbTr = btnGO.transform.Find("Thumbnail");
-            if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");
+            Transform thumbTr = b != null ? b.thumbTr : null;
+            if (thumbTr == null)
+            {
+                thumbTr = btnGO.transform.Find("Thumbnail");
+                if (thumbTr == null) thumbTr = btnGO.transform.Find("ThumbContainer/Thumbnail");
+            }
 
             if (thumbTr != null)
             {
                 if (!thumbTr.gameObject.activeSelf) thumbTr.gameObject.SetActive(true);
-                RectTransform thumbRT = thumbTr as RectTransform;
-                
+                RectTransform thumbRT = b != null && b.thumbRT != null ? b.thumbRT : thumbTr as RectTransform;
+
                 if (isListMode)
                 {
                     // Full height square on left
@@ -3000,7 +3013,7 @@ namespace VPB
                     ApplyGridLabelStripLayout(btnGO, file);
                 }
 
-                RawImage thumbImg = thumbTr.GetComponent<RawImage>();
+                RawImage thumbImg = b != null ? b.thumbRaw : thumbTr.GetComponent<RawImage>();
                 if (thumbImg != null)
                 {
                     // Let LoadThumbnail decide whether this is a true rebind or the same
@@ -3015,14 +3028,19 @@ namespace VPB
                         thumbImg,
                         file,
                         isListMode,
-                        out bool noUsableThumb,
+                        out bool noUableThumb,
                         out bool showThumbLabels);
                     ApplyPluginThumbPlaceholder(thumbTr, thumbImg, file, isListMode, showThumbLabels);
 
                     // List-layout hover preview: bind hover handler to the thumbnail only.
                     // (Use the thumbnail rect so the full row doesn't trigger the popup.)
-                    var hp = thumbTr.GetComponent<UIHoverPreviewTrigger>();
-                    if (hp == null) hp = thumbTr.gameObject.AddComponent<UIHoverPreviewTrigger>();
+                    UIHoverPreviewTrigger hp = b != null ? b.hoverPreview : null;
+                    if (hp == null)
+                    {
+                        hp = thumbTr.GetComponent<UIHoverPreviewTrigger>();
+                        if (hp == null) hp = thumbTr.gameObject.AddComponent<UIHoverPreviewTrigger>();
+                        if (b != null) b.hoverPreview = hp;
+                    }
                     hp.panel = this;
                     hp.file = file;
                     hp.SyncHoverPreviewAfterRebind();
@@ -3032,13 +3050,17 @@ namespace VPB
                     {
                         var staleThumbLu = thumbTr.gameObject.GetComponent<UIFileEntryLeftReleaseSelect>();
                         if (staleThumbLu != null) UnityEngine.Object.Destroy(staleThumbLu);
-                        var rootLu = btnGO.GetComponent<UIFileEntryLeftReleaseSelect>();
-                        if (rootLu != null)
+                        if (leftUp != null)
                         {
-                            var fwd = thumbTr.gameObject.GetComponent<UIFileEntryPointerForwarder>();
+                            UIFileEntryPointerForwarder fwd = b != null ? b.thumbPointerFwd : null;
+                            if (fwd == null)
+                            {
+                                fwd = thumbTr.gameObject.GetComponent<UIFileEntryPointerForwarder>();
+                                if (b != null) b.thumbPointerFwd = fwd;
+                            }
                             if (fwd != null)
                             {
-                                fwd.Target = rootLu;
+                                fwd.Target = leftUp;
                                 fwd.ForwardLeftPointerUp = true;
                             }
                         }
@@ -3048,29 +3070,34 @@ namespace VPB
             }
 
             // Hide NavText
-            Transform navTextTr = btnGO.transform.Find("NavText");
+            Transform navTextTr = b != null ? b.navTextTr : btnGO.transform.Find("NavText");
             if (navTextTr != null && navTextTr.gameObject.activeSelf) navTextTr.gameObject.SetActive(false);
-            
+
             // Hover Path
-            UIHoverReveal hover = btnGO.GetComponent<UIHoverReveal>();
+            UIHoverReveal hover = b != null ? b.hoverReveal : btnGO.GetComponent<UIHoverReveal>();
             if (hover != null) hover.file = file;
 
             // Hold-to-launch/apply: pointer must stay pressed; duration from VPBConfig.HoldToLaunchHoldSeconds.
             // Kept always attached for pooling; enabled/disabled by panel toggle at runtime.
             try
             {
-                var h = btnGO.GetComponent<HoldToApplyOnHover>();
-                if (h == null) h = btnGO.AddComponent<HoldToApplyOnHover>();
+                HoldToApplyOnHover h = b != null ? b.holdToApply : null;
+                if (h == null)
+                {
+                    h = btnGO.GetComponent<HoldToApplyOnHover>();
+                    if (h == null) h = btnGO.AddComponent<HoldToApplyOnHover>();
+                    if (b != null) b.holdToApply = h;
+                }
                 h.panel = this;
                 h.file = file;
             }
             catch { }
 
             // Label
-            Transform labelTr = btnGO.transform.Find("Card/Label");
+            Transform labelTr = b != null ? b.cardLabelTr : btnGO.transform.Find("Card/Label");
             if (labelTr != null)
             {
-                Text labelText = labelTr.GetComponent<Text>();
+                Text labelText = b != null && b.cardLabelText != null ? b.cardLabelText : labelTr.GetComponent<Text>();
                 if (labelText != null)
                 {
                     bool pretty = VPBConfig.Instance != null && VPBConfig.Instance.GalleryPrettyPresetNames;
@@ -3094,29 +3121,29 @@ namespace VPB
             }
 
             // List: star + full badge strip. Grid: thumbnail + GridLabel only; all badges hidden.
-            Transform ratingTr = btnGO.transform.Find("Rating");
+            Transform ratingTr = b != null ? b.ratingTr : btnGO.transform.Find("Rating");
             if (isListMode)
             {
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(true);
 
                 bool showAutoInstallBadge = file.IsAutoInstall();
-                Transform aiBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
+                Transform aiBadgeTr = b != null ? b.autoInstallBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "AutoInstallBadge");
                 if (aiBadgeTr != null)
                     aiBadgeTr.gameObject.SetActive(showAutoInstallBadge);
 
                 bool showHideBadge = PackageHidePrefs.IsGalleryHideBadgeVisible(file);
-                Transform hideBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
+                Transform hideBadgeTr = b != null ? b.hidePackageBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "HidePackageBadge");
                 if (hideBadgeTr != null)
                     hideBadgeTr.gameObject.SetActive(showHideBadge);
 
                 bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
-                Transform scanExBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                Transform scanExBadgeTr = b != null ? b.scanExcludedBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
                 if (scanExBadgeTr != null)
                     scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
 
                 bool showUserTagsBadge = IsGalleryUserTagBadgeVisible(file);
-                Transform userTagsBadgeTr = FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
+                Transform userTagsBadgeTr = b != null ? b.userTagsBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
                 if (userTagsBadgeTr != null)
                     userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
 
@@ -3127,7 +3154,7 @@ namespace VPB
                 bool anyListBadge = showAutoInstallBadge || showHideBadge || showScanExcludedBadge || showUserTagsBadge;
                 if (listRowTr != null)
                 {
-                    Transform listBadgesRowTr = listRowTr.Find("ListBadges");
+                    Transform listBadgesRowTr = b != null ? b.listBadgesTr : listRowTr.Find("ListBadges");
                     if (listBadgesRowTr != null && listBadgesRowTr.gameObject.activeSelf != anyListBadge)
                         listBadgesRowTr.gameObject.SetActive(anyListBadge);
                 }
@@ -3138,9 +3165,10 @@ namespace VPB
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 
-                foreach (string badgeName in new[] { "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn" })
+                string[] badgeNames = FileButtonBinder.GridBadgeHideNames;
+                for (int bi = 0; bi < badgeNames.Length; bi++)
                 {
-                    Transform t = FindGalleryBadgeTransform(btnGO.transform, badgeName);
+                    Transform t = b != null ? b.GetBadge(badgeNames[bi]) : FindGalleryBadgeTransform(btnGO.transform, badgeNames[bi]);
                     if (t != null) t.gameObject.SetActive(false);
                 }
             }
@@ -3152,10 +3180,10 @@ namespace VPB
 
                 ApplyListRowScale(listRowTr, EffectiveListRowHeightForGallery());
 
-                Transform nameTr = btnGO.transform.Find("ListRow/Name");
+                Transform nameTr = b != null ? b.listNameTr : btnGO.transform.Find("ListRow/Name");
                 if (nameTr != null)
                 {
-                    Text t = nameTr.GetComponent<Text>();
+                    Text t = b != null && b.listNameText != null ? b.listNameText : nameTr.GetComponent<Text>();
                     if (t != null)
                     {
                         string displayName = GetGalleryListRowDisplayName(file);
@@ -3164,10 +3192,10 @@ namespace VPB
                     }
                 }
 
-                Transform depsTr = btnGO.transform.Find("ListRow/Details/Deps");
+                Transform depsTr = b != null ? b.depsTr : btnGO.transform.Find("ListRow/Details/Deps");
                 if (depsTr != null)
                 {
-                    Text t = depsTr.GetComponent<Text>();
+                    Text t = b != null && b.depsText != null ? b.depsText : depsTr.GetComponent<Text>();
                     if (t != null)
                     {
                         int deps = GallerySortManager.GetDepsCount(file);
@@ -3178,8 +3206,12 @@ namespace VPB
                         // Hover-highlight only the value; Set() resets color on recycle.
                         try
                         {
-                            var hv = depsTr.GetComponent<UIRichValueHover>();
-                            if (hv == null) hv = depsTr.gameObject.AddComponent<UIRichValueHover>();
+                            UIRichValueHover hv = b != null ? b.EnsureDepsHover() : null;
+                            if (hv == null)
+                            {
+                                hv = depsTr.GetComponent<UIRichValueHover>();
+                                if (hv == null) hv = depsTr.gameObject.AddComponent<UIRichValueHover>();
+                            }
                             hv.target = t;
                             hv.Set("D: ", v, "  |  ");
                         }
@@ -3188,14 +3220,22 @@ namespace VPB
                     // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
-                        UIScrollPassthrough sp = depsTr.GetComponent<UIScrollPassthrough>();
-                        if (sp == null) sp = depsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        UIScrollPassthrough sp = b != null ? b.EnsureDepsScrollPassthrough() : null;
+                        if (sp == null)
+                        {
+                            sp = depsTr.GetComponent<UIScrollPassthrough>();
+                            if (sp == null) sp = depsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        }
                         sp.target = scrollRect;
                     }
                     catch { }
                     // Make clickable to filter by dependencies using EventTrigger (non-invasive)
-                    EventTrigger et = depsTr.GetComponent<EventTrigger>();
-                    if (et == null) et = depsTr.gameObject.AddComponent<EventTrigger>();
+                    EventTrigger et = b != null ? b.EnsureDepsEventTrigger() : null;
+                    if (et == null)
+                    {
+                        et = depsTr.GetComponent<EventTrigger>();
+                        if (et == null) et = depsTr.gameObject.AddComponent<EventTrigger>();
+                    }
                     var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
                     pointerClickEntry.callback.AddListener((data) => {
                         if (GallerySortManager.GetDepsCount(file) > 0)
@@ -3207,10 +3247,10 @@ namespace VPB
                     try { AddTooltip(depsTr.gameObject, "gallery.tooltip.dependencies", "Dependencies"); } catch { }
                 }
 
-                Transform missingTr = btnGO.transform.Find("ListRow/Details/Missing");
+                Transform missingTr = b != null ? b.missingTr : btnGO.transform.Find("ListRow/Details/Missing");
                 if (missingTr != null)
                 {
-                    Text t = missingTr.GetComponent<Text>();
+                    Text t = b != null && b.missingText != null ? b.missingText : missingTr.GetComponent<Text>();
                     if (t != null)
                     {
                         int missing = GallerySortManager.GetMissingDepsCount(file);
@@ -3221,8 +3261,12 @@ namespace VPB
                         // Hover-highlight only the value; Set() resets color on recycle.
                         try
                         {
-                            var hv = missingTr.GetComponent<UIRichValueHover>();
-                            if (hv == null) hv = missingTr.gameObject.AddComponent<UIRichValueHover>();
+                            UIRichValueHover hv = b != null ? b.EnsureMissingHover() : null;
+                            if (hv == null)
+                            {
+                                hv = missingTr.GetComponent<UIRichValueHover>();
+                                if (hv == null) hv = missingTr.gameObject.AddComponent<UIRichValueHover>();
+                            }
                             hv.target = t;
                             hv.useConditionalColoring = true;
                             hv.zeroValueColor = Color.green;  // Green when no missing
@@ -3234,14 +3278,22 @@ namespace VPB
                     // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
-                        UIScrollPassthrough sp = missingTr.GetComponent<UIScrollPassthrough>();
-                        if (sp == null) sp = missingTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        UIScrollPassthrough sp = b != null ? b.EnsureMissingScrollPassthrough() : null;
+                        if (sp == null)
+                        {
+                            sp = missingTr.GetComponent<UIScrollPassthrough>();
+                            if (sp == null) sp = missingTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        }
                         sp.target = scrollRect;
                     }
                     catch { }
                     // Make clickable to filter by missing dependencies using EventTrigger (non-invasive)
-                    EventTrigger et = missingTr.GetComponent<EventTrigger>();
-                    if (et == null) et = missingTr.gameObject.AddComponent<EventTrigger>();
+                    EventTrigger et = b != null ? b.EnsureMissingEventTrigger() : null;
+                    if (et == null)
+                    {
+                        et = missingTr.GetComponent<EventTrigger>();
+                        if (et == null) et = missingTr.gameObject.AddComponent<EventTrigger>();
+                    }
                     var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
                     pointerClickEntry.callback.AddListener((data) => {
                         try
@@ -3261,10 +3313,10 @@ namespace VPB
                     try { AddTooltip(missingTr.gameObject, "gallery.tooltip.missing_dependencies", "Missing Dependencies"); } catch { }
                 }
 
-                Transform catTr = btnGO.transform.Find("ListRow/Details/Category");
+                Transform catTr = b != null ? b.categoryTr : btnGO.transform.Find("ListRow/Details/Category");
                 if (catTr != null)
                 {
-                    Text t = catTr.GetComponent<Text>();
+                    Text t = b != null && b.categoryText != null ? b.categoryText : catTr.GetComponent<Text>();
                     if (t != null)
                     {
                         string catLabel = "";
@@ -3306,10 +3358,10 @@ namespace VPB
                     }
                 }
 
-                Transform dependentsTr = btnGO.transform.Find("ListRow/Details/Dependents");
+                Transform dependentsTr = b != null ? b.dependentsTr : btnGO.transform.Find("ListRow/Details/Dependents");
                 if (dependentsTr != null)
                 {
-                    Text t = dependentsTr.GetComponent<Text>();
+                    Text t = b != null && b.dependentsText != null ? b.dependentsText : dependentsTr.GetComponent<Text>();
                     if (t != null)
                     {
                         int dependents = GallerySortManager.GetDependentsCount(file);
@@ -3320,8 +3372,12 @@ namespace VPB
                         // Hover-highlight only the value; Set() resets color on recycle.
                         try
                         {
-                            var hv = dependentsTr.GetComponent<UIRichValueHover>();
-                            if (hv == null) hv = dependentsTr.gameObject.AddComponent<UIRichValueHover>();
+                            UIRichValueHover hv = b != null ? b.EnsureDependentsHover() : null;
+                            if (hv == null)
+                            {
+                                hv = dependentsTr.GetComponent<UIRichValueHover>();
+                                if (hv == null) hv = dependentsTr.gameObject.AddComponent<UIRichValueHover>();
+                            }
                             hv.target = t;
                             hv.Set("Dn: ", v, "");
                         }
@@ -3330,14 +3386,22 @@ namespace VPB
                     // Keep ScrollRect scrolling even when hovering over clickable text.
                     try
                     {
-                        UIScrollPassthrough sp = dependentsTr.GetComponent<UIScrollPassthrough>();
-                        if (sp == null) sp = dependentsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        UIScrollPassthrough sp = b != null ? b.EnsureDependentsScrollPassthrough() : null;
+                        if (sp == null)
+                        {
+                            sp = dependentsTr.GetComponent<UIScrollPassthrough>();
+                            if (sp == null) sp = dependentsTr.gameObject.AddComponent<UIScrollPassthrough>();
+                        }
                         sp.target = scrollRect;
                     }
                     catch { }
                     // Make clickable to filter by dependents using EventTrigger (non-invasive)
-                    EventTrigger et = dependentsTr.GetComponent<EventTrigger>();
-                    if (et == null) et = dependentsTr.gameObject.AddComponent<EventTrigger>();
+                    EventTrigger et = b != null ? b.EnsureDependentsEventTrigger() : null;
+                    if (et == null)
+                    {
+                        et = dependentsTr.GetComponent<EventTrigger>();
+                        if (et == null) et = dependentsTr.gameObject.AddComponent<EventTrigger>();
+                    }
                     var pointerClickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
                     pointerClickEntry.callback.AddListener((data) => {
                         if (GallerySortManager.GetDependentsCount(file) > 0)
@@ -3349,17 +3413,17 @@ namespace VPB
                     try { AddTooltip(dependentsTr.gameObject, "gallery.tooltip.dependents", "Dependents"); } catch { }
                 }
 
-                Transform sizeTr = btnGO.transform.Find("ListRow/Details/Size");
+                Transform sizeTr = b != null ? b.sizeTr : btnGO.transform.Find("ListRow/Details/Size");
                 if (sizeTr != null)
                 {
-                    Text t = sizeTr.GetComponent<Text>();
+                    Text t = b != null && b.sizeText != null ? b.sizeText : sizeTr.GetComponent<Text>();
                     if (t != null) t.text = FormatBytesForList(file.Size);
                 }
 
-                Transform dateTr = btnGO.transform.Find("ListRow/Details/Date");
+                Transform dateTr = b != null ? b.dateTr : btnGO.transform.Find("ListRow/Details/Date");
                 if (dateTr != null)
                 {
-                    Text t = dateTr.GetComponent<Text>();
+                    Text t = b != null && b.dateText != null ? b.dateText : dateTr.GetComponent<Text>();
                     if (t != null)
                     {
                         // Prefer when we first indexed this uid (= when user actually got it / got the update)
@@ -3378,18 +3442,22 @@ namespace VPB
 
             // Init RatingHandler in both list and grid mode
             {
-                Text starText = null;
-                Transform starBtnTr = btnGO.transform.Find("Rating/Star");
-                if (starBtnTr != null) starText = starBtnTr.GetComponentInChildren<Text>();
-
+                Text starText = b != null ? b.ratingStarText : null;
                 if (starText == null)
                 {
-                    Transform oldStar = btnGO.transform.Find("ListRow/Details/Rating/Star");
-                    if (oldStar != null) starText = oldStar.GetComponentInChildren<Text>();
+                    Transform starBtnTr = b != null ? b.ratingStarTr : btnGO.transform.Find("Rating/Star");
+                    if (starBtnTr != null) starText = starBtnTr.GetComponentInChildren<Text>();
+
+                    if (starText == null)
+                    {
+                        Transform oldStar = btnGO.transform.Find("ListRow/Details/Rating/Star");
+                        if (oldStar != null) starText = oldStar.GetComponentInChildren<Text>();
+                    }
+                    if (b != null && starText != null) b.ratingStarText = starText;
                 }
 
-                Transform selector2Tr = btnGO.transform.Find("RatingSelector");
-                RatingHandler rh = btnGO.GetComponent<RatingHandler>();
+                Transform selector2Tr = b != null ? b.ratingSelectorTr : btnGO.transform.Find("RatingSelector");
+                RatingHandler rh = b != null ? b.ratingHandler : btnGO.GetComponent<RatingHandler>();
                 if (rh != null && selector2Tr != null && starText != null)
                 {
                     rh.Init(file, starText, selector2Tr.gameObject);
@@ -3397,9 +3465,9 @@ namespace VPB
                     rh.SetShowDigitMode(false);
                 }
             }
-            
+
             // Draggable
-            UIDraggableItem draggable = btnGO.GetComponent<UIDraggableItem>();
+            UIDraggableItem draggable = b != null ? b.draggable : btnGO.GetComponent<UIDraggableItem>();
             if (draggable != null) draggable.FileEntry = file;
         }
 

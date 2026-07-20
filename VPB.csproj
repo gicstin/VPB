@@ -511,6 +511,7 @@
     <Compile Include="src\gallery\CategoryFilterState.cs" />
     <Compile Include="src\gallery\GalleryTypes.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.cs" />
+    <Compile Include="src\gallery\GalleryFileButtonBinder.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.Behaviours.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.cs" />
     <Compile Include="src\gallery\GalleryUIUtils.DraggableItem.Undo.cs" />

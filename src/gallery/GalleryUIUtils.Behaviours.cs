@@ -1524,7 +1524,8 @@ namespace VPB
                     if (item != null)
                     {
                         _activeIndexSet.Remove(item.index);
-                        Recycle(item.GetComponent<RectTransform>());
+                        RectTransform rt = item.cachedRT != null ? item.cachedRT : item.GetComponent<RectTransform>();
+                        Recycle(rt);
                     }
                     activeItems.RemoveAt(i);
                 }
@@ -1538,7 +1539,16 @@ namespace VPB
                 RectTransform itemRT = GetItem();
                 if (itemRT != null)
                 {
-                    RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(itemRT.gameObject);
+                    RecyclingGridItem item = binder.gridItem;
+                    if (item == null)
+                    {
+                        item = itemRT.GetComponent<RecyclingGridItem>();
+                        if (item == null) item = itemRT.gameObject.AddComponent<RecyclingGridItem>();
+                        binder.gridItem = item;
+                    }
+                    item.cachedRT = itemRT;
+                    item.binder = binder;
                     item.index = i;
                     _activeIndexSet.Add(i);
                     PositionItem(itemRT, i);
@@ -1600,9 +1610,17 @@ namespace VPB
                 {
                     item = go.GetComponent<RectTransform>();
                     go.transform.SetParent(content, false);
-                    RecyclingGridItem rgi = go.GetComponent<RecyclingGridItem>();
-                    if (rgi == null) rgi = go.AddComponent<RecyclingGridItem>();
-                    
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(go);
+                    RecyclingGridItem rgi = binder.gridItem;
+                    if (rgi == null)
+                    {
+                        rgi = go.GetComponent<RecyclingGridItem>();
+                        if (rgi == null) rgi = go.AddComponent<RecyclingGridItem>();
+                        binder.gridItem = rgi;
+                    }
+                    rgi.cachedRT = item;
+                    rgi.binder = binder;
+
                     item.anchorMin = new Vector2(0, 1);
                     item.anchorMax = new Vector2(0, 1);
                     item.pivot = new Vector2(0, 1);
@@ -1623,7 +1641,9 @@ namespace VPB
         {
             for (int i = 0; i < activeItems.Count; i++)
             {
-                Recycle(activeItems[i].GetComponent<RectTransform>());
+                RecyclingGridItem ai = activeItems[i];
+                RectTransform rt = ai != null ? (ai.cachedRT != null ? ai.cachedRT : ai.GetComponent<RectTransform>()) : null;
+                Recycle(rt);
             }
             activeItems.Clear();
             _activeIndexSet.Clear();
@@ -1634,6 +1654,9 @@ namespace VPB
     public class RecyclingGridItem : MonoBehaviour
     {
         public int index;
+        /// <summary>Cached at create/pool warm — avoid GetComponent&lt;RectTransform&gt; on recycle.</summary>
+        public RectTransform cachedRT;
+        internal FileButtonBinder binder;
     }
 
     public class ScrollbarSync : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
