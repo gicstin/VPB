@@ -256,14 +256,19 @@ namespace VPB
                 if (!string.IsNullOrEmpty(filterNow) && pe.Path.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                 bool isActive = string.Equals(currentPackagePathFilter, pe.Path, StringComparison.OrdinalIgnoreCase);
-                if (pe.Count <= 0 && !isActive) continue;
+                bool zeroCount = pe.Count <= 0;
 
-                string label = pe.Path;
-                Color btnColor = isActive ? ColorPath : ColorInactiveRow;
+                // Keep zero-count folders visible (muted). Counts are category-scoped; folder tree is not.
+                string label = pe.Path + " (" + pe.Count + ")";
+                Color btnColor = isActive
+                    ? ColorPath
+                    : (zeroCount ? ColorPathZeroCount : ColorInactiveRow);
                 string pathValue = pe.Path;
+                int pathCountSnap = pe.Count;
                 CreateTabButton(container.transform, label, btnColor, isActive, () =>
                 {
-                    if (string.Equals(currentPackagePathFilter, pathValue, StringComparison.OrdinalIgnoreCase))
+                    bool selecting = !string.Equals(currentPackagePathFilter, pathValue, StringComparison.OrdinalIgnoreCase);
+                    if (!selecting)
                         currentPackagePathFilter = "";
                     else
                         currentPackagePathFilter = pathValue;
@@ -273,6 +278,17 @@ namespace VPB
                     tagsCached = false;
                     userTagsCached = false;
                     RefreshFilesAndTabs();
+
+                    if (selecting && pathCountSnap <= 0)
+                    {
+                        string cat = currentCategoryTitle ?? "";
+                        if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+                        if (string.IsNullOrEmpty(cat))
+                            cat = VPBTranslation.T("gallery.status.path_empty_items", "items");
+                        ShowTemporaryStatus(string.Format(
+                            VPBTranslation.T("gallery.status.path_empty_for_category", "No {0} in this folder."),
+                            cat), 2f);
+                    }
                 }, trackedButtons, () =>
                 {
                     currentPackagePathFilter = "";
@@ -300,6 +316,9 @@ namespace VPB
                         txt.verticalOverflow = VerticalWrapMode.Truncate;
                         txt.alignment = TextAnchor.MiddleLeft;
                         txt.resizeTextForBestFit = false;
+                        txt.color = (!isActive && zeroCount)
+                            ? ColorPathZeroCountText
+                            : Color.white;
 
                         RectTransform txtRT = txt.GetComponent<RectTransform>();
                         if (txtRT != null)

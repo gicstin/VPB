@@ -272,36 +272,92 @@ namespace VPB
         /// <summary>
         /// Title-bar / side Refresh: rescan packages and reload the grid while preserving scroll when possible.
         /// Needed when <see cref="VPBConfig.GalleryManualRefreshOnly"/> blocks automatic file-manager updates.
+        /// Waits for the async package scan so Path listings / SQL <c>var_path</c> match disk after Explorer moves.
         /// </summary>
         public void UserRequestedPackageRefresh()
         {
             try
             {
-                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
-
                 if (cleanupModeActive)
                 {
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
                     RebuildCleanupCandidates(true, true);
                     return;
                 }
 
-                try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
-                GalleryFileListSnapshotCache.InvalidateAll();
-                creatorsCached = false;
-                categoriesCached = false;
-                tagsCached = false;
-                pathsCached = false;
-                refreshOnNextShow = true;
-                RefreshFiles(true);
-                refreshOnNextShow = false;
-                try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
-                try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
+                if (_userPackageRefreshCo != null)
+                {
+                    try { StopCoroutine(_userPackageRefreshCo); } catch { }
+                    _userPackageRefreshCo = null;
+                }
+                _userPackageRefreshCo = StartCoroutine(UserRequestedPackageRefreshCo());
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
                 ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
             }
+        }
+
+        private Coroutine _userPackageRefreshCo;
+
+        private IEnumerator UserRequestedPackageRefreshCo()
+        {
+            ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 2.5f);
+
+            DateTime scanBefore = DateTime.MinValue;
+            try { scanBefore = FileManager.lastPackageRefreshTime; } catch { }
+
+            try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
+
+            // Let RefreshCo start (or attach to an in-flight coalesced scan).
+            yield return null;
+
+            float waited = 0f;
+            const float maxWaitSec = 180f;
+            while (waited < maxWaitSec)
+            {
+                bool scanning = false;
+                try { scanning = FileManager.IsScanning; } catch { }
+                DateTime scanNow = DateTime.MinValue;
+                try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
+
+                if (!scanning && scanNow > scanBefore)
+                    break;
+                if (!scanning && waited > 0.5f)
+                    break;
+
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            // One frame for onRefreshHandlers / MessageKit after scan clock stamp.
+            yield return null;
+
+            try
+            {
+                VpbLocalDatabase.TrySyncAllPkgPathsFromLivePackages(
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+            catch { }
+
+            // Deleted/moved Path folder while still selected → clear so RefreshFiles is not empty-filtered.
+            try { TryClearStalePackagePathFilter(); } catch { }
+
+            GalleryFileListSnapshotCache.InvalidateAll();
+            creatorsCached = false;
+            categoriesCached = false;
+            tagsCached = false;
+            pathsCached = false;
+            refreshOnNextShow = true;
+            // RefreshFiles is async: Path tabs need Custom/Saves from the finished grid.
+            // Do not UpdateTabs here — CachePaths would mark pathsCached with SQL AddonPackages only.
+            RefreshFiles(true);
+            refreshOnNextShow = false;
+            try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+            try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
+
+            _userPackageRefreshCo = null;
         }
 
         /// <summary>
@@ -1831,6 +1887,10 @@ namespace VPB
             if (refreshTime <= DateTime.MinValue) refreshTime = DateTime.Now;
             if (refreshTime <= lastAppliedPackageRefreshTime) return false;
 
+            // Folder moves keep the same UID set; Path side-panel counts must still rebuild.
+            pathsCached = false;
+            try { TryClearStalePackagePathFilter(); } catch { }
+
             // If content is already loaded, Gallery.AutoRefreshAfterPackageScan will apply
             // an incremental delta immediately. Do not arm refreshOnNextShow here, otherwise
             // a hide/open race can trigger a one-off full RefreshFiles() stall on Show().
@@ -1840,7 +1900,6 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
-                pathsCached = false;
 			    try { if (IsVisible) UpdateTabs(); } catch { }
             }
             return true;

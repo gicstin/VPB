@@ -215,6 +215,11 @@ namespace VPB
             try { RestoreSelectedHoverPath(); } catch { }
         }
 
+        internal void InvalidateCachedPathTabs()
+        {
+            pathsCached = false;
+        }
+
         private static void RefreshVarRelatedPathsInList(List<FileEntry> list, HashSet<string> packageUids)
         {
             if (list == null || list.Count == 0 || packageUids == null || packageUids.Count == 0) return;
@@ -1889,6 +1894,19 @@ namespace VPB
             {
                 LogPackageDeltaSkip("settings_open");
                 return false;
+            }
+
+            // Path filter folder deleted in Explorer — incremental delta cannot rebuild loose Custom/Saves.
+            if (TryClearStalePackagePathFilter())
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
+                }
+                catch { }
+                pathsCached = false;
+                RefreshFiles(true);
+                return true;
             }
 
             // If we have never loaded, the scan just completed and we have a full PackagesByUid

@@ -43,6 +43,9 @@ namespace VPB
         }
 
         private static readonly Color ColorInactiveRow = new Color(0.25f, 0.25f, 0.25f, 1f);
+        /// <summary>Path side row with category count 0 — still listed, visually quieter.</summary>
+        private static readonly Color ColorPathZeroCount = new Color(0.16f, 0.16f, 0.16f, 1f);
+        private static readonly Color ColorPathZeroCountText = new Color(0.55f, 0.55f, 0.55f, 1f);
         private static readonly Color ColorCancelRow = new Color(0.35f, 0.35f, 0.35f, 1f);
         private static readonly Color ColorGroupRow = UI.ChromePanel;
         private static readonly Color ColorDangerRow = UI.AccentRed;

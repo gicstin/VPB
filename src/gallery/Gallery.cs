@@ -913,6 +913,27 @@ namespace VPB
         }
 
         /// <summary>
+        /// After SQLite <c>pkg.var_path</c> was corrected for Explorer moves (index reuse, no rebuild).
+        /// Clears Path side-panel folder counts and refreshes displayed VAR paths for changed UIDs.
+        /// </summary>
+        public static void NotifyAfterPkgVarPathsSynced(ICollection<string> packageUids)
+        {
+            if (singleton == null) return;
+            List<GalleryPanel> pl = singleton.Panels;
+            if (pl != null)
+            {
+                for (int i = 0; i < pl.Count; i++)
+                {
+                    GalleryPanel p = pl[i];
+                    if (p == null) continue;
+                    try { p.InvalidateCachedPathTabs(); } catch { }
+                }
+            }
+            if (packageUids != null && packageUids.Count > 0)
+                NotifyDisplayedPathsAfterPackagePathChanges(packageUids);
+        }
+
+        /// <summary>
         /// Refreshes row bindings for visible non-hub panels only (no full list rebuild).
         /// Useful for badge-only state changes while auto-refresh is suppressed.
         /// </summary>

@@ -222,7 +222,14 @@ namespace VPB
                 case ContentType.Category: return VPBTranslation.T("gallery.side.category", "Categories");
                 case ContentType.Creator: return VPBTranslation.T("gallery.side.creator", "Creators");
                 case ContentType.UserTags: return VPBTranslation.T("gallery.side.tags", "User Tags");
-                case ContentType.Path: return VPBTranslation.T("gallery.side.path", "Path");
+                case ContentType.Path:
+                {
+                    string cat = currentCategoryTitle ?? "";
+                    if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+                    if (!string.IsNullOrEmpty(cat))
+                        return string.Format(VPBTranslation.T("gallery.side.path_counts_for", "Path · {0}"), cat);
+                    return VPBTranslation.T("gallery.side.path", "Path");
+                }
                 case ContentType.History: return VPBTranslation.T("gallery.history.title", "History");
                 case ContentType.Settings: return VPBTranslation.T("settings.title", "Settings");
                 case ContentType.SavePresets: return SidePanelHeaderTranslation("gallery.side.save", "Save");

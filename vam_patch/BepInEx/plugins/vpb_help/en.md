@@ -18,7 +18,7 @@ Some categories use two columns:
 Open a side column, then search or sort inside it:
 
 - {{icon:creator|Creator}} — green icon; filter by package author.
-- {{icon:path|Path}} — blue folder; browse by file path.
+- {{icon:path|Path}} — blue folder; browse by file path. Folder list shows all known package folders; **counts** match the **current category** (folders with `0` stay listed, dimmed).
 - {{icon:history|History}} — purple clock; recently used items.
 
 **Right-click** any side-rail button to open the same panel on the **opposite** edge.

@@ -1467,22 +1467,25 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Parent folder of a normalized file path (slash-safe; avoids <see cref="Path.GetDirectoryName"/> quirks).
+        /// </summary>
+        internal static string TryGetParentFolderFromNormalizedPath(string normalizedFilePath)
+        {
+            if (string.IsNullOrEmpty(normalizedFilePath)) return null;
+            string p = normalizedFilePath.Replace('\\', '/').TrimEnd('/');
+            int slash = p.LastIndexOf('/');
+            if (slash <= 0) return null;
+            string folder = p.Substring(0, slash).TrimEnd('/');
+            return folder.Length == 0 ? null : folder;
+        }
+
         internal static string TryGetPathFilterFolderForEntry(FileEntry entry)
         {
             if (entry == null) return null;
             string normalized;
             if (!TryNormalizeGalleryPathUnderKnownRoots(entry.Path, out normalized)) return null;
-            try
-            {
-                string dir = Path.GetDirectoryName(normalized);
-                if (string.IsNullOrEmpty(dir)) return null;
-                dir = dir.Replace('\\', '/').TrimEnd('/');
-                return dir.Length == 0 ? null : dir;
-            }
-            catch
-            {
-                return null;
-            }
+            return TryGetParentFolderFromNormalizedPath(normalized);
         }
 
         internal static bool GalleryPathFilterMatchesFolder(string folderPath, string selectedFilter)
@@ -1498,12 +1501,180 @@ namespace VPB
             if (string.IsNullOrEmpty(selectedFilter)) return true;
             string normalized;
             if (!TryNormalizeGalleryPathUnderKnownRoots(rawPath, out normalized)) return false;
-            string folder = "";
-            try { folder = Path.GetDirectoryName(normalized); } catch { folder = ""; }
+            string folder = TryGetParentFolderFromNormalizedPath(normalized);
             if (string.IsNullOrEmpty(folder)) return false;
-            folder = folder.Replace('\\', '/').TrimEnd('/');
-            if (folder.Length == 0) return false;
             return GalleryPathFilterMatchesFolder(folder, selectedFilter);
+        }
+
+        /// <summary>
+        /// True when <paramref name="filter"/> still matches at least one live .var path or an on-disk folder.
+        /// Used to drop Path filters whose folder was deleted in Explorer.
+        /// </summary>
+        internal static bool PackagePathFilterStillResolves(string filter)
+        {
+            if (string.IsNullOrEmpty(filter)) return true;
+            string f = filter.Replace('\\', '/').Trim().TrimEnd('/');
+            if (f.Length == 0) return true;
+
+            // Folder still on disk (incl. empty AddonPackages/new) — keep filter.
+            try
+            {
+                if (Directory.Exists(f)) return true;
+            }
+            catch { }
+
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid != null)
+                    {
+                        foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                        {
+                            VarPackage pkg = kv.Value;
+                            if (pkg == null) continue;
+                            if (GalleryPathFilterMatchesRawPath(pkg.Path, f))
+                                return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Clears <see cref="currentPackagePathFilter"/> when the selected folder no longer exists
+        /// (Explorer delete/move). Returns true when the filter was cleared.
+        /// </summary>
+        internal bool TryClearStalePackagePathFilter()
+        {
+            if (string.IsNullOrEmpty(currentPackagePathFilter)) return false;
+            if (PackagePathFilterStillResolves(currentPackagePathFilter)) return false;
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery] cleared stale Path filter '" + currentPackagePathFilter + "'");
+            }
+            catch { }
+            currentPackagePathFilter = "";
+            pathsCached = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Seed Custom/Saves roots that exist on disk (count 0). Folder tree stays visible even when
+        /// current category has no loose hits under those roots.
+        /// </summary>
+        private static void EnsureLoosePathRootsSeeded(Dictionary<string, int> folders)
+        {
+            if (folders == null) return;
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string rootWithSlash = GalleryPathFilterRoots[i];
+                if (rootWithSlash.StartsWith("AddonPackages", StringComparison.OrdinalIgnoreCase)) continue;
+                if (rootWithSlash.StartsWith("AllPackages", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string root = rootWithSlash.TrimEnd('/');
+                try
+                {
+                    if (!Directory.Exists(root)) continue;
+                }
+                catch { continue; }
+
+                if (!folders.ContainsKey(root))
+                    folders[root] = 0;
+            }
+        }
+
+        /// <summary>
+        /// Category-agnostic Path folder tree: every known package/loose folder, counts start at 0.
+        /// Category-scoped counts overlay later in <see cref="CachePaths"/>.
+        /// </summary>
+        private static void SeedAgnosticPathFolders(Dictionary<string, int> folders)
+        {
+            if (folders == null) return;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid != null)
+                    {
+                        foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                        {
+                            VarPackage pkg = kv.Value;
+                            if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                            string normalized;
+                            if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
+                            string folder = TryGetParentFolderFromNormalizedPath(normalized);
+                            if (string.IsNullOrEmpty(folder)) continue;
+                            SeedPathFolderHierarchy(folders, folder);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try { VpbLocalDatabase.SeedPackageFoldersFromVarPathInventory(folders); } catch { }
+
+            EnsureLoosePathRootsSeeded(folders);
+        }
+
+        /// <summary>
+        /// When SQLite Path counts are unavailable, build AddonPackages/AllPackages folder hierarchy
+        /// from the live registry (full tree, not the path-filtered grid).
+        /// </summary>
+        private static void AddPathCountsFromLiveVarPackages(Dictionary<string, int> counts)
+        {
+            if (counts == null) return;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid == null || byUid.Count == 0) return;
+                    foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                    {
+                        VarPackage pkg = kv.Value;
+                        if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                        string normalized;
+                        if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
+                        string folder = TryGetParentFolderFromNormalizedPath(normalized);
+                        if (string.IsNullOrEmpty(folder)) continue;
+                        AddPathHierarchyCount(counts, folder);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Ensure folder + parents exist in the map with count 0 (do not inflate existing counts).
+        /// </summary>
+        private static void SeedPathFolderHierarchy(Dictionary<string, int> folders, string folderPath)
+        {
+            if (folders == null || string.IsNullOrEmpty(folderPath)) return;
+            string p = folderPath.Replace('\\', '/').Trim('/');
+            if (p.Length == 0) return;
+
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string root = GalleryPathFilterRoots[i].TrimEnd('/');
+                if (!p.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                string[] seg = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (seg.Length == 0) return;
+                string running = seg[0];
+                for (int si = 1; si <= seg.Length; si++)
+                {
+                    if (!folders.ContainsKey(running))
+                        folders[running] = 0;
+                    if (si < seg.Length) running += "/" + seg[si];
+                }
+                return;
+            }
         }
 
         private static void AddPathHierarchyCount(Dictionary<string, int> counts, string folderPath)
@@ -1548,8 +1719,12 @@ namespace VPB
 
         private void CachePaths()
         {
-            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            // 1) Category-agnostic folder tree (presence only — zeros until overlay).
+            var folders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            SeedAgnosticPathFolders(folders);
 
+            // 2) Category-scoped counts (SQL + loose grid; live registry only when SQL unavailable).
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             bool sqlOk = VpbLocalDatabase.TryReadPackageFolderCounts(
                 counts,
                 currentExtension,
@@ -1560,14 +1735,26 @@ namespace VPB
                 GetCreatorFilterForQueries(),
                 null);
 
-            // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
-            // If SQL is unavailable/stale, include VAR rows too from current loaded list.
             IList<FileEntry> source = currentFilteredFiles != null && currentFilteredFiles.Count > 0
                 ? (IList<FileEntry>)currentFilteredFiles
                 : (IList<FileEntry>)lastFilteredFiles;
             AddPathCountsFromEntries(counts, source, includeVarRows: !sqlOk, includeLooseRows: true);
 
-            FillPathCacheEntriesSorted(counts, cachedPaths);
+            if (!sqlOk)
+                AddPathCountsFromLiveVarPackages(counts);
+
+            // 3) Overlay category counts onto agnostic tree (folders with no hits stay 0).
+            foreach (KeyValuePair<string, int> kv in counts)
+                folders[kv.Key] = kv.Value;
+
+            // Mid-refresh with nothing useful yet — keep previous Path list, rebuild when grid finishes.
+            if (refreshCoroutine != null && folders.Count == 0)
+            {
+                pathsCached = false;
+                return;
+            }
+
+            FillPathCacheEntriesSorted(folders, cachedPaths);
             pathsCached = true;
         }
 

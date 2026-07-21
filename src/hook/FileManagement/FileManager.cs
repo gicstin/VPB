@@ -313,6 +313,8 @@ namespace VPB
             if (rawPaths == null || rawPaths.Count == 0) return diff;
 
             var addByUid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            // UID already registered but path may have moved on disk — resolve after PathHashSet is complete.
+            var uidPathConflicts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             HashSet<string> seenFileIds = skipFileIdDedup ? null : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             HashSet<string> existingPaths = null;
             lock (packagesLock)
@@ -356,14 +358,28 @@ namespace VPB
 
                 if (!string.IsNullOrEmpty(candidateUid) && existingUids != null && existingUids.Contains(candidateUid))
                 {
-                    List<string> dups;
-                    if (!diff.DuplicateUidPaths.TryGetValue(candidateUid, out dups))
+                    string priorConflict;
+                    if (uidPathConflicts.TryGetValue(candidateUid, out priorConflict))
                     {
-                        dups = new List<string>();
-                        diff.DuplicateUidPaths.Add(candidateUid, dups);
+                        string canonical = ChooseCanonicalDuplicatePath(priorConflict, varPath);
+                        string loser = string.Equals(canonical, priorConflict, StringComparison.OrdinalIgnoreCase)
+                            ? varPath
+                            : priorConflict;
+                        uidPathConflicts[candidateUid] = canonical;
+
+                        List<string> dups;
+                        if (!diff.DuplicateUidPaths.TryGetValue(candidateUid, out dups))
+                        {
+                            dups = new List<string>();
+                            diff.DuplicateUidPaths.Add(candidateUid, dups);
+                        }
+                        dups.Add(loser);
                     }
-                    dups.Add(varPath);
-                    VpbPackageIndexDiagnostics.Log(candidateUid, "diffSkipDupUid", "path='" + varPath + "'");
+                    else
+                    {
+                        uidPathConflicts[candidateUid] = varPath;
+                    }
+                    VpbPackageIndexDiagnostics.Log(candidateUid, "diffUidPathConflict", "path='" + varPath + "'");
                     continue;
                 }
 
@@ -390,6 +406,51 @@ namespace VPB
                     addByUid[candidateUid] = varPath;
             }
 
+            // Resolve UID conflicts: relocate (old path gone) vs true duplicate (old path still on disk).
+            if (uidPathConflicts.Count > 0)
+            {
+                foreach (KeyValuePair<string, string> kv in uidPathConflicts)
+                {
+                    string uid = kv.Key;
+                    string newPath = kv.Value;
+                    VarPackage existing = null;
+                    lock (packagesLock)
+                    {
+                        if (packagesByUid != null)
+                            packagesByUid.TryGetValue(uid, out existing);
+                    }
+
+                    bool existingStillPresent = false;
+                    if (existing != null && !string.IsNullOrEmpty(existing.Path))
+                    {
+                        if (diff.PathHashSet.Contains(existing.Path))
+                            existingStillPresent = true;
+                        else
+                        {
+                            // Symlink/junction subfolders may be omitted from enum while path still resolves.
+                            try { existingStillPresent = File.Exists(existing.Path); } catch { existingStillPresent = false; }
+                        }
+                    }
+
+                    if (existingStillPresent)
+                    {
+                        List<string> dups;
+                        if (!diff.DuplicateUidPaths.TryGetValue(uid, out dups))
+                        {
+                            dups = new List<string>();
+                            diff.DuplicateUidPaths.Add(uid, dups);
+                        }
+                        dups.Add(newPath);
+                        VpbPackageIndexDiagnostics.Log(uid, "diffSkipDupUid", "path='" + newPath + "'");
+                        continue;
+                    }
+
+                    // File moved: RemoveSet drops old path; AddSet registers at new path.
+                    diff.AddSet.Add(newPath);
+                    VpbPackageIndexDiagnostics.Log(uid, "diffRelocate", "path='" + newPath + "'");
+                }
+            }
+
             VarPackage[] packagesSnapshot;
             lock (packagesLock)
             {
@@ -398,8 +459,15 @@ namespace VPB
             for (int i = 0; i < packagesSnapshot.Length; i++)
             {
                 VarPackage pkg = packagesSnapshot[i];
-                if (pkg != null && !diff.PathHashSet.Contains(pkg.Path))
-                    diff.RemoveSet.Add(pkg);
+                if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                if (diff.PathHashSet.Contains(pkg.Path)) continue;
+                // Keep packages whose path still resolves (junction/symlink enum gaps).
+                try
+                {
+                    if (File.Exists(pkg.Path)) continue;
+                }
+                catch { }
+                diff.RemoveSet.Add(pkg);
             }
 
             return diff;
@@ -3483,7 +3551,9 @@ namespace VPB
 
 		// Pick the canonical path for a duplicate-UID pair. Preference order:
 		// 1) AddonPackages over AllPackages (Addon is the live install location).
-		// 2) Shorter path (closer to the package root) over deeper subfolders.
+		// 2) Path under a junction/symlink folder (e.g. AddonPackages/NEW) over a flatter
+		//    sibling path to the same files — otherwise Path list never shows that folder.
+		// 3) Shorter path (closer to the package root) over deeper normal subfolders.
 		private static string ChooseCanonicalDuplicatePath(string a, string b)
 		{
 			if (string.IsNullOrEmpty(a)) return b;
@@ -3491,8 +3561,49 @@ namespace VPB
 			bool aAddon = a.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
 			bool bAddon = b.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase);
 			if (aAddon != bAddon) return aAddon ? a : b;
+
+			bool aReparse = VarPathHasReparsePointDirectory(a);
+			bool bReparse = VarPathHasReparsePointDirectory(b);
+			if (aReparse != bReparse) return aReparse ? a : b;
+
 			if (a.Length != b.Length) return a.Length < b.Length ? a : b;
 			return string.Compare(a, b, StringComparison.OrdinalIgnoreCase) <= 0 ? a : b;
+		}
+
+		/// <summary>
+		/// True when any directory segment of the .var path (below AddonPackages/AllPackages) is a
+		/// junction/symlink. Used so duplicate resolution keeps those folder names in the Path list.
+		/// </summary>
+		private static bool VarPathHasReparsePointDirectory(string varPath)
+		{
+			try
+			{
+				string p = CleanFilePath(varPath);
+				if (string.IsNullOrEmpty(p)) return false;
+				int slash = p.LastIndexOf('/');
+				if (slash <= 0) return false;
+				string parent = p.Substring(0, slash);
+				while (!string.IsNullOrEmpty(parent))
+				{
+					if (string.Equals(parent, "AddonPackages", StringComparison.OrdinalIgnoreCase)
+						|| string.Equals(parent, "AllPackages", StringComparison.OrdinalIgnoreCase)
+						|| string.Equals(parent, "Custom", StringComparison.OrdinalIgnoreCase)
+						|| string.Equals(parent, "Saves", StringComparison.OrdinalIgnoreCase))
+						break;
+					try
+					{
+						FileAttributes attr = File.GetAttributes(parent);
+						if ((attr & FileAttributes.ReparsePoint) != 0)
+							return true;
+					}
+					catch { }
+					int s = parent.LastIndexOf('/');
+					if (s <= 0) break;
+					parent = parent.Substring(0, s);
+				}
+			}
+			catch { }
+			return false;
 		}
 
 		[StructLayout(LayoutKind.Sequential)]
@@ -3524,9 +3635,20 @@ namespace VPB
 			IntPtr hTemplateFile);
 
 		private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+		private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
 		private const uint OPEN_EXISTING = 3;
 
 		private static bool TryGetWindowsFileId(string path, out string fileId)
+		{
+			return TryGetWindowsFileId(path, openReparsePoint: false, out fileId);
+		}
+
+		/// <summary>
+		/// File index id for cycle/dedup. When <paramref name="openReparsePoint"/> is true, identifies the
+		/// junction/symlink node itself (so each AddonPackages junction is scanned under its own path).
+		/// When false, follows the reparse target (same-file dedup across links).
+		/// </summary>
+		private static bool TryGetWindowsFileId(string path, bool openReparsePoint, out string fileId)
 		{
 			fileId = null;
 			try
@@ -3543,13 +3665,17 @@ namespace VPB
 					return false;
 				}
 
+				uint flags = FILE_FLAG_BACKUP_SEMANTICS;
+				if (openReparsePoint)
+					flags |= FILE_FLAG_OPEN_REPARSE_POINT;
+
 				using (SafeFileHandle handle = CreateFile(
 					path,
 					0x80, // FILE_READ_ATTRIBUTES
 					(uint)(FileShare.ReadWrite | FileShare.Delete),
 					IntPtr.Zero,
 					OPEN_EXISTING,
-					FILE_FLAG_BACKUP_SEMANTICS,
+					flags,
 					IntPtr.Zero))
 				{
 					if (handle.IsInvalid)
@@ -3580,7 +3706,9 @@ namespace VPB
 			try
 			{
 				string dirId;
-				if (TryGetWindowsFileId(path, out dirId))
+				// Use the reparse node's own id (not the target). Following target ids skipped
+				// sibling junctions that point at the same library — Path list lost those subfolders.
+				if (TryGetWindowsFileId(path, openReparsePoint: true, out dirId))
 				{
 					if (!visited.Add(dirId))
 					{
@@ -3620,7 +3748,7 @@ namespace VPB
 			try
 			{
 				string dirId;
-				if (TryGetWindowsFileId(path, out dirId))
+				if (TryGetWindowsFileId(path, openReparsePoint: true, out dirId))
 				{
 					if (!visited.Add(dirId))
 					{
@@ -3870,12 +3998,12 @@ namespace VPB
 
 	private static int FolderContentsCount(string path, HashSet<string> visited)
 	{
-		// Cycle guard: only reparse points (junctions/symlinks) get a file ID;
-		// normal directories cannot form cycles so skipping them is fine.
+		// Cycle guard: identify the junction/symlink node itself (not the target) so sibling
+		// links to the same library are still counted under their own paths.
 		try
 		{
 			string dirId;
-			if (TryGetWindowsFileId(path, out dirId) && !visited.Add(dirId))
+			if (TryGetWindowsFileId(path, openReparsePoint: true, out dirId) && !visited.Add(dirId))
 				return 0;
 		}
 		catch { }

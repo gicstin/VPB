@@ -2226,6 +2226,116 @@ namespace VPB
             }
         }
 
+        static string NormalizeVarPathForCompare(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            return path.Replace('\\', '/');
+        }
+
+        /// <summary>
+        /// When gallery index is reused via UID inventory signature, <c>pkg.var_path</c> can stay stale
+        /// after external Explorer moves (same UIDs, new folders). Sync paths + loaded from live
+        /// <see cref="FileManager.PackagesByUid"/> without rebuilding <c>cat_mem</c>.
+        /// </summary>
+        /// <returns>Number of rows updated.</returns>
+        internal static int TrySyncAllPkgPathsFromLivePackages()
+        {
+            return TrySyncAllPkgPathsFromLivePackages(null);
+        }
+
+        internal static int TrySyncAllPkgPathsFromLivePackages(HashSet<string> changedUidsOut)
+        {
+            if (!VpbSqlite3.IsAvailable) return 0;
+
+            Dictionary<string, string> liveByUid = null;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid == null || byUid.Count == 0) return 0;
+                    liveByUid = new Dictionary<string, string>(byUid.Count, StringComparer.OrdinalIgnoreCase);
+                    foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                    {
+                        VarPackage p = kv.Value;
+                        if (p == null) continue;
+                        string uid = p.Uid;
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        liveByUid[uid] = p.Path ?? "";
+                    }
+                }
+            }
+            catch
+            {
+                return 0;
+            }
+            if (liveByUid == null || liveByUid.Count == 0) return 0;
+
+            int updated = 0;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var sel = conn.Prepare("SELECT uid, ifnull(var_path,'') FROM pkg"))
+                    using (var upd = conn.Prepare("UPDATE pkg SET var_path=?, loaded=? WHERE uid=?"))
+                    {
+                        while (sel.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string uid = sel.ColumnText(0) ?? "";
+                            if (uid.Length == 0) continue;
+                            string livePath;
+                            if (!liveByUid.TryGetValue(uid, out livePath)) continue;
+                            string dbPath = sel.ColumnText(1) ?? "";
+                            if (string.Equals(
+                                NormalizeVarPathForCompare(dbPath),
+                                NormalizeVarPathForCompare(livePath),
+                                StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            int ld = ComputePackageLoadedFlagFromVarPath(livePath);
+                            upd.BindText(1, livePath);
+                            upd.BindText(2, ld.ToString());
+                            upd.BindText(3, uid);
+                            upd.Step();
+                            upd.Reset();
+                            updated++;
+                            if (changedUidsOut != null)
+                                changedUidsOut.Add(uid);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return updated;
+            }
+
+            if (updated > 0)
+            {
+                try
+                {
+                    LogUtil.Log(VamStartupOptimizations.LogTag
+                        + " synced pkg.var_path from live registry rows=" + updated);
+                }
+                catch { }
+                try { GalleryFileListSnapshotCache.InvalidateAll(); } catch { }
+                try { Gallery.NotifyAfterPkgVarPathsSynced(changedUidsOut); } catch { }
+            }
+            return updated;
+        }
+
+        /// <summary>Call after reusing gallery SQL index without rebuild (UID set unchanged).</summary>
+        static void SyncPkgPathsAfterIndexReuse()
+        {
+            try
+            {
+                TrySyncAllPkgPathsFromLivePackages(
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+            catch { }
+        }
+
         /// <summary>Precomputes packed clothing metadata once per VAR row at index rebuild (mirrors VAR branch of <see cref="GalleryPanel.PassesClothingGalleryFiltersForPath"/>).</summary>
         internal static int PackClothingGalleryAttrForVarListPath(string listPath)
         {
@@ -2651,6 +2761,8 @@ namespace VPB
             s_SkipDeferredGallerySqlRebuild = true;
             s_SqlRebuildDeferredPostReady = false;
             ResetGalleryIndexBuildProgress();
+            // UID inventory sig ignores folder moves; keep pkg.var_path aligned with live registry.
+            SyncPkgPathsAfterIndexReuse();
             try { VamStartupProfiler.Milestone("sql_rebuild_skipped_" + reason); } catch { }
             try
             {
@@ -2998,6 +3110,8 @@ namespace VPB
                 ok = true;
                 s_SkipDeferredGallerySqlRebuild = true;
                 s_SqlRebuildDeferredPostReady = false;
+                // Direct callers (e.g. SetCategories) skip NoteGalleryIndexReadySkipDeferredRebuild.
+                SyncPkgPathsAfterIndexReuse();
                 return true;
             }
             catch
@@ -3583,6 +3697,8 @@ namespace VPB
                 }
                 catch { }
             }
+            // Explorer moves keep UID set; sync pkg.var_path before Path rail / filters query SQL.
+            SyncPkgPathsAfterIndexReuse();
             try { ScheduleGalleryIndexUpdateAfterScan(); } catch { }
         }
 
@@ -3934,6 +4050,8 @@ namespace VPB
                                 // keep s_ReadyPkgInvSig as-is
                             }
                         }
+                        // Same UID set can still mean Explorer moved .var folders — sync paths.
+                        SyncPkgPathsAfterIndexReuse();
                         try
                         {
                             if (invComputeMs >= 5)
@@ -5429,6 +5547,49 @@ namespace VPB
         }
 
         /// <summary>
+        /// Seed Path side-tab folders from <c>pkg_var_path</c> inventory (all scanned .var paths,
+        /// including junction aliases that lost canonical registration to a shorter duplicate path).
+        /// Missing hierarchy nodes get count 0 — do not inflate category-scoped counts.
+        /// </summary>
+        internal static void SeedPackageFoldersFromVarPathInventory(Dictionary<string, int> foldersOut)
+        {
+            if (!VpbSqlite3.IsAvailable || foldersOut == null) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    EnsureVarPathInventorySchema(conn);
+                    using (var st = conn.Prepare("SELECT path FROM pkg_var_path"))
+                    {
+                        while (st.Step() == VpbSqlite3.SqliteRow)
+                        {
+                            string varPath = st.ColumnText(0) ?? "";
+                            if (varPath.Length == 0) continue;
+                            string normalized;
+                            if (!GalleryPanel.TryNormalizeGalleryPathUnderKnownRoots(varPath, out normalized)) continue;
+                            string folder = GalleryPanel.TryGetParentFolderFromNormalizedPath(normalized);
+                            if (string.IsNullOrEmpty(folder)) continue;
+
+                            string p = folder.Replace('\\', '/').Trim('/');
+                            if (p.Length == 0) continue;
+                            string[] seg = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (seg.Length == 0) continue;
+                            string running = seg[0];
+                            for (int si = 1; si <= seg.Length; si++)
+                            {
+                                if (!foldersOut.ContainsKey(running))
+                                    foldersOut[running] = 0;
+                                if (si < seg.Length) running += "/" + seg[si];
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Side-tab package-folder file counts (VAR rows only) grouped by package directory path under
         /// AddonPackages/ and AllPackages/, including parent folders.
         /// </summary>
@@ -5605,11 +5766,8 @@ namespace VPB
 
                             string normalized;
                             if (!GalleryPanel.TryNormalizeGalleryPathUnderKnownRoots(varPath, out normalized)) continue;
-                            string folder = "";
-                            try { folder = Path.GetDirectoryName(normalized); } catch { folder = ""; }
+                            string folder = GalleryPanel.TryGetParentFolderFromNormalizedPath(normalized);
                             if (string.IsNullOrEmpty(folder)) continue;
-                            folder = folder.Replace('\\', '/').Trim('/');
-                            if (folder.Length == 0) continue;
                             AddHierarchyCount(folder, n);
                         }
                     }
