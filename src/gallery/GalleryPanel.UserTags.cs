@@ -958,16 +958,19 @@ namespace VPB
         private void RefreshVisibleGalleryFileButtonsForKey(string wantedKey)
         {
             if (string.IsNullOrEmpty(wantedKey)) return;
-            if (recyclingGrid != null && recyclingGrid.content != null)
+            if (recyclingGrid != null)
             {
-                foreach (Transform child in recyclingGrid.content)
+                int n = recyclingGrid.ActiveItemCount;
+                for (int i = 0; i < n; i++)
                 {
-                    if (child == null || !child.gameObject.activeSelf) continue;
-                    FileEntry fe = ResolveVisibleFileEntryFromButton(child.gameObject);
+                    RecyclingGridItem rgv = recyclingGrid.GetActiveItemAt(i);
+                    if (rgv == null || rgv.gameObject == null || !rgv.gameObject.activeSelf) continue;
+                    GameObject btn = rgv.gameObject;
+                    FileEntry fe = ResolveVisibleFileEntryFromItem(rgv, rgv.binder);
                     if (fe == null) continue;
                     string key = GetSelectionIdentityKey(fe, false);
                     if (string.Equals(key, wantedKey, StringComparison.OrdinalIgnoreCase))
-                        UpdateFileButtonVisuals(child.gameObject, fe);
+                        UpdateFileButtonVisuals(btn, fe);
                 }
                 return;
             }
@@ -984,11 +987,29 @@ namespace VPB
             }
         }
 
+        private FileEntry ResolveVisibleFileEntryFromItem(RecyclingGridItem rgvItem, FileButtonBinder binder)
+        {
+            if (rgvItem == null) return null;
+            if (binder == null) binder = rgvItem.binder;
+            if (binder == null) binder = FileButtonBinder.GetOrAdd(rgvItem.gameObject);
+            UIDraggableItem diag = binder != null ? binder.draggable : null;
+            try
+            {
+                if (settingsListViewActive && currentFilteredFiles != null
+                    && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                    return currentFilteredFiles[rgvItem.index];
+                if (diag != null) return diag.FileEntry;
+            }
+            catch { return diag != null ? diag.FileEntry : null; }
+            return null;
+        }
+
         private FileEntry ResolveVisibleFileEntryFromButton(GameObject btn)
         {
             if (btn == null) return null;
-            var diag = btn.GetComponent<UIDraggableItem>();
-            var rgvItem = btn.GetComponent<RecyclingGridItem>();
+            FileButtonBinder binder = FileButtonBinder.GetOrAdd(btn);
+            UIDraggableItem diag = binder != null ? binder.draggable : null;
+            RecyclingGridItem rgvItem = binder != null ? binder.gridItem : null;
             try
             {
                 if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null

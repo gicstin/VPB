@@ -117,6 +117,7 @@ namespace VPB
                 try { ApplyTitleBarResponsiveLayout(paneScale); } catch { }
                 try { ApplyFooterOverflowLayout(paneScale); } catch { }
                 try { ApplyTopDockSideButtonsLayout(paneScale); } catch { }
+                MarkGalleryPaneChromeDirty();
             }
             catch { }
 

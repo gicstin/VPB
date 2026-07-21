@@ -5099,23 +5099,24 @@ namespace VPB
 
         private bool DetailStripTryCopyThumbFromVisibleGrid(FileEntry file, int listIndex)
         {
-            if (file == null || _detailStripThumb == null || recyclingGrid == null || recyclingGrid.content == null)
+            if (file == null || _detailStripThumb == null || recyclingGrid == null)
                 return false;
             try
             {
-                foreach (Transform child in recyclingGrid.content)
+                int n = recyclingGrid.ActiveItemCount;
+                for (int i = 0; i < n; i++)
                 {
-                    if (child == null || !child.gameObject.activeSelf) continue;
-                    RecyclingGridItem rgv = child.GetComponent<RecyclingGridItem>();
-                    if (rgv != null && listIndex >= 0 && rgv.index != listIndex) continue;
-                    if (rgv == null)
+                    RecyclingGridItem rgv = recyclingGrid.GetActiveItemAt(i);
+                    if (rgv == null || rgv.gameObject == null || !rgv.gameObject.activeSelf) continue;
+                    if (listIndex >= 0 && rgv.index != listIndex) continue;
+                    FileButtonBinder binder = rgv.binder;
+                    if (binder == null) binder = FileButtonBinder.GetOrAdd(rgv.gameObject);
+                    if (listIndex < 0)
                     {
-                        UIDraggableItem diag = child.GetComponent<UIDraggableItem>();
+                        UIDraggableItem diag = binder != null ? binder.draggable : null;
                         if (diag == null || !ReferenceEquals(diag.FileEntry, file)) continue;
                     }
-                    // Grid cell thumb is direct child "Thumbnail".
-                    Transform imgT = child.Find("Thumbnail");
-                    RawImage ri = imgT != null ? imgT.GetComponent<RawImage>() : null;
+                    RawImage ri = binder != null ? binder.thumbRaw : null;
                     if (ri == null || ri.texture == null || ri == _detailStripThumb) continue;
                     _detailStripThumb.texture = ri.texture;
                     _detailStripThumb.uvRect = ri.uvRect;

@@ -2060,6 +2060,7 @@ namespace VPB
             VPBConfig.Instance.DesktopFixedHeightMode = (VPBConfig.Instance.DesktopFixedHeightMode + 1) % 2;
             VPBConfig.Instance.Save();
             UpdateFooterHeightState();
+            InvalidateFooterOverflowLayout();
             UpdateLayout();
         }
 
@@ -2760,6 +2761,8 @@ namespace VPB
                 VPBConfig.Instance.Save();
                 UpdateDesktopModeButton();
                 try { UpdateSpringScrollButtonToggleUI(); } catch { }
+                InvalidateFooterOverflowLayout();
+                MarkGalleryPaneChromeDirty();
                 UpdateLayout();
                 try { SyncCategoryQuickSwitchChrome(); } catch { }
                 try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
@@ -2799,6 +2802,8 @@ namespace VPB
             VPBConfig.Instance.Save();
             UpdateDesktopModeButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
+            InvalidateFooterOverflowLayout();
+            MarkGalleryPaneChromeDirty();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
             try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
@@ -2820,6 +2825,8 @@ namespace VPB
             VPBConfig.Instance.Save(true, true);
             UpdateFooterDockButtonState();
             UpdateFooterAutoHideState();
+            InvalidateFooterOverflowLayout();
+            MarkGalleryPaneChromeDirty();
             UpdateLayout();
         }
 
@@ -2837,6 +2844,8 @@ namespace VPB
             UpdateDesktopModeButton();
             try { UpdateSpringScrollButtonToggleUI(); } catch { }
             UpdateSideButtonsVisibility();
+            InvalidateFooterOverflowLayout();
+            MarkGalleryPaneChromeDirty();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
             try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
@@ -2862,7 +2871,12 @@ namespace VPB
 
             if (backgroundBoxGO != null)
             {
-                RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
+                RectTransform rt = _backgroundBoxRT;
+                if (rt == null)
+                {
+                    rt = backgroundBoxGO.GetComponent<RectTransform>();
+                    _backgroundBoxRT = rt;
+                }
                 Vector2 off = Vector2.zero;
                 if (collapsed && VPBConfig.Instance != null)
                 {
@@ -2885,6 +2899,8 @@ namespace VPB
             ApplyFixedCollapseTriggerVisuals();
             
             UpdateSideButtonsVisibility();
+            InvalidateFooterOverflowLayout();
+            MarkGalleryPaneChromeDirty();
             UpdateLayout();
         }
 

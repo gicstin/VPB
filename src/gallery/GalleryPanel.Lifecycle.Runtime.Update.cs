@@ -13,7 +13,12 @@ namespace VPB
         private bool IsPointerInsideGalleryWindowRect()
         {
             if (backgroundBoxGO == null) return false;
-            RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
+            RectTransform rt = _backgroundBoxRT;
+            if (rt == null)
+            {
+                rt = backgroundBoxGO.GetComponent<RectTransform>();
+                _backgroundBoxRT = rt;
+            }
             if (rt == null) return false;
 
             Camera cam = null;
@@ -27,6 +32,27 @@ namespace VPB
 
             try { return RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam); }
             catch { return false; }
+        }
+
+        private RectTransform GetCachedCollapseTriggerRT(GameObject triggerGO, ref RectTransform cache)
+        {
+            if (triggerGO == null) { cache = null; return null; }
+            if (cache == null || cache.gameObject != triggerGO)
+                cache = triggerGO.GetComponent<RectTransform>();
+            return cache;
+        }
+
+        private UIAnchorResizer GetCachedUIAnchorResizer(GameObject go, ref UIAnchorResizer cache)
+        {
+            if (go == null) { cache = null; return null; }
+            if (cache == null || cache.gameObject != go)
+                cache = go.GetComponent<UIAnchorResizer>();
+            return cache;
+        }
+
+        private void MarkGalleryPaneChromeDirty()
+        {
+            try { GalleryPaneChromeEnforcer.MarkDirtyOn(backgroundBoxGO); } catch { }
         }
 
         private void Update()
@@ -145,12 +171,16 @@ namespace VPB
                         else activeTrigger = collapseTriggerGO;
                         if (activeTrigger != null)
                         {
-                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
+                            RectTransform ctRT = null;
+                            if (activeTrigger == collapseTriggerLeftGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerLeftRT);
+                            else if (activeTrigger == collapseTriggerTopGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerTopRT);
+                            else ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerRT);
                             // Overlay MUST pass null — leftover worldCamera triggers ScreenPointToRay spam.
                             Camera cam = null;
                             if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                                 cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
-                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
+                            if (ctRT != null)
+                                isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
                         if (isHoveringTrigger || isHoveringTriggerManual) SetCollapsed(false);
                     }
@@ -165,11 +195,15 @@ namespace VPB
                         else activeTrigger = collapseTriggerGO;
                         if (activeTrigger != null)
                         {
-                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
+                            RectTransform ctRT = null;
+                            if (activeTrigger == collapseTriggerLeftGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerLeftRT);
+                            else if (activeTrigger == collapseTriggerTopGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerTopRT);
+                            else ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerRT);
                             Camera cam = null;
                             if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                                 cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
-                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
+                            if (ctRT != null)
+                                isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
                         bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
@@ -213,7 +247,12 @@ namespace VPB
                     }
 
                     // Always update anchors in Fixed mode to support height toggles and screen resizing
-                    RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                    RectTransform bgRT = _backgroundBoxRT;
+                    if (bgRT == null)
+                    {
+                        bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        _backgroundBoxRT = bgRT;
+                    }
                     float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
                     dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
                     
@@ -234,48 +273,41 @@ namespace VPB
                     // Right dock → bottom-left grip; Left dock → bottom-right grip; Top dock → both grips (height only),
                     // both using the straight-down chevron.
                     bool isTopDock = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+                    bool showFixedBottomLeft = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
+                    bool showFixedBottomRight = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
                     if (_resizeHandleFixedBottomGO != null)
                     {
-                        // Fixed-bottom-left handle: Right or Top dock.
-                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
-                        if (_resizeHandleFixedBottomGO.activeSelf != shouldShow)
-                            _resizeHandleFixedBottomGO.SetActive(shouldShow);
+                        if (_resizeHandleFixedBottomGO.activeSelf != showFixedBottomLeft)
+                            _resizeHandleFixedBottomGO.SetActive(showFixedBottomLeft);
 
-                        // Top dock uses this handle for height only (no width change).
-                        try
+                        UIAnchorResizer rz = GetCachedUIAnchorResizer(_resizeHandleFixedBottomGO, ref _fixedBottomResizer);
+                        if (rz != null)
                         {
-                            UIAnchorResizer rz = _resizeHandleFixedBottomGO.GetComponent<UIAnchorResizer>();
-                            if (rz != null)
-                            {
-                                rz.resizeX = !isTopDock;
-                                rz.resizeY = true;
-                            }
+                            rz.resizeX = !isTopDock;
+                            rz.resizeY = true;
                         }
-                        catch { }
-
-                        if (shouldShow)
-                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_left.png"); } catch { }
                     }
                     if (_resizeHandleFixedBottomRightGO != null)
                     {
-                        // Fixed-bottom-right handle: Left or Top dock.
-                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
-                        if (_resizeHandleFixedBottomRightGO.activeSelf != shouldShow)
-                            _resizeHandleFixedBottomRightGO.SetActive(shouldShow);
+                        if (_resizeHandleFixedBottomRightGO.activeSelf != showFixedBottomRight)
+                            _resizeHandleFixedBottomRightGO.SetActive(showFixedBottomRight);
 
-                        // Top dock uses this handle for height only (no width change).
-                        try
+                        UIAnchorResizer rz = GetCachedUIAnchorResizer(_resizeHandleFixedBottomRightGO, ref _fixedBottomRightResizer);
+                        if (rz != null)
                         {
-                            UIAnchorResizer rz = _resizeHandleFixedBottomRightGO.GetComponent<UIAnchorResizer>();
-                            if (rz != null)
-                            {
-                                rz.resizeX = !isTopDock;
-                                rz.resizeY = true;
-                            }
+                            rz.resizeX = !isTopDock;
+                            rz.resizeY = true;
                         }
-                        catch { }
+                    }
 
-                        if (shouldShow)
+                    // Icons only when dock / visibility changes — ApplyBarIconFromPath every frame was hot-path waste.
+                    string iconKey = dock + "|" + (showFixedBottomLeft ? "1" : "0") + (showFixedBottomRight ? "1" : "0") + (isTopDock ? "T" : "S");
+                    if (iconKey != _fixedDockHandleIconKey)
+                    {
+                        _fixedDockHandleIconKey = iconKey;
+                        if (showFixedBottomLeft && _resizeHandleFixedBottomGO != null)
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_left.png"); } catch { }
+                        if (showFixedBottomRight && _resizeHandleFixedBottomRightGO != null)
                             try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_right.png"); } catch { }
                     }
 
@@ -344,7 +376,12 @@ namespace VPB
                         canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                         
                         if (backgroundBoxGO == null) return;
-                        RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        RectTransform bgRT = _backgroundBoxRT;
+                        if (bgRT == null)
+                        {
+                            bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                            _backgroundBoxRT = bgRT;
+                        }
                         bgRT.anchorMin = new Vector2(0.5f, 0.5f);
                         bgRT.anchorMax = new Vector2(0.5f, 0.5f);
                         bgRT.sizeDelta = new Vector2(1200, 800);
@@ -359,6 +396,7 @@ namespace VPB
                         if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(true);
                         if (_resizeHandleFixedBottomGO != null && _resizeHandleFixedBottomGO.activeSelf) _resizeHandleFixedBottomGO.SetActive(false);
                         if (_resizeHandleFixedBottomRightGO != null && _resizeHandleFixedBottomRightGO.activeSelf) _resizeHandleFixedBottomRightGO.SetActive(false);
+                        _fixedDockHandleIconKey = null;
 
                         RepositionInFront();
                     }

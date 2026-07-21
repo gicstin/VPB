@@ -2118,6 +2118,7 @@ namespace VPB
 
             SetLayerRecursive(btnGO, 5);
             FileButtonBinder.Attach(btnGO);
+            MarkGalleryPaneChromeDirty();
             return btnGO;
         }
 

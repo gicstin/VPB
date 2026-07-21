@@ -95,6 +95,7 @@ namespace VPB
             try { SuppressImportOccupiedSideColumnChrome(); } catch { }
             try { SyncImportSidebarHeaderLabel(); } catch { }
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            MarkGalleryPaneChromeDirty();
         }
 
         /// <summary>
@@ -403,6 +404,7 @@ namespace VPB
             // UpdateLayout runs before UpdateTabs in ToggleLeft/Right; UpdateTabsImpl mutates tab ScrollRect geometry
             // after that — viewport stretch resets unless sticky chrome is reapplied here.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            MarkGalleryPaneChromeDirty();
         }
 
         private bool TryUpdateCategoryCreatorDualBufferMainPane(ContentType activeContent, GameObject tabContainer, bool isLeft)

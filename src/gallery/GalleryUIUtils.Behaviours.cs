@@ -681,19 +681,40 @@ namespace VPB
     }
 
     /// <summary>
-    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> on a throttle so dynamic UI and Unity defaults
-    /// cannot bring back ColorTint hover fill, without paying full-tree cost every frame.
+    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> when marked dirty (UI rebuild),
+    /// rate-limited. Idle frames pay zero GetComponentsInChildren cost.
     /// </summary>
     public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
     {
-        private const float IntervalSeconds = 0.5f;
+        private const float MinIntervalSeconds = 0.5f;
         private float _nextApplyUnscaledTime;
+        private bool _dirty = true;
+
+        public void MarkDirty()
+        {
+            _dirty = true;
+        }
+
+        public static void MarkDirtyOn(GameObject root)
+        {
+            if (root == null) return;
+            GalleryPaneChromeEnforcer e = root.GetComponent<GalleryPaneChromeEnforcer>();
+            if (e != null) e.MarkDirty();
+        }
+
+        private void OnEnable()
+        {
+            _dirty = true;
+            _nextApplyUnscaledTime = 0f;
+        }
 
         private void LateUpdate()
         {
+            if (!_dirty) return;
             float now = Time.unscaledTime;
             if (now < _nextApplyUnscaledTime) return;
-            _nextApplyUnscaledTime = now + IntervalSeconds;
+            _nextApplyUnscaledTime = now + MinIntervalSeconds;
+            _dirty = false;
             UI.ApplyGalleryPaneHoverPolicy(gameObject);
         }
     }
@@ -1045,6 +1066,15 @@ namespace VPB
         /// Cached so callers (e.g. thumbnail priority computation) don't recompute it per-item.
         /// </summary>
         public int CachedCenterItemIndex { get; private set; }
+
+        /// <summary>Visible recycled cells — prefer over Transform foreach (no enumerator alloc).</summary>
+        public int ActiveItemCount { get { return activeItems != null ? activeItems.Count : 0; } }
+
+        public RecyclingGridItem GetActiveItemAt(int index)
+        {
+            if (activeItems == null || index < 0 || index >= activeItems.Count) return null;
+            return activeItems[index];
+        }
 
         private List<RecyclingGridItem> activeItems = new List<RecyclingGridItem>();
         private HashSet<int> _activeIndexSet = new HashSet<int>();

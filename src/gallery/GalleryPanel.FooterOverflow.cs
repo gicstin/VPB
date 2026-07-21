@@ -126,7 +126,15 @@ namespace VPB
             if (_resizeHandleBottomLeftGO != null && _resizeHandleBottomLeftGO.activeSelf) sig ^= 1 << 7;
             if (_resizeHandleBottomRightGO != null && _resizeHandleBottomRightGO.activeSelf) sig ^= 1 << 8;
             if (IsFixedTopDockMode() && !isCollapsed) sig ^= 1 << 9;
+            if (isFixedLocally) sig ^= 1 << 10;
+            if (isCollapsed) sig ^= 1 << 11;
             return sig;
+        }
+
+        /// <summary>Force next <see cref="ApplyFooterOverflowLayout"/> to remeasure (mode/dock chrome change).</summary>
+        private void InvalidateFooterOverflowLayout()
+        {
+            _footerOverflowLayoutSig = int.MinValue;
         }
 
         private static float FooterChipPackWidth(int count, float chip, float gap)
@@ -477,14 +485,13 @@ namespace VPB
             float footerW = paginationRT.rect.width;
             if (footerW < 8f) return;
 
-            CollectFooterOverflowCandidates(_footerOverflowCandidates);
-
             int sig = ComputeFooterOverflowLayoutSig(footerW, s);
+            // Hard early-out: width/scale/visibility unchanged — skip Collect + Collapse every visible frame.
+            // Note: undo/redo label text does not change chip size (fixed ButtonSizeRef), so omit from sig.
             if (sig == _footerOverflowLayoutSig)
-            {
-                CollapseFooterOverflowUntilFits(s);
                 return;
-            }
+
+            CollectFooterOverflowCandidates(_footerOverflowCandidates);
             _footerOverflowLayoutSig = sig;
 
             for (int i = 0; i < _footerOverflowCandidates.Count; i++)

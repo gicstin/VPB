@@ -1751,22 +1751,27 @@ namespace VPB
         /// </summary>
         private void RefreshSelectionVisualsCore(bool runHeavySideEffects)
         {
-            // Iterate over active buttons in the recycling grid content
-            if (recyclingGrid != null && recyclingGrid.content != null)
+            // Walk recycled activeItems only — no Transform foreach / GetComponent storm.
+            if (recyclingGrid != null)
             {
-                foreach (Transform child in recyclingGrid.content)
+                int n = recyclingGrid.ActiveItemCount;
+                for (int i = 0; i < n; i++)
                 {
-                    if (!child.gameObject.activeSelf) continue;
-                    GameObject btn = child.gameObject;
-                    
+                    RecyclingGridItem rgvItem = recyclingGrid.GetActiveItemAt(i);
+                    if (rgvItem == null) continue;
+                    GameObject btn = rgvItem.gameObject;
+                    if (btn == null || !btn.activeSelf) continue;
+
+                    FileButtonBinder binder = rgvItem.binder;
+                    if (binder == null) binder = FileButtonBinder.GetOrAdd(btn);
+
                     if (btn.name.StartsWith("FileButton_"))
                     {
-                        var diag = btn.GetComponent<UIDraggableItem>();
-                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        UIDraggableItem diag = binder != null ? binder.draggable : null;
                         FileEntry feForVisuals = null;
                         try
                         {
-                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                            if (settingsListViewActive && currentFilteredFiles != null
                                 && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
                                 feForVisuals = currentFilteredFiles[rgvItem.index];
                             else if (diag != null) feForVisuals = diag.FileEntry;
@@ -1775,22 +1780,24 @@ namespace VPB
                         if (feForVisuals != null)
                             UpdateFileButtonVisuals(btn, feForVisuals);
                     }
-                    
-                    var ratingHandler = btn.GetComponent<RatingHandler>();
+
+                    RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
             // Fallback for non-recycled items (if any legacy usage remains)
-            else 
+            else
             {
-                foreach (var btn in activeButtons)
+                for (int i = 0; activeButtons != null && i < activeButtons.Count; i++)
                 {
+                    GameObject btn = activeButtons[i];
                     if (btn == null) continue;
-                    
+
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(btn);
                     if (btn.name.StartsWith("FileButton_"))
                     {
-                        var diag = btn.GetComponent<UIDraggableItem>();
-                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        UIDraggableItem diag = binder != null ? binder.draggable : null;
+                        RecyclingGridItem rgvItem = binder != null ? binder.gridItem : null;
                         FileEntry feForVisuals = null;
                         try
                         {
@@ -1803,8 +1810,8 @@ namespace VPB
                         if (feForVisuals != null)
                             UpdateFileButtonVisuals(btn, feForVisuals);
                     }
-                    
-                    var ratingHandler = btn.GetComponent<RatingHandler>();
+
+                    RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }

@@ -1010,6 +1010,14 @@ namespace VPB
         private GameObject _resizeHandleTopLeftGO;           // floating TL (title bar far-left)
         private GameObject _resizeHandleFixedBottomGO;       // fixed Right/Top dock (footer left slot)
         private GameObject _resizeHandleFixedBottomRightGO;  // fixed Left dock (footer right slot)
+        /// <summary>Cached comps for fixed-dock Update — avoid GetComponent every frame.</summary>
+        private RectTransform _backgroundBoxRT;
+        private RectTransform _collapseTriggerRT;
+        private RectTransform _collapseTriggerLeftRT;
+        private RectTransform _collapseTriggerTopRT;
+        private UIAnchorResizer _fixedBottomResizer;
+        private UIAnchorResizer _fixedBottomRightResizer;
+        private string _fixedDockHandleIconKey;
         private GameObject footerBackBtn;
         private GameObject footerClearFilterBtn;
         private Text footerFilterModeText;
