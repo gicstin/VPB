@@ -914,7 +914,7 @@ namespace VPB
 
                 if (pkg != null)
                 {
-                    CollectUnsatisfiedDeps(pkg.RecursivePackageDependencies, missing);
+                    CollectUnsatisfiedDeps(pkg.RecursivePackageDependencies, missing, pkg);
                     return missing;
                 }
 
@@ -934,11 +934,19 @@ namespace VPB
 
         private static void CollectUnsatisfiedDeps(IEnumerable<string> deps, List<string> into)
         {
+            CollectUnsatisfiedDeps(deps, into, null);
+        }
+
+        private static void CollectUnsatisfiedDeps(IEnumerable<string> deps, List<string> into, VarPackage consumer)
+        {
             if (deps == null || into == null) return;
             foreach (var dep in deps)
             {
-                // Newer installed .var satisfies exact meta pins (Hub download-latest).
-                if (!string.IsNullOrEmpty(dep) && !FileManager.IsDependencySatisfiedByInstalled(dep))
+                if (string.IsNullOrEmpty(dep)) continue;
+                bool satisfied = consumer != null
+                    ? FileManager.IsDependencySatisfiedByInstalled(dep, consumer)
+                    : FileManager.IsDependencySatisfiedByInstalled(dep);
+                if (!satisfied)
                     into.Add(dep);
             }
         }
@@ -953,8 +961,7 @@ namespace VPB
                     int missingCount = 0;
                     foreach (var dep in deps)
                     {
-                        // Newer installed .var satisfies exact meta pins (Hub download-latest).
-                        if (!FileManager.IsDependencySatisfiedByInstalled(dep))
+                        if (!FileManager.IsDependencySatisfiedByInstalled(dep, package))
                             missingCount++;
                     }
                     return missingCount;

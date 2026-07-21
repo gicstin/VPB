@@ -119,6 +119,10 @@ namespace VPB
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
+        /// <summary>When true, honor meta.json standard/script ReferenceVersionOption (Exact/Minimum/Latest).</summary>
+        public ConfigEntry<bool> RespectPackageReferenceVersionOption;
+        /// <summary>When true, always treat package refs as Exact (never upgrade versioned UIDs).</summary>
+        public ConfigEntry<bool> ForceExactPackageVersions;
         public ConfigEntry<bool> PluginConsolidateCslist;
 
         internal static void Init(ConfigFile config)
@@ -172,6 +176,8 @@ namespace VPB
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
+            RespectPackageReferenceVersionOption = config.Bind<bool>("Settings", "RespectPackageReferenceVersionOption", true, "When true, honor meta.json standardReferenceVersionOption / scriptReferenceVersionOption (Exact, Minimum, Latest) when a pinned package version is missing. Exact pins that exist on disk are always kept.");
+            ForceExactPackageVersions = config.Bind<bool>("Settings", "ForceExactPackageVersions", false, "When true, never rewrite versioned package paths (Author.Pkg.N) to a newer version — always use the exact pin. Overrides meta Latest/Minimum for missing-version fallback.");
             PluginConsolidateCslist = config.Bind<bool>("Settings", "PluginConsolidateCslist", true, "In the Plugins gallery category, hide .cs files that are referenced by a .cslist so each multi-file plugin shows as a single row (its .cslist). Standalone .cs files (not in any .cslist) always show. Turn off to see every individual .cs file.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 0, "0=off, 1=summary only, 2=verbose per-texture trace.");

@@ -60,6 +60,12 @@ namespace VPB
         {
             try
             {
+                string referrerUid = PackageReferenceVersionResolver.TryExtractPackageUid(normalizedPath);
+                if (!string.IsNullOrEmpty(referrerUid))
+                    PackageReferenceVersionResolver.SetActiveLoadReferrer(referrerUid);
+                else
+                    PackageReferenceVersionResolver.ClearActiveLoadReferrer();
+
                 if (string.IsNullOrEmpty(normalizedPath)) return false;
                 SuperController sc = SuperController.singleton;
                 if (sc == null) return false;
@@ -749,6 +755,22 @@ namespace VPB
         {
             if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
             if (entry == null && string.IsNullOrEmpty(pathHint)) return 0;
+
+            try
+            {
+                string hostUid = null;
+                if (entry is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                    hostUid = vfe.Package.Uid;
+                if (string.IsNullOrEmpty(hostUid))
+                    hostUid = PackageReferenceVersionResolver.TryExtractPackageUid(pathHint);
+                if (string.IsNullOrEmpty(hostUid) && entry != null)
+                    hostUid = PackageReferenceVersionResolver.TryExtractPackageUid(entry.Path);
+                if (!string.IsNullOrEmpty(hostUid))
+                    PackageReferenceVersionResolver.SetActiveLoadReferrer(hostUid);
+                else
+                    PackageReferenceVersionResolver.ClearActiveLoadReferrer();
+            }
+            catch { }
 
             var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             void addUid(string uid)

@@ -48,42 +48,93 @@ namespace VPB
 
         private static string ResolveBestAvailableUid(string requestUid)
         {
+            return ResolveBestAvailableUid(requestUid, null);
+        }
+
+        /// <summary>
+        /// Resolve an alternate UID when the requested versioned UID should be rewritten.
+        /// Keeps exact UID when that package is installed (native VaM behavior).
+        /// When exact is missing, applies meta ReferenceVersionOption / user settings.
+        /// </summary>
+        private static string ResolveBestAvailableUid(string requestUid, string entryPath)
+        {
             if (string.IsNullOrEmpty(requestUid)) return null;
 
             // Explicit ".latest" already handled by existing logic.
             if (requestUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                 return ResolveLatestUid(requestUid);
 
-            // If a specific version was requested but doesn't exist, serve the latest
-            // installed version for the same group (if newer).
             if (!TryParseUidGroupAndVersion(requestUid, out string group, out int requestedVer))
                 return null;
 
-            string latestUid = ResolveLatestUid(group + ".latest");
-            if (string.IsNullOrEmpty(latestUid)) return null;
+            // Force-latest list: upgrade even when exact exists.
+            if (FileManager.ShouldForceLatestForPackageGroup(group))
+            {
+                string forcedLatest = ResolveLatestUid(group + ".latest");
+                if (!string.IsNullOrEmpty(forcedLatest)
+                    && !string.Equals(forcedLatest, requestUid, StringComparison.OrdinalIgnoreCase))
+                    return forcedLatest;
+                return null;
+            }
 
-            if (!TryParseUidGroupAndVersion(latestUid, out _, out int latestVer))
+            // Exact version present → never rewrite (matches native NormalizeCommon).
+            if (IsExactUidAvailable(requestUid))
                 return null;
 
-            if (latestVer <= requestedVer) return null;
-            return latestUid;
+            VarPackage.ReferenceVersionOption option =
+                PackageReferenceVersionResolver.GetEffectiveOption(entryPath);
+            return PackageReferenceVersionResolver.ResolveMissingVersionUid(group, requestedVer, option);
         }
+
+        private static bool IsExactUidAvailable(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                if (pkg != null) return true;
+            }
+            catch { }
+
+            // Cheap existence only — no recursive Directory.GetFiles (warm NormalizeLoadPath).
+            try
+            {
+                if (VpbLocalDatabase.TryResolveIndexedVarPathForUid(uid, out string sqlPath)
+                    && !string.IsNullOrEmpty(sqlPath))
+                    return true;
+            }
+            catch { }
+
+            try
+            {
+                string filename = uid + ".var";
+                if (File.Exists(Path.Combine("AddonPackages", filename))) return true;
+                if (File.Exists(Path.Combine("AllPackages", filename))) return true;
+            }
+            catch { }
+
+            return IsUidAlreadyRegisteredInVam(uid);
+        }
+
+        private static MethodInfo s_VamGetPackageMethod;
+        private static bool s_VamGetPackageMethodResolved;
 
         private static bool IsUidAlreadyRegisteredInVam(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
             try
             {
-                var fmType = typeof(MVR.FileManagement.FileManager);
-                // VaM has a static GetPackage(string) in most builds; use reflection to avoid hard dependency.
-                var m = fmType.GetMethod("GetPackage",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null, new[] { typeof(string) }, null);
-                if (m != null)
+                if (!s_VamGetPackageMethodResolved)
                 {
-                    object r = m.Invoke(null, new object[] { uid });
-                    if (r != null) return true;
+                    s_VamGetPackageMethodResolved = true;
+                    var fmType = typeof(MVR.FileManagement.FileManager);
+                    s_VamGetPackageMethod = fmType.GetMethod("GetPackage",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                        null, new[] { typeof(string) }, null);
                 }
+                if (s_VamGetPackageMethod == null) return false;
+                object r = s_VamGetPackageMethod.Invoke(null, new object[] { uid });
+                return r != null;
             }
             catch { }
             return false;
@@ -818,8 +869,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// For entry paths like "Author.Pkg.12:/Custom/...", rewrites to the latest available
-        /// installed version if the request version is not present but a newer version is.
+        /// For entry paths like "Author.Pkg.12:/Custom/...", rewrites only when the request
+        /// version is not installed (or ForceLatest / Latest policy applies). Exact pins stay
+        /// when that version exists on disk.
         /// </summary>
         public static string TryRewriteBestAvailableEntryPath(string entryPath, bool attemptRegister)
         {
@@ -830,7 +882,7 @@ namespace VPB
             string uid = entryPath.Substring(0, colonIdx);
             if (string.IsNullOrEmpty(uid)) return null;
 
-            string bestUid = ResolveBestAvailableUid(uid);
+            string bestUid = ResolveBestAvailableUid(uid, entryPath);
             if (string.IsNullOrEmpty(bestUid)) return null;
             if (string.Equals(bestUid, uid, StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -868,8 +920,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// Rewrites an entry path to a concrete, best-available UID if possible.
-        /// This handles both "*.latest:/..." and "Author.Pkg.12:/..." → newest installed.
+        /// Rewrites an entry path to a concrete UID when policy allows.
+        /// Handles "*.latest:/..." always, and versioned UIDs only when exact is missing
+        /// (or ForceLatest / meta Latest fallback applies).
         /// </summary>
         public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
         {

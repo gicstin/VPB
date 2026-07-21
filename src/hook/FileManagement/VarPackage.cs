@@ -798,6 +798,41 @@ namespace VPB
 			protected set;
 		}
 
+		private bool _referenceVersionOptionsLoaded;
+
+		internal void SetStandardReferenceVersionOption(ReferenceVersionOption option)
+		{
+			StandardReferenceVersionOption = option;
+		}
+
+		internal void SetScriptReferenceVersionOption(ReferenceVersionOption option)
+		{
+			ScriptReferenceVersionOption = option;
+		}
+
+		internal void MarkReferenceVersionOptionsLoaded()
+		{
+			_referenceVersionOptionsLoaded = true;
+		}
+
+		internal bool AreReferenceVersionOptionsLoaded
+		{
+			get { return _referenceVersionOptionsLoaded; }
+		}
+
+		/// <summary>
+		/// Ensure meta.json reference-version options are loaded (cache-hit scans skip DumpVarPackage).
+		/// Cold/warm UI and load-prep only — do not call from NormalizeLoadPath hot loop.
+		/// </summary>
+		public bool TryEnsureReferenceVersionOptions()
+		{
+			if (_referenceVersionOptionsLoaded)
+				return true;
+			TryEnsureMetaJsonLiteFields();
+			_referenceVersionOptionsLoaded = true;
+			return true;
+		}
+
 		public DateTime LastWriteTime
 		{
 			get;
@@ -1209,6 +1244,9 @@ namespace VPB
 			LicenseType = null;
 			_metaJsonLiteLoaded = false;
 			_metaJsonLiteLicensePass = false;
+			_referenceVersionOptionsLoaded = false;
+			StandardReferenceVersionOption = ReferenceVersionOption.Latest;
+			ScriptReferenceVersionOption = ReferenceVersionOption.Latest;
 			RecursivePackageDependencies = null;
 			PackageDependencies = null;
 		}
@@ -1220,11 +1258,12 @@ namespace VPB
 		/// </summary>
 		public bool TryEnsureMetaJsonLiteFields()
 		{
-			if (_metaJsonLiteLoaded && _metaJsonLiteLicensePass)
+			if (_metaJsonLiteLoaded && _metaJsonLiteLicensePass && _referenceVersionOptionsLoaded)
 				return !string.IsNullOrEmpty(Description)
 					|| !string.IsNullOrEmpty(PromotionalLink)
 					|| !string.IsNullOrEmpty(LicenseType)
-					|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
+					|| (PackageMetaTags != null && PackageMetaTags.Count > 0)
+					|| _referenceVersionOptionsLoaded;
 
 			_metaJsonLiteLoaded = true;
 			_metaJsonLiteLicensePass = true;
@@ -1304,6 +1343,8 @@ namespace VPB
 							}
 						}
 						catch { }
+
+						try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
 					}
 				}
 			}
@@ -1315,7 +1356,8 @@ namespace VPB
 			return !string.IsNullOrEmpty(Description)
 				|| !string.IsNullOrEmpty(PromotionalLink)
 				|| !string.IsNullOrEmpty(LicenseType)
-				|| (PackageMetaTags != null && PackageMetaTags.Count > 0);
+				|| (PackageMetaTags != null && PackageMetaTags.Count > 0)
+				|| _referenceVersionOptionsLoaded;
 		}
 		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
 		// zero references, so a later sig check is a positive hit instead of a re-parse.
@@ -1994,6 +2036,8 @@ namespace VPB
 							}
 							catch { }
 
+							try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
+
 							if (!FileManager.IsBulkDeepScanActive)
 								FindMissingDependenciesRecursive(asObject);
 						}
@@ -2067,6 +2111,19 @@ namespace VPB
 		{
 			if (FileManager.IsBulkDeepScanActive)
 				return;
+			PackageReferenceVersionResolver.BeginReferrerContext(Uid);
+			try
+			{
+				FindMissingDependenciesRecursiveCore(jc);
+			}
+			finally
+			{
+				PackageReferenceVersionResolver.EndReferrerContext();
+			}
+		}
+
+		void FindMissingDependenciesRecursiveCore(JSONClass jc)
+		{
 			// First, try the explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
@@ -2082,7 +2139,7 @@ namespace VPB
 					JSONClass asObject2 = asObject[key].AsObject;
 					if (asObject2 != null)
 					{
-						FindMissingDependenciesRecursive(asObject2);
+						FindMissingDependenciesRecursiveCore(asObject2);
 					}
 				}
 			}
@@ -2166,14 +2223,22 @@ namespace VPB
 			//string linkvar = "AddonPackages/" + this.Uid + ".var";
             if (this.RecursivePackageDependencies != null)
             {
-				foreach (var key in this.RecursivePackageDependencies)
+				PackageReferenceVersionResolver.BeginReferrerContext(Uid);
+				try
 				{
-					VarPackage package = FileManager.GetPackageForDependency(key, false);
-					if (package != null)
+					foreach (var key in this.RecursivePackageDependencies)
 					{
-						bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
-						if (dirty2) flag = true;
+						VarPackage package = FileManager.GetPackageForDependency(key, false);
+						if (package != null)
+						{
+							bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
+							if (dirty2) flag = true;
+						}
 					}
+				}
+				finally
+				{
+					PackageReferenceVersionResolver.EndReferrerContext();
 				}
 			}
 			if(flag)

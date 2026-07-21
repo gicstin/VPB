@@ -2402,10 +2402,18 @@ namespace VPB
 			return hashSet;
 		}
 
+		private static readonly HashSet<string> s_EmptyPackageGroupSet =
+			new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		private static string s_CachedForceLatestRaw;
+		private static string s_CachedForceLatestIgnoreRaw;
+		private static HashSet<string> s_CachedForceLatestSet = s_EmptyPackageGroupSet;
+		private static HashSet<string> s_CachedForceLatestIgnoreSet = s_EmptyPackageGroupSet;
+
 		private static HashSet<string> ParsePackageGroupList(string raw)
 		{
+			if (string.IsNullOrEmpty(raw)) return s_EmptyPackageGroupSet;
 			HashSet<string> set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			if (string.IsNullOrEmpty(raw)) return set;
 			string[] parts = Regex.Split(raw, "[\\s,;]+", RegexOptions.CultureInvariant);
 			for (int i = 0; i < parts.Length; i++)
 			{
@@ -2415,7 +2423,40 @@ namespace VPB
 				if (p.Length == 0) continue;
 				set.Add(p);
 			}
-			return set;
+			return set.Count == 0 ? s_EmptyPackageGroupSet : set;
+		}
+
+		/// <summary>
+		/// Cached force/ignore sets — NormalizeLoadPath hits this often; avoid Regex.Split + HashSet per call.
+		/// </summary>
+		private static void EnsureForceLatestGroupCache()
+		{
+			string forceRaw = null;
+			string ignoreRaw = null;
+			try
+			{
+				if (Settings.Instance != null)
+				{
+					if (Settings.Instance.ForceLatestDependencyPackageGroups != null)
+						forceRaw = Settings.Instance.ForceLatestDependencyPackageGroups.Value;
+					if (Settings.Instance.ForceLatestDependencyIgnorePackageGroups != null)
+						ignoreRaw = Settings.Instance.ForceLatestDependencyIgnorePackageGroups.Value;
+				}
+			}
+			catch { }
+
+			if (forceRaw == null) forceRaw = "";
+			if (ignoreRaw == null) ignoreRaw = "";
+
+			if (s_CachedForceLatestSet != null
+				&& string.Equals(forceRaw, s_CachedForceLatestRaw, StringComparison.Ordinal)
+				&& string.Equals(ignoreRaw, s_CachedForceLatestIgnoreRaw, StringComparison.Ordinal))
+				return;
+
+			s_CachedForceLatestRaw = forceRaw;
+			s_CachedForceLatestIgnoreRaw = ignoreRaw;
+			s_CachedForceLatestSet = ParsePackageGroupList(forceRaw);
+			s_CachedForceLatestIgnoreSet = ParsePackageGroupList(ignoreRaw);
 		}
 
 		private static bool TryGetPackageGroupFromDependencyId(string depId, out string packageGroup)
@@ -2472,6 +2513,29 @@ namespace VPB
 			catch { }
 		}
 
+		/// <summary>
+		/// True when ForceLatestDependencies is on and <paramref name="packageGroup"/> is in the force list
+		/// (and not ignored). Used by on-demand path rewrite.
+		/// </summary>
+		public static bool ShouldForceLatestForPackageGroup(string packageGroup)
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(packageGroup)) return false;
+				if (Settings.Instance == null || Settings.Instance.ForceLatestDependencies == null || !Settings.Instance.ForceLatestDependencies.Value)
+					return false;
+
+				EnsureForceLatestGroupCache();
+				if (s_CachedForceLatestIgnoreSet != null && s_CachedForceLatestIgnoreSet.Contains(packageGroup))
+					return false;
+				return s_CachedForceLatestSet != null && s_CachedForceLatestSet.Contains(packageGroup);
+			}
+			catch
+			{
+				return false;
+			}
+		}
+
 		private static string MaybeForceLatestDependency(string dependencyId)
 		{
 			try
@@ -2485,10 +2549,9 @@ namespace VPB
 					s_ForceLatestSummaryLogged = true;
 					try
 					{
-						string ignoreRaw0 = (Settings.Instance.ForceLatestDependencyIgnorePackageGroups != null) ? Settings.Instance.ForceLatestDependencyIgnorePackageGroups.Value : null;
-						string forceRaw0 = (Settings.Instance.ForceLatestDependencyPackageGroups != null) ? Settings.Instance.ForceLatestDependencyPackageGroups.Value : null;
-						int ignoreCount0 = ParsePackageGroupList(ignoreRaw0).Count;
-						int forceCount0 = ParsePackageGroupList(forceRaw0).Count;
+						EnsureForceLatestGroupCache();
+						int ignoreCount0 = s_CachedForceLatestIgnoreSet != null ? s_CachedForceLatestIgnoreSet.Count : 0;
+						int forceCount0 = s_CachedForceLatestSet != null ? s_CachedForceLatestSet.Count : 0;
 						LogUtil.Log("[VPB] ForceLatestDeps: ENABLED | forceCount=" + forceCount0 + " | whitelistCount=" + ignoreCount0);
 					}
 					catch { }
@@ -2497,17 +2560,14 @@ namespace VPB
 				if (!TryGetPackageGroupFromDependencyId(dependencyId, out string packageGroup) || string.IsNullOrEmpty(packageGroup))
 					return dependencyId;
 
-				string ignoreRaw = (Settings.Instance.ForceLatestDependencyIgnorePackageGroups != null) ? Settings.Instance.ForceLatestDependencyIgnorePackageGroups.Value : null;
-				HashSet<string> ignore = ParsePackageGroupList(ignoreRaw);
-				if (ignore.Contains(packageGroup))
+				EnsureForceLatestGroupCache();
+				if (s_CachedForceLatestIgnoreSet != null && s_CachedForceLatestIgnoreSet.Contains(packageGroup))
 				{
 					LogForceLatestDecisionOnce("wl:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (whitelisted) dep='" + dependencyId + "'");
 					return dependencyId;
 				}
 
-				string forceRaw = (Settings.Instance.ForceLatestDependencyPackageGroups != null) ? Settings.Instance.ForceLatestDependencyPackageGroups.Value : null;
-				HashSet<string> force = ParsePackageGroupList(forceRaw);
-				if (!force.Contains(packageGroup))
+				if (s_CachedForceLatestSet == null || !s_CachedForceLatestSet.Contains(packageGroup))
 				{
 					LogForceLatestDecisionOnce("nf:" + packageGroup, "[VPB] ForceLatestDeps: SKIP (not in force list) dep='" + dependencyId + "'");
 					return dependencyId;
@@ -2532,20 +2592,69 @@ namespace VPB
 		public static VarPackage GetPackageForDependency(string dependencyId, bool ensureInstalled = true)
 		{
 			string resolvedId = MaybeForceLatestDependency(dependencyId);
-			return GetPackage(resolvedId, ensureInstalled);
+			VarPackage pkg = GetPackage(resolvedId, ensureInstalled);
+			if (pkg != null) return pkg;
+			return ResolveVersionedDependencyFallback(resolvedId, ensureInstalled);
+		}
+
+		/// <summary>
+		/// When an exact / min pin is missing, resolve per ReferenceVersionOption (referrer context or Latest).
+		/// </summary>
+		static VarPackage ResolveVersionedDependencyFallback(string dependencyId, bool ensureInstalled)
+		{
+			if (string.IsNullOrEmpty(dependencyId)) return null;
+			try
+			{
+				if (dependencyId.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+					return null;
+
+				Match min = Regex.Match(dependencyId, "^([^\\.]+\\.[^\\.]+)\\.min([0-9]+)$", RegexOptions.IgnoreCase);
+				if (min.Success)
+				{
+					string groupId = min.Groups[1].Value;
+					int reqMin;
+					if (!int.TryParse(min.Groups[2].Value, out reqMin)) return null;
+					VarPackageGroup g = GetPackageGroup(groupId);
+					if (g == null) return null;
+					VarPackage closest = g.GetClosestMatchingPackageVersion(reqMin, false, false);
+					if (closest != null && ensureInstalled) EnsurePackageInstalled(closest);
+					return closest;
+				}
+
+				string group = PackageIDToPackageGroupID(dependencyId);
+				string verStr = PackageIDToPackageVersion(dependencyId);
+				int ver;
+				if (string.IsNullOrEmpty(group) || string.IsNullOrEmpty(verStr) || !int.TryParse(verStr, out ver))
+					return null;
+
+				VarPackage.ReferenceVersionOption option =
+					PackageReferenceVersionResolver.GetEffectiveOption(null);
+				string altUid = PackageReferenceVersionResolver.ResolveMissingVersionUid(group, ver, option);
+				if (string.IsNullOrEmpty(altUid)) return null;
+				return GetPackage(altUid, ensureInstalled);
+			}
+			catch
+			{
+				return null;
+			}
 		}
 
 		/// <summary>
 		/// True when a local package satisfies <paramref name="dependencyId"/> for gallery missing-deps /
-		/// Hub download. Exact pins (Author.Name.7) are satisfied by any newer installed version in the
-		/// same group — matches Hub download-latest behavior (meta may pin old .N while .latest is installed).
+		/// Hub download. Exact meta pins follow <see cref="VarPackage.ReferenceVersionOption"/> when
+		/// RespectPackageReferenceVersionOption is on; otherwise newer installed versions still satisfy.
 		/// </summary>
 		public static bool IsDependencySatisfiedByInstalled(string dependencyId)
+		{
+			return IsDependencySatisfiedByInstalled(dependencyId, PackageReferenceVersionResolver.GetEffectiveOption(null));
+		}
+
+		public static bool IsDependencySatisfiedByInstalled(string dependencyId, VarPackage.ReferenceVersionOption option)
 		{
 			if (string.IsNullOrEmpty(dependencyId)) return false;
 			try
 			{
-				if (GetPackageForDependency(dependencyId, ensureInstalled: false) != null)
+				if (GetPackage(MaybeForceLatestDependency(dependencyId), ensureInstalled: false) != null)
 					return true;
 
 				string group = PackageIDToPackageGroupID(dependencyId);
@@ -2569,7 +2678,14 @@ namespace VPB
 				string ver = PackageIDToPackageVersion(dependencyId);
 				int exact;
 				if (!string.IsNullOrEmpty(ver) && int.TryParse(ver, out exact))
+				{
+					if (PackageReferenceVersionResolver.ForceExactGlobally()
+						|| option == VarPackage.ReferenceVersionOption.Exact)
+					{
+						return GetPackage(dependencyId, ensureInstalled: false) != null;
+					}
 					return newest.Version >= exact;
+				}
 
 				return true;
 			}
@@ -2577,6 +2693,13 @@ namespace VPB
 			{
 				return false;
 			}
+		}
+
+		public static bool IsDependencySatisfiedByInstalled(string dependencyId, VarPackage consumer)
+		{
+			return IsDependencySatisfiedByInstalled(
+				dependencyId,
+				PackageReferenceVersionResolver.GetSatisfactionOption(consumer));
 		}
 
 		static bool TryRebuildDependentCountsFromBulkEdges(VarPackage[] snapshot)
@@ -2969,7 +3092,16 @@ namespace VPB
                 string verStr = PackageIDToPackageVersion(uid);
                 if (verStr != null && int.TryParse(verStr, out int ver))
                 {
-                    return group.GetClosestMatchingPackageVersion(ver, false, true);
+                    VarPackage.ReferenceVersionOption option =
+                        PackageReferenceVersionResolver.GetEffectiveOption(null);
+                    string altUid = PackageReferenceVersionResolver.ResolveMissingVersionUid(groupId, ver, option);
+                    if (string.IsNullOrEmpty(altUid)) return null;
+                    VarPackage alt;
+                    if (packagesByUid.TryGetValue(altUid, out alt)) return alt;
+                    return group.GetClosestMatchingPackageVersion(
+                        ver,
+                        false,
+                        option == VarPackage.ReferenceVersionOption.Latest);
                 }
 
                 // Fallback to newest if we can't parse version but found group
@@ -3126,13 +3258,30 @@ namespace VPB
 				if (package == null || !package.Enabled)
 				{
 					string packageGroupUid = PackageIDToPackageGroupID(value5);
-					VarPackageGroup packageGroup3 = GetPackageGroup(packageGroupUid);
-					if (packageGroup3 != null)
+					string verStr = PackageIDToPackageVersion(value5);
+					int requestVersion;
+					VarPackage.ReferenceVersionOption option =
+						PackageReferenceVersionResolver.GetEffectiveOption(text);
+					if (!string.IsNullOrEmpty(verStr) && int.TryParse(verStr, out requestVersion))
 					{
-						package = packageGroup3.NewestEnabledPackage;
-						if (package != null)
+						string altUid = PackageReferenceVersionResolver.ResolveMissingVersionUid(
+							packageGroupUid, requestVersion, option);
+						if (!string.IsNullOrEmpty(altUid))
 						{
-							text = text.Replace(value5, package.Uid);
+							text = text.Replace(value5, altUid);
+						}
+					}
+					else
+					{
+						VarPackageGroup packageGroup3 = GetPackageGroup(packageGroupUid);
+						if (packageGroup3 != null
+							&& option != VarPackage.ReferenceVersionOption.Exact)
+						{
+							package = packageGroup3.NewestEnabledPackage;
+							if (package != null)
+							{
+								text = text.Replace(value5, package.Uid);
+							}
 						}
 					}
 				}

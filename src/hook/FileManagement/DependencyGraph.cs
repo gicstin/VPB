@@ -240,16 +240,25 @@ namespace VPB
 				string depId = direct[i];
 				if (string.IsNullOrEmpty(depId)) continue;
 
-				VarPackage resolved = FileManager.GetPackageForDependency(depId, false);
-				// Exact meta pin satisfied by newer installed group version (Hub download-latest).
-				if (resolved == null && FileManager.IsDependencySatisfiedByInstalled(depId))
+				VarPackage resolved = null;
+				PackageReferenceVersionResolver.BeginReferrerContext(uid);
+				try
 				{
-					string group = FileManager.PackageIDToPackageGroupID(depId);
-					if (!string.IsNullOrEmpty(group))
+					resolved = FileManager.GetPackageForDependency(depId, false);
+					// Exact meta pin may still be satisfied by newer version when option is Latest/Minimum.
+					if (resolved == null && FileManager.IsDependencySatisfiedByInstalled(depId, n.Package))
 					{
-						try { resolved = FileManager.GetPackage(group + ".latest", false); }
-						catch { resolved = null; }
+						string group = FileManager.PackageIDToPackageGroupID(depId);
+						if (!string.IsNullOrEmpty(group))
+						{
+							try { resolved = FileManager.GetPackage(group + ".latest", false); }
+							catch { resolved = null; }
+						}
 					}
+				}
+				finally
+				{
+					PackageReferenceVersionResolver.EndReferrerContext();
 				}
 				if (resolved != null)
 				{
