@@ -6639,6 +6639,16 @@ namespace VPB
                                 textBinds.Add("%" + EscapeLike(term) + "%");
                             }
                         }
+                        if (br.BroadExclude != null)
+                        {
+                            for (int t = 0; t < br.BroadExclude.Count; t++)
+                            {
+                                string term = br.BroadExclude[t];
+                                if (string.IsNullOrEmpty(term)) continue;
+                                branchSql.Append(" AND i.item_key NOT LIKE ? ESCAPE '\\'");
+                                textBinds.Add("%" + EscapeLike(term) + "%");
+                            }
+                        }
                         branchSql.Append(')');
                     }
                     if (!anyBranch)

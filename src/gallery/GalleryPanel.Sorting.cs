@@ -584,7 +584,7 @@ namespace VPB
                     || type == SortType.UnusedOnly
                     || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
             }
-            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
             {
                 return type == SortType.Name || type == SortType.Count;
             }

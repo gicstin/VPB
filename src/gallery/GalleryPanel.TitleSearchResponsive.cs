@@ -18,8 +18,6 @@ namespace VPB
         /// <summary>Preferred labeled category width when space allows (no void-filling).</summary>
         private const float TitleBarCategoryPreferredRef = 168f;
         private const float TitleSearchFieldMaxWidthRef = 240f;
-        private const float TitleSearchPopupDismissAfterAwaySeconds = 0.72f;
-        private const float TitleSearchPopupVicinityInflateScreenPx = 18f;
 
         /// <summary>
         /// Pin left group flush left (category · source · settings · language; overflow: category · settings · …).
@@ -415,7 +413,7 @@ namespace VPB
         private void SetupTitleSearchCompactControl(GameObject titleBarGO)
         {
             if (titleBarGO == null) return;
-            _titleSearchCompactGO = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "", 18, 0, 0, AnchorPresets.middleCenter, () => OpenTitleSearchPopup());
+            _titleSearchCompactGO = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, "", 18, 0, 0, AnchorPresets.middleCenter, () => ToggleTitleSearchPopup());
             _titleSearchCompactGO.name = "TitleSearchCompact";
             _titleSearchCompactGO.SetActive(false);
             RectTransform crt = _titleSearchCompactGO.GetComponent<RectTransform>();
@@ -439,16 +437,39 @@ namespace VPB
             var compactIconImg = _titleSearchCompactGO.transform.Find("Icon")?.GetComponent<Image>();
             if (compactIconImg != null) compactIconImg.color = Color.white;
             _titleSearchCompactRT = crt;
-            try { AddTooltip(_titleSearchCompactGO, "gallery.search.main", "Search name, #tag, OR, badge…"); } catch { }
+            try { AddTooltip(_titleSearchCompactGO, "gallery.search.shortcuts_tip", "Ctrl+F focus · Enter → chip · Shift+Enter exclude"); } catch { }
             AddRightClickDelegate(_titleSearchCompactGO, ClearTitleBarSearch);
+        }
+
+        private void WireTitleSearchFieldChromeTips(InputField field)
+        {
+            if (field == null) return;
+            try
+            {
+                AddTooltip(field.gameObject, "gallery.search.shortcuts_tip",
+                    "Ctrl+F focus · Enter → chip · Shift+Enter exclude");
+            }
+            catch { }
+            try
+            {
+                Transform clearTr = field.transform.Find("Button_X");
+                if (clearTr != null)
+                {
+                    AddTooltip(clearTr.gameObject, "gallery.search.clear_all_tip",
+                        "Clear all search. Ctrl+Z undoes within 5s.");
+                }
+            }
+            catch { }
         }
 
         private void ClearTitleBarSearch()
         {
             if (titleSearchInput == null) return;
             string cur = titleSearchInput.text ?? "";
-            if (string.IsNullOrEmpty(nameFilter) && cur.Trim().Length == 0) return;
+            if (string.IsNullOrEmpty(nameFilter) && cur.Trim().Length == 0 && !HasTitleSearchChips()) return;
 
+            CaptureTitleSearchClearUndo();
+            ClearTitleSearchChipsState();
             try { CloseTitleSearchPopup(); } catch { }
             if (_titleSearchPopupField != null)
             {
@@ -463,6 +484,13 @@ namespace VPB
             SetNameFilter("");
             try { SyncBrowseFilterChipChrome(); } catch { }
             try { UpdateEmptyGridState(); } catch { }
+            try
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Press Ctrl+Z within 5s to undo."),
+                    TitleSearchClearUndoSeconds);
+            }
+            catch { }
         }
 
         private void EnsureTitleSearchPopupBuilt()
@@ -478,14 +506,24 @@ namespace VPB
             _titleSearchPopupPanelRT.anchorMin = new Vector2(0.5f, 1f);
             _titleSearchPopupPanelRT.anchorMax = new Vector2(0.5f, 1f);
             _titleSearchPopupPanelRT.pivot = new Vector2(0.5f, 1f);
-            Image pbg = UI.AddImage(panel, new Color(0.14f, 0.14f, 0.16f, 1f));
+            Image pbg = UI.AddImage(panel, TitleSearchPopupPanelIdle);
+            _titleSearchPopupPanelImg = pbg;
 
             float w0 = 320f;
             _titleSearchPopupField = CreateSearchInput(panel, w0, (val) =>
             {
                 if (_suppressTitleBarSearchValueChanged) return;
                 _titleBarSearchOnValueChanged?.Invoke(val);
-            });
+            }, OnTitleSearchClearClicked, TitleSearchOnEscape);
+            try { WireTitleSearchCommitKeys(_titleSearchPopupField); } catch { }
+            try { WireTitleSearchFieldChromeTips(_titleSearchPopupField); } catch { }
+            try
+            {
+                Text ph = _titleSearchPopupField != null ? _titleSearchPopupField.placeholder as Text : null;
+                if (ph != null)
+                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Shift+Enter exclude · Ctrl+F");
+            }
+            catch { }
             RectTransform ifrt = _titleSearchPopupField.GetComponent<RectTransform>();
             ifrt.anchorMin = new Vector2(0.5f, 0.5f);
             ifrt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -495,19 +533,38 @@ namespace VPB
             _titleSearchPopupRootGO.SetActive(false);
         }
 
+        private void ToggleTitleSearchPopup()
+        {
+            if (_titleSearchPopupOpen && _titleSearchPopupRootGO != null && _titleSearchPopupRootGO.activeSelf)
+                CloseTitleSearchPopup();
+            else
+                OpenTitleSearchPopup(selectAll: false);
+        }
+
         private void OpenTitleSearchPopup()
+        {
+            OpenTitleSearchPopup(selectAll: false);
+        }
+
+        private void OpenTitleSearchPopup(bool selectAll)
         {
             if (titleSearchInput == null || backgroundBoxGO == null) return;
             EnsureTitleSearchPopupBuilt();
             if (_titleSearchPopupRootGO == null || _titleSearchPopupField == null || _titleSearchPopupPanelRT == null) return;
-            if (_titleSearchPopupOpen && _titleSearchPopupRootGO.activeSelf) return;
+
+            if (_titleSearchPopupOpen && _titleSearchPopupRootGO.activeSelf)
+            {
+                PulseTitleSearchPopupOpenCue();
+                FocusTitleSearchInputField(_titleSearchPopupField, selectAll);
+                return;
+            }
 
             float s = ChromeScale;
             RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
             float bw = bgRT != null ? bgRT.rect.width : 600f;
             float pw = Mathf.Clamp(Mathf.Min(288f * s, bw - 36f * s), 196f * s, 308f * s);
 
-            _titleSearchPopupProximityAwayTimer = 0f;
+            _titleSearchPopupOpenedFrame = Time.frameCount;
             _titleSearchPopupPanelRT.sizeDelta = new Vector2(pw, GalleryUiDesignTokens.TitleBarChipRef * s + 10f);
             float popupX = (_titleSearchCompactRT != null && _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf)
                 ? _titleSearchCompactRT.anchoredPosition.x
@@ -533,15 +590,124 @@ namespace VPB
             _titleSearchPopupRootGO.SetActive(true);
             _titleSearchPopupOpen = true;
 
-            try { _titleSearchPopupField.ActivateInputField(); } catch { }
-            try { _titleSearchPopupField.MoveTextEnd(false); } catch { }
+            PulseTitleSearchPopupOpenCue();
+            FocusTitleSearchInputField(_titleSearchPopupField, selectAll);
+        }
+
+        /// <summary>Ctrl+F: open/focus title search and select draft text.</summary>
+        private void FocusTitleSearchFromHotkey()
+        {
+            if (!IsVisible || isCollapsed) return;
+            if (cleanupModeActive) return;
+
+            bool compact = _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf;
+            bool fieldHidden = titleSearchInput == null
+                || titleSearchInput.gameObject == null
+                || !titleSearchInput.gameObject.activeInHierarchy;
+
+            if (compact || fieldHidden || _titleSearchPopupOpen)
+            {
+                OpenTitleSearchPopup(selectAll: true);
+                return;
+            }
+
+            FocusTitleSearchInputField(titleSearchInput, selectAll: true);
+            PulseTitleSearchInlineFieldCue();
+        }
+
+        private bool _titleSearchInlineCueActive;
+        private Color _titleSearchInlineCueIdle;
+        /// <summary>Cached title-search field Image for cue tick (no GetComponent per frame).</summary>
+        private Image _titleSearchInlineCueImg;
+        /// <summary>Main-thread scratch for GetWorldCorners — no per-call Vector3[4] alloc.</summary>
+        private static readonly Vector3[] TitleSearchWorldCornersScratch = new Vector3[4];
+
+        private void PulseTitleSearchPopupOpenCue()
+        {
+            _titleSearchPopupCueUntil = Time.unscaledTime + TitleSearchPopupCueSeconds;
+            if (_titleSearchPopupPanelImg != null)
+                _titleSearchPopupPanelImg.color = TitleSearchPopupPanelCue;
+        }
+
+        /// <summary>Brief backdrop flash when focusing expanded title search (Ctrl+F).</summary>
+        private void PulseTitleSearchInlineFieldCue()
+        {
+            if (titleSearchInput == null) return;
+            try
+            {
+                if (_titleSearchInlineCueImg == null)
+                    _titleSearchInlineCueImg = titleSearchInput.GetComponent<Image>();
+                Image bg = _titleSearchInlineCueImg;
+                if (bg == null) return;
+                Color idle = ColorTitleSearchBackdropIdle;
+                if (!string.IsNullOrEmpty(nameFilter) || HasTitleSearchChips())
+                    idle = ColorTitleSearchFilterActive;
+                bg.color = TitleSearchPopupPanelCue;
+                _titleSearchPopupCueUntil = Time.unscaledTime + TitleSearchPopupCueSeconds;
+                _titleSearchInlineCueActive = true;
+                _titleSearchInlineCueIdle = idle;
+            }
+            catch { }
+        }
+
+        private void TickTitleSearchPopupOpenCue()
+        {
+            if (_titleSearchPopupCueUntil <= 0f) return;
+            float left = _titleSearchPopupCueUntil - Time.unscaledTime;
+            float t = left <= 0f ? 0f : Mathf.Clamp01(left / TitleSearchPopupCueSeconds);
+
+            if (_titleSearchPopupOpen && _titleSearchPopupPanelImg != null)
+                _titleSearchPopupPanelImg.color = Color.Lerp(TitleSearchPopupPanelIdle, TitleSearchPopupPanelCue, t);
+
+            if (_titleSearchInlineCueActive && _titleSearchInlineCueImg != null)
+                _titleSearchInlineCueImg.color = Color.Lerp(_titleSearchInlineCueIdle, TitleSearchPopupPanelCue, t);
+
+            if (left <= 0f)
+            {
+                _titleSearchPopupCueUntil = 0f;
+                if (_titleSearchPopupPanelImg != null)
+                    _titleSearchPopupPanelImg.color = TitleSearchPopupPanelIdle;
+                if (_titleSearchInlineCueActive)
+                {
+                    _titleSearchInlineCueActive = false;
+                    try { SyncTitleBarSearchBackdrop(); } catch { }
+                }
+            }
+        }
+
+        private static void FocusTitleSearchInputField(InputField field, bool selectAll)
+        {
+            if (field == null) return;
+            try { field.ActivateInputField(); } catch { }
+            string text = field.text ?? "";
+            if (selectAll)
+            {
+                try
+                {
+                    field.caretPosition = text.Length;
+                    field.selectionAnchorPosition = 0;
+                    field.selectionFocusPosition = text.Length;
+                }
+                catch
+                {
+                    try { field.MoveTextEnd(false); } catch { }
+                }
+            }
+            else
+            {
+                try { field.MoveTextEnd(false); } catch { }
+            }
         }
 
         private void CloseTitleSearchPopup()
         {
             if (!_titleSearchPopupOpen) return;
             _titleSearchPopupOpen = false;
-            _titleSearchPopupProximityAwayTimer = 0f;
+            _titleSearchPopupOpenedFrame = -1;
+            _titleSearchPopupCueUntil = 0f;
+            _titleSearchInlineCueActive = false;
+            if (_titleSearchPopupPanelImg != null)
+                _titleSearchPopupPanelImg.color = TitleSearchPopupPanelIdle;
             if (_titleSearchPopupRootGO != null)
                 _titleSearchPopupRootGO.SetActive(false);
 
@@ -569,7 +735,7 @@ namespace VPB
         private static bool ScreenPointInRectTransformExpanded(RectTransform rt, Vector2 screenPoint, float inflateScreenPx, Camera cam)
         {
             if (rt == null || !rt.gameObject.activeInHierarchy) return false;
-            Vector3[] wc = new Vector3[4];
+            Vector3[] wc = TitleSearchWorldCornersScratch;
             rt.GetWorldCorners(wc);
             float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
             for (int i = 0; i < 4; i++)
@@ -585,43 +751,51 @@ namespace VPB
                    screenPoint.y >= minY - z && screenPoint.y <= maxY + z;
         }
 
-        private bool TitleSearchPopupPointerInVicinity(float paneScale)
+        /// <summary>
+        /// Dismiss only on explicit outside click (Jakob menu contract). Not proximity/focus-loss —
+        /// so Ctrl+F stays open until Esc, outside click, or compact toggle.
+        /// Compact click handled by <see cref="ToggleTitleSearchPopup"/> (skip here).
+        /// Chip host counts as inside (search chrome).
+        /// </summary>
+        private void TickTitleSearchPopupOutsideClickDismiss()
         {
+            if (!_titleSearchPopupOpen || _titleSearchPopupRootGO == null || !_titleSearchPopupRootGO.activeSelf)
+                return;
+            if (!IsVisible || titleSearchInput == null)
+                return;
+            // Same-frame open: ignore (pointer may still be down from unrelated click).
+            if (_titleSearchPopupOpenedFrame >= 0 && Time.frameCount <= _titleSearchPopupOpenedFrame + 1)
+                return;
+
+            bool pressed = false;
+            try
+            {
+                if (Input.GetMouseButtonDown(0)) pressed = true;
+                else if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) pressed = true;
+            }
+            catch { pressed = false; }
+            if (!pressed) return;
+
             Camera cam = TitleSearchUiRaycastCameraOrNull();
             Vector2 ptr;
             try { ptr = currentPointerData != null ? currentPointerData.position : (Vector2)Input.mousePosition; }
             catch { ptr = Input.mousePosition; }
 
-            float s = paneScale <= 0f ? 1f : paneScale;
-            float pad = TitleSearchPopupVicinityInflateScreenPx + 8f * s;
-            bool hitCompact = _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf &&
-                               _titleSearchCompactRT != null &&
-                               ScreenPointInRectTransformExpanded(_titleSearchCompactRT, ptr, pad, cam);
-            bool hitPanel = _titleSearchPopupPanelRT != null && _titleSearchPopupPanelRT.gameObject.activeSelf &&
-                             ScreenPointInRectTransformExpanded(_titleSearchPopupPanelRT, ptr, pad, cam);
-            return hitCompact || hitPanel;
-        }
+            // Compact toggle owns close — do not also close on pointer-down over it.
+            if (_titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf && _titleSearchCompactRT != null
+                && ScreenPointInRectTransformExpanded(_titleSearchCompactRT, ptr, 2f, cam))
+                return;
 
-        private void TickTitleSearchPopupProximityDismiss(float paneScale)
-        {
-            if (!_titleSearchPopupOpen || _titleSearchPopupRootGO == null || !_titleSearchPopupRootGO.activeSelf)
-            {
-                _titleSearchPopupProximityAwayTimer = 0f;
+            if (_titleSearchPopupPanelRT != null
+                && ScreenPointInRectTransformExpanded(_titleSearchPopupPanelRT, ptr, 2f, cam))
                 return;
-            }
-            if (!IsVisible || titleSearchInput == null)
-            {
-                _titleSearchPopupProximityAwayTimer = 0f;
+
+            // Chip Include/Exclude host is part of search chrome — keep popup.
+            if (_titleSearchChipHostVisible && _titleSearchChipHostRT != null
+                && ScreenPointInRectTransformExpanded(_titleSearchChipHostRT, ptr, 2f, cam))
                 return;
-            }
-            if (TitleSearchPopupPointerInVicinity(paneScale))
-                _titleSearchPopupProximityAwayTimer = 0f;
-            else
-            {
-                _titleSearchPopupProximityAwayTimer += Time.unscaledDeltaTime;
-                if (_titleSearchPopupProximityAwayTimer >= TitleSearchPopupDismissAfterAwaySeconds)
-                    CloseTitleSearchPopup();
-            }
+
+            CloseTitleSearchPopup();
         }
     }
 }

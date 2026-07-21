@@ -479,12 +479,14 @@ namespace VPB
     {
         private InputField inputField;
         private Button clearButton;
+        private Action onEscape;
         private bool refocusQueued;
 
-        public void Initialize(InputField input, Button clearBtn = null)
+        public void Initialize(InputField input, Button clearBtn = null, Action escapeOverride = null)
         {
             inputField = input;
             clearButton = clearBtn;
+            onEscape = escapeOverride;
         }
 
         private void OnGUI()
@@ -494,6 +496,12 @@ namespace VPB
             if (e != null && e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
             {
                 e.Use();
+                // Title-search override: blur / close popup only — do not wipe committed chips.
+                if (onEscape != null)
+                {
+                    try { onEscape.Invoke(); } catch { }
+                    return;
+                }
                 if (clearButton != null) clearButton.onClick?.Invoke();
                 else
                 {

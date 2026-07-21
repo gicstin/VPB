@@ -305,9 +305,25 @@ namespace VPB
                     ? br.BroadTerms.ToArray()
                     : new string[0];
                 bool hasBroad = broad.Length > 0;
-                if (structured && !hasBroad) continue; // this OR-branch cannot match on fallback
-                if (!hasBroad) continue;
-                if (!MatchesPackageByScope(packageUid, packagePath, internalPath, broad)) continue;
+                bool hasBroadExcl = br.BroadExclude != null && br.BroadExclude.Count > 0;
+                if (structured && !hasBroad && !hasBroadExcl) continue; // this OR-branch cannot match on fallback
+                if (!hasBroad && !hasBroadExcl) continue;
+                if (hasBroad && !MatchesPackageByScope(packageUid, packagePath, internalPath, broad)) continue;
+                if (hasBroadExcl)
+                {
+                    bool hitExcl = false;
+                    for (int xi = 0; xi < br.BroadExclude.Count; xi++)
+                    {
+                        string xt = br.BroadExclude[xi];
+                        if (string.IsNullOrEmpty(xt)) continue;
+                        if (MatchesPackageByScope(packageUid, packagePath, internalPath, new string[] { xt }))
+                        {
+                            hitExcl = true;
+                            break;
+                        }
+                    }
+                    if (hitExcl) continue;
+                }
                 if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
                 {
                     string creator = "";
@@ -356,6 +372,7 @@ namespace VPB
             nameFilterTerms = new string[0];
             _searchTagKeysCache = null;
             _searchTagKeysCacheFor = null;
+            ClearTitleSearchChipsState();
         }
 
         private Dictionary<string, HashSet<string>> GetSearchTagKeysCached()
@@ -542,48 +559,74 @@ namespace VPB
                 if (!w) return false;
             }
 
-            if (br.BroadTerms == null || br.BroadTerms.Count == 0)
-                return true;
-
             string creatorHint = TryGetFileEntryCreatorHint(file) ?? "";
             string uidHint = "";
             try { uidHint = file.Uid ?? ""; } catch { uidHint = ""; }
+
+            if (br.BroadExclude != null && br.BroadExclude.Count > 0)
+            {
+                for (int i = 0; i < br.BroadExclude.Count; i++)
+                {
+                    string t = br.BroadExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    if (FileEntryMatchesBroadTerm(file, t, creatorHint, uidHint, tagKeysByTerm, rowKey))
+                        return false;
+                }
+            }
+
+            if (br.BroadTerms == null || br.BroadTerms.Count == 0)
+                return true;
 
             for (int i = 0; i < br.BroadTerms.Count; i++)
             {
                 string t = br.BroadTerms[i];
                 if (string.IsNullOrEmpty(t)) continue;
-
-                string scope = VPBConfig.Instance != null
-                    ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
-                    : "PathAndName";
-                string pretty = GetPrettyEntryDisplayName(file);
-                bool namePathOk;
-                if (scope == "NameStartsWith")
-                    namePathOk = !string.IsNullOrEmpty(pretty) && pretty.StartsWith(t, StringComparison.OrdinalIgnoreCase);
-                else if (scope == "NameOnly")
-                    namePathOk = !string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0;
-                else
-                {
-                    string path = null;
-                    try { path = file.Path; } catch { path = null; }
-                    namePathOk = (!string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
-                        || (!string.IsNullOrEmpty(path) && path.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
-                }
-                if (namePathOk) continue;
-                if (!string.IsNullOrEmpty(creatorHint) && creatorHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                if (FileEntryMatchesBroadTerm(file, t, creatorHint, uidHint, tagKeysByTerm, rowKey))
                     continue;
-                if (!string.IsNullOrEmpty(uidHint) && uidHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
-                    continue;
-
-                HashSet<string> keys = null;
-                if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
-                    && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
-                    continue;
-
                 return false;
             }
             return true;
+        }
+
+        /// <summary>Same surface as include broad: name/path (scope), creator, uid, or user-tag substring.</summary>
+        private bool FileEntryMatchesBroadTerm(
+            FileEntry file,
+            string t,
+            string creatorHint,
+            string uidHint,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            string rowKey)
+        {
+            if (file == null || string.IsNullOrEmpty(t)) return false;
+
+            string scope = VPBConfig.Instance != null
+                ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                : "PathAndName";
+            string pretty = GetPrettyEntryDisplayName(file);
+            bool namePathOk;
+            if (scope == "NameStartsWith")
+                namePathOk = !string.IsNullOrEmpty(pretty) && pretty.StartsWith(t, StringComparison.OrdinalIgnoreCase);
+            else if (scope == "NameOnly")
+                namePathOk = !string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0;
+            else
+            {
+                string path = null;
+                try { path = file.Path; } catch { path = null; }
+                namePathOk = (!string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                    || (!string.IsNullOrEmpty(path) && path.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            if (namePathOk) return true;
+            if (!string.IsNullOrEmpty(creatorHint) && creatorHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (!string.IsNullOrEmpty(uidHint) && uidHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            HashSet<string> keys = null;
+            if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
+                && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
+                return true;
+
+            return false;
         }
 
         private static bool IsFileEntryLoadedForSearch(FileEntry file)
@@ -645,6 +688,15 @@ namespace VPB
                 for (int i = 0; i < query.BroadTerms.Count; i++)
                 {
                     string t = query.BroadTerms[i];
+                    if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
+                    need.Add(t);
+                }
+            }
+            if (query.BroadExclude != null)
+            {
+                for (int i = 0; i < query.BroadExclude.Count; i++)
+                {
+                    string t = query.BroadExclude[i];
                     if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
                     need.Add(t);
                 }

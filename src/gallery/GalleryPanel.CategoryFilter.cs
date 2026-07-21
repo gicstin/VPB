@@ -95,8 +95,11 @@ namespace VPB
             topSearchBaseFiles = null;
             string restoredSearch = state.NameFilter ?? "";
             AssignNameFilterState(restoredSearch);
+            HydrateTitleSearchChipsFromCurrentFilter();
             // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
-            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, restoredSearch, _titleBarSearchOnValueChanged); } catch { }
+            // Chip mode: field stays empty (draft); live mode: show restored string.
+            string fieldText = HasTitleSearchChips() ? "" : restoredSearch;
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, fieldText, _titleBarSearchOnValueChanged); } catch { }
 
             currentCreator = state.Creator ?? "";
             _currentCreatorSetSrc = null;

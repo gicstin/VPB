@@ -1882,7 +1882,7 @@ namespace VPB
                 return;
             if (leftActiveContent == ContentType.Settings) leftActiveContent = null;
             if (rightActiveContent == ContentType.Settings) rightActiveContent = null;
-            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
             SyncInternalSettingsListView();
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }

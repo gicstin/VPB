@@ -297,11 +297,26 @@ namespace VPB
                     try { SyncTitleBarSearchBackdrop(); } catch { }
                     return;
                 }
+                // Chip mode: field is draft only — filter updates on Enter / chip toggle.
+                if (HasTitleSearchChips())
+                {
+                    try { SyncTitleBarSearchBackdrop(); } catch { }
+                    return;
+                }
                 SetNameFilter(val);
                 try { SyncTitleBarSearchBackdrop(); } catch { }
             };
 
-            titleSearchInput = CreateSearchInput(titleBarGO, 240f, _titleBarSearchOnValueChanged);
+            titleSearchInput = CreateSearchInput(titleBarGO, 240f, _titleBarSearchOnValueChanged, OnTitleSearchClearClicked, TitleSearchOnEscape);
+            try { WireTitleSearchCommitKeys(titleSearchInput); } catch { }
+            try { WireTitleSearchFieldChromeTips(titleSearchInput); } catch { }
+            try
+            {
+                Text ph = titleSearchInput != null ? titleSearchInput.placeholder as Text : null;
+                if (ph != null)
+                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Shift+Enter exclude · Ctrl+F");
+            }
+            catch { }
             RectTransform titleSearchRT = titleSearchInput.GetComponent<RectTransform>();
             titleSearchRT.anchorMin = new Vector2(0.5f, 0.5f);
             titleSearchRT.anchorMax = new Vector2(0.5f, 0.5f);
@@ -2265,6 +2280,7 @@ namespace VPB
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
             try { CreateFirstRunHintStrip(); } catch { }
+            try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFooterPerfChrome(); } catch { }
 
@@ -2367,6 +2383,7 @@ namespace VPB
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             try { CreateFirstRunHintStrip(); } catch { }
+            try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFirstRunHintStrip(); } catch { }
             try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }

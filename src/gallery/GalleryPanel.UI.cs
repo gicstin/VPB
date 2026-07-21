@@ -3214,7 +3214,7 @@ namespace VPB
             if (!hadSettingsPanel && hasSettingsPanel)
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
             else if (hadSettingsPanel && !hasSettingsPanel)
-                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
 
             // Ensure settings list view active before layout pass so first click opens list immediately.
             if (type == ContentType.Settings)

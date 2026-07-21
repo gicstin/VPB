@@ -10,6 +10,8 @@ namespace VPB
     internal sealed class GallerySearchBranch
     {
         internal readonly List<string> BroadTerms = new List<string>();
+        /// <summary>Bare terms that must NOT match name/path/creator/uid/user-tag (AND).</summary>
+        internal readonly List<string> BroadExclude = new List<string>();
         internal readonly List<string> TagInclude = new List<string>();
         internal readonly List<string> TagExclude = new List<string>();
         internal readonly List<string> CreatorTerms = new List<string>();
@@ -20,6 +22,7 @@ namespace VPB
             get
             {
                 return BroadTerms.Count == 0
+                    && BroadExclude.Count == 0
                     && TagInclude.Count == 0
                     && TagExclude.Count == 0
                     && CreatorTerms.Count == 0
@@ -36,7 +39,7 @@ namespace VPB
     /// <summary>
     /// Parsed title-bar search AST.
     /// Bare terms match name/path/creator/uid/user-tags (OR within a term).
-    /// Structured: tag:/# (comma lists), -tag / -#, creator:/@, status/badge, AND / OR / IF.
+    /// Structured: tag:/# (comma lists), -tag / -#, -bare (broad exclude), creator:/@, status/badge, AND / OR / IF.
     /// </summary>
     internal sealed class GallerySearchQuery
     {
@@ -62,6 +65,8 @@ namespace VPB
 
         /// <summary>Union of all branch broad terms (tag-key lookup / legacy helpers).</summary>
         internal readonly List<string> BroadTerms = new List<string>();
+        /// <summary>Union of all branch broad excludes.</summary>
+        internal readonly List<string> BroadExclude = new List<string>();
         /// <summary>Union of all branch tag includes (tag-key lookup).</summary>
         internal readonly List<string> TagInclude = new List<string>();
         /// <summary>Union of all branch tag excludes (tag-key lookup).</summary>
@@ -104,7 +109,8 @@ namespace VPB
                     || TagExclude.Count > 0
                     || CreatorTerms.Count > 0
                     || HasStatusFlags
-                    || BroadTerms.Count > 0;
+                    || BroadTerms.Count > 0
+                    || BroadExclude.Count > 0;
             }
         }
 
@@ -217,6 +223,15 @@ namespace VPB
                     continue;
                 }
 
+                // Bare exclude: -wet (not -# / -tag:). Must not match name/path/creator/uid/user-tag.
+                if (lower.Length > 1 && lower[0] == '-')
+                {
+                    string rest = lower.Substring(1).Trim();
+                    if (rest.Length > 0)
+                        AddUnique(branch.BroadExclude, rest);
+                    continue;
+                }
+
                 AddUnique(branch.BroadTerms, lower);
             }
 
@@ -231,6 +246,7 @@ namespace VPB
         private void RebuildFlatViews()
         {
             BroadTerms.Clear();
+            BroadExclude.Clear();
             TagInclude.Clear();
             TagExclude.Clear();
             CreatorTerms.Clear();
@@ -240,6 +256,7 @@ namespace VPB
                 GallerySearchBranch br = Branches[b];
                 if (br == null) continue;
                 for (int i = 0; i < br.BroadTerms.Count; i++) AddUnique(BroadTerms, br.BroadTerms[i]);
+                for (int i = 0; i < br.BroadExclude.Count; i++) AddUnique(BroadExclude, br.BroadExclude[i]);
                 for (int i = 0; i < br.TagInclude.Count; i++) AddUnique(TagInclude, br.TagInclude[i]);
                 for (int i = 0; i < br.TagExclude.Count; i++) AddUnique(TagExclude, br.TagExclude[i]);
                 for (int i = 0; i < br.CreatorTerms.Count; i++) AddUnique(CreatorTerms, br.CreatorTerms[i]);

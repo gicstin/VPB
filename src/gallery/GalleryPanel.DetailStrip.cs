@@ -31,7 +31,8 @@ namespace VPB
         private const float DetailStripTagMenuColGapRef = 8f;
         private const float DetailStripTagMenuSectionLabelHRef = 22f;
         private const float DetailStripTagMenuHeaderHRef = 36f;
-        private const float DetailStripTagMenuTitleCloseRef = 28f;
+        /// <summary>Sort / title X square — match gallery <see cref="GalleryUiDesignTokens.ButtonSizeRef"/>.</summary>
+        private const float DetailStripTagMenuChromeBtnRef = 32f;
         private const int DetailStripTagMenuMaxRows = 48;
         private const int DetailStripTagMenuRecentMax = 8;
         private const float DetailStripTagMenuFilterDebounceSec = 0.12f;
@@ -180,7 +181,10 @@ namespace VPB
         private GameObject _detailStripTagMenuAvailableScrollGO;
         private GameObject _detailStripTagMenuAvailableListGO;
         private Text _detailStripTagMenuAvailableLabel;
+        private GameObject _detailStripTagMenuAvailSortBtnGO;
+        private Image _detailStripTagMenuAvailSortIcon;
         private Text _detailStripTagMenuTipText;
+        private const string DetailStripTagMenuAvailSortContext = "DetailStripTagMenu";
         private InputField _detailStripTagMenuSearch;
         private GameObject _detailStripTagMenuCreateGO;
         private Text _detailStripTagMenuCreateText;
@@ -586,6 +590,8 @@ namespace VPB
                 && !_detailStripTagMenuCloseGO.transform.IsChildOf(_detailStripTagMenuHeaderGO.transform);
             bool tagMenuMissingAvailRemove = _detailStripTagMenuAvailableScrollGO != null
                 && _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>() == null;
+            bool tagMenuMissingAvailSort = _detailStripTagMenuAvailableLabel != null
+                && _detailStripTagMenuAvailSortBtnGO == null;
             if (_detailStripTagMenuRoot != null && (
                 tagMenuCloseHasArf
                 || tagMenuWrongParent
@@ -595,6 +601,7 @@ namespace VPB
                 || tagMenuMissingTip
                 || tagMenuCloseNotInTitle
                 || tagMenuMissingAvailRemove
+                || tagMenuMissingAvailSort
                 || _detailStripTagMenuHeaderGO == null
                 || _detailStripTagMenuSelText == null
                 || _detailStripTagMenuColumnsGO == null
@@ -623,6 +630,8 @@ namespace VPB
                 _detailStripTagMenuAvailableScrollGO = null;
                 _detailStripTagMenuAvailableListGO = null;
                 _detailStripTagMenuAvailableLabel = null;
+                _detailStripTagMenuAvailSortBtnGO = null;
+                _detailStripTagMenuAvailSortIcon = null;
                 _detailStripTagMenuSearchRowGO = null;
                 _detailStripTagMenuCloseGO = null;
                 _detailStripTagMenuFooterCloseGO = null;
@@ -6129,17 +6138,19 @@ namespace VPB
 
             // Drag titlebar — left spacer matches X width so title stays optically centered (Jakob).
             float headerH = DetailStripTagMenuHeaderHRef;
-            float titleCloseSz = DetailStripTagMenuTitleCloseRef;
+            float titleCloseSz = DetailStripTagMenuChromeBtnRef;
             _detailStripTagMenuHeaderGO = UI.CreateChildRT(_detailStripTagMenuPanelGO, "Header");
             Image headerImg = UI.AddImage(_detailStripTagMenuHeaderGO, DetailStripTagMenuTitleBarBg);
             if (headerImg != null) headerImg.raycastTarget = true;
             UI.AddHLG(
                 _detailStripTagMenuHeaderGO,
                 spacing: 4f,
-                padding: UI.Pad(6f, 6f, 0f, 0f),
+                padding: UI.Pad(4f, 4f, 2f, 2f),
                 childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: true,
+                childControlHeight: true,
                 childForceExpandWidth: false,
-                childForceExpandHeight: true);
+                childForceExpandHeight: false);
             UI.AddLE(
                 _detailStripTagMenuHeaderGO,
                 preferredHeight: headerH,
@@ -6154,7 +6165,7 @@ namespace VPB
                 padding: UI.Pad(0f, 0f, 0f, 0f),
                 childAlignment: TextAnchor.MiddleCenter,
                 childForceExpandWidth: false,
-                childForceExpandHeight: true);
+                childForceExpandHeight: false);
             UI.AddLE(leftSlot, preferredWidth: titleCloseSz, minWidth: titleCloseSz, flexibleWidth: 0f);
             Text gripL = UI.CreateLabel(
                 leftSlot,
@@ -6240,14 +6251,17 @@ namespace VPB
                 VPBTranslation.T("gallery.detail.tag_applied", "Applied"),
                 out _detailStripTagMenuAppliedLabel,
                 out _detailStripTagMenuAppliedScrollGO,
-                out _detailStripTagMenuAppliedListGO);
+                out _detailStripTagMenuAppliedListGO,
+                withAvailSort: false);
             DetailStripCreateTagMenuColumn(
                 _detailStripTagMenuColumnsGO, "Available",
                 VPBTranslation.T("gallery.detail.tag_available", "Add"),
                 out _detailStripTagMenuAvailableLabel,
                 out _detailStripTagMenuAvailableScrollGO,
-                out _detailStripTagMenuAvailableListGO);
+                out _detailStripTagMenuAvailableListGO,
+                withAvailSort: true);
             DetailStripEnsureTagMenuAvailableRemoveZone();
+            DetailStripSyncTagMenuAvailSortIcon();
 
             // Create row — shown only when filter has no exact match.
             _detailStripTagMenuCreateGO = UI.CreateUIButton(
@@ -6335,7 +6349,7 @@ namespace VPB
             if (_detailStripTagMenuSearch != null)
             {
                 if (_detailStripTagMenuSearch.placeholder is Text ph)
-                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter or create tags");
+                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter Add list / create…");
                 RectTransform searchRT = _detailStripTagMenuSearch.GetComponent<RectTransform>();
                 if (searchRT != null)
                     searchRT.sizeDelta = new Vector2(0f, searchH);
@@ -6364,27 +6378,53 @@ namespace VPB
         private static void DetailStripStyleTagMenuTitleClose(GameObject closeGO, float size)
         {
             if (closeGO == null) return;
+            // Never AspectRatioFitter here — ensure-path treats ARF as legacy and rebuilds.
+            AspectRatioFitter arf = closeGO.GetComponent<AspectRatioFitter>();
+            if (arf != null) UnityEngine.Object.Destroy(arf);
             Image closeImg = closeGO.GetComponent<Image>();
             if (closeImg != null) closeImg.color = new Color(0f, 0f, 0f, 0.01f);
             Button closeBtn = closeGO.GetComponent<Button>();
             if (closeBtn != null) closeBtn.transition = Selectable.Transition.None;
-            UI.AddLE(
-                closeGO,
-                preferredWidth: size,
-                preferredHeight: size,
-                minWidth: size,
-                minHeight: size,
-                flexibleWidth: 0f,
-                flexibleHeight: 0f);
+            LayoutElement closeLe = closeGO.GetComponent<LayoutElement>();
+            if (closeLe == null) closeLe = closeGO.AddComponent<LayoutElement>();
+            closeLe.preferredWidth = size;
+            closeLe.preferredHeight = size;
+            closeLe.minWidth = size;
+            closeLe.minHeight = size;
+            closeLe.flexibleWidth = 0f;
+            closeLe.flexibleHeight = 0f;
             RectTransform closeRT = closeGO.GetComponent<RectTransform>();
             if (closeRT != null)
+            {
+                closeRT.anchorMin = closeRT.anchorMax = new Vector2(0.5f, 0.5f);
+                closeRT.pivot = new Vector2(0.5f, 0.5f);
                 closeRT.sizeDelta = new Vector2(size, size);
+            }
             Text closeLabel = closeGO.GetComponentInChildren<Text>(true);
             if (closeLabel != null) closeLabel.gameObject.SetActive(false);
-            Sprite closeSpr = null;
-            try { closeSpr = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); } catch { }
-            if (closeSpr != null)
-                UI.AddIconToButton(closeGO, closeSpr, 5f, new Color(0f, 0f, 0f, 0f));
+
+            const float iconPad = 6f;
+            Transform closeIconTr = closeGO.transform.Find("Icon");
+            if (closeIconTr == null)
+            {
+                Sprite closeSpr = null;
+                try { closeSpr = UI.LoadIconSprite("vpb_icons/x.png", UI.BarIconGlyphTint); } catch { }
+                if (closeSpr != null)
+                    UI.AddIconToButton(closeGO, closeSpr, iconPad, new Color(0f, 0f, 0f, 0f));
+                closeIconTr = closeGO.transform.Find("Icon");
+            }
+            else
+            {
+                RectTransform iconRT = closeIconTr.GetComponent<RectTransform>();
+                if (iconRT != null)
+                {
+                    iconRT.anchorMin = Vector2.zero;
+                    iconRT.anchorMax = Vector2.one;
+                    iconRT.sizeDelta = new Vector2(-iconPad * 2f, -iconPad * 2f);
+                    iconRT.anchoredPosition = Vector2.zero;
+                }
+            }
+
             UIHoverBorder closeBorder = closeGO.GetComponent<UIHoverBorder>();
             if (closeBorder != null)
             {
@@ -6392,7 +6432,6 @@ namespace VPB
                 closeBorder.borderSize = 2f;
                 closeBorder.inward = true;
             }
-            Transform closeIconTr = closeGO.transform.Find("Icon");
             Image closeIconImg = closeIconTr != null ? closeIconTr.GetComponent<Image>() : null;
             if (closeIconImg != null)
             {
@@ -6476,7 +6515,8 @@ namespace VPB
             string title,
             out Text label,
             out GameObject scrollGO,
-            out GameObject listGO)
+            out GameObject listGO,
+            bool withAvailSort)
         {
             label = null;
             scrollGO = null;
@@ -6493,8 +6533,27 @@ namespace VPB
                 childForceExpandHeight: false);
             UI.AddLE(col, flexibleWidth: 1f, flexibleHeight: 1f, minWidth: 120f);
 
+            // Header: label (+ optional sort on Add). Both cols use chrome btn height so rows align.
+            float headerH = DetailStripTagMenuChromeBtnRef;
+            GameObject header = UI.CreateChildRT(col, "Header");
+            UI.AddHLG(
+                header,
+                spacing: 4f,
+                padding: UI.Pad(0f, 0f, 0f, 0f),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true,
+                childControlHeight: true,
+                childForceExpandWidth: false,
+                childForceExpandHeight: false);
+            UI.AddLE(
+                header,
+                preferredHeight: headerH,
+                minHeight: headerH,
+                flexibleWidth: 1f,
+                flexibleHeight: 0f);
+
             label = UI.CreateLabel(
-                col,
+                header,
                 title ?? "",
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 UI.PopupMutedText,
@@ -6503,9 +6562,30 @@ namespace VPB
                 name: "Label");
             UI.AddLE(
                 label.gameObject,
-                preferredHeight: DetailStripTagMenuSectionLabelHRef,
-                minHeight: DetailStripTagMenuSectionLabelHRef,
-                flexibleWidth: 1f);
+                preferredHeight: headerH,
+                minHeight: headerH,
+                flexibleWidth: 1f,
+                flexibleHeight: 0f);
+
+            if (withAvailSort)
+            {
+                float sortSq = DetailStripTagMenuChromeBtnRef;
+                Color sortBackdropCol = new Color(0.22f, 0.42f, 0.58f, 1f);
+                Sprite sortSpr0 = sceneSourceSortModeSprites != null && sceneSourceSortModeSprites.Length > 0
+                    ? sceneSourceSortModeSprites[0]
+                    : null;
+                // Same edge as side-pane sort chips; pad 5 keeps glyph readable.
+                _detailStripTagMenuAvailSortBtnGO = UI.CreateSideTabSquareIconButton(
+                    header, sortSq, sortSpr0, DetailStripCycleTagMenuAvailSort, sortBackdropCol, 5f);
+                _detailStripTagMenuAvailSortBtnGO.name = "AvailSortBtn";
+                Transform sortIconTr = _detailStripTagMenuAvailSortBtnGO.transform.Find("Icon");
+                _detailStripTagMenuAvailSortIcon = sortIconTr != null ? sortIconTr.GetComponent<Image>() : null;
+                AddTooltipPlain(
+                    _detailStripTagMenuAvailSortBtnGO,
+                    VPBTranslation.T(
+                        "gallery.detail.tag_avail_sort_tip",
+                        "Sort Add list: A→Z / Z→A / count 1→9 / 9→1. Remembers choice."));
+            }
 
             float colW = (DetailStripTagMenuWidthRef - 16f - DetailStripTagMenuColGapRef) * 0.5f;
             scrollGO = UI.CreateVScrollableContent(
@@ -6526,6 +6606,33 @@ namespace VPB
             ScrollRect sr = scrollGO.GetComponent<ScrollRect>();
             listGO = sr != null && sr.content != null ? sr.content.gameObject : null;
             if (sr != null) sr.movementType = ScrollRect.MovementType.Clamped;
+        }
+
+        private void DetailStripCycleTagMenuAvailSort()
+        {
+            SortState st = GetSortState(DetailStripTagMenuAvailSortContext);
+            int i = TryGetSidePaneFourModeIndex(st);
+            int next = (i < 0) ? 0 : (i + 1) % 4;
+            SidePaneFourModeToState(next, out SortType ty, out SortDirection d);
+            st.Type = ty;
+            st.Direction = d;
+            SaveSortState(DetailStripTagMenuAvailSortContext, st);
+            DetailStripSyncTagMenuAvailSortIcon();
+            DetailStripRebuildTagMenuList(fullLayoutSync: false);
+        }
+
+        private void DetailStripSyncTagMenuAvailSortIcon()
+        {
+            if (_detailStripTagMenuAvailSortIcon == null) return;
+            if (sceneSourceSortModeSprites == null || sceneSourceSortModeSprites.Length == 0) return;
+            SortState st = GetSortState(DetailStripTagMenuAvailSortContext);
+            int idx = TryGetSidePaneFourModeIndex(st);
+            int spIdx = idx >= 0 ? idx : 0;
+            if (spIdx < 0 || spIdx >= sceneSourceSortModeSprites.Length) return;
+            Sprite sp = sceneSourceSortModeSprites[spIdx];
+            if (sp == null) return;
+            _detailStripTagMenuAvailSortIcon.sprite = sp;
+            _detailStripTagMenuAvailSortIcon.enabled = true;
         }
 
         private void DetailStripOnTagMenuCreateClick()
@@ -7027,12 +7134,28 @@ namespace VPB
                 _detailStripTagMenuRecent.RemoveAt(_detailStripTagMenuRecent.Count - 1);
         }
 
-        /// <summary>Add-column order: pinned → session recent → A–Z remainder.</summary>
+        /// <summary>
+        /// Add-column order: pinned first (investment), then user sort (A→Z / Z→A / count).
+        /// Name A→Z also floats session-recent (recognition). Filter only applies here —
+        /// Applied column stays full for remove/reorder.
+        /// </summary>
         private List<string> DetailStripOrderAvailableTagsForMenu(List<string> vocab, HashSet<string> applied, string filter)
         {
             var result = new List<string>(64);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (applied == null) applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            SortState sort = GetSortState(DetailStripTagMenuAvailSortContext);
+            bool byCount = sort != null && sort.Type == SortType.Count;
+            bool nameAsc = !byCount && (sort == null || sort.Direction == SortDirection.Ascending);
+            if (byCount)
+            {
+                try
+                {
+                    if (!userTagsCached) CacheUserTagsSideTab();
+                }
+                catch { }
+            }
 
             try { EnsureUserTagPinOrderRuntimeLoaded(); } catch { }
             if (_userTagPinOrderRuntime != null)
@@ -7047,18 +7170,22 @@ namespace VPB
                 }
             }
 
-            for (int i = 0; i < _detailStripTagMenuRecent.Count; i++)
+            // Default A→Z: keep recent near top (recognition). Other modes: pure sort after pins.
+            if (nameAsc)
             {
-                string recent = _detailStripTagMenuRecent[i];
-                if (string.IsNullOrEmpty(recent) || applied.Contains(recent)) continue;
-                if (!DetailStripTagMatchesFilter(recent, filter)) continue;
-                if (!seen.Add(recent)) continue;
-                result.Add(recent);
+                for (int i = 0; i < _detailStripTagMenuRecent.Count; i++)
+                {
+                    string recent = _detailStripTagMenuRecent[i];
+                    if (string.IsNullOrEmpty(recent) || applied.Contains(recent)) continue;
+                    if (!DetailStripTagMatchesFilter(recent, filter)) continue;
+                    if (!seen.Add(recent)) continue;
+                    result.Add(recent);
+                }
             }
 
+            var rest = new List<string>(vocab != null ? vocab.Count : 8);
             if (vocab != null)
             {
-                var rest = new List<string>(vocab.Count);
                 for (int i = 0; i < vocab.Count; i++)
                 {
                     string tag = vocab[i];
@@ -7067,10 +7194,42 @@ namespace VPB
                     if (!seen.Add(tag)) continue;
                     rest.Add(tag);
                 }
-                rest.Sort(StringComparer.OrdinalIgnoreCase);
-                result.AddRange(rest);
             }
+
+            if (byCount)
+            {
+                bool asc = sort.Direction == SortDirection.Ascending;
+                rest.Sort((a, b) =>
+                {
+                    int ca = DetailStripTagMenuUsageCount(a);
+                    int cb = DetailStripTagMenuUsageCount(b);
+                    int cmp = asc ? ca.CompareTo(cb) : cb.CompareTo(ca);
+                    if (cmp != 0) return cmp;
+                    return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+                });
+            }
+            else
+            {
+                bool asc = sort == null || sort.Direction == SortDirection.Ascending;
+                if (asc)
+                    rest.Sort(StringComparer.OrdinalIgnoreCase);
+                else
+                    rest.Sort((a, b) => string.Compare(b, a, StringComparison.OrdinalIgnoreCase));
+            }
+
+            result.AddRange(rest);
             return result;
+        }
+
+        private int DetailStripTagMenuUsageCount(string tag)
+        {
+            if (string.IsNullOrEmpty(tag) || cachedUserTagSideTab == null) return 0;
+            for (int i = 0; i < cachedUserTagSideTab.Count; i++)
+            {
+                if (string.Equals(cachedUserTagSideTab[i].Name, tag, StringComparison.OrdinalIgnoreCase))
+                    return cachedUserTagSideTab[i].Count;
+            }
+            return 0;
         }
 
         private int DetailStripTagMenuSelectionHitCount(string tag)
@@ -7237,13 +7396,24 @@ namespace VPB
                     headerLe.preferredHeight = headerH;
                     headerLe.minHeight = headerH;
                 }
+                HorizontalLayoutGroup headerHlg = _detailStripTagMenuHeaderGO.GetComponent<HorizontalLayoutGroup>();
+                if (headerHlg != null)
+                {
+                    // Keep X square — expand-height stretches width≠height.
+                    headerHlg.childForceExpandHeight = false;
+                    headerHlg.childForceExpandWidth = false;
+                    headerHlg.childControlWidth = true;
+                    headerHlg.childControlHeight = true;
+                    headerHlg.padding = UI.Pad(4f, 4f, 2f, 2f, s);
+                    headerHlg.spacing = 4f * s;
+                }
                 if (_detailStripTagMenuSelText != null)
                     GalleryUiMetrics.ApplyFont(_detailStripTagMenuSelText, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
                 Transform gripLTr = _detailStripTagMenuHeaderGO.transform.Find("LeftSlot/GripL");
                 Text gripL = gripLTr != null ? gripLTr.GetComponent<Text>() : null;
                 if (gripL != null)
                     GalleryUiMetrics.ApplyFont(gripL, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
-                float titleCloseSz = DetailStripTagMenuTitleCloseRef * s;
+                float titleCloseSz = DetailStripTagMenuChromeBtnRef * s;
                 Transform leftSlotTr = _detailStripTagMenuHeaderGO.transform.Find("LeftSlot");
                 if (leftSlotTr != null)
                 {
@@ -7253,25 +7423,11 @@ namespace VPB
                         leftLe.preferredWidth = titleCloseSz;
                         leftLe.minWidth = titleCloseSz;
                     }
+                    HorizontalLayoutGroup leftHlg = leftSlotTr.GetComponent<HorizontalLayoutGroup>();
+                    if (leftHlg != null) leftHlg.childForceExpandHeight = false;
                 }
                 if (_detailStripTagMenuCloseGO != null)
-                {
-                    AspectRatioFitter arf = _detailStripTagMenuCloseGO.GetComponent<AspectRatioFitter>();
-                    if (arf != null) UnityEngine.Object.Destroy(arf);
-                    LayoutElement closeLe = _detailStripTagMenuCloseGO.GetComponent<LayoutElement>();
-                    if (closeLe != null)
-                    {
-                        closeLe.preferredWidth = titleCloseSz;
-                        closeLe.preferredHeight = titleCloseSz;
-                        closeLe.minWidth = titleCloseSz;
-                        closeLe.minHeight = titleCloseSz;
-                        closeLe.flexibleWidth = 0f;
-                        closeLe.flexibleHeight = 0f;
-                    }
-                    RectTransform closeRT = _detailStripTagMenuCloseGO.GetComponent<RectTransform>();
-                    if (closeRT != null)
-                        closeRT.sizeDelta = new Vector2(titleCloseSz, titleCloseSz);
-                }
+                    DetailStripStyleTagMenuTitleClose(_detailStripTagMenuCloseGO, titleCloseSz);
                 DetailStripUpdateTagMenuSelectionChrome();
             }
 
@@ -7311,6 +7467,7 @@ namespace VPB
 
             DetailStripSyncTagMenuColumnChrome(_detailStripTagMenuAppliedLabel, _detailStripTagMenuAppliedScrollGO, _detailStripTagMenuAppliedListGO, s);
             DetailStripSyncTagMenuColumnChrome(_detailStripTagMenuAvailableLabel, _detailStripTagMenuAvailableScrollGO, _detailStripTagMenuAvailableListGO, s);
+            DetailStripSyncTagMenuAvailSortChrome(s);
 
             float searchH = GalleryUiDesignTokens.SearchFieldHeightRef * s;
             if (_detailStripTagMenuSearchRowGO != null)
@@ -7378,19 +7535,38 @@ namespace VPB
                 RectTransform searchRT = _detailStripTagMenuSearch.GetComponent<RectTransform>();
                 if (searchRT != null)
                     searchRT.sizeDelta = new Vector2(0f, searchH);
+                if (_detailStripTagMenuSearch.placeholder is Text ph)
+                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter Add list / create…");
             }
         }
 
         private void DetailStripSyncTagMenuColumnChrome(Text label, GameObject scrollGO, GameObject listGO, float s)
         {
+            float colHeaderH = DetailStripTagMenuChromeBtnRef * s;
             if (label != null)
             {
                 GalleryUiMetrics.ApplyFont(label, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
                 LayoutElement labelLe = label.GetComponent<LayoutElement>();
                 if (labelLe != null)
                 {
-                    labelLe.preferredHeight = DetailStripTagMenuSectionLabelHRef * s;
-                    labelLe.minHeight = DetailStripTagMenuSectionLabelHRef * s;
+                    labelLe.preferredHeight = colHeaderH;
+                    labelLe.minHeight = colHeaderH;
+                }
+                Transform headerTr = label.transform.parent;
+                if (headerTr != null && headerTr.name == "Header")
+                {
+                    LayoutElement headerLe = headerTr.GetComponent<LayoutElement>();
+                    if (headerLe != null)
+                    {
+                        headerLe.preferredHeight = colHeaderH;
+                        headerLe.minHeight = colHeaderH;
+                    }
+                    HorizontalLayoutGroup headerHlg = headerTr.GetComponent<HorizontalLayoutGroup>();
+                    if (headerHlg != null)
+                    {
+                        headerHlg.childForceExpandHeight = false;
+                        headerHlg.childForceExpandWidth = false;
+                    }
                 }
             }
 
@@ -7425,6 +7601,26 @@ namespace VPB
             }
         }
 
+        private void DetailStripSyncTagMenuAvailSortChrome(float s)
+        {
+            if (_detailStripTagMenuAvailSortBtnGO == null) return;
+            float sortSq = DetailStripTagMenuChromeBtnRef * s;
+            LayoutElement le = _detailStripTagMenuAvailSortBtnGO.GetComponent<LayoutElement>();
+            if (le != null)
+            {
+                le.preferredWidth = sortSq;
+                le.preferredHeight = sortSq;
+                le.minWidth = sortSq;
+                le.minHeight = sortSq;
+                le.flexibleWidth = 0f;
+                le.flexibleHeight = 0f;
+            }
+            RectTransform rt = _detailStripTagMenuAvailSortBtnGO.GetComponent<RectTransform>();
+            if (rt != null)
+                rt.sizeDelta = new Vector2(sortSq, sortSq);
+            DetailStripSyncTagMenuAvailSortIcon();
+        }
+
         private void DetailStripRebuildTagMenuList(bool fullLayoutSync)
         {
             if (_detailStripTagMenuAppliedListGO == null || _detailStripTagMenuAvailableListGO == null) return;
@@ -7451,7 +7647,7 @@ namespace VPB
                 for (int i = 0; i < appliedList.Count; i++)
                 {
                     string tag = appliedList[i];
-                    if (!DetailStripTagMatchesFilter(tag, filter)) continue;
+                    // Filter scopes Add column only — Applied stays visible for remove/reorder.
                     if (appliedRows >= DetailStripTagMenuMaxRows) break;
                     string tagSnap = tag;
                     UserTagSelectionState st = GetUserTagSelectionState(tagSnap);
@@ -7475,9 +7671,7 @@ namespace VPB
             {
                 DetailStripAddTagMenuEmptyRow(
                     _detailStripTagMenuAppliedListGO,
-                    string.IsNullOrEmpty(filter)
-                        ? VPBTranslation.T("gallery.detail.tag_applied_empty", "None yet")
-                        : VPBTranslation.T("gallery.detail.tag_applied_none_match", "No match"),
+                    VPBTranslation.T("gallery.detail.tag_applied_empty", "None yet"),
                     rowH, s);
             }
 

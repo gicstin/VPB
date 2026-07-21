@@ -5198,7 +5198,8 @@ namespace VPB
             try
             {
                 AssignNameFilterState(frame.savedNameFilter);
-                SetTitleSearchInputTextWithoutNotify(titleSearchInput, frame.savedNameFilter ?? "", _titleBarSearchOnValueChanged);
+                HydrateTitleSearchChipsFromCurrentFilter();
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
             }
             catch { }
 
@@ -5268,7 +5269,8 @@ namespace VPB
                 try
                 {
                     AssignNameFilterState(bottom.savedNameFilter);
-                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, bottom.savedNameFilter ?? "", _titleBarSearchOnValueChanged);
+                    HydrateTitleSearchChipsFromCurrentFilter();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
                 }
                 catch { }
             }

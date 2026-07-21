@@ -390,6 +390,8 @@
     <Compile Include="src\gallery\Gallery.cs" />
     <Compile Include="src\gallery\GalleryFileListSnapshotCache.cs" />
     <Compile Include="src\gallery\GallerySearchQuery.cs" />
+    <Compile Include="src\gallery\GalleryTitleSearchChip.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TitleSearchChips.cs" />
     <Compile Include="src\gallery\GalleryTagCountSnapshotCache.cs" />
     <Compile Include="src\gallery\GalleryTagCountBackgroundScan.cs" />
     <Compile Include="src\gallery\CacheCleanupManager.cs" />

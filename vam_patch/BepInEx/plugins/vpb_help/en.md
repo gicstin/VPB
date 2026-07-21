@@ -26,7 +26,9 @@ Open a side column, then search or sort inside it:
 Tap the **colored header bar** at the top of a side column to collapse that list.
 
 ### Title bar search and filters
-- **Search** (center) — universal grid filter (`Search name, #tag, badge…`). Compact mode shows a {{icon:search|search icon}}; click to type.
+- **Search** (center) — type a term and press **Enter** to commit a **filter chip**. Compact mode shows a {{icon:search|search icon}}; click to type.
+- **Include / Exclude** rows appear under search when chips are active. **Drag** a chip to **Exclude** to negate tags/bare terms. Drag tags from the side Tags list onto Include/Exclude.
+- Empty draft: **Backspace** removes last chip. **ESC** closes search without clearing chips.
 - Bare words, tags, badges, loaded/starred, **AND** / **OR** / **IF** — full syntax in **Advanced search** (help nav).
 - **Side-column search** — filters only the **open list** (categories / creators / tags / paths), not the grid.
 - {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset.
@@ -55,6 +57,17 @@ The language button on the title bar (e.g. EN) switches UI text. Help content lo
 
 Title-bar search is a **universal filter**. Bare words match name/path/creator/uid **or** user-tag text.
 
+### Filter chips (Enter to commit)
+- Type `@creatorA` then **Enter**, then `#tagB` then **Enter** — each becomes its own chip under **Include**.
+- **Shift+Enter** — commit draft to **Exclude** (bare → broad exclude `-term`; `#tag` → `-#tag`).
+- Paste a full query (`#wet -nsfw -#old @Acid`) and press **Enter** — tokens explode into chips.
+- **Exclude** row stays visible whenever any chip exists (hint: *Drop chip here to exclude*).
+- **X** left of Include/Exclude — clears **all** search chips (and draft). Same as search-field clear. **Ctrl+Z** within 5s undoes.
+- **Ctrl+F** — focus title search (opens compact popup if needed) and select draft text. Brief highlight cues open. Popup stays until **Esc**, click outside (not chip rows), or click the compact search icon again.
+- **Drag** a chip onto **Exclude** / **Include** to change polarity (tags and bare terms). Chip **×** removes it.
+- **Backspace** on an empty draft removes the last chip. **ESC** closes the search field without clearing chips. Search **X** clears all search chips.
+- Drag a tag from the **Tags** side list (or detail tag chip) onto Include/Exclude to add a search chip (does not apply the tag to items).
+
 ### Boolean logic (AND / OR / IF)
 
 - **AND** (default) — every term in a group must match. Space or the word `AND` means the same thing: `dress AND #wet` ≡ `dress #wet`.
@@ -63,11 +76,12 @@ Title-bar search is a **universal filter**. Bare words match name/path/creator/u
 
 ### Text and tags
 - Bare words — `dress man` (each word must match somewhere; AND)
+- **Broad exclude** — `-wet` (must **not** match name/path/creator/uid **or** user-tag text). Chip Exclude / Shift+Enter on a bare word uses this.
 - User tag — `tag:wet` or `#wet`
 - **Multiple tags** (comma list) — `tag:wet,shiny,-nsfw` or `#wet,#shiny,-nsfw` or shorthand `wet,shiny,-nsfw`
   - plain name = must have that tag
   - `-name` = must **not** have that tag
-- Exclude tag — `-tag:nsfw` or `-#nsfw`
+- Exclude tag — `-tag:nsfw` or `-#nsfw` (user-tag only; different from bare `-wet`)
 - Creator — `creator:Acid` or `@Acid` (comma list OK: `@Acid,@Other`)
 
 ### Status and badges
@@ -148,7 +162,7 @@ Select one or more rows to expand the **toolbox** at the bottom (hover the bar i
 - **Description & package tags** — wide+short pane uses a side column (scrollable description + native tags). Tall strip moves those into regular rows under actions; narrow pane keeps a short description row. Turn off **Show description & package tags** in Settings → Visuals to hide them.
 - **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
 - **Creator** — filter by creator.
-- **Tag** or tags line — quick-tag menu (existing tags, remove with ✓, or **New tag…**).
+- **Tag** or tags line — quick-tag menu (Applied | Add). Filter box scopes **Add** list only. Sort button on Add cycles A→Z / Z→A / count 1→9 / 9→1 (remembers). Remove with ✓, or **New tag…**.
 - **Copy** or path / title — copy path or display name.
 - Badges match grid meaning (auto-install, hidden, scan-excluded, has tags).
 

@@ -4163,11 +4163,40 @@ namespace VPB
         public static List<string> PendingTags;
         /// <summary>True when dragging from Applied rows — apply drop zones must ignore <see cref="IDropHandler.OnDrop"/>.</summary>
         public static bool PendingIsAppliedRowRemove;
+        /// <summary>Index into panel title-search chips while dragging a committed chip (Incl↔Excl). −1 = none.</summary>
+        public static int PendingTitleSearchChipIndex = -1;
+        public static GalleryPanel PendingTitleSearchChipPanel;
+        /// <summary>While chip-move drag active: whether Exclude drop is valid.</summary>
+        public static bool PendingTitleSearchChipCanExclude;
+
+        public static bool HasPendingTags
+        {
+            get { return PendingTags != null && PendingTags.Count > 0; }
+        }
+
+        /// <summary>Side/detail tag drag that may land on title-search Incl/Excl (not Applied-remove).</summary>
+        public static bool IsTitleSearchTagDropActive
+        {
+            get { return HasPendingTags && !PendingIsAppliedRowRemove; }
+        }
+
+        public static bool IsTitleSearchChipMoveActive
+        {
+            get { return PendingTitleSearchChipIndex >= 0 && PendingTitleSearchChipPanel != null; }
+        }
+
+        public static bool IsTitleSearchDropActive
+        {
+            get { return IsTitleSearchTagDropActive || IsTitleSearchChipMoveActive; }
+        }
 
         public static void Clear()
         {
             PendingTags = null;
             PendingIsAppliedRowRemove = false;
+            PendingTitleSearchChipIndex = -1;
+            PendingTitleSearchChipPanel = null;
+            PendingTitleSearchChipCanExclude = false;
         }
     }
 
@@ -4340,6 +4369,10 @@ namespace VPB
             {
                 try { Panel.DetailStripSetTagMenuRemoveDragHint(true, false); } catch { }
             }
+            if (!UserTagDragSession.PendingIsAppliedRowRemove && Panel != null)
+            {
+                try { Panel.TitleSearchOnExternalTagDragBegan(); } catch { }
+            }
         }
 
         private void EndManualDrag(PointerEventData eventData)
@@ -4417,6 +4450,23 @@ namespace VPB
             ped.position = screenPos;
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
+
+            // Title-search Incl/Excl rows win over gallery apply (search filter, not item tag).
+            if (!UserTagDragSession.PendingIsAppliedRowRemove)
+            {
+                for (int i = 0; i < _raycastHits.Count; i++)
+                {
+                    GameObject go = _raycastHits[i].gameObject;
+                    if (go == null) continue;
+                    TitleSearchChipDropZone tdz = go.GetComponentInParent<TitleSearchChipDropZone>();
+                    if (tdz != null && tdz.Panel == Panel)
+                    {
+                        Panel.TitleSearchAcceptDroppedTags(tags, tdz.TargetPolarity);
+                        return;
+                    }
+                }
+            }
+
             for (int i = 0; i < _raycastHits.Count; i++)
             {
                 GameObject go = _raycastHits[i].gameObject;
@@ -4485,6 +4535,7 @@ namespace VPB
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
             try { if (Panel != null) Panel.DetailStripClearAppliedReorderHint(); } catch { }
             try { if (Panel != null) Panel.DetailStripSetTagMenuRemoveDragHint(false, false); } catch { }
+            try { if (Panel != null) Panel.TitleSearchOnDragEnded(); } catch { }
             if (_cg != null)
             {
                 _cg.alpha = 1f;
@@ -4619,13 +4670,13 @@ namespace VPB
 
         public bool IsRaycastLocationValid(Vector2 sp, Camera eventCamera)
         {
-            return UserTagDragSession.PendingTags != null && UserTagDragSession.PendingTags.Count > 0;
+            return UserTagDragSession.HasPendingTags;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (Image == null) return;
-            if (UserTagDragSession.PendingTags == null || UserTagDragSession.PendingTags.Count == 0) return;
+            if (!UserTagDragSession.HasPendingTags) return;
             Image.color = new Color(1f, 1f, 1f, HoverAlpha);
         }
 

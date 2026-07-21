@@ -1439,7 +1439,7 @@ namespace VPB
             rt.offsetMax = new Vector2(-pad, -pad);
         }
 
-        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null)
+        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null, Action onEscape = null)
         {
             GameObject inputGO = new GameObject("SearchInput");
             inputGO.transform.SetParent(parent.transform, false);
@@ -1527,9 +1527,9 @@ namespace VPB
             clearHoverBorder.borderSize = 2f;
             clearHoverBorder.inward = true;
 
-            // ESC key handling to clear and refocus
+            // ESC: default clears field; title search passes onEscape to blur without wiping chips.
             Button clearBtnComponent = clearBtn.GetComponent<Button>();
-            inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent);
+            inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent, onEscape);
             // Standard editor shortcut: Ctrl+Backspace deletes previous word
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
 

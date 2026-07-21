@@ -228,6 +228,18 @@ namespace VPB
                     binds.Add(esc);
                 }
             }
+            if (br.BroadExclude != null)
+            {
+                for (int i = 0; i < br.BroadExclude.Count; i++)
+                {
+                    string t = br.BroadExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    string esc = "%" + EscapeLike(t) + "%";
+                    sb.Append(" AND NOT (m.list_path LIKE ? ESCAPE '\\' OR m.internal_path LIKE ? ESCAPE '\\')");
+                    binds.Add(esc);
+                    binds.Add(esc);
+                }
+            }
 
             if (br.TagInclude != null)
             {
@@ -348,6 +360,27 @@ namespace VPB
                     if (string.IsNullOrEmpty(t)) continue;
                     string esc = "%" + EscapeLike(t) + "%";
                     sb.Append(" AND (");
+                    sb.Append(listPath).Append(" LIKE ? ESCAPE '\\'");
+                    sb.Append(" OR ").Append(intPath).Append(" LIKE ? ESCAPE '\\'");
+                    sb.Append(" OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\'");
+                    sb.Append(" OR ifnull(p.creator,'') LIKE ? ESCAPE '\\'");
+                    sb.Append(" OR p.uid LIKE ? ESCAPE '\\'");
+                    sb.Append(')');
+                    textBinds.Add(esc);
+                    textBinds.Add(esc);
+                    textBinds.Add(esc);
+                    textBinds.Add(esc);
+                    textBinds.Add(esc);
+                }
+            }
+            if (br.BroadExclude != null)
+            {
+                for (int i = 0; i < br.BroadExclude.Count; i++)
+                {
+                    string t = br.BroadExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    string esc = "%" + EscapeLike(t) + "%";
+                    sb.Append(" AND NOT (");
                     sb.Append(listPath).Append(" LIKE ? ESCAPE '\\'");
                     sb.Append(" OR ").Append(intPath).Append(" LIKE ? ESCAPE '\\'");
                     sb.Append(" OR ifnull(p.var_path,'') LIKE ? ESCAPE '\\'");

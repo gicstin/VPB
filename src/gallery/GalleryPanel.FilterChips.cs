@@ -48,11 +48,15 @@ namespace VPB
         /// <summary>Extra top inset for main grid when browse filter chips are visible (not side tab columns).</summary>
         public float ActiveFilterChromeTopInsetPx(float paneScale)
         {
-            if (!_activeFilterChipBarVisible) return 0f;
             float s = paneScale <= 0f ? 1f : paneScale;
-            int rows = _activeFilterChipRowCount < 1 ? 1 : _activeFilterChipRowCount;
-            float rowsH = rows * FilterChipRowHeightRef + (rows - 1) * FilterChipRowSpacingRef;
-            return (rowsH + FilterChipRowVerticalMarginRef) * s;
+            float total = TitleSearchChipChromeTopInsetPx(s);
+            if (_activeFilterChipBarVisible)
+            {
+                int rows = _activeFilterChipRowCount < 1 ? 1 : _activeFilterChipRowCount;
+                float rowsH = rows * FilterChipRowHeightRef + (rows - 1) * FilterChipRowSpacingRef;
+                total += (rowsH + FilterChipRowVerticalMarginRef) * s;
+            }
+            return total;
         }
 
         private bool ShouldShowActiveFilterChipBar()
@@ -112,6 +116,16 @@ namespace VPB
 
             var specs = new List<ActiveFilterChipSpec>(12);
             CollectActiveFilterChipSpecs(specs);
+
+            // Title-search chips own their host; don't leave an empty ActiveFilterChipBar strip.
+            if (specs.Count == 0)
+            {
+                _activeFilterChipBarVisible = false;
+                _activeFilterChipBarGO.SetActive(false);
+                ClearActiveFilterChipButtons();
+                _activeFilterChipRowCount = 1;
+                return;
+            }
 
             ClearActiveFilterChipButtons();
             if (_activeFilterChipScrollContentRT == null) return;
@@ -347,18 +361,23 @@ namespace VPB
             // Package dep/dependent/missing mode — primary constraint; list first.
             CollectPackageFilterChipSpecs(specs);
 
-            string search = nameFilter != null ? nameFilter.Trim() : "";
-            if (search.Length > 0)
+            // Committed title-search chips live in TitleSearchChipHost (incl/excl rows).
+            // Only show aggregate Search chip while live-typing (no committed chips yet).
+            if (!HasTitleSearchChips())
             {
-                specs.Add(new ActiveFilterChipSpec
+                string search = nameFilter != null ? nameFilter.Trim() : "";
+                if (search.Length > 0)
                 {
-                    Label = VPBTranslation.T("gallery.filter_chip.search", "Search") + ": " + TruncateFilterChipLabel(search, 28),
-                    Kind = FilterChipKind.Search,
-                    OnDismiss = () =>
+                    specs.Add(new ActiveFilterChipSpec
                     {
-                        try { ClearTitleBarSearchAndSyncChrome(); } catch { }
-                    }
-                });
+                        Label = VPBTranslation.T("gallery.filter_chip.search", "Search") + ": " + TruncateFilterChipLabel(search, 28),
+                        Kind = FilterChipKind.Search,
+                        OnDismiss = () =>
+                        {
+                            try { ClearTitleBarSearchAndSyncChrome(); } catch { }
+                        }
+                    });
+                }
             }
 
             if (activeTags != null && activeTags.Count > 0)
@@ -750,13 +769,16 @@ namespace VPB
         /// <summary>Refresh filter chip row immediately after browse filter state changes.</summary>
         private void SyncBrowseFilterChipChrome()
         {
-            bool wasVisible = _activeFilterChipBarVisible;
+            bool wasVisible = _activeFilterChipBarVisible || _titleSearchChipHostVisible;
+            int wasSearchRows = _titleSearchChipRowCount;
+            try { RebuildTitleSearchChipUi(); } catch { }
             try { RefreshActiveFilterChips(); } catch { }
             try
             {
-                if (wasVisible != _activeFilterChipBarVisible)
+                bool nowVisible = _activeFilterChipBarVisible || _titleSearchChipHostVisible;
+                if (wasVisible != nowVisible || wasSearchRows != _titleSearchChipRowCount)
                     UpdateLayout();
-                else if (_activeFilterChipBarVisible)
+                else if (nowVisible)
                     ApplyActiveFilterChipBarLayout(_lastBrowseGridLeftInset, _lastBrowseGridRightInset,
                         ChromeScale);
             }
@@ -787,12 +809,18 @@ namespace VPB
         /// <summary>Align chip bar with main grid column — same horizontal insets as <see cref="contentScrollRT"/>.</summary>
         private void ApplyActiveFilterChipBarLayout(float leftOffset, float rightOffset, float paneScale)
         {
+            float s = paneScale <= 0f ? 1f : paneScale;
+            _lastBrowseGridLeftInset = leftOffset;
+            _lastBrowseGridRightInset = rightOffset;
+
+            try { ApplyTitleSearchChipHostLayout(leftOffset, rightOffset, s); } catch { }
+
             if (_activeFilterChipBarGO == null || !_activeFilterChipBarVisible) return;
 
-            float s = paneScale <= 0f ? 1f : paneScale;
-            // Align top edge with the grid reference (SideTabTopOffsetRef), so chips tuck directly
-            // under the title bar instead of leaving a scale-dependent gap.
+            // Title-search chip host sits under title bar; ActiveFilterChipBar stacks below it.
             float titleBottom = -GalleryUiDesignTokens.SideTabTopOffsetRef * s;
+            float searchChipH = TitleSearchChipChromeTopInsetPx(s);
+            float barTop = titleBottom - searchChipH;
             float gridTop = titleBottom - ActiveFilterChromeTopInsetPx(s);
             float pad = FilterChipHorizontalPaddingRef * s;
             float margin = FilterChipRowVerticalMarginRef * 0.5f * s;
@@ -804,7 +832,7 @@ namespace VPB
             rt.pivot = new Vector2(0.5f, 1f);
             // Match grid column exactly (contentScrollRT offsetMin/Max X).
             rt.offsetMin = new Vector2(leftOffset + pad, gridTop + margin);
-            rt.offsetMax = new Vector2(rightOffset - pad, titleBottom - margin);
+            rt.offsetMax = new Vector2(rightOffset - pad, barTop - margin);
 
             // Re-flow against the resolved bar width (covers cases where the up-front estimate differs).
             try
@@ -821,9 +849,18 @@ namespace VPB
 
             try
             {
-                // Above grid, below side-tab scroll columns.
+                // Above grid, below side-tab scroll columns. Title search chips stay above this bar.
                 if (contentScrollRT != null)
-                    _activeFilterChipBarGO.transform.SetSiblingIndex(contentScrollRT.transform.GetSiblingIndex() + 1);
+                {
+                    int gridIdx = contentScrollRT.transform.GetSiblingIndex();
+                    if (_titleSearchChipHostGO != null && _titleSearchChipHostVisible)
+                    {
+                        _titleSearchChipHostGO.transform.SetSiblingIndex(gridIdx + 1);
+                        _activeFilterChipBarGO.transform.SetSiblingIndex(gridIdx + 2);
+                    }
+                    else
+                        _activeFilterChipBarGO.transform.SetSiblingIndex(gridIdx + 1);
+                }
                 else
                     _activeFilterChipBarGO.transform.SetAsLastSibling();
             }

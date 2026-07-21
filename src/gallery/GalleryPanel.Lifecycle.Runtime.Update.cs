@@ -598,7 +598,8 @@ namespace VPB
                 float iscale = ChromeScale;
                 try { ApplyTitleBarResponsiveLayout(iscale); } catch { }
                 try { ApplyFooterOverflowLayout(iscale); } catch { }
-                try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
+                try { TickTitleSearchPopupOutsideClickDismiss(); } catch { }
+                try { TickTitleSearchPopupOpenCue(); } catch { }
             }
             else if (IsVisible && paginationRT != null)
             {
@@ -698,6 +699,23 @@ namespace VPB
         {
             if (IsPluginHotkeyCaptureActive())
                 return;
+
+            // Ctrl+F — focus title search even when another InputField is selected.
+            bool ctrlEarly = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (ctrlEarly && Input.GetKeyDown(KeyCode.F))
+            {
+                try { FocusTitleSearchFromHotkey(); } catch { }
+                return;
+            }
+            if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
+            {
+                try
+                {
+                    if (TryUndoTitleSearchClear())
+                        return;
+                }
+                catch { }
+            }
 
             if (DetailStripIsTagMenuOpen()
                 && (Input.GetKeyDown(KeyCode.UpArrow)

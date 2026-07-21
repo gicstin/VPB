@@ -48,7 +48,7 @@ namespace VPB
             if (IsSettingsPanelOpen())
                 SetTitleSearchInputTextWithoutNotify(titleSearchInput, CanonicalSettingsSideSearchText(), _titleBarSearchOnValueChanged);
             else
-                SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged);
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
         }
 
         private void SetSideSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)

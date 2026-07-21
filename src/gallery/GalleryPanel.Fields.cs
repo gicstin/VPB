@@ -821,9 +821,21 @@ namespace VPB
         private RectTransform _titleSearchCompactRT;
         private GameObject _titleSearchPopupRootGO;
         private RectTransform _titleSearchPopupPanelRT;
+        private Image _titleSearchPopupPanelImg;
         private InputField _titleSearchPopupField;
         private bool _titleSearchPopupOpen;
-        private float _titleSearchPopupProximityAwayTimer;
+        /// <summary>Frame popup opened; outside-click dismiss skips this frame + next.</summary>
+        private int _titleSearchPopupOpenedFrame = -1;
+        /// <summary>Unscaled end time for open-cue flash; 0 = idle.</summary>
+        private float _titleSearchPopupCueUntil;
+        private static readonly Color TitleSearchPopupPanelIdle = new Color(0.14f, 0.14f, 0.16f, 1f);
+        private static readonly Color TitleSearchPopupPanelCue = new Color(0.28f, 0.42f, 0.55f, 1f);
+        private const float TitleSearchPopupCueSeconds = 0.28f;
+
+        /// <summary>Soft-undo snapshot after clear-all (chips + filter string).</summary>
+        private string _pendingTitleSearchUndoSerialized;
+        private float _pendingTitleSearchUndoUntilRealtime;
+        private const float TitleSearchClearUndoSeconds = 5f;
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
