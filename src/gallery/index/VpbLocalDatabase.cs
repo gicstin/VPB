@@ -131,9 +131,10 @@ namespace VPB
         private static volatile bool s_RebuildRunning;
         private static volatile int s_PendingRescheduleAfterRunningRebuild;
         private static volatile int s_PendingSqlRebuildAfterDeepScan;
+        private static volatile int s_SuppressNextIncompleteRebuildReschedule;
         /// <summary>Queued <see cref="QueueGalleryIndexUpdateWorker"/> with force — worker must not honor stale skip flags.</summary>
         private static volatile int s_WorkerBypassGallerySkipCheck;
-        /// <summary>Consecutive rebuilds that finished with cat_mem incomplete (skip threshold). Capped to break re-queue loops when a handful of VARs are genuinely uncacheable.</summary>
+        /// <summary>Consecutive rebuilds that finished with incomplete package coverage. Capped to break re-queue loops when a handful of VARs are genuinely uncacheable.</summary>
         private static volatile int s_PostBulkIncompleteRebuildAttempts;
         private const int MaxPostBulkIncompleteRebuildAttempts = 3;
         static int s_LastSqlRebuildDeepScanProgress;
@@ -246,6 +247,14 @@ namespace VPB
                 if (long.TryParse(t, out n)) return n;
                 return -1;
             }
+        }
+
+        private static long CountPackagesMissingCatMem(VpbSqlite3.Connection conn)
+        {
+            // Every valid registered VAR has meta.json, which classification keeps in a real category or EVERYTHING.
+            // A package with no cat_mem row was never fully classified.
+            return ScalarInt64(conn,
+                "SELECT COUNT(*) FROM pkg WHERE uid NOT IN (SELECT pkg_uid FROM cat_mem);");
         }
 
         private static string MetaGet(VpbSqlite3.Connection conn, string key)
@@ -2743,7 +2752,6 @@ namespace VPB
             if (scanned != total && scanned - s_LastSqlRebuildDeepScanProgress < rebuildStep)
                 return;
             s_LastSqlRebuildDeepScanProgress = scanned;
-            if (s_RebuildRunning || s_RebuildScheduled) return;
             lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
             try { ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
         }
@@ -2934,6 +2942,20 @@ namespace VPB
             }
         }
 
+        static string ComputePackageInventorySignatureFromDatabase(VpbSqlite3.Connection conn)
+        {
+            var uids = new List<string>();
+            using (var st = conn.Prepare("SELECT uid FROM pkg"))
+            {
+                while (st.Step() == VpbSqlite3.SqliteRow)
+                {
+                    string uid = st.ColumnText(0);
+                    if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+                }
+            }
+            return ComputePackageInventorySignatureFromUids(uids);
+        }
+
         private static string GetCachedPackageInventorySignatureFromLivePackages(long scanBin, out long invComputeMs)
         {
             invComputeMs = 0;
@@ -3012,6 +3034,7 @@ namespace VPB
             long invMs = 0;
             bool ok = false;
             long pkgsInMem = -1;
+            long pkgsMissingCatMem = -1;
             try
             {
                 string metaInv;
@@ -3029,6 +3052,12 @@ namespace VPB
                     metaInv = MetaGet(conn, "pkg_inv_sig");
                     if (string.IsNullOrEmpty(metaInv))
                         return false;
+                    string dbInv = ComputePackageInventorySignatureFromDatabase(conn);
+                    if (!string.Equals(dbInv, metaInv, StringComparison.Ordinal))
+                    {
+                        try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: pkg rows do not match pkg_inv_sig"); } catch { }
+                        return false;
+                    }
 
                     string galleryReady = MetaGet(conn, MetaGalleryReadyKey);
                     if (!string.Equals(galleryReady ?? "", "1", StringComparison.Ordinal))
@@ -3049,6 +3078,12 @@ namespace VPB
                     {
                         if (stPkg.Step() == VpbSqlite3.SqliteRow)
                             int.TryParse(stPkg.ColumnText(0), out pkgCount);
+                    }
+                    pkgsMissingCatMem = CountPackagesMissingCatMem(conn);
+                    if (pkgsMissingCatMem > 0)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery] sqlRestore rejected: packages_missing_cat_mem=" + pkgsMissingCatMem); } catch { }
+                        return false;
                     }
                     // Signature counts the live set; an incremental update only bodies its delta, so a dropped
                     // delta over-reports the count here. Trusting it would skip the rebuild on every restart.
@@ -3074,18 +3109,6 @@ namespace VPB
                         {
                             LogUtil.Log("[VPB.Gallery] sqlRestore rejected: live_count=" + liveCount
                                 + " != pkg_rows=" + pkgCount);
-                        }
-                        catch { }
-                        return false;
-                    }
-                    if (liveCount > 0 && pkgCount > 0
-                        && (pkgCount < (liveCount * 9) / 10
-                            || pkgsInMem < Math.Max(8, pkgCount / 2)))
-                    {
-                        try
-                        {
-                            LogUtil.Log("[VPB.Gallery] sqlRestore rejected: partial index pkg=" + pkgCount
-                                + " live=" + liveCount + " pkgs_in_mem=" + pkgsInMem);
                         }
                         catch { }
                         return false;
@@ -3447,8 +3470,12 @@ namespace VPB
                     {
                         // A stored signature that counts more packages than the body has rows means an earlier
                         // incremental stamped a full-set count over a short delta write; rebuild to reconcile.
+                        string metaInv = MetaGet(conn, "pkg_inv_sig");
+                        string dbInv = ComputePackageInventorySignatureFromDatabase(conn);
+                        if (string.IsNullOrEmpty(metaInv) || !string.Equals(metaInv, dbInv, StringComparison.Ordinal))
+                            return true;
                         int invSigCount;
-                        if (TryParseInventorySignatureCount(MetaGet(conn, "pkg_inv_sig"), out invSigCount)
+                        if (TryParseInventorySignatureCount(metaInv, out invSigCount)
                             && invSigCount != pkgCount)
                             return true;
                         int liveCount = 0;
@@ -3457,10 +3484,9 @@ namespace VPB
                             if (FileManager.PackagesByUid != null)
                                 liveCount = FileManager.PackagesByUid.Count;
                         }
-                        if (liveCount > 0 && pkgCount < (liveCount * 9) / 10)
+                        if (liveCount > 0 && pkgCount != liveCount)
                             return true;
-                        long pkgsInMem = ScalarInt64(conn, "SELECT COUNT(DISTINCT pkg_uid) FROM cat_mem;");
-                        if (liveCount > 0 && pkgsInMem < Math.Max(8, pkgCount / 2))
+                        if (CountPackagesMissingCatMem(conn) > 0)
                             return true;
                     }
                 }
@@ -3484,7 +3510,7 @@ namespace VPB
                     if (!string.Equals(ready ?? "", "1", StringComparison.Ordinal))
                         return false;
                     long catMem = ScalarInt64(conn, "SELECT COUNT(*) FROM cat_mem;");
-                    return catMem > 0;
+                    return catMem > 0 && CountPackagesMissingCatMem(conn) == 0;
                 }
             }
             catch
@@ -3571,19 +3597,6 @@ namespace VPB
                 }
             }
             catch { }
-        }
-
-        /// <summary>True when rebuild ran before every package had zip file lists (common during overlapping deep scan).</summary>
-        static bool GalleryCatMemIndexIncompleteAfterRebuild(int pkgInserted, int catMemSkippedUnscanned)
-        {
-            if (catMemSkippedUnscanned <= 0) return false;
-            if (pkgInserted <= 0) return true;
-            try
-            {
-                if (FileManager.IsBulkDeepScanActive) return true;
-            }
-            catch { }
-            return catMemSkippedUnscanned > Math.Max(32, pkgInserted / 20);
         }
 
         static void ClearGalleryIndexReadyMeta(VpbSqlite3.Connection conn)
@@ -3704,7 +3717,7 @@ namespace VPB
 
         static void QueueGalleryIndexUpdateWorker(bool forceFullRebuild)
         {
-            if (s_RebuildScheduled || s_RebuildRunning) return;
+            if (TryDeferGalleryIndexRebuildIfActive()) return;
 
             bool manifestReady = false;
             try { manifestReady = VarPackageMgr.singleton != null && VarPackageMgr.singleton.IsManifestReady; } catch { }
@@ -3714,28 +3727,27 @@ namespace VPB
             if (TrySkipGalleryIndexRebuild())
                 return;
 
-            if (forceFullRebuild)
-            {
-                Interlocked.Exchange(ref s_WorkerBypassGallerySkipCheck, 1);
-                lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-            }
-
             if (!VpbSqlite3.IsAvailable) return;
 
             if (forceFullRebuild || NeedsFullGalleryIndexBuild())
             {
+                if (!TryClaimGalleryIndexRebuildSlot()) return;
+                if (forceFullRebuild)
+                {
+                    Interlocked.Exchange(ref s_WorkerBypassGallerySkipCheck, 1);
+                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+                }
                 try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (" + (forceFullRebuild ? "forceFullRebuild" : "NeedsFullGalleryIndexBuild") + ")"); } catch { }
                 s_GalleryIndexBuildIndicatorPending = true;
-                s_RebuildScheduled = true;
                 ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
                 return;
             }
 
             if (!VamStartupOptimizations.PreferIncrementalGallerySqlIndex)
             {
+                if (!TryClaimGalleryIndexRebuildSlot()) return;
                 try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (prefer-incremental off)"); } catch { }
                 s_GalleryIndexBuildIndicatorPending = true;
-                s_RebuildScheduled = true;
                 ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
                 return;
             }
@@ -3749,22 +3761,42 @@ namespace VPB
             int delta = added.Count + removedPackages.Count + removedUidsOnly.Count;
             if (delta <= 0) return;
 
+            if (!TryClaimGalleryIndexRebuildSlot()) return;
             s_GalleryIndexBuildIndicatorPending = true;
-            s_RebuildScheduled = true;
             var addedCopy = added;
             var removedPackagesCopy = removedPackages;
             var removedUidsCopy = removedUidsOnly;
             ThreadPool.QueueUserWorkItem(_ => IncrementalIndexUpdateWorker(addedCopy, removedPackagesCopy, removedUidsCopy));
         }
 
+        static bool TryClaimGalleryIndexRebuildSlot()
+        {
+            lock (s_Sync)
+            {
+                if (s_RebuildScheduled || s_RebuildRunning)
+                {
+                    Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
+                    return false;
+                }
+                s_RebuildScheduled = true;
+                return true;
+            }
+        }
+
+        static bool TryDeferGalleryIndexRebuildIfActive()
+        {
+            lock (s_Sync)
+            {
+                if (!s_RebuildScheduled && !s_RebuildRunning) return false;
+                Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
+                return true;
+            }
+        }
+
         /// <summary>Call after <see cref="FileManager"/> finishes a package scan.</summary>
         internal static void ScheduleGalleryIndexUpdateAfterScan(bool forceFullRebuild = false)
         {
-            if (s_RebuildScheduled || s_RebuildRunning)
-            {
-                Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
-                return;
-            }
+            if (TryDeferGalleryIndexRebuildIfActive()) return;
 
             if (forceFullRebuild
                 && VamStartupOptimizations.DeferGallerySqlRebuildUntilReady
@@ -3882,6 +3914,10 @@ namespace VPB
             int nPkgInserted = 0;
             int nDepInserted = 0;
             int nCatMemInserted = 0;
+            long pkgRowsAfter = -1;
+            long packagesMissingCatMem = -1;
+            string dbInvSigAfter = null;
+            bool indexComplete = false;
 
             try
             {
@@ -3933,8 +3969,15 @@ namespace VPB
                             try { if (insMem != null) insMem.Dispose(); } catch { }
                         }
 
-                        // Delete-only (nRemoved>0, nothing added) leaves the index consistent: clearing ready meta would wipe categories_sig and force the next op into a full rebuild.
-                        if (nCatMemInserted > 0 || nRemoved > 0)
+                        pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
+                        packagesMissingCatMem = CountPackagesMissingCatMem(conn);
+                        dbInvSigAfter = ComputePackageInventorySignatureFromDatabase(conn);
+                        indexComplete = pkgRowsAfter == pkgSnap.Count
+                            && packagesMissingCatMem == 0
+                            && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
+
+                        // Ready meta describes whole live inventory. Never publish it over a partial delta.
+                        if (indexComplete)
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
                         else
                             ClearGalleryIndexReadyMeta(conn);
@@ -3958,6 +4001,27 @@ namespace VPB
             long scanNow = 0;
             try { scanNow = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
             if (scanNow != scanAtStart) return false;
+
+            if (!indexComplete)
+            {
+                lock (s_Sync)
+                {
+                    s_ReadyScanBinary = long.MinValue;
+                    s_ReadyCategoriesSig = null;
+                    s_ReadyPkgInvSig = null;
+                    s_SkipDeferredGallerySqlRebuild = false;
+                }
+                try
+                {
+                    LogUtil.LogWarning(VamStartupOptimizations.LogTag
+                        + " incremental gallery index incomplete; full repair required"
+                        + " pkg_rows=" + pkgRowsAfter + "/" + pkgSnap.Count
+                        + " packages_missing_cat_mem=" + packagesMissingCatMem
+                        + " uid_set_match=" + (string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal) ? "1" : "0"));
+                }
+                catch { }
+                return false;
+            }
 
             lock (s_Sync)
             {
@@ -3985,34 +4049,60 @@ namespace VPB
             List<VarPackage> removedPackages,
             List<string> removedUidsOnly)
         {
+            bool queueFullRebuild = false;
+            bool pendingReschedule = false;
             try
             {
                 s_RebuildRunning = true;
                 try { VpbProgressService.BeginGalleryIncremental(); } catch { }
                 long scanAtStart = 0;
                 try { scanAtStart = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
-                if (scanAtStart == 0) return;
-                bool bypassSkip = Interlocked.CompareExchange(ref s_WorkerBypassGallerySkipCheck, 0, 1) == 1;
-                if (!bypassSkip && TrySkipGalleryIndexRebuild()) return;
-                if (!TryIncrementalGalleryIndexUpdateCore(added, removedPackages, removedUidsOnly, scanAtStart))
+                if (scanAtStart != 0)
                 {
-                    try { LogUtil.LogWarning(VamStartupOptimizations.LogTag + " incremental gallery index update failed; SQL queries use disk fallback until next successful update"); } catch { }
-                }
-                else
-                {
-                    try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
+                    bool bypassSkip = Interlocked.CompareExchange(ref s_WorkerBypassGallerySkipCheck, 0, 1) == 1;
+                    if (bypassSkip || !TrySkipGalleryIndexRebuild())
+                    {
+                        if (!TryIncrementalGalleryIndexUpdateCore(added, removedPackages, removedUidsOnly, scanAtStart))
+                        {
+                            queueFullRebuild = true;
+                            try { LogUtil.LogWarning(VamStartupOptimizations.LogTag + " incremental gallery index incomplete or failed; SQL queries use disk fallback until full repair"); } catch { }
+                        }
+                        else
+                        {
+                            try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
+                queueFullRebuild = true;
                 s_LastError = ex.Message;
                 try { LogUtil.LogError("[VPB] VpbLocalDatabase: incremental index worker failed: " + ex); } catch { }
             }
             finally
             {
-                s_RebuildRunning = false;
-                s_RebuildScheduled = false;
+                lock (s_Sync)
+                {
+                    pendingReschedule = Interlocked.CompareExchange(ref s_PendingRescheduleAfterRunningRebuild, 0, 1) == 1;
+                    s_RebuildRunning = false;
+                    s_RebuildScheduled = false;
+                }
                 ResetGalleryIndexBuildProgress();
+            }
+
+            if (!queueFullRebuild && !pendingReschedule) return;
+
+            bool bulkScan = false;
+            try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
+            if (bulkScan)
+            {
+                Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+            }
+            else
+            {
+                try { QueueGalleryIndexUpdateWorker(true); } catch { }
             }
         }
 
@@ -4024,7 +4114,6 @@ namespace VPB
         private static void AutoScheduleRebuildIfStale(long scanBin, long readyScan, string catSig)
         {
             if (!VpbSqlite3.IsAvailable) return;
-            if (s_RebuildScheduled || s_RebuildRunning) return;
             if (scanBin == 0 || scanBin == long.MinValue) return;
             if (readyScan == scanBin && !string.IsNullOrEmpty(catSig)) return;
 
@@ -4074,12 +4163,15 @@ namespace VPB
         {
             long readyBefore;
             lock (s_Sync) { readyBefore = s_ReadyScanBinary; }
+            long readyAfter = long.MinValue;
+            bool suppressIncompleteReschedule = false;
+            bool pendingReschedule = false;
             bool bypassSkip = Interlocked.CompareExchange(ref s_WorkerBypassGallerySkipCheck, 0, 1) == 1;
             try
             {
                 s_RebuildRunning = true;
-                if (!bypassSkip && TrySkipGalleryIndexRebuild()) return;
-                RebuildCore();
+                if (bypassSkip || !TrySkipGalleryIndexRebuild())
+                    RebuildCore();
             }
             catch (Exception ex)
             {
@@ -4096,37 +4188,41 @@ namespace VPB
             }
             finally
             {
-                s_RebuildRunning = false;
-                s_RebuildScheduled = false;
+                lock (s_Sync)
+                {
+                    readyAfter = s_ReadyScanBinary;
+                    suppressIncompleteReschedule = Interlocked.CompareExchange(ref s_SuppressNextIncompleteRebuildReschedule, 0, 1) == 1;
+                    pendingReschedule = Interlocked.CompareExchange(ref s_PendingRescheduleAfterRunningRebuild, 0, 1) == 1;
+                    s_RebuildRunning = false;
+                    s_RebuildScheduled = false;
+                }
                 ResetGalleryIndexBuildProgress();
             }
-            long readyAfter;
-            lock (s_Sync) { readyAfter = s_ReadyScanBinary; }
-            if (readyAfter != long.MinValue && readyAfter != readyBefore)
+            bool rebuildCompleted = readyAfter != long.MinValue && readyAfter != readyBefore;
+            if (rebuildCompleted)
             {
                 try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
             }
-            else if (Interlocked.CompareExchange(ref s_PendingRescheduleAfterRunningRebuild, 0, 1) == 1)
+            if (pendingReschedule)
             {
                 try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                return;
             }
-            else
+            if (rebuildCompleted || suppressIncompleteReschedule) return;
+            try
             {
-                try
+                if (!NeedsFullGalleryIndexBuild()) return;
+                bool bulkScan = false;
+                try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
+                if (bulkScan)
                 {
-                    if (!NeedsFullGalleryIndexBuild()) return;
-                    bool bulkScan = false;
-                    try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
-                    if (bulkScan)
-                    {
-                        Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
-                        lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-                    }
-                    else
-                        QueueGalleryIndexUpdateWorker(true);
+                    Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
                 }
-                catch { }
+                else
+                    QueueGalleryIndexUpdateWorker(true);
             }
+            catch { }
         }
 
         private static string BuildCategoriesSignature(List<Gallery.Category> cats)
@@ -4828,6 +4924,10 @@ namespace VPB
             int nCatMemInserted = 0;
             int nCatMemSkippedUnscanned = 0;
             int nPkgErrors = 0;
+            long pkgRowsAfter = -1;
+            long packagesMissingCatMem = -1;
+            string dbInvSigAfter = null;
+            bool catMemIndexComplete = false;
             bool parallelRebuildCatMem = false;
             int rebuildClassifyWorkers = 0;
             try
@@ -5013,14 +5113,15 @@ namespace VPB
                             }
                         }
 
-                        int scannedPkgEstimateNow = Math.Max(0, nPkgInserted - nCatMemSkippedUnscanned);
-                        int catMemDenomNow = scannedPkgEstimateNow > 0 ? scannedPkgEstimateNow : nPkgInserted;
-                        bool catMemUsableNow = nCatMemInserted >= Math.Max(32, Math.Max(1, catMemDenomNow) / 4);
-                        bool catMemIndexCompleteNow = catMemUsableNow
-                            && !GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned);
+                        pkgRowsAfter = ScalarInt64(conn, "SELECT COUNT(*) FROM pkg;");
+                        packagesMissingCatMem = CountPackagesMissingCatMem(conn);
+                        dbInvSigAfter = ComputePackageInventorySignatureFromDatabase(conn);
+                        catMemIndexComplete = pkgRowsAfter == pkgSnap.Count
+                            && packagesMissingCatMem == 0
+                            && string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal);
 
                         long tMeta0 = Stopwatch.GetTimestamp();
-                        if (catMemIndexCompleteNow)
+                        if (catMemIndexComplete)
                             WriteGalleryIndexReadyMeta(conn, scanAtStart, catSig, invSigForMeta);
                         else
                         {
@@ -5104,7 +5205,10 @@ namespace VPB
                 sb.Append("catMem=").Append(nCatMemInserted).Append(',');
                 sb.Append("catMemSkippedUnscanned=").Append(nCatMemSkippedUnscanned).Append(',');
                 sb.Append("pkgErrors=").Append(nPkgErrors);
-                sb.Append(",catMemIncomplete=").Append(GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned) ? "1" : "0");
+                sb.Append(",pkgRowsAfter=").Append(pkgRowsAfter);
+                sb.Append(",packagesMissingCatMem=").Append(packagesMissingCatMem);
+                sb.Append(",uidSetMatch=").Append(string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal) ? "1" : "0");
+                sb.Append(",catMemIncomplete=").Append(catMemIndexComplete ? "0" : "1");
                 sb.Append(" | catMemParallel=").Append(parallelRebuildCatMem ? "1" : "0");
                 if (parallelRebuildCatMem)
                     sb.Append(" workers=").Append(rebuildClassifyWorkers);
@@ -5122,11 +5226,8 @@ namespace VPB
 
             if (rebuildAbortReason != null) return;
 
-            int scannedPkgEstimate = Math.Max(0, nPkgInserted - nCatMemSkippedUnscanned);
-            int catMemDenom = scannedPkgEstimate > 0 ? scannedPkgEstimate : nPkgInserted;
-            bool catMemUsable = nCatMemInserted >= Math.Max(32, Math.Max(1, catMemDenom) / 4);
-            bool catMemIncomplete = GalleryCatMemIndexIncompleteAfterRebuild(nPkgInserted, nCatMemSkippedUnscanned);
-            if (!catMemUsable || catMemIncomplete)
+            bool catMemIncomplete = !catMemIndexComplete;
+            if (catMemIncomplete)
             {
                 Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
                 lock (s_Sync)
@@ -5145,13 +5246,16 @@ namespace VPB
                     ? s_PostBulkIncompleteRebuildAttempts
                     : Interlocked.Increment(ref s_PostBulkIncompleteRebuildAttempts);
                 bool givingUp = !bulkActive && attempts >= MaxPostBulkIncompleteRebuildAttempts;
+                if (givingUp)
+                    Interlocked.Exchange(ref s_SuppressNextIncompleteRebuildReschedule, 1);
                 try
                 {
                     LogUtil.Log(VamStartupOptimizations.LogTag
-                        + (catMemIncomplete
-                            ? " gallery SQL rebuild partial (cat_mem incomplete until deep scan finishes)"
-                            : " gallery SQL pkg pass only (cat_mem waits for deep scan)")
+                        + " gallery SQL rebuild partial (cat_mem incomplete until deep scan finishes)"
                         + " pkg=" + nPkgInserted + " catMem=" + nCatMemInserted
+                        + " pkgRowsAfter=" + pkgRowsAfter
+                        + " packagesMissingCatMem=" + packagesMissingCatMem
+                        + " uidSetMatch=" + (string.Equals(dbInvSigAfter, invSigForMeta, StringComparison.Ordinal) ? "1" : "0")
                         + " skippedUnscanned=" + nCatMemSkippedUnscanned
                         + " pkgErrors=" + nPkgErrors
                         + (bulkActive ? "" : " attempt=" + attempts + "/" + MaxPostBulkIncompleteRebuildAttempts)
