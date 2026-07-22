@@ -353,11 +353,11 @@ namespace VPB
         public string GallerySearchScope = "PathAndName";
         /// <summary>Which layout(s) show the hover preview. Off, List, Grid, or Both. Default: List.</summary>
         public string GalleryHoverPreviewMode = "List";
-        /// <summary>Square preview size (pixels) for List layout hover preview.</summary>
+        /// <summary>Square preview size (pixels) for hover preview.</summary>
         public float GalleryListHoverPreviewSize = 300f;
-        /// <summary>X offset (pixels) from the default bottom-left dock point for the List layout hover preview.</summary>
+        /// <summary>X offset (unscaled px) from canvas bottom-left default (20). Independent of gallery dock/pane size.</summary>
         public float GalleryListHoverPreviewOffsetX = 0f;
-        /// <summary>Y offset (pixels) from the default bottom-left dock point for the List layout hover preview.</summary>
+        /// <summary>Y offset (unscaled px) from canvas bottom-left default (12). Independent of gallery dock/pane size. Drag placeholder in Settings to set.</summary>
         public float GalleryListHoverPreviewOffsetY = 0f;
         /// <summary>When true, each grid cell shows a persistent label strip below the thumbnail with Creator.Package.Version. Grid mode only.</summary>
         public bool GalleryGridLabelsEnabled = true;
@@ -403,8 +403,14 @@ namespace VPB
             try { TriggerChange(); } catch { }
         }
 
-        /// <summary>Gallery: draw inward border on packages included in VaM scan whitelist.</summary>
-        public bool GalleryScanWlBorderEnabled = true;
+        /// <summary>
+        /// One-time migration: full-cell WL rims retired; W badge is primary ambient cue.
+        /// When false on load, borders force-disabled once then flag saved true.
+        /// </summary>
+        public bool GalleryScanWlBadgePrimaryV1 = false;
+
+        /// <summary>Legacy opt-in: inward full-cell rim for persistent scan-whitelist inclusion. Default off — use W badge.</summary>
+        public bool GalleryScanWlBorderEnabled = false;
         /// <summary>Gallery grid view: show scan-whitelist border on included packages.</summary>
         public bool GalleryScanWlBorderShowInGrid = true;
         /// <summary>Gallery list view: show scan-whitelist border on included packages.</summary>
@@ -440,8 +446,8 @@ namespace VPB
             try { TriggerChange(); } catch { }
         }
 
-        /// <summary>Gallery: inward border on session-only temporary scan-whitelist UID overrides.</summary>
-        public bool GalleryScanWlTempBorderEnabled = true;
+        /// <summary>Legacy opt-in: inward full-cell rim for temporary scan-whitelist UID overrides. Default off — use W badge ring.</summary>
+        public bool GalleryScanWlTempBorderEnabled = false;
         public bool GalleryScanWlTempBorderShowInGrid = true;
         public bool GalleryScanWlTempBorderShowInList = true;
         public float GalleryScanWlTempBorderWidth = 4f;
@@ -491,6 +497,10 @@ namespace VPB
         public bool GalleryDetailStripTagMenuPosSaved = false;
         public float GalleryDetailStripTagMenuPosX = 0f;
         public float GalleryDetailStripTagMenuPosY = 0f;
+        /// <summary>When true, restore last quick-tag popup size (design px at scale 1).</summary>
+        public bool GalleryDetailStripTagMenuSizeSaved = false;
+        public float GalleryDetailStripTagMenuWidthRef = 0f;
+        public float GalleryDetailStripTagMenuHeightRef = 0f;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1028,7 +1038,8 @@ namespace VPB
             GalleryGridBorderColorG = 1f;
             GalleryGridBorderColorB = 0f;
             GalleryGridBorderColorA = 1f;
-            GalleryScanWlBorderEnabled = true;
+            GalleryScanWlBadgePrimaryV1 = true;
+            GalleryScanWlBorderEnabled = false;
             GalleryScanWlBorderShowInGrid = true;
             GalleryScanWlBorderShowInList = true;
             GalleryScanWlBorderWidth = 4f;
@@ -1039,7 +1050,7 @@ namespace VPB
             GalleryScanWlBorderColorG = 0.95f;
             GalleryScanWlBorderColorB = 1f;
             GalleryScanWlBorderColorA = 1f;
-            GalleryScanWlTempBorderEnabled = true;
+            GalleryScanWlTempBorderEnabled = false;
             GalleryScanWlTempBorderShowInGrid = true;
             GalleryScanWlTempBorderShowInList = true;
             GalleryScanWlTempBorderWidth = 4f;
@@ -1058,6 +1069,9 @@ namespace VPB
             GalleryDetailStripTagMenuPosSaved = false;
             GalleryDetailStripTagMenuPosX = 0f;
             GalleryDetailStripTagMenuPosY = 0f;
+            GalleryDetailStripTagMenuSizeSaved = false;
+            GalleryDetailStripTagMenuWidthRef = 0f;
+            GalleryDetailStripTagMenuHeightRef = 0f;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1270,8 +1284,8 @@ namespace VPB
                         else if (node["GalleryListHoverPreviewEnabled"] != null)
                             GalleryHoverPreviewMode = node["GalleryListHoverPreviewEnabled"].AsBool ? "List" : "Off";
                         if (node["GalleryListHoverPreviewSize"] != null) GalleryListHoverPreviewSize = Mathf.Clamp(node["GalleryListHoverPreviewSize"].AsFloat, 200f, 600f);
-                        if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -2000f, 2000f);
-                        if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -2000f, 2000f);
+                        if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -4000f, 4000f);
+                        if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -4000f, 4000f);
                         if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;
                         if (node["GalleryGridLabelFontSize"] != null) GalleryGridLabelFontSize = Mathf.Clamp(node["GalleryGridLabelFontSize"].AsFloat, 8f, 40f);
                         if (node["GalleryGridLabelsAutoHideAtHighDensity"] != null) GalleryGridLabelsAutoHideAtHighDensity = node["GalleryGridLabelsAutoHideAtHighDensity"].AsBool;
@@ -1308,6 +1322,15 @@ namespace VPB
                         if (node["GalleryScanWlTempBorderColorG"] != null) GalleryScanWlTempBorderColorG = Mathf.Clamp01(node["GalleryScanWlTempBorderColorG"].AsFloat);
                         if (node["GalleryScanWlTempBorderColorB"] != null) GalleryScanWlTempBorderColorB = Mathf.Clamp01(node["GalleryScanWlTempBorderColorB"].AsFloat);
                         if (node["GalleryScanWlTempBorderColorA"] != null) GalleryScanWlTempBorderColorA = Mathf.Clamp01(node["GalleryScanWlTempBorderColorA"].AsFloat);
+                        // One-time: retire full-cell WL rims as default ambient cue (W badge is primary).
+                        if (node["GalleryScanWlBadgePrimaryV1"] != null && node["GalleryScanWlBadgePrimaryV1"].AsBool)
+                            GalleryScanWlBadgePrimaryV1 = true;
+                        else
+                        {
+                            GalleryScanWlBorderEnabled = false;
+                            GalleryScanWlTempBorderEnabled = false;
+                            GalleryScanWlBadgePrimaryV1 = true;
+                        }
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryDetailStripExpanded"] != null) GalleryDetailStripExpanded = node["GalleryDetailStripExpanded"].AsBool;
                         if (node["GalleryDetailStripSideInfoEnabled"] != null) GalleryDetailStripSideInfoEnabled = node["GalleryDetailStripSideInfoEnabled"].AsBool;
@@ -1320,6 +1343,12 @@ namespace VPB
                             GalleryDetailStripTagMenuPosX = node["GalleryDetailStripTagMenuPosX"].AsFloat;
                         if (node["GalleryDetailStripTagMenuPosY"] != null)
                             GalleryDetailStripTagMenuPosY = node["GalleryDetailStripTagMenuPosY"].AsFloat;
+                        if (node["GalleryDetailStripTagMenuSizeSaved"] != null)
+                            GalleryDetailStripTagMenuSizeSaved = node["GalleryDetailStripTagMenuSizeSaved"].AsBool;
+                        if (node["GalleryDetailStripTagMenuWidthRef"] != null)
+                            GalleryDetailStripTagMenuWidthRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuWidthRef"].AsFloat);
+                        if (node["GalleryDetailStripTagMenuHeightRef"] != null)
+                            GalleryDetailStripTagMenuHeightRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuHeightRef"].AsFloat);
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1679,6 +1708,7 @@ namespace VPB
                 node["GalleryScanWlTempBorderColorG"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorG);
                 node["GalleryScanWlTempBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorB);
                 node["GalleryScanWlTempBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorA);
+                node["GalleryScanWlBadgePrimaryV1"].AsBool = GalleryScanWlBadgePrimaryV1;
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryDetailStripExpanded"].AsBool = GalleryDetailStripExpanded;
                 node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;
@@ -1687,6 +1717,9 @@ namespace VPB
                 node["GalleryDetailStripTagMenuPosSaved"].AsBool = GalleryDetailStripTagMenuPosSaved;
                 node["GalleryDetailStripTagMenuPosX"].AsFloat = GalleryDetailStripTagMenuPosX;
                 node["GalleryDetailStripTagMenuPosY"].AsFloat = GalleryDetailStripTagMenuPosY;
+                node["GalleryDetailStripTagMenuSizeSaved"].AsBool = GalleryDetailStripTagMenuSizeSaved;
+                node["GalleryDetailStripTagMenuWidthRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuWidthRef);
+                node["GalleryDetailStripTagMenuHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuHeightRef);
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

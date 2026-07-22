@@ -662,6 +662,11 @@ namespace VPB
         private float _userTagDropPulseUntil = 0f;
         private Coroutine _userTagVisualPulseCoroutine;
 
+        private float _scanWlBadgePulseUntil = 0f;
+        private HashSet<string> _scanWlBadgePulseUids;
+        private Coroutine _scanWlBadgePulseCoroutine;
+        private const float ScanWlBadgePulseSeconds = 0.55f;
+
         private static readonly Color UserTagStateOnColor = new Color(0.14f, 0.42f, 0.48f, 1f);
         private static readonly Color UserTagStateMixedColor = new Color(0.35f, 0.38f, 0.22f, 1f);
         private static readonly Color UserTagStatePulseColor = new Color(0.20f, 0.55f, 0.58f, 1f);
@@ -1040,13 +1045,19 @@ namespace VPB
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
-        // Hover preview overlay (bottom-left above tbox)
+        // Hover preview overlay (stationary user position on canvas; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;
         private RawImage hoverPreviewImage;
+        private Image hoverPreviewBgImage;
+        private Text hoverPreviewHintText;
         private FileEntry hoverPreviewFile;
         private bool hoverPreviewDummyActive;
         private UIHoverPreviewTrigger hoverPreviewSource;
+        private Vector2 hoverPreviewDragGrabLocal;
+        private bool hoverPreviewDragging;
+        /// <summary>Swallow the click that ends a placeholder drag so it cannot step a settings row underneath.</summary>
+        private bool hoverPreviewSuppressSettingsClick;
         private GameObject gridSizeMinusBtn;
         private GameObject gridSizePlusBtn;
         private GameObject footerScrollTopBtn;

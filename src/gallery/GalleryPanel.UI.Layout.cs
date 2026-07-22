@@ -191,16 +191,17 @@ namespace VPB
                 {
                     // Info bar: stretch to full width, sits above the buttons bar
                     hoverPathRT.offsetMin = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * paneScale);
-                    // Only set offsetMax if toolbox is not yet initialized (tbox == null)
-                    // Once initialized, the animation system handles the height via tboxRT.offsetMax.y
-                    // Setting it here after initialization causes flashing during category switches
-                    if (tbox == null)
-                        hoverPathRT.offsetMax = new Vector2(0, GalleryUiDesignTokens.FooterToolboxTopRef * paneScale);
                     // Update tbox expansion references so animation uses the correct scale
                     tboxTopOffsetBase  = GalleryUiDesignTokens.FooterToolboxTopRef * paneScale;
                     tboxInfoRowHeight  = GalleryUiDesignTokens.FooterInfoRowHeightRef * paneScale;
-                    if (tbox != null)
+                    if (tbox == null)
+                        hoverPathRT.offsetMax = new Vector2(0, tboxTopOffsetBase);
+                    else
+                    {
+                        // Height-only refresh — full UpdateSelectionContextMenu here flashes on category switch.
                         try { SyncTboxFooterRowChrome(paneScale); } catch { }
+                        try { ApplyTboxBarHeightNow(); } catch { }
+                    }
                 }
             }
 

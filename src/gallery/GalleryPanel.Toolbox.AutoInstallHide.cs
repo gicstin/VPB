@@ -124,6 +124,7 @@ namespace VPB
                 if (scanWlDirty)
                 {
                     try { ScanWhitelistManager.Instance.Save(); } catch { }
+                    try { BeginScanWlBadgePulseFromFiles(selectedFiles); } catch { }
                 }
 
                 if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
@@ -135,6 +136,7 @@ namespace VPB
                 // SetAutoInstall no longer moves .var files here; refresh grid so AI badges match the updated lookup.
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
                 ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk}, scan-whitelist: {scanWlOk} (install at next launch).", 2.5f);
             }
             catch (Exception ex)
@@ -511,10 +513,12 @@ namespace VPB
                 if (scanWlDirty)
                 {
                     try { ScanWhitelistManager.Instance.Save(); } catch { }
+                    try { BeginScanWlBadgePulseFromFiles(selectedFiles); } catch { }
                 }
 
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
 
                 if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
                     ShowTemporaryStatus("No auto-install or auto-load flags to clear for selection.", 2f);
@@ -601,8 +605,10 @@ namespace VPB
                     return;
                 }
 
+                try { BeginScanWlBadgePulse(added ?? addUids); } catch { }
                 try { RefreshVisibleGridVisualsOnly(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
                 ShowTemporaryStatus($"Temporarily whitelisted {addedCount} package(s) for this VaM session.", 2.5f);
             }
             catch (Exception ex)

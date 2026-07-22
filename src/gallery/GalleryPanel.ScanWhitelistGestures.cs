@@ -139,8 +139,10 @@ namespace VPB
                 return;
             }
 
+            try { BeginScanWlBadgePulseFromFiles(targets); } catch { }
             try { RefreshVisibleGridVisualsOnly(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { DetailStripRefreshBadgesForSelection(); } catch { }
 
             if (added > 0 || removed > 0)
             {
@@ -268,8 +270,17 @@ namespace VPB
                 return;
             }
 
+            try
+            {
+                var pulse = new List<string>(addUids.Count + removeUids.Count);
+                pulse.AddRange(addUids);
+                pulse.AddRange(removeUids);
+                BeginScanWlBadgePulse(pulse);
+            }
+            catch { }
             try { RefreshVisibleGridVisualsOnly(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { DetailStripRefreshBadgesForSelection(); } catch { }
 
             if (addedCount > 0 && removedCount > 0)
                 ShowTemporaryStatus("Temp scan whitelist: " + addedCount + " added, " + removedCount + " removed (session).", 2.5f);

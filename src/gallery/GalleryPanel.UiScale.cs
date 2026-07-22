@@ -112,9 +112,15 @@ namespace VPB
         private void RescaleFooterInfoBarInternal(float s)
         {
             if (s <= 0f) s = 1f;
+            // Keep expand-height math on the same scale as chrome (ConfigChanged used to ApplyInnerPaneScale
+            // before UpdateLayout, leaving stale tboxTopOffsetBase → crushed/shifted InfoBar).
+            tboxTopOffsetBase = GalleryUiDesignTokens.FooterToolboxTopRef * s;
+            tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
             // Same global chrome font as rest of gallery UI.
             if (hoverPathText != null)
                 GalleryUiMetrics.ApplyFont(hoverPathText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            if (statusBarText != null)
+                GalleryUiMetrics.ApplyFont(statusBarText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxLabel != null)
                 GalleryUiMetrics.ApplyFont(tboxLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxHintLabel != null)

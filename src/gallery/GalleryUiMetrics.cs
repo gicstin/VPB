@@ -137,17 +137,24 @@ namespace VPB
             if (txt == null) return;
             txt.fontSize = ScaledFontSize(designPt, scale, minPt);
             float extra = FontExtraScale(scale, designPt, minPt);
-            // Below FontMin floor, extra < 1 keeps glyphs tracking chrome scale. Default
-            // stretch pivot (0.5,0.5) then insets left-aligned rows from both edges —
-            // detail strip name/path and other HLG/VLG labels look offset under ~0.7.
-            // Scale from reading edge; stretch corners stay fixed (offsets own the rect).
-            if (Mathf.Abs(extra - 1f) > 0.001f)
-            {
-                RectTransform rt = txt.rectTransform;
-                if (rt != null)
-                    rt.pivot = PivotFromTextAnchor(txt.alignment);
-            }
             txt.transform.localScale = new Vector3(extra, extra, 1f);
+
+            // Always re-apply pivot. Old code only set pivot when extra != 1, so after dipping
+            // below FontMin floor (UI scale ~0.55) bottom-anchored tooltip/status rows kept a
+            // center pivot and stayed shifted down until panel recreate.
+            RectTransform rt = txt.rectTransform;
+            if (rt == null) return;
+            Vector2 pivot = Mathf.Abs(extra - 1f) > 0.001f
+                ? PivotFromTextAnchor(txt.alignment)
+                : new Vector2(0.5f, 0.5f);
+            // Fixed vertical anchor (status / hover-path row): keep pivot on that edge so
+            // localScale never drops half the rect below the InfoBar.
+            if (Mathf.Abs(rt.anchorMin.y - rt.anchorMax.y) < 0.001f)
+            {
+                if (rt.anchorMin.y <= 0.01f) pivot.y = 0f;
+                else if (rt.anchorMin.y >= 0.99f) pivot.y = 1f;
+            }
+            rt.pivot = pivot;
         }
 
         /// <summary>Pivot matching <see cref="Text.alignment"/> so localScale shrinks from the reading edge.</summary>

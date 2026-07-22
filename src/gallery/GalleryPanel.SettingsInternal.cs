@@ -1169,7 +1169,7 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_mode", "Show larger image preview while hovering items."),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_mode", "Show larger image preview while hovering items. Position is fixed (drag the placeholder here to place it)."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Off", "List", "Grid", "Both" },
                 GetString = () => VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
                 SetString = v => { VPBConfig.Instance.GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(v); VPBConfig.Instance.TriggerChange(); }
@@ -1183,19 +1183,19 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "hover.offsetX", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_x", "Hover preview X offset"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_x", "Move hover preview left/right."),
+                Key = "hover.offsetX", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_x", "Hover preview X"),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_x", "Horizontal position. Prefer drag the on-screen placeholder while Settings is open."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryListHoverPreviewOffsetX,
                 SetFloat = v => { VPBConfig.Instance.GalleryListHoverPreviewOffsetX = v; VPBConfig.Instance.TriggerChange(); },
-                Min = -2000f, Max = 2000f, Step = 25f, Decimals = 0, AllowNegative = true,
+                Min = -4000f, Max = 4000f, Step = 25f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "hover.offsetY", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_y", "Hover preview Y offset"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_y", "Move hover preview up/down."),
+                Key = "hover.offsetY", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_y", "Hover preview Y"),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_y", "Vertical position. Prefer drag the on-screen placeholder while Settings is open."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryListHoverPreviewOffsetY,
                 SetFloat = v => { VPBConfig.Instance.GalleryListHoverPreviewOffsetY = v; VPBConfig.Instance.TriggerChange(); },
-                Min = -2000f, Max = 2000f, Step = 25f, Decimals = 0, AllowNegative = true,
+                Min = -4000f, Max = 4000f, Step = 25f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
 
@@ -1307,8 +1307,8 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "scanWlBorder.enabled", GroupKey = "scan_wl_border",
-                Label = VPBTranslation.T("settings.scan_wl_border_enabled", "Persistent whitelist border"),
-                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_enabled", "Draw an inward border on gallery rows for packages in whitelisted folders or with a persisted UID override."),
+                Label = VPBTranslation.T("settings.scan_wl_border_enabled", "Legacy: persistent full-cell rim"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_enabled", "Optional legacy cue. Off by default — gallery uses the W badge for whitelist status (teal = saved/folder, amber ring = temporary). Full-cell rims fight hover/selection borders."),
                 ControlType = InternalSettingControlType.Toggle,
                 GetBool = () => VPBConfig.Instance.GalleryScanWlBorderEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
@@ -1375,8 +1375,8 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "scanWlTempBorder.enabled", GroupKey = "scan_wl_border",
-                Label = VPBTranslation.T("settings.scan_wl_temp_border_enabled", "Temporary whitelist border"),
-                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_enabled", "Draw an inward border on gallery rows for packages with a session-only temporary UID override."),
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_enabled", "Legacy: temporary full-cell rim"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_enabled", "Optional legacy cue. Off by default — temporary whitelist uses the W badge with an amber outline ring instead of painting the whole cell."),
                 ControlType = InternalSettingControlType.Toggle,
                 GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
@@ -2052,6 +2052,11 @@ namespace VPB
 
         internal bool HandleInternalSettingsRowClick(FileEntry file, bool secondary)
         {
+            if (hoverPreviewSuppressSettingsClick || hoverPreviewDragging)
+            {
+                hoverPreviewSuppressSettingsClick = false;
+                return true;
+            }
             var row = file as InternalSettingRowEntry;
             if (row == null) return false;
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);

@@ -2018,8 +2018,7 @@ namespace VPB
             LayoutElement hideBadgeLE = UI.AddLE(hideBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             hideBadgeGO.SetActive(false);
 
-            // Scan-whitelist excluded badge (top-left, to the right of Hide "H")
-            // Shows "W" when the package is in AddonPackages/ but excluded from VaM's scan whitelist.
+            // Scan-whitelist included badge (top-left). Ambient in grid+list; temp gets outline ring.
             GameObject scanExBadgeGO = new GameObject("ScanExcludedBadge");
             scanExBadgeGO.transform.SetParent(btnGO.transform, false);
             RectTransform scanExBadgeRT = scanExBadgeGO.AddComponent<RectTransform>();
@@ -2029,7 +2028,8 @@ namespace VPB
             scanExBadgeRT.sizeDelta = new Vector2(32, 32);
             scanExBadgeRT.anchoredPosition = new Vector2(80, -6);
             AddGalleryBadgeBackground(scanExBadgeGO);
-            Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterScanExcluded, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            EnsureScanWlBadgeTempRing(scanExBadgeGO);
+            Text scanExBadgeText = UI.CreateLabel(scanExBadgeGO, "W", GalleryUiDesignTokens.FontBodyRef, GalleryBadgeLetterScanWlPersistent, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
             LayoutElement scanExBadgeLE = UI.AddLE(scanExBadgeGO, minWidth: 32f, minHeight: 32f, preferredWidth: 32f, preferredHeight: 32f);
             scanExBadgeGO.SetActive(false);
 
@@ -2355,12 +2355,27 @@ namespace VPB
             }
         }
 
-        /// <summary>List mode: badges live in ListRow/ListBadges (below Details). Params kept for call-site stability.</summary>
-        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelistExcluded, bool showUserTags)
+        /// <summary>List: badges in ListBadges (layout packs inactive). Grid: compact top-left slots for visible badges.</summary>
+        private void ApplyDynamicTopLeftBadgeLayout(GameObject btnGO, bool showAutoInstall, bool showHide, bool showWhitelist, bool showUserTags)
         {
             if (btnGO == null) return;
             FileButtonBinder b = FileButtonBinder.GetOrAdd(btnGO);
             string[] names = FileButtonBinder.TopLeftBadgeNames;
+            bool[] show = { showAutoInstall, showHide, showWhitelist, showUserTags };
+
+            if (layoutMode == GalleryLayoutMode.Grid)
+            {
+                int slot = 0;
+                for (int i = 0; i < names.Length; i++)
+                {
+                    Transform tr = b != null ? b.GetBadge(names[i]) : FindGalleryBadgeTransform(btnGO.transform, names[i]);
+                    if (tr == null) continue;
+                    if (show[i])
+                        ApplyTopLeftBadgeSlot(tr as RectTransform, slot++);
+                }
+                return;
+            }
+
             for (int i = 0; i < names.Length; i++)
             {
                 Transform tr = b != null ? b.GetBadge(names[i]) : FindGalleryBadgeTransform(btnGO.transform, names[i]);
@@ -2374,7 +2389,14 @@ namespace VPB
         // Former solid badge fills → letter colors (lifted for readability on translucent black).
         private static readonly Color GalleryBadgeLetterAutoInstall = new Color(0.35f, 0.65f, 1f, 1f);
         private static readonly Color GalleryBadgeLetterHide = new Color(0.78f, 0.78f, 0.84f, 1f);
-        private static readonly Color GalleryBadgeLetterScanExcluded = new Color(0.45f, 0.72f, 0.92f, 1f);
+        /// <summary>Persistent scan-whitelist inclusion (status teal — not interaction magenta).</summary>
+        private static readonly Color GalleryBadgeLetterScanWlPersistent = new Color(0.42f, 0.82f, 0.58f, 1f);
+        /// <summary>Session temporary scan-whitelist (amber + ring — shape, not color alone).</summary>
+        private static readonly Color GalleryBadgeLetterScanWlTemporary = new Color(0.95f, 0.72f, 0.28f, 1f);
+        private static readonly Color GalleryBadgeScanWlTempRingColor = new Color(0.95f, 0.72f, 0.28f, 0.95f);
+        private static readonly Color GalleryBadgeLetterScanWlPulse = new Color(1f, 1f, 1f, 1f);
+        // Legacy alias used by detail-strip create site.
+        private static readonly Color GalleryBadgeLetterScanExcluded = GalleryBadgeLetterScanWlPersistent;
         private static readonly Color GalleryBadgeLetterUserTags = new Color(0.35f, 0.88f, 0.92f, 1f);
         private static readonly Color GalleryBadgeLetterDepsDownload = new Color(0.35f, 0.65f, 1f, 1f);
 
@@ -2388,6 +2410,141 @@ namespace VPB
             rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
             EnsureGalleryBadgeHoverBorder(go, rr);
             return rr;
+        }
+
+        /// <summary>Temp-WL shape cue: inward ring on badge (not full-cell rim).</summary>
+        private static void EnsureScanWlBadgeTempRing(GameObject badgeGO)
+        {
+            if (badgeGO == null) return;
+            Transform existing = badgeGO.transform.Find("TempRing");
+            if (existing != null) return;
+
+            GameObject ringGO = new GameObject("TempRing");
+            ringGO.transform.SetParent(badgeGO.transform, false);
+            RectTransform rt = ringGO.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            RoundedRectOutline outline = ringGO.AddComponent<RoundedRectOutline>();
+            outline.raycastTarget = false;
+            outline.borderThickness = 2f;
+            outline.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            outline.color = GalleryBadgeScanWlTempRingColor;
+            ringGO.SetActive(false);
+        }
+
+        /// <summary>
+        /// Apply W badge for scan-whitelist inclusion. Persistent = solid letter; temporary = amber letter + ring.
+        /// Returns whether badge is shown.
+        /// </summary>
+        private bool ApplyScanWhitelistBadgeVisual(GameObject badgeGO, FileEntry file)
+        {
+            if (badgeGO == null) return false;
+            EnsureScanWlBadgeTempRing(badgeGO);
+
+            ScanWhitelistManager.GalleryScanWlBadgeKind kind = ScanWhitelistManager.GalleryScanWlBadgeKind.None;
+            try { kind = ScanWhitelistManager.GetGalleryScanWhitelistBadgeKind(file); } catch { kind = ScanWhitelistManager.GalleryScanWlBadgeKind.None; }
+
+            bool show = kind != ScanWhitelistManager.GalleryScanWlBadgeKind.None;
+            if (badgeGO.activeSelf != show)
+                badgeGO.SetActive(show);
+            if (!show) return false;
+
+            bool temporary = kind == ScanWhitelistManager.GalleryScanWlBadgeKind.Temporary;
+            bool pulsing = IsScanWlBadgePulsing(file);
+
+            Transform textTr = badgeGO.transform.Find("Text");
+            Text letter = textTr != null ? textTr.GetComponent<Text>() : badgeGO.GetComponentInChildren<Text>(true);
+            if (letter != null)
+            {
+                letter.text = "W";
+                if (pulsing)
+                    letter.color = GalleryBadgeLetterScanWlPulse;
+                else
+                    letter.color = temporary ? GalleryBadgeLetterScanWlTemporary : GalleryBadgeLetterScanWlPersistent;
+            }
+
+            Transform ringTr = badgeGO.transform.Find("TempRing");
+            if (ringTr != null)
+            {
+                bool ringOn = temporary || pulsing;
+                if (ringTr.gameObject.activeSelf != ringOn)
+                    ringTr.gameObject.SetActive(ringOn);
+                RoundedRectOutline outline = ringTr.GetComponent<RoundedRectOutline>();
+                if (outline != null)
+                {
+                    outline.color = pulsing ? GalleryBadgeLetterScanWlPulse : GalleryBadgeScanWlTempRingColor;
+                    outline.borderThickness = pulsing ? 3f : 2f;
+                }
+            }
+
+            string tip = temporary
+                ? VPBTranslation.T(
+                    "gallery.badge.tip.scan_wl_temporary",
+                    "Scan whitelist (temporary): included for this session only. Not saved to scan_whitelist.json.")
+                : VPBTranslation.T(
+                    "gallery.badge.tip.scan_wl_persistent",
+                    "Scan whitelist: included via whitelisted folder or saved UID override.");
+            AddTooltipPlain(badgeGO, tip);
+            return true;
+        }
+
+        private bool IsScanWlBadgePulsing(FileEntry file)
+        {
+            if (file == null || Time.unscaledTime >= _scanWlBadgePulseUntil) return false;
+            if (_scanWlBadgePulseUids == null || _scanWlBadgePulseUids.Count == 0) return false;
+            string uid = null;
+            try { uid = file.Uid; } catch { uid = null; }
+            if (string.IsNullOrEmpty(uid)) return false;
+            return _scanWlBadgePulseUids.Contains(uid);
+        }
+
+        private void BeginScanWlBadgePulse(IEnumerable<string> uids)
+        {
+            if (uids == null) return;
+            if (_scanWlBadgePulseUids == null)
+                _scanWlBadgePulseUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            else
+                _scanWlBadgePulseUids.Clear();
+
+            foreach (string uid in uids)
+            {
+                if (!string.IsNullOrEmpty(uid))
+                    _scanWlBadgePulseUids.Add(uid);
+            }
+            if (_scanWlBadgePulseUids.Count == 0) return;
+
+            _scanWlBadgePulseUntil = Time.unscaledTime + ScanWlBadgePulseSeconds;
+            if (_scanWlBadgePulseCoroutine == null && isActiveAndEnabled)
+                _scanWlBadgePulseCoroutine = StartCoroutine(ScanWlBadgePulseCoroutine());
+        }
+
+        private void BeginScanWlBadgePulseFromFiles(List<FileEntry> files)
+        {
+            if (files == null || files.Count == 0) return;
+            var uids = new List<string>(files.Count);
+            for (int i = 0; i < files.Count; i++)
+            {
+                FileEntry f = files[i];
+                if (f == null) continue;
+                string uid = null;
+                try { uid = f.Uid; } catch { uid = null; }
+                if (!string.IsNullOrEmpty(uid)) uids.Add(uid);
+            }
+            BeginScanWlBadgePulse(uids);
+        }
+
+        private System.Collections.IEnumerator ScanWlBadgePulseCoroutine()
+        {
+            try { RefreshVisibleGridVisualsOnly(); } catch { }
+            try { DetailStripRefreshBadgesForSelection(); } catch { }
+            while (Time.unscaledTime < _scanWlBadgePulseUntil)
+                yield return null;
+            if (_scanWlBadgePulseUids != null) _scanWlBadgePulseUids.Clear();
+            try { RefreshVisibleGridVisualsOnly(); } catch { }
+            try { DetailStripRefreshBadgesForSelection(); } catch { }
+            _scanWlBadgePulseCoroutine = null;
         }
 
         /// <summary>Same yellow rim as CreateUIButton / star rating on hover.</summary>
@@ -3138,21 +3295,19 @@ namespace VPB
                 if (hideBadgeTr != null)
                     hideBadgeTr.gameObject.SetActive(showHideBadge);
 
-                bool showScanExcludedBadge = ScanWhitelistManager.IsScanExcludedBadgeVisible(file);
                 Transform scanExBadgeTr = b != null ? b.scanExcludedBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
-                if (scanExBadgeTr != null)
-                    scanExBadgeTr.gameObject.SetActive(showScanExcludedBadge);
+                bool showScanWlBadge = ApplyScanWhitelistBadgeVisual(scanExBadgeTr != null ? scanExBadgeTr.gameObject : null, file);
 
                 bool showUserTagsBadge = IsGalleryUserTagBadgeVisible(file);
                 Transform userTagsBadgeTr = b != null ? b.userTagsBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "UserTagsBadge");
                 if (userTagsBadgeTr != null)
                     userTagsBadgeTr.gameObject.SetActive(showUserTagsBadge);
 
-                ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanExcludedBadge, showUserTagsBadge);
+                ApplyDynamicTopLeftBadgeLayout(btnGO, showAutoInstallBadge, showHideBadge, showScanWlBadge, showUserTagsBadge);
 
                 // An empty strip still reserves its row height in the VLG and pushes the Details line
                 // out of a compact row; deactivate it so the group ignores it when no badge shows.
-                bool anyListBadge = showAutoInstallBadge || showHideBadge || showScanExcludedBadge || showUserTagsBadge;
+                bool anyListBadge = showAutoInstallBadge || showHideBadge || showScanWlBadge || showUserTagsBadge;
                 if (listRowTr != null)
                 {
                     Transform listBadgesRowTr = b != null ? b.listBadgesTr : listRowTr.Find("ListBadges");
@@ -3162,7 +3317,7 @@ namespace VPB
             }
             else
             {
-                // Grid: badges stay off at bind (scroll perf). Hover may revive rating via ShowGridHoverBadges.
+                // Grid: only W badge is ambient status. Other badges stay off (detail strip / hover rating).
                 if (ratingTr != null)
                     ratingTr.gameObject.SetActive(false);
 
@@ -3172,6 +3327,10 @@ namespace VPB
                     Transform t = b != null ? b.GetBadge(badgeNames[bi]) : FindGalleryBadgeTransform(btnGO.transform, badgeNames[bi]);
                     if (t != null) t.gameObject.SetActive(false);
                 }
+
+                Transform scanExBadgeTr = b != null ? b.scanExcludedBadgeTr : FindGalleryBadgeTransform(btnGO.transform, "ScanExcludedBadge");
+                bool showScanWlBadge = ApplyScanWhitelistBadgeVisual(scanExBadgeTr != null ? scanExBadgeTr.gameObject : null, file);
+                ApplyDynamicTopLeftBadgeLayout(btnGO, false, false, showScanWlBadge, false);
             }
 
             // List Row Bind

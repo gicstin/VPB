@@ -1919,6 +1919,28 @@ namespace VPB
             catch { }
         }
 
+        /// <summary>
+        /// Recompute InfoBar <c>offsetMax</c> from current expand state + scale bases.
+        /// Call after changing <see cref="tboxTopOffsetBase"/> / chrome scale so tooltip row
+        /// is not left crushed or shifted (offsetMin updated alone is not enough).
+        /// </summary>
+        private void ApplyTboxBarHeightNow()
+        {
+            if (tboxRT == null) return;
+
+            float innerH = TboxActionButtonInnerHeight();
+            float gap = TboxBtnRowGapScaled();
+            float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
+                + (tboxButtonLayoutRows > 1 ? gap * (tboxButtonLayoutRows - 1) : 0f);
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
+                btnBand += tboxInfoRowHeight + gap;
+            btnBand += TryOnToolboxReservedHeight();
+            float detailH = 0f;
+            try { detailH = DetailStripReservedHeight(); } catch { detailH = 0f; }
+            float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
+            tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+        }
+
         private void UpdateSelectionContextMenu()
         {
             if (canvas == null) return;
@@ -1997,22 +2019,9 @@ namespace VPB
                     }
                 }
 
-                float innerH = TboxActionButtonInnerHeight();
-                float gap = TboxBtnRowGapScaled();
-                float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
-                    + (tboxButtonLayoutRows > 1 ? gap * (tboxButtonLayoutRows - 1) : 0f);
-                // Add appearance clothing-mode row height when active
-                if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
-                    btnBand += tboxInfoRowHeight + gap;
-                // Reserve a row at the very top of the toolbox for the active Try-On bar so
-                // it becomes part of the toolbox layout instead of floating over the buttons.
-                btnBand += TryOnToolboxReservedHeight();
                 // Detail strip: visible on selection when expanded (not gated on toolbox hover).
-                // User can collapse to Info button in pin gutter; preference persists in VPB.cfg.
                 try { DetailStripRefresh(); } catch { }
-                float detailH = DetailStripReservedHeight();
-                float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
-                tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+                try { ApplyTboxBarHeightNow(); } catch { }
                 if (_tryOnActive) TryOnLayoutBar();
                 try { DetailStripLayout(); } catch { }
                 try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }

@@ -1819,20 +1819,22 @@ namespace VPB
 
         private void CreateHoverPreviewOverlay(GameObject parentGO)
         {
-            if (parentGO == null) return;
             if (hoverPreviewGO != null) return;
+            // Parent to canvas so position stays put across left/right/top dock (not gallery pane rect).
+            GameObject host = null;
+            try { if (canvas != null) host = canvas.gameObject; } catch { host = null; }
+            if (host == null) host = parentGO;
+            if (host == null) return;
 
             hoverPreviewGO = new GameObject("HoverPreview");
-            hoverPreviewGO.transform.SetParent(parentGO.transform, false);
+            hoverPreviewGO.transform.SetParent(host.transform, false);
             hoverPreviewRT = hoverPreviewGO.AddComponent<RectTransform>();
             hoverPreviewRT.anchorMin = new Vector2(0f, 0f);
             hoverPreviewRT.anchorMax = new Vector2(0f, 0f);
             hoverPreviewRT.pivot = new Vector2(0f, 0f);
 
-            // Backdrop
-            var bg = UI.AddImage(hoverPreviewGO, new Color(0f, 0f, 0f, 0.55f), false);
+            hoverPreviewBgImage = UI.AddImage(hoverPreviewGO, new Color(0f, 0f, 0f, 0.55f), false);
 
-            // Actual preview
             var imgGO = UI.CreateChildRT(hoverPreviewGO, "Image", AnchorPresets.stretchAll);
             var rt = imgGO.GetComponent<RectTransform>();
             rt.offsetMin = new Vector2(4f, 4f);
@@ -1842,7 +1844,27 @@ namespace VPB
             hoverPreviewImage.color = new Color(1f, 1f, 1f, 1f);
             hoverPreviewImage.raycastTarget = false;
 
-            // Keep it hidden until first hover
+            Text hint = UI.CreateLabel(
+                hoverPreviewGO,
+                VPBTranslation.T(
+                    "settings.hover_preview_drag_label",
+                    "Drag to position\nScroll to change size"),
+                GalleryUiDesignTokens.FontCaptionRef,
+                new Color(1f, 1f, 1f, 0.95f),
+                TextAnchor.MiddleCenter,
+                raycastTarget: false,
+                name: "DragHint");
+            hoverPreviewHintText = hint;
+            if (hint != null)
+            {
+                hint.horizontalOverflow = HorizontalWrapMode.Wrap;
+                hint.verticalOverflow = VerticalWrapMode.Overflow;
+                hint.gameObject.SetActive(false);
+            }
+
+            var drag = hoverPreviewGO.AddComponent<HoverPreviewPlaceholderDragHandler>();
+            drag.Panel = this;
+
             hoverPreviewGO.SetActive(false);
         }
 
@@ -1859,12 +1881,15 @@ namespace VPB
 
         public void NotifyHoverPreviewTriggerEntered(UIHoverPreviewTrigger source, FileEntry file)
         {
+            // Settings placeholder owns the overlay — do not let recycled thumbs steal it / clear raycasts.
+            if (internalSettingsSessionActive && hoverPreviewDummyActive) return;
             if (source != null) hoverPreviewSource = source;
             ShowHoverPreview(file);
         }
 
         public void NotifyHoverPreviewTriggerExited(UIHoverPreviewTrigger source)
         {
+            if (internalSettingsSessionActive && hoverPreviewDummyActive) return;
             if (source != null && hoverPreviewSource != null && !ReferenceEquals(source, hoverPreviewSource)) return;
             hoverPreviewSource = null;
             HideHoverPreview(null);
@@ -1872,16 +1897,18 @@ namespace VPB
 
         public void ShowHoverPreview(FileEntry file)
         {
+            if (internalSettingsSessionActive && hoverPreviewDummyActive) return;
             if (!CanShowHoverPreviewForLayout(layoutMode)) { HideHoverPreview(null); return; }
             if (file == null) { HideHoverPreview(null); return; }
             if (hoverPreviewGO == null || hoverPreviewRT == null || hoverPreviewImage == null) return;
 
             hoverPreviewDummyActive = false;
             hoverPreviewFile = file;
+            SyncHoverPreviewRaycast();
             UpdateHoverPreviewLayout();
             hoverPreviewGO.SetActive(true);
+            try { hoverPreviewGO.transform.SetAsLastSibling(); } catch { }
 
-            // Full-res decode/cache tier for hover; grid-only plugin thumb hiding still off via gridThumbnailContext.
             hoverPreviewImage.color = Color.white;
             LoadThumbnail(file, hoverPreviewImage, gridThumbnailContext: false, turboJpegThumbnailDenom: 1, thumbnailUnityDecodeOnly: true);
         }
@@ -1893,7 +1920,10 @@ namespace VPB
             hoverPreviewFile = null;
             hoverPreviewSource = null;
             if (!hoverPreviewDummyActive)
+            {
                 hoverPreviewGO.SetActive(false);
+                SyncHoverPreviewRaycast();
+            }
         }
 
         private void ValidateHoverPreviewActive()
@@ -1922,11 +1952,15 @@ namespace VPB
         public void SetHoverPreviewDummyActive(bool active)
         {
             hoverPreviewDummyActive = active;
+            if (!active) hoverPreviewDragging = false;
             if (!active && hoverPreviewGO != null && hoverPreviewFile == null)
-            {
                 hoverPreviewGO.SetActive(false);
-            }
+            SyncHoverPreviewRaycast();
             UpdateHoverPreviewLayout();
+            if (active && hoverPreviewGO != null)
+            {
+                try { hoverPreviewGO.transform.SetAsLastSibling(); } catch { }
+            }
         }
 
         public void RefreshHoverPreviewLayoutImmediate()
@@ -1934,9 +1968,20 @@ namespace VPB
             UpdateHoverPreviewLayout();
         }
 
+        private void SyncHoverPreviewRaycast()
+        {
+            // Only the settings placeholder captures clicks for drag; live hover must not steal list rays.
+            bool want = hoverPreviewDummyActive;
+            if (hoverPreviewBgImage != null) hoverPreviewBgImage.raycastTarget = want;
+            if (hoverPreviewHintText != null)
+                hoverPreviewHintText.gameObject.SetActive(want);
+        }
+
         private void UpdateHoverPreviewLayout()
         {
             if (hoverPreviewRT == null) return;
+            if (hoverPreviewDragging) return;
+
             if (hoverPreviewGO != null)
             {
                 bool layoutAllows = CanShowHoverPreviewForLayout(layoutMode);
@@ -1952,30 +1997,47 @@ namespace VPB
                 if (!shouldBeVisible)
                 {
                     hoverPreviewGO.SetActive(false);
+                    SyncHoverPreviewRaycast();
                     return;
                 }
             }
+
             float s = ChromeScale;
+            if (s <= 0f) s = 1f;
 
             float size = 300f;
-            if (VPBConfig.Instance != null) size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, 200f, 600f);
-
             float ox = 0f;
             float oy = 0f;
             if (VPBConfig.Instance != null)
             {
-                ox = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetX, -2000f, 2000f);
-                oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -2000f, 2000f);
+                size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, 200f, 600f);
+                ox = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetX, -4000f, 4000f);
+                oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -4000f, 4000f);
             }
 
+            // Stationary canvas-local position. Default corner (20,12) + user offsets. No parent clamp —
+            // clamp was blocking slider/drag travel inside the canvas work area.
             float x = (20f + ox) * s;
-            float y = GalleryMainAreaBottomInset() + ((12f + oy) * s);
+            float y = (12f + oy) * s;
 
-            hoverPreviewRT.anchoredPosition = new Vector2(x, y);
             hoverPreviewRT.sizeDelta = new Vector2(size, size);
+            hoverPreviewRT.anchoredPosition = new Vector2(x, y);
 
             if (hoverPreviewGO != null)
+            {
                 hoverPreviewGO.SetActive(true);
+                try
+                {
+                    Transform hpParent = hoverPreviewGO.transform.parent;
+                    if (hpParent != null
+                        && hoverPreviewGO.transform.GetSiblingIndex() != hpParent.childCount - 1)
+                        hoverPreviewGO.transform.SetAsLastSibling();
+                }
+                catch { }
+            }
+
+            SyncHoverPreviewRaycast();
+
             if (hoverPreviewImage != null && hoverPreviewDummyActive && hoverPreviewFile == null)
             {
                 hoverPreviewImage.texture = null;
@@ -1983,8 +2045,138 @@ namespace VPB
             }
             else if (hoverPreviewImage != null && hoverPreviewFile != null)
             {
-                // Ensure dummy alpha doesn't stick while the real preview loads.
                 if (hoverPreviewImage.color.a < 0.95f) hoverPreviewImage.color = Color.white;
+            }
+
+            if (hoverPreviewHintText != null && hoverPreviewDummyActive)
+            {
+                hoverPreviewHintText.text = VPBTranslation.T(
+                    "settings.hover_preview_drag_label",
+                    "Drag to position\nScroll to change size");
+                try
+                {
+                    GalleryUiMetrics.ApplyFont(
+                        hoverPreviewHintText,
+                        GalleryUiDesignTokens.FontCaptionRef,
+                        s,
+                        GalleryUiDesignTokens.FontMinRef);
+                }
+                catch { }
+            }
+        }
+
+        private void CommitHoverPreviewPosFromAnchored(Vector2 anchored)
+        {
+            if (VPBConfig.Instance == null) return;
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float ox = anchored.x / s - 20f;
+            float oy = anchored.y / s - 12f;
+            VPBConfig.Instance.GalleryListHoverPreviewOffsetX = Mathf.Clamp(ox, -4000f, 4000f);
+            VPBConfig.Instance.GalleryListHoverPreviewOffsetY = Mathf.Clamp(oy, -4000f, 4000f);
+        }
+
+        internal void HoverPreviewPlaceholderBeginDrag(PointerEventData eventData)
+        {
+            if (!hoverPreviewDummyActive || hoverPreviewRT == null || eventData == null) return;
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            RectTransform parentRT = hoverPreviewRT.parent as RectTransform;
+            if (parentRT == null) return;
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parentRT, eventData.position, eventData.pressEventCamera, out local))
+                return;
+            hoverPreviewDragGrabLocal = local - hoverPreviewRT.anchoredPosition;
+            hoverPreviewDragging = true;
+            hoverPreviewSuppressSettingsClick = true;
+        }
+
+        internal void HoverPreviewPlaceholderDrag(PointerEventData eventData)
+        {
+            if (!hoverPreviewDragging || !hoverPreviewDummyActive || hoverPreviewRT == null || eventData == null) return;
+            RectTransform parentRT = hoverPreviewRT.parent as RectTransform;
+            if (parentRT == null) return;
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parentRT, eventData.position, eventData.pressEventCamera, out local))
+                return;
+            Vector2 pos = local - hoverPreviewDragGrabLocal;
+            hoverPreviewRT.anchoredPosition = pos;
+            CommitHoverPreviewPosFromAnchored(pos);
+            hoverPreviewSuppressSettingsClick = true;
+        }
+
+        internal void HoverPreviewPlaceholderEndDrag(PointerEventData eventData)
+        {
+            if (!hoverPreviewDragging) return;
+            hoverPreviewDragging = false;
+            hoverPreviewSuppressSettingsClick = true;
+            // Do not TriggerChange / RefreshInternalSettingsListRows — that rebuilds settings rows
+            // and feels like scaling/rearrange while placing the preview.
+        }
+
+        internal void HoverPreviewPlaceholderScroll(PointerEventData eventData)
+        {
+            if (!hoverPreviewDummyActive || eventData == null || VPBConfig.Instance == null) return;
+            hoverPreviewSuppressSettingsClick = true;
+            float dy = eventData.scrollDelta.y;
+            if (Mathf.Abs(dy) < 0.01f) return;
+
+            const float step = 10f;
+            float size = VPBConfig.Instance.GalleryListHoverPreviewSize;
+            size = Mathf.Clamp(size + (dy > 0f ? step : -step), 200f, 600f);
+            if (Mathf.Abs(size - VPBConfig.Instance.GalleryListHoverPreviewSize) < 0.01f) return;
+            VPBConfig.Instance.GalleryListHoverPreviewSize = size;
+            if (hoverPreviewRT != null)
+                hoverPreviewRT.sizeDelta = new Vector2(size, size);
+        }
+
+        internal void HoverPreviewPlaceholderPointerDown(PointerEventData eventData)
+        {
+            if (!hoverPreviewDummyActive) return;
+            hoverPreviewSuppressSettingsClick = true;
+        }
+
+        internal void HoverPreviewPlaceholderClick(PointerEventData eventData)
+        {
+            if (!hoverPreviewDummyActive) return;
+            hoverPreviewSuppressSettingsClick = true;
+        }
+
+        private sealed class HoverPreviewPlaceholderDragHandler : MonoBehaviour,
+            IBeginDragHandler, IDragHandler, IEndDragHandler,
+            IPointerDownHandler, IPointerClickHandler, IScrollHandler
+        {
+            public GalleryPanel Panel;
+
+            public void OnPointerDown(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderPointerDown(eventData); } catch { }
+            }
+
+            public void OnPointerClick(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderClick(eventData); } catch { }
+            }
+
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderBeginDrag(eventData); } catch { }
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderDrag(eventData); } catch { }
+            }
+
+            public void OnEndDrag(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderEndDrag(eventData); } catch { }
+            }
+
+            public void OnScroll(PointerEventData eventData)
+            {
+                try { if (Panel != null) Panel.HoverPreviewPlaceholderScroll(eventData); } catch { }
             }
         }
 

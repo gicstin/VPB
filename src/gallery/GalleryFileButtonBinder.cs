@@ -11,9 +11,12 @@ namespace VPB
     /// </summary>
     internal sealed class FileButtonBinder : MonoBehaviour
     {
+        /// <summary>
+        /// Badges hidden in grid bind / hover-exit. Scan whitelist "W" stays ambient in grid (status cue).
+        /// </summary>
         public static readonly string[] GridBadgeHideNames =
         {
-            "AutoInstallBadge", "HidePackageBadge", "ScanExcludedBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn"
+            "AutoInstallBadge", "HidePackageBadge", "UserTagsBadge", "DepsBadge", "DepsDownloadBtn"
         };
 
         public static readonly string[] TopLeftBadgeNames =

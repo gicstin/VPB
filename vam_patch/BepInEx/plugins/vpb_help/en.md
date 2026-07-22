@@ -120,6 +120,8 @@ At the top of the Tags column, pick a mode:
 
 Use **Edit** in the Tags column header to rename, merge, or delete tags.
 
+**Copy tags between items** — on the detail strip tags row: **Copy Tags** from a source item (or multi-select for a union), select targets, then **Paste Tags** (merge) or **Replace Tags** (overwrite). **Shift+Paste** also replaces. With a mixed multi-selection, **Stamp from first** applies the first item’s tags to the rest in one click.
+
 ## Import
 
 **Scenes category only.**
@@ -163,6 +165,7 @@ Select one or more rows to expand the **toolbox** at the bottom (hover the bar i
 - **D / M / Dn** — filter grid to dependencies / missing / dependents (hover for tip).
 - **Creator** — filter by creator.
 - **Tag** or tags line — quick-tag menu (Applied | Add). Filter box scopes **Add** list only. Sort button on Add cycles A→Z / Z→A / count 1→9 / 9→1 (remembers). Remove with ✓, or **New tag…**.
+- **Copy Tags / Paste Tags / Replace Tags** — on the tags row: copy user tags from the selection, then paste (merge) or replace onto other items. **Shift+Paste** also replaces. When multiple items have different tags, **Stamp from first** merges the first item’s tags onto the whole selection.
 - **Copy** or path / title — copy path or display name.
 - Badges match grid meaning (auto-install, hidden, scan-excluded, has tags).
 
