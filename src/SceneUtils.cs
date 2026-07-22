@@ -226,7 +226,7 @@ namespace VPB
         }
 
 
-        private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced, string hostUid, ICollection<string> sceneDeps)
+        private static void RewriteCustomPathsRecursive(JSONNode node, List<string> unresolved, ref int replaced, string hostUid, string hostSceneDir, ICollection<string> sceneDeps)
         {
             if (node == null) return;
 
@@ -320,7 +320,7 @@ namespace VPB
             {
                 for (int i = 0; i < ja.Count; i++)
                 {
-                    RewriteCustomPathsRecursive(ja[i], unresolved, ref replaced, hostUid, sceneDeps);
+                    RewriteCustomPathsRecursive(ja[i], unresolved, ref replaced, hostUid, hostSceneDir, sceneDeps);
                 }
                 return;
             }
@@ -329,7 +329,35 @@ namespace VPB
             {
                 foreach (string k in jc.Keys)
                 {
-                    RewriteCustomPathsRecursive(jc[k], unresolved, ref replaced, hostUid, sceneDeps);
+                    // SceneLoader resolves bare sibling paths against temp CurrentLoadDir; restore original package directory.
+                    if (!string.IsNullOrEmpty(hostSceneDir)
+                        && string.Equals(k, "sceneFilePath", StringComparison.OrdinalIgnoreCase)
+                        && jc[k] is JSONData sfp)
+                    {
+                        string sv = sfp.Value;
+                        if (!string.IsNullOrEmpty(sv)
+                            && sv.IndexOf(":/", StringComparison.Ordinal) < 0
+                            && sv.IndexOf('/') < 0
+                            && sv.IndexOf('\\') < 0)
+                        {
+                            string qualified = hostSceneDir + "/" + sv;
+                            try
+                            {
+                                if (VPB.FileManager.GetVarFileEntry(qualified) != null)
+                                {
+                                    sfp.Value = qualified;
+                                    replaced++;
+                                    continue;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                try { LogUtil.LogWarning("[VPB.SceneImport] failed to resolve sibling scene path '" + qualified + "': " + ex.Message); } catch { }
+                            }
+                        }
+                    }
+
+                    RewriteCustomPathsRecursive(jc[k], unresolved, ref replaced, hostUid, hostSceneDir, sceneDeps);
                 }
                 return;
             }
@@ -388,6 +416,15 @@ namespace VPB
             }
             catch { hostUid = null; }
 
+            // Package-qualified directory of the original scene, used to re-qualify bare sibling scene paths (SceneLoader triggers) that VaM would otherwise resolve into the temp dir.
+            string hostSceneDir = null;
+            if (!string.IsNullOrEmpty(hostUid))
+            {
+                string up2 = uidOrPath.Replace('\\', '/');
+                int ls = up2.LastIndexOf('/');
+                if (ls > 0) hostSceneDir = up2.Substring(0, ls);
+            }
+
             // Collect the scene's de-facto dependency packages from its fully-qualified
             // (Author.Name.version) references. Bare Custom/ paths are resolved against these
             // before the global first-writer-wins index, so a reference whose internal path
@@ -404,7 +441,7 @@ namespace VPB
             var unresolved = new List<string>();
             try
             {
-                RewriteCustomPathsRecursive(root, unresolved, ref replaced, hostUid, sceneDeps);
+                RewriteCustomPathsRecursive(root, unresolved, ref replaced, hostUid, hostSceneDir, sceneDeps);
             }
             catch (Exception ex)
             {
