@@ -129,6 +129,54 @@ namespace VPB
             try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
+        /// <summary>
+        /// Delete leftover gallery undo snapshot JSON under Saves/ (written for undo, deleted only when undo runs).
+        /// Call once at process launch while undo stacks are empty.
+        /// </summary>
+        public static void CleanupOrphanUndoTempFiles()
+        {
+            string savesDir = null;
+            try
+            {
+                if (SuperController.singleton != null)
+                    savesDir = SuperController.singleton.savesDir;
+            }
+            catch { }
+            if (string.IsNullOrEmpty(savesDir))
+                savesDir = "Saves";
+
+            if (!Directory.Exists(savesDir)) return;
+
+            int deleted = 0;
+            deleted += DeleteMatchingFiles(savesDir, "vpb_temp_undo_atom_*.json");
+            deleted += DeleteMatchingFiles(savesDir, "vpb_temp_undo_redo_scene_*.json");
+            if (deleted > 0)
+            {
+                try { LogUtil.Log("[VPB] Cleared " + deleted + " orphan undo temp file(s) from " + savesDir); }
+                catch { }
+            }
+        }
+
+        private static int DeleteMatchingFiles(string dir, string pattern)
+        {
+            string[] files = null;
+            try { files = Directory.GetFiles(dir, pattern, SearchOption.TopDirectoryOnly); }
+            catch { return 0; }
+            if (files == null || files.Length == 0) return 0;
+
+            int deleted = 0;
+            for (int i = 0; i < files.Length; i++)
+            {
+                try
+                {
+                    File.Delete(files[i]);
+                    deleted++;
+                }
+                catch { }
+            }
+            return deleted;
+        }
+
         private static string WriteTempSceneJson(JSONNode root, string filePrefix)
         {
             try

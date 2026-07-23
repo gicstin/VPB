@@ -135,7 +135,12 @@ namespace VPB
             }
         }
 
-        /// <summary>Flush scroll viewport left with column; reserve width on scrollbar side only.</summary>
+        /// <summary>
+        /// Flush scroll viewport left with column; reserve width on scrollbar side only.
+        /// Keeps pristine Def Y from init. Never re-bakes sticky-shrunk live Y into Def —
+        /// that compounded viewport height toward zero on every UpdateTabs while Tags open
+        /// (Tags (N) correct, rows only flicker then clip).
+        /// </summary>
         private void AlignSideTabScrollViewport(GameObject scrollGO, float s, bool isLeft, bool isSub)
         {
             if (scrollGO == null) return;
@@ -145,30 +150,58 @@ namespace VPB
             float scrollW = GalleryUiDesignTokens.SideTabScrollBarWidthRef * s;
             vprt.sizeDelta = Vector2.zero;
             vprt.anchoredPosition = Vector2.zero;
-            float minY = vprt.offsetMin.y;
-            float maxY = vprt.offsetMax.y;
-            vprt.offsetMin = new Vector2(0f, minY);
-            vprt.offsetMax = new Vector2(-scrollW, maxY);
+
+            Vector2 defMin;
+            Vector2 defMax;
             if (isLeft && !isSub)
             {
-                _leftTabViewportDefOffsetMin = vprt.offsetMin;
-                _leftTabViewportDefOffsetMax = vprt.offsetMax;
+                defMin = _leftTabViewportDefOffsetMin;
+                defMax = _leftTabViewportDefOffsetMax;
             }
             else if (isLeft && isSub)
             {
-                _leftSubTabViewportDefOffsetMin = vprt.offsetMin;
-                _leftSubTabViewportDefOffsetMax = vprt.offsetMax;
+                defMin = _leftSubTabViewportDefOffsetMin;
+                defMax = _leftSubTabViewportDefOffsetMax;
             }
             else if (!isLeft && !isSub)
             {
-                _rightTabViewportDefOffsetMin = vprt.offsetMin;
-                _rightTabViewportDefOffsetMax = vprt.offsetMax;
+                defMin = _rightTabViewportDefOffsetMin;
+                defMax = _rightTabViewportDefOffsetMax;
             }
             else
             {
-                _rightSubTabViewportDefOffsetMin = vprt.offsetMin;
-                _rightSubTabViewportDefOffsetMax = vprt.offsetMax;
+                defMin = _rightSubTabViewportDefOffsetMin;
+                defMax = _rightSubTabViewportDefOffsetMax;
             }
+
+            // Refresh scrollbar X only; Def Y stays full-height baseline from init.
+            defMin = new Vector2(0f, defMin.y);
+            defMax = new Vector2(-scrollW, defMax.y);
+
+            if (isLeft && !isSub)
+            {
+                _leftTabViewportDefOffsetMin = defMin;
+                _leftTabViewportDefOffsetMax = defMax;
+            }
+            else if (isLeft && isSub)
+            {
+                _leftSubTabViewportDefOffsetMin = defMin;
+                _leftSubTabViewportDefOffsetMax = defMax;
+            }
+            else if (!isLeft && !isSub)
+            {
+                _rightTabViewportDefOffsetMin = defMin;
+                _rightTabViewportDefOffsetMax = defMax;
+            }
+            else
+            {
+                _rightSubTabViewportDefOffsetMin = defMin;
+                _rightSubTabViewportDefOffsetMax = defMax;
+            }
+
+            // Restore live RT to Def so sticky chrome can inset once (caller reapplies sticky after).
+            vprt.offsetMin = defMin;
+            vprt.offsetMax = defMax;
         }
 
         private string ResolveCleanupSidePanelHeaderTitle()

@@ -160,12 +160,19 @@ namespace VPB
 
         private const string DatabaseFileName = "VpbLocalDatabase.sqlite3";
         private const string LegacyDatabaseFileName = "GalleryVarFileIndex.sqlite3";
+        private static readonly object s_DbPathLock = new object();
+        private static bool s_DbMigrateFromCacheAttempted;
 
         /// <summary>Prefer <see cref="DatabaseFileName"/>; one-time rename from <see cref="LegacyDatabaseFileName"/> when the new file is absent.</summary>
         private static string ResolveDatabaseFilePath(string directory)
         {
             if (string.IsNullOrEmpty(directory))
-                directory = Path.GetFullPath(Path.Combine("Cache", "VPB"));
+            {
+                try { directory = GlobalInfo.PluginInfoDirectory; }
+                catch { directory = null; }
+            }
+            if (string.IsNullOrEmpty(directory))
+                directory = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
             try
             {
                 if (!Directory.Exists(directory))
@@ -184,15 +191,131 @@ namespace VPB
             return current;
         }
 
+        /// <summary>
+        /// One-time copy of gallery SQLite (+ wal/shm) from <c>Cache\VPB</c> into
+        /// <c>Saves\PluginData\VPB</c>. Leaves Cache copy in place so a downgrade to a
+        /// Cache-path build still finds a DB (snapshot at migrate time; later writes go
+        /// only to Saves — Cache copy can go stale).
+        /// </summary>
+        private static void EnsureLocalDatabaseMigratedFromCache(string durableDir)
+        {
+            if (s_DbMigrateFromCacheAttempted) return;
+            lock (s_DbPathLock)
+            {
+                if (s_DbMigrateFromCacheAttempted) return;
+                try
+                {
+                    if (string.IsNullOrEmpty(durableDir)) return;
+                    try
+                    {
+                        if (!Directory.Exists(durableDir))
+                            Directory.CreateDirectory(durableDir);
+                    }
+                    catch { return; }
+
+                    string durableCurrent = Path.Combine(durableDir, DatabaseFileName);
+                    string durableLegacy = Path.Combine(durableDir, LegacyDatabaseFileName);
+                    if (File.Exists(durableCurrent) || File.Exists(durableLegacy))
+                    {
+                        s_DbMigrateFromCacheAttempted = true;
+                        return;
+                    }
+
+                    string cacheDir = null;
+                    try { cacheDir = VpbSqlite3.GetCacheVpbDirectoryOrFallback(); }
+                    catch { cacheDir = null; }
+                    if (string.IsNullOrEmpty(cacheDir))
+                    {
+                        s_DbMigrateFromCacheAttempted = true;
+                        return;
+                    }
+
+                    string cacheCurrent = Path.Combine(cacheDir, DatabaseFileName);
+                    string cacheLegacy = Path.Combine(cacheDir, LegacyDatabaseFileName);
+                    string src;
+                    string dest;
+                    if (File.Exists(cacheCurrent))
+                    {
+                        src = cacheCurrent;
+                        dest = durableCurrent;
+                    }
+                    else if (File.Exists(cacheLegacy))
+                    {
+                        src = cacheLegacy;
+                        dest = durableLegacy;
+                    }
+                    else
+                    {
+                        s_DbMigrateFromCacheAttempted = true;
+                        return;
+                    }
+
+                    if (!TryCopySqliteDatabaseBundle(src, dest))
+                        return; // leave flag false so later open can retry
+
+                    s_DbMigrateFromCacheAttempted = true;
+                    try
+                    {
+                        LogUtil.Log("[VPB] Copied local database from Cache\\VPB to Saves\\PluginData\\VPB (Cache copy kept for downgrade): " + dest);
+                    }
+                    catch { }
+                }
+                catch (Exception ex)
+                {
+                    try { LogUtil.LogWarning("[VPB] Failed to copy local database out of Cache\\VPB: " + ex.Message); }
+                    catch { }
+                }
+            }
+        }
+
+        /// <summary>Copy main DB file and SQLite -wal/-shm sidecars; leave sources in place.</summary>
+        private static bool TryCopySqliteDatabaseBundle(string srcDb, string destDb)
+        {
+            if (string.IsNullOrEmpty(srcDb) || string.IsNullOrEmpty(destDb)) return false;
+            if (!File.Exists(srcDb)) return false;
+            if (File.Exists(destDb)) return false;
+            try
+            {
+                string destDir = Path.GetDirectoryName(destDb);
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                    Directory.CreateDirectory(destDir);
+            }
+            catch { }
+
+            if (!TryCopyFileLeaveSource(srcDb, destDb))
+                return false;
+            TryCopyFileLeaveSource(srcDb + "-wal", destDb + "-wal");
+            TryCopyFileLeaveSource(srcDb + "-shm", destDb + "-shm");
+            return true;
+        }
+
+        private static bool TryCopyFileLeaveSource(string src, string dest)
+        {
+            if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dest)) return false;
+            if (!File.Exists(src)) return false;
+            if (File.Exists(dest)) return true;
+            try
+            {
+                File.Copy(src, dest, false);
+                return File.Exists(dest);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static string DbPath
         {
             get
             {
                 try
                 {
-                    string dir = VpbSqlite3.GetCacheVpbDirectoryOrFallback();
+                    GlobalInfo.EnsurePluginDataInitialized();
+                    string dir = GlobalInfo.PluginInfoDirectory;
                     if (string.IsNullOrEmpty(dir))
-                        dir = Path.GetFullPath(Path.Combine("Cache", "VPB"));
+                        dir = Path.GetFullPath(Path.Combine(Path.Combine("Saves", "PluginData"), "VPB"));
+                    EnsureLocalDatabaseMigratedFromCache(dir);
                     return ResolveDatabaseFilePath(dir);
                 }
                 catch
@@ -4818,7 +4941,7 @@ namespace VPB
                     {
                         LogUtil.LogWarning(
                             "[VPB] VpbLocalDatabase: sqlite3.dll could not be loaded (no local DB index). " +
-                            "Deploy 64-bit sqlite3.dll to BepInEx\\plugins under the VaM folder (Cache\\VPB is a legacy fallback). " +
+                            "Deploy 64-bit sqlite3.dll to BepInEx\\plugins under the VaM folder (Cache\\VPB is a legacy DLL fallback). " +
                             "Expected DB path (when working): " + GetLocalDatabasePathForDiagnostics());
                     }
                     catch { }

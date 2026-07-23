@@ -1274,7 +1274,9 @@ namespace VPB
                 }
             }
             catch { }
-            if (viewportH < rowH * 2f)
+            // Invent height only when layout has not produced a rect yet.
+            // Do not inflate a truly collapsed viewport — that masked Def-poison clipping.
+            if (viewportH < rowH * 2f && viewportH <= 0.5f)
                 viewportH = rowH * 10f;
             return viewportH;
         }
@@ -3505,7 +3507,20 @@ namespace VPB
             InvalidateTags();
             userTagsCached = false;
             RebuildUserTagEditorRows();
-            try { UpdateTabs(); } catch { }
+            // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
+            // Land in Tag Mode so Create tag rows is visible without hunting F/N/T.
+            if (created > 0
+                && _userTagAvailMode == UserTagAvailMode.FilterByTags
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
+            {
+                try { SetUserTagAvailMode(UserTagAvailMode.Tag); }
+                catch { try { UpdateTabs(); } catch { } }
+            }
+            else
+            {
+                try { UpdateTabs(); } catch { }
+            }
         }
 
         private void UserTagEditorRemoveSelectedFromDb()

@@ -26,7 +26,7 @@ namespace VPB
         private static bool loadAttempted;
         private static bool loadOk;
         private static string s_GameInstallRoot;
-        /// <summary>Absolute <c>Cache\VPB</c> for the gallery index DB; set on main thread for use from workers (not the default sqlite3.dll location).</summary>
+        /// <summary>Absolute <c>Cache\VPB</c> (rebuildable cache + legacy sqlite3.dll / DB migrate source); set on main thread for workers. Durable gallery DB lives under <c>Saves\PluginData\VPB</c>.</summary>
         private static string s_CacheVpbDirectory;
         private static bool s_LoggedSqliteLoadDetail;
         /// <summary>Module handle from <see cref="LoadLibrary"/>; kept for process lifetime once bound.</summary>
