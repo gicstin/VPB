@@ -605,8 +605,18 @@ namespace VPB
             bool tagMenuMissingResize = _detailStripTagMenuResizeGO == null
                 || (_detailStripTagMenuSearchRowGO != null
                     && !_detailStripTagMenuResizeGO.transform.IsChildOf(_detailStripTagMenuSearchRowGO.transform));
-            if (_detailStripTagMenuRoot != null && (
-                tagMenuCloseHasArf
+            // Prefer attach ModeTabs / DatabaseHost over destroying an open menu (flash-close).
+            if (_detailStripTagMenuRoot != null && DetailStripTagMenuNeedsUnifiedRebuild())
+            {
+                try
+                {
+                    DetailStripEnsureTagMenuModeTabs();
+                    DetailStripEnsureTagMenuDatabasePane();
+                }
+                catch { }
+            }
+            bool tagMenuMissingUnified = DetailStripTagMenuNeedsUnifiedRebuild();
+            bool tagMenuNeedsHardRebuild = tagMenuCloseHasArf
                 || tagMenuWrongParent
                 || tagMenuNeedsOpaque
                 || tagMenuMissingKeys
@@ -616,6 +626,7 @@ namespace VPB
                 || tagMenuMissingAvailRemove
                 || tagMenuMissingAvailSort
                 || tagMenuMissingResize
+                || tagMenuMissingUnified
                 || _detailStripTagMenuHeaderGO == null
                 || _detailStripTagMenuSelText == null
                 || _detailStripTagMenuColumnsGO == null
@@ -627,7 +638,10 @@ namespace VPB
                 || _detailStripTagMenuCloseGO == null
                 || _detailStripTagMenuFooterCloseGO == null
                 || _detailStripTagMenuSearch == null
-                || _detailStripTagMenuCreateGO == null))
+                || _detailStripTagMenuCreateGO == null;
+            // Soft-repair unified chrome already attempted above. Never Destroy while open — flash-close.
+            if (_detailStripTagMenuRoot != null && tagMenuNeedsHardRebuild
+                && !_detailStripTagMenuRoot.activeSelf)
             {
                 try { UnityEngine.Object.Destroy(_detailStripTagMenuRoot); } catch { }
                 _detailStripTagMenuRoot = null;
@@ -658,6 +672,7 @@ namespace VPB
                 _detailStripTagMenuFocusIdx = -1;
                 DetailStripStopTagMenuFilterRebuild();
                 DetailStripInvalidateTagMenuCaches();
+                DetailStripClearTagMenuDatabaseFieldRefs();
             }
 
             if (_detailStripGO != null)
@@ -1661,7 +1676,7 @@ namespace VPB
 
             if (!expanded)
             {
-                try { DetailStripCloseTagMenu(); } catch { }
+                // Tag editor is independent of strip expand — never auto-close on collapse.
                 try { DetailStripCloseTagFilterPopup(); } catch { }
                 if (_detailStripGO != null) _detailStripGO.SetActive(false);
             }
@@ -3480,19 +3495,22 @@ namespace VPB
             int sel = selectedFiles != null ? selectedFiles.Count : 0;
             if (sel <= 0)
             {
-                DetailStripCloseTagMenu();
+                // Tag editor stays open (Apply shows empty lists; Database is vocab-only).
+                // Only explicit Close / Esc / toggle dismisses it — strip refresh must not.
                 DetailStripCloseTagFilterPopup();
                 DetailStripHide();
+                try { DetailStripSyncOpenTagMenuIfSelectionChanged(); } catch { }
                 return;
             }
 
             // Collapsed: strip height 0; Info expand button stays in toolbox gutter.
             if (!DetailStripIsExpanded())
             {
-                try { DetailStripCloseTagMenu(); } catch { }
+                // Keep tag editor open across strip collapse (mode switch / Edit must stay stable).
                 try { DetailStripCloseTagFilterPopup(); } catch { }
                 if (_detailStripGO != null) _detailStripGO.SetActive(false);
                 DetailStripSyncCollapseExpandChrome();
+                try { DetailStripSyncOpenTagMenuIfSelectionChanged(); } catch { }
                 return;
             }
 
@@ -6498,7 +6516,7 @@ namespace VPB
                 tipGO,
                 VPBTranslation.T(
                     "gallery.detail.tag_menu_tip",
-                    "Click toggle · drag reorder · drop on Add to remove"),
+                    "Click toggle · drag reorder · drop on Available to remove"),
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 UI.PopupMutedText,
                 TextAnchor.MiddleCenter,
@@ -6547,13 +6565,16 @@ namespace VPB
                 withAvailSort: false);
             DetailStripCreateTagMenuColumn(
                 _detailStripTagMenuColumnsGO, "Available",
-                VPBTranslation.T("gallery.detail.tag_available", "Add"),
+                VPBTranslation.T("gallery.detail.tag_available", "Available"),
                 out _detailStripTagMenuAvailableLabel,
                 out _detailStripTagMenuAvailableScrollGO,
                 out _detailStripTagMenuAvailableListGO,
                 withAvailSort: true);
             DetailStripEnsureTagMenuAvailableRemoveZone();
             DetailStripSyncTagMenuAvailSortIcon();
+
+            DetailStripEnsureTagMenuModeTabs();
+            DetailStripEnsureTagMenuDatabasePane();
 
             // Create row — shown only when filter has no exact match.
             _detailStripTagMenuCreateGO = UI.CreateUIButton(
@@ -6627,21 +6648,15 @@ namespace VPB
 
             _detailStripTagMenuSearch = CreateSearchInput(_detailStripTagMenuSearchRowGO, DetailStripTagMenuWidthRef - 20f, val =>
             {
-                _detailStripTagMenuFilter = val ?? "";
-                // Create button updates immediately; list rebuild is debounced (avoids SQLite + full UI churn per key).
-                DetailStripUpdateTagMenuCreateButton();
-                DetailStripScheduleTagMenuFilterRebuild();
+                DetailStripOnTagMenuFilterChanged(val);
             }, () =>
             {
-                _detailStripTagMenuFilter = "";
-                DetailStripStopTagMenuFilterRebuild();
-                DetailStripUpdateTagMenuCreateButton();
-                DetailStripRebuildTagMenuList(fullLayoutSync: false);
+                DetailStripOnTagMenuFilterCleared();
             });
             if (_detailStripTagMenuSearch != null)
             {
                 if (_detailStripTagMenuSearch.placeholder is Text ph)
-                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter Add list / create…");
+                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter Available / create…");
                 RectTransform searchRT = _detailStripTagMenuSearch.GetComponent<RectTransform>();
                 if (searchRT != null)
                     searchRT.sizeDelta = new Vector2(0f, searchH);
@@ -6803,6 +6818,21 @@ namespace VPB
         internal void DetailStripTagMenuOnSearchEscape()
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
+            if (_userTagEditorMergeModalGo != null && _userTagEditorMergeModalGo.activeSelf)
+            {
+                UserTagEditorCloseMergeDialog();
+                return;
+            }
+            if (_userTagEditorRenameModalGo != null && _userTagEditorRenameModalGo.activeSelf)
+            {
+                UserTagEditorCloseRenameDialog();
+                return;
+            }
+            if (_tagCategoryModalGo != null)
+            {
+                CloseTagCategoryEditorModal();
+                return;
+            }
             string filter = (_detailStripTagMenuFilter ?? "").Trim();
             if (!string.IsNullOrEmpty(filter)
                 || (_detailStripTagMenuSearch != null && !string.IsNullOrEmpty(_detailStripTagMenuSearch.text)))
@@ -6819,8 +6849,13 @@ namespace VPB
                     }
                     catch { }
                 }
-                DetailStripUpdateTagMenuCreateButton();
-                DetailStripRebuildTagMenuList(fullLayoutSync: false);
+                if (DetailStripTagMenuIsDatabaseMode())
+                    RebuildUserTagEditorRows();
+                else
+                {
+                    DetailStripUpdateTagMenuCreateButton();
+                    DetailStripRebuildTagMenuList(fullLayoutSync: false);
+                }
                 return;
             }
             DetailStripCloseTagMenu();
@@ -6829,6 +6864,19 @@ namespace VPB
         internal void DetailStripTagMenuOnSearchSubmit()
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
+            if (DetailStripTagMenuIsDatabaseMode())
+            {
+                // Enter in Database filter: create vocab rows from filter text (one name).
+                string filter = (_detailStripTagMenuFilter ?? "").Trim();
+                if (string.IsNullOrEmpty(filter)) return;
+                if (_userTagEditorNewTagInput != null
+                    && string.IsNullOrEmpty((_userTagEditorNewTagInput.text ?? "").Trim()))
+                {
+                    _userTagEditorNewTagInput.text = filter;
+                    UserTagEditorOnCreateTagsClicked();
+                }
+                return;
+            }
             if (_detailStripTagMenuCreateGO != null && _detailStripTagMenuCreateGO.activeSelf)
                 DetailStripOnTagMenuCreateClick();
         }
@@ -6913,7 +6961,7 @@ namespace VPB
                     _detailStripTagMenuAvailSortBtnGO,
                     VPBTranslation.T(
                         "gallery.detail.tag_avail_sort_tip",
-                        "Sort Add list: A→Z / Z→A / count 1→9 / 9→1. Remembers choice."));
+                        "Sort Available list: A→Z / Z→A / count 1→9 / 9→1. Remembers choice."));
             }
 
             float colW = (DetailStripTagMenuWidthRef - 16f - DetailStripTagMenuColGapRef) * 0.5f;
@@ -7088,6 +7136,9 @@ namespace VPB
             DetailStripStopTagMenuFilterRebuild();
             DetailStripClearAppliedReorderHint();
             try { DetailStripSetTagMenuRemoveDragHint(false, false); } catch { }
+            try { CloseTagCategoryEditorModal(); } catch { }
+            if (_userTagEditorMergeModalGo != null) _userTagEditorMergeModalGo.SetActive(false);
+            if (_userTagEditorRenameModalGo != null) _userTagEditorRenameModalGo.SetActive(false);
             _detailStripTagMenuFocusIdx = -1;
             if (_detailStripTagMenuRoot != null)
                 _detailStripTagMenuRoot.SetActive(false);
@@ -7116,42 +7167,7 @@ namespace VPB
                 return;
             }
 
-            _detailStripTagMenuFilter = "";
-            _detailStripTagMenuSelectionKey = "";
-            _detailStripTagMenuAppliedOrder = null;
-            _detailStripTagMenuFocusIdx = -1;
-            if (_detailStripTagMenuSearch != null)
-            {
-                try { _detailStripTagMenuSearch.text = ""; } catch { }
-            }
-            // Restore persisted / session position; else center. Always clamp into view.
-            DetailStripLoadTagMenuSavedPosFromConfig();
-            DetailStripLoadTagMenuSavedSizeFromConfig();
-            if (_detailStripTagMenuSavedPos.HasValue)
-                _detailStripTagMenuDragged = true;
-            else
-                _detailStripTagMenuDragged = false;
-            DetailStripPositionTagMenu();
-            if (_detailStripTagMenuSavedPos.HasValue && _detailStripTagMenuPanelRT != null)
-                _detailStripTagMenuPanelRT.anchoredPosition = _detailStripTagMenuSavedPos.Value;
-            DetailStripClampTagMenuPanelInView();
-            // Resolution / scale may nudge restored pos — keep clamped value sticky.
-            if (_detailStripTagMenuDragged && _detailStripTagMenuPanelRT != null)
-            {
-                _detailStripTagMenuSavedPos = _detailStripTagMenuPanelRT.anchoredPosition;
-                DetailStripPersistTagMenuPos(_detailStripTagMenuPanelRT.anchoredPosition);
-            }
-            _detailStripTagMenuRoot.SetActive(true);
-            _detailStripTagMenuRoot.transform.SetAsLastSibling();
-            DetailStripSyncOpenTagMenuIfSelectionChanged(force: true);
-            DetailStripSyncTagMenuLayout(ChromeScale > 0f ? ChromeScale : 1f);
-            DetailStripClampTagMenuPanelInView();
-            try
-            {
-                if (_detailStripTagMenuSearch != null)
-                    _detailStripTagMenuSearch.ActivateInputField();
-            }
-            catch { }
+            DetailStripOpenTagMenu(DetailStripTagMenuMode.Apply);
         }
 
         private static void DetailStripDisableTagMenuBackdrop(GameObject root)
@@ -7335,7 +7351,7 @@ namespace VPB
             if (_detailStripTagMenuAvailableLabel != null)
             {
                 _detailStripTagMenuAvailableLabel.text = string.Format(
-                    VPBTranslation.T("gallery.detail.tag_available_count_fmt", "Add ({0})"),
+                    VPBTranslation.T("gallery.detail.tag_available_count_fmt", "Available ({0})"),
                     availCount);
                 _detailStripTagMenuAvailableLabel.color = UI.PopupMutedText;
             }
@@ -7388,6 +7404,11 @@ namespace VPB
 
         private void DetailStripUpdateTagMenuSelectionChrome()
         {
+            if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database)
+            {
+                DetailStripSyncTagMenuModeTipAndTitle();
+                return;
+            }
             int n = selectedFiles != null ? selectedFiles.Count : 0;
             bool multi = n > 1;
             if (_detailStripTagMenuSelText != null)
@@ -7448,6 +7469,12 @@ namespace VPB
         private void DetailStripSyncOpenTagMenuIfSelectionChanged(bool force = false)
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
+            if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database)
+            {
+                // Database mode is vocab-scoped — still refresh title count if cache dirty.
+                DetailStripSyncTagMenuModeTipAndTitle();
+                return;
+            }
             string key = BuildDetailStripTagMenuSelectionKey();
             if (!force && string.Equals(key, _detailStripTagMenuSelectionKey, StringComparison.Ordinal))
                 return;
@@ -7465,6 +7492,13 @@ namespace VPB
         private void DetailStripRefreshTagMenuAfterMutation()
         {
             if (_detailStripTagMenuRoot == null || !_detailStripTagMenuRoot.activeSelf) return;
+            if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database)
+            {
+                userTagsCached = false;
+                RebuildUserTagEditorRows();
+                DetailStripSyncTagMenuModeTipAndTitle();
+                return;
+            }
             _detailStripTagMenuSelectionKey = "";
             DetailStripSyncOpenTagMenuIfSelectionChanged(force: true);
         }
@@ -7690,12 +7724,20 @@ namespace VPB
         {
             yield return new WaitForSecondsRealtime(DetailStripTagMenuFilterDebounceSec);
             _detailStripTagMenuFilterCo = null;
-            DetailStripRebuildTagMenuList(fullLayoutSync: false);
+            if (DetailStripTagMenuIsDatabaseMode())
+                RebuildUserTagEditorRows();
+            else
+                DetailStripRebuildTagMenuList(fullLayoutSync: false);
         }
 
         private void DetailStripUpdateTagMenuCreateButton()
         {
             if (_detailStripTagMenuCreateGO == null) return;
+            if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database)
+            {
+                _detailStripTagMenuCreateGO.SetActive(false);
+                return;
+            }
             string filter = (_detailStripTagMenuFilter ?? "").Trim();
             bool exists = false;
             if (!string.IsNullOrEmpty(filter))
@@ -7847,9 +7889,7 @@ namespace VPB
                     GalleryUiDesignTokens.PopupMenuRowFontRef,
                     s,
                     GalleryUiDesignTokens.FontMinRef);
-                _detailStripTagMenuTipText.text = VPBTranslation.T(
-                    "gallery.detail.tag_menu_tip",
-                    "Click toggle · drag reorder · drop on Add to remove");
+                DetailStripSyncTagMenuModeTipAndTitle();
                 Transform tipTr = _detailStripTagMenuTipText.transform.parent;
                 if (tipTr != null)
                 {
@@ -7879,6 +7919,7 @@ namespace VPB
             DetailStripSyncTagMenuColumnChrome(_detailStripTagMenuAppliedLabel, _detailStripTagMenuAppliedScrollGO, _detailStripTagMenuAppliedListGO, s);
             DetailStripSyncTagMenuColumnChrome(_detailStripTagMenuAvailableLabel, _detailStripTagMenuAvailableScrollGO, _detailStripTagMenuAvailableListGO, s);
             DetailStripSyncTagMenuAvailSortChrome(s);
+            DetailStripSyncTagMenuUnifiedChrome(s);
 
             float searchH = GalleryUiDesignTokens.SearchFieldHeightRef * s;
             if (_detailStripTagMenuSearchRowGO != null)
@@ -7946,8 +7987,7 @@ namespace VPB
                 RectTransform searchRT = _detailStripTagMenuSearch.GetComponent<RectTransform>();
                 if (searchRT != null)
                     searchRT.sizeDelta = new Vector2(0f, searchH);
-                if (_detailStripTagMenuSearch.placeholder is Text ph)
-                    ph.text = VPBTranslation.T("gallery.detail.tag_search", "Filter Add list / create…");
+                DetailStripSyncTagMenuSearchPlaceholder();
             }
 
             if (_detailStripTagMenuResizeGO != null)
@@ -8407,6 +8447,7 @@ namespace VPB
         internal bool DetailStripTagMenuHandleListKey(KeyCode key)
         {
             if (!DetailStripIsTagMenuOpen()) return false;
+            if (_detailStripTagMenuMode == DetailStripTagMenuMode.Database) return false;
             if (key == KeyCode.UpArrow)
             {
                 DetailStripTagMenuMoveFocus(-1);

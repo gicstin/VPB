@@ -750,7 +750,8 @@ namespace VPB
                 && _detailStripTagMenuRoot != null
                 && _detailStripTagMenuRoot.activeSelf)
             {
-                DetailStripCloseTagMenu();
+                // Nested modal → clear filter → close (same ladder as search Esc).
+                DetailStripTagMenuOnSearchEscape();
                 return;
             }
 

@@ -118,7 +118,7 @@ At the top of the Tags column, pick a mode:
 - **Filter** — filter the grid by selected tags (AND/OR in Settings → Gallery side lists).
 - **Filter untagged** — show only items with no user tags.
 
-Use **Edit** in the Tags column header to rename, merge, or delete tags.
+Use **Edit** in the Tags column header to open the tag editor **Database** mode (create, rename, merge, purge, categories, YAML). Same window as detail-strip **Set Tags** / **T** — switch **Tag** ↔ **Database** in the mode tabs.
 
 **Copy tags between items** — on the detail strip tags row: **Copy Tags** from a source item (or multi-select for a union), select targets, then **Paste Tags** (merge) or **Replace Tags** (overwrite). **Shift+Paste** also replaces. With a mixed multi-selection, **Stamp from first** applies the first item’s tags to the rest in one click.
 

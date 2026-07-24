@@ -7,8 +7,8 @@ namespace VPB
 {
     // US-02: color-coded named tag categories. A tag may belong to one category; the category owns a
     // display color used to tint the resting (inactive) state of its rows in the Tag pane, and shown as a
-    // swatch in the Tag Editor list. Category assignment + management live inside the Tag Editor overlay
-    // (full-size, tap-based, VR-friendly) — no right-click required.
+    // swatch in the Tag Editor list. Category assign + manage live as nested chrome centered on the
+    // floating tag editor panel (popup tokens + hover), not a separate full-canvas modal.
     public partial class GalleryPanel
     {
         private Dictionary<string, Color> _userTagCategoryColorByTag;
@@ -81,6 +81,7 @@ namespace VPB
         {
             InvalidateUserTagCategoryColorCache();
             try { RebuildUserTagEditorRows(); } catch { }
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
             try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
         }
@@ -186,59 +187,122 @@ namespace VPB
 
         // ---- Modal chrome ----------------------------------------------------------------
 
+        /// <summary>
+        /// Category assign/manage shell: centered on floating tag editor panel, popup tokens + hover
+        /// (Jakob: match tag-menu chrome; Fitts: dense scaled rows).
+        /// </summary>
         private GameObject BuildTagCategoryModalShell(string title, out Transform rowsParent, out int bodyFont, out float rowH)
         {
             rowsParent = null;
-            bodyFont = 16;
-            rowH = 40f;
+            bodyFont = GalleryUiDesignTokens.PopupMenuRowFontRef;
+            rowH = GalleryUiDesignTokens.PopupMenuRowHeightCompactRef;
 
-            Transform host = _userTagEditorRoot != null ? _userTagEditorRoot.transform
-                : (backgroundBoxGO != null ? backgroundBoxGO.transform : null);
+            Transform host = DetailStripTagMenuCategoryModalHost();
             if (host == null) return null;
 
             float s = ChromeScale;
-            var typ = new GalleryModalTypography(s * 1.38f);
-            bodyFont = typ.Body;
-            rowH = 42f * s;
+            if (s <= 0f) s = 1f;
+            bodyFont = GalleryUiMetrics.ScaledFontSize(
+                GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+            rowH = GalleryUiDesignTokens.PopupMenuRowHeightCompactRef * s;
+            float panelW = 440f * s;
 
             GameObject panel;
+            // Opaque work-surface fill — same family as DetailStripTagMenu panel.
+            Color panelBg = new Color(0.08f, 0.08f, 0.10f, 1f);
             GameObject overlay = UI.CreateModalChrome(
-                host.gameObject, "VPB_TagCategoryModal", 470f * s, 60f,
-                new Color(0.12f, 0.12f, 0.14f, 1f), CloseTagCategoryEditorModal, out panel, dimAlpha: 0.55f);
+                host.gameObject, "VPB_TagCategoryModal", panelW, 80f * s,
+                panelBg, CloseTagCategoryEditorModal, out panel, dimAlpha: 0.45f);
             // Swallow clicks on the panel so they do not fall through to the dim close button.
             Button pbtn = panel.AddComponent<Button>();
             pbtn.transition = Selectable.Transition.None;
 
-            VerticalLayoutGroup v = UI.AddVLG(panel, spacing: 5f * s, padding: UI.Pad(12, 12, 10, 10, s));
+            UI.AddVLG(
+                panel,
+                spacing: GalleryUiDesignTokens.PopupMenuRowSpacingRef * s,
+                padding: UI.Pad(
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef + 2f,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    s));
             ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-            Text tt = UI.CreateLabel(panel, title ?? "", typ.Prose, new Color(0.92f, 0.92f, 0.95f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, name: "Title");
-            LayoutElement tle = UI.AddLE(tt.gameObject, minHeight: rowH, preferredHeight: rowH);
+            RectTransform panelRT = panel.GetComponent<RectTransform>();
+            if (panelRT != null)
+            {
+                panelRT.anchorMin = panelRT.anchorMax = new Vector2(0.5f, 0.5f);
+                panelRT.pivot = new Vector2(0.5f, 0.5f);
+                panelRT.sizeDelta = new Vector2(panelW, panelRT.sizeDelta.y);
+            }
+
+            // Title bar hairline group — match tag-menu header weight.
+            GameObject titleRow = UI.CreateChildRT(panel, "TitleRow");
+            UI.AddHLG(titleRow, spacing: 4f * s, childAlignment: TextAnchor.MiddleLeft, childForceExpandWidth: false);
+            float titleH = DetailStripTagMenuChromeBtnRef * s;
+            UI.AddLE(titleRow, minHeight: titleH, preferredHeight: titleH, flexibleWidth: 1f);
+
+            Text tt = UI.CreateLabel(
+                titleRow, title ?? "", bodyFont, UI.PopupText, TextAnchor.MiddleLeft,
+                HorizontalWrapMode.Overflow, name: "Title");
+            tt.fontStyle = FontStyle.Bold;
+            GalleryUiMetrics.ApplyFont(tt, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+            UI.AddLE(tt.gameObject, flexibleWidth: 1f, minHeight: titleH, preferredHeight: titleH);
+
+            GameObject titleRule = UI.CreateChildRT(panel, "TitleRule");
+            UI.AddImage(titleRule, new Color(0.32f, 0.34f, 0.40f, 1f), raycastTarget: false);
+            UI.AddLE(titleRule, preferredHeight: 1f, minHeight: 1f, flexibleWidth: 1f, flexibleHeight: 0f);
+
+            GameObject listHost = UI.CreateChildRT(panel, "Rows");
+            UI.AddVLG(
+                listHost,
+                spacing: GalleryUiDesignTokens.PopupMenuRowSpacingRef * s,
+                padding: UI.Pad(0f, 0f, 0f, 0f),
+                childForceExpandWidth: true,
+                childForceExpandHeight: false);
+            UI.AddLE(listHost, flexibleWidth: 1f, flexibleHeight: 0f);
 
             SetLayerRecursive(overlay, host.gameObject.layer);
             overlay.transform.SetAsLastSibling();
-            rowsParent = panel.transform;
+            rowsParent = listHost.transform;
             return overlay;
         }
 
         private GameObject AddCategoryModalRow(Transform parent, string label, Color? bg, float rowH, int font, TextAnchor align, Action onClick)
         {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+
             GameObject row = new GameObject("CatModalRow");
             row.transform.SetParent(parent, false);
-            Image img = AddCategoryQuickRoundedBg(row, bg.HasValue ? bg.Value : UI.PopupRowBackdrop);
-            LayoutElement le = UI.AddLE(row, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+            Color fill = bg.HasValue ? bg.Value : UI.PopupRowBackdrop;
+            Image img = AddCategoryQuickRoundedBg(row, fill);
+            UI.AddLE(row, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+
             if (onClick != null)
             {
                 Button b = row.AddComponent<Button>();
                 b.targetGraphic = img;
                 b.transition = Selectable.Transition.None;
                 b.onClick.AddListener(() => { try { onClick(); } catch { } });
+
+                UIHoverBorder hb = row.AddComponent<UIHoverBorder>();
+                hb.hoverColor = DetailStripActionPrimary;
+                hb.borderSize = 2f;
+                hb.inward = true;
+                // Destructive / cancel rows: danger hover cue (von Restorff restraint — only on risk).
+                if (fill.r > 0.4f && fill.g < 0.3f && fill.b < 0.3f)
+                    hb.hoverColor = DetailStripActionDanger;
             }
-            Text txt = UI.CreateLabel(row, label, font, Color.white, align, HorizontalWrapMode.Overflow, name: "Label");
+
+            Text txt = UI.CreateLabel(row, label, font, UI.PopupText, align, HorizontalWrapMode.Overflow, name: "Label");
+            GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
             RectTransform trt = txt.GetComponent<RectTransform>();
-            trt.offsetMin = new Vector2(14f, 0f);
-            trt.offsetMax = new Vector2(-14f, 0f);
+            float padX = GalleryUiDesignTokens.PopupMenuRowTextPadXRef * s;
+            trt.offsetMin = new Vector2(padX, 0f);
+            trt.offsetMax = new Vector2(-padX, 0f);
             return row;
         }
 
@@ -358,12 +422,21 @@ namespace VPB
                 GameObject strip = new GameObject("CatManageRow");
                 strip.transform.SetParent(rows, false);
                 strip.AddComponent<RectTransform>();
-                HorizontalLayoutGroup hlg = UI.AddHLG(strip, spacing: 5f * s, childForceExpandWidth: false, childForceExpandHeight: true);
-                LayoutElement stripLe = UI.AddLE(strip, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+                UI.AddHLG(
+                    strip,
+                    spacing: GalleryUiDesignTokens.PopupMenuRowSpacingRef * s,
+                    childForceExpandWidth: false,
+                    childForceExpandHeight: true);
+                UI.AddLE(strip, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
 
                 GameObject nameRow = AddCategoryModalRow(strip.transform, capName, swatch, rowH, font, TextAnchor.MiddleLeft, null);
-                if (nameRow != null) { var le = nameRow.GetComponent<LayoutElement>(); if (le != null) { le.flexibleWidth = 1f; le.minWidth = 140f * s; } }
+                if (nameRow != null)
+                {
+                    var le = nameRow.GetComponent<LayoutElement>();
+                    if (le != null) { le.flexibleWidth = 1f; le.minWidth = 120f * s; }
+                }
 
+                float actionW = 72f * s;
                 GameObject colorBtn = AddCategoryModalRow(strip.transform, VPBTranslation.T("gallery.tagcat.color", "Color"), new Color(0.28f, 0.34f, 0.4f, 1f), rowH, font, TextAnchor.MiddleCenter,
                     () =>
                     {
@@ -375,7 +448,11 @@ namespace VPB
                             OpenTagCategoryManageView();
                         });
                     });
-                if (colorBtn != null) { var le = colorBtn.GetComponent<LayoutElement>(); if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = 74f * s; le.minWidth = 74f * s; } }
+                if (colorBtn != null)
+                {
+                    var le = colorBtn.GetComponent<LayoutElement>();
+                    if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = actionW; le.minWidth = actionW; }
+                }
 
                 GameObject renameBtn = AddCategoryModalRow(strip.transform, VPBTranslation.T("gallery.tagcat.rename", "Rename"), new Color(0.26f, 0.34f, 0.46f, 1f), rowH, font, TextAnchor.MiddleCenter,
                     () =>
@@ -388,7 +465,11 @@ namespace VPB
                             OpenTagCategoryManageView();
                         });
                     });
-                if (renameBtn != null) { var le = renameBtn.GetComponent<LayoutElement>(); if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = 86f * s; le.minWidth = 86f * s; } }
+                if (renameBtn != null)
+                {
+                    var le = renameBtn.GetComponent<LayoutElement>();
+                    if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = 80f * s; le.minWidth = 80f * s; }
+                }
 
                 GameObject delBtn = AddCategoryModalRow(strip.transform, VPBTranslation.T("gallery.tagcat.delete", "Delete"), new Color(0.5f, 0.2f, 0.2f, 1f), rowH, font, TextAnchor.MiddleCenter,
                     () =>
@@ -403,7 +484,11 @@ namespace VPB
                                 OpenTagCategoryManageView();
                             });
                     });
-                if (delBtn != null) { var le = delBtn.GetComponent<LayoutElement>(); if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = 82f * s; le.minWidth = 82f * s; } }
+                if (delBtn != null)
+                {
+                    var le = delBtn.GetComponent<LayoutElement>();
+                    if (le != null) { le.flexibleWidth = 0f; le.preferredWidth = actionW; le.minWidth = actionW; }
+                }
             }
 
             AddCategoryModalRow(rows,

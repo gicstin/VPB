@@ -408,6 +408,7 @@
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
     <Compile Include="src\gallery\GalleryPanel.UserTags.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TagEditor.cs" />
     <Compile Include="src\gallery\GalleryPanel.UserTags.Clipboard.cs" />
     <Compile Include="src\gallery\GalleryPanel.UserTags.Scroll.cs" />
     <Compile Include="src\gallery\GalleryUserTagEditorText.cs" />

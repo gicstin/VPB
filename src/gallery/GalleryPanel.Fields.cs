@@ -703,7 +703,7 @@ namespace VPB
         private const float UserTagVisualPulseSeconds = 0.65f;
         private const string UserTagDropFlashName = "VPB_UserTagDropFlash";
 
-        /// <summary>Dim overlay on gallery pane + centered panel for <see cref="GalleryPanel.ShowUserTagListEditor"/>.</summary>
+        /// <summary>Unified tag editor root (DetailStripTagMenu). Legacy overlay name retired.</summary>
         private GameObject _userTagEditorRoot;
         private Transform _userTagEditorRowsParent;
         private InputField _userTagEditorFilterInput;
