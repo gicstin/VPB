@@ -115,6 +115,8 @@ namespace VPB
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            try { HideGlobalSourceFilterDropdownIfOpen(); } catch { }
             try { SyncSceneSourceSortButtonHighlights(); } catch { }
             try { RebuildFileSortTypeMenuOptions(); } catch { }
             try { SyncSidePaneTopSortButtonVisuals(); } catch { }

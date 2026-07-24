@@ -119,7 +119,7 @@ namespace VPB
             var state = GetSortState(context);
             SortType prevType = state.Type;
             state.Type = newType;
-            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly || state.Type == SortType.UnusedOnly)
+            if (state.Type == SortType.Name)
                 state.Direction = SortDirection.Ascending;
             else
                 state.Direction = SortDirection.Descending;
@@ -160,18 +160,9 @@ namespace VPB
                 }
                 else
                 {
-                    bool prevExclusive =
-                        prevType == SortType.HiddenOnly ||
-                        prevType == SortType.AutoInstallOnly ||
-                        prevType == SortType.LoadedOnly ||
-                        prevType == SortType.UnloadedOnly ||
-                        prevType == SortType.UnusedOnly;
-                    bool nextExclusive =
-                        newType == SortType.HiddenOnly ||
-                        newType == SortType.AutoInstallOnly ||
-                        newType == SortType.LoadedOnly ||
-                        newType == SortType.UnloadedOnly ||
-                        newType == SortType.UnusedOnly;
+                    // Exclusive prune modes now live on Filter; UnusedOnly kept for legacy migrate only.
+                    bool prevExclusive = false;
+                    bool nextExclusive = false;
 
                     // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
                     // otherwise the user can't "clear" the mode without changing categories.
@@ -236,9 +227,7 @@ namespace VPB
             SortType.Size, SortType.Rating,
             SortType.UsageCount,
             SortType.Random,
-            SortType.UnusedOnly,
-            SortType.Deps, SortType.Dependents, SortType.Missing,
-            SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
+            SortType.Deps, SortType.Dependents, SortType.Missing
         };
 
         private static string FileSortTypeFullLabel(SortType type)
@@ -259,9 +248,7 @@ namespace VPB
                 case SortType.Dependents: return VPBTranslation.T("gallery.sort.full.dependents", "Dependents");
                 case SortType.Missing: return VPBTranslation.T("gallery.sort.full.missing", "Missing dependencies");
                 case SortType.Hidden: return VPBTranslation.T("gallery.sort.full.hidden", "Hidden");
-                case SortType.HiddenOnly: return VPBTranslation.T("gallery.sort.full.hidden_only", "Hidden (only)");
-                case SortType.AutoInstall: return VPBTranslation.T("gallery.sort.full.autoinstall", "Auto Install");
-                case SortType.AutoInstallOnly: return VPBTranslation.T("gallery.sort.full.autoinstall_only", "Auto Install (only)");
+                case SortType.AutoInstall: return VPBTranslation.T("gallery.sort.full.autoinstall", "Always loaded");
                 case SortType.LoadedOnly: return VPBTranslation.T("gallery.sort.full.loaded_only", "All Loaded");
                 case SortType.UnloadedOnly: return VPBTranslation.T("gallery.sort.full.unloaded_only", "All Unloaded");
                 default: return type.ToString();
@@ -457,8 +444,6 @@ namespace VPB
                     38f);
             }
 
-            AppendHideOldVersionsMenuRow();
-            AppendShowHiddenPackagesMenuRow();
             SyncFileSortTypeMenuLayout(ChromeScale);
         }
 
@@ -483,48 +468,6 @@ namespace VPB
                 GalleryUiDesignTokens.PopupMenuRowHeightRef,
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 GalleryUiDesignTokens.FileSortMenuPanelWidthRef);
-        }
-
-        // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
-        private void AppendHideOldVersionsMenuRow()
-        {
-            bool on = false;
-            try { on = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { }
-            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T("gallery.sort.full.hide_old_versions", "Hide old versions (keep newest only)");
-
-            UI.AddPopupMenuRow(
-                fileSortTypeMenuPanelGO, 248, 36, label, 14, on,
-                () =>
-                {
-                    try
-                    {
-                        if (Settings.Instance != null && Settings.Instance.HideOldVersions != null)
-                            Settings.Instance.HideOldVersions.Value = !Settings.Instance.HideOldVersions.Value;
-                    }
-                    catch { }
-                    CloseFileSortTypeMenu();
-                    try { RefreshFiles(); } catch { }
-                },
-                38f);
-        }
-
-        // Bottom-of-menu toggle: include packages marked hidden (.hide).
-        private void AppendShowHiddenPackagesMenuRow()
-        {
-            bool on = false;
-            try { on = VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages; } catch { }
-            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T(
-                on ? "gallery.sort.full.hide_hidden_items" : "gallery.sort.full.show_hidden_items",
-                on ? "Hide hidden items" : "Show hidden items");
-
-            UI.AddPopupMenuRow(
-                fileSortTypeMenuPanelGO, 248, 36, label, 14, on,
-                () =>
-                {
-                    ToggleGalleryShowHiddenPackages();
-                    CloseFileSortTypeMenu();
-                },
-                38f);
         }
 
         private void ToggleFileSortDirection()
@@ -576,13 +519,14 @@ namespace VPB
         {
             if (context == "Files")
             {
+                // Hidden / Always loaded / Loaded / Unloaded live on Filter button.
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated
                     || type == SortType.DateAdded || type == SortType.DateUpdated
                     || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
                     || type == SortType.Random
-                    || type == SortType.UnusedOnly
-                    || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
+                    // Prefer-sort still used by Always-loaded / Unused Filter cycles (not shown in sort menu).
+                    || type == SortType.AutoInstall;
             }
             else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
             {

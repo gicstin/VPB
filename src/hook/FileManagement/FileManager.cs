@@ -2484,6 +2484,9 @@ namespace VPB
 
 		private static readonly HashSet<string> s_ForceLatestDepLogOnce = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		private static bool s_ForceLatestSummaryLogged = false;
+		private const int MaxForceLatestSkipDetailLogs = 10;
+		private static int s_ForceLatestSkipDetailLogged;
+		private static bool s_ForceLatestSkipCapNoteLogged;
 
 		private static bool ShouldLogForceLatestDependencies()
 		{
@@ -2505,10 +2508,29 @@ namespace VPB
 			if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(message)) return;
 			try
 			{
-				if (s_ForceLatestDepLogOnce.Add(key))
+				if (!s_ForceLatestDepLogOnce.Add(key))
+					return;
+
+				// SKIP (not in force / whitelisted) is high-volume; show first N then silence.
+				// APPLY / KEEP stay uncapped — those are actionable.
+				bool isSkipNoise = key.Length >= 3
+					&& (key.StartsWith("nf:", StringComparison.OrdinalIgnoreCase)
+						|| key.StartsWith("wl:", StringComparison.OrdinalIgnoreCase));
+				if (isSkipNoise)
 				{
-					LogUtil.Log(message);
+					if (s_ForceLatestSkipDetailLogged >= MaxForceLatestSkipDetailLogs)
+					{
+						if (!s_ForceLatestSkipCapNoteLogged)
+						{
+							s_ForceLatestSkipCapNoteLogged = true;
+							LogUtil.Log("[VPB] ForceLatestDeps: further SKIP details silenced (cap=" + MaxForceLatestSkipDetailLogs + ")");
+						}
+						return;
+					}
+					s_ForceLatestSkipDetailLogged++;
 				}
+
+				LogUtil.Log(message);
 			}
 			catch { }
 		}

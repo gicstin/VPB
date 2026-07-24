@@ -2292,17 +2292,8 @@ namespace VPB
 
         private void ToggleGalleryShowHiddenPackages()
         {
-            if (VPBConfig.Instance == null) return;
-            VPBConfig.Instance.GalleryShowHiddenPackages = !VPBConfig.Instance.GalleryShowHiddenPackages;
-            VPBConfig.Instance.Save();
-            GalleryFileListSnapshotCache.InvalidateAll();
-            try
-            {
-                if (TryFastApplyGalleryShowHiddenToggle(true))
-                    return;
-            }
-            catch { }
-            try { RefreshFiles(true); } catch { }
+            // Quick-menu / overflow: same tri-state cycle as Filter menu Hidden row.
+            CycleBrowseHiddenFilter();
         }
 
         private void ToggleAutoHideMode()

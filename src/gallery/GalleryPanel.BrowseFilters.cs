@@ -11,7 +11,7 @@ namespace VPB
             {
                 if (!string.IsNullOrEmpty(currentRatingFilter)) return true;
                 if (HasCreatorFilter()) return true;
-                if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return true;
+                if (HasTitleBarBrowseFilterActive()) return true;
                 if (activeTags != null && activeTags.Count > 0) return true;
                 if (HasActiveSubPaneOrExtraBrowseFilters()) return true;
             }
@@ -28,15 +28,7 @@ namespace VPB
             try { ClearTitleBarSearchAndSyncChrome(); } catch { }
             try { ClearCreatorFilters(); } catch { }
             ClearSubPaneAndExtraBrowseFilters();
-            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
-            {
-                currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
-                if (VPBConfig.Instance != null)
-                {
-                    VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
-                    try { VPBConfig.Instance.Save(); } catch { }
-                }
-            }
+            try { ClearTitleBarBrowseFilters(refresh: false); } catch { }
             try { UpdateTitleCreatorButtonVisual(); } catch { }
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             try { UpdateTabs(); } catch { }

@@ -24,6 +24,16 @@ namespace VPB
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
         public SortState FileSortState = null;
+        /// <summary>Title-bar Filter Hidden cycle: 0=Off, 1=Show, 2=Only.</summary>
+        public int BrowseHiddenMode = 0;
+        /// <summary>Title-bar Filter Always-loaded cycle: 0=Off, 1=Prefer/sort, 2=Only.</summary>
+        public int BrowseAlwaysLoadedMode = 0;
+        /// <summary>Title-bar Filter Old-versions cycle: 0=Off, 1=Hide old, 2=Old only.</summary>
+        public int BrowseOldVersionsMode = 0;
+        /// <summary>Title-bar Filter Loaded cycle: 0=Off, 1=All Loaded, 2=All Unloaded.</summary>
+        public int BrowseLoadedMode = 0;
+        /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>
+        public int BrowseUnusedMode = 0;
 
         // Maps legacy source-filter string values to the binary toggle the global-filter
         // design now uses: "" means toggle OFF (global filter applies), "local" means toggle ON
@@ -35,6 +45,13 @@ namespace VPB
             if (string.Equals(raw, "Custom Scenes", StringComparison.OrdinalIgnoreCase)) return "local";
             if (string.Equals(raw, "custom", StringComparison.OrdinalIgnoreCase)) return "local";
             return "";
+        }
+
+        private static int ClampBrowseCycle(int v)
+        {
+            if (v < 0) return 0;
+            if (v > 2) return 2;
+            return v;
         }
 
         public string ToJson()
@@ -73,6 +90,11 @@ namespace VPB
                 sortNode["d"].AsInt = (int)FileSortState.Direction;
                 node["sort"] = sortNode;
             }
+            node["bh"].AsInt = BrowseHiddenMode;
+            node["ba"].AsInt = BrowseAlwaysLoadedMode;
+            node["bo"].AsInt = BrowseOldVersionsMode;
+            node["bl"].AsInt = BrowseLoadedMode;
+            node["bu"].AsInt = BrowseUnusedMode;
 
             return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
@@ -121,6 +143,65 @@ namespace VPB
                     int di = sortNode["d"].AsInt;
                     if (Enum.IsDefined(typeof(SortType), ti) && Enum.IsDefined(typeof(SortDirection), di))
                         s.FileSortState = new SortState((SortType)ti, (SortDirection)di);
+                }
+
+                bool hasModeSchema = node["bo"] != null;
+                int bh = node["bh"] != null ? node["bh"].AsInt : 0;
+                int ba = node["ba"] != null ? node["ba"].AsInt : 0;
+                if (hasModeSchema)
+                {
+                    s.BrowseHiddenMode = ClampBrowseCycle(bh);
+                    s.BrowseAlwaysLoadedMode = ClampBrowseCycle(ba);
+                    s.BrowseOldVersionsMode = ClampBrowseCycle(node["bo"].AsInt);
+                    s.BrowseLoadedMode = node["bl"] != null ? ClampBrowseCycle(node["bl"].AsInt) : 0;
+                    s.BrowseUnusedMode = node["bu"] != null ? ClampBrowseCycle(node["bu"].AsInt) : 0;
+                }
+                else
+                {
+                    // Legacy bh/ba were bool "only" flags (0/1).
+                    if (bh != 0) s.BrowseHiddenMode = 2;
+                    if (ba != 0) s.BrowseAlwaysLoadedMode = 2;
+                }
+
+                // Legacy: exclusive sort modes lived on FileSortState.
+                if (s.FileSortState != null)
+                {
+                    if (s.FileSortState.Type == SortType.HiddenOnly)
+                    {
+                        s.BrowseHiddenMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.AutoInstallOnly)
+                    {
+                        s.BrowseAlwaysLoadedMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.LoadedOnly)
+                    {
+                        s.BrowseLoadedMode = 1;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.UnloadedOnly)
+                    {
+                        s.BrowseLoadedMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.Hidden)
+                    {
+                        if (s.BrowseHiddenMode == 0) s.BrowseHiddenMode = 1;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.UnusedOnly)
+                    {
+                        s.BrowseUnusedMode = 2;
+                        s.FileSortState.Type = SortType.UsageCount;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
                 }
 
                 return s;

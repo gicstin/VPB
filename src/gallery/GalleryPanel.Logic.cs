@@ -3215,9 +3215,8 @@ namespace VPB
                 int loadedState = -1;
                 try
                 {
-                    var st = GetSortState("Files");
-                    if (st.Type == SortType.LoadedOnly) loadedState = 1;
-                    else if (st.Type == SortType.UnloadedOnly) loadedState = 0;
+                    if (FilesSortWantsLoadedOnly()) loadedState = 1;
+                    else if (FilesSortWantsUnloadedOnly()) loadedState = 0;
                 }
                 catch { }
 

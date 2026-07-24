@@ -214,6 +214,10 @@ namespace VPB
             PackageMissing,
             PackageFilterBack,
             ClearAll,
+            HiddenOnly,
+            AlwaysLoaded,
+            HideOldVersions,
+            ShowHiddenItems,
         }
 
         private static Color ResolveFilterChipAccent(FilterChipKind kind)
@@ -233,6 +237,10 @@ namespace VPB
                 case FilterChipKind.PackageMissing: return DetailStripColorMissingBad;
                 case FilterChipKind.PackageFilterBack: return new Color(0.28f, 0.42f, 0.62f, 1f);
                 case FilterChipKind.ClearAll: return ColorCategory;
+                case FilterChipKind.HiddenOnly: return new Color(0.55f, 0.35f, 0.55f, 1f);
+                case FilterChipKind.AlwaysLoaded: return new Color(0.35f, 0.55f, 0.75f, 1f);
+                case FilterChipKind.HideOldVersions: return new Color(0.45f, 0.50f, 0.40f, 1f);
+                case FilterChipKind.ShowHiddenItems: return new Color(0.55f, 0.40f, 0.35f, 1f);
                 default: return ColorTitleSearchFilterActive;
             }
         }
@@ -451,6 +459,58 @@ namespace VPB
                     {
                         try { OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue.All); } catch { }
                     }
+                });
+            }
+
+            if (_browseHiddenCycle != BrowseFilterCycle.Off)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveBrowseHiddenCycleLabel(),
+                    Kind = _browseHiddenCycle == BrowseFilterCycle.Only
+                        ? FilterChipKind.HiddenOnly
+                        : FilterChipKind.ShowHiddenItems,
+                    OnDismiss = () => SetBrowseHiddenCycle(BrowseFilterCycle.Off, refresh: true)
+                });
+            }
+
+            if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveBrowseAlwaysLoadedCycleLabel(),
+                    Kind = FilterChipKind.AlwaysLoaded,
+                    OnDismiss = () => SetBrowseAlwaysLoadedCycle(BrowseFilterCycle.Off, refresh: true)
+                });
+            }
+
+            if (_browseOldVersionsCycle != BrowseFilterCycle.Off)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveBrowseOldVersionsCycleLabel(),
+                    Kind = FilterChipKind.HideOldVersions,
+                    OnDismiss = () => SetBrowseOldVersionsCycle(BrowseFilterCycle.Off, refresh: true)
+                });
+            }
+
+            if (_browseLoadedMode != BrowseLoadedMode.Off)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveBrowseLoadedModeLabel(),
+                    Kind = FilterChipKind.Subfilter,
+                    OnDismiss = () => SetBrowseLoadedMode(BrowseLoadedMode.Off, refresh: true)
+                });
+            }
+
+            if (_browseUnusedCycle != BrowseFilterCycle.Off)
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveBrowseUnusedCycleLabel(),
+                    Kind = FilterChipKind.Subfilter,
+                    OnDismiss = () => SetBrowseUnusedCycle(BrowseFilterCycle.Off, refresh: true)
                 });
             }
 

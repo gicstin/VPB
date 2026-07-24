@@ -547,6 +547,33 @@ namespace VPB
         // applied as the early gate in PassesFilters.
         private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
 
+        /// <summary>Filter menu tri-state: Off → apply/include → only → Off.</summary>
+        private enum BrowseFilterCycle : byte
+        {
+            Off = 0,
+            Apply = 1,
+            Only = 2
+        }
+
+        /// <summary>Loaded path filter: Off → All Loaded → All Unloaded → Off.</summary>
+        private enum BrowseLoadedMode : byte
+        {
+            Off = 0,
+            LoadedOnly = 1,
+            UnloadedOnly = 2
+        }
+
+        // Title-bar Filter cycles (per-category via CategoryFilterState; settings mirrored when applied).
+        private BrowseFilterCycle _browseHiddenCycle;
+        private BrowseFilterCycle _browseAlwaysLoadedCycle;
+        private BrowseFilterCycle _browseOldVersionsCycle;
+        private BrowseFilterCycle _browseUnusedCycle;
+        private BrowseLoadedMode _browseLoadedMode;
+        /// <summary>Sort restored when Always-loaded Prefer/Only returns to Off.</summary>
+        private SortState _browseAlwaysLoadedSavedSort;
+        /// <summary>Sort restored when Unused Prefer/Only returns to Off.</summary>
+        private SortState _browseUnusedSavedSort;
+
         private GameObject globalSourceFilterBtn;
         private Text globalSourceFilterBtnText;
         private Image globalSourceFilterBtnIcon;

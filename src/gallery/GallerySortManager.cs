@@ -757,6 +757,52 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Keep only VAR rows whose uid version is less than the family's highest version (old versions).
+        /// Non-VAR entries removed. Mutates list in place.
+        /// </summary>
+        public static void ApplyOldVersionsOnlyFilter(List<FileEntry> files)
+        {
+            if (files == null || files.Count == 0) return;
+
+            var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int existing;
+                if (!highest.TryGetValue(famKey, out existing) || v > existing) highest[famKey] = v;
+            }
+            if (highest.Count == 0)
+            {
+                files.Clear();
+                return;
+            }
+
+            for (int i = files.Count - 1; i >= 0; i--)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry))
+                {
+                    files.RemoveAt(i);
+                    continue;
+                }
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey))
+                {
+                    files.RemoveAt(i);
+                    continue;
+                }
+                int v = GetUidVersionNumber(f);
+                int top;
+                if (!highest.TryGetValue(famKey, out top) || v >= top)
+                    files.RemoveAt(i);
+            }
+        }
+
         private static DateTime GetFamilyHighestVersionScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
         {
             string k = ComputeFamilyKey(file);

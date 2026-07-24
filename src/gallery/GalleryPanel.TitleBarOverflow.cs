@@ -77,12 +77,15 @@ namespace VPB
                 tipDefault: "Multi-select creators → filter grid. Right-click clear.");
             AddOverflowMenuRow(
                 panel,
-                VPBTranslation.T("gallery.title.source_filter", "Source filter"),
+                VPBTranslation.T("gallery.title.browse_filter", "Filter"),
                 () => { CloseTitleBarOverflowMenu(); ToggleGlobalSourceFilterDropdown(); },
+                HasTitleBarBrowseFilterActive(),
                 icon: UI.GetButtonIconSprite(globalSourceFilterBtn)
-                    ?? UI.LoadIconSprite("vpb_icons/gallery_source.png", UI.BarIconGlyphTint),
-                tipKey: "gallery.tooltip.global_source_filter",
-                tipDefault: "Source filter (All / Local / .var). Applies to every category. (Right-click to reset to All)");
+                    ?? UI.LoadIconSprite(
+                        HasTitleBarBrowseFilterActive() ? "vpb_icons/filter_on.png" : "vpb_icons/filter_off.png",
+                        UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.browse_filter",
+                tipDefault: "Filter: source, hidden, always loaded, old versions. Click rows to cycle Off → apply → only. Right-click clears.");
             AddOverflowMenuRow(
                 panel,
                 VPBTranslation.T("gallery.title.rated_only", "Rated only"),

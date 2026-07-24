@@ -230,6 +230,11 @@ namespace VPB
             entry.AppearanceSubfilter = state.AppearanceSubfilter;
             entry.PosePeopleFilter = state.PosePeopleFilter;
             entry.SortState = state.FileSortState != null ? state.FileSortState.Clone() : null;
+            entry.BrowseHiddenMode = state.BrowseHiddenMode;
+            entry.BrowseAlwaysLoadedMode = state.BrowseAlwaysLoadedMode;
+            entry.BrowseOldVersionsMode = state.BrowseOldVersionsMode;
+            entry.BrowseLoadedMode = state.BrowseLoadedMode;
+            entry.BrowseUnusedMode = state.BrowseUnusedMode;
         }
 
         private static CategoryFilterState CategoryFilterStateFromQuickFilterEntry(QuickFilterEntry entry)
@@ -252,6 +257,11 @@ namespace VPB
             state.AppearanceSubfilter = entry.AppearanceSubfilter;
             state.PosePeopleFilter = entry.PosePeopleFilter;
             if (entry.SortState != null) state.FileSortState = entry.SortState.Clone();
+            state.BrowseHiddenMode = entry.BrowseHiddenMode;
+            state.BrowseAlwaysLoadedMode = entry.BrowseAlwaysLoadedMode;
+            state.BrowseOldVersionsMode = entry.BrowseOldVersionsMode;
+            state.BrowseLoadedMode = entry.BrowseLoadedMode;
+            state.BrowseUnusedMode = entry.BrowseUnusedMode;
             return state;
         }
 

@@ -31,6 +31,11 @@ namespace VPB
             s.PosePeopleFilter = (int)posePeopleFilter;
             var sort = GetSortState("Files");
             if (sort != null) s.FileSortState = sort.Clone();
+            s.BrowseHiddenMode = (int)_browseHiddenCycle;
+            s.BrowseAlwaysLoadedMode = (int)_browseAlwaysLoadedCycle;
+            s.BrowseOldVersionsMode = (int)_browseOldVersionsCycle;
+            s.BrowseLoadedMode = (int)_browseLoadedMode;
+            s.BrowseUnusedMode = (int)_browseUnusedCycle;
             return s;
         }
 
@@ -154,6 +159,16 @@ namespace VPB
                 try { SyncRatingSortToggleState(); } catch { }
             }
 
+            _browseHiddenCycle = ClampBrowseFilterCycle(state.BrowseHiddenMode);
+            _browseAlwaysLoadedCycle = ClampBrowseFilterCycle(state.BrowseAlwaysLoadedMode);
+            _browseOldVersionsCycle = ClampBrowseFilterCycle(state.BrowseOldVersionsMode);
+            _browseLoadedMode = ClampBrowseLoadedMode(state.BrowseLoadedMode);
+            _browseUnusedCycle = ClampBrowseFilterCycle(state.BrowseUnusedMode);
+            try { SyncShowHiddenPackagesFromCycle(); } catch { }
+            try { SyncHideOldVersionsFromCycle(); } catch { }
+            try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
             SyncBrowseFilterChipChrome();
         }
@@ -186,7 +201,47 @@ namespace VPB
             _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
+            if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off)
+            {
+                BrowseFilterCycle prevAl = _browseAlwaysLoadedCycle;
+                _browseAlwaysLoadedCycle = BrowseFilterCycle.Off;
+                try { ApplyAlwaysLoadedCycleSortSideEffects(prevAl, BrowseFilterCycle.Off); } catch { }
+            }
+            else
+            {
+                _browseAlwaysLoadedCycle = BrowseFilterCycle.Off;
+                _browseAlwaysLoadedSavedSort = null;
+            }
+            _browseHiddenCycle = BrowseFilterCycle.Off;
+            _browseOldVersionsCycle = BrowseFilterCycle.Off;
+            _browseLoadedMode = BrowseLoadedMode.Off;
+            if (_browseUnusedCycle != BrowseFilterCycle.Off)
+            {
+                BrowseFilterCycle prevU = _browseUnusedCycle;
+                _browseUnusedCycle = BrowseFilterCycle.Off;
+                try { ApplyUnusedCycleSortSideEffects(prevU, BrowseFilterCycle.Off); } catch { }
+            }
+            else
+            {
+                _browseUnusedCycle = BrowseFilterCycle.Off;
+                _browseUnusedSavedSort = null;
+            }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             SyncBrowseFilterChipChrome();
+        }
+
+        private static BrowseFilterCycle ClampBrowseFilterCycle(int v)
+        {
+            if (v <= 0) return BrowseFilterCycle.Off;
+            if (v == 1) return BrowseFilterCycle.Apply;
+            return BrowseFilterCycle.Only;
+        }
+
+        private static BrowseLoadedMode ClampBrowseLoadedMode(int v)
+        {
+            if (v <= 0) return BrowseLoadedMode.Off;
+            if (v == 1) return BrowseLoadedMode.LoadedOnly;
+            return BrowseLoadedMode.UnloadedOnly;
         }
     }
 }

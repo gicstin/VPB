@@ -2147,6 +2147,11 @@ namespace VPB
                         GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
                         try { GallerySortManager.ApplyHideOldVersionsFilter(currentFilteredFiles); } catch { }
                         try { GallerySortManager.ApplyHideOldVersionsFilter(lastFilteredFiles); } catch { }
+                        if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+                        {
+                            try { GallerySortManager.ApplyOldVersionsOnlyFilter(currentFilteredFiles); } catch { }
+                            try { GallerySortManager.ApplyOldVersionsOnlyFilter(lastFilteredFiles); } catch { }
+                        }
                     }
 
                     changed = true;
@@ -2308,6 +2313,19 @@ namespace VPB
                 sb.Append(tagFilter ?? "").Append('\u001E');
                 sb.Append(isRatingSortToggleEnabled ? '1' : '0').Append('\u001E');
                 sb.Append((VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) ? '1' : '0').Append('\u001E');
+                sb.Append(((int)_browseHiddenCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseAlwaysLoadedCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseOldVersionsCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseLoadedMode).ToString()).Append('\u001E');
+                sb.Append(((int)_browseUnusedCycle).ToString()).Append('\u001E');
+                try
+                {
+                    sb.Append((Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value) ? '1' : '0').Append('\u001E');
+                }
+                catch
+                {
+                    sb.Append('0').Append('\u001E');
+                }
                 if (activeTags != null && activeTags.Count > 0)
                 {
                     var arr = new List<string>(activeTags);
@@ -2630,9 +2648,8 @@ namespace VPB
             int wantsLoadedStateForIndexMain = -1;
             try
             {
-                SortType st = GetSortState("Files").Type;
-                if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
-                else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+                if (FilesSortWantsLoadedOnly()) wantsLoadedStateForIndexMain = 1;
+                else if (FilesSortWantsUnloadedOnly()) wantsLoadedStateForIndexMain = 0;
             }
             catch { }
 
@@ -3257,9 +3274,8 @@ namespace VPB
                 int wantsLoadedStateForIndexMain = -1;
                 try
                 {
-                    SortType st = GetSortState("Files").Type;
-                    if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
-                    else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+                    if (FilesSortWantsLoadedOnly()) wantsLoadedStateForIndexMain = 1;
+                    else if (FilesSortWantsUnloadedOnly()) wantsLoadedStateForIndexMain = 0;
                 }
                 catch { }
                 ContentType activeContentSnap = activeContentType;
@@ -4654,6 +4670,7 @@ namespace VPB
         {
             try
             {
+                if (_browseHiddenCycle != BrowseFilterCycle.Off) return true;
                 SortType t = GetSortState("Files").Type;
                 return t == SortType.Hidden || t == SortType.HiddenOnly;
             }
@@ -4662,21 +4679,36 @@ namespace VPB
 
         private bool FilesSortWantsLoadedOnly()
         {
-            try { return GetSortState("Files").Type == SortType.LoadedOnly; }
+            try
+            {
+                if (_browseLoadedMode == BrowseLoadedMode.LoadedOnly) return true;
+                return GetSortState("Files").Type == SortType.LoadedOnly;
+            }
             catch { return false; }
         }
 
         private bool FilesSortWantsUnloadedOnly()
         {
-            try { return GetSortState("Files").Type == SortType.UnloadedOnly; }
+            try
+            {
+                if (_browseLoadedMode == BrowseLoadedMode.UnloadedOnly) return true;
+                return GetSortState("Files").Type == SortType.UnloadedOnly;
+            }
             catch { return false; }
         }
 
-        /// <summary>Removes non-matching rows for Hidden-only / AutoInstall-only file sort modes (list is modified in place).</summary>
-        private static void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
+        /// <summary>Removes non-matching rows for exclusive browse/sort modes (list is modified in place).</summary>
+        private void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
         {
             if (list == null) return;
-            if (type == SortType.HiddenOnly)
+
+            bool hiddenOnly = _browseHiddenCycle == BrowseFilterCycle.Only || type == SortType.HiddenOnly;
+            bool alwaysLoadedOnly = _browseAlwaysLoadedCycle == BrowseFilterCycle.Only || type == SortType.AutoInstallOnly;
+            bool loadedOnly = _browseLoadedMode == BrowseLoadedMode.LoadedOnly || type == SortType.LoadedOnly;
+            bool unloadedOnly = _browseLoadedMode == BrowseLoadedMode.UnloadedOnly || type == SortType.UnloadedOnly;
+            bool unusedOnly = _browseUnusedCycle == BrowseFilterCycle.Only || type == SortType.UnusedOnly;
+
+            if (hiddenOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4688,7 +4720,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.AutoInstallOnly)
+            if (alwaysLoadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4700,7 +4732,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.LoadedOnly)
+            if (loadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4722,7 +4754,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.UnloadedOnly)
+            if (unloadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4742,7 +4774,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.UnusedOnly)
+            if (unusedOnly)
             {
                 try
                 {
@@ -4751,25 +4783,30 @@ namespace VPB
                         keys.Add(VpbLocalDatabase.BuildUsageKey(list[i]));
 
                     var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    if (!VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts))
-                        return;
-
-                    for (int i = list.Count - 1; i >= 0; i--)
+                    if (VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts))
                     {
-                        try
+                        for (int i = list.Count - 1; i >= 0; i--)
                         {
-                            string k = VpbLocalDatabase.BuildUsageKey(list[i]);
-                            int c = 0;
-                            if (!string.IsNullOrEmpty(k) && counts.TryGetValue(k, out int got)) c = got;
-                            if (c != 0) list.RemoveAt(i);
+                            try
+                            {
+                                string k = VpbLocalDatabase.BuildUsageKey(list[i]);
+                                int c = 0;
+                                if (!string.IsNullOrEmpty(k) && counts.TryGetValue(k, out int got)) c = got;
+                                if (c != 0) list.RemoveAt(i);
+                            }
+                            catch { try { list.RemoveAt(i); } catch { } }
                         }
-                        catch { try { list.RemoveAt(i); } catch { } }
                     }
                 }
                 catch
                 {
                     // If usage DB is unavailable, keep the list unchanged (fail open).
                 }
+            }
+
+            if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+            {
+                try { GallerySortManager.ApplyOldVersionsOnlyFilter(list); } catch { }
             }
         }
 

@@ -417,7 +417,10 @@ namespace VPB
             fileSortBtnText = fileSortTypeText;
 
             // Init File Sort State
+            try { SyncBrowseFilterCyclesFromMirroredSettings(); } catch { }
+            try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
 
             ratingSortToggleBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, VPBTranslation.T("gallery.sort.star", "★"), 18, 0, 0, AnchorPresets.middleCenter, null);
             ratingSortToggleBtn.GetComponent<Image>().color = UI.ChromeDark;

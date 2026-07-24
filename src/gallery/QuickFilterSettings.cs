@@ -28,6 +28,11 @@ namespace VPB
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
         public SortState SortState;
+        public int BrowseHiddenMode = 0;
+        public int BrowseAlwaysLoadedMode = 0;
+        public int BrowseOldVersionsMode = 0;
+        public int BrowseLoadedMode = 0;
+        public int BrowseUnusedMode = 0;
 
         /// <summary>True when side-tab layout was captured with this preset (distinguishes legacy presets).</summary>
         public bool HasSideTabState = false;
@@ -81,6 +86,11 @@ namespace VPB
             node["HairSubfilter"].AsInt = HairSubfilter;
             node["AppearanceSubfilter"].AsInt = AppearanceSubfilter;
             node["PosePeopleFilter"].AsInt = PosePeopleFilter;
+            node["BrowseHiddenMode"].AsInt = BrowseHiddenMode;
+            node["BrowseAlwaysLoadedMode"].AsInt = BrowseAlwaysLoadedMode;
+            node["BrowseOldVersionsMode"].AsInt = BrowseOldVersionsMode;
+            node["BrowseLoadedMode"].AsInt = BrowseLoadedMode;
+            node["BrowseUnusedMode"].AsInt = BrowseUnusedMode;
 
             if (SortState != null)
             {
@@ -161,6 +171,22 @@ namespace VPB
             entry.HairSubfilter = node["HairSubfilter"] != null ? node["HairSubfilter"].AsInt : 0;
             entry.AppearanceSubfilter = node["AppearanceSubfilter"] != null ? node["AppearanceSubfilter"].AsInt : 0;
             entry.PosePeopleFilter = node["PosePeopleFilter"] != null ? node["PosePeopleFilter"].AsInt : 0;
+            if (node["BrowseHiddenMode"] != null || node["BrowseAlwaysLoadedMode"] != null || node["BrowseOldVersionsMode"] != null || node["BrowseLoadedMode"] != null || node["BrowseUnusedMode"] != null)
+            {
+                entry.BrowseHiddenMode = node["BrowseHiddenMode"] != null ? node["BrowseHiddenMode"].AsInt : 0;
+                entry.BrowseAlwaysLoadedMode = node["BrowseAlwaysLoadedMode"] != null ? node["BrowseAlwaysLoadedMode"].AsInt : 0;
+                entry.BrowseOldVersionsMode = node["BrowseOldVersionsMode"] != null ? node["BrowseOldVersionsMode"].AsInt : 0;
+                entry.BrowseLoadedMode = node["BrowseLoadedMode"] != null ? node["BrowseLoadedMode"].AsInt : 0;
+                entry.BrowseUnusedMode = node["BrowseUnusedMode"] != null ? node["BrowseUnusedMode"].AsInt : 0;
+            }
+            else
+            {
+                // Legacy bool only-flags
+                if (node["BrowseHiddenOnly"] != null && node["BrowseHiddenOnly"].AsInt != 0)
+                    entry.BrowseHiddenMode = 2;
+                if (node["BrowseAlwaysLoadedOnly"] != null && node["BrowseAlwaysLoadedOnly"].AsInt != 0)
+                    entry.BrowseAlwaysLoadedMode = 2;
+            }
 
             var sortNode = node["SortState"];
             if (sortNode != null)
@@ -169,6 +195,47 @@ namespace VPB
                 int di = sortNode["Direction"].AsInt;
                 if (Enum.IsDefined(typeof(SortType), ti) && Enum.IsDefined(typeof(SortDirection), di))
                     entry.SortState = new SortState((SortType)ti, (SortDirection)di);
+            }
+
+            // Legacy exclusive sort → browse filter cycles
+            if (entry.SortState != null)
+            {
+                if (entry.SortState.Type == SortType.HiddenOnly)
+                {
+                    entry.BrowseHiddenMode = 2;
+                    entry.SortState.Type = SortType.Name;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
+                else if (entry.SortState.Type == SortType.AutoInstallOnly)
+                {
+                    entry.BrowseAlwaysLoadedMode = 2;
+                    entry.SortState.Type = SortType.Name;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
+                else if (entry.SortState.Type == SortType.LoadedOnly)
+                {
+                    entry.BrowseLoadedMode = 1;
+                    entry.SortState.Type = SortType.Name;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
+                else if (entry.SortState.Type == SortType.UnloadedOnly)
+                {
+                    entry.BrowseLoadedMode = 2;
+                    entry.SortState.Type = SortType.Name;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
+                else if (entry.SortState.Type == SortType.Hidden)
+                {
+                    if (entry.BrowseHiddenMode == 0) entry.BrowseHiddenMode = 1;
+                    entry.SortState.Type = SortType.Name;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
+                else if (entry.SortState.Type == SortType.UnusedOnly)
+                {
+                    entry.BrowseUnusedMode = 2;
+                    entry.SortState.Type = SortType.UsageCount;
+                    entry.SortState.Direction = SortDirection.Ascending;
+                }
             }
 
             entry.HasSideTabState = node["HasSideTabState"] != null && node["HasSideTabState"].AsBool;
