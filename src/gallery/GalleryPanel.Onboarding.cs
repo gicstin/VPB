@@ -79,11 +79,7 @@ namespace VPB
                 try { activeUserTags?.Clear(); } catch { }
                 try { excludedUserTags?.Clear(); } catch { }
             }
-            else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-            {
-                _userTagAvailMode = ResolveDefaultUserTagAvailMode();
-                try { ClearUntaggedTaggedPinKeys(); } catch { }
-            }
+            // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }
 

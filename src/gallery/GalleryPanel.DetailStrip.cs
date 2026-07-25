@@ -1271,7 +1271,7 @@ namespace VPB
             _detailStripCopyTagsLink = DetailStripCreateTagClipboardActionLink(
                 _detailStripTagClipboardActionsGO,
                 "CopyTags",
-                VPBTranslation.T("gallery.detail.copy_tags", "Copy Tags"),
+                VPBTranslation.T("gallery.detail.copy_tags", "Copy"),
                 s, hitH,
                 DetailStripOnCopyTagsClick,
                 () => VPBTranslation.T(
@@ -1283,7 +1283,7 @@ namespace VPB
             _detailStripPasteTagsLink = DetailStripCreateTagClipboardActionLink(
                 _detailStripTagClipboardActionsGO,
                 "PasteTags",
-                VPBTranslation.T("gallery.detail.paste_tags", "Paste Tags"),
+                VPBTranslation.T("gallery.detail.paste_tags", "Paste"),
                 s, hitH,
                 DetailStripOnPasteTagsClick,
                 DetailStripGetPasteTagsTooltip);
@@ -1294,7 +1294,7 @@ namespace VPB
             _detailStripReplaceTagsLink = DetailStripCreateTagClipboardActionLink(
                 _detailStripTagClipboardActionsGO,
                 "ReplaceTags",
-                VPBTranslation.T("gallery.detail.replace_tags", "Replace Tags"),
+                VPBTranslation.T("gallery.detail.replace_tags", "Replace"),
                 s, hitH,
                 DetailStripOnReplaceTagsClick,
                 DetailStripGetReplaceTagsTooltip);
@@ -6159,13 +6159,13 @@ namespace VPB
                 // Fallback estimate before first layout pass.
                 actionsW = DetailStripEstimateChipTextWidth(" · ", s)
                     + DetailStripEstimateChipTextWidth(
-                        VPBTranslation.T("gallery.detail.copy_tags", "Copy Tags"), s)
+                        VPBTranslation.T("gallery.detail.copy_tags", "Copy"), s)
                     + DetailStripEstimateChipTextWidth(" · ", s)
                     + DetailStripEstimateChipTextWidth(
-                        VPBTranslation.T("gallery.detail.paste_tags", "Paste Tags"), s)
+                        VPBTranslation.T("gallery.detail.paste_tags", "Paste"), s)
                     + DetailStripEstimateChipTextWidth(" · ", s)
                     + DetailStripEstimateChipTextWidth(
-                        VPBTranslation.T("gallery.detail.replace_tags", "Replace Tags"), s);
+                        VPBTranslation.T("gallery.detail.replace_tags", "Replace"), s);
             }
             float gap = 4f * s;
             float chips = avail - setW - actionsW - gap * 2f;

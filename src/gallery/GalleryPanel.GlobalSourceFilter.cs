@@ -84,7 +84,7 @@ namespace VPB
             }
 
             AddTooltip(globalSourceFilterBtn, "gallery.tooltip.browse_filter",
-                "Filter: source, hidden, always loaded, old versions. Click rows to cycle Off → apply → only. Right-click clears.");
+                "Filter: source, hidden, always loaded, old versions, not tagged. Click rows to cycle Off → apply → only. Right-click clears.");
 
             // Compact: filter_off idle / filter_on when active (filter.png is Filter Presets).
             try
@@ -244,6 +244,11 @@ namespace VPB
                 _browseUnusedCycle,
                 CycleBrowseUnusedFilter);
 
+            AddBrowseFilterToggleRow(
+                VPBTranslation.T("gallery.filter.not_tagged", "Not tagged"),
+                _userTagAvailMode == UserTagAvailMode.FilterUntagged,
+                ToggleBrowseNotTaggedFilter);
+
             try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(globalSourceFilterMenuPanelGO.GetComponent<RectTransform>());
         }
@@ -302,6 +307,38 @@ namespace VPB
                     try { onCycle?.Invoke(); } catch { }
                 },
                 GalleryUiDesignTokens.PopupMenuRowHeightRef);
+        }
+
+        private void AddBrowseFilterToggleRow(string name, bool isOn, Action onToggle)
+        {
+            string mark = isOn ? "\u2713  " : "    ";
+            UI.AddPopupMenuRow(
+                globalSourceFilterMenuPanelGO,
+                BrowseFilterMenuPanelWidthRef - 12f,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                mark + name,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                isOn,
+                () =>
+                {
+                    try { onToggle?.Invoke(); } catch { }
+                },
+                GalleryUiDesignTokens.PopupMenuRowHeightRef);
+        }
+
+        private void ToggleBrowseNotTaggedFilter()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
+                SetUserTagAvailMode(restore);
+            }
+            else
+            {
+                SetUserTagAvailMode(UserTagAvailMode.FilterUntagged);
+            }
         }
 
         private static BrowseFilterCycle NextBrowseFilterCycle(BrowseFilterCycle cur)
@@ -680,6 +717,16 @@ namespace VPB
                 ApplyUnusedCycleSortSideEffects(prevU, BrowseFilterCycle.Off);
                 changed = true;
             }
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
+                _userTagAvailMode = restore;
+                try { ClearUntaggedTaggedPinKeys(); } catch { }
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                changed = true;
+            }
 
             MigrateLegacyExclusiveFileSortIfNeeded();
             UpdateGlobalSourceFilterButtonLabel();
@@ -703,6 +750,7 @@ namespace VPB
             if (_browseOldVersionsCycle != BrowseFilterCycle.Off) return true;
             if (_browseLoadedMode != BrowseLoadedMode.Off) return true;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) return true;
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return true;
             return false;
         }
 
@@ -715,6 +763,7 @@ namespace VPB
             if (_browseOldVersionsCycle != BrowseFilterCycle.Off) n++;
             if (_browseLoadedMode != BrowseLoadedMode.Off) n++;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) n++;
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) n++;
             return n;
         }
 

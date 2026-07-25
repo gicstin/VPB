@@ -458,6 +458,30 @@ namespace VPB
             }
         }
 
+        /// <summary>True when any item has a user-tag assignment (not vocabulary-only). Fresh/wiped DB returns false.</summary>
+        internal static bool TryHasAnyGalleryUserTagAssignment(out bool anyExists)
+        {
+            anyExists = false;
+            if (!VpbSqlite3.IsAvailable) return false;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var stmt = conn.Prepare("SELECT 1 FROM gallery_item_user_tag LIMIT 1"))
+                    {
+                        if (stmt.Step() == VpbSqlite3.SqliteRow)
+                            anyExists = true;
+                    }
+                }
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>One gallery row ↔ user tag link (for YAML export).</summary>
         internal struct GalleryUserTagAssignmentRow
         {

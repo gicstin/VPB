@@ -17,6 +17,7 @@ namespace VPB
             EnsureUserTagAvailScrollTrackingHooks();
             SnapshotUserTagAvailScrollForPreserve(isLeft);
             EnsureUserTagSideTabBulkBlock(container.transform, isLeft);
+            // Sticky before first virt measure — Mask height must be final or bind uses wrong window / invents into collapse.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
             if (utBulk == null && isLeft && leftUserTagsAvailStickyGO != null)
@@ -55,11 +56,12 @@ namespace VPB
             GameObject utVirtHolder = EnsureUserTagPickVirtualHolder(container.transform);
             EnsureUserTagVirtScrollHook(isLeft, utVirtHolder);
             SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            InvalidateUserTagVirtWindowGate(isLeft);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             RequestUserTagVirtLayoutRefresh(isLeft, container.transform, preserveScroll: true);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
-            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             RestorePreservedUserTagAvailScroll();
         }
 

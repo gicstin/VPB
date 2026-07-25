@@ -133,10 +133,14 @@ namespace VPB
                 int utfm = state.UserTagAvailFilterMode;
                 if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
                 _userTagAvailMode = (UserTagAvailMode)utfm;
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
             else
             {
                 _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
@@ -190,6 +194,8 @@ namespace VPB
             activeUserTags.Clear();
             excludedUserTags.Clear();
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;
             currentSceneSourceFilter = "";

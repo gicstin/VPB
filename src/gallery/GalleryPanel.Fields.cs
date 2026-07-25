@@ -633,9 +633,11 @@ namespace VPB
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Excluded tags (none-of) in filter-by-tags mode: grid hides rows carrying any of these tags. Right-click an Available row to toggle.</summary>
         private readonly HashSet<string> excludedUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Available pane mode: apply, filter by selected tags, or filter untagged items only.</summary>
+        /// <summary>Available pane work mode: Tag (apply) or FilterByTags. FilterUntagged is a title-bar browse filter.</summary>
         private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.FilterByTags;
-        /// <summary>Not Tagged mode: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
+        /// <summary>Work mode restored when title-bar Not tagged filter turns off (Tag or FilterByTags).</summary>
+        private UserTagAvailMode _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
+        /// <summary>Not Tagged filter: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
         private readonly HashSet<string> _untaggedTaggedPinKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>
         private bool _userTagInheritVarToChildren;
@@ -647,6 +649,10 @@ namespace VPB
         /// </summary>
         private int _refreshWorkerFallbackUserTagPrefilterFlag;
         private bool userTagsCached = false;
+        /// <summary>True when side-tab per-category counts query succeeded (gate hide-unused; independent of <see cref="userTagsCached"/>).</summary>
+        private bool _userTagSideTabCountsReady = false;
+        /// <summary>Cached: any <c>gallery_item_user_tag</c> row exists. False on fresh/wiped DB (skip hide-unused).</summary>
+        private bool _userTagAnyAssignmentExists = false;
         /// <summary>Bumped when <see cref="GalleryPanel.CacheUserTagsSideTab"/> finishes rebuilding SQLite-backed rows.</summary>
         private int userTagSideTabDataRevision = 0;
         private List<UserTagSideTabEntry> cachedUserTagSideTab = new List<UserTagSideTabEntry>(64);

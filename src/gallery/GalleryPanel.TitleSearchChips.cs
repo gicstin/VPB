@@ -1061,11 +1061,16 @@ namespace VPB
         private bool _pressed;
         private bool _dragging;
         private Vector2 _pressPos;
+        private Vector2 _lastScreenPos;
+        private Camera _pressEventCamera;
         private float _pressTime;
         private GameObject _ghost;
         private RectTransform _ghostRT;
+        private Canvas _rootCanvas;
         private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(12);
         private bool _releaseProcessed;
+        private const float DesktopMinScreenPixelsForChipDrag = 10f;
+        private const float VrHoldSecondsForChipDrag = 0.25f;
 
         private void Awake()
         {
@@ -1088,6 +1093,8 @@ namespace VPB
             ConsumedByDrag = false;
             _releaseProcessed = false;
             _pressPos = eventData.position;
+            _lastScreenPos = eventData.position;
+            _pressEventCamera = eventData.pressEventCamera;
             _pressTime = Time.unscaledTime;
         }
 
@@ -1099,8 +1106,8 @@ namespace VPB
             _releaseProcessed = true;
             if (_dragging)
             {
+                if (eventData != null) _lastScreenPos = eventData.position;
                 EndManualDrag(eventData);
-                ConsumedByDrag = true;
             }
         }
 
@@ -1109,6 +1116,8 @@ namespace VPB
             if (Panel == null) return;
             if (_dragging)
             {
+                if (!XrUtils.IsVrActive())
+                    _lastScreenPos = (Vector2)Input.mousePosition;
                 UpdateGhostPosition();
                 if (!_releaseProcessed && Input.GetMouseButtonUp(0))
                     EndManualDrag(null);
@@ -1116,40 +1125,50 @@ namespace VPB
             }
             if (!_pressed) return;
 
-            bool isVR = XrUtils.IsVrActive();
-            float distThreshold = isVR ? 50f : 10f;
-            float holdThreshold = isVR ? 0.25f : 0f;
+            // VR: OnBeginDrag starts (no pixel gate). Avoid hold-alone auto-start stealing taps.
+            if (XrUtils.IsVrActive()) return;
+
             Vector2 cur = Input.mousePosition;
-            if ((cur - _pressPos).magnitude < distThreshold) return;
-            if (Time.unscaledTime - _pressTime < holdThreshold) return;
+            _lastScreenPos = cur;
+            if ((cur - _pressPos).sqrMagnitude < DesktopMinScreenPixelsForChipDrag * DesktopMinScreenPixelsForChipDrag)
+                return;
             BeginManualDrag();
         }
 
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (Panel == null) return;
+            if (eventData != null)
+            {
+                _lastScreenPos = eventData.position;
+                if (eventData.pressEventCamera != null)
+                    _pressEventCamera = eventData.pressEventCamera;
+            }
             if (XrUtils.IsVrActive())
             {
-                if (Time.unscaledTime - _pressTime < 0.25f) return;
-                if (eventData != null && (eventData.position - _pressPos).magnitude < 50f) return;
+                if (Time.unscaledTime - _pressTime < VrHoldSecondsForChipDrag) return;
             }
             BeginManualDrag();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
+            if (eventData != null) _lastScreenPos = eventData.position;
             if (_dragging) UpdateGhostPosition();
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            if (_dragging) EndManualDrag(eventData);
+            if (!_dragging) return;
+            if (eventData != null) _lastScreenPos = eventData.position;
+            EndManualDrag(eventData);
         }
 
         private void BeginManualDrag()
         {
             if (Panel == null || _dragging) return;
             _dragging = true;
+            ConsumedByDrag = true;
             try { Panel.TitleSearchOnChipDragBegan(ChipIndex); } catch { }
 
             if (_cg != null)
@@ -1163,6 +1182,7 @@ namespace VPB
 
         private void EndManualDrag(PointerEventData eventData)
         {
+            if (!_dragging) return;
             TryDrop(eventData);
             CleanupDragVisuals();
         }
@@ -1173,7 +1193,7 @@ namespace VPB
             EventSystem es = EventSystem.current;
             if (es == null) return;
 
-            Vector2 screenPos = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            Vector2 screenPos = eventData != null ? eventData.position : _lastScreenPos;
             var ped = eventData ?? new PointerEventData(es);
             ped.position = screenPos;
             _raycastHits.Clear();
@@ -1196,9 +1216,11 @@ namespace VPB
 
         private void CleanupDragVisuals()
         {
+            bool wasDragging = _dragging;
             _pressed = false;
             _dragging = false;
             _releaseProcessed = false;
+            if (!wasDragging) ConsumedByDrag = false;
             if (_cg != null)
             {
                 _cg.alpha = 1f;
@@ -1207,6 +1229,7 @@ namespace VPB
             if (_ghost != null) Destroy(_ghost);
             _ghost = null;
             _ghostRT = null;
+            _rootCanvas = null;
             try { if (Panel != null) Panel.TitleSearchOnDragEnded(); } catch { }
             if (UserTagDragSession.PendingTitleSearchChipPanel == Panel)
             {
@@ -1222,6 +1245,7 @@ namespace VPB
             try { root = GetComponentInParent<Canvas>(); } catch { }
             if (root == null && Panel != null) root = Panel.canvas;
             if (root == null) return;
+            _rootCanvas = root;
 
             float s = 1f;
             try { if (Panel != null && Panel.ChromeScale > 0f) s = Panel.ChromeScale; } catch { }
@@ -1263,8 +1287,28 @@ namespace VPB
         private void UpdateGhostPosition()
         {
             if (_ghostRT == null) return;
-            Vector2 pos = Input.mousePosition;
-            _ghostRT.position = new Vector3(pos.x, pos.y, 0f);
+            Canvas root = _rootCanvas;
+            if (root == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+            RectTransform parent = root.transform as RectTransform;
+            if (parent == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+            Camera cam = null;
+            if (root.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                cam = _pressEventCamera;
+                if (cam == null)
+                    cam = root.worldCamera != null ? root.worldCamera : Camera.main;
+            }
+            Vector3 world;
+            if (RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, _lastScreenPos, cam, out world))
+                _ghostRT.position = world;
             _ghostRT.SetAsLastSibling();
         }
     }

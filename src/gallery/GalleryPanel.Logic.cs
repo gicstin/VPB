@@ -1761,6 +1761,8 @@ namespace VPB
         private void CacheUserTagsSideTab()
         {
             cachedUserTagSideTab.Clear();
+            _userTagSideTabCountsReady = false;
+            _userTagAnyAssignmentExists = false;
             string cat = currentCategoryTitle ?? "";
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
 
@@ -1771,6 +1773,9 @@ namespace VPB
                 unchecked { userTagSideTabDataRevision++; }
                 return;
             }
+
+            bool anyAssignOk = VpbLocalDatabase.TryHasAnyGalleryUserTagAssignment(out bool anyExists);
+            if (anyAssignOk) _userTagAnyAssignmentExists = anyExists;
 
             var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             bool countsOk = false;
@@ -1784,7 +1789,10 @@ namespace VPB
                 if (countsOk) dict.TryGetValue(name, out c);
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
-            userTagsCached = countsOk;
+            // Stick cache after vocabulary load so empty category / failed counts do not re-query every refresh.
+            // Hide-unused waits on counts-ready separately.
+            userTagsCached = true;
+            _userTagSideTabCountsReady = countsOk;
             unchecked { userTagSideTabDataRevision++; }
         }
 

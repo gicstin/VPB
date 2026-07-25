@@ -783,12 +783,26 @@ namespace VPB
                 {
                     try
                     {
+                        UserTagPickDragSource dragSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                        if (dragSrc != null && dragSrc.ConsumedByDrag) return;
                         if (isCreateRow)
                         {
                             if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(tagSnap, out string norm) && !string.IsNullOrEmpty(norm))
                             {
                                 userTagsCached = false;
                                 _userTagVirtViewSig = null;
+                                // Drop list filter so new tag joins full avail list (not stuck matching typed text).
+                                ClearUserTagSideListFilter(sideLeft);
+                                // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
+                                // Land in Tag Mode so Create tag row is visible (same as editor CreateTagRows).
+                                if (_userTagAvailMode == UserTagAvailMode.FilterByTags
+                                    && VPBConfig.Instance != null
+                                    && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
+                                {
+                                    try { RequestUserTagWorkMode(UserTagAvailMode.Tag); }
+                                    catch { try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { } }
+                                    return;
+                                }
                             }
                         }
                         else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
@@ -863,9 +877,20 @@ namespace VPB
                 RectTransform btnRtUt = btnGO.GetComponent<RectTransform>();
                 float padUt = 10f * s;
                 float iconReserve = pinReserve + filterReserve;
-                float innerUt = (btnRtUt != null ? btnRtUt.rect.width : 0f) - padUt - iconReserve;
-                if (innerUt <= 2f) innerUt = 125f * s;
-                string shownUt = EllipsizeTextPreferredWidth(txt, labelUt, innerUt);
+                float btnW = btnRtUt != null ? btnRtUt.rect.width : 0f;
+                // Sticky Create row often binds before stretch; prefer parent strip width over ~170 create size.
+                float preferW = GalleryUiDesignTokens.TabButtonPreferredWidthRef * s;
+                if (btnW <= preferW + 1f)
+                {
+                    RectTransform parentRt = btnGO.transform.parent as RectTransform;
+                    if (parentRt != null && parentRt.rect.width > btnW + 1f)
+                        btnW = parentRt.rect.width - (GalleryUiDesignTokens.SideTabRowPadRef * 2f * s);
+                }
+                float innerUt = btnW - padUt - iconReserve;
+                if (innerUt <= 2f) innerUt = preferW;
+                string shownUt = isCreateRow
+                    ? EllipsizeCreateTagLabel(txt, VPBTranslation.T(CreateLabelKey, "Create Tag") + ": ", tagSnap, innerUt)
+                    : EllipsizeTextPreferredWidth(txt, labelUt, innerUt);
                 txt.text = shownUt;
             }
             SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
@@ -905,6 +930,8 @@ namespace VPB
             if (dr == null) dr = btnGO.AddComponent<UserTagPickDragSource>();
             dr.Panel = this;
             dr.PrimaryTag = isCreateRow ? "" : tagSnap;
+            dr.IsAppliedRowDrag = false;
+            dr.DetailStripAppliedReorder = false;
         }
 
         private void UpdateUserTagVirtualVisible(bool isLeft, Color utAccent, Transform tabContainer, bool fromScroll = false)
@@ -936,6 +963,12 @@ namespace VPB
                 return;
             }
             float contentH = total * rowH;
+            // Collapsed Mask after sticky over-inset: keep content height, skip bind (layout co rebinds after clamp).
+            if (viewportH <= 0.5f)
+            {
+                if (holderLe != null) holderLe.preferredHeight = contentH;
+                return;
+            }
 
             float scrollRange = Mathf.Max(0f, contentH - viewportH);
             float scrollY = (1f - Mathf.Clamp01(sr.verticalNormalizedPosition)) * scrollRange;
@@ -1253,6 +1286,49 @@ namespace VPB
             return ell;
         }
 
+        /// <summary>
+        /// Keep "Create Tag: " prefix; ellipsize typed name only (recognition of draft tag beats truncating verb).
+        /// </summary>
+        private static string EllipsizeCreateTagLabel(Text txt, string prefix, string tagName, float maxInnerWidth)
+        {
+            string name = tagName ?? "";
+            string full = (prefix ?? "") + name;
+            if (txt == null) return full;
+            if (maxInnerWidth <= 4f) return full;
+            txt.text = full;
+            try
+            {
+                if (txt.preferredWidth <= maxInnerWidth) return full;
+            }
+            catch { return full; }
+
+            string p = prefix ?? "";
+            if (string.IsNullOrEmpty(p))
+                return EllipsizeTextPreferredWidth(txt, full, maxInnerWidth);
+
+            txt.text = p;
+            float prefixW;
+            try { prefixW = txt.preferredWidth; }
+            catch { return EllipsizeTextPreferredWidth(txt, full, maxInnerWidth); }
+
+            float remain = maxInnerWidth - prefixW;
+            if (remain < 12f)
+                return EllipsizeTextPreferredWidth(txt, full, maxInnerWidth);
+
+            return p + EllipsizeTextPreferredWidth(txt, name, remain);
+        }
+
+        /// <summary>Clear User Tags side-list search after Create Tag so full vocabulary shows again.</summary>
+        private void ClearUserTagSideListFilter(bool isLeft)
+        {
+            userTagFilter = "";
+            InputField input = isLeft ? leftSearchInput : rightSearchInput;
+            UnityAction<string> handler = isLeft
+                ? _leftMainSideSearchOnValueChanged
+                : _rightMainSideSearchOnValueChanged;
+            SetSideSearchInputTextWithoutNotify(input, "", handler);
+        }
+
         private GameObject CreateTabButton(Transform parent, string label, Color color, bool isActive, UnityAction onClick, List<GameObject> targetList, UnityAction onRightClick = null, string tooltip = null, string userTagAppliedDragPrimary = null, TextAnchor labelAnchor = TextAnchor.MiddleCenter, float labelInsetLeft = 0f, float labelInsetRight = 0f, Sprite leftIcon = null, Color? leftIconBackdrop = null)
         {
             GameObject btnGO = GetTabButton(parent);
@@ -1283,7 +1359,16 @@ namespace VPB
             // Standard Button Configuration
             Button btnComp = btnGO.GetComponent<Button>();
             btnComp.onClick.RemoveAllListeners();
-            if (onClick != null) btnComp.onClick.AddListener(onClick);
+            if (onClick != null)
+            {
+                UnityAction click = onClick;
+                btnComp.onClick.AddListener(() =>
+                {
+                    UserTagPickDragSource dragSrc = btnGO.GetComponent<UserTagPickDragSource>();
+                    if (dragSrc != null && dragSrc.ConsumedByDrag) return;
+                    click();
+                });
+            }
 
             UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();

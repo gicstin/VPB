@@ -891,7 +891,7 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "tags.defaultAction", GroupKey = "tags",
                 Label = VPBTranslation.T("settings.gallery_default_user_tag_mode", "Tags panel default action"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_user_tag_mode", "Mode when opening the User Tags side panel: filter grid by tags, apply tags to selection, or show untagged items only."),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_user_tag_mode", "Mode when opening the User Tags side panel: filter grid by tags, or apply tags to selection. Untagged only also available from title-bar Filter menu."),
                 ControlType = InternalSettingControlType.Cycle,
                 Options = new[] { "Filter tags", "Apply tags", "Untagged only" },
                 GetString = () => VPBConfig.FormatGalleryDefaultUserTagAvailModeForSettings(VPBConfig.Instance.GalleryDefaultUserTagAvailMode),

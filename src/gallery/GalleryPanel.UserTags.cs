@@ -444,6 +444,8 @@ namespace VPB
         /// <summary>Pins Available / Applied toolbars; shrinks scroll viewports. Defaults restored when not UserTags.</summary>
         private void ApplyUserTagsStickyScrollChrome(float _)
         {
+            // Last-wins: do not first-wins frame-gate. UpdateTabs applies chrome before content settles;
+            // skipping later same-frame applies left one-frame wrong insets (Filter↔Tag flicker).
             ApplyUserTagsAvailStickyOneSide(true);
             ApplyUserTagsAvailStickyOneSide(false);
             ApplyUserTagsAppliedStickyOneSide(true);
@@ -500,7 +502,28 @@ namespace VPB
                     pinnedStrip.SetActive(false);
             }
 
+            // Measure Def-restored viewport before inset. Never shrink Mask below a usable strip —
+            // over-inset → height≈0, Tags(N) still correct, rows clipped (black empty under chrome).
+            float availH = vp.rect.height;
+            if (availH < 1f)
+            {
+                try
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(vp);
+                    Canvas.ForceUpdateCanvases();
+                    availH = vp.rect.height;
+                }
+                catch { }
+            }
             float topChrome = h + pinnedH;
+            float minVp = Mathf.Max(72f, SideTabVirtRowStridePx() * 3f);
+            if (availH > 1f)
+            {
+                float maxChrome = Mathf.Max(0f, availH - minVp);
+                if (topChrome > maxChrome)
+                    topChrome = maxChrome;
+            }
+
             vp.offsetMin = defMin;
             vp.offsetMax = new Vector2(defMax.x, defMax.y - topChrome);
 
@@ -529,7 +552,14 @@ namespace VPB
                     frt.pivot = new Vector2(0.5f, 0f);
                     frt.offsetMin = new Vector2(defMin.x, 0f);
                     frt.offsetMax = new Vector2(defMax.x, fh);
-                    vp.offsetMin = new Vector2(defMin.x, defMin.y + fh);
+                    float bottomInset = fh;
+                    // Keep min viewport after footer inset too.
+                    if (availH > 1f)
+                    {
+                        float maxBottom = Mathf.Max(0f, availH - topChrome - minVp);
+                        if (bottomInset > maxBottom) bottomInset = maxBottom;
+                    }
+                    vp.offsetMin = new Vector2(defMin.x, defMin.y + bottomInset);
 
                     EnsureUserTagInheritVarToChildrenButtonInFooter(footer.transform);
                 }
@@ -1218,11 +1248,12 @@ namespace VPB
                 ? GetUserTagPickRowTooltipFilter()
                 : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
-            float s = ChromeScale;
 
+            // Create rows first, layout stretch, then bind labels.
+            // Bind-before-layout used CreateUIButton width (~170) with scaled font → "Create Tag: ab" then "...".
+            var stickyBtns = new GameObject[count];
             for (int ri = 0; ri < count; ri++)
             {
-                UserTagSideTabEntry ut = _userTagStickyRows[ri];
                 GameObject btnGO = UI.CreateUIButton(strip, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 AddHoverDelegate(btnGO);
                 LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -1230,10 +1261,16 @@ namespace VPB
                 le.minHeight = rowH;
                 le.preferredHeight = rowH;
                 le.flexibleWidth = 1f;
-                BindUserTagVirtButton(btnGO, ut, utAccent, pickTip, isLeft);
+                stickyBtns[ri] = btnGO;
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
+
+            for (int ri = 0; ri < count; ri++)
+            {
+                if (stickyBtns[ri] == null) continue;
+                BindUserTagVirtButton(stickyBtns[ri], _userTagStickyRows[ri], utAccent, pickTip, isLeft);
+            }
         }
 
         private void SyncUserTagAppliedPinnedStickyRows(bool isLeft, List<UserTagSideTabEntry> pinnedRows, Color accent, float scale)
@@ -1286,11 +1323,29 @@ namespace VPB
                 }
             }
             catch { }
-            // Invent height only when layout has not produced a rect yet.
-            // Do not inflate a truly collapsed viewport — that masked Def-poison clipping.
-            if (viewportH < rowH * 2f && viewportH <= 0.5f)
+            // Invent only while sticky chrome is off (Def viewport / layout settling).
+            // Sticky-on + ≤0.5 = collapsed Mask; inventing binds rows that clip forever (Tags(N), black list).
+            bool stickyOn = (leftUserTagsAvailStickyGO != null && leftUserTagsAvailStickyGO.activeSelf)
+                || (rightUserTagsAvailStickyGO != null && rightUserTagsAvailStickyGO.activeSelf);
+            if (viewportH <= 0.5f && !stickyOn)
                 viewportH = rowH * 10f;
             return viewportH;
+        }
+
+        private void InvalidateUserTagVirtWindowGate(bool isLeft)
+        {
+            if (isLeft)
+            {
+                _lastUserTagVirtFirstIdxLeft = int.MinValue;
+                _lastUserTagVirtVisibleLeft = -1;
+                _lastUserTagVirtTotalLeft = -1;
+            }
+            else
+            {
+                _lastUserTagVirtFirstIdxRight = int.MinValue;
+                _lastUserTagVirtVisibleRight = -1;
+                _lastUserTagVirtTotalRight = -1;
+            }
         }
 
         private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool preserveScroll)
@@ -1313,7 +1368,10 @@ namespace VPB
             }
             try
             {
+                // Sticky first so Mask height is final before virt window measure/bind.
+                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
                 Canvas.ForceUpdateCanvases();
+                InvalidateUserTagVirtWindowGate(isLeft);
                 if (resetScrollToTop)
                 {
                     ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
@@ -1323,7 +1381,6 @@ namespace VPB
                     ApplyUserTagAvailScrollOffsetPx(isLeft, preserveOffsetPx);
                 if (tabContainer != null)
                     UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
-                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
             }
             catch { }
             _userTagVirtLayoutCo = null;
@@ -2377,8 +2434,6 @@ namespace VPB
 
             CreateUserTagModeMiniButton(titleRow, "F", UserTagAvailMode.FilterByTags, miniSq, s,
                 VPBTranslation.T("gallery.usertags.mini_filter_tip", "Filter Mode: grid shows items matching selected tags."));
-            CreateUserTagModeMiniButton(titleRow, "N", UserTagAvailMode.FilterUntagged, miniSq, s,
-                VPBTranslation.T("gallery.usertags.mini_untagged_tip", "Not Tagged: grid shows only items with no user tags."));
             CreateUserTagModeMiniButton(titleRow, "T", UserTagAvailMode.Tag, miniSq, s,
                 VPBTranslation.T("gallery.usertags.mini_tag_tip", "Tag Mode: click tags to apply them to the selection."));
 
@@ -2612,7 +2667,7 @@ namespace VPB
                 OnUserTagAvailFilterModeClicked);
             filterGo.name = "VPB_UserTagFilterModeBtn";
             AddUserTagFilterButtonIconAndLabel(filterGo, s);
-            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "Cycles: Tag Mode (apply tags), Filter Mode (grid matches selected tags), Not Tagged (grid shows only items with no user tags)."));
+            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "Cycles: Tag Mode (apply tags) \u2194 Filter Mode (grid matches selected tags). Not tagged filter lives in title-bar Filter menu."));
             filterGo.transform.SetSiblingIndex(Mathf.Min(1, filterGo.transform.GetSiblingIndex()));
 
             HorizontalLayoutGroup hlg = btnRow.GetComponent<HorizontalLayoutGroup>();
@@ -2724,7 +2779,10 @@ namespace VPB
                     return false;
             }
             catch { return false; }
-            if (!userTagsCached) return false;
+            // Wait until per-category counts are ready; vocabulary-only cache must not hide everything as Count=0.
+            if (!_userTagSideTabCountsReady) return false;
+            // Fresh/wiped DB: vocabulary exists but no assignments yet — hide-unused would empty the list.
+            if (!_userTagAnyAssignmentExists) return false;
             if (ut.Count == int.MinValue) return false;
             if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
             {
@@ -2734,32 +2792,86 @@ namespace VPB
             return ut.Count <= 0;
         }
 
-        /// <summary>When User Tags side panel opens, apply configured default mode (filter / apply / untagged).</summary>
+        /// <summary>When User Tags side panel opens, apply configured default work mode (filter / apply). Not tagged browse filter stays until manual clear.</summary>
         internal void ApplyDefaultUserTagAvailModeOnTagsPanelOpen()
         {
             UserTagAvailMode mode = ResolveDefaultUserTagAvailMode();
+            // Opening the tags rail must not dismiss title-bar Not tagged (browse filter ≠ panel work mode).
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                if (mode == UserTagAvailMode.Tag || mode == UserTagAvailMode.FilterByTags)
+                    _userTagModeBeforeUntagged = mode;
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+                try { SyncBrowseFilterChipChrome(); } catch { }
+                return;
+            }
+            if (mode == UserTagAvailMode.FilterUntagged)
+            {
+                SetUserTagAvailMode(UserTagAvailMode.FilterUntagged);
+                return;
+            }
             if (_userTagAvailMode == mode)
             {
                 try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
                 return;
             }
-            UserTagAvailMode prev = _userTagAvailMode;
-            _userTagAvailMode = mode;
-            if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
-                try { ClearUntaggedTaggedPinKeys(); } catch { }
-            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
-            try { RefreshFiles(true, false, false, null); } catch { }
+            RequestUserTagWorkMode(mode);
         }
 
         private void OnUserTagAvailFilterModeClicked()
         {
-            SetUserTagAvailMode((UserTagAvailMode)(((int)_userTagAvailMode + 1) % 3));
+            // Tag \u2194 Filter only. Not tagged is title-bar browse filter — keep it armed.
+            UserTagAvailMode chrome = ResolveUserTagWorkModeForChrome();
+            if (chrome == UserTagAvailMode.Tag)
+                RequestUserTagWorkMode(UserTagAvailMode.FilterByTags);
+            else
+                RequestUserTagWorkMode(UserTagAvailMode.Tag);
+        }
+
+        /// <summary>
+        /// Switch Tag / Filter work mode. While Not tagged browse filter is on, only updates
+        /// remembered work mode + chrome — does not clear the browse filter (manual dismiss only).
+        /// </summary>
+        private void RequestUserTagWorkMode(UserTagAvailMode mode)
+        {
+            if (mode != UserTagAvailMode.Tag && mode != UserTagAvailMode.FilterByTags)
+            {
+                SetUserTagAvailMode(mode);
+                return;
+            }
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                if (_userTagModeBeforeUntagged == mode)
+                {
+                    try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                    return;
+                }
+                _userTagModeBeforeUntagged = mode;
+                try
+                {
+                    string t = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
+                    string p = currentPath ?? "";
+                    if (!string.IsNullOrEmpty(t) || !string.IsNullOrEmpty(p))
+                        SaveCurrentCategoryFilterState(t, p);
+                }
+                catch { }
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                return;
+            }
+            SetUserTagAvailMode(mode);
         }
 
         private void SetUserTagAvailMode(UserTagAvailMode mode)
         {
             UserTagAvailMode prev = _userTagAvailMode;
             if (prev == mode) return;
+            if (mode == UserTagAvailMode.FilterUntagged
+                && prev != UserTagAvailMode.FilterUntagged)
+                _userTagModeBeforeUntagged = prev == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
             _userTagAvailMode = mode;
             if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 ClearUntaggedTaggedPinKeys();
@@ -2772,19 +2884,69 @@ namespace VPB
             }
             catch { }
             SyncUserTagFilterModeToggleVisualsEverywhere();
-            try { RefreshFiles(true, false, false, null); } catch { }
-            try { UpdateTabs(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            try { SyncBrowseFilterChipChrome(); } catch { }
+            if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
+            {
+                try { RebuildGlobalSourceFilterMenuOptions(); } catch { }
+            }
+
+            // Grid only changes when untagged mode toggles, or Filter↔Tag while include/exclude filters are armed.
+            bool untaggedInvolved = prev == UserTagAvailMode.FilterUntagged
+                || mode == UserTagAvailMode.FilterUntagged;
+            bool filterAffectsGrid = (activeUserTags != null && activeUserTags.Count > 0)
+                || (excludedUserTags != null && excludedUserTags.Count > 0);
+            if (untaggedInvolved || filterAffectsGrid)
+            {
+                try { RefreshFiles(true, false, false, null); } catch { }
+            }
+
+            // Prefer in-place User Tags rebuild over full UpdateTabs — avoids left-panel flash on F↔T.
+            _userTagVirtViewSig = null;
+            bool leftOpen = IsUserTagsSideTabOpen(true);
+            bool rightOpen = IsUserTagsSideTabOpen(false);
+            if (leftOpen || rightOpen)
+            {
+                if (leftOpen)
+                {
+                    try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
+                    if (leftTabContainerGO != null)
+                        try { RequestUserTagVirtLayoutRefresh(true, leftTabContainerGO.transform, preserveScroll: true); } catch { }
+                }
+                if (rightOpen)
+                {
+                    try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
+                    if (rightTabContainerGO != null)
+                        try { RequestUserTagVirtLayoutRefresh(false, rightTabContainerGO.transform, preserveScroll: true); } catch { }
+                }
+            }
+            else
+            {
+                try { UpdateTabs(); } catch { }
+            }
         }
 
-        /// <summary>Backdrop colour for each tag-availability mode (shared by the toggle and the F/N/T mini buttons).</summary>
+        /// <summary>Backdrop colour for Tag / Filter work modes (F/T mini + sticky toggle).</summary>
         private Color UserTagAvailModeColor(UserTagAvailMode mode)
         {
             switch (mode)
             {
                 case UserTagAvailMode.Tag: return new Color(0.20f, 0.50f, 0.25f, 1f);
                 case UserTagAvailMode.FilterByTags: return new Color(0.18f, 0.38f, 0.62f, 1f);
-                default: return new Color(0.45f, 0.32f, 0.14f, 1f);
+                default: return new Color(0.18f, 0.38f, 0.62f, 1f);
             }
+        }
+
+        /// <summary>Work mode shown on side-rail chrome while Not tagged browse filter is on.</summary>
+        private UserTagAvailMode ResolveUserTagWorkModeForChrome()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                return _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
+            }
+            return _userTagAvailMode;
         }
 
         private void CreateUserTagModeMiniButton(GameObject parent, string letter, UserTagAvailMode mode, float sq, float s, string tip)
@@ -2796,7 +2958,7 @@ namespace VPB
             UI.ConfigButtonFlat(btn);
             btn.targetGraphic = img;
             UserTagAvailMode target = mode;
-            btn.onClick.AddListener(() => SetUserTagAvailMode(target));
+            btn.onClick.AddListener(() => RequestUserTagWorkMode(target));
             go.AddComponent<UIHoverBorder>();
 
             LayoutElement le = UI.AddLE(go, minWidth: sq, minHeight: sq, preferredWidth: sq, preferredHeight: sq, flexibleWidth: 0f, flexibleHeight: 0f);
@@ -2812,8 +2974,10 @@ namespace VPB
             if (bulkBlockV3 == null) return;
             Transform row = bulkBlockV3.Find("TagsTitleRow");
             if (row == null) return;
+            // Legacy N mini: Not tagged moved to title-bar Filter menu.
+            Transform legacyN = row.Find("VPB_UserTagModeMiniBtn_" + UserTagAvailMode.FilterUntagged);
+            if (legacyN != null) UnityEngine.Object.Destroy(legacyN.gameObject);
             SyncUserTagModeMiniButton(row, UserTagAvailMode.FilterByTags);
-            SyncUserTagModeMiniButton(row, UserTagAvailMode.FilterUntagged);
             SyncUserTagModeMiniButton(row, UserTagAvailMode.Tag);
         }
 
@@ -2860,12 +3024,11 @@ namespace VPB
             Sprite tagSpr = UI.LoadIconSprite("vpb_icons/gallery_tags.png", iconTint);
             if (tagSpr == null) tagSpr = UI.LoadIconSprite("vpb_icons/tags.png", iconTint);
             if (tagSpr == null) tagSpr = offSpr;
+            UserTagAvailMode chromeMode = ResolveUserTagWorkModeForChrome();
             if (iconImg != null)
             {
-                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+                if (chromeMode == UserTagAvailMode.FilterByTags)
                     iconImg.sprite = onSpr;
-                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-                    iconImg.sprite = offSpr != null ? offSpr : onSpr;
                 else
                     iconImg.sprite = tagSpr;
                 iconImg.color = Color.white;
@@ -2874,10 +3037,8 @@ namespace VPB
             if (label != null)
             {
                 label.gameObject.SetActive(true);
-                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+                if (chromeMode == UserTagAvailMode.FilterByTags)
                     label.text = VPBTranslation.T("gallery.usertags.filter_button_on_label", "Filter Mode");
-                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-                    label.text = VPBTranslation.T("gallery.usertags.not_tagged_mode_button_label", "Not Tagged");
                 else
                     label.text = VPBTranslation.T("gallery.usertags.tag_mode_button_label", "Tag Mode");
             }
@@ -2886,13 +3047,9 @@ namespace VPB
             {
                 Color tagModeBackdrop = new Color(0.20f, 0.50f, 0.25f, 1f);
                 Color filterModeBackdrop = new Color(0.18f, 0.38f, 0.62f, 1f);
-                Color untaggedModeBackdrop = new Color(0.45f, 0.32f, 0.14f, 1f);
-                if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
-                    bd.color = filterModeBackdrop;
-                else if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-                    bd.color = untaggedModeBackdrop;
-                else
-                    bd.color = tagModeBackdrop;
+                bd.color = chromeMode == UserTagAvailMode.FilterByTags
+                    ? filterModeBackdrop
+                    : tagModeBackdrop;
             }
         }
 
@@ -3264,13 +3421,13 @@ namespace VPB
             RebuildUserTagEditorRows();
             try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
-            // Land in Tag Mode so Create tag rows is visible without hunting F/N/T.
+            // Land in Tag Mode so Create tag rows is visible without hunting F/T.
             if (created > 0
                 && _userTagAvailMode == UserTagAvailMode.FilterByTags
                 && VPBConfig.Instance != null
                 && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
             {
-                try { SetUserTagAvailMode(UserTagAvailMode.Tag); }
+                try { RequestUserTagWorkMode(UserTagAvailMode.Tag); }
                 catch { try { UpdateTabs(); } catch { } }
             }
             else
@@ -4021,6 +4178,8 @@ namespace VPB
         private bool _pressed;
         private bool _dragging;
         private Vector2 _pressPos;
+        private Vector2 _lastScreenPos;
+        private Camera _pressEventCamera;
         private float _pressTime;
         private GameObject _ghost;
         private Text _ghostText;
@@ -4029,6 +4188,9 @@ namespace VPB
         private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(16);
         public bool ConsumedByDrag { get; private set; }
         private bool _releaseProcessed;
+        /// <summary>Desktop: small screen slack past press. VR laser+world canvas barely moves screen px — skip (same as UIDraggableItem).</summary>
+        private const float DesktopMinScreenPixelsForTagDrag = 10f;
+        private const float VrHoldSecondsForTagDrag = 0.25f;
 
         private void Awake()
         {
@@ -4052,6 +4214,8 @@ namespace VPB
             ConsumedByDrag = false;
             _releaseProcessed = false;
             _pressPos = eventData.position;
+            _lastScreenPos = eventData.position;
+            _pressEventCamera = eventData.pressEventCamera;
             _pressTime = Time.unscaledTime;
         }
 
@@ -4064,8 +4228,8 @@ namespace VPB
             _releaseProcessed = true;
             if (_dragging)
             {
+                if (eventData != null) _lastScreenPos = eventData.position;
                 EndManualDrag(eventData);
-                ConsumedByDrag = true;
             }
         }
 
@@ -4075,18 +4239,21 @@ namespace VPB
 
             if (_dragging)
             {
+                // Desktop Update-started drags may never get OnDrag — keep screen pos fresh.
+                if (!XrUtils.IsVrActive())
+                    _lastScreenPos = (Vector2)Input.mousePosition;
                 UpdateGhostPosition();
                 if (!IsAppliedRowDrag)
                 {
                     bool reorderHint = false;
                     if (DetailStripAppliedReorder && Panel != null)
                     {
-                        try { reorderHint = Panel.DetailStripUpdateAppliedReorderHint(PrimaryTag, (Vector2)Input.mousePosition); }
+                        try { reorderHint = Panel.DetailStripUpdateAppliedReorderHint(PrimaryTag, _lastScreenPos); }
                         catch { reorderHint = false; }
                         try
                         {
                             bool overAvail = !reorderHint
-                                && Panel.DetailStripScreenPosOverAvailableList((Vector2)Input.mousePosition);
+                                && Panel.DetailStripScreenPosOverAvailableList(_lastScreenPos);
                             Panel.DetailStripSetTagMenuRemoveDragHint(true, overAvail);
                         }
                         catch { }
@@ -4105,16 +4272,14 @@ namespace VPB
 
             if (!_pressed) return;
 
-            bool isVR = XrUtils.IsVrActive();
-            float distThreshold = isVR ? 50f : 10f;
-            float holdThreshold = isVR ? 0.25f : 0f;
+            // VR: EventSystem OnBeginDrag starts drag (no extra pixel gate — laser barely moves).
+            // Do not auto-start from hold alone (would steal long taps).
+            if (XrUtils.IsVrActive()) return;
 
             Vector2 cur = Input.mousePosition;
-            float dist = (cur - _pressPos).magnitude;
-            if (dist < distThreshold) return;
-
-            float held = Time.unscaledTime - _pressTime;
-            if (held < holdThreshold) return;
+            _lastScreenPos = cur;
+            if ((cur - _pressPos).sqrMagnitude < DesktopMinScreenPixelsForTagDrag * DesktopMinScreenPixelsForTagDrag)
+                return;
 
             BeginManualDrag();
         }
@@ -4122,17 +4287,17 @@ namespace VPB
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (Panel == null) return;
+            if (eventData != null)
+            {
+                _lastScreenPos = eventData.position;
+                if (eventData.pressEventCamera != null)
+                    _pressEventCamera = eventData.pressEventCamera;
+            }
 
+            // VR: hold only — pixel delta vs press unreliable (same note as UIDraggableItem).
             if (XrUtils.IsVrActive())
             {
-                float held = Time.unscaledTime - _pressTime;
-                if (held < 0.25f) return;
-
-                if (eventData != null)
-                {
-                    float dist = (eventData.position - _pressPos).magnitude;
-                    if (dist < 50f) return;
-                }
+                if (Time.unscaledTime - _pressTime < VrHoldSecondsForTagDrag) return;
             }
 
             BeginManualDrag();
@@ -4140,13 +4305,15 @@ namespace VPB
 
         public void OnDrag(PointerEventData eventData)
         {
+            if (eventData != null) _lastScreenPos = eventData.position;
             if (_dragging) UpdateGhostPosition();
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            if (_dragging)
-                EndManualDrag(eventData);
+            if (!_dragging) return;
+            if (eventData != null) _lastScreenPos = eventData.position;
+            EndManualDrag(eventData);
         }
 
         private void BeginManualDrag()
@@ -4165,6 +4332,7 @@ namespace VPB
             // Applied-column quick-tagger: treat as remove-mode so strip/gallery apply zones ignore the drag.
             UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag || DetailStripAppliedReorder;
             _dragging = true;
+            ConsumedByDrag = true;
 
             if (_cg != null)
             {
@@ -4186,6 +4354,7 @@ namespace VPB
 
         private void EndManualDrag(PointerEventData eventData)
         {
+            if (!_dragging) return;
             if (IsAppliedRowDrag)
                 TryDropToRemoveZone(eventData);
             else
@@ -4193,11 +4362,15 @@ namespace VPB
             CleanupDragVisuals();
         }
 
+        private Vector2 ResolveDropScreenPos(PointerEventData eventData)
+        {
+            if (eventData != null) return eventData.position;
+            return _lastScreenPos;
+        }
+
         private void TryDropToRemoveZone(PointerEventData eventData)
         {
-            TryDropToRemoveZoneAt(
-                (eventData != null) ? eventData.position : (Vector2)Input.mousePosition,
-                eventData);
+            TryDropToRemoveZoneAt(ResolveDropScreenPos(eventData), eventData);
         }
 
         private bool TryDropToRemoveZoneAt(Vector2 screenPos, PointerEventData eventData)
@@ -4234,7 +4407,7 @@ namespace VPB
             if (tags == null || tags.Count == 0) return;
 
             EventSystem es = EventSystem.current;
-            Vector2 screenPos = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            Vector2 screenPos = ResolveDropScreenPos(eventData);
 
             // Quick-tagger Applied: reorder in-list, or drop on Available → remove.
             if (DetailStripAppliedReorder)
@@ -4276,6 +4449,13 @@ namespace VPB
                 }
             }
 
+            // Gallery row before Applied/selection zones — drop on item tags that item.
+            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
+            {
+                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
+                return;
+            }
+
             for (int i = 0; i < _raycastHits.Count; i++)
             {
                 GameObject go = _raycastHits[i].gameObject;
@@ -4286,12 +4466,6 @@ namespace VPB
                     Panel.UserTagApplyDroppedTags(tags);
                     return;
                 }
-            }
-
-            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
-            {
-                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
-                return;
             }
 
             // Fallback: drop anywhere inside this panel's canvas applies (selection-targeted).
@@ -4324,7 +4498,7 @@ namespace VPB
                 Panel.dragHoverItem(null, tags);
                 return;
             }
-            var ped = new PointerEventData(es) { position = (Vector2)Input.mousePosition };
+            var ped = new PointerEventData(es) { position = _lastScreenPos };
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
             if (!GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry rowHit))
@@ -4337,10 +4511,12 @@ namespace VPB
 
         private void CleanupDragVisuals()
         {
+            bool wasDragging = _dragging;
             _pressed = false;
             _dragging = false;
-            ConsumedByDrag = false;
             _releaseProcessed = false;
+            // Keep ConsumedByDrag until next PointerDown so Button onClick skips post-drag click.
+            if (!wasDragging) ConsumedByDrag = false;
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
             try { if (Panel != null) Panel.DetailStripClearAppliedReorderHint(); } catch { }
             try { if (Panel != null) Panel.DetailStripSetTagMenuRemoveDragHint(false, false); } catch { }
@@ -4436,9 +4612,32 @@ namespace VPB
         private void UpdateGhostPosition()
         {
             if (_ghostRT == null) return;
-            Vector2 pos = Input.mousePosition;
-            // Center ghost on cursor so label sits on drop placeholder.
-            _ghostRT.position = new Vector3(pos.x, pos.y, 0f);
+            Canvas root = _rootCanvas;
+            if (root == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+
+            RectTransform parent = root.transform as RectTransform;
+            if (parent == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+
+            // Overlay: cam null. World/floating: press camera or canvas worldCamera.
+            Camera cam = null;
+            if (root.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                cam = _pressEventCamera;
+                if (cam == null)
+                    cam = root.worldCamera != null ? root.worldCamera : Camera.main;
+            }
+
+            Vector3 world;
+            if (RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, _lastScreenPos, cam, out world))
+                _ghostRT.position = world;
             _ghostRT.SetAsLastSibling();
         }
     }

@@ -92,7 +92,6 @@ namespace VPB
             if (hairSubfilter != 0) return true;
             if (appearanceSubfilter != 0) return true;
             if (posePeopleFilter != PosePeopleFilter.All) return true;
-            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return true;
             if (_userTagAvailMode == UserTagAvailMode.FilterByTags
                 && ((activeUserTags != null && activeUserTags.Count > 0) || (excludedUserTags != null && excludedUserTags.Count > 0)))
                 return true;
@@ -721,10 +720,10 @@ namespace VPB
 
         private void DismissUntaggedOnlyFilterChip()
         {
-            _userTagAvailMode = ResolveDefaultUserTagAvailMode();
-            try { ClearUntaggedTaggedPinKeys(); } catch { }
-            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
-            try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
+            UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                ? UserTagAvailMode.Tag
+                : UserTagAvailMode.FilterByTags;
+            SetUserTagAvailMode(restore);
             SyncBrowseFilterChipChrome();
         }
 

@@ -153,6 +153,15 @@ namespace VPB
 
         private IEnumerator CoRestoreUserTagAvailScroll(bool isLeft, float offsetPx)
         {
+            // Empty virt list: no content height to stabilize — one apply, skip 4-frame ForceRebuild thrash.
+            if (_userTagVirtView == null || _userTagVirtView.Count == 0)
+            {
+                try { ApplyUserTagAvailScrollOffsetPx(isLeft, offsetPx); } catch { }
+                if (isLeft) _leftUserTagAvailScrollRestoreCo = null;
+                else _rightUserTagAvailScrollRestoreCo = null;
+                yield break;
+            }
+
             for (int frame = 0; frame < 4; frame++)
             {
                 yield return null;
@@ -206,10 +215,11 @@ namespace VPB
             }
 
             SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            InvalidateUserTagVirtWindowGate(isLeft);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
-            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             RestorePreservedUserTagAvailScroll();
         }
     }
