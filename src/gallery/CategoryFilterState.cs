@@ -16,8 +16,8 @@ namespace VPB
         public int UserTagAvailFilterMode = 0;
         /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
         public int UserTagInheritVarToChildren = 0;
-        public string SceneSourceFilter = "";
-        public string AppearanceSourceFilter = "";
+        public string SceneSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
+        public string AppearanceSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
         public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
         public int HairSubfilter = 0;
@@ -35,9 +35,8 @@ namespace VPB
         /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>
         public int BrowseUnusedMode = 0;
 
-        // Maps legacy source-filter string values to the binary toggle the global-filter
-        // design now uses: "" means toggle OFF (global filter applies), "local" means toggle ON
-        // (override to local-only on this category).
+        // Maps legacy per-category source-filter strings. "" / non-local → ignored.
+        // "local" migrates to title-bar global Source Local on ApplyCategoryFilterState.
         private static string MigrateLegacySourceFilter(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";

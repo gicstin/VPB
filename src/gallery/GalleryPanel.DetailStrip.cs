@@ -5899,7 +5899,7 @@ namespace VPB
             catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip quick tag: " + ex.Message); }
         }
 
-        /// <summary>Toggle gallery user-tag filter (include on/off), same job as author filter.</summary>
+        /// <summary>Toggle gallery user-tag filter (include on/off). Keeps current F/T work mode — filter sets are orthogonal.</summary>
         private void DetailStripOnTagFilterClick(string tagName)
         {
             if (string.IsNullOrEmpty(tagName)) return;
@@ -5907,14 +5907,17 @@ namespace VPB
             {
                 string norm = tagName.Trim();
                 if (string.IsNullOrEmpty(norm)) return;
+                norm = VpbLocalDatabase.NormalizeGalleryUserTagName(norm);
+                if (string.IsNullOrEmpty(norm)) return;
 
-                if (_userTagAvailMode != UserTagAvailMode.FilterByTags)
+                // Exit Not-tagged browse if armed; restore prior F/T work mode without forcing Filter mode.
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 {
-                    if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
-                    {
-                        try { ClearUntaggedTaggedPinKeys(); } catch { }
-                    }
-                    _userTagAvailMode = UserTagAvailMode.FilterByTags;
+                    try { ClearUntaggedTaggedPinKeys(); } catch { }
+                    UserTagAvailMode restore = _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                        ? UserTagAvailMode.Tag
+                        : UserTagAvailMode.FilterByTags;
+                    _userTagAvailMode = restore;
                     try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
                 }
 
@@ -5931,6 +5934,8 @@ namespace VPB
                     if (excludedUserTags != null) excludedUserTags.Remove(norm);
                     nowOn = true;
                 }
+
+                try { BridgeTitleSearchTagChipFromFilterSet(norm); } catch { }
 
                 try { RefreshFilesAndTabs(); } catch { try { RefreshFiles(true, false, false, "detail_strip_tag_filter"); } catch { } }
                 try { SyncBrowseFilterChipChrome(); } catch { }

@@ -225,12 +225,17 @@ namespace VPB
             if (IsSettingsPanelOpen() || settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(true);
-                UpdateTabs();
+                // Settings chrome only — full side-tab rebuild not required for settings list rows.
+                try { UpdateTabsImpl(rebuildSideTabLists: false, rebuildSubPaneSideTabLists: false); } catch { }
                 return;
             }
             ReconcileAutoGenderForCurrentTarget();
             RefreshFiles();
-            UpdateTabs();
+            // Do NOT call UpdateTabs() here. RefreshFiles bumps _deferredSubPaneSessionId, cancels
+            // tag/loose-merge coroutines, and schedules DeferredGallerySideTabsAfterGridReady — which
+            // rebuilds side strips + facets once the grid is ready. Sync UpdateTabs was a second full
+            // rebuild and restarted cancelled scans (chip/subfilter storm).
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         private string GetSelectedTargetGenderLabel()

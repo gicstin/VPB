@@ -283,7 +283,7 @@ namespace VPB
 
         private void SyncGridAfterUserTagRemoveInFilterMode(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows, List<string> tags)
         {
-            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return;
+            if (!IsUserTagIncludeFilterArmed()) return;
             if (activeUserTags == null || activeUserTags.Count == 0) return;
             if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable) return;
 
@@ -2067,7 +2067,7 @@ namespace VPB
         private bool TryPruneVisibleGridAfterUserTagRemove(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
             if (updatedRows == null || updatedRows.Count == 0) return false;
-            if (_userTagAvailMode != UserTagAvailMode.FilterByTags || activeUserTags == null || activeUserTags.Count == 0)
+            if (!IsUserTagIncludeFilterArmed() || activeUserTags == null || activeUserTags.Count == 0)
                 return false;
             if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable)
                 return false;
@@ -2219,7 +2219,7 @@ namespace VPB
             try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
 
-            bool filterModeRemove = remove && _userTagAvailMode == UserTagAvailMode.FilterByTags;
+            bool filterModeRemove = remove && IsUserTagIncludeExcludeFilterArmed();
 
             if (filterModeRemove)
             {
@@ -2765,8 +2765,40 @@ namespace VPB
         private string GetUserTagPickRowTooltipFilter()
         {
             return UserTagFilterRequiresAllTags()
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Tap to cycle: include (all must match) \u2192 exclude (hide items with this tag) \u2192 off. Drag to Applied below.")
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Tap to cycle: include (any can match) \u2192 exclude (hide items with this tag) \u2192 off. Drag to Applied below.");
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Tap: include on/off (all must match). Right-click or drag to Exclude row to hide items with this tag. Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Tap: include on/off (any can match). Right-click or drag to Exclude row to hide items with this tag. Drag to Applied below.");
+        }
+
+        /// <summary>
+        /// Include/exclude user-tag sets arm the grid filter independent of F/T work mode.
+        /// FilterUntagged browse is exclusive and ignores include/exclude until dismissed.
+        /// </summary>
+        private bool IsUserTagIncludeExcludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (activeUserTags != null && activeUserTags.Count > 0) return true;
+            if (excludedUserTags != null && excludedUserTags.Count > 0) return true;
+            return false;
+        }
+
+        private bool IsUserTagIncludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            return activeUserTags != null && activeUserTags.Count > 0;
+        }
+
+        private bool IsUserTagExcludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            return excludedUserTags != null && excludedUserTags.Count > 0;
+        }
+
+        private bool UserTagNameIsInIncludeOrExcludeFilter(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return false;
+            if (activeUserTags != null && activeUserTags.Contains(tagName)) return true;
+            if (excludedUserTags != null && excludedUserTags.Contains(tagName)) return true;
+            return false;
         }
 
         /// <summary>True when available tag row should be omitted in filter-by-tags mode (unused in current category).</summary>
@@ -2779,16 +2811,23 @@ namespace VPB
                     return false;
             }
             catch { return false; }
+            // Side-list search: match full vocabulary (including zero-count).
+            if (!string.IsNullOrEmpty(userTagFilter)) return false;
             // Wait until per-category counts are ready; vocabulary-only cache must not hide everything as Count=0.
             if (!_userTagSideTabCountsReady) return false;
             // Fresh/wiped DB: vocabulary exists but no assignments yet — hide-unused would empty the list.
             if (!_userTagAnyAssignmentExists) return false;
-            if (ut.Count == int.MinValue) return false;
+            if (ut.Count == UserTagCreateRowCountSentinel) return false;
+            if (ut.Count == UserTagUnusedBucketHeaderSentinel) return false;
+            // Expanded Unused bucket shows zero-count rows explicitly.
+            if (_userTagShowUnusedBucket) return false;
             if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
             {
                 UserTagSelectionState st = GetUserTagSelectionState(ut.Name);
                 if (st != UserTagSelectionState.Off) return false;
             }
+            // Armed filter tags stay visible even when Count=0.
+            if (UserTagNameIsInIncludeOrExcludeFilter(ut.Name)) return false;
             return ut.Count <= 0;
         }
 
@@ -2891,12 +2930,11 @@ namespace VPB
                 try { RebuildGlobalSourceFilterMenuOptions(); } catch { }
             }
 
-            // Grid only changes when untagged mode toggles, or Filter↔Tag while include/exclude filters are armed.
+            // Grid only changes when untagged browse toggles. Include/exclude filters stay live across F↔T
+            // (work mode is list density + click binding only — never re-arm/disarm filter sets).
             bool untaggedInvolved = prev == UserTagAvailMode.FilterUntagged
                 || mode == UserTagAvailMode.FilterUntagged;
-            bool filterAffectsGrid = (activeUserTags != null && activeUserTags.Count > 0)
-                || (excludedUserTags != null && excludedUserTags.Count > 0);
-            if (untaggedInvolved || filterAffectsGrid)
+            if (untaggedInvolved)
             {
                 try { RefreshFiles(true, false, false, null); } catch { }
             }

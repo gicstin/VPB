@@ -92,7 +92,23 @@ namespace VPB
         }
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
+        private const int GlobalRegionCacheMaxEntries = 1024;
         private static string _lastAppearanceClothingMode = "keep";
+
+        /// <summary>Drop clothing/hair region L1 cache (package refresh / soak-test bound).</summary>
+        public static void ClearGlobalRegionCache()
+        {
+            _globalRegionCache.Clear();
+        }
+
+        private static void PutGlobalRegionCache(string cacheKey, HashSet<string> regions)
+        {
+            if (string.IsNullOrEmpty(cacheKey) || regions == null) return;
+            if (_globalRegionCache.Count >= GlobalRegionCacheMaxEntries
+                && !_globalRegionCache.ContainsKey(cacheKey))
+                _globalRegionCache.Clear();
+            _globalRegionCache[cacheKey] = regions;
+        }
 
         public static HashSet<string> GetTagSetForClothingItem(object item)
         {

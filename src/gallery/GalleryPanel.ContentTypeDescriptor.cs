@@ -54,7 +54,7 @@ namespace VPB
             Add(ContentType.UserTags, "gallery.search.user_tags", "Filter tag list...", SideFilterFieldKind.UserTags);
             Add(ContentType.UserTagsApplied, "gallery.search.user_tags_applied", "Filter applied tags...");
             Add(ContentType.Path, "gallery.search.paths", "Filter path list...", SideFilterFieldKind.Path);
-            Add(ContentType.Tags, "gallery.search.tags", "Filter tags...");
+            Add(ContentType.Tags, "gallery.search.tags", "Filter regions...");
             Add(ContentType.RemoveClothing, "gallery.search.clothing", "Filter Clothing...", SideFilterFieldKind.RemoveClothing, suppressSideSort: true);
             Add(ContentType.RemoveHair, "gallery.search.hair", "Filter Hair...", SideFilterFieldKind.RemoveHair, suppressSideSort: true);
             Add(ContentType.RemoveAtom, "gallery.search.atoms", "Filter Atoms...", SideFilterFieldKind.RemoveAtom, suppressSideSort: true);

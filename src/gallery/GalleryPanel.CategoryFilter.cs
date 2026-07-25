@@ -22,8 +22,9 @@ namespace VPB
             s.ExcludedUserTags = new List<string>(excludedUserTags);
             s.UserTagAvailFilterMode = (int)_userTagAvailMode;
             s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
-            s.SceneSourceFilter = currentSceneSourceFilter ?? "";
-            s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
+            // Legacy per-category Local fields retired — Local lives on global Source only.
+            s.SceneSourceFilter = "";
+            s.AppearanceSourceFilter = "";
             s.PackagePathFilter = currentPackagePathFilter ?? "";
             s.ClothingSubfilter = (int)clothingSubfilter;
             s.HairSubfilter = (int)hairSubfilter;
@@ -67,7 +68,7 @@ namespace VPB
 
             if (_categoryFilterStates.TryGetValue(key, out state) && state != null)
             {
-                ApplyCategoryFilterState(state, restoreUserTagFilter: false);
+                ApplyCategoryFilterState(state, restoreUserTagFilter: true);
                 return;
             }
 
@@ -78,7 +79,7 @@ namespace VPB
                 if (state != null)
                 {
                     _categoryFilterStates[key] = state;
-                    ApplyCategoryFilterState(state, restoreUserTagFilter: false);
+                    ApplyCategoryFilterState(state, restoreUserTagFilter: true);
                     return;
                 }
             }
@@ -87,10 +88,10 @@ namespace VPB
         }
 
         /// <param name="restoreUserTagFilter">
-        /// When false (auto-persisted per-category state, e.g. after restart), the user-tag availability
-        /// filter (FilterByTags / FilterUntagged + selected tags) is NOT restored — it resets to the default
-        /// non-filtering selection so re-entering a category never silently hides scenes by tag (issue #64).
-        /// Explicit Quick Filter presets pass true so a deliberately saved tag filter is honored.
+        /// When true (default for category restore + Quick Filters), restore include/exclude user-tag
+        /// filter sets and work mode. Filter chips make armed filters visible (issue #64: silent hide
+        /// was from restoring FilterUntagged / FilterByTags without clear affordance).
+        /// Pass false only when deliberately wiping user-tag filter while applying other state.
         /// </param>
         private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true)
         {
@@ -142,12 +143,28 @@ namespace VPB
                 if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                     _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             }
+            _userTagShowUnusedBucket = false;
             if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
                 try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
-            currentSceneSourceFilter = state.SceneSourceFilter ?? "";
-            currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
+            // Migrate legacy per-category Scene/Appearance Local → global Source Local.
+            try
+            {
+                bool legacyLocal =
+                    string.Equals(state.SceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(state.AppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+                if (legacyLocal && currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.Local)
+                {
+                    currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
+                    if (VPBConfig.Instance != null)
+                    {
+                        VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
+                        try { VPBConfig.Instance.Save(); } catch { }
+                    }
+                }
+            }
+            catch { }
             currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
             hairSubfilter = (HairSubfilter)state.HairSubfilter;
@@ -193,13 +210,12 @@ namespace VPB
             activeTags.Clear();
             activeUserTags.Clear();
             excludedUserTags.Clear();
+            _userTagShowUnusedBucket = false;
             _userTagAvailMode = ResolveDefaultUserTagAvailMode();
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
                 _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
             try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;
-            currentSceneSourceFilter = "";
-            currentAppearanceSourceFilter = "";
             currentPackagePathFilter = "";
             clothingSubfilter = 0;
             hairSubfilter = 0;

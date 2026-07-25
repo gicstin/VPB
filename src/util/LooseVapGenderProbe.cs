@@ -22,6 +22,18 @@ namespace VPB.src.util
         private static readonly Dictionary<string, Gender> s_MemCache =
             new Dictionary<string, Gender>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_MemCacheLock = new object();
+        private const int MemCacheMaxEntries = 4096;
+
+        private static void PutMemCache(string filePath, Gender g)
+        {
+            if (string.IsNullOrEmpty(filePath)) return;
+            lock (s_MemCacheLock)
+            {
+                if (s_MemCache.Count >= MemCacheMaxEntries && !s_MemCache.ContainsKey(filePath))
+                    s_MemCache.Clear();
+                s_MemCache[filePath] = g;
+            }
+        }
 
         /// <summary>Gender for <paramref name="filePath"/>: in-process cache, then SQLite, then file parse. Never throws.</summary>
         public static Gender Classify(string filePath)
@@ -70,7 +82,7 @@ namespace VPB.src.util
                 // might reference a character that's now resolvable. Re-probe instead of trusting it.
                 if (g != Gender.Unknown || !mapReady)
                 {
-                    lock (s_MemCacheLock) { s_MemCache[filePath] = g; }
+                    PutMemCache(filePath, g);
                     return FoldFutaForUi(g);
                 }
             }
@@ -93,7 +105,7 @@ namespace VPB.src.util
                 if (bulk != null) bulk.Enqueue(filePath, wtBin, sz, (int)resolved);
                 else { try { VpbLocalDatabase.WriteLooseVapGender(filePath, wtBin, sz, (int)resolved); } catch { } }
             }
-            lock (s_MemCacheLock) { s_MemCache[filePath] = resolved; }
+            PutMemCache(filePath, resolved);
             return FoldFutaForUi(resolved);
         }
 

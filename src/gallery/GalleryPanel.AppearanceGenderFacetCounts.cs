@@ -16,13 +16,11 @@ namespace VPB
             return title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>Appearance grid narrowed to loose/custom only (per-category Local toggle or global Local).</summary>
+        /// <summary>Appearance grid narrowed to loose/custom only (global Source Local).</summary>
         private bool IsAppearanceLocalOnlyActive()
         {
             if (!IsAppearanceCategoryTitle()) return false;
-            if (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                return true;
-            return ResolveEffectiveSourceFilterMode(true, currentPath ?? "") == 1;
+            return IsGlobalSourceFilterLocal();
         }
 
         /// <summary>Fast gender badges + skip heavy parallel tag scan when Source: Local is active.</summary>
@@ -78,7 +76,11 @@ namespace VPB
             else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
         }
 
-        /// <summary>Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).</summary>
+        /// <summary>
+        /// Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).
+        /// Prefer <see cref="CoMergeLooseVapAppearanceGenderFacetCounts"/> (sliced) from UI paths —
+        /// this sync path remains for tiny libraries / tests only.
+        /// </summary>
         private void AccumulateLooseVapAppearanceGenderCounts(bool resetCountsFirst)
         {
             if (resetCountsFirst)
@@ -200,11 +202,14 @@ namespace VPB
             genderBulk.Flush();
         }
 
-        /// <summary>Time-sliced loose .vap merge — keeps category switch responsive on huge libraries.</summary>
-        private IEnumerator CoMergeLooseVapAppearanceGenderFacetCounts(int maxMsPerSlice, int deferredSessionId)
+        /// <summary>Time-sliced loose .vap merge/recount — keeps category switch responsive on huge libraries.</summary>
+        /// <param name="resetCountsFirst">True for Source:Local full recount; false to merge onto SQL/VAR totals.</param>
+        private IEnumerator CoMergeLooseVapAppearanceGenderFacetCounts(int maxMsPerSlice, int deferredSessionId, bool resetCountsFirst)
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) yield break;
-            if (IsAppearanceLooseScopedBrowsing()) yield break;
+
+            if (resetCountsFirst)
+                ResetAppearanceGenderFacetCounts();
 
             string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             EnsureAppearanceGenderRefreshCaches(cat ?? "");
@@ -338,7 +343,12 @@ namespace VPB
         private void ScheduleAppearanceLooseMergeRefresh()
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) return;
-            if (IsAppearanceLooseScopedBrowsing()) return;
+            // Source:Local uses ScheduleAppearanceLooseScopedSliceRecount (full reset).
+            if (IsAppearanceLooseScopedBrowsing())
+            {
+                ScheduleAppearanceLooseScopedSliceRecount(_deferredSubPaneSessionId);
+                return;
+            }
             StopCo(ref _appearanceLooseMergeCo);
             _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseMergeRefresh());
         }
@@ -347,7 +357,7 @@ namespace VPB
         {
             try
             {
-                IEnumerator merge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, -1);
+                IEnumerator merge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, -1, resetCountsFirst: false);
                 while (merge.MoveNext()) yield return merge.Current;
                 string tckPut;
                 if (TryBuildTagCountCacheKey(out tckPut))
@@ -362,12 +372,56 @@ namespace VPB
             }
         }
 
-        /// <summary>Recount gender/source chips from loose .vap under the current path only (milliseconds).</summary>
+        /// <summary>
+        /// Source:Local Appearance — sliced full loose-.vap recount (never sync Accumulate on large trees).
+        /// </summary>
+        private void ScheduleAppearanceLooseScopedSliceRecount(int deferredSessionId)
+        {
+            if (!ShouldCountLooseAppearanceGenderFiles()) return;
+            if (!IsAppearanceLooseScopedBrowsing()) return;
+            StopCo(ref _appearanceLooseMergeCo);
+            int sessionSnap = deferredSessionId >= 0 ? deferredSessionId : _deferredSubPaneSessionId;
+            _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseScopedSliceRecount(sessionSnap));
+        }
+
+        private IEnumerator CoAppearanceLooseScopedSliceRecount(int sessionWhenStarted)
+        {
+            try
+            {
+                IEnumerator merge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, sessionWhenStarted, resetCountsFirst: true);
+                while (merge.MoveNext())
+                {
+                    if (sessionWhenStarted >= 0 && sessionWhenStarted != _deferredSubPaneSessionId)
+                        yield break;
+                    yield return merge.Current;
+                }
+                if (sessionWhenStarted >= 0 && sessionWhenStarted != _deferredSubPaneSessionId)
+                    yield break;
+                tagsCached = true;
+                string tckPut;
+                if (TryBuildTagCountCacheKey(out tckPut))
+                {
+                    try { GalleryTagCountSnapshotCache.Put(tckPut, CaptureTagCountSnapshot()); } catch { }
+                }
+                try { RebuildSubPaneSideTabListsOnly(); } catch { }
+            }
+            finally
+            {
+                _appearanceLooseMergeCo = null;
+            }
+        }
+
+        /// <summary>
+        /// Source:Local Appearance: prefer SQL for instant chips; kick sliced loose recount.
+        /// Never runs sync <see cref="AccumulateLooseVapAppearanceGenderCounts"/> (can freeze VAM).
+        /// </summary>
         private bool TryRecomputeAppearanceGenderFacetCountsScoped()
         {
             if (!IsAppearanceLooseScopedBrowsing()) return false;
-            AccumulateLooseVapAppearanceGenderCounts(resetCountsFirst: true);
-            return true;
+            bool primedSql = false;
+            try { primedSql = TryApplyAppearanceFacetCountsFromSql(); } catch { primedSql = false; }
+            ScheduleAppearanceLooseScopedSliceRecount(_deferredSubPaneSessionId);
+            return primedSql;
         }
 
         private bool LoosePassesAppearanceSubfilter(AppearanceSubfilter f, bool isPresetLoose, bool isCustomLoose, AppearanceGender lg)

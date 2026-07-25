@@ -66,19 +66,16 @@ namespace VPB
 
         private void ClearSubPaneAndExtraBrowseFilters()
         {
-            currentSceneSourceFilter = "";
-            currentAppearanceSourceFilter = "";
             clothingSubfilter = 0;
             hairSubfilter = 0;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
             _clothingGenderUserOverride = false;
             _hairGenderUserOverride = false;
-            if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
-            {
-                try { activeUserTags?.Clear(); } catch { }
-                try { excludedUserTags?.Clear(); } catch { }
-            }
+            // Include/exclude filter sets always clear — armed independent of F/T work mode.
+            try { activeUserTags?.Clear(); } catch { }
+            try { excludedUserTags?.Clear(); } catch { }
+            _userTagShowUnusedBucket = false;
             // Not tagged owned by title-bar Filter (ClearTitleBarBrowseFilters).
             try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
         }

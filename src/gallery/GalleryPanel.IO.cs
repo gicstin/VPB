@@ -389,6 +389,34 @@ namespace VPB
         }
 
         /// <summary>
+        /// Package deps/dependents/missing filter enter/leave: title + side chrome only.
+        /// Never rebuilds side-tab button lists (see <see cref="UpdateTabs"/>).
+        /// </summary>
+        private void RefreshChromeAfterPackageFilterListChange()
+        {
+            if (titleText != null)
+            {
+                bool showTitle = !IsFilterActive;
+                if (titleText.gameObject.activeSelf != showTitle)
+                    titleText.gameObject.SetActive(showTitle);
+                if (showTitle)
+                {
+                    if (IsSettingsPanelOpen())
+                        titleText.text = VPBTranslation.T("settings.title", "Settings");
+                    else
+                        titleText.text = currentCategoryTitle;
+                }
+            }
+
+            try { SyncCategoryQuickSwitchChrome(); } catch { }
+            try { UpdateSideContextActions(); } catch { }
+            try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
+            try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
+            try { UpdateSideButtonsVisibility(); } catch { }
+            MarkGalleryPaneChromeDirty();
+        }
+
+        /// <summary>
         /// Rebind currently visible rows without rebuilding filters/sort/list contents.
         /// Used when badge-only state changes (e.g. temporary scan-whitelist UID overrides).
         /// </summary>
@@ -605,7 +633,9 @@ namespace VPB
             }
             catch { }
 
-            try { UpdateTabs(); } catch { }
+            // Package filter only changes the file grid + title/footer chrome.
+            // Full UpdateTabs() rebuilds every side-tab button list (can take seconds) — avoid here.
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
             ScrollGalleryToTop();
@@ -1546,24 +1576,12 @@ namespace VPB
             // Applies only when browsing Appearance category.
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            // Global source filter (early gate). Cheap type check, runs first. Bypassed when the
-            // per-category Local toggle is ON for this category (toggle has override semantics).
+            // Global source filter (early gate). Cheap type check, runs first.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
             {
-                bool toggleOverridesGlobal = false;
-                if (isAppearance && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    toggleOverridesGlobal = true;
-                bool isScene = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
-                               || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    toggleOverridesGlobal = true;
-
-                if (!toggleOverridesGlobal)
-                {
-                    bool isVarBackedForGate = IsVarBacked(entry);
-                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local && isVarBackedForGate) return false;
-                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var   && !isVarBackedForGate) return false;
-                }
+                bool isVarBackedForGate = IsVarBacked(entry);
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local && isVarBackedForGate) return false;
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var && !isVarBackedForGate) return false;
             }
 
             if (isAppearance)
@@ -1575,34 +1593,11 @@ namespace VPB
                 string ext = (lastDot >= 0 && lastDot < norm.Length - 1) ? norm.Substring(lastDot + 1) : "";
                 bool isVap = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
-                bool isVarEntry = (entry is VarFileEntry);
-
-                // Inside .var: identify by internal path prefix
-                bool isVarAppearanceVap = false;
-                var vfe = entry as VarFileEntry;
-                if (vfe != null)
-                {
-                    string ip = (vfe.InternalPath ?? "").Replace('\\', '/');
-                    isVarAppearanceVap = isVap && ip.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
-                }
-
-                // Outside .var: identify by VaM folders
-                bool isLocalAppearanceVap = (!isVarEntry) && isVap &&
-                    (
-                        norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) ||
-                        norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase)
-                    );
-
-                // Per-category Local toggle override. When ON, ignore global filter and show local-only.
-                // When OFF (empty string), the global filter applies at the earlier gate.
-                bool appearanceLocalToggleOn = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
-                if (appearanceLocalToggleOn)
-                {
-                    if (IsVarBacked(entry)) return false;
-                    if (AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
-                        && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
-                        return false;
-                }
+                // Global Local + Appearance folder browse: keep path-scope gate (was under legacy Local toggle).
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
+                    && AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
+                    && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
+                    return false;
 
                 if (appearanceSubfilter != 0)
                 {
@@ -1656,20 +1651,7 @@ namespace VPB
                 else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
             }
 
-            // Scene Source Filter.
-            // Per-category Local toggle override. When ON, ignore global filter and show local-only.
-            // When OFF, the global filter applies at the earlier gate.
-            // Gated to scene categories so leftover toggle state cannot hide var rows in unrelated categories.
-            bool isSceneCategoryForLocal =
-                title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
-                || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0
-                || cp.IndexOf("Saves\\scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool sceneLocalToggleOn = isSceneCategoryForLocal
-                && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
-            if (sceneLocalToggleOn)
-            {
-                if (IsVarBacked(entry)) return false;
-            }
+            // Scene Local is global Source Local (early gate). No per-category override.
 
             // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
             // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
@@ -1704,10 +1686,11 @@ namespace VPB
                 if (!tagMatch) return false;
             }
 
-            // Gallery SQLite user tags (Available Filter Mode). VAR rows from SQLite bulk query already match tags;
+            // Gallery SQLite user tags. Include/exclude filter always live (orthogonal to F/T work mode).
+            // FilterUntagged browse is exclusive. VAR rows from SQLite bulk query already match tags;
             // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
-            if (_userTagAvailMode != UserTagAvailMode.Tag
-                && activeContentType == ContentType.Category && VpbSqlite3.IsAvailable)
+            if (activeContentType == ContentType.Category && VpbSqlite3.IsAvailable
+                && (_userTagAvailMode == UserTagAvailMode.FilterUntagged || IsUserTagIncludeExcludeFilterArmed()))
             {
                 VarFileEntry vfeUt = entry as VarFileEntry;
                 bool bulkSqlAlreadyFilteredVar =
@@ -2296,8 +2279,8 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
-                sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
-                sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
                 try
                 {
                     sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
@@ -2338,7 +2321,7 @@ namespace VPB
                 }
                 sb.Append('\u001E');
                 sb.Append((int)_userTagAvailMode).Append('\u001E');
-                if (_userTagAvailMode == UserTagAvailMode.FilterByTags && activeUserTags != null && activeUserTags.Count > 0)
+                if (IsUserTagIncludeFilterArmed())
                 {
                     var uarr = new List<string>(activeUserTags);
                     uarr.Sort(StringComparer.Ordinal);
@@ -2351,7 +2334,7 @@ namespace VPB
                 sb.Append('\u001E');
                 // Excluded (none-of) user tags must vary the key too, else toggling an exclude reuses the
                 // previously cached, unfiltered list and the exclusion appears to do nothing.
-                if (_userTagAvailMode == UserTagAvailMode.FilterByTags && excludedUserTags != null && excludedUserTags.Count > 0)
+                if (IsUserTagExcludeFilterArmed())
                 {
                     var xarr = new List<string>(excludedUserTags);
                     xarr.Sort(StringComparer.Ordinal);
@@ -2383,7 +2366,6 @@ namespace VPB
             if (isRatingSortToggleEnabled) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
-            if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
             // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
             // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return false;
@@ -2394,7 +2376,6 @@ namespace VPB
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (!string.IsNullOrEmpty(currentAppearanceSourceFilter)) return false;
                 if (appearanceSubfilter != 0) return false;
             }
 
@@ -3285,8 +3266,7 @@ namespace VPB
                 string workerPathSnap = pathForIndexMain;
                 List<string> workerPathsSnap = currentPaths != null ? new List<string>(currentPaths) : null;
                 bool appearanceWorkerLocalOnly = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
-                    && (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
-                        || ResolveEffectiveSourceFilterMode(true, pathForIndexMain) == 1);
+                    && ResolveEffectiveSourceFilterMode(true, pathForIndexMain) == 1;
                 bool appearanceWorkerSkipPathMatch = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
                     && !appearanceWorkerLocalOnly;
                 List<string> pathInclusionsForSql = null;
@@ -3305,14 +3285,16 @@ namespace VPB
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
-                bool userTagGridFilterByTagsSnap = _userTagAvailMode == UserTagAvailMode.FilterByTags;
                 bool userTagGridFilterUntaggedSnap = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
-                bool userTagFilterIsolateSnap = userTagGridFilterByTagsSnap && UserTagFilterRequiresAllTags();
+                bool userTagIncludeExcludeArmedSnap = !userTagGridFilterUntaggedSnap && IsUserTagIncludeExcludeFilterArmed();
+                bool userTagFilterIsolateSnap = userTagIncludeExcludeArmedSnap
+                    && activeUserTags != null && activeUserTags.Count > 0
+                    && UserTagFilterRequiresAllTags();
                 HashSet<string> userTagNamesForGridSqlSnap = null;
-                if (userTagGridFilterByTagsSnap && activeUserTags != null && activeUserTags.Count > 0)
+                if (userTagIncludeExcludeArmedSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
                 HashSet<string> excludedUserTagNamesForGridSqlSnap = null;
-                if (userTagGridFilterByTagsSnap && excludedUserTags != null && excludedUserTags.Count > 0)
+                if (userTagIncludeExcludeArmedSnap && excludedUserTags != null && excludedUserTags.Count > 0)
                     excludedUserTagNamesForGridSqlSnap = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
                 int[] refreshDrainUtSqlFilterApplied = { 0 };
 
@@ -3547,14 +3529,14 @@ namespace VPB
                                 HashSet<string> utCatMemKeyHits = null;
                                 if (activeContentSnap == ContentType.Category
                                     && (userTagGridFilterUntaggedSnap
-                                        || (userTagGridFilterByTagsSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0))
+                                        || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0))
                                     && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
                                 {
                                     var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                                     bool utOk = false;
                                     if (userTagGridFilterUntaggedSnap)
                                         utOk = VpbLocalDatabase.TryBuildCatMemRowKeysWithNoUserTags(titleForIndexMain, utBuilt);
-                                    else if (userTagGridFilterByTagsSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                    else if (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
                                         utOk = VpbLocalDatabase.TryBuildCatMemRowKeysMatchingUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt, userTagFilterIsolateSnap);
                                     if (utOk)
                                     {
@@ -3850,9 +3832,9 @@ namespace VPB
                                         + " | ratingToggle=" + (isRatingSortToggleEnabled ? "1" : "0")
                                         + " | ratingFilter=" + (string.IsNullOrEmpty(currentRatingFilter) ? "0" : "1")
                                         + " | sizeFilter=" + (string.IsNullOrEmpty(currentSizeFilter) ? "0" : "1")
-                                        + " | sceneSrcFilter=" + (string.IsNullOrEmpty(currentSceneSourceFilter) ? "0" : "1")
+                                        + " | sceneSrcFilter=0"
                                         + " | poseFilter=" + ((posePeopleFilter != PosePeopleFilter.All || wantsPoseCounts) ? "1" : "0")
-                                        + " | appearanceFilter=" + ((!string.IsNullOrEmpty(currentAppearanceSourceFilter) || appearanceSubfilter != 0) ? "1" : "0"));
+                                        + " | appearanceFilter=" + (appearanceSubfilter != 0 ? "1" : "0"));
                                 }
                                 catch { }
                             }
@@ -4575,9 +4557,11 @@ namespace VPB
                 bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
                 if (!primed)
                     primed = TryApplyAppearanceFacetCountsFromSql();
+                // Source:Local already scheduled sliced recount inside TryRecompute.
+                // Non-Local: merge loose counts onto SQL/VAR totals in slices.
                 if (primed && ShouldCountLooseAppearanceGenderFiles() && !IsAppearanceLooseScopedBrowsing())
                 {
-                    IEnumerator looseMerge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, deferredSubPaneSessionWhenScheduled);
+                    IEnumerator looseMerge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, deferredSubPaneSessionWhenScheduled, resetCountsFirst: false);
                     while (looseMerge.MoveNext())
                     {
                         if (deferredSubPaneSessionWhenScheduled != _deferredSubPaneSessionId)
@@ -4586,6 +4570,8 @@ namespace VPB
                     }
                     ranSlicedTagScan = true;
                 }
+                if (IsAppearanceLooseScopedBrowsing())
+                    ranSlicedTagScan = true;
                 if (primed)
                 {
                     tagsCached = true;
@@ -5261,7 +5247,7 @@ namespace VPB
             filterBaseAnchorKey = null;
             InvalidateGalleryPreHideFileListSnapshot();
             RefreshRecycleGridAfterFilterChange();
-            try { UpdateTabs(); } catch { }
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
             ScrollGalleryToTop();
             try { SyncBrowseFilterChipChrome(); } catch { }
@@ -5289,7 +5275,7 @@ namespace VPB
             filterSearchLower = "";
 
             RefreshRecycleGridAfterFilterChange();
-            try { UpdateTabs(); } catch { }
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
 
             filterBaseAnchorKey = null;

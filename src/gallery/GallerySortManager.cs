@@ -83,8 +83,25 @@ namespace VPB
 
         private GallerySortCache cache;
 
-        // Cache for scene dependencies to avoid re-parsing on every access
+        // Cache for scene dependencies to avoid re-parsing on every access.
+        // Bounded: clear-on-overflow (same pattern as GalleryFileListSnapshotCache).
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
+        private const int SceneDependencyCacheMaxEntries = 512;
+
+        /// <summary>Drop in-memory scene-deps L1 cache (package refresh / soak-test bound).</summary>
+        public static void ClearSceneDependencyCache()
+        {
+            _sceneDependencyCache.Clear();
+        }
+
+        private static void PutSceneDependencyCache(string filePath, HashSet<string> deps)
+        {
+            if (string.IsNullOrEmpty(filePath) || deps == null) return;
+            if (_sceneDependencyCache.Count >= SceneDependencyCacheMaxEntries
+                && !_sceneDependencyCache.ContainsKey(filePath))
+                _sceneDependencyCache.Clear();
+            _sceneDependencyCache[filePath] = deps;
+        }
 
         // Background warmer: at-most-one running task that pre-populates the SQLite loose-deps cache.
         // Writes DB only — never touches _sceneDependencyCache — so it cannot race with main-thread binds.
@@ -1058,7 +1075,7 @@ namespace VPB
                     var dbDeps = new HashSet<string>();
                     if (VpbLocalDatabase.TryReadLooseSceneDeps(filePath, wtBin, sz, dbDeps))
                     {
-                        _sceneDependencyCache[filePath] = dbDeps;
+                        PutSceneDependencyCache(filePath, dbDeps);
                         return dbDeps;
                     }
                 }
@@ -1067,7 +1084,7 @@ namespace VPB
                 var deps = ExtractDependenciesStreaming(file);
 
                 if (deps != null && deps.Count > 0)
-                    _sceneDependencyCache[filePath] = deps;
+                    PutSceneDependencyCache(filePath, deps);
 
                 if (haveStat && deps != null)
                 {

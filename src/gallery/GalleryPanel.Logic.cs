@@ -1841,6 +1841,10 @@ namespace VPB
             if (tagsCached) return;
             if (_sideTabsTagCountSliceCo != null)
                 return;
+            // RefreshFiles owns DeferredGallerySideTabsAfterGridReady (tag scan + sub-pane).
+            // Starting a parallel slice during an in-flight refresh races session id and is cancelled.
+            if (refreshCoroutine != null)
+                return;
             int sessionSnap = _deferredSubPaneSessionId;
             _sideTabsTagCountSliceCo = StartCoroutine(CoTagCountsForSideTabsSlice(sessionSnap));
         }
@@ -2003,12 +2007,18 @@ namespace VPB
 
             if (IsAppearanceLooseScopedBrowsing())
             {
-                TryRecomputeAppearanceGenderFacetCountsScoped();
-                tagsCached = true;
-                if (TryBuildTagCountCacheKey(out tagCountCacheKey))
+                // Prefer SQL for instant chips; loose .vap recount is sliced (never sync Accumulate).
+                bool primedSql = false;
+                try { primedSql = TryApplyAppearanceFacetCountsFromSql(); } catch { primedSql = false; }
+                if (primedSql)
                 {
-                    try { GalleryTagCountSnapshotCache.Put(tagCountCacheKey, CaptureTagCountSnapshot()); } catch { }
+                    tagsCached = true;
+                    if (TryBuildTagCountCacheKey(out tagCountCacheKey))
+                    {
+                        try { GalleryTagCountSnapshotCache.Put(tagCountCacheKey, CaptureTagCountSnapshot()); } catch { }
+                    }
                 }
+                try { ScheduleAppearanceLooseScopedSliceRecount(deferredSessionId); } catch { }
                 yield break;
             }
 
@@ -2942,6 +2952,8 @@ namespace VPB
                 }
                 catch { sysCacheHit = false; sysCached = null; }
 
+                var genderBulk = new LooseVapGenderBulkCache();
+                string appearanceCat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                 for (int pi = 0; pi < pathsToSearch.Count; pi++)
                 {
                     string searchPath = pathsToSearch[pi];
@@ -2990,7 +3002,7 @@ namespace VPB
                         bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                         bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                         AppearanceGender lg = AppearanceGender.Unknown;
-                        try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? ""); }
+                        try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, appearanceCat, _appearanceUserTagsByRowKey, genderBulk); }
                         catch { lg = AppearanceGender.Unknown; }
 
                         appearanceSubfilterCountAll++;
@@ -3036,6 +3048,8 @@ namespace VPB
                     }
                 }
 
+                try { genderBulk.Flush(); } catch { }
+
                 if (!sysCacheHit && !string.IsNullOrEmpty(sysCacheKey) && sysCacheSig != null)
                 {
                     try
@@ -3074,26 +3088,33 @@ namespace VPB
 
         /// <summary>Stable key for <see cref="GalleryTagCountSnapshotCache"/> when tag/facet counts depend only on category + filters + package scan.</summary>
         /// <summary>
-        /// Resolves the effective source filter for the tag scan / cache key. The per-category Local toggle on
-        /// Appearance / Scenes overrides the global filter; otherwise the global filter wins. Returned values:
-        /// 0=All, 1=Local, 2=Var.
+        /// Effective source filter for scans / cache keys. Single source of truth: title-bar global Source
+        /// (All / Local / .var). Legacy per-category Scene/Appearance Local toggles were merged into global Local.
+        /// Returned values: 0=All, 1=Local, 2=Var.
         /// </summary>
         private int ResolveEffectiveSourceFilterMode(bool isAppearanceTitle, string cp)
         {
-            bool localOverride = false;
-            try
-            {
-                if (isAppearanceTitle && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    localOverride = true;
-                bool isScene = (!string.IsNullOrEmpty(cp)) && cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    localOverride = true;
-            }
-            catch { }
-            if (localOverride) return 1;
             if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local) return 1;
-            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var)   return 2;
+            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var) return 2;
             return 0;
+        }
+
+        private bool IsGlobalSourceFilterLocal()
+        {
+            return currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local;
+        }
+
+        /// <summary>Side-pane Local only: mirrors title-bar Source Local (one mental model).</summary>
+        private void ToggleGlobalLocalFromCategorySidePane(bool invalidateTags)
+        {
+            if (invalidateTags)
+            {
+                try { InvalidateTags(); } catch { }
+            }
+            if (IsGlobalSourceFilterLocal())
+                ApplyGlobalSourceFilterValue(VPBConfig.GlobalSourceFilterValue.All);
+            else
+                ApplyGlobalSourceFilterValue(VPBConfig.GlobalSourceFilterValue.Local);
         }
 
         private bool TryBuildTagCountCacheKey(out string key)
@@ -3118,7 +3139,7 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
-                sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
                 long pr = 0;
                 string ckTitle = !string.IsNullOrEmpty(currentCategoryTitle)
                     ? currentCategoryTitle
@@ -3229,14 +3250,15 @@ namespace VPB
                 catch { }
 
                 // User tag filter params (mirrors RefreshFilesRoutine worker snapshot).
-                bool utFilterByTags = _userTagAvailMode == UserTagAvailMode.FilterByTags;
+                // Include/exclude arm independent of F/T; FilterUntagged is exclusive.
                 bool utUntaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
-                bool utRequireAll = utFilterByTags && UserTagFilterRequiresAllTags();
+                bool utIncludeExcludeArmed = IsUserTagIncludeExcludeFilterArmed();
+                bool utRequireAll = utIncludeExcludeArmed && UserTagFilterRequiresAllTags();
                 HashSet<string> utNames = null;
-                if (utFilterByTags && activeUserTags != null && activeUserTags.Count > 0)
+                if (utIncludeExcludeArmed && activeUserTags != null && activeUserTags.Count > 0)
                     utNames = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
                 HashSet<string> utExcludeNames = null;
-                if (utFilterByTags && excludedUserTags != null && excludedUserTags.Count > 0)
+                if (utIncludeExcludeArmed && excludedUserTags != null && excludedUserTags.Count > 0)
                     utExcludeNames = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
 
                 int session = _deferredSubPaneSessionId;

@@ -296,6 +296,12 @@ namespace VPB
             else
                 GalleryFileListSnapshotCache.InvalidateAll();
 
+            // Process-lifetime static L1 caches: drop on package library change (stability / bound memory).
+            try { GallerySortManager.ClearSceneDependencyCache(); } catch { }
+            try { UIDraggableItem.ClearGlobalRegionCache(); } catch { }
+            try { LooseVapGenderProbe.InvalidateMemoryCache(); } catch { }
+            try { VpbLocalDatabase.ClearDeepDirMtimeCache(); } catch { }
+
             // VAR scan rewrote per-uid cslist-referenced rows; drop the in-memory set so the
             // next read sees the fresh SQLite state.
             try

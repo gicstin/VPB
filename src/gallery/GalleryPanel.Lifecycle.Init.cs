@@ -728,8 +728,6 @@ namespace VPB
                 // Right Sub Clear Button
                 rightSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomRight, () => {
                     activeTags.Clear();
-                    currentSceneSourceFilter = "";
-                    currentAppearanceSourceFilter = "";
                     RefreshFiles();
                     UpdateTabs();
                 });
@@ -1042,8 +1040,6 @@ namespace VPB
                 // Left Sub Clear Button
                 leftSubClearBtn = UI.CreateUIButton(backgroundBoxGO, tabAreaWidth, 35, VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected"), 14, 0, 0, AnchorPresets.bottomLeft, () => {
                     activeTags.Clear();
-                    currentSceneSourceFilter = "";
-                    currentAppearanceSourceFilter = "";
                     RefreshFiles();
                     UpdateTabs();
                 });

@@ -141,19 +141,15 @@ namespace VPB
                     ScheduleTagCountsForSideTabsNonBlocking();
             }
 
-            bool localOnly = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+            bool localOnly = IsGlobalSourceFilterLocal();
 
-            // Single toggle: "Local only" overrides the global source filter on Appearance when ON.
-            // When OFF, the title-bar global filter applies normally.
-            string label = "Local only";
+            // Mirrors title-bar Source Local (one Local story for Scenes + Appearance + global).
+            string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                currentAppearanceSourceFilter = localOnly ? "" : "local";
-                InvalidateTags();
-                RefreshFilesAndTabs();
-                SyncBrowseFilterChipChrome();
+                ToggleGlobalLocalFromCategorySidePane(invalidateTags: true);
             }, trackedButtons);
 
             {
@@ -307,17 +303,15 @@ namespace VPB
         {
             Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f);
 
-            bool localOnly = string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+            bool localOnly = IsGlobalSourceFilterLocal();
 
-            // Single toggle: "Local only" overrides the global source filter on Scenes when ON.
-            string label = "Local only";
+            // Mirrors title-bar Source Local (same control as Appearance Local only).
+            string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? sceneColor : ColorInactiveRow;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                currentSceneSourceFilter = localOnly ? "" : "local";
-                RefreshFilesAndTabs();
-                SyncBrowseFilterChipChrome();
+                ToggleGlobalLocalFromCategorySidePane(invalidateTags: false);
             }, trackedButtons);
         }
     }

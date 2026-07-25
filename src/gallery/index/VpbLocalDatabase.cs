@@ -1853,10 +1853,41 @@ namespace VPB
         /// the cache return stale rows. Walking GetDirectories(AllDirectories) costs one directory enumeration
         /// per scan but is far cheaper than the file enumeration the cache is protecting against.
         /// </summary>
+        /// <remarks>
+        /// Results cached briefly (TTL) + clear-on-overflow so chip/filter storms do not re-walk the same trees.
+        /// Cleared on package refresh. Thread-safe (tag background scan may call).
+        /// </remarks>
+        private static readonly object s_DeepMtimeLock = new object();
+        private static readonly Dictionary<string, DeepMtimeCacheEntry> s_DeepMtimeCache =
+            new Dictionary<string, DeepMtimeCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private const int DeepMtimeCacheMaxEntries = 64;
+        private static readonly long DeepMtimeCacheTtlTicks = TimeSpan.FromSeconds(3).Ticks;
+
+        private struct DeepMtimeCacheEntry
+        {
+            public long MtimeBinary;
+            public long CachedAtUtcTicks;
+        }
+
+        internal static void ClearDeepDirMtimeCache()
+        {
+            lock (s_DeepMtimeLock) { s_DeepMtimeCache.Clear(); }
+        }
+
         internal static long DeepMaxDirMtimeBinary(string root)
         {
             long max = 0;
             if (string.IsNullOrEmpty(root)) return max;
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            lock (s_DeepMtimeLock)
+            {
+                DeepMtimeCacheEntry cached;
+                if (s_DeepMtimeCache.TryGetValue(root, out cached)
+                    && (nowTicks - cached.CachedAtUtcTicks) < DeepMtimeCacheTtlTicks)
+                    return cached.MtimeBinary;
+            }
+
             try
             {
                 if (!Directory.Exists(root)) return max;
@@ -1885,6 +1916,17 @@ namespace VPB
                 }
             }
             catch { }
+
+            lock (s_DeepMtimeLock)
+            {
+                if (s_DeepMtimeCache.Count >= DeepMtimeCacheMaxEntries
+                    && !s_DeepMtimeCache.ContainsKey(root))
+                    s_DeepMtimeCache.Clear();
+                DeepMtimeCacheEntry e;
+                e.MtimeBinary = max;
+                e.CachedAtUtcTicks = nowTicks;
+                s_DeepMtimeCache[root] = e;
+            }
             return max;
         }
 

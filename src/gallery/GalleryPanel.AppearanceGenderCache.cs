@@ -82,17 +82,23 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Populate appearance sub-pane counts immediately (folder recount or SQL fallback).</summary>
+        /// <summary>Populate appearance sub-pane counts immediately (SQL or schedule deferred loose recount).</summary>
         private bool TryPrimeAppearanceSubPaneCounts()
         {
             string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             if (!string.IsNullOrEmpty(cat))
                 EnsureAppearanceGenderRefreshCaches(cat);
 
-            if (TryRecomputeAppearanceGenderFacetCountsScoped())
+            // Source:Local — SQL only here. Sliced loose recount is owned by Deferred phase 2 /
+            // TryRecomputeAppearanceGenderFacetCountsScoped (avoid starting then killing a coroutine).
+            if (IsAppearanceLooseScopedBrowsing())
             {
-                tagsCached = true;
-                return true;
+                if (TryApplyAppearanceFacetCountsFromSql())
+                {
+                    tagsCached = true;
+                    return true;
+                }
+                return false;
             }
 
             if (TryApplyAppearanceFacetCountsFromSql())
@@ -121,7 +127,9 @@ namespace VPB
                 InvalidateTags();
 
             RefreshFilesAndTabs();
-            ScheduleAppearanceLooseMergeRefresh();
+            // Local path already scheduled sliced recount inside TryRecompute; non-Local merge here.
+            if (!IsAppearanceLooseScopedBrowsing())
+                ScheduleAppearanceLooseMergeRefresh();
         }
 
         /// <summary>

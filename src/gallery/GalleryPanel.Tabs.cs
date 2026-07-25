@@ -507,9 +507,13 @@ namespace VPB
                 + "|" + _userTagPinRevision
                 + "|" + (int)_userTagAvailMode
                 + "|" + (VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode ? 1 : 0)
+                + "|" + (_userTagShowUnusedBucket ? 1 : 0)
                 + "|" + (userTagsCached ? 1 : 0)
                 + "|sel:" + BuildUserTagSelectionVirtSignature();
         }
+
+        private const int UserTagCreateRowCountSentinel = int.MinValue;
+        private const int UserTagUnusedBucketHeaderSentinel = int.MinValue + 1;
 
         private void RebuildUserTagVirtViewList(bool isLeft, bool resetScrollToTop)
         {
@@ -539,8 +543,6 @@ namespace VPB
             }
             string filterUt = userTagFilter ?? "";
 
-            const int CreateRowCountSentinel = int.MinValue;
-
             // "Create Tag" synthetic top row when user typed text in search box.
             // Uses Count sentinel so BindUserTagVirtButton can render different UI/behavior.
             if (!string.IsNullOrEmpty(filterUt))
@@ -558,19 +560,83 @@ namespace VPB
                         }
                     }
                     if (!alreadyExists)
-                        _userTagStickyRows.Add(new UserTagSideTabEntry { Name = normCandidate, Count = CreateRowCountSentinel });
+                        _userTagStickyRows.Add(new UserTagSideTabEntry { Name = normCandidate, Count = UserTagCreateRowCountSentinel });
                 }
             }
 
+            bool hideUnused = _userTagAvailMode == UserTagAvailMode.FilterByTags
+                && string.IsNullOrEmpty(filterUt)
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode
+                && _userTagSideTabCountsReady
+                && _userTagAnyAssignmentExists;
+
             var filteredUt = new List<UserTagSideTabEntry>(rowsUt.Count);
+            int unusedHiddenCount = 0;
+
             for (int ui = 0; ui < rowsUt.Count; ui++)
             {
                 UserTagSideTabEntry ut = rowsUt[ui];
                 if (string.IsNullOrEmpty(ut.Name)) continue;
-                if (ShouldHideUnusedUserTagInFilterAvailList(ut)) continue;
-                if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (!string.IsNullOrEmpty(filterUt) && ut.Name.IndexOf(filterUt, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                if (hideUnused && ShouldHideUnusedUserTagInFilterAvailList(ut))
+                {
+                    unusedHiddenCount++;
+                    continue;
+                }
+
+                // Expanded unused bucket: still hide from main path via ShouldHide=false when expanded;
+                // when collapsed we counted above. When expanded, zero-count rows flow into filteredUt.
                 filteredUt.Add(ut);
             }
+
+            // Collapsed Unused bucket header (only when hide-unused active and some zeros hidden).
+            if (hideUnused && !_userTagShowUnusedBucket && unusedHiddenCount > 0)
+            {
+                filteredUt.Add(new UserTagSideTabEntry
+                {
+                    Name = string.Format(
+                        VPBTranslation.T("gallery.usertags.unused_bucket", "Unused ({0})"),
+                        unusedHiddenCount),
+                    Count = UserTagUnusedBucketHeaderSentinel
+                });
+            }
+            else if (hideUnused && _userTagShowUnusedBucket)
+            {
+                // Header stays at end of used section: insert before zero-count rows by partitioning.
+                var usedOnly = new List<UserTagSideTabEntry>(filteredUt.Count);
+                var unusedOnly = new List<UserTagSideTabEntry>(16);
+                for (int i = 0; i < filteredUt.Count; i++)
+                {
+                    UserTagSideTabEntry e = filteredUt[i];
+                    if (e.Count <= 0
+                        && e.Count != UserTagCreateRowCountSentinel
+                        && e.Count != UserTagUnusedBucketHeaderSentinel
+                        && !UserTagNameIsInIncludeOrExcludeFilter(e.Name))
+                    {
+                        UserTagSelectionState st = GetUserTagSelectionState(e.Name);
+                        if (st == UserTagSelectionState.Off)
+                        {
+                            unusedOnly.Add(e);
+                            continue;
+                        }
+                    }
+                    usedOnly.Add(e);
+                }
+                filteredUt.Clear();
+                for (int i = 0; i < usedOnly.Count; i++) filteredUt.Add(usedOnly[i]);
+                filteredUt.Add(new UserTagSideTabEntry
+                {
+                    Name = string.Format(
+                        VPBTranslation.T("gallery.usertags.unused_bucket_hide", "Hide unused ({0})"),
+                        unusedOnly.Count),
+                    Count = UserTagUnusedBucketHeaderSentinel
+                });
+                for (int i = 0; i < unusedOnly.Count; i++) filteredUt.Add(unusedOnly[i]);
+            }
+
             EnsureSelectionUserTagsInAvailList(filteredUt);
             var pinnedUt = new List<UserTagSideTabEntry>(8);
             var normalUt = new List<UserTagSideTabEntry>(filteredUt.Count);
@@ -731,48 +797,48 @@ namespace VPB
         {
             if (btnGO == null) return;
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagBind++;
-            const int CreateRowCountSentinel = int.MinValue;
             const string CreateLabelKey = "gallery.usertags.create_from_search";
             const string CreateTipKey = "gallery.usertags.create_from_search_tip";
 
             string tagSnap = ut.Name ?? "";
-            bool isCreateRow = ut.Count == CreateRowCountSentinel;
-            UserTagSelectionState state = isCreateRow ? UserTagSelectionState.Off : GetUserTagSelectionState(tagSnap);
-            bool isFilterActive = !isCreateRow
-                && _userTagAvailMode == UserTagAvailMode.FilterByTags
+            bool isCreateRow = ut.Count == UserTagCreateRowCountSentinel;
+            bool isUnusedBucketHeader = ut.Count == UserTagUnusedBucketHeaderSentinel;
+            UserTagSelectionState state = (isCreateRow || isUnusedBucketHeader)
+                ? UserTagSelectionState.Off
+                : GetUserTagSelectionState(tagSnap);
+            bool isFilterActive = !isCreateRow && !isUnusedBucketHeader
                 && activeUserTags != null
                 && activeUserTags.Contains(tagSnap);
-            bool isFilterExcluded = !isCreateRow
-                && _userTagAvailMode == UserTagAvailMode.FilterByTags
+            bool isFilterExcluded = !isCreateRow && !isUnusedBucketHeader
                 && excludedUserTags != null
                 && excludedUserTags.Contains(tagSnap);
-            bool isPulsing = !isCreateRow
+            bool isPulsing = !isCreateRow && !isUnusedBucketHeader
                 && !string.IsNullOrEmpty(_userTagPulseTag)
                 && string.Equals(_userTagPulseTag, tagSnap, StringComparison.OrdinalIgnoreCase)
                 && Time.unscaledTime < _userTagPulseUntil;
             bool hasGridSelection = selectedFiles != null && selectedFiles.Count > 0;
-            bool isOnSelection = !isCreateRow
+            bool isOnSelection = !isCreateRow && !isUnusedBucketHeader
                 && (state == UserTagSelectionState.On || state == UserTagSelectionState.Mixed);
-            bool preferSelectionColor = _userTagAvailMode == UserTagAvailMode.FilterByTags
-                && hasGridSelection && isOnSelection && !isFilterActive;
+            bool preferSelectionColor = hasGridSelection && isOnSelection && !isFilterActive && !isFilterExcluded;
             // Resting (fully-inactive) slot is tinted by the tag's category color when assigned (US-02);
             // filter/selection states above still take visual priority.
             Color restingRowColor = ColorInactiveRow;
-            if (!isCreateRow)
+            if (!isCreateRow && !isUnusedBucketHeader)
             {
                 Color? catCol = TryGetUserTagCategoryColor(tagSnap);
                 if (catCol.HasValue) restingRowColor = catCol.Value;
             }
             Color btnColor = isCreateRow ? new Color(0.25f, 0.45f, 0.28f, 1f)
+                : (isUnusedBucketHeader ? new Color(0.28f, 0.28f, 0.32f, 1f)
                 : (isFilterExcluded ? UserTagFilterExcludedColor
                 : (isFilterActive ? UserTagFilterActiveColor
                 : (preferSelectionColor ? UserTagStateOnColor
                 : (isPulsing ? UserTagStatePulseColor
                 : (state == UserTagSelectionState.On ? UserTagStateOnColor
-                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : restingRowColor))))));
+                : (state == UserTagSelectionState.Mixed ? UserTagStateMixedColor : restingRowColor)))))));
             string labelUt = isCreateRow
                 ? (VPBTranslation.T(CreateLabelKey, "Create Tag") + ": " + tagSnap)
-                : (tagSnap + " (" + ut.Count + ")");
+                : (isUnusedBucketHeader ? tagSnap : (tagSnap + " (" + ut.Count + ")"));
 
             Button btnComp = btnGO.GetComponent<Button>();
             if (btnComp != null)
@@ -785,6 +851,13 @@ namespace VPB
                     {
                         UserTagPickDragSource dragSrc = btnGO.GetComponent<UserTagPickDragSource>();
                         if (dragSrc != null && dragSrc.ConsumedByDrag) return;
+                        if (isUnusedBucketHeader)
+                        {
+                            _userTagShowUnusedBucket = !_userTagShowUnusedBucket;
+                            _userTagVirtViewSig = null;
+                            try { RefreshUserTagsAvailPaneInPlace(sideLeft); } catch { }
+                            return;
+                        }
                         if (isCreateRow)
                         {
                             if (VpbLocalDatabase.TryEnsureGalleryUserTagInVocabulary(tagSnap, out string norm) && !string.IsNullOrEmpty(norm))
@@ -807,22 +880,17 @@ namespace VPB
                         }
                         else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
                         {
-                            // Tri-state tap cycle (VR-friendly, no right-click needed):
-                            // Off -> Include (green) -> Exclude (red) -> Off. Row color reflects the state.
+                            // Tap: Off ↔ Include. Exclude via right-click or drag to title Excl row.
                             if (activeUserTags.Contains(tagSnap))
                             {
                                 activeUserTags.Remove(tagSnap);
-                                excludedUserTags.Add(tagSnap);
-                            }
-                            else if (excludedUserTags.Contains(tagSnap))
-                            {
-                                excludedUserTags.Remove(tagSnap);
                             }
                             else
                             {
                                 activeUserTags.Add(tagSnap);
                                 excludedUserTags.Remove(tagSnap);
                             }
+                            try { BridgeTitleSearchTagChipFromFilterSet(tagSnap); } catch { }
                             RefreshFiles(true, false, false, "user_tag_filter_toggle");
                         }
                         else
@@ -838,7 +906,7 @@ namespace VPB
             UIRightClickDelegate rightClickDelegate = btnGO.GetComponent<UIRightClickDelegate>();
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
             rightClickDelegate.OnRightClick = null;
-            if (!isCreateRow && _userTagAvailMode == UserTagAvailMode.FilterByTags)
+            if (!isCreateRow && !isUnusedBucketHeader && _userTagAvailMode == UserTagAvailMode.FilterByTags)
             {
                 bool sideLeftRc = isLeft;
                 rightClickDelegate.OnRightClick = () =>
@@ -846,8 +914,14 @@ namespace VPB
                     try
                     {
                         // Right-click cycles the exclude (none-of) state for this tag.
-                        if (excludedUserTags.Contains(tagSnap)) excludedUserTags.Remove(tagSnap);
-                        else { excludedUserTags.Add(tagSnap); activeUserTags.Remove(tagSnap); }
+                        if (excludedUserTags.Contains(tagSnap))
+                            excludedUserTags.Remove(tagSnap);
+                        else
+                        {
+                            excludedUserTags.Add(tagSnap);
+                            activeUserTags.Remove(tagSnap);
+                        }
+                        try { BridgeTitleSearchTagChipFromFilterSet(tagSnap); } catch { }
                         RefreshFiles(true, false, false, "user_tag_filter_exclude_toggle");
                         RefreshUserTagsAvailPaneInPlace(sideLeftRc);
                     }
@@ -867,7 +941,7 @@ namespace VPB
                 txt.verticalOverflow = VerticalWrapMode.Truncate;
                 txt.resizeTextForBestFit = false;
                 RectTransform txtRt = txt.GetComponent<RectTransform>();
-                float pinReserve = isCreateRow ? 0f : 34f * s;
+                float pinReserve = (isCreateRow || isUnusedBucketHeader) ? 0f : 34f * s;
                 float filterReserve = isFilterActive ? 34f * s : 0f;
                 if (txtRt != null)
                 {
@@ -894,7 +968,7 @@ namespace VPB
                 txt.text = shownUt;
             }
             SyncUserTagRowFilterIcon(btnGO, isFilterActive, s);
-            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow, s, isLeft, appliedRow: false, availSelectionState: state);
+            SyncUserTagRowPinButton(btnGO, tagSnap, isCreateRow || isUnusedBucketHeader, s, isLeft, appliedRow: false, availSelectionState: state);
 
             LayoutElement le = btnGO.GetComponent<LayoutElement>();
             if (le == null) le = btnGO.AddComponent<LayoutElement>();
@@ -909,7 +983,9 @@ namespace VPB
                 bool tr = !string.Equals(txt.text, labelUt, StringComparison.Ordinal);
                 string tip = isCreateRow
                     ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
-                    : pickTooltip;
+                    : (isUnusedBucketHeader
+                        ? VPBTranslation.T("gallery.usertags.unused_bucket_tip", "Show or hide tags with no items in this category.")
+                        : pickTooltip);
                 if (tr && !string.IsNullOrEmpty(tip))
                     AddTooltipPlain(btnGO, labelUt + "\n\n" + tip);
                 else if (tr)
@@ -921,7 +997,9 @@ namespace VPB
             {
                 string tip = isCreateRow
                     ? VPBTranslation.T(CreateTipKey, "Create new tag from search text (adds to database, selects tag).")
-                    : pickTooltip;
+                    : (isUnusedBucketHeader
+                        ? VPBTranslation.T("gallery.usertags.unused_bucket_tip", "Show or hide tags with no items in this category.")
+                        : pickTooltip);
                 if (!string.IsNullOrEmpty(tip))
                     AddTooltipPlain(btnGO, tip);
             }
@@ -929,7 +1007,7 @@ namespace VPB
             UserTagPickDragSource dr = btnGO.GetComponent<UserTagPickDragSource>();
             if (dr == null) dr = btnGO.AddComponent<UserTagPickDragSource>();
             dr.Panel = this;
-            dr.PrimaryTag = isCreateRow ? "" : tagSnap;
+            dr.PrimaryTag = (isCreateRow || isUnusedBucketHeader) ? "" : tagSnap;
             dr.IsAppliedRowDrag = false;
             dr.DetailStripAppliedReorder = false;
         }

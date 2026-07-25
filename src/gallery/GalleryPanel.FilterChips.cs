@@ -18,6 +18,10 @@ namespace VPB
         private GameObject _activeFilterChipBarGO;
         private RectTransform _activeFilterChipScrollContentRT;
         private readonly List<GameObject> _activeFilterChipButtons = new List<GameObject>(12);
+        // Warm-path pool: reuse chip GOs instead of Destroy+new on every SyncBrowseFilterChipChrome.
+        private readonly List<GameObject> _filterChipPoolStandard = new List<GameObject>(16);
+        private readonly List<GameObject> _filterChipPoolCompact = new List<GameObject>(4);
+        private const int FilterChipPoolMaxIdle = 24;
         private bool _activeFilterChipBarVisible;
         private int _activeFilterChipRowCount = 1;
         private float _lastChipBarAvailWidth = -1f;
@@ -86,14 +90,12 @@ namespace VPB
 
         private bool HasActiveSubPaneOrExtraBrowseFilters()
         {
-            if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return true;
-            if (!string.IsNullOrEmpty(currentAppearanceSourceFilter)) return true;
+            // Scene/Appearance Local merged into global Source (HasTitleBarBrowseFilterActive).
             if (clothingSubfilter != 0) return true;
             if (hairSubfilter != 0) return true;
             if (appearanceSubfilter != 0) return true;
             if (posePeopleFilter != PosePeopleFilter.All) return true;
-            if (_userTagAvailMode == UserTagAvailMode.FilterByTags
-                && ((activeUserTags != null && activeUserTags.Count > 0) || (excludedUserTags != null && excludedUserTags.Count > 0)))
+            if (IsUserTagIncludeExcludeFilterArmed())
                 return true;
             return false;
         }
@@ -126,7 +128,7 @@ namespace VPB
                 return;
             }
 
-            ClearActiveFilterChipButtons();
+            ReturnActiveFilterChipsToPool();
             if (_activeFilterChipScrollContentRT == null) return;
 
             float s = ChromeScale;
@@ -137,7 +139,7 @@ namespace VPB
             for (int i = 0; i < specs.Count; i++)
             {
                 ActiveFilterChipSpec spec = specs[i];
-                GameObject chip = CreateFilterChipControl(_activeFilterChipScrollContentRT, spec, chipH, fontSize, s);
+                GameObject chip = AcquireFilterChipControl(_activeFilterChipScrollContentRT, spec, chipH, fontSize, s);
                 if (chip != null) _activeFilterChipButtons.Add(chip);
             }
 
@@ -258,68 +260,87 @@ namespace VPB
             return rr;
         }
 
-        private GameObject CreateFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize, float s = 1f)
+        private static bool IsCompactFilterChipKind(FilterChipKind kind)
+        {
+            return kind == FilterChipKind.ClearAll || kind == FilterChipKind.PackageFilterBack;
+        }
+
+        private GameObject AcquireFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize, float s = 1f)
         {
             if (parent == null || spec.OnDismiss == null) return null;
             if (s <= 0f) s = 1f;
 
-            bool isCompactAction = spec.Kind == FilterChipKind.ClearAll || spec.Kind == FilterChipKind.PackageFilterBack;
-            Color accent = ResolveFilterChipAccent(spec.Kind);
+            bool isCompact = IsCompactFilterChipKind(spec.Kind);
+            List<GameObject> pool = isCompact ? _filterChipPoolCompact : _filterChipPoolStandard;
+            GameObject chip = null;
+            while (pool.Count > 0 && chip == null)
+            {
+                int last = pool.Count - 1;
+                chip = pool[last];
+                pool.RemoveAt(last);
+                if (chip == null) continue;
+            }
 
-            GameObject chip = new GameObject(isCompactAction ? "FilterChip_" + spec.Kind : "FilterChip_" + spec.Kind);
+            if (chip == null)
+                chip = CreateFilterChipControlScaffold(parent, isCompact, chipH, fontSize, s);
+            else
+            {
+                chip.transform.SetParent(parent, false);
+                chip.SetActive(true);
+            }
+
+            BindFilterChipControl(chip, spec, chipH, fontSize, s, isCompact);
+            return chip;
+        }
+
+        private GameObject CreateFilterChipControlScaffold(Transform parent, bool isCompactAction, float chipH, int fontSize, float s)
+        {
+            GameObject chip = new GameObject(isCompactAction ? "FilterChip_Compact" : "FilterChip_Standard");
             chip.transform.SetParent(parent, false);
 
-            Image bg = AddFilterChipRoundedBg(chip, new Color(accent.r, accent.g, accent.b, isCompactAction ? 0.94f : 0.96f));
+            AddFilterChipRoundedBg(chip, Color.white);
 
             int padLeft = Mathf.RoundToInt(10f * s);
             int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
             float innerH = Mathf.Max(16f, chipH - padV * 2f);
 
-            HorizontalLayoutGroup row = UI.AddHLG(chip,
+            UI.AddHLG(chip,
                 spacing: isCompactAction ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s,
                 padding: isCompactAction
                     ? new RectOffset(padLeft, padLeft, padV, padV)
                     : new RectOffset(padLeft, 0, padV, padV),
                 childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
 
-            LayoutElement chipLE = UI.AddLE(chip, minHeight: chipH, preferredHeight: chipH);
+            UI.AddLE(chip, minHeight: chipH, preferredHeight: chipH);
 
             ContentSizeFitter chipCsf = chip.AddComponent<ContentSizeFitter>();
             chipCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             // Self-size height (chip is flow-positioned with no parent layout group driving it).
             chipCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            Text labelTxt = UI.CreateLabel(chip, spec.Label, fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
+            Text labelTxt = UI.CreateLabel(chip, "", fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
             GameObject labelGO = labelTxt.gameObject;
             ContentSizeFitter labelCsf = labelGO.AddComponent<ContentSizeFitter>();
             labelCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            LayoutElement labelLE = UI.AddLE(labelGO, preferredHeight: innerH, flexibleHeight: 0f);
+            UI.AddLE(labelGO, preferredHeight: innerH, flexibleHeight: 0f);
 
-            UnityAction dismiss = spec.OnDismiss;
             if (!isCompactAction)
             {
-                // Clicking anywhere on the chip (label area) dismisses it — child dismiss button
-                // consumes its own click so the parent only fires when the label area is hit.
                 Button chipBodyBtn = chip.AddComponent<Button>();
                 UI.NeutralizeSelectableColorTint(chipBodyBtn);
-                chipBodyBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
 
                 float dismissSize = innerH;
                 GameObject dismissGO = new GameObject("Dismiss");
                 dismissGO.transform.SetParent(chip.transform, false);
-                AddFilterChipRoundedBg(dismissGO, FilterChipDismissBackdrop(accent));
+                AddFilterChipRoundedBg(dismissGO, Color.gray);
                 Button dismissBtn = dismissGO.AddComponent<Button>();
                 dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
                 UI.NeutralizeSelectableColorTint(dismissBtn);
-                dismissBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
 
                 float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
-                Color dismissBg = FilterChipDismissBackdrop(accent);
                 Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
                 if (closeSpr != null)
-                {
-                    UI.AddIconToButton(dismissGO, closeSpr, iconPad, dismissBg);
-                }
+                    UI.AddIconToButton(dismissGO, closeSpr, iconPad, Color.gray);
                 else
                 {
                     Text xTxt = UI.CreateLabel(dismissGO, "\u00d7", (int)GalleryUiDesignTokens.FilterChipDismissSizeRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "X");
@@ -332,23 +353,12 @@ namespace VPB
                 dismissHover.inward = true;
                 dismissHover.ApplyBorderSettings();
 
-                LayoutElement dismissLE = UI.AddLE(dismissGO, minWidth: dismissSize, minHeight: dismissSize, preferredWidth: dismissSize, preferredHeight: dismissSize, flexibleHeight: 0f);
-
-                try { AddTooltip(chip, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
+                UI.AddLE(dismissGO, minWidth: dismissSize, minHeight: dismissSize, preferredWidth: dismissSize, preferredHeight: dismissSize, flexibleHeight: 0f);
             }
             else
             {
                 Button chipBtn = chip.AddComponent<Button>();
                 UI.NeutralizeSelectableColorTint(chipBtn);
-                chipBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
-                if (spec.Kind == FilterChipKind.PackageFilterBack)
-                {
-                    try { AddTooltip(chip, "gallery.tooltip.filter_back", "Back"); } catch { }
-                }
-                else
-                {
-                    try { AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters"); } catch { }
-                }
             }
 
             chip.AddComponent<UIHoverBorder>();
@@ -359,6 +369,108 @@ namespace VPB
             }
             catch { }
             return chip;
+        }
+
+        private void BindFilterChipControl(GameObject chip, ActiveFilterChipSpec spec, float chipH, int fontSize, float s, bool isCompactAction)
+        {
+            if (chip == null) return;
+
+            Color accent = ResolveFilterChipAccent(spec.Kind);
+            chip.name = "FilterChip_" + spec.Kind;
+
+            Image bg = chip.GetComponent<Image>();
+            if (bg != null)
+                bg.color = new Color(accent.r, accent.g, accent.b, isCompactAction ? 0.94f : 0.96f);
+
+            int padLeft = Mathf.RoundToInt(10f * s);
+            int padV = Mathf.Max(1, Mathf.RoundToInt(2f * s));
+            float innerH = Mathf.Max(16f, chipH - padV * 2f);
+
+            HorizontalLayoutGroup hlg = chip.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = isCompactAction ? 0f : GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s;
+                hlg.padding = isCompactAction
+                    ? new RectOffset(padLeft, padLeft, padV, padV)
+                    : new RectOffset(padLeft, 0, padV, padV);
+            }
+
+            LayoutElement chipLE = chip.GetComponent<LayoutElement>();
+            if (chipLE != null)
+            {
+                chipLE.minHeight = chipH;
+                chipLE.preferredHeight = chipH;
+            }
+
+            Transform labelT = chip.transform.Find("Label");
+            Text labelTxt = labelT != null ? labelT.GetComponent<Text>() : null;
+            if (labelTxt != null)
+            {
+                labelTxt.text = spec.Label ?? "";
+                labelTxt.fontSize = fontSize;
+                LayoutElement labelLE = labelTxt.GetComponent<LayoutElement>();
+                if (labelLE != null) labelLE.preferredHeight = innerH;
+            }
+
+            UnityAction dismiss = spec.OnDismiss;
+            Button bodyBtn = chip.GetComponent<Button>();
+            if (bodyBtn != null)
+            {
+                bodyBtn.onClick.RemoveAllListeners();
+                bodyBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
+            }
+
+            Transform dismissT = chip.transform.Find("Dismiss");
+            if (dismissT != null)
+            {
+                float dismissSize = innerH;
+                Image dismissBg = dismissT.GetComponent<Image>();
+                Color dismissColor = FilterChipDismissBackdrop(accent);
+                if (dismissBg != null) dismissBg.color = dismissColor;
+
+                LayoutElement dismissLE = dismissT.GetComponent<LayoutElement>();
+                if (dismissLE != null)
+                {
+                    dismissLE.minWidth = dismissSize;
+                    dismissLE.minHeight = dismissSize;
+                    dismissLE.preferredWidth = dismissSize;
+                    dismissLE.preferredHeight = dismissSize;
+                }
+
+                Button dismissBtn = dismissT.GetComponent<Button>();
+                if (dismissBtn != null)
+                {
+                    dismissBtn.onClick.RemoveAllListeners();
+                    dismissBtn.onClick.AddListener(() => { try { dismiss?.Invoke(); } catch { } });
+                }
+
+                // Icon button tint (if present) follows dismiss backdrop.
+                Image iconImg = null;
+                for (int i = 0; i < dismissT.childCount; i++)
+                {
+                    Transform child = dismissT.GetChild(i);
+                    if (child != null && child.name != "X")
+                    {
+                        iconImg = child.GetComponent<Image>();
+                        if (iconImg != null) break;
+                    }
+                }
+                if (iconImg != null) iconImg.color = Color.white;
+            }
+
+            try
+            {
+                if (isCompactAction)
+                {
+                    if (spec.Kind == FilterChipKind.PackageFilterBack)
+                        AddTooltip(chip, "gallery.tooltip.filter_back", "Back");
+                    else
+                        AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters");
+                }
+                else
+                    AddTooltip(chip, "gallery.filter_chip.remove_tip", "Remove this filter");
+            }
+            catch { }
         }
 
         private void CollectActiveFilterChipSpecs(List<ActiveFilterChipSpec> specs)
@@ -513,26 +625,6 @@ namespace VPB
                 });
             }
 
-            if (string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                specs.Add(new ActiveFilterChipSpec
-                {
-                    Label = VPBTranslation.T("gallery.filter_chip.scene_local", "Scene: Local only"),
-                    Kind = FilterChipKind.Source,
-                    OnDismiss = () => DismissSceneSourceLocalFilterChip()
-                });
-            }
-
-            if (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-            {
-                specs.Add(new ActiveFilterChipSpec
-                {
-                    Label = VPBTranslation.T("gallery.filter_chip.appearance_local", "Appearance: Local only"),
-                    Kind = FilterChipKind.Source,
-                    OnDismiss = () => DismissAppearanceSourceLocalFilterChip()
-                });
-            }
-
             string subfilterLabel = ResolveActiveCategorySubfilterChipLabel();
             if (!string.IsNullOrEmpty(subfilterLabel))
             {
@@ -566,7 +658,7 @@ namespace VPB
                     OnDismiss = () => DismissUntaggedOnlyFilterChip()
                 });
             }
-            else if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+            else if (IsUserTagIncludeExcludeFilterArmed())
             {
                 if (activeUserTags != null && activeUserTags.Count > 0)
                 {
@@ -685,20 +777,6 @@ namespace VPB
             if (found != null) activeTags.Remove(found);
         }
 
-        private void DismissSceneSourceLocalFilterChip()
-        {
-            currentSceneSourceFilter = "";
-            try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
-            SyncBrowseFilterChipChrome();
-        }
-
-        private void DismissAppearanceSourceLocalFilterChip()
-        {
-            currentAppearanceSourceFilter = "";
-            try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
-            SyncBrowseFilterChipChrome();
-        }
-
         private void DismissCategorySubfilterChip()
         {
             clothingSubfilter = 0;
@@ -743,6 +821,7 @@ namespace VPB
                 }
                 if (found != null) activeUserTags.Remove(found);
             }
+            try { BridgeTitleSearchTagChipFromFilterSet(tag); } catch { }
             try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
             SyncBrowseFilterChipChrome();
         }
@@ -763,6 +842,7 @@ namespace VPB
                 }
                 if (found != null) excludedUserTags.Remove(found);
             }
+            try { BridgeTitleSearchTagChipFromFilterSet(tag); } catch { }
             try { RefreshFilesAndTabs(); } catch { RefreshFiles(true); }
             SyncBrowseFilterChipChrome();
         }
@@ -854,15 +934,45 @@ namespace VPB
 
         private void ClearActiveFilterChipButtons()
         {
+            ReturnActiveFilterChipsToPool();
+        }
+
+        private void ReturnActiveFilterChipsToPool()
+        {
             for (int i = 0; i < _activeFilterChipButtons.Count; i++)
             {
                 GameObject go = _activeFilterChipButtons[i];
-                if (go != null)
-                {
-                    try { Destroy(go); } catch { }
-                }
+                if (go == null) continue;
+                try { ReturnFilterChipToPool(go); } catch { }
             }
             _activeFilterChipButtons.Clear();
+        }
+
+        private void ReturnFilterChipToPool(GameObject go)
+        {
+            if (go == null) return;
+
+            Button bodyBtn = go.GetComponent<Button>();
+            if (bodyBtn != null) bodyBtn.onClick.RemoveAllListeners();
+            Transform dismissT = go.transform.Find("Dismiss");
+            if (dismissT != null)
+            {
+                Button dismissBtn = dismissT.GetComponent<Button>();
+                if (dismissBtn != null) dismissBtn.onClick.RemoveAllListeners();
+            }
+
+            bool isCompact = dismissT == null;
+            List<GameObject> pool = isCompact ? _filterChipPoolCompact : _filterChipPoolStandard;
+            if (pool.Count >= FilterChipPoolMaxIdle)
+            {
+                try { Destroy(go); } catch { }
+                return;
+            }
+
+            go.SetActive(false);
+            if (_activeFilterChipScrollContentRT != null)
+                go.transform.SetParent(_activeFilterChipScrollContentRT, false);
+            pool.Add(go);
         }
 
         /// <summary>Align chip bar with main grid column — same horizontal insets as <see cref="contentScrollRT"/>.</summary>

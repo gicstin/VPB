@@ -15,6 +15,8 @@ namespace VPB
 
         private readonly List<TitleSearchChip> _titleSearchChips = new List<TitleSearchChip>(8);
         private readonly List<GameObject> _titleSearchChipButtons = new List<GameObject>(8);
+        private readonly List<GameObject> _titleSearchChipPool = new List<GameObject>(8);
+        private const int TitleSearchChipPoolMaxIdle = 24;
 
         private GameObject _titleSearchChipHostGO;
         private RectTransform _titleSearchChipHostRT;
@@ -452,6 +454,9 @@ namespace VPB
                 _titleSearchChipDragReveal = false;
                 _titleSearchChipDragActive = false;
             }
+            // Exact vocab #tag / -#tag → filter sets (source of truth); leave substring tags in title.
+            bool filterSetsChanged = false;
+            try { filterSetsChanged = BridgeExactTitleTagChipsIntoFilterSets(); } catch { }
             string serialized = GalleryTitleSearchChipUtil.Serialize(_titleSearchChips);
             try { RebuildTitleSearchChipUi(); } catch { }
             if (!string.Equals(serialized, nameFilter ?? "", StringComparison.Ordinal))
@@ -459,6 +464,13 @@ namespace VPB
             else
             {
                 try { SyncBrowseFilterChipChrome(); } catch { }
+            }
+            if (filterSetsChanged)
+            {
+                try { RefreshFiles(true, false, false, "title_tag_bridge_filter"); } catch { }
+                try { SyncBrowseFilterChipChrome(); } catch { }
+                try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
+                try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
             }
         }
 
@@ -660,6 +672,7 @@ namespace VPB
 
         private void HideTitleSearchChipHostFully()
         {
+            ClearTitleSearchChipButtons();
             _titleSearchChipHostVisible = false;
             _titleSearchChipRowCount = 0;
             if (_titleSearchChipHostGO != null) _titleSearchChipHostGO.SetActive(false);
@@ -723,7 +736,7 @@ namespace VPB
 
                 RectTransform parent = excl ? _titleSearchChipExclContentRT : _titleSearchChipInclContentRT;
                 if (parent == null) continue;
-                GameObject go = CreateTitleSearchChipControl(parent, i, chip, chipH, fontSize, s);
+                GameObject go = AcquireTitleSearchChipControl(parent, i, chip, chipH, fontSize, s);
                 if (go != null) _titleSearchChipButtons.Add(go);
             }
 
@@ -756,13 +769,34 @@ namespace VPB
                 GameObject go = _titleSearchChipButtons[i];
                 if (go != null)
                 {
-                    try { Destroy(go); } catch { }
+                    try { ReturnTitleSearchChipToPool(go); } catch { }
                 }
             }
             _titleSearchChipButtons.Clear();
         }
 
-        private GameObject CreateTitleSearchChipControl(
+        private void ReturnTitleSearchChipToPool(GameObject go)
+        {
+            if (go == null) return;
+
+            Button dismissBtn = null;
+            Transform dismissT = go.transform.Find("Dismiss");
+            if (dismissT != null) dismissBtn = dismissT.GetComponent<Button>();
+            if (dismissBtn != null) dismissBtn.onClick.RemoveAllListeners();
+
+            if (_titleSearchChipPool.Count >= TitleSearchChipPoolMaxIdle)
+            {
+                try { Destroy(go); } catch { }
+                return;
+            }
+
+            go.SetActive(false);
+            if (_titleSearchChipInclContentRT != null)
+                go.transform.SetParent(_titleSearchChipInclContentRT, false);
+            _titleSearchChipPool.Add(go);
+        }
+
+        private GameObject AcquireTitleSearchChipControl(
             Transform parent,
             int index,
             TitleSearchChip chip,
@@ -773,12 +807,35 @@ namespace VPB
             if (parent == null) return null;
             if (s <= 0f) s = 1f;
 
-            bool excl = chip.Polarity == TitleSearchChipPolarity.Exclude;
-            Color accent = excl ? UserTagFilterExcludedColor : UserTagFilterActiveColor;
+            GameObject go = null;
+            while (_titleSearchChipPool.Count > 0 && go == null)
+            {
+                int last = _titleSearchChipPool.Count - 1;
+                go = _titleSearchChipPool[last];
+                _titleSearchChipPool.RemoveAt(last);
+            }
 
+            if (go == null)
+                go = CreateTitleSearchChipControlScaffold(parent, chipH, fontSize, s);
+            else
+            {
+                go.transform.SetParent(parent, false);
+                go.SetActive(true);
+            }
+
+            BindTitleSearchChipControl(go, index, chip, chipH, fontSize, s);
+            return go;
+        }
+
+        private GameObject CreateTitleSearchChipControlScaffold(
+            Transform parent,
+            float chipH,
+            int fontSize,
+            float s)
+        {
             GameObject go = new GameObject("TitleSearchChip");
             go.transform.SetParent(parent, false);
-            AddFilterChipRoundedBg(go, new Color(accent.r, accent.g, accent.b, 0.96f));
+            AddFilterChipRoundedBg(go, Color.white);
 
             int padLeft = Mathf.RoundToInt(6f * s);
             int padV = Mathf.Max(1, Mathf.RoundToInt(1f * s));
@@ -796,16 +853,10 @@ namespace VPB
             csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            int captured = index;
-
             TitleSearchChipDragSource drag = go.AddComponent<TitleSearchChipDragSource>();
             drag.Panel = this;
-            drag.ChipIndex = captured;
-            drag.CanMoveToExclude = chip.CanExclude;
 
-            // Label only — polarity via drag to Include/Exclude rows (no ± buttons).
-            string label = chip.ToDisplayLabel();
-            Text labelTxt = UI.CreateLabel(go, label, fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
+            Text labelTxt = UI.CreateLabel(go, "", fontSize, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "Label");
             ContentSizeFitter labelCsf = labelTxt.gameObject.AddComponent<ContentSizeFitter>();
             labelCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             UI.AddLE(labelTxt.gameObject, preferredHeight: innerH, flexibleHeight: 0f);
@@ -813,35 +864,21 @@ namespace VPB
             float dismissSize = innerH;
             GameObject dismissGO = new GameObject("Dismiss");
             dismissGO.transform.SetParent(go.transform, false);
-            AddFilterChipRoundedBg(dismissGO, FilterChipDismissBackdrop(accent));
+            AddFilterChipRoundedBg(dismissGO, Color.gray);
             Button dismissBtn = dismissGO.AddComponent<Button>();
             dismissBtn.targetGraphic = dismissGO.GetComponent<Image>();
             UI.NeutralizeSelectableColorTint(dismissBtn);
-            dismissBtn.onClick.AddListener(() =>
-            {
-                if (drag != null && drag.ConsumedByDrag) return;
-                try { RemoveTitleSearchChipAt(captured); } catch { }
-            });
 
             float iconPad = GalleryUiDesignTokens.SearchIconButtonPadRef * s;
             Sprite closeSpr = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
             if (closeSpr != null)
-                UI.AddIconToButton(dismissGO, closeSpr, iconPad, FilterChipDismissBackdrop(accent));
+                UI.AddIconToButton(dismissGO, closeSpr, iconPad, Color.gray);
             else
             {
                 Text xTxt = UI.CreateLabel(dismissGO, "\u00d7", (int)GalleryUiDesignTokens.FilterChipDismissSizeRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "X");
                 GalleryUiMetrics.ApplyGlyphFont(xTxt, GalleryUiDesignTokens.FilterChipDismissSizeRef, s, GalleryUiDesignTokens.FontMinRef);
             }
             UI.AddLE(dismissGO, minWidth: dismissSize, minHeight: dismissSize, preferredWidth: dismissSize, preferredHeight: dismissSize, flexibleHeight: 0f);
-            try { AddTooltip(dismissGO, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
-            try
-            {
-                AddTooltip(go, "gallery.search.chip_drag_tip",
-                    chip.CanExclude
-                        ? "Drag to Include or Exclude row"
-                        : "Drag to Include row");
-            }
-            catch { }
 
             // Inward rim — chips live under RectMask2D scroll; outward hover clips (Import sidebar same).
             go.AddComponent<UIHoverBorder>();
@@ -858,6 +895,101 @@ namespace VPB
             catch { }
 
             return go;
+        }
+
+        private void BindTitleSearchChipControl(
+            GameObject go,
+            int index,
+            TitleSearchChip chip,
+            float chipH,
+            int fontSize,
+            float s)
+        {
+            if (go == null) return;
+            if (s <= 0f) s = 1f;
+
+            bool excl = chip.Polarity == TitleSearchChipPolarity.Exclude;
+            Color accent = excl ? UserTagFilterExcludedColor : UserTagFilterActiveColor;
+
+            Image bg = go.GetComponent<Image>();
+            if (bg != null)
+                bg.color = new Color(accent.r, accent.g, accent.b, 0.96f);
+
+            int padLeft = Mathf.RoundToInt(6f * s);
+            int padV = Mathf.Max(1, Mathf.RoundToInt(1f * s));
+            float innerH = Mathf.Max(14f, chipH - padV * 2f);
+
+            HorizontalLayoutGroup hlg = go.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = GalleryUiDesignTokens.FilterChipLabelDismissGapRef * s;
+                hlg.padding = new RectOffset(padLeft, 0, padV, padV);
+            }
+
+            LayoutElement goLE = go.GetComponent<LayoutElement>();
+            if (goLE != null)
+            {
+                goLE.minHeight = chipH;
+                goLE.preferredHeight = chipH;
+            }
+
+            TitleSearchChipDragSource drag = go.GetComponent<TitleSearchChipDragSource>();
+            if (drag != null)
+            {
+                drag.Panel = this;
+                drag.ChipIndex = index;
+                drag.CanMoveToExclude = chip.CanExclude;
+            }
+
+            Transform labelT = go.transform.Find("Label");
+            Text labelTxt = labelT != null ? labelT.GetComponent<Text>() : null;
+            if (labelTxt != null)
+            {
+                labelTxt.text = chip.ToDisplayLabel();
+                labelTxt.fontSize = fontSize;
+                LayoutElement labelLE = labelTxt.GetComponent<LayoutElement>();
+                if (labelLE != null) labelLE.preferredHeight = innerH;
+            }
+
+            Transform dismissT = go.transform.Find("Dismiss");
+            if (dismissT != null)
+            {
+                float dismissSize = innerH;
+                Image dismissBg = dismissT.GetComponent<Image>();
+                if (dismissBg != null) dismissBg.color = FilterChipDismissBackdrop(accent);
+
+                LayoutElement dismissLE = dismissT.GetComponent<LayoutElement>();
+                if (dismissLE != null)
+                {
+                    dismissLE.minWidth = dismissSize;
+                    dismissLE.minHeight = dismissSize;
+                    dismissLE.preferredWidth = dismissSize;
+                    dismissLE.preferredHeight = dismissSize;
+                }
+
+                Button dismissBtn = dismissT.GetComponent<Button>();
+                if (dismissBtn != null)
+                {
+                    int captured = index;
+                    TitleSearchChipDragSource dragRef = drag;
+                    dismissBtn.onClick.RemoveAllListeners();
+                    dismissBtn.onClick.AddListener(() =>
+                    {
+                        if (dragRef != null && dragRef.ConsumedByDrag) return;
+                        try { RemoveTitleSearchChipAt(captured); } catch { }
+                    });
+                }
+            }
+
+            try { AddTooltip(dismissT != null ? dismissT.gameObject : go, "gallery.filter_chip.remove_tip", "Remove this filter"); } catch { }
+            try
+            {
+                AddTooltip(go, "gallery.search.chip_drag_tip",
+                    chip.CanExclude
+                        ? "Drag to Include or Exclude row"
+                        : "Drag to Include row");
+            }
+            catch { }
         }
 
         private float TitleSearchChipChromeTopInsetPx(float paneScale)
@@ -981,6 +1113,111 @@ namespace VPB
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Exact vocabulary title #tag / -#tag chips move into include/exclude filter sets (one truth).
+        /// Substring / unknown names stay in title search. Returns true when filter sets changed.
+        /// </summary>
+        private bool BridgeExactTitleTagChipsIntoFilterSets()
+        {
+            if (_bridgingUserTagFilterTitleSearch) return false;
+            if (_titleSearchChips == null || _titleSearchChips.Count == 0) return false;
+
+            _bridgingUserTagFilterTitleSearch = true;
+            bool filterChanged = false;
+            try
+            {
+                for (int i = _titleSearchChips.Count - 1; i >= 0; i--)
+                {
+                    TitleSearchChip c = _titleSearchChips[i];
+                    if (c.Kind != TitleSearchChipKind.Tag) continue;
+                    string n = VpbLocalDatabase.NormalizeGalleryUserTagName(c.Value);
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (!IsExactCachedUserTagVocabularyName(n)) continue;
+
+                    if (c.Polarity == TitleSearchChipPolarity.Exclude)
+                    {
+                        if (activeUserTags != null && activeUserTags.Remove(n))
+                            filterChanged = true;
+                        if (excludedUserTags != null && !excludedUserTags.Contains(n))
+                        {
+                            excludedUserTags.Add(n);
+                            filterChanged = true;
+                        }
+                    }
+                    else
+                    {
+                        if (excludedUserTags != null && excludedUserTags.Remove(n))
+                            filterChanged = true;
+                        if (activeUserTags != null && !activeUserTags.Contains(n))
+                        {
+                            activeUserTags.Add(n);
+                            filterChanged = true;
+                        }
+                    }
+
+                    _titleSearchChips.RemoveAt(i);
+                }
+
+                // Title chip removal alone is handled by caller re-serialize; report filter set mutations only.
+                return filterChanged;
+            }
+            finally
+            {
+                _bridgingUserTagFilterTitleSearch = false;
+            }
+        }
+
+        /// <summary>When side/DetailStrip mutates filter sets, drop matching exact title #tag chips (avoid double filter UI).</summary>
+        private void BridgeTitleSearchTagChipFromFilterSet(string tagName)
+        {
+            if (_bridgingUserTagFilterTitleSearch) return;
+            if (string.IsNullOrEmpty(tagName)) return;
+            if (_titleSearchChips == null || _titleSearchChips.Count == 0) return;
+
+            string n = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(n)) return;
+
+            _bridgingUserTagFilterTitleSearch = true;
+            bool removed = false;
+            try
+            {
+                for (int i = _titleSearchChips.Count - 1; i >= 0; i--)
+                {
+                    TitleSearchChip c = _titleSearchChips[i];
+                    if (c.Kind != TitleSearchChipKind.Tag) continue;
+                    if (!string.Equals(c.Value, n, StringComparison.OrdinalIgnoreCase)) continue;
+                    _titleSearchChips.RemoveAt(i);
+                    removed = true;
+                }
+                if (removed)
+                {
+                    string serialized = GalleryTitleSearchChipUtil.Serialize(_titleSearchChips);
+                    try { RebuildTitleSearchChipUi(); } catch { }
+                    if (!string.Equals(serialized, nameFilter ?? "", StringComparison.Ordinal))
+                    {
+                        AssignNameFilterState(serialized);
+                        try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, HasTitleSearchChips() ? "" : serialized, _titleBarSearchOnValueChanged); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                _bridgingUserTagFilterTitleSearch = false;
+            }
+        }
+
+        private bool IsExactCachedUserTagVocabularyName(string normalizedName)
+        {
+            if (string.IsNullOrEmpty(normalizedName)) return false;
+            if (cachedUserTagSideTab == null || cachedUserTagSideTab.Count == 0) return false;
+            for (int i = 0; i < cachedUserTagSideTab.Count; i++)
+            {
+                if (string.Equals(cachedUserTagSideTab[i].Name, normalizedName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
     }
 

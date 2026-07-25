@@ -33,7 +33,11 @@ namespace VPB
     public enum GalleryLayoutMode { Grid, List }
     public enum GalleryHistoryFilterMode { Recent, MostUsed, Scenes, Appearance, Clothing, Hair, Plugins, Pose, Body, Misc }
 
-    /// <summary>User Tags Available pane: apply tags, filter grid by selected tags, or show only untagged rows.</summary>
+    /// <summary>
+    /// User Tags Available pane work mode: Tag (click applies) or FilterByTags (click arms include/exclude).
+    /// Include/exclude filter sets are orthogonal and stay live across Tag↔FilterByTags.
+    /// FilterUntagged is a title-bar browse filter (exclusive of include/exclude).
+    /// </summary>
     public enum UserTagAvailMode { Tag = 0, FilterByTags = 1, FilterUntagged = 2 }
     
     public struct CreatorCacheEntry 

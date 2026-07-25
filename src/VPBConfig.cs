@@ -605,7 +605,7 @@ namespace VPB
         public string GalleryDefaultRightSidePanel = "None";
         /// <summary>Default User Tags side panel mode when opening tags: FilterByTags (default), Tag, or FilterUntagged.</summary>
         public string GalleryDefaultUserTagAvailMode = "FilterByTags";
-        /// <summary>When true (default), User Tags available list in filter-by-tags mode hides tags with zero items in the current category view.</summary>
+        /// <summary>When true (default), User Tags available list in Filter work mode hides zero-count tags behind an Unused bucket (side search still matches full vocab).</summary>
         public bool GalleryHideUnusedUserTagsInFilterMode = true;
         /// <summary>Multi-tag grid filter: Compound (any selected tag, default) or Isolate (all selected tags).</summary>
         public string GalleryUserTagFilterCombineMode = "Compound";

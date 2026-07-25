@@ -540,14 +540,12 @@ namespace VPB
         /// <summary>Range anchor for SHIFT+click in applied-tags list (visible order).</summary>
         private string userTagAppliedRemoveAnchor = null;
         private readonly List<UserTagSideTabEntry> cachedAppliedUserTagsSelection = new List<UserTagSideTabEntry>(32);
-        private string currentSceneSourceFilter = ""; // NEW
-        private string currentAppearanceSourceFilter = "";
 
         // Mirror of VPBConfig.GlobalSourceFilter. Read in init, written by dropdown click handlers,
-        // applied as the early gate in PassesFilters.
+        // applied as the early gate in PassesFilters. Scene/Appearance side "Local only" mirrors this.
         private VPBConfig.GlobalSourceFilterValue currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.All;
 
-        /// <summary>Filter menu tri-state: Off → apply/include → only → Off.</summary>
+        /// <summary>Filter menu cycle: Off / Apply (prefer) / Only. Primary click toggles Off↔Apply; RMB or Shift+click arms Only.</summary>
         private enum BrowseFilterCycle : byte
         {
             Off = 0,
@@ -555,7 +553,7 @@ namespace VPB
             Only = 2
         }
 
-        /// <summary>Loaded path filter: Off → All Loaded → All Unloaded → Off.</summary>
+        /// <summary>Loaded path filter: Off / LoadedOnly / UnloadedOnly. Click Off↔Loaded; RMB/Shift → Unloaded.</summary>
         private enum BrowseLoadedMode : byte
         {
             Off = 0,
@@ -568,6 +566,10 @@ namespace VPB
         private BrowseFilterCycle _browseAlwaysLoadedCycle;
         private BrowseFilterCycle _browseOldVersionsCycle;
         private BrowseFilterCycle _browseUnusedCycle;
+        /// <summary>Cached armed count for Filter button chrome — skip icon reload when unchanged.</summary>
+        private int _globalSourceFilterBtnArmedCount = -1;
+        /// <summary>Cached label text to avoid redundant Text assigns.</summary>
+        private string _globalSourceFilterBtnLabelCached;
         private BrowseLoadedMode _browseLoadedMode;
         /// <summary>Sort restored when Always-loaded Prefer/Only returns to Off.</summary>
         private SortState _browseAlwaysLoadedSavedSort;
@@ -629,14 +631,25 @@ namespace VPB
         // Tagging
         private List<string> currentPaths = new List<string>();
         private HashSet<string> activeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Checked tags in Available pick list. Tag mode: staging for Apply. Filter-by-tags: SQL grid AND filter. Untagged: grid shows rows with no user tags.</summary>
+        /// <summary>
+        /// User-tag grid filter include set. Always live when non-empty (orthogonal to F/T work mode).
+        /// Tag mode applies via <c>toggleTagForSelectedItems</c> immediately — does not use this set.
+        /// FilterUntagged browse ignores include/exclude until dismissed.
+        /// </summary>
         private readonly HashSet<string> activeUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Excluded tags (none-of) in filter-by-tags mode: grid hides rows carrying any of these tags. Right-click an Available row to toggle.</summary>
+        /// <summary>User-tag grid filter exclude (none-of). Always live when non-empty; same orthogonality as include.</summary>
         private readonly HashSet<string> excludedUserTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Available pane work mode: Tag (apply) or FilterByTags. FilterUntagged is a title-bar browse filter.</summary>
+        /// <summary>
+        /// Available pane work mode: Tag (click applies) or FilterByTags (click arms include/exclude).
+        /// Does not gate whether include/exclude filter the grid. FilterUntagged is title-bar browse filter.
+        /// </summary>
         private UserTagAvailMode _userTagAvailMode = UserTagAvailMode.FilterByTags;
         /// <summary>Work mode restored when title-bar Not tagged filter turns off (Tag or FilterByTags).</summary>
         private UserTagAvailMode _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
+        /// <summary>Filter-mode Available list: expand collapsed Unused bucket (zero-count tags).</summary>
+        private bool _userTagShowUnusedBucket;
+        /// <summary>Guard against recursive title↔filter user-tag chip bridging.</summary>
+        private bool _bridgingUserTagFilterTitleSearch;
         /// <summary>Not Tagged filter: selection keys kept visible after tagging until deselected (avoids per-click grid SQLite scan).</summary>
         private readonly HashSet<string> _untaggedTaggedPinKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>ALL VAR only: when true, applying/removing user tags on package row also touches all indexed child items in that VAR.</summary>

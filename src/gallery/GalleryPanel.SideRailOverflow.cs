@@ -422,7 +422,7 @@ namespace VPB
             if (SideRailGoIs(go, leftSceneImportSideBtn, rightSceneImportSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_import", "Import");
             if (SideRailGoIs(go, leftUserTagsSideBtn, rightUserTagsSideBtn))
-                return VPBTranslation.T("gallery.side.overflow_tags", "Tags");
+                return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_remove_mode", "Remove mode");
             if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
