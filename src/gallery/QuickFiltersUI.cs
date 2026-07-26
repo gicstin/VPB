@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,10 +7,18 @@ namespace VPB
 {
     public class QuickFiltersUI
     {
+        private const float PanelMaxHeightRef = 500f;
+        private const float ScrollBarWidthRef = 14f;
+        private const float RowTextPadLeftRef = 12f;
+        private const float RowTextPadRightRef = 8f;
+        private const float SplitterHeightRef = 8f;
+
         private GalleryPanel panel;
         private GameObject containerGO;
         private GameObject backdropGO;
         private GameObject scrollContentGO;
+        private ScrollRect scrollRect;
+        private RectTransform containerRT;
         private List<GameObject> activeButtons = new List<GameObject>();
         private Dictionary<GameObject, QuickFilterEntry> buttonToEntry = new Dictionary<GameObject, QuickFilterEntry>();
         private bool editMode;
@@ -45,12 +52,17 @@ namespace VPB
                 backdropGO.SetActive(visible);
                 if (visible) backdropGO.transform.SetAsLastSibling();
             }
-            if (containerGO != null) 
+            if (containerGO != null)
             {
                 containerGO.SetActive(visible);
                 if (visible) containerGO.transform.SetAsLastSibling();
             }
-            
+
+            if (visible)
+            {
+                try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
+            }
+
             // Sync toggle button color if needed
             if (panel != null && !visible)
             {
@@ -63,104 +75,216 @@ namespace VPB
 
         private void CreateUI(GameObject parent)
         {
-            // Backdrop to close when clicking outside
-            backdropGO = new GameObject("QuickFiltersBackdrop");
-            backdropGO.transform.SetParent(parent.transform, false);
-            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
-            backdropRT.anchorMin = Vector2.zero;
-            backdropRT.anchorMax = Vector2.one;
-            backdropRT.sizeDelta = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0, 0, 0, 0); // Transparent but raycast target
+            // Backdrop to close when clicking outside (same near-transparent pattern as CreatePopupMenuRoot).
+            backdropGO = UI.CreateChildRT(parent, "QuickFiltersBackdrop", AnchorPresets.stretchAll);
+            Image backdropImg = UI.AddImage(backdropGO, new Color(0, 0, 0, 0.001f));
             Button backdropBtn = backdropGO.AddComponent<Button>();
+            backdropBtn.transition = Selectable.Transition.None;
+            backdropBtn.targetGraphic = backdropImg;
             backdropBtn.onClick.AddListener(() => SetVisible(false));
 
-            // Dropdown container
-            containerGO = new GameObject("QuickFiltersDropdown");
-            containerGO.transform.SetParent(parent.transform, false);
-            
-            RectTransform rt = containerGO.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 1);
-            rt.anchorMax = new Vector2(0.5f, 1);
-            rt.pivot = new Vector2(0.5f, 1);
-            // Aligned under title-bar P (see title bar anchoredPosition = -228)
-            rt.anchoredPosition = new Vector2(-228, -70);
-            rt.sizeDelta = new Vector2(330, 500);
-            
-            Image bgImg = containerGO.AddComponent<Image>();
-            bgImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            // Dropdown panel — same PopupBackdrop / VLG chrome as language + sort menus.
+            containerGO = UI.CreateChildRT(
+                parent,
+                "QuickFiltersDropdown",
+                AnchorPresets.topMiddle,
+                new Vector2(GalleryUiDesignTokens.PopupMenuPanelWidthRef, 50f),
+                new Vector2(-228f, -72f));
+            containerRT = containerGO.GetComponent<RectTransform>();
+            UI.AddImage(containerGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
-            // Scroll View
-            ScrollRect scrollRect = containerGO.AddComponent<ScrollRect>();
+            scrollRect = containerGO.AddComponent<ScrollRect>();
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
-            scrollRect.scrollSensitivity = 25;
+            scrollRect.scrollSensitivity = 25f;
 
-            // Viewport
-            GameObject viewport = new GameObject("Viewport");
-            viewport.transform.SetParent(containerGO.transform, false);
-            RectTransform vpRT = viewport.AddComponent<RectTransform>();
-            vpRT.anchorMin = Vector2.zero;
-            vpRT.anchorMax = Vector2.one;
-            vpRT.sizeDelta = new Vector2(-18f, -20f);
-            vpRT.anchoredPosition = new Vector2(-9f, -10f);
-            vpRT.pivot = new Vector2(0.5f, 0.5f);
+            GameObject viewport = UI.CreateChildRT(containerGO, "Viewport", AnchorPresets.stretchAll);
+            RectTransform vpRT = viewport.GetComponent<RectTransform>();
             viewport.AddComponent<RectMask2D>();
-            
             scrollRect.viewport = vpRT;
 
-            // Scrollbar
-            float scrollBarWidth = 18f;
-            GameObject scrollbarGO = UI.CreateScrollBar(containerGO, scrollBarWidth, 0f, Scrollbar.Direction.BottomToTop);
+            GameObject scrollbarGO = UI.CreateScrollBar(containerGO, ScrollBarWidthRef, 0f, Scrollbar.Direction.BottomToTop);
             Scrollbar scrollbar = scrollbarGO.GetComponent<Scrollbar>();
-            
             RectTransform sbRT = scrollbarGO.GetComponent<RectTransform>();
-            sbRT.anchorMin = new Vector2(1, 0);
-            sbRT.anchorMax = new Vector2(1, 1);
-            sbRT.pivot = new Vector2(1, 0.5f);
-            sbRT.sizeDelta = new Vector2(scrollBarWidth, 0);
+            sbRT.anchorMin = new Vector2(1f, 0f);
+            sbRT.anchorMax = new Vector2(1f, 1f);
+            sbRT.pivot = new Vector2(1f, 0.5f);
+            sbRT.sizeDelta = new Vector2(ScrollBarWidthRef, 0f);
+            scrollRect.verticalScrollbar = null;
 
-            scrollRect.verticalScrollbar = null; // Decouple
-            
             ScrollbarSync sync = scrollbarGO.AddComponent<ScrollbarSync>();
             sync.scrollRect = scrollRect;
             sync.scrollbar = scrollbar;
             sync.minSizePixels = 20f;
 
-            // Content
-            scrollContentGO = new GameObject("Content");
-            scrollContentGO.transform.SetParent(viewport.transform, false);
-            RectTransform contentRT = scrollContentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 1);
-            contentRT.anchorMax = new Vector2(1, 1);
-            contentRT.pivot = new Vector2(0.5f, 1);
-            contentRT.sizeDelta = new Vector2(0, 0);
-            
+            scrollContentGO = UI.CreateChildRT(viewport, "Content", AnchorPresets.hStretchTop);
+            RectTransform contentRT = scrollContentGO.GetComponent<RectTransform>();
             scrollRect.content = contentRT;
 
-            // Vertical Layout Group
-            VerticalLayoutGroup vlg = scrollContentGO.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2;
-            vlg.padding = new RectOffset(10, 10, 10, 10);
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(
+                scrollContentGO,
+                spacing: GalleryUiDesignTokens.PopupMenuRowSpacingRef,
+                padding: UI.Pad(
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef,
+                    GalleryUiDesignTokens.PopupMenuPaddingRef),
+                childAlignment: TextAnchor.UpperCenter,
+                childControlHeight: false);
 
             ContentSizeFitter csf = scrollContentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
 
+        public void ApplyLayout(float s)
+        {
+            if (containerGO == null) return;
+            if (s <= 0f) s = 1f;
+
+            float panelW = GalleryUiDesignTokens.PopupMenuPanelWidthRef * s;
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            float maxH = PanelMaxHeightRef * s;
+            int pad = Mathf.RoundToInt(GalleryUiDesignTokens.PopupMenuPaddingRef * s);
+            float spacing = GalleryUiDesignTokens.PopupMenuRowSpacingRef * s;
+            float sbW = ScrollBarWidthRef * s;
+
+            VerticalLayoutGroup vlg = scrollContentGO != null ? scrollContentGO.GetComponent<VerticalLayoutGroup>() : null;
+            if (vlg != null)
+            {
+                vlg.padding = new RectOffset(pad, pad, pad, pad);
+                vlg.spacing = spacing;
+            }
+
+            float splitH = SplitterHeightRef * s;
+            float textPadL = RowTextPadLeftRef * s;
+            float textPadR = RowTextPadRightRef * s;
+            int rowCount = 0;
+            bool hasSplitter = false;
+
+            if (scrollContentGO != null)
+            {
+                for (int i = 0; i < scrollContentGO.transform.childCount; i++)
+                {
+                    Transform ch = scrollContentGO.transform.GetChild(i);
+                    if (ch == null) continue;
+                    if (ch.name == "Splitter")
+                    {
+                        hasSplitter = true;
+                        LayoutElement splitLe = ch.GetComponent<LayoutElement>();
+                        if (splitLe != null) splitLe.preferredHeight = splitH;
+                        RectTransform splitRT = ch as RectTransform;
+                        if (splitRT != null)
+                            splitRT.sizeDelta = new Vector2(panelW - pad * 2f - sbW, splitH);
+                        Transform line = ch.Find("Line");
+                        if (line != null)
+                        {
+                            RectTransform lineRT = line as RectTransform;
+                            if (lineRT != null)
+                                lineRT.sizeDelta = new Vector2(-20f * s, Mathf.Max(1f, 1f * s));
+                        }
+                        continue;
+                    }
+
+                    rowCount++;
+                    LayoutElement le = ch.GetComponent<LayoutElement>();
+                    if (le != null) le.preferredHeight = rowH;
+
+                    RectTransform rowRT = ch as RectTransform;
+                    if (rowRT != null)
+                        rowRT.sizeDelta = new Vector2(panelW - pad * 2f - sbW, rowH);
+
+                    float editReserve = (editMode && ch.Find("RenameBtn") != null) ? 78f * s : 0f;
+                    ApplyPopupRowTextInsets(ch, textPadL, textPadR, editReserve);
+                    Text t = ch.Find("Text") != null ? ch.Find("Text").GetComponent<Text>() : null;
+                    if (t != null)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+
+                    // Edit-mode icon squares track row height.
+                    float sq = Mathf.Max(18f, rowH - 6f * s);
+                    float padR = 4f * s;
+                    float gap = 4f * s;
+                    Transform renameT = ch.Find("RenameBtn");
+                    Transform deleteT = ch.Find("DeleteBtn");
+                    if (renameT != null)
+                    {
+                        RectTransform irt = renameT as RectTransform;
+                        if (irt != null)
+                        {
+                            irt.sizeDelta = new Vector2(sq, sq);
+                            irt.anchoredPosition = new Vector2(-(padR + sq + gap), 0f);
+                        }
+                    }
+                    if (deleteT != null)
+                    {
+                        RectTransform irt = deleteT as RectTransform;
+                        if (irt != null)
+                        {
+                            irt.sizeDelta = new Vector2(sq, sq);
+                            irt.anchoredPosition = new Vector2(-padR, 0f);
+                        }
+                    }
+                }
+
+                LayoutRebuilder.ForceRebuildLayoutImmediate(scrollContentGO.GetComponent<RectTransform>());
+            }
+
+            // Splitter is thin — do not count it as a full row (that left empty gap under Edit).
+            int childCount = scrollContentGO != null ? scrollContentGO.transform.childCount : 0;
+            float contentH = pad * 2f
+                + rowCount * rowH
+                + (hasSplitter ? splitH : 0f)
+                + Mathf.Max(0, childCount - 1) * spacing;
+            RectTransform contentRT = scrollContentGO != null ? scrollContentGO.GetComponent<RectTransform>() : null;
+            if (contentRT != null && contentRT.rect.height > 1f)
+                contentH = contentRT.rect.height;
+            float panelH = Mathf.Min(maxH, contentH);
+
+            if (containerRT != null)
+                containerRT.sizeDelta = new Vector2(panelW, panelH);
+
+            Transform vp = containerGO.transform.Find("Viewport");
+            if (vp != null)
+            {
+                RectTransform vpRT = vp as RectTransform;
+                if (vpRT != null)
+                {
+                    vpRT.offsetMin = new Vector2(0f, 0f);
+                    vpRT.offsetMax = new Vector2(-sbW, 0f);
+                }
+            }
+
+            Transform sb = containerGO.transform.Find("Scrollbar");
+            if (sb != null)
+            {
+                RectTransform sbRT = sb as RectTransform;
+                if (sbRT != null)
+                    sbRT.sizeDelta = new Vector2(sbW, 0f);
+            }
+
+            // Anchor under filter-presets title-bar chip (same gap as language menu).
+            if (containerRT != null && panel != null)
+            {
+                RectTransform btnRT = panel.QuickFiltersToggleBtnRT;
+                containerRT.anchorMin = new Vector2(0.5f, 1f);
+                containerRT.anchorMax = new Vector2(0.5f, 1f);
+                containerRT.pivot = new Vector2(0.5f, 1f);
+                float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                float x = btnRT != null ? btnRT.anchoredPosition.x : -228f * s;
+                containerRT.anchoredPosition = new Vector2(
+                    x,
+                    -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            }
+        }
+
         public void Refresh()
         {
             // Clear existing
-            foreach(var btn in activeButtons) GameObject.Destroy(btn);
+            foreach (var btn in activeButtons) GameObject.Destroy(btn);
             activeButtons.Clear();
             buttonToEntry.Clear();
 
-            // 1. Save Preset Button (Green) - Index 0
+            // 1. Save Preset Button - Index 0
             CreateSaveButton();
 
             // 2. Edit Presets Button - Index 1
@@ -170,7 +294,7 @@ namespace VPB
             CreateSplitter();
 
             // 4. Existing Filters - Index 3+
-            foreach(var filter in QuickFilterSettings.Instance.Filters)
+            foreach (var filter in QuickFilterSettings.Instance.Filters)
             {
                 CreateFilterButton(filter);
             }
@@ -178,20 +302,48 @@ namespace VPB
             // Ensure correct layer for new items
             if (containerGO != null)
                 SetLayerRecursive(containerGO, containerGO.layer);
+
+            try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
+        }
+
+        private static void ApplyPopupRowTextInsets(Transform row, float padLeft, float padRight, float editIconsReserve = 0f)
+        {
+            if (row == null) return;
+            Transform textT = row.Find("Text");
+            if (textT == null) return;
+            RectTransform txtRT = textT as RectTransform;
+            if (txtRT == null) return;
+            float right = editIconsReserve > 0f ? Mathf.Max(padRight, editIconsReserve) : padRight;
+            txtRT.offsetMin = new Vector2(padLeft, 0f);
+            txtRT.offsetMax = new Vector2(-right, 0f);
         }
 
         private void CreateSaveButton()
         {
-            GameObject btn = UI.CreateUIButton(scrollContentGO, 240, 50, VPBTranslation.T("quickfilters.save_preset", "Save Preset"), 20, 0, 0, AnchorPresets.middleCenter, () => {
-                CaptureCurrentFilter();
-                // Removed SetVisible(false) so list stays open
-            });
-            btn.GetComponent<Image>().color = new Color(0.2f, 0.4f, 0.2f, 1f);
-            
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 50;
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef;
+            float rowW = GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f;
+            GameObject btn = UI.CreateUIButton(
+                scrollContentGO,
+                rowW,
+                rowH,
+                VPBTranslation.T("quickfilters.save_preset", "Save Preset"),
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                0, 0,
+                AnchorPresets.middleCenter,
+                () => { CaptureCurrentFilter(); });
 
-            // Hover tooltip (status line)
+            Image img = btn.GetComponent<Image>();
+            if (img != null) img.color = UI.PopupRowBackdrop;
+            Text txt = btn.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                txt.alignment = TextAnchor.MiddleLeft;
+                txt.color = UI.PopupText;
+                VPBUiFont.ApplyTo(txt);
+            }
+            ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef);
+            UI.AddLE(btn, preferredHeight: rowH, flexibleWidth: 1f);
+
             var del = btn.AddComponent<UIHoverDelegate>();
             del.OnHoverChange += (enter) =>
             {
@@ -209,17 +361,33 @@ namespace VPB
                 ? VPBTranslation.T("quickfilters.done_editing", "Done Editing")
                 : VPBTranslation.T("quickfilters.edit_presets", "Edit Presets");
 
-            GameObject btn = UI.CreateUIButton(scrollContentGO, 240, 45, label, 18, 0, 0, AnchorPresets.middleCenter, () =>
-            {
-                editMode = !editMode;
-                Refresh();
-            });
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef;
+            float rowW = GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f;
+            GameObject btn = UI.CreateUIButton(
+                scrollContentGO,
+                rowW,
+                rowH,
+                label,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                0, 0,
+                AnchorPresets.middleCenter,
+                () =>
+                {
+                    editMode = !editMode;
+                    Refresh();
+                });
 
-            var img = btn.GetComponent<Image>();
+            Image img = btn.GetComponent<Image>();
             if (img != null) img.color = editMode ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 45;
+            Text txt = btn.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                txt.alignment = TextAnchor.MiddleLeft;
+                txt.color = editMode ? UI.PopupText : UI.PopupMutedText;
+                VPBUiFont.ApplyTo(txt);
+            }
+            ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef);
+            UI.AddLE(btn, preferredHeight: rowH, flexibleWidth: 1f);
 
             activeButtons.Add(btn);
         }
@@ -228,28 +396,29 @@ namespace VPB
         {
             GameObject splitter = new GameObject("Splitter");
             splitter.transform.SetParent(scrollContentGO.transform, false);
-            var rt = splitter.AddComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0, 15);
-            
-            var le = splitter.AddComponent<LayoutElement>();
-            le.preferredHeight = 15;
+            var splitRT = splitter.AddComponent<RectTransform>();
+            splitRT.sizeDelta = new Vector2(0f, SplitterHeightRef);
+            UI.AddLE(splitter, preferredHeight: SplitterHeightRef, flexibleWidth: 1f);
 
-            GameObject line = new GameObject("Line");
-            line.transform.SetParent(splitter.transform, false);
-            var lineRT = line.AddComponent<RectTransform>();
-            lineRT.anchorMin = new Vector2(0, 0.5f);
-            lineRT.anchorMax = new Vector2(1, 0.5f);
-            lineRT.sizeDelta = new Vector2(-10, 1);
-            
-            var img = line.AddComponent<Image>();
-            img.color = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+            GameObject line = UI.CreateChildRT(splitter, "Line", AnchorPresets.hStretchMiddle, new Vector2(-20f, 1f));
+            UI.AddImage(line, new Color(0.5f, 0.5f, 0.5f, 0.35f));
 
             activeButtons.Add(splitter);
         }
 
         private void CreateFilterButton(QuickFilterEntry entry)
         {
-            GameObject btn = UI.CreateUIButton(scrollContentGO, 240, 45, entry.Name, 18, 0, 0, AnchorPresets.middleCenter, null);
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef;
+            float rowW = GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f;
+            GameObject btn = UI.CreateUIButton(
+                scrollContentGO,
+                rowW,
+                rowH,
+                entry.Name,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                0, 0,
+                AnchorPresets.middleCenter,
+                null);
             var b = btn != null ? btn.GetComponent<Button>() : null;
             if (b != null)
             {
@@ -266,20 +435,20 @@ namespace VPB
                     SetVisible(false); // Close dropdown on action
                 });
             }
-            
-            Image img = btn.GetComponent<Image>();
-            img.color = entry.ButtonColor;
-            
-            Text txt = btn.GetComponentInChildren<Text>();
-            txt.color = entry.TextColor;
-            txt.alignment = TextAnchor.MiddleLeft;
-            RectTransform txtRT = txt.GetComponent<RectTransform>();
-            txtRT.offsetMin = new Vector2(15, 0); // More indent for text
-            if (editMode)
-                txtRT.offsetMax = new Vector2(-78, 0); // space for icon buttons
 
-            var le = btn.AddComponent<LayoutElement>();
-            le.preferredHeight = 45;
+            Image img = btn.GetComponent<Image>();
+            if (img != null) img.color = entry.ButtonColor;
+
+            Text txt = btn.GetComponentInChildren<Text>();
+            if (txt != null)
+            {
+                txt.color = entry.TextColor;
+                txt.alignment = TextAnchor.MiddleLeft;
+                VPBUiFont.ApplyTo(txt);
+            }
+            ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef, editMode ? 78f : 0f);
+
+            UI.AddLE(btn, preferredHeight: rowH, flexibleWidth: 1f);
 
             // Reorderable (allow drag in edit mode too)
             var reorder = btn.AddComponent<UIListReorderable>();
@@ -289,15 +458,17 @@ namespace VPB
 
             if (editMode)
             {
-                float sq = 32f;
-                float padR = 6f;
-                float gap = 6f;
+                float sq = 26f;
+                float padR = 4f;
+                float gap = 4f;
 
                 Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
                 Sprite sprDelete = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
 
                 GameObject renameBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject deleteBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                if (renameBtn != null) renameBtn.name = "RenameBtn";
+                if (deleteBtn != null) deleteBtn.name = "DeleteBtn";
                 if (renameBtn != null && deleteBtn != null)
                 {
                     void setupSquare(GameObject go, Sprite icon, Color iconTint, float x, Color backdrop)
@@ -380,7 +551,6 @@ namespace VPB
                         });
                     }
 
-                    // Hover tooltips (status line)
                     var rh = renameBtn.AddComponent<UIHoverDelegate>();
                     rh.OnHoverChange += (enter) =>
                     {
@@ -398,16 +568,14 @@ namespace VPB
                 }
             }
 
-            // Right click to manage
             var rightClick = btn.AddComponent<UIRightClickDelegate>();
             rightClick.OnRightClick = () => {
                 ShowContextMenu(btn, entry);
             };
 
-            // Tooltip
             var del = btn.AddComponent<UIHoverDelegate>();
             del.OnHoverChange += (enter) => {
-                if (enter && panel != null) 
+                if (enter && panel != null)
                 {
                     string info = editMode
                         ? string.Format(VPBTranslation.T("quickfilters.edit_hint", "Edit '{0}' (Drag to reorder. Use icons for rename/delete.)"), entry.Name)
@@ -425,7 +593,7 @@ namespace VPB
         {
             // Gather all filter entries based on current sibling index
             var newList = new List<QuickFilterEntry>();
-            
+
             // Siblings at index 3+ are the filters (0=Save, 1=Edit, 2=Splitter)
             for (int i = 3; i < scrollContentGO.transform.childCount; i++)
             {
@@ -435,7 +603,7 @@ namespace VPB
                     newList.Add(entry);
                 }
             }
-            
+
             QuickFilterSettings.Instance.Filters = newList;
             QuickFilterSettings.Instance.Save();
         }
@@ -461,7 +629,7 @@ namespace VPB
         private void ShowContextMenu(GameObject btn, QuickFilterEntry entry)
         {
             var options = new List<ContextMenuPanel.Option>();
-            
+
             options.Add(new ContextMenuPanel.Option(VPBTranslation.T("quickfilters.ctx.rename", "Rename"), () => {
                 panel.DisplayTextInput(VPBTranslation.T("quickfilters.rename_title", "Rename Filter"), entry.Name, (string val) => {
                     if (!string.IsNullOrEmpty(val))

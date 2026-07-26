@@ -53,8 +53,7 @@ namespace VPB
                             {
                                 if (LocalSceneGallerySupport.InstallDependenciesForSceneJsonFile(absLocalJson))
                                 {
-                                    try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                                    try { FileManager.Refresh(); } catch { }
+                                    try { FileManagerBridge.Refresh("tbox_autoinstall_local_scene", RefreshScope.Both); } catch { }
                                 }
                             }
                             catch (Exception ex)
@@ -125,6 +124,7 @@ namespace VPB
                 if (scanWlDirty)
                 {
                     try { ScanWhitelistManager.Instance.Save(); } catch { }
+                    try { BeginScanWlBadgePulseFromFiles(selectedFiles); } catch { }
                 }
 
                 if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
@@ -136,6 +136,7 @@ namespace VPB
                 // SetAutoInstall no longer moves .var files here; refresh grid so AI badges match the updated lookup.
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
                 ShowTemporaryStatus($"Autoinstall: {installOk}, auto-load: {loadOk}, scan-whitelist: {scanWlOk} (install at next launch).", 2.5f);
             }
             catch (Exception ex)
@@ -213,7 +214,7 @@ namespace VPB
                     return;
                 }
 
-                if (ok > 0 && !IsHubMode)
+                if (ok > 0)
                 {
                     try { RemoveCurrentGalleryEntriesMatchingHideFilter(); } catch { }
                 }
@@ -512,10 +513,12 @@ namespace VPB
                 if (scanWlDirty)
                 {
                     try { ScanWhitelistManager.Instance.Save(); } catch { }
+                    try { BeginScanWlBadgePulseFromFiles(selectedFiles); } catch { }
                 }
 
                 try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
 
                 if (installOk == 0 && loadOk == 0 && scanWlOk == 0)
                     ShowTemporaryStatus("No auto-install or auto-load flags to clear for selection.", 2f);
@@ -582,17 +585,10 @@ namespace VPB
                 }
                 foreach (var depId in depCandidateIds)
                 {
-                    try
-                    {
-                        // Resolve aliases like ".latest" to actual local package UID when possible.
-                        var depPkg = FileManager.GetPackage(depId, ensureInstalled: false);
-                        string depUid = depPkg != null ? depPkg.Uid : depId;
-                        if (string.IsNullOrEmpty(depUid)) continue;
-                        if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(depUid)) continue;
-                        if (!seenUids.Add(depUid)) continue;
-                        addUids.Add(depUid);
-                    }
-                    catch { }
+                    if (string.IsNullOrEmpty(depId)) continue;
+                    if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(depId)) continue;
+                    if (!seenUids.Add(depId)) continue;
+                    addUids.Add(depId);
                 }
 
                 if (addUids.Count == 0)
@@ -609,8 +605,10 @@ namespace VPB
                     return;
                 }
 
-                try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
+                try { BeginScanWlBadgePulse(added ?? addUids); } catch { }
+                try { RefreshVisibleGridVisualsOnly(); } catch { }
                 try { RefreshTboxConditionalActionButtons(); } catch { }
+                try { DetailStripRefreshBadgesForSelection(); } catch { }
                 ShowTemporaryStatus($"Temporarily whitelisted {addedCount} package(s) for this VaM session.", 2.5f);
             }
             catch (Exception ex)

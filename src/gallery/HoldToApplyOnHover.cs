@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using MVR.FileManagement;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -41,8 +42,26 @@ namespace VPB
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData == null) return;
+            bool isVR = XrUtils.IsVrActive();
+            if (!isVR && eventData.button != PointerEventData.InputButton.Left) return;
+            // Don't start hold-to-apply when pressing the rating star / picker.
+            if (IsOverRatingChrome(eventData)) return;
             TryStartHold();
+        }
+
+        private static bool IsOverRatingChrome(PointerEventData eventData)
+        {
+            GameObject go = eventData.pointerCurrentRaycast.gameObject;
+            if (go == null) go = eventData.pointerEnter;
+            Transform t = go != null ? go.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (n == "Star" || n == "Rating" || n == "RatingSelector") return true;
+                t = t.parent;
+            }
+            return false;
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -85,6 +104,11 @@ namespace VPB
             float end = start + Mathf.Max(0.05f, holdSeconds);
             while (Time.unscaledTime < end)
             {
+                if (UIDraggableItem.IsDragging)
+                {
+                    Cancel();
+                    yield break;
+                }
                 float t = Mathf.InverseLerp(start, end, Time.unscaledTime);
                 if (_fill != null) _fill.fillAmount = t;
                 if (_text != null)
@@ -111,30 +135,13 @@ namespace VPB
         {
             if (_overlay != null) return;
 
-            _overlay = new GameObject("HoldToApplyOverlay");
-            _overlay.transform.SetParent(transform, false);
+            _overlay = UI.CreateChildRT(gameObject, "HoldToApplyOverlay", AnchorPresets.middleCenter, new Vector2(78f, 78f));
 
-            var rt = _overlay.AddComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(78f, 78f);
-            rt.anchoredPosition = Vector2.zero;
+            var bg = UI.AddImage(_overlay, new Color(0f, 0f, 0f, 0.55f), false);
 
-            var bg = _overlay.AddComponent<Image>();
-            bg.color = new Color(0f, 0f, 0f, 0.55f);
-            bg.raycastTarget = false;
+            var fillGO = UI.CreateChildRT(_overlay, "Fill", AnchorPresets.stretchAll, new Vector2(-10f, -10f));
 
-            var fillGO = new GameObject("Fill");
-            fillGO.transform.SetParent(_overlay.transform, false);
-            var frt = fillGO.AddComponent<RectTransform>();
-            frt.anchorMin = Vector2.zero;
-            frt.anchorMax = Vector2.one;
-            frt.sizeDelta = new Vector2(-10f, -10f);
-            frt.anchoredPosition = Vector2.zero;
-
-            _fill = fillGO.AddComponent<Image>();
-            _fill.color = new Color(0.15f, 0.75f, 0.2f, 0.85f);
+            _fill = UI.AddImage(fillGO, new Color(0.15f, 0.75f, 0.2f, 0.85f));
             _fill.type = Image.Type.Filled;
             _fill.fillMethod = Image.FillMethod.Radial360;
             _fill.fillOrigin = 2; // Top
@@ -142,21 +149,7 @@ namespace VPB
             _fill.fillAmount = 0f;
             _fill.raycastTarget = false;
 
-            var textGO = new GameObject("Text");
-            textGO.transform.SetParent(_overlay.transform, false);
-            var trt = textGO.AddComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.sizeDelta = Vector2.zero;
-            trt.anchoredPosition = Vector2.zero;
-
-            _text = textGO.AddComponent<Text>();
-            _text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _text.fontSize = 22;
-            _text.alignment = TextAnchor.MiddleCenter;
-            _text.color = Color.white;
-            _text.raycastTarget = false;
-            _text.text = ResolveHoldSeconds().ToString("0.0");
+            _text = UI.CreateLabel(_overlay, ResolveHoldSeconds().ToString("0.0"), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
         }
     }
 }

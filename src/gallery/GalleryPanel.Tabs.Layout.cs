@@ -10,12 +10,24 @@ namespace VPB
         private float SideTabBottomMargin => GalleryMainAreaBottomInset() + 8f;
         private float SideTabDefaultBottomOffset => GalleryMainAreaBottomInset() + 8f;
 
-        // Top inset for main tab scroll: clears sort + search row (same top as contentScrollRT: 65*s, row height 35*s, gap 5*s)
+        // Top inset for side tab scroll: clears sort + search row (SideTabTopOffsetRef*s + row + gap).
+        // Filter chip bar lives in the main grid column only — do not add ActiveFilterChromeTopInsetPx here.
         private float TabScrollTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float rowTop = 65f * s;
-            return -(rowTop + 35f * s + 5f * s);
+            float s = ChromeScale;
+            float rowTop = GalleryUiDesignTokens.SideTabTopOffsetRef * s;
+            float headerExtra = 0f;
+            try { headerExtra = SidePanelHeaderExtraTopInset(); } catch { }
+            float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+            float gap = GalleryUiDesignTokens.SideTabFilterRowBottomGapRef * s;
+            return -(rowTop + headerExtra + rowH + gap);
+        }
+
+        private static float SideTabSplitSubPaneTopAnchorY(ContentType activeContent)
+        {
+            return activeContent == ContentType.Category
+                ? GalleryUiDesignTokens.CategorySideSubPaneHeightFraction
+                : 0.5f;
         }
 
         private static bool CategoryNeedsSplitView(string title)
@@ -26,6 +38,13 @@ namespace VPB
                 || title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
                 || title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0
                 || title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Split sub-panes that need tag-count cache priming (excludes Scene — uses SceneSource only).</summary>
+        private static bool CategoryNeedsTagCountCachePass(string title)
+        {
+            if (!CategoryNeedsSplitView(title)) return false;
+            return title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) < 0;
         }
 
         private static ContentType InferCategorySubPaneTypeFromTitle(string title)
@@ -47,7 +66,9 @@ namespace VPB
                     titleText.text = currentCategoryTitle;
             }
             SyncCategoryQuickSwitchChrome();
-            try { ApplyTitleBarResponsiveLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f); } catch { }
+            try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
+            try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
+            try { ApplyInAppHelpPanelLayout(ChromeScale); } catch { }
             UpdateSideContextActions();
 
             // Lightweight refresh must still keep split sub-pane lists alive (Hair/Clothing tags, SceneSource, etc.).
@@ -69,7 +90,12 @@ namespace VPB
             }
             catch { }
             UpdateSideButtonsVisibility();
+            float paneScale = ChromeScale;
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
+            try { SuppressImportOccupiedSideColumnChrome(); } catch { }
+            try { SyncImportSidebarHeaderLabel(); } catch { }
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            MarkGalleryPaneChromeDirty();
         }
 
         /// <summary>
@@ -100,7 +126,7 @@ namespace VPB
             // of this method — layout rebuilds would leave toolbars hidden until a full UpdateLayout.
             bool userTagsSideOpen = leftActiveContent == ContentType.UserTags
                 || rightActiveContent == ContentType.UserTags;
-            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null)
+            if ((leftTabContainerGO != null || rightTabContainerGO != null)
                 && VPBConfig.Instance != null && VPBConfig.Instance.TryConsumeLightweightGalleryTabRefreshSlot()
                 && !userTagsSideOpen)
             {
@@ -125,7 +151,6 @@ namespace VPB
                 {
                     if (IsSettingsPanelOpen())
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
-                    else if (IsHubMode) titleText.text = VPBTranslation.T("gallery.hub.title_prefix", "HUB: ") + currentHubCategory;
                     else titleText.text = currentCategoryTitle;
                 }
             }
@@ -134,13 +159,10 @@ namespace VPB
 
             UpdateSideContextActions();
 
-            if (IsHubMode)
-            {
-                TeardownCategoryCreatorDualBufferForHub();
-                UpdateHubLayout(rebuildSideTabLists);
-                UpdateSideButtonsVisibility();
-                return;
-            }
+            if (!leftActiveContent.HasValue || leftActiveContent != ContentType.UserTags)
+                PurgeUserTagsSideTabArtifactsFromMainPane(true);
+            if (!rightActiveContent.HasValue || rightActiveContent != ContentType.UserTags)
+                PurgeUserTagsSideTabArtifactsFromMainPane(false);
 
             if (leftActiveContent.HasValue)
             {
@@ -151,25 +173,20 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     splitView = CategoryNeedsSplitView(title);
                 }
-                else if (leftActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
                 else if (leftActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.Hub || leftActiveContent == ContentType.CleanupCategories))
+                if ((splitView && (leftActiveContent == ContentType.Category || leftActiveContent == ContentType.CleanupCategories))
                     && leftSubTabScrollGO != null)
                 {
                     // Split Layout
                     leftSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (leftActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
+                    if (leftActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (leftActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
 
@@ -192,19 +209,20 @@ namespace VPB
                             if (leftSubSearchInput.placeholder is Text phT)
                                 phT.text = GetContentTypePlaceholder(ContentType.Tags);
                         }
-                        ApplyLeftSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     if (sceneSourceLeft) SyncSceneSourceSortButtonHighlights();
+                    SyncSideTabSubFilterRowChrome(ChromeScale);
 
+                    float splitY = SideTabSplitSubPaneTopAnchorY(leftActiveContent.Value);
                     RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                    leftRT.anchorMin = new Vector2(0, 0.5f);
+                    leftRT.anchorMin = new Vector2(0, splitY);
                     leftRT.anchorMax = new Vector2(0, 1);
                     leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
                     leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
 
                     RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(0, 0);
-                    subRT.anchorMax = new Vector2(0, 0.5f);
+                    subRT.anchorMax = new Vector2(0, splitY);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
@@ -257,6 +275,8 @@ namespace VPB
             {
                 leftSubSceneSortBarActive = false;
                 if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
+                if (leftCategoryTabHolder != null) leftCategoryTabHolder.SetActive(false);
+                if (leftCreatorTabHolder != null) leftCreatorTabHolder.SetActive(false);
             }
 
             if (rightActiveContent.HasValue)
@@ -268,37 +288,27 @@ namespace VPB
                     string title = titleText != null ? titleText.text : "";
                     splitView = CategoryNeedsSplitView(title);
                 }
-                else if (rightActiveContent == ContentType.Hub)
-                {
-                    splitView = true;
-                }
                 else if (rightActiveContent == ContentType.CleanupCategories)
                 {
                     // Split view when filtering stale cache: show age buckets in the sub-pane.
                     splitView = GetCleanupFilterMode() == 4;
                 }
 
-                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.Hub || rightActiveContent == ContentType.CleanupCategories))
+                if ((splitView && (rightActiveContent == ContentType.Category || rightActiveContent == ContentType.CleanupCategories))
                     && rightSubTabScrollGO != null)
                 {
                     // Split Layout
                     rightSubTabScrollGO.SetActive(true);
 
                     ContentType subType = ContentType.Tags;
-                    if (rightActiveContent == ContentType.Hub) subType = ContentType.HubTags;
-                    else if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
+                    if (rightActiveContent == ContentType.CleanupCategories) subType = ContentType.CleanupStaleBuckets;
                     else if (rightActiveContent == ContentType.Category)
                         subType = InferCategorySubPaneTypeFromTitle(titleText != null ? titleText.text : "");
 
                     bool sceneSourceRight = rightActiveContent == ContentType.Category && subType == ContentType.SceneSource;
                     rightSubSceneSortBarActive = sceneSourceRight;
                     if (rightSubSortBtn != null)
-                    {
                         rightSubSortBtn.SetActive(!sceneSourceRight);
-                        RectTransform srt = rightSubSortBtn.GetComponent<RectTransform>();
-                        srt.anchorMin = new Vector2(1, 0.5f);
-                        srt.anchorMax = new Vector2(1, 0.5f);
-                    }
                     if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(sceneSourceRight);
                     if (rightActiveContent == ContentType.CleanupCategories)
                     {
@@ -313,23 +323,21 @@ namespace VPB
                             if (rightSubSearchInput.text != tagFilter) rightSubSearchInput.text = tagFilter;
                             if (rightSubSearchInput.placeholder is Text phT)
                                 phT.text = GetContentTypePlaceholder(ContentType.Tags);
-                            RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                            rt.anchorMin = new Vector2(1, 0.5f);
-                            rt.anchorMax = new Vector2(1, 0.5f);
                         }
-                        ApplyRightSubSearchLayoutScaled(VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f);
                     }
                     if (sceneSourceRight) SyncSceneSourceSortButtonHighlights();
+                    SyncSideTabSubFilterRowChrome(ChromeScale);
 
+                    float splitY = SideTabSplitSubPaneTopAnchorY(rightActiveContent.Value);
                     RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                    rightRT.anchorMin = new Vector2(1, 0.5f);
+                    rightRT.anchorMin = new Vector2(1, splitY);
                     rightRT.anchorMax = new Vector2(1, 1);
                     rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
                     rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
 
                     RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
                     subRT.anchorMin = new Vector2(1, 0);
-                    subRT.anchorMax = new Vector2(1, 0.5f);
+                    subRT.anchorMax = new Vector2(1, splitY);
                     subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
                     subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
 
@@ -382,14 +390,21 @@ namespace VPB
             {
                 rightSubSceneSortBarActive = false;
                 if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
+                if (rightCategoryTabHolder != null) rightCategoryTabHolder.SetActive(false);
+                if (rightCreatorTabHolder != null) rightCreatorTabHolder.SetActive(false);
             }
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
+            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+
+            float paneScale = ChromeScale;
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
 
             // UpdateLayout runs before UpdateTabs in ToggleLeft/Right; UpdateTabsImpl mutates tab ScrollRect geometry
             // after that — viewport stretch resets unless sticky chrome is reapplied here.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            MarkGalleryPaneChromeDirty();
         }
 
         private bool TryUpdateCategoryCreatorDualBufferMainPane(ContentType activeContent, GameObject tabContainer, bool isLeft)
@@ -440,99 +455,6 @@ namespace VPB
             return true;
         }
 
-        private void UpdateHubLayout(bool populateSideTabLists = true)
-        {
-            // Left Side: Category (Top) / Tags (Bottom)
-            if (leftTabScrollGO != null && leftSubTabScrollGO != null)
-            {
-                leftTabScrollGO.SetActive(true);
-                leftSubTabScrollGO.SetActive(true);
-
-                // Left Search Top (Category)
-                if (leftSearchInput != null)
-                {
-                    leftSearchInput.gameObject.SetActive(true);
-                    // For now, no separate search for categories on left, but let's clear it
-                    if (leftSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.categories", "Categories...");
-                }
-
-                // Left Search Bottom (Tags)
-                if (leftSubSearchInput != null)
-                {
-                    leftSubSearchInput.gameObject.SetActive(true);
-                    if (leftSubSearchInput.text != tagFilter) leftSubSearchInput.text = tagFilter;
-                    if (leftSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.tags", "Search Tags...");
-                }
-
-                RectTransform leftRT = leftTabScrollGO.GetComponent<RectTransform>();
-                leftRT.anchorMin = new Vector2(0, 0.5f);
-                leftRT.anchorMax = new Vector2(0, 1);
-                leftRT.offsetMin = new Vector2(10, SideTabSplitSeamInset());
-                leftRT.offsetMax = new Vector2(leftRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = leftSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(0, 0);
-                subRT.anchorMax = new Vector2(0, 0.5f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.Hub, leftTabContainerGO, leftActiveTabButtons, true);
-                    UpdateTabs(ContentType.HubTags, leftSubTabContainerGO, leftSubActiveTabButtons, true);
-                }
-            }
-
-            // Right Side: Pay Type (Top 20%) / Creator (Bottom 80%)
-            if (rightTabScrollGO != null && rightSubTabScrollGO != null)
-            {
-                rightTabScrollGO.SetActive(true);
-                rightSubTabScrollGO.SetActive(true);
-
-                // Right Search Top (Pay Type) - Hide search
-                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
-
-                // Right Search Bottom (Creators)
-                if (rightSubSearchInput != null)
-                {
-                    rightSubSearchInput.gameObject.SetActive(true);
-                    if (rightSubSearchInput.text != creatorFilter) rightSubSearchInput.text = creatorFilter;
-                    if (rightSubSearchInput.placeholder is Text ph) ph.text = VPBTranslation.T("gallery.search.creators", "Search Creators...");
-
-                    // Adjust anchor for 70/30 split
-                    RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                if (rightSubSortBtn != null)
-                {
-                    RectTransform rt = rightSubSortBtn.GetComponent<RectTransform>();
-                    rt.anchorMin = new Vector2(1, 0.7f);
-                    rt.anchorMax = new Vector2(1, 0.7f);
-                }
-
-                RectTransform rightRT = rightTabScrollGO.GetComponent<RectTransform>();
-                rightRT.anchorMin = new Vector2(1, 0.7f);
-                rightRT.anchorMax = new Vector2(1, 1);
-                rightRT.offsetMin = new Vector2(rightRT.offsetMin.x, SideTabSplitSeamInset());
-                rightRT.offsetMax = new Vector2(rightRT.offsetMax.x, TabScrollTopOffset());
-
-                RectTransform subRT = rightSubTabScrollGO.GetComponent<RectTransform>();
-                subRT.anchorMin = new Vector2(1, 0);
-                subRT.anchorMax = new Vector2(1, 0.7f);
-                subRT.offsetMax = new Vector2(subRT.offsetMax.x, SubTabScrollPaneTopOffset());
-                subRT.offsetMin = new Vector2(subRT.offsetMin.x, SideTabBottomMargin);
-
-                if (populateSideTabLists)
-                {
-                    UpdateTabs(ContentType.HubPayTypes, rightTabContainerGO, rightActiveTabButtons, false);
-                    UpdateTabs(ContentType.HubCreators, rightSubTabContainerGO, rightSubActiveTabButtons, false);
-                }
-            }
-
-            SyncSidePaneTopSortButtonVisuals();
-        }
     }
 }
 

@@ -19,10 +19,12 @@ namespace VPB
             s.Creator = currentCreator ?? "";
             s.Tags = new List<string>(activeTags);
             s.UserTags = new List<string>(activeUserTags);
-            s.UserTagAvailFilterMode = _userTagAvailFilterMode ? 1 : 0;
+            s.ExcludedUserTags = new List<string>(excludedUserTags);
+            s.UserTagAvailFilterMode = (int)_userTagAvailMode;
             s.UserTagInheritVarToChildren = _userTagInheritVarToChildren ? 1 : 0;
-            s.SceneSourceFilter = currentSceneSourceFilter ?? "";
-            s.AppearanceSourceFilter = currentAppearanceSourceFilter ?? "";
+            // Legacy per-category Local fields retired — Local lives on global Source only.
+            s.SceneSourceFilter = "";
+            s.AppearanceSourceFilter = "";
             s.PackagePathFilter = currentPackagePathFilter ?? "";
             s.ClothingSubfilter = (int)clothingSubfilter;
             s.HairSubfilter = (int)hairSubfilter;
@@ -30,6 +32,11 @@ namespace VPB
             s.PosePeopleFilter = (int)posePeopleFilter;
             var sort = GetSortState("Files");
             if (sort != null) s.FileSortState = sort.Clone();
+            s.BrowseHiddenMode = (int)_browseHiddenCycle;
+            s.BrowseAlwaysLoadedMode = (int)_browseAlwaysLoadedCycle;
+            s.BrowseOldVersionsMode = (int)_browseOldVersionsCycle;
+            s.BrowseLoadedMode = (int)_browseLoadedMode;
+            s.BrowseUnusedMode = (int)_browseUnusedCycle;
             return s;
         }
 
@@ -51,13 +58,17 @@ namespace VPB
 
         private void RestoreCategoryFilterState(string categoryTitle, string path)
         {
+            // Drop pending keystroke search refresh — otherwise it fires mid category load (double RefreshFiles).
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+
             string key = MakeCategoryFilterKey(categoryTitle, path);
 
             CategoryFilterState state = null;
 
             if (_categoryFilterStates.TryGetValue(key, out state) && state != null)
             {
-                ApplyCategoryFilterState(state);
+                ApplyCategoryFilterState(state, restoreUserTagFilter: true);
                 return;
             }
 
@@ -68,7 +79,7 @@ namespace VPB
                 if (state != null)
                 {
                     _categoryFilterStates[key] = state;
-                    ApplyCategoryFilterState(state);
+                    ApplyCategoryFilterState(state, restoreUserTagFilter: true);
                     return;
                 }
             }
@@ -76,17 +87,25 @@ namespace VPB
             ClearFiltersForNewCategory();
         }
 
-        private void ApplyCategoryFilterState(CategoryFilterState state)
+        /// <param name="restoreUserTagFilter">
+        /// When true (default for category restore + Quick Filters), restore include/exclude user-tag
+        /// filter sets and work mode. Filter chips make armed filters visible (issue #64: silent hide
+        /// was from restoring FilterUntagged / FilterByTags without clear affordance).
+        /// Pass false only when deliberately wiping user-tag filter while applying other state.
+        /// </param>
+        private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true)
         {
             // Set search fields directly — RefreshFiles (called after Show returns) will build
             // currentFilteredFiles using these terms. topSearchBaseFiles must be null so that
             // the first SetNameFilter call after RefreshFiles captures the correct unfiltered base.
             topSearchBaseFiles = null;
             string restoredSearch = state.NameFilter ?? "";
-            nameFilter = restoredSearch;
-            nameFilterLower = restoredSearch.ToLowerInvariant();
-            nameFilterTerms = SplitSearchTerms(restoredSearch);
-            if (titleSearchInput != null) titleSearchInput.text = restoredSearch;
+            AssignNameFilterState(restoredSearch);
+            HydrateTitleSearchChipsFromCurrentFilter();
+            // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
+            // Chip mode: field stays empty (draft); live mode: show restored string.
+            string fieldText = HasTitleSearchChips() ? "" : restoredSearch;
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, fieldText, _titleBarSearchOnValueChanged); } catch { }
 
             currentCreator = state.Creator ?? "";
             _currentCreatorSetSrc = null;
@@ -97,17 +116,55 @@ namespace VPB
                 foreach (var t in state.Tags) activeTags.Add(t);
 
             activeUserTags.Clear();
-            if (state.UserTags != null)
-                foreach (var t in state.UserTags)
-                {
-                    string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
-                    if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
-                }
-            _userTagAvailFilterMode = state.UserTagAvailFilterMode != 0;
+            excludedUserTags.Clear();
+            if (restoreUserTagFilter)
+            {
+                if (state.UserTags != null)
+                    foreach (var t in state.UserTags)
+                    {
+                        string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                        if (!string.IsNullOrEmpty(n)) activeUserTags.Add(n);
+                    }
+                if (state.ExcludedUserTags != null)
+                    foreach (var t in state.ExcludedUserTags)
+                    {
+                        string n = VpbLocalDatabase.NormalizeGalleryUserTagName(t);
+                        if (!string.IsNullOrEmpty(n)) excludedUserTags.Add(n);
+                    }
+                int utfm = state.UserTagAvailFilterMode;
+                if (utfm < 0 || utfm > (int)UserTagAvailMode.FilterUntagged) utfm = utfm != 0 ? 1 : 0;
+                _userTagAvailMode = (UserTagAvailMode)utfm;
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
+            }
+            else
+            {
+                _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+                if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
+            }
+            _userTagShowUnusedBucket = false;
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged)
+                try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = state.UserTagInheritVarToChildren != 0;
 
-            currentSceneSourceFilter = state.SceneSourceFilter ?? "";
-            currentAppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
+            // Migrate legacy per-category Scene/Appearance Local → global Source Local.
+            try
+            {
+                bool legacyLocal =
+                    string.Equals(state.SceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(state.AppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+                if (legacyLocal && currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.Local)
+                {
+                    currentGlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
+                    if (VPBConfig.Instance != null)
+                    {
+                        VPBConfig.Instance.GlobalSourceFilter = VPBConfig.GlobalSourceFilterValue.Local;
+                        try { VPBConfig.Instance.Save(); } catch { }
+                    }
+                }
+            }
+            catch { }
             currentPackagePathFilter = state.PackagePathFilter ?? "";
             clothingSubfilter = (ClothingSubfilter)state.ClothingSubfilter;
             hairSubfilter = (HairSubfilter)state.HairSubfilter;
@@ -122,14 +179,27 @@ namespace VPB
                 try { UpdateSortButtonText(fileSortTypeText, fileSortDirText, state.FileSortState); } catch { }
                 try { SyncRatingSortToggleState(); } catch { }
             }
+
+            _browseHiddenCycle = ClampBrowseFilterCycle(state.BrowseHiddenMode);
+            _browseAlwaysLoadedCycle = ClampBrowseFilterCycle(state.BrowseAlwaysLoadedMode);
+            _browseOldVersionsCycle = ClampBrowseFilterCycle(state.BrowseOldVersionsMode);
+            _browseLoadedMode = ClampBrowseLoadedMode(state.BrowseLoadedMode);
+            _browseUnusedCycle = ClampBrowseFilterCycle(state.BrowseUnusedMode);
+            try { SyncShowHiddenPackagesFromCycle(); } catch { }
+            try { SyncHideOldVersionsFromCycle(); } catch { }
+            try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+
+            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+            SyncBrowseFilterChipChrome();
         }
 
         private void ClearFiltersForNewCategory()
         {
-            nameFilter = "";
-            nameFilterLower = "";
-            nameFilterTerms = new string[0];
-            if (titleSearchInput != null) titleSearchInput.text = "";
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+            ClearNameFilterState();
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged); } catch { }
 
             // Category navigation reset: creator selection is a filter and should not silently carry
             // into unrelated categories (causes side-tab counts like ALL VAR to drop to 0).
@@ -139,10 +209,13 @@ namespace VPB
 
             activeTags.Clear();
             activeUserTags.Clear();
-            _userTagAvailFilterMode = false;
+            excludedUserTags.Clear();
+            _userTagShowUnusedBucket = false;
+            _userTagAvailMode = ResolveDefaultUserTagAvailMode();
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                _userTagModeBeforeUntagged = UserTagAvailMode.FilterByTags;
+            try { ClearUntaggedTaggedPinKeys(); } catch { }
             _userTagInheritVarToChildren = false;
-            currentSceneSourceFilter = "";
-            currentAppearanceSourceFilter = "";
             currentPackagePathFilter = "";
             clothingSubfilter = 0;
             hairSubfilter = 0;
@@ -150,6 +223,47 @@ namespace VPB
             _hairGenderUserOverride = false;
             appearanceSubfilter = 0;
             posePeopleFilter = PosePeopleFilter.All;
+            if (_browseAlwaysLoadedCycle != BrowseFilterCycle.Off)
+            {
+                BrowseFilterCycle prevAl = _browseAlwaysLoadedCycle;
+                _browseAlwaysLoadedCycle = BrowseFilterCycle.Off;
+                try { ApplyAlwaysLoadedCycleSortSideEffects(prevAl, BrowseFilterCycle.Off); } catch { }
+            }
+            else
+            {
+                _browseAlwaysLoadedCycle = BrowseFilterCycle.Off;
+                _browseAlwaysLoadedSavedSort = null;
+            }
+            _browseHiddenCycle = BrowseFilterCycle.Off;
+            _browseOldVersionsCycle = BrowseFilterCycle.Off;
+            _browseLoadedMode = BrowseLoadedMode.Off;
+            if (_browseUnusedCycle != BrowseFilterCycle.Off)
+            {
+                BrowseFilterCycle prevU = _browseUnusedCycle;
+                _browseUnusedCycle = BrowseFilterCycle.Off;
+                try { ApplyUnusedCycleSortSideEffects(prevU, BrowseFilterCycle.Off); } catch { }
+            }
+            else
+            {
+                _browseUnusedCycle = BrowseFilterCycle.Off;
+                _browseUnusedSavedSort = null;
+            }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            SyncBrowseFilterChipChrome();
+        }
+
+        private static BrowseFilterCycle ClampBrowseFilterCycle(int v)
+        {
+            if (v <= 0) return BrowseFilterCycle.Off;
+            if (v == 1) return BrowseFilterCycle.Apply;
+            return BrowseFilterCycle.Only;
+        }
+
+        private static BrowseLoadedMode ClampBrowseLoadedMode(int v)
+        {
+            if (v <= 0) return BrowseLoadedMode.Off;
+            if (v == 1) return BrowseLoadedMode.LoadedOnly;
+            return BrowseLoadedMode.UnloadedOnly;
         }
     }
 }

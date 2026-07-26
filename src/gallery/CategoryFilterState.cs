@@ -10,22 +10,33 @@ namespace VPB
         public string Creator = "";
         public List<string> Tags = new List<string>();
         public List<string> UserTags = new List<string>();
-        /// <summary>1 when Available pane Filter Mode is on (grid narrows by picked tags).</summary>
+        /// <summary>Excluded (none-of) user tags in filter-by-tags mode.</summary>
+        public List<string> ExcludedUserTags = new List<string>();
+        /// <summary><see cref="UserTagAvailMode"/> as int (0=tag, 1=filter by tags, 2=untagged only). Legacy: 1 meant filter-by-tags only.</summary>
         public int UserTagAvailFilterMode = 0;
         /// <summary>1 when ALL VAR user-tag apply/removal also propagates to child items inside VAR.</summary>
         public int UserTagInheritVarToChildren = 0;
-        public string SceneSourceFilter = "";
-        public string AppearanceSourceFilter = "";
+        public string SceneSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
+        public string AppearanceSourceFilter = ""; // Legacy JSON; ignored on apply (migrated to global Local).
         public string PackagePathFilter = "";
         public int ClothingSubfilter = 0;
         public int HairSubfilter = 0;
         public int AppearanceSubfilter = 0;
         public int PosePeopleFilter = 0;
         public SortState FileSortState = null;
+        /// <summary>Title-bar Filter Hidden cycle: 0=Off, 1=Show, 2=Only.</summary>
+        public int BrowseHiddenMode = 0;
+        /// <summary>Title-bar Filter Always-loaded cycle: 0=Off, 1=Prefer/sort, 2=Only.</summary>
+        public int BrowseAlwaysLoadedMode = 0;
+        /// <summary>Title-bar Filter Old-versions cycle: 0=Off, 1=Hide old, 2=Old only.</summary>
+        public int BrowseOldVersionsMode = 0;
+        /// <summary>Title-bar Filter Loaded cycle: 0=Off, 1=All Loaded, 2=All Unloaded.</summary>
+        public int BrowseLoadedMode = 0;
+        /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>
+        public int BrowseUnusedMode = 0;
 
-        // Maps legacy source-filter string values to the binary toggle the global-filter
-        // design now uses: "" means toggle OFF (global filter applies), "local" means toggle ON
-        // (override to local-only on this category).
+        // Maps legacy per-category source-filter strings. "" / non-local → ignored.
+        // "local" migrates to title-bar global Source Local on ApplyCategoryFilterState.
         private static string MigrateLegacySourceFilter(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
@@ -33,6 +44,13 @@ namespace VPB
             if (string.Equals(raw, "Custom Scenes", StringComparison.OrdinalIgnoreCase)) return "local";
             if (string.Equals(raw, "custom", StringComparison.OrdinalIgnoreCase)) return "local";
             return "";
+        }
+
+        private static int ClampBrowseCycle(int v)
+        {
+            if (v < 0) return 0;
+            if (v > 2) return 2;
+            return v;
         }
 
         public string ToJson()
@@ -57,6 +75,10 @@ namespace VPB
             if (UserTags != null)
                 foreach (var t in UserTags) utArr.Add(t);
             node["utags"] = utArr;
+            var xutArr = new JSONArray();
+            if (ExcludedUserTags != null)
+                foreach (var t in ExcludedUserTags) xutArr.Add(t);
+            node["xutags"] = xutArr;
             node["utfm"].AsInt = UserTagAvailFilterMode;
             node["utin"].AsInt = UserTagInheritVarToChildren;
 
@@ -67,6 +89,11 @@ namespace VPB
                 sortNode["d"].AsInt = (int)FileSortState.Direction;
                 node["sort"] = sortNode;
             }
+            node["bh"].AsInt = BrowseHiddenMode;
+            node["ba"].AsInt = BrowseAlwaysLoadedMode;
+            node["bo"].AsInt = BrowseOldVersionsMode;
+            node["bl"].AsInt = BrowseLoadedMode;
+            node["bu"].AsInt = BrowseUnusedMode;
 
             return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
@@ -100,6 +127,11 @@ namespace VPB
                     foreach (JSONNode t in utArr)
                         if (!string.IsNullOrEmpty(t)) s.UserTags.Add(t);
 
+                var xutArr = node["xutags"].AsArray;
+                if (xutArr != null)
+                    foreach (JSONNode t in xutArr)
+                        if (!string.IsNullOrEmpty(t)) s.ExcludedUserTags.Add(t);
+
                 s.UserTagAvailFilterMode = node["utfm"] != null ? node["utfm"].AsInt : 0;
                 s.UserTagInheritVarToChildren = node["utin"] != null ? node["utin"].AsInt : 0;
 
@@ -110,6 +142,65 @@ namespace VPB
                     int di = sortNode["d"].AsInt;
                     if (Enum.IsDefined(typeof(SortType), ti) && Enum.IsDefined(typeof(SortDirection), di))
                         s.FileSortState = new SortState((SortType)ti, (SortDirection)di);
+                }
+
+                bool hasModeSchema = node["bo"] != null;
+                int bh = node["bh"] != null ? node["bh"].AsInt : 0;
+                int ba = node["ba"] != null ? node["ba"].AsInt : 0;
+                if (hasModeSchema)
+                {
+                    s.BrowseHiddenMode = ClampBrowseCycle(bh);
+                    s.BrowseAlwaysLoadedMode = ClampBrowseCycle(ba);
+                    s.BrowseOldVersionsMode = ClampBrowseCycle(node["bo"].AsInt);
+                    s.BrowseLoadedMode = node["bl"] != null ? ClampBrowseCycle(node["bl"].AsInt) : 0;
+                    s.BrowseUnusedMode = node["bu"] != null ? ClampBrowseCycle(node["bu"].AsInt) : 0;
+                }
+                else
+                {
+                    // Legacy bh/ba were bool "only" flags (0/1).
+                    if (bh != 0) s.BrowseHiddenMode = 2;
+                    if (ba != 0) s.BrowseAlwaysLoadedMode = 2;
+                }
+
+                // Legacy: exclusive sort modes lived on FileSortState.
+                if (s.FileSortState != null)
+                {
+                    if (s.FileSortState.Type == SortType.HiddenOnly)
+                    {
+                        s.BrowseHiddenMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.AutoInstallOnly)
+                    {
+                        s.BrowseAlwaysLoadedMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.LoadedOnly)
+                    {
+                        s.BrowseLoadedMode = 1;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.UnloadedOnly)
+                    {
+                        s.BrowseLoadedMode = 2;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.Hidden)
+                    {
+                        if (s.BrowseHiddenMode == 0) s.BrowseHiddenMode = 1;
+                        s.FileSortState.Type = SortType.Name;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
+                    else if (s.FileSortState.Type == SortType.UnusedOnly)
+                    {
+                        s.BrowseUnusedMode = 2;
+                        s.FileSortState.Type = SortType.UsageCount;
+                        s.FileSortState.Direction = SortDirection.Ascending;
+                    }
                 }
 
                 return s;

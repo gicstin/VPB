@@ -146,16 +146,17 @@ namespace VPB
 
         private void OnCreatorFilterChanged(bool refreshFilesAndTabs)
         {
+            try { UpdateTitleCreatorButtonVisual(); } catch { }
             PushCreatorFilterSqlModeForDatabase();
             categoriesCached = false;
             pathsCached = false;
             tagsCached = false;
             creatorsCached = false;
             InvalidateDisplayCreatorsCache();
-            try { GalleryFileListSnapshotCache.Clear(); } catch { }
-            try { UpdateTitleCreatorButtonVisual(); } catch { }
+            GalleryFileListSnapshotCache.Clear();
 
             if (refreshFilesAndTabs) RefreshFilesAndTabs();
+            SyncBrowseFilterChipChrome();
         }
 
         private void UpdateTitleCreatorButtonVisual()

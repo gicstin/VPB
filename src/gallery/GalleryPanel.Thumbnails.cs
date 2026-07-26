@@ -581,6 +581,51 @@ namespace VPB
             }
         }
 
+        /// <summary>After save/overwrite: bust VPB/VaM thumb caches and force visible grid cells to reload.</summary>
+        internal void OnGalleryAssetSavedInvalidateThumbnails(string savedAssetPath)
+        {
+            refreshOnNextShow = true;
+
+            try
+            {
+                if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+                    CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+                currentLoadingGroupId = Guid.NewGuid().ToString();
+            }
+            catch { }
+
+            try { RefreshVisibleGridVisualsOnly(); } catch { }
+        }
+
+        private static long GetThumbnailSourceWriteTimeForBinding(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return 0;
+
+            try
+            {
+                if (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                    return 0;
+            }
+            catch { }
+
+            try
+            {
+                string full = FileManager.GetFullPath(imgPath.Replace('\\', '/'));
+                if (!string.IsNullOrEmpty(full) && File.Exists(full))
+                    return File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
+            }
+            catch { }
+
+            try
+            {
+                FileEntry fe = FileManager.GetFileEntry(imgPath);
+                if (fe != null) return fe.LastWriteTime.ToFileTime();
+            }
+            catch { }
+
+            return 0;
+        }
+
         private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
         {
             if (pendingThumbnailCacheJobs == null) pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
@@ -826,7 +871,7 @@ namespace VPB
             if (CustomImageLoaderThreaded.singleton == null) return;
 
             string capturedGroupId = currentLoadingGroupId;
-            string expectedTag = capturedGroupId + "|" + imgPath;
+            string expectedTag = capturedGroupId + "|" + imgPath + "|" + GetThumbnailSourceWriteTimeForBinding(imgPath);
             ThumbnailBindingTag bind = null;
             if (target != null)
             {
@@ -840,6 +885,7 @@ namespace VPB
                 {
                     target.color = Color.white;
                     UpdateAspectRatio(target, bind.CurrentTexture);
+                    try { SyncThumbPlaceholderForFile(target.transform, target, file); } catch { }
                     return;
                 }
 
@@ -879,13 +925,14 @@ namespace VPB
                 target.texture = tex;
                 target.color = Color.white;
                 UpdateAspectRatio(target, tex);
+                try { SyncThumbPlaceholderForFile(target.transform, target, file); } catch { }
                 return;
             }
 
-            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true, turboJpegScaleDenom: thumbTd, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+            QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: true, turboJpegScaleDenom: thumbTd, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly, bind: bind);
         }
 
-        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly)
+        private void QueueThumbnailDecode(FileEntry file, RawImage target, string imgPath, string expectedTag, string capturedGroupId, bool skipCache, bool scheduleHangWatchdog, int turboJpegScaleDenom, bool thumbnailUnityDecodeOnly, ThumbnailBindingTag bind = null)
         {
             if (CustomImageLoaderThreaded.singleton == null || target == null) return;
 
@@ -898,12 +945,15 @@ namespace VPB
             qi.skipCache = skipCache;
             qi.priority = skipCache ? Mathf.Min(-2, _nextThumbPriority - 30) : _nextThumbPriority;
             qi.groupId = currentLoadingGroupId;
+            // Capture bind — post-process callback must stay RawImage-only (no GetComponent / listener rewiring).
+            ThumbnailBindingTag bindForCallback = bind;
+            FileEntry fileForCallback = file;
             qi.callback = (res) =>
             {
                 if (res != null && res.tex != null && !res.cancel)
                 {
-                    ThumbnailBindingTag cbBind = target.GetComponent<ThumbnailBindingTag>();
-                    if (cbBind != null && cbBind.ExpectedTag == expectedTag)
+                    ThumbnailBindingTag cbBind = bindForCallback;
+                    if (cbBind != null && cbBind.ExpectedTag == expectedTag && target != null)
                     {
                         if (cbBind.CurrentTexture != null && CustomImageLoaderThreaded.singleton != null)
                             CustomImageLoaderThreaded.singleton.DeregisterThumbnailUse(cbBind.CurrentTexture);
@@ -914,30 +964,35 @@ namespace VPB
                         target.texture = res.tex;
                         target.color = Color.white;
                         UpdateAspectRatio(target, res.tex);
+                        try { SyncThumbPlaceholderForFile(target.transform, target, fileForCallback); } catch { }
                     }
 
-                    long imgTime = 0;
-                    if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                        imgTime = 0;
-                    else if (imgPath == file.Path)
-                        imgTime = file.LastWriteTime.ToFileTime();
-                    else
+                    // Disk enqueue idle-gated in ProcessThumbnailCacheQueue. Avoid FileManager.GetFileEntry while scroll-hot.
+                    if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId && res.tex != null)
                     {
-                        FileEntry fe = FileManager.GetFileEntry(imgPath);
-                        if (fe != null) imgTime = fe.LastWriteTime.ToFileTime();
-                        else imgTime = file.LastWriteTime.ToFileTime();
-                    }
-
-                    if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId)
+                        long imgTime = 0;
+                        if (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+                            imgTime = 0;
+                        else if (fileForCallback != null && imgPath == fileForCallback.Path)
+                            imgTime = fileForCallback.LastWriteTime.ToFileTime();
+                        else if (!CustomImageLoaderThreaded.IsGalleryScrollHot)
+                        {
+                            FileEntry fe = FileManager.GetFileEntry(imgPath);
+                            if (fe != null) imgTime = fe.LastWriteTime.ToFileTime();
+                            else if (fileForCallback != null) imgTime = fileForCallback.LastWriteTime.ToFileTime();
+                        }
+                        else if (fileForCallback != null)
+                            imgTime = fileForCallback.LastWriteTime.ToFileTime();
                         EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId, res.turboJpegScaleDenom);
+                    }
                     return;
                 }
 
                 if (res != null && res.cancel) return;
-                ThumbnailBindingTag failBind = target.GetComponent<ThumbnailBindingTag>();
+                ThumbnailBindingTag failBind = bindForCallback;
                 if (failBind == null || failBind.ExpectedTag != expectedTag) return;
                 if (capturedGroupId != currentLoadingGroupId) return;
-                RequestThumbnailRetryAfterFailure(file, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: true);
+                RequestThumbnailRetryAfterFailure(fileForCallback, target, imgPath, expectedTag, capturedGroupId, turboJpegScaleDenom, thumbnailUnityDecodeOnly, aggressiveSkipCache: true);
             };
             CustomImageLoaderThreaded.singleton.QueueThumbnail(qi);
             if (scheduleHangWatchdog)
@@ -971,11 +1026,11 @@ namespace VPB
             if (aggressiveSkipCache)
             {
                 CustomImageLoaderThreaded.singleton.ClearCacheThumbnail(imgPath, turboJpegScaleDenom, thumbnailUnityDecodeOnly);
-                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: true, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly, bind: b);
             }
             else
             {
-                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly);
+                QueueThumbnailDecode(file, target, imgPath, expectedTag, capturedGroupId, skipCache: false, scheduleHangWatchdog: false, turboJpegScaleDenom: turboJpegScaleDenom, thumbnailUnityDecodeOnly: thumbnailUnityDecodeOnly, bind: b);
             }
         }
 

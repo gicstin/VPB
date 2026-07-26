@@ -133,20 +133,12 @@ namespace VPB
         {
             if (isLeft)
             {
-                if (_leftUserTagAvailScrollRestoreCo != null)
-                {
-                    try { StopCoroutine(_leftUserTagAvailScrollRestoreCo); } catch { }
-                    _leftUserTagAvailScrollRestoreCo = null;
-                }
+                StopCo(ref _leftUserTagAvailScrollRestoreCo);
                 _leftUserTagAvailScrollRestoreCo = StartCoroutine(CoRestoreUserTagAvailScroll(isLeft, offsetPx));
             }
             else
             {
-                if (_rightUserTagAvailScrollRestoreCo != null)
-                {
-                    try { StopCoroutine(_rightUserTagAvailScrollRestoreCo); } catch { }
-                    _rightUserTagAvailScrollRestoreCo = null;
-                }
+                StopCo(ref _rightUserTagAvailScrollRestoreCo);
                 _rightUserTagAvailScrollRestoreCo = StartCoroutine(CoRestoreUserTagAvailScroll(isLeft, offsetPx));
             }
         }
@@ -161,6 +153,15 @@ namespace VPB
 
         private IEnumerator CoRestoreUserTagAvailScroll(bool isLeft, float offsetPx)
         {
+            // Empty virt list: no content height to stabilize — one apply, skip 4-frame ForceRebuild thrash.
+            if (_userTagVirtView == null || _userTagVirtView.Count == 0)
+            {
+                try { ApplyUserTagAvailScrollOffsetPx(isLeft, offsetPx); } catch { }
+                if (isLeft) _leftUserTagAvailScrollRestoreCo = null;
+                else _rightUserTagAvailScrollRestoreCo = null;
+                yield break;
+            }
+
             for (int frame = 0; frame < 4; frame++)
             {
                 yield return null;
@@ -193,10 +194,12 @@ namespace VPB
         /// <summary>Rebind User Tags rows without full <see cref="UpdateTabs"/> (avoids scroll jump).</summary>
         private void RefreshUserTagsAvailPaneInPlace(bool isLeft)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             GameObject container = isLeft ? leftTabContainerGO : rightTabContainerGO;
             if (container == null) return;
             EnsureUserTagAvailScrollTrackingHooks();
             SnapshotUserTagAvailScrollForPreserve(isLeft);
+            CacheAppliedUserTagsForSelection();
 
             if (!userTagsCached)
             {
@@ -212,10 +215,11 @@ namespace VPB
             }
 
             SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            InvalidateUserTagVirtWindowGate(isLeft);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
-            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             RestorePreservedUserTagAvailScroll();
         }
     }

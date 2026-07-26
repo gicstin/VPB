@@ -47,6 +47,18 @@ namespace VPB
                 Has(p, "lipstick") || Has(p, "foundation") || Has(p, "concealer") || Has(p, "highlight") || Has(p, "highlighter") || Has(p, "contour") || Has(p, "powder"))
                 return true;
 
+            if (Has(p, "/textures/skin/") || Has(p, "/skinfx/") || Has(p, "/skin_fx/") || Has(p, "/bodyfx/") || Has(p, "/body_fx/") ||
+                Has(p, "/skineffects/") || Has(p, "/bodyeffects/") || Has(p, "/wetness/") || Has(p, "/nonclothing/") || Has(p, "/non-clothing/"))
+                return true;
+
+            if (Has(p, "wetskin") || Has(p, "wet_skin") || Has(p, "wet-skin") || Has(p, "wetbody") || Has(p, "wet_body") || Has(p, "wet-body") ||
+                Has(p, "bodywet") || Has(p, "body_wet") || Has(p, "skinwet") || Has(p, "skin_wet") || Has(p, "wetlook") || Has(p, "wet_look") ||
+                Has(p, "oilyskin") || Has(p, "oily_skin") || Has(p, "bodyoil") || Has(p, "body_oil") || Has(p, "skinoil") ||
+                Has(p, "bodygloss") || Has(p, "body_gloss") || Has(p, "skingloss") || Has(p, "skin_gloss") || Has(p, "bodyshine") || Has(p, "skinshine") ||
+                Has(p, "bodysheen") || Has(p, "skinsheen") || Has(p, "wetness") || Has(p, "sweaty") || Has(p, "sweat") || Has(p, "moisture") ||
+                Has(p, "skinfx") || Has(p, "bodyfx") || Has(p, "skin_fx") || Has(p, "body_fx"))
+                return true;
+
             if (Has(p, "facemask") || Has(p, "face_mask") || Has(p, "mask") || Has(p, "opacity") || Has(p, "alpha"))
             {
                 if (Has(p, "face") || Has(p, "makeup") || Has(p, "makeups") || Has(p, "freckle") || Has(p, "blush")) return true;
@@ -56,6 +68,552 @@ namespace VPB
             if (Has(p, "eye") && (Has(p, "enhance") || Has(p, "enhancement") || Has(p, "overlay") || Has(p, "decal") || Has(p, "makeup"))) return true;
 
             return false;
+        }
+
+        public enum ClothingWearClass
+        {
+            Unknown = 0,
+            RealGarment = 1,
+            Cosmetic = 2,
+        }
+
+        private static readonly Dictionary<string, ClothingWearClass> s_wearClassCache =
+            new Dictionary<string, ClothingWearClass>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly HashSet<string> GarmentClothingRegionTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "torso", "hip", "arms", "hands", "legs", "feet", "neck", "full body"
+        };
+
+        private static readonly string[] CosmeticClothingKeywords =
+        {
+            "lash", "lashes", "makeup", "shadow", "liner", "eyeliner", "eyeshadow", "eyesdw", "brow",
+            "gloss", "lipstick", "lip_", "lips", "nail", "toenail", "piercing", "earring",
+            "reflection", "eye_reflection", "eyes_reflection", "tears", "tear",
+            "teeth", "head flower", "glasses", "tattoo", "decal", "lash_female", "lash_male",
+            "wetline", "wet_line", "eyelid", "cornea", "sclera", "contact", "overlay",
+            "iris_tex", "eyeball", "pupil",
+            "wetskin", "wet_skin", "wet-skin", "wetbody", "wet_body", "bodywet", "body_wet",
+            "skinwet", "skin_wet", "wetlook", "wet_look", "oilyskin", "oily_skin", "bodyoil", "skinoil",
+            "bodygloss", "body_gloss", "skingloss", "skin_gloss", "bodyshine", "skinshine", "bodysheen", "skinsheen",
+            "wetness", "sweaty", "sweat", "moisture", "skinfx", "bodyfx", "skin_fx", "body_fx",
+            "nonclothing", "non_clothing", "non-clothing", "notclothing", "bodywetness", "skinmoisture"
+        };
+
+        private static readonly HashSet<string> GarmentClothingTypeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static ClothingLoadingUtils()
+        {
+            for (int i = 0; i < TagFilter.ClothingTypeTags.Count; i++)
+                GarmentClothingTypeTags.Add(TagFilter.ClothingTypeTags[i]);
+        }
+
+        private static bool ParseIsRealClothingItemJsonValue(JSONNode node)
+        {
+            if (node == null) return false;
+            if (node.AsBool) return true;
+            string s = node.Value;
+            return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1";
+        }
+
+        private static bool HasGarmentTypeOrRegionTag(IEnumerable<string> tags)
+        {
+            if (tags == null) return false;
+            foreach (string tag in tags)
+            {
+                if (string.IsNullOrEmpty(tag)) continue;
+                if (GarmentClothingRegionTags.Contains(tag)) return true;
+                if (GarmentClothingTypeTags.Contains(tag)) return true;
+            }
+            return false;
+        }
+
+        private static FileEntry ResolveClothingVamEntry(string uidOrPath, FileEntry entry)
+        {
+            if (entry != null)
+            {
+                string ext = Path.GetExtension(entry.Path);
+                if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return entry;
+            }
+
+            if (string.IsNullOrEmpty(uidOrPath)) return entry;
+
+            try
+            {
+                FileEntry resolved = entry ?? FileManager.GetVarFileEntry(uidOrPath);
+                if (resolved != null)
+                {
+                    string ext = Path.GetExtension(resolved.Path);
+                    if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return resolved;
+                }
+            }
+            catch { }
+
+            string pathPart = uidOrPath;
+            int colon = uidOrPath.IndexOf(':');
+            if (colon >= 0) pathPart = uidOrPath.Substring(colon + 1);
+            pathPart = pathPart.Replace('\\', '/');
+            if (pathPart.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+            {
+                string vamPath = pathPart.Substring(0, pathPart.Length - 4) + ".vam";
+                try
+                {
+                    if (colon >= 0)
+                    {
+                        string vamUid = uidOrPath.Substring(0, colon + 1) + vamPath;
+                        FileEntry vamEntry = FileManager.GetVarFileEntry(vamUid);
+                        if (vamEntry != null) return vamEntry;
+                    }
+                    FileEntry loose = FileManager.GetFileEntry(vamPath);
+                    if (loose != null) return loose;
+                }
+                catch { }
+            }
+
+            return entry;
+        }
+
+        public static bool? TryGetIsRealClothingItemFromAtom(Atom atom, string clothingGeometryUid)
+        {
+            if (atom == null || string.IsNullOrEmpty(clothingGeometryUid)) return null;
+
+            try
+            {
+                foreach (string sid in atom.GetStorableIDs())
+                {
+                    if (string.IsNullOrEmpty(sid)) continue;
+                    if (sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                    JSONStorable st = null;
+                    try { st = atom.GetStorableByID(sid); } catch { }
+                    if (st == null) continue;
+
+                    bool matches = false;
+                    try
+                    {
+                        JSONStorableString urlParam = st.GetStringJSONParam("url");
+                        if (urlParam != null && !string.IsNullOrEmpty(urlParam.val))
+                        {
+                            string url = urlParam.val;
+                            if (string.Equals(url, clothingGeometryUid, StringComparison.OrdinalIgnoreCase)) matches = true;
+                            else if (url.IndexOf(clothingGeometryUid, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                            else if (clothingGeometryUid.IndexOf(url, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                        }
+                    }
+                    catch { }
+
+                    if (!matches)
+                    {
+                        try
+                        {
+                            JSONClass jc = st.GetJSON();
+                            string url = jc != null && jc["url"] != null ? jc["url"].Value : null;
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                if (string.Equals(url, clothingGeometryUid, StringComparison.OrdinalIgnoreCase)) matches = true;
+                                else if (url.IndexOf(clothingGeometryUid, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                                else if (clothingGeometryUid.IndexOf(url, StringComparison.OrdinalIgnoreCase) >= 0) matches = true;
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (!matches) continue;
+
+                    JSONStorableBool realParam = null;
+                    try { realParam = st.GetBoolJSONParam("isRealClothingItem"); } catch { }
+                    if (realParam != null) return realParam.val;
+
+                    try
+                    {
+                        JSONClass jc = st.GetJSON();
+                        if (jc != null && jc["isRealClothingItem"] != null)
+                            return ParseIsRealClothingItemJsonValue(jc["isRealClothingItem"]);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static readonly string[] GarmentClothingKeywords =
+        {
+            "pant", "skirt", "short", "shirt", "top", "bra", "dress", "suit", "jacket", "coat",
+            "sock", "shoe", "boot", "heel", "glove", "underwear", "thong", "brief", "jean",
+            "bodysuit", "sweater", "stocking", "lingerie", "bikini", "bottom", "corset", "panty",
+            "winter_clothes", "costume_o", "jean_short", "sandals", "uggs", "baggy",
+            "outfit", "apron", "vest", "legging", "hoodie", "costume", "uniform", "robe", "cloak",
+            "tunic", "kimono", "yukata", "leotard", "catsuit", "jumpsuit", "overalls", "sarong",
+            "tights", "cardigan", "blazer", "necker", "scarf", "belt", "harness", "swimwear",
+            "swimsuit", "idol", "nighty", "nightie", "pajama", "pyjama"
+        };
+
+        public static bool IsCosmeticClothingUidHeuristic(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < CosmeticClothingKeywords.Length; i++)
+            {
+                if (s.Contains(CosmeticClothingKeywords[i])) return true;
+            }
+            int colonIdx = s.IndexOf(':');
+            string packagePart = colonIdx >= 0 ? s.Substring(0, colonIdx) : s;
+            string[] segs = packagePart.Split(new char[] { '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < segs.Length; i++)
+            {
+                string seg = segs[i];
+                if (seg == "eye" || seg == "eyes") return true;
+                if (seg.StartsWith("eye") && seg != "eyelet") return true;
+            }
+            return false;
+        }
+
+        // Physical wearable accessories (eyewear, jewelry, headwear) that some heuristics flag as
+        // "cosmetic" but which belong WITH an outfit, not with the face. Used by Outfit Only import to
+        // carry preset accessories while still keeping the target's face cosmetics (eye overlays, makeup).
+        private static readonly string[] AccessoryClothingKeywords =
+        {
+            "glasses", "sunglasses", "goggles", "monocle", "eyewear",
+            "earring", "piercing", "necklace", "choker", "bracelet", "anklet",
+            "crown", "tiara", "headband", "head flower", "headflower"
+        };
+
+        public static bool IsAccessoryClothingUidHeuristic(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < AccessoryClothingKeywords.Length; i++)
+                if (s.Contains(AccessoryClothingKeywords[i])) return true;
+            return false;
+        }
+
+        public static bool IsGarmentClothingUidHeuristicPositive(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            string s = uid.ToLowerInvariant();
+            for (int i = 0; i < GarmentClothingKeywords.Length; i++)
+            {
+                if (s.Contains(GarmentClothingKeywords[i])) return true;
+            }
+            return false;
+        }
+
+        public static bool IsClothingAssetPathInUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            int colon = uid.IndexOf(':');
+            string pathPart = colon >= 0 ? uid.Substring(colon + 1) : uid;
+            if (pathPart.IndexOf("/custom/clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (pathPart.IndexOf("\\custom\\clothing\\", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Loose path under <c>Custom/Clothing/</c> or <c>Saves/Person/Clothing/</c> (items, not atom outfit presets).</summary>
+        public static bool IsLooseCustomClothingItemPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            if (norm.Length == 0) return false;
+            if (IsLooseCustomClothingPresetPath(norm)) return false;
+            if (norm.IndexOf("Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (norm.IndexOf("Saves/Person/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Loose full-outfit preset under <c>Custom/Atom/Person/Clothing/</c>.</summary>
+        public static bool IsLooseCustomClothingPresetPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            return norm.IndexOf("Custom/Atom/Person/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>Loose path under <c>Custom/Hair/</c> (items, not atom hair presets).</summary>
+        public static bool IsLooseCustomHairItemPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            if (norm.Length == 0) return false;
+            if (IsLooseCustomHairPresetPath(norm)) return false;
+            if (norm.IndexOf("Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (norm.IndexOf("Saves/Person/Hair/", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        /// <summary>Loose full hair preset under <c>Custom/Atom/Person/Hair/</c>.</summary>
+        public static bool IsLooseCustomHairPresetPath(string path)
+        {
+            string norm = NormalizeLooseGalleryPath(path);
+            return norm.IndexOf("Custom/Atom/Person/Hair/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static string NormalizeLooseGalleryPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "";
+            string p = path.Replace('\\', '/');
+            int sep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (sep >= 0 && sep + 2 < p.Length) p = p.Substring(sep + 2);
+            return p;
+        }
+
+        public static HashSet<string> GetClothingMetadataRegionsFromEntry(FileEntry entry)
+        {
+            if (entry == null) return null;
+
+            if (entry is VarFileEntry vfe && vfe.ClothingTags != null && vfe.ClothingTags.Count > 0)
+            {
+                var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string tag in vfe.ClothingTags)
+                {
+                    if (!string.IsNullOrEmpty(tag)) regions.Add(tag);
+                }
+                if (regions.Count > 0) return regions;
+            }
+
+            string ext = Path.GetExtension(entry.Path);
+            if (!string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ext, ".vap", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            try
+            {
+                using (var sr = entry.OpenStreamReader())
+                {
+                    if (sr == null) return null;
+                    var jc = JSON.Parse(sr.ReadToEnd()) as JSONClass;
+                    if (jc == null) return null;
+
+                    if (jc["metadata"] != null)
+                    {
+                        var meta = jc["metadata"].AsObject;
+                        if (meta != null && meta["tags"] != null)
+                        {
+                            var arr = meta["tags"].AsArray;
+                            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            if (arr != null)
+                            {
+                                foreach (JSONNode node in arr)
+                                {
+                                    var tag = node.Value;
+                                    if (!string.IsNullOrEmpty(tag)) regions.Add(tag);
+                                }
+                            }
+                            if (regions.Count > 0) return regions;
+                        }
+                    }
+
+                    if (jc["tags"] != null)
+                    {
+                        string tagStr = jc["tags"].Value;
+                        if (!string.IsNullOrEmpty(tagStr))
+                        {
+                            var regions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (string t in tagStr.Split(','))
+                            {
+                                string trimmed = t.Trim();
+                                if (!string.IsNullOrEmpty(trimmed)) regions.Add(trimmed);
+                            }
+                            if (regions.Count > 0) return regions;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static bool? TryGetIsRealClothingItemFromEntry(FileEntry entry)
+        {
+            FileEntry vamEntry = ResolveClothingVamEntry(null, entry);
+            if (vamEntry == null) return null;
+
+            string ext = Path.GetExtension(vamEntry.Path);
+            if (!string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase)) return null;
+
+            try
+            {
+                using (var sr = vamEntry.OpenStreamReader())
+                {
+                    if (sr == null) return null;
+                    var jc = JSON.Parse(sr.ReadToEnd()) as JSONClass;
+                    if (jc == null) return null;
+
+                    JSONArray storables = jc["storables"] as JSONArray;
+                    if (storables != null)
+                    {
+                        for (int i = 0; i < storables.Count; i++)
+                        {
+                            JSONClass st = storables[i] as JSONClass;
+                            if (st == null || st["isRealClothingItem"] == null) continue;
+                            return ParseIsRealClothingItemJsonValue(st["isRealClothingItem"]);
+                        }
+                    }
+
+                    if (jc["isRealClothingItem"] != null)
+                        return ParseIsRealClothingItemJsonValue(jc["isRealClothingItem"]);
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        public static bool IsGarmentClothingUid(string itemUid, FileEntry entry = null)
+        {
+            if (string.IsNullOrEmpty(itemUid)) return false;
+            if (IsDecalLikePath(itemUid) || IsCosmeticClothingUidHeuristic(itemUid)) return false;
+
+            if (entry == null)
+            {
+                try { entry = FileManager.GetVarFileEntry(itemUid); } catch { entry = null; }
+            }
+
+            FileEntry vamEntry = ResolveClothingVamEntry(itemUid, entry);
+            bool? realFlag = TryGetIsRealClothingItemFromEntry(vamEntry);
+            if (realFlag == true) return true;
+            if (realFlag == false) return false;
+
+            if (vamEntry != null)
+            {
+                HashSet<string> regions = GetClothingMetadataRegionsFromEntry(vamEntry);
+                if (regions != null && regions.Count > 0)
+                    return HasGarmentTypeOrRegionTag(regions);
+            }
+
+            return IsGarmentClothingUidHeuristicPositive(itemUid);
+        }
+
+        public static ClothingWearClass ClassifyClothingWearClass(string uidOrPath, FileEntry entry = null, Atom atom = null)
+        {
+            if (string.IsNullOrEmpty(uidOrPath)) return ClothingWearClass.Unknown;
+
+            string cacheKey = uidOrPath;
+            if (entry != null && !string.IsNullOrEmpty(entry.Uid)) cacheKey = entry.Uid;
+            if (atom != null)
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(atom.uid))
+                        cacheKey = atom.uid + "|" + cacheKey;
+                }
+                catch { }
+            }
+
+            ClothingWearClass cached;
+            if (s_wearClassCache.TryGetValue(cacheKey, out cached)) return cached;
+
+            if (atom != null)
+            {
+                bool? runtimeReal = TryGetIsRealClothingItemFromAtom(atom, uidOrPath);
+                if (runtimeReal == true)
+                {
+                    s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                    return ClothingWearClass.RealGarment;
+                }
+                if (runtimeReal == false)
+                {
+                    s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                    return ClothingWearClass.Cosmetic;
+                }
+            }
+
+            if (IsDecalLikePath(uidOrPath) || IsCosmeticClothingUidHeuristic(uidOrPath))
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                return ClothingWearClass.Cosmetic;
+            }
+
+            if (entry == null)
+            {
+                try { entry = FileManager.GetVarFileEntry(uidOrPath); } catch { entry = null; }
+            }
+
+            FileEntry vamEntry = ResolveClothingVamEntry(uidOrPath, entry);
+            bool? realFlag = TryGetIsRealClothingItemFromEntry(vamEntry);
+            if (realFlag == true)
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                return ClothingWearClass.RealGarment;
+            }
+            if (realFlag == false)
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.Cosmetic;
+                return ClothingWearClass.Cosmetic;
+            }
+
+            if (IsGarmentClothingUid(uidOrPath, vamEntry ?? entry))
+            {
+                s_wearClassCache[cacheKey] = ClothingWearClass.RealGarment;
+                return ClothingWearClass.RealGarment;
+            }
+
+            s_wearClassCache[cacheKey] = ClothingWearClass.Unknown;
+            return ClothingWearClass.Unknown;
+        }
+
+        public static bool ShouldClearClothingOnReplace(ClothingWearClass dropped, ClothingWearClass existing)
+        {
+            if (existing == ClothingWearClass.Unknown || dropped == ClothingWearClass.Unknown) return false;
+            if (dropped == ClothingWearClass.RealGarment && existing == ClothingWearClass.Cosmetic) return false;
+            if (dropped == ClothingWearClass.Cosmetic && existing == ClothingWearClass.RealGarment) return false;
+            return dropped == existing;
+        }
+
+        public static void RemoveRealGarmentClothing(Atom target)
+        {
+            RemoveClothingByWearClass(target, ClothingWearClass.RealGarment);
+        }
+
+        // Disable the target's worn clothing whose wear class matches classToRemove (live geometry
+        // clothing:<uid> bools); other classes, including Unknown, stay on.
+        public static void RemoveClothingByWearClass(Atom target, ClothingWearClass classToRemove)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveClothingByWearClass: target is null");
+                return;
+            }
+
+            LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): target={target.uid} ({target.type})");
+
+            try
+            {
+                JSONStorable geometry = target.GetStorableByID("geometry");
+                if (geometry == null)
+                {
+                    LogUtil.LogWarning("[VPB] RemoveClothingByWearClass: geometry storable NOT found");
+                    return;
+                }
+
+                int disabledCount = 0;
+                int skipped = 0;
+                foreach (var name in geometry.GetBoolParamNames())
+                {
+                    if (string.IsNullOrEmpty(name)) continue;
+                    if (!name.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    string itemUid = name.Substring("clothing:".Length);
+                    ClothingWearClass wearClass = ClassifyClothingWearClass(itemUid, null, target);
+                    if (wearClass != classToRemove)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    JSONStorableBool active = null;
+                    try { active = geometry.GetBoolJSONParam(name); } catch { }
+                    if (active == null || !active.val) continue;
+
+                    active.val = false;
+                    disabledCount++;
+                }
+
+                LogUtil.Log($"[VPB] RemoveClothingByWearClass({classToRemove}): disabled {disabledCount} (skipped {skipped})");
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RemoveClothingByWearClass: exception: " + ex);
+            }
         }
 
         public static void ClassifyClothingHairPath(string pathOrUid, out ResourceKind kind, out ResourceGender gender)
@@ -158,7 +716,7 @@ namespace VPB
             return false;
         }
 
-        private static IEnumerator PostApplyClothingHairFixupCoroutine(Atom atom, string inferredBaseId)
+        private static IEnumerator PostApplyClothingHairFixupCoroutine(Atom atom, string inferredBaseId, bool isClothing)
         {
             if (atom == null) yield break;
 
@@ -209,11 +767,17 @@ namespace VPB
                     }
                 }
 
-                // Also try common VaM aggregate storables.
+                // Also try common VaM aggregate storables (clothing apply must not poke Hair — resets active hair).
                 JSONStorable clothing = null;
                 JSONStorable hair = null;
-                try { clothing = atom.GetStorableByID("Clothing"); } catch { }
-                try { hair = atom.GetStorableByID("Hair"); } catch { }
+                if (isClothing)
+                {
+                    try { clothing = atom.GetStorableByID("Clothing"); } catch { }
+                }
+                else
+                {
+                    try { hair = atom.GetStorableByID("Hair"); } catch { }
+                }
 
                 if (clothing != null)
                 {
@@ -233,13 +797,13 @@ namespace VPB
             catch { }
         }
 
-        private static void SchedulePostApplyFixup(Atom atom, string inferredBaseId)
+        private static void SchedulePostApplyFixup(Atom atom, string inferredBaseId, bool isClothing)
         {
             try
             {
                 if (atom == null) return;
                 if (SuperController.singleton == null) return;
-                SuperController.singleton.StartCoroutine(PostApplyClothingHairFixupCoroutine(atom, inferredBaseId));
+                SuperController.singleton.StartCoroutine(PostApplyClothingHairFixupCoroutine(atom, inferredBaseId, isClothing));
             }
             catch { }
         }
@@ -431,45 +995,6 @@ namespace VPB
             return null;
         }
 
-        private static void FixupUnprefixedCustomPathsInVarPreset(JSONNode node, string presetPackageName)
-        {
-            if (node == null || string.IsNullOrEmpty(presetPackageName)) return;
-
-            JSONClass obj = node as JSONClass;
-            if (obj != null)
-            {
-                foreach (KeyValuePair<string, JSONNode> kvp in obj)
-                {
-                    FixupUnprefixedCustomPathsInVarPreset(kvp.Value, presetPackageName);
-                }
-                return;
-            }
-
-            JSONArray arr = node as JSONArray;
-            if (arr != null)
-            {
-                for (int i = 0; i < arr.Count; i++)
-                {
-                    FixupUnprefixedCustomPathsInVarPreset(arr[i], presetPackageName);
-                }
-                return;
-            }
-
-            string v = node.Value;
-            if (string.IsNullOrEmpty(v)) return;
-            if (v.IndexOf(':') >= 0) return;
-
-            string vNorm = v.Replace('\\', '/');
-            if (!vNorm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return;
-
-            string candidate = presetPackageName + ":/" + vNorm;
-            string normalizedCandidate = FileManagerSecure.NormalizePath(candidate);
-            if (FileManagerSecure.FileExists(normalizedCandidate))
-            {
-                node.Value = candidate;
-            }
-        }
-
         private static JSONClass LoadPresetJsonWithPathFixups(string normalizedPresetPath)
         {
             if (string.IsNullOrEmpty(normalizedPresetPath)) return null;
@@ -478,36 +1003,7 @@ namespace VPB
             JSONClass presetJSON = (node != null) ? node.AsObject : null;
             if (presetJSON == null) return null;
 
-            if (UI.IsLikelyVarPackageReference(normalizedPresetPath))
-            {
-                string presetPackageName = normalizedPresetPath.Substring(0, normalizedPresetPath.IndexOf(':'));
-                string folderFullPath = FileManagerSecure.GetDirectoryName(normalizedPresetPath);
-                folderFullPath = FileManagerSecure.NormalizeLoadPath(folderFullPath);
-
-                string presetJSONString = VPB.src.util.JsonSerializationUtil.Serialize(presetJSON, 16_384);
-                bool modified = false;
-
-                if (presetJSONString.Contains("SELF:"))
-                {
-                    presetJSONString = presetJSONString.Replace("SELF:", presetPackageName + ":");
-                    modified = true;
-                }
-
-                if (presetJSONString.Contains("\":\"./"))
-                {
-                    presetJSONString = presetJSONString.Replace("\":\"./", "\":\"" + folderFullPath + "/");
-                    modified = true;
-                }
-
-                if (modified)
-                {
-                    JSONNode parsed = SimpleJSON.JSON.Parse(presetJSONString);
-                    presetJSON = (parsed != null) ? parsed.AsObject : presetJSON;
-                }
-
-                FixupUnprefixedCustomPathsInVarPreset(presetJSON, presetPackageName);
-            }
-
+            VPB.src.util.VarPresetPathFixups.Apply(presetJSON, normalizedPresetPath);
             return presetJSON;
         }
 
@@ -706,11 +1202,12 @@ namespace VPB
 
                     LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
 
-                    VpbImport.LoadPreset(entry, atom, isClothing ? VpbResourceType.Clothing : VpbResourceType.Hair,
-                        ClothingApplyMode.Replace, presetJC: presetJSON);
+                    VpbImport.LoadPreset(entry, atom, VpbResourceType.General,
+                        ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
+                        skipDependencyPrewarm: true, updateLastRestoredData: false);
 
                     // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
-                    SchedulePostApplyFixup(atom, inferredBaseId);
+                    SchedulePostApplyFixup(atom, inferredBaseId, isClothing);
                     yield break;
                 }
 
@@ -727,7 +1224,7 @@ namespace VPB
 
             if (isClothing && VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode)
             {
-                RemoveAllClothing(atom);
+                RemoveRealGarmentClothing(atom);
             }
 
             string normalizedPath = UI.NormalizePath(path);
@@ -1002,6 +1499,391 @@ namespace VPB
                     LogUtil.LogError("[VPB] RemoveAllClothing: geometry fallback exception: " + ex);
                 }
             }
+        }
+
+        internal sealed class ClothingHairUndoState
+        {
+            public Dictionary<string, bool> GeometryToggles;
+            public List<JSONClass> StorableSnapshots;
+        }
+
+        private static readonly HashSet<string> s_ClothingHairAggregateStorables =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Clothing",
+                "Hair",
+                "ClothingPresets",
+                "HairPresets",
+            };
+
+        private static readonly string[] s_ClothingHairItemStorableSuffixes =
+        {
+            "Preset",
+            "Presets",
+            "Material",
+            "Sim",
+            "Physics",
+            "Colliders",
+            "Collider",
+        };
+
+        private static string NormalizeUndoMatchToken(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            char[] buf = new char[value.Length];
+            int n = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (char.IsLetterOrDigit(c))
+                    buf[n++] = char.ToLowerInvariant(c);
+            }
+            return n > 0 ? new string(buf, 0, n) : "";
+        }
+
+        private static void CollectClothingHairItemMatchTokens(string itemUid, HashSet<string> tokens)
+        {
+            if (tokens == null || string.IsNullOrEmpty(itemUid)) return;
+
+            void add(string s)
+            {
+                string n = NormalizeUndoMatchToken(s);
+                if (!string.IsNullOrEmpty(n)) tokens.Add(n);
+            }
+
+            add(itemUid);
+
+            string path = itemUid.Replace('\\', '/');
+            int slash = path.LastIndexOf('/');
+            if (slash >= 0 && slash < path.Length - 1)
+                path = path.Substring(slash + 1);
+            int dot = path.LastIndexOf('.');
+            if (dot > 0)
+                path = path.Substring(0, dot);
+            add(path);
+
+            string creator = "";
+            int colon = itemUid.IndexOf(':');
+            if (colon > 0)
+                creator = itemUid.Substring(0, colon);
+            if (!string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(path))
+                add(creator + ":" + path);
+        }
+
+        private static bool IsClothingHairItemStorableId(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            return storableId.IndexOf("clothingItem#", StringComparison.OrdinalIgnoreCase) >= 0
+                || storableId.StartsWith("clothingItem", StringComparison.OrdinalIgnoreCase)
+                || storableId.IndexOf("hairItem#", StringComparison.OrdinalIgnoreCase) >= 0
+                || storableId.StartsWith("hairItem", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExcludedPersonPresetStorable(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            return string.Equals(storableId, "AppearancePresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "PosePresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "MorphPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "SkinPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "PluginPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "AnimationPresets", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(storableId, "FemaleBreastPhysicsPresets", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsBodyControlOrPhysicsStorableId(string storableId)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            if (string.Equals(storableId, "control", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(storableId, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+            if (storableId.EndsWith("Control", StringComparison.OrdinalIgnoreCase)) return true;
+            if (storableId.IndexOf("Physics", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("AutoCollider", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("Rescale", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (storableId.IndexOf("JointDrive", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
+        private static bool StorableMatchesClothingHairItemTokens(string storableId, HashSet<string> itemTokens)
+        {
+            if (string.IsNullOrEmpty(storableId) || itemTokens == null || itemTokens.Count == 0)
+                return false;
+
+            string sidNorm = NormalizeUndoMatchToken(storableId);
+            if (string.IsNullOrEmpty(sidNorm)) return false;
+
+            foreach (string token in itemTokens)
+            {
+                if (string.IsNullOrEmpty(token)) continue;
+                if (sidNorm.Contains(token)) return true;
+            }
+
+            return false;
+        }
+
+        private static bool ShouldCaptureClothingHairStorable(string storableId, HashSet<string> itemTokens)
+        {
+            if (string.IsNullOrEmpty(storableId)) return false;
+            if (IsBodyControlOrPhysicsStorableId(storableId)) return false;
+            if (s_ClothingHairAggregateStorables.Contains(storableId)) return true;
+            if (IsClothingHairItemStorableId(storableId)) return true;
+            if (StorableMatchesClothingHairItemTokens(storableId, itemTokens)) return true;
+
+            if (IsExcludedPersonPresetStorable(storableId)) return false;
+
+            for (int i = 0; i < s_ClothingHairItemStorableSuffixes.Length; i++)
+            {
+                if (storableId.EndsWith(s_ClothingHairItemStorableSuffixes[i], StringComparison.OrdinalIgnoreCase)
+                    && storableId.IndexOf(':') >= 0)
+                {
+                    return StorableMatchesClothingHairItemTokens(storableId, itemTokens)
+                        || storableId.IndexOf("cloth", StringComparison.OrdinalIgnoreCase) >= 0
+                        || storableId.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+
+            return false;
+        }
+
+        internal static ClothingHairUndoState CaptureClothingHairUndoState(Atom atom)
+        {
+            var state = new ClothingHairUndoState
+            {
+                GeometryToggles = new Dictionary<string, bool>(),
+                StorableSnapshots = new List<JSONClass>(),
+            };
+            if (atom == null) return state;
+
+            HashSet<string> itemTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            JSONStorable geometry = null;
+            try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+            if (geometry != null)
+            {
+                List<string> names = null;
+                try { names = geometry.GetBoolParamNames(); } catch { }
+                if (names != null)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string key = names[i];
+                        if (string.IsNullOrEmpty(key)) continue;
+                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                            && !key.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(key); } catch { }
+                        if (b != null) state.GeometryToggles[key] = b.val;
+
+                        string prefix = key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                            ? "clothing:"
+                            : "hair:";
+                        CollectClothingHairItemMatchTokens(key.Substring(prefix.Length), itemTokens);
+                    }
+                }
+            }
+
+            HashSet<string> capturedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> storableIds = null;
+            try { storableIds = atom.GetStorableIDs(); } catch { }
+
+            if (storableIds != null)
+            {
+                for (int i = 0; i < storableIds.Count; i++)
+                {
+                    string sid = storableIds[i];
+                    if (string.IsNullOrEmpty(sid)) continue;
+                    if (!ShouldCaptureClothingHairStorable(sid, itemTokens)) continue;
+                    if (!capturedIds.Add(sid)) continue;
+
+                    JSONStorable s = null;
+                    try { s = atom.GetStorableByID(sid); } catch { }
+                    if (s == null) continue;
+
+                    JSONClass snap = null;
+                    try { snap = s.GetJSON(); } catch { }
+                    if (snap != null) state.StorableSnapshots.Add(snap);
+                }
+            }
+
+            return state;
+        }
+
+        internal static void RestoreClothingHairUndoState(Atom atom, ClothingHairUndoState state)
+        {
+            if (atom == null || state == null) return;
+
+            if (state.GeometryToggles != null)
+            {
+                JSONStorable geometry = null;
+                try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+                if (geometry != null)
+                {
+                    foreach (KeyValuePair<string, bool> kvp in state.GeometryToggles)
+                    {
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(kvp.Key); } catch { }
+                        if (b != null) b.val = kvp.Value;
+                    }
+
+                    List<string> currentNames = null;
+                    try { currentNames = geometry.GetBoolParamNames(); } catch { }
+                    if (currentNames != null)
+                    {
+                        for (int i = 0; i < currentNames.Count; i++)
+                        {
+                            string key = currentNames[i];
+                            if (string.IsNullOrEmpty(key)) continue;
+                            if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)
+                                && !key.StartsWith("hair:", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                            if (state.GeometryToggles.ContainsKey(key)) continue;
+
+                            JSONStorableBool b = null;
+                            try { b = geometry.GetBoolJSONParam(key); } catch { }
+                            if (b != null) b.val = false;
+                        }
+                    }
+                }
+            }
+
+            RestoreClothingHairStorableSnapshots(atom, state.StorableSnapshots);
+
+            try
+            {
+                if (SuperController.singleton != null)
+                {
+                    SuperController.singleton.StartCoroutine(
+                        DeferredRestoreClothingHairUndoStateCoroutine(atom, state));
+                }
+            }
+            catch { }
+        }
+
+        private static void RestoreClothingHairStorableSnapshots(Atom atom, List<JSONClass> storableSnapshots)
+        {
+            if (atom == null || storableSnapshots == null) return;
+
+            for (int i = 0; i < storableSnapshots.Count; i++)
+            {
+                JSONClass snap = storableSnapshots[i];
+                if (snap == null || snap["id"] == null) continue;
+
+                string sid = snap["id"].Value;
+                if (string.IsNullOrEmpty(sid)) continue;
+                if (IsBodyControlOrPhysicsStorableId(sid)) continue;
+
+                JSONStorable s = null;
+                try { s = atom.GetStorableByID(sid); } catch { }
+                if (s == null) continue;
+
+                try { s.RestoreFromJSON(snap); } catch { }
+            }
+        }
+
+        // Clothing-only variant used by the "Clothes: Keep" appearance load. Snapshots the material /
+        // customization state (textures, colors, sim, etc.) of the currently-active clothing item
+        // storables so it can be re-applied after a non-merge appearance preset load. The ClothingPresets
+        // lock preserves which items are worn, but a non-merge load still resets unlisted storables to
+        // default, which strips the customization from the kept clothing. Hair and aggregate storables are
+        // intentionally excluded so the incoming preset's hair still applies normally.
+        internal static List<JSONClass> CaptureActiveClothingStorableSnapshots(Atom atom)
+        {
+            var snapshots = new List<JSONClass>();
+            if (atom == null) return snapshots;
+
+            HashSet<string> itemTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            JSONStorable geometry = null;
+            try { geometry = atom.GetStorableByID("geometry"); } catch { }
+
+            if (geometry != null)
+            {
+                List<string> names = null;
+                try { names = geometry.GetBoolParamNames(); } catch { }
+                if (names != null)
+                {
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string key = names[i];
+                        if (string.IsNullOrEmpty(key)) continue;
+                        if (!key.StartsWith("clothing:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        JSONStorableBool b = null;
+                        try { b = geometry.GetBoolJSONParam(key); } catch { }
+                        if (b == null || !b.val) continue; // only currently-active clothing
+
+                        CollectClothingHairItemMatchTokens(key.Substring("clothing:".Length), itemTokens);
+                    }
+                }
+            }
+
+            HashSet<string> captured = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<string> storableIds = null;
+            try { storableIds = atom.GetStorableIDs(); } catch { }
+            if (storableIds == null) return snapshots;
+
+            for (int i = 0; i < storableIds.Count; i++)
+            {
+                string sid = storableIds[i];
+                if (string.IsNullOrEmpty(sid)) continue;
+                if (s_ClothingHairAggregateStorables.Contains(sid)) continue;
+                if (IsBodyControlOrPhysicsStorableId(sid)) continue;
+                // Exclude hair item storables and hair aggregates so the new preset's hair still loads.
+                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                bool include = sid.IndexOf("clothingItem", StringComparison.OrdinalIgnoreCase) >= 0
+                    || StorableMatchesClothingHairItemTokens(sid, itemTokens);
+                if (!include) continue;
+                if (!captured.Add(sid)) continue;
+
+                JSONStorable s = null;
+                try { s = atom.GetStorableByID(sid); } catch { }
+                if (s == null) continue;
+
+                JSONClass snap = null;
+                try { snap = s.GetJSON(); } catch { }
+                if (snap != null) snapshots.Add(snap);
+            }
+
+            return snapshots;
+        }
+
+        internal static void RestoreClothingStorableSnapshots(Atom atom, List<JSONClass> storableSnapshots)
+        {
+            RestoreClothingHairStorableSnapshots(atom, storableSnapshots);
+        }
+
+        private static IEnumerator DeferredRestoreClothingHairUndoStateCoroutine(
+            Atom atom,
+            ClothingHairUndoState state)
+        {
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+
+            if (atom == null || state == null) yield break;
+            RestoreClothingHairStorableSnapshots(atom, state.StorableSnapshots);
+        }
+
+        internal static bool ClothingHairUndoStateContainsStorable(ClothingHairUndoState state, string storableId)
+        {
+            if (state == null || state.StorableSnapshots == null || string.IsNullOrEmpty(storableId))
+                return false;
+
+            for (int i = 0; i < state.StorableSnapshots.Count; i++)
+            {
+                JSONClass snap = state.StorableSnapshots[i];
+                if (snap == null || snap["id"] == null) continue;
+                if (string.Equals(snap["id"].Value, storableId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

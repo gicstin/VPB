@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace VPB
 {
     public partial class GalleryPanel
     {
+        private static readonly string[] QuickFilterSideTabSortContexts =
+        {
+            "Category", "Creator", "Tags", "SceneSource", "UserTags", "UserTagsApplied", "Path"
+        };
+
         public QuickFilterEntry CaptureQuickFilterState()
         {
             var entry = new QuickFilterEntry();
@@ -28,13 +31,11 @@ namespace VPB
                 entry.Name = candidate;
             }
             else entry.Name = "Preset#" + nextNum;
+
             entry.CategoryPath = currentPath;
-            entry.SearchText = nameFilter;
-            entry.Creator = currentCreator;
-            entry.Tags = new List<string>(activeTags);
-            
-            var sort = GetSortState("Files");
-            if (sort != null) entry.SortState = sort.Clone();
+            entry.CategoryTitle = currentCategoryTitle;
+            PopulateQuickFilterEntryFromCategoryFilterState(entry, CaptureCurrentFilterState());
+            CaptureQuickFilterSideTabState(entry);
             
             return entry;
         }
@@ -52,7 +53,10 @@ namespace VPB
                     for (int i = 0; i < categories.Count; i++)
                     {
                         var c = categories[i];
-                        if (c.path == entry.CategoryPath) { cat = c; break; }
+                        if (c.path != entry.CategoryPath) continue;
+                        if (!string.IsNullOrEmpty(entry.CategoryTitle) && c.name != entry.CategoryTitle) continue;
+                        cat = c;
+                        break;
                     }
                 }
 
@@ -67,39 +71,198 @@ namespace VPB
                 }
             }
 
-            // 2. Restore Search
-            SetNameFilter(entry.SearchText); 
-            if (titleSearchInput != null) 
-            {
-                titleSearchInput.text = entry.SearchText ?? "";
-            }
+            // 2. Restore full filter state (scene/appearance local-only, untagged, subfilters, etc.)
+            ApplyCategoryFilterState(CategoryFilterStateFromQuickFilterEntry(entry));
+            try { ReconcileAutoGenderForCurrentTarget(); } catch { }
 
-            // 3. Restore Creator
-            currentCreator = entry.Creator ?? "";
-            _currentCreatorSetSrc = null;
-            try { UpdateTitleCreatorButtonVisual(); } catch { }
+            // 3. Restore side-tab panels and their list configurations
+            if (entry.HasSideTabState)
+                ApplyQuickFilterSideTabState(entry);
 
-            // 4. Restore Tags
-            activeTags.Clear();
-            if (entry.Tags != null)
-            {
-                foreach (var t in entry.Tags) activeTags.Add(t);
-            }
-
-            // 5. Restore Sort
-            if (entry.SortState != null)
-            {
-                SaveSortState("Files", entry.SortState);
-                if (fileSortTypeText != null)
-                    UpdateSortButtonText(fileSortTypeText, fileSortDirText, entry.SortState);
-                SyncRatingSortToggleState();
-            }
-
-            // 6. Refresh
-            UpdateTabs(); // Refreshes sidebars
-            RefreshFiles(); // Refreshes grid
+            // 4. Refresh
+            UpdateLayout();
+            UpdateTabs();
+            RefreshFiles();
+            try { SyncSidePaneTopSortButtonVisuals(); } catch { }
+            try { SyncSceneSourceSortButtonHighlights(); } catch { }
             
             ShowTemporaryStatus("Quick Filter Applied: " + entry.Name);
+        }
+
+        private void CaptureQuickFilterSideTabState(QuickFilterEntry entry)
+        {
+            if (entry == null) return;
+
+            entry.HasSideTabState = true;
+            entry.LeftActiveContent = ContentTypeToPresetInt(NormalizePersistableSideTabContent(leftActiveContent));
+            entry.RightActiveContent = ContentTypeToPresetInt(NormalizePersistableSideTabContent(rightActiveContent));
+            entry.CategorySideFilter = categoryFilter ?? "";
+            entry.CreatorSideFilter = creatorFilter ?? "";
+            entry.UserTagSideFilter = userTagFilter ?? "";
+            entry.PathSideFilter = pathFilter ?? "";
+            entry.HistoryTabFilter = historyTabFilter ?? "";
+            entry.TagSubPaneFilter = tagFilter ?? "";
+            entry.HistoryFilterMode = (int)galleryHistoryFilterMode;
+
+            entry.SideTabSortStates.Clear();
+            for (int i = 0; i < QuickFilterSideTabSortContexts.Length; i++)
+            {
+                string ctx = QuickFilterSideTabSortContexts[i];
+                SortState st = GetSortState(ctx);
+                if (st == null) continue;
+                entry.SideTabSortStates.Add(new QuickFilterSideTabSortEntry
+                {
+                    Context = ctx,
+                    SortState = st.Clone()
+                });
+            }
+        }
+
+        private void ApplyQuickFilterSideTabState(QuickFilterEntry entry)
+        {
+            if (entry == null) return;
+
+            try
+            {
+                if (IsSettingsPanelOpen() || settingsListViewActive)
+                    ExitInternalSettingsMode(true);
+            }
+            catch { }
+            try
+            {
+                if (cleanupModeActive)
+                    ExitCleanupModeForSidePanelNavigation();
+            }
+            catch { }
+
+            categoryFilter = entry.CategorySideFilter ?? "";
+            creatorFilter = entry.CreatorSideFilter ?? "";
+            userTagFilter = entry.UserTagSideFilter ?? "";
+            pathFilter = entry.PathSideFilter ?? "";
+            historyTabFilter = entry.HistoryTabFilter ?? "";
+            tagFilter = entry.TagSubPaneFilter ?? "";
+
+            int histMode = entry.HistoryFilterMode;
+            if (histMode >= 0 && histMode <= (int)GalleryHistoryFilterMode.Misc)
+                galleryHistoryFilterMode = (GalleryHistoryFilterMode)histMode;
+
+            if (entry.SideTabSortStates != null)
+            {
+                for (int i = 0; i < entry.SideTabSortStates.Count; i++)
+                {
+                    var row = entry.SideTabSortStates[i];
+                    if (row == null || string.IsNullOrEmpty(row.Context) || row.SortState == null) continue;
+                    SaveSortState(row.Context, row.SortState.Clone());
+                }
+            }
+
+            ContentType? left = NormalizePersistableSideTabContent(PresetIntToContentType(entry.LeftActiveContent));
+            ContentType? right = NormalizePersistableSideTabContent(PresetIntToContentType(entry.RightActiveContent));
+            if (left.HasValue && right.HasValue && left.Value == right.Value)
+                right = null;
+
+            leftActiveContent = left;
+            rightActiveContent = right;
+            SyncActiveContentTypeFromSidePanels();
+
+            bool hasHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
+            if (hasHistorySide)
+                try { ApplyHistoryBrowseTitle(); } catch { }
+            else if (titleText != null)
+                titleText.text = currentCategoryTitle;
+        }
+
+        private ContentType? NormalizePersistableSideTabContent(ContentType? type)
+        {
+            if (!IsPersistableSideTabContent(type)) return null;
+            if (type == ContentType.Creator
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryHideCreatorSideButtons)
+                return null;
+            return type;
+        }
+
+        private static bool IsPersistableSideTabContent(ContentType? type)
+        {
+            if (!type.HasValue) return false;
+            switch (type.Value)
+            {
+                case ContentType.Category:
+                case ContentType.Creator:
+                case ContentType.UserTags:
+                case ContentType.Path:
+                case ContentType.History:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static int ContentTypeToPresetInt(ContentType? type)
+        {
+            return type.HasValue ? (int)type.Value : -1;
+        }
+
+        private static ContentType? PresetIntToContentType(int value)
+        {
+            if (value < 0) return null;
+            if (!Enum.IsDefined(typeof(ContentType), value)) return null;
+            var ct = (ContentType)value;
+            return IsPersistableSideTabContent(ct) ? (ContentType?)ct : null;
+        }
+
+        private static void PopulateQuickFilterEntryFromCategoryFilterState(QuickFilterEntry entry, CategoryFilterState state)
+        {
+            if (entry == null || state == null) return;
+
+            entry.SearchText = state.NameFilter ?? "";
+            entry.Creator = state.Creator ?? "";
+            entry.Tags = state.Tags != null ? new List<string>(state.Tags) : new List<string>();
+            entry.UserTags = state.UserTags != null ? new List<string>(state.UserTags) : new List<string>();
+            entry.ExcludedUserTags = state.ExcludedUserTags != null ? new List<string>(state.ExcludedUserTags) : new List<string>();
+            entry.UserTagAvailFilterMode = state.UserTagAvailFilterMode;
+            entry.UserTagInheritVarToChildren = state.UserTagInheritVarToChildren;
+            entry.SceneSourceFilter = state.SceneSourceFilter ?? "";
+            entry.AppearanceSourceFilter = state.AppearanceSourceFilter ?? "";
+            entry.PackagePathFilter = state.PackagePathFilter ?? "";
+            entry.ClothingSubfilter = state.ClothingSubfilter;
+            entry.HairSubfilter = state.HairSubfilter;
+            entry.AppearanceSubfilter = state.AppearanceSubfilter;
+            entry.PosePeopleFilter = state.PosePeopleFilter;
+            entry.SortState = state.FileSortState != null ? state.FileSortState.Clone() : null;
+            entry.BrowseHiddenMode = state.BrowseHiddenMode;
+            entry.BrowseAlwaysLoadedMode = state.BrowseAlwaysLoadedMode;
+            entry.BrowseOldVersionsMode = state.BrowseOldVersionsMode;
+            entry.BrowseLoadedMode = state.BrowseLoadedMode;
+            entry.BrowseUnusedMode = state.BrowseUnusedMode;
+        }
+
+        private static CategoryFilterState CategoryFilterStateFromQuickFilterEntry(QuickFilterEntry entry)
+        {
+            var state = new CategoryFilterState();
+            if (entry == null) return state;
+
+            state.NameFilter = entry.SearchText ?? "";
+            state.Creator = entry.Creator ?? "";
+            state.Tags = entry.Tags != null ? new List<string>(entry.Tags) : new List<string>();
+            state.UserTags = entry.UserTags != null ? new List<string>(entry.UserTags) : new List<string>();
+            state.ExcludedUserTags = entry.ExcludedUserTags != null ? new List<string>(entry.ExcludedUserTags) : new List<string>();
+            state.UserTagAvailFilterMode = entry.UserTagAvailFilterMode;
+            state.UserTagInheritVarToChildren = entry.UserTagInheritVarToChildren;
+            state.SceneSourceFilter = entry.SceneSourceFilter ?? "";
+            state.AppearanceSourceFilter = entry.AppearanceSourceFilter ?? "";
+            state.PackagePathFilter = entry.PackagePathFilter ?? "";
+            state.ClothingSubfilter = entry.ClothingSubfilter;
+            state.HairSubfilter = entry.HairSubfilter;
+            state.AppearanceSubfilter = entry.AppearanceSubfilter;
+            state.PosePeopleFilter = entry.PosePeopleFilter;
+            if (entry.SortState != null) state.FileSortState = entry.SortState.Clone();
+            state.BrowseHiddenMode = entry.BrowseHiddenMode;
+            state.BrowseAlwaysLoadedMode = entry.BrowseAlwaysLoadedMode;
+            state.BrowseOldVersionsMode = entry.BrowseOldVersionsMode;
+            state.BrowseLoadedMode = entry.BrowseLoadedMode;
+            state.BrowseUnusedMode = entry.BrowseUnusedMode;
+            return state;
         }
 
         public void ToggleQuickFilters()

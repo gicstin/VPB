@@ -216,7 +216,7 @@ namespace VPB
             var blocker = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0f, 0f, 0f, 0.35f), AnchorPresets.stretchAll, 0, 0, Vector2.zero);
             blocker.name = "Blocker";
 
-            m_DepWhitelistUGUIPanel = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0.12f, 0.12f, 0.12f, 0.97f), AnchorPresets.middleCenter, 900, 720, Vector2.zero);
+            m_DepWhitelistUGUIPanel = UI.AddChildGOImage(m_DepWhitelistUGUIRoot, new Color(0.12f, 0.12f, 0.12f, 0.97f), AnchorPresets.middleCenter, 900, 720, Vector2.zero, rounded: true);
             m_DepWhitelistUGUIPanel.name = "Panel";
 
             var panelRT = m_DepWhitelistUGUIPanel.GetComponent<RectTransform>();
@@ -234,20 +234,7 @@ namespace VPB
             var dragger = dragBar.AddComponent<DepWhitelistDragHandler>();
             dragger.Target = panelRT;
 
-            var titleGo = new GameObject("Title");
-            titleGo.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var titleText = titleGo.AddComponent<Text>();
-            titleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleText.text = "Dependency Whitelist";
-            titleText.fontSize = 30;
-            titleText.color = Color.white;
-            titleText.alignment = TextAnchor.MiddleLeft;
-            var titleRt = titleGo.GetComponent<RectTransform>();
-            titleRt.anchorMin = new Vector2(0, 1);
-            titleRt.anchorMax = new Vector2(1, 1);
-            titleRt.pivot = new Vector2(0.5f, 1);
-            titleRt.sizeDelta = new Vector2(-120, 60);
-            titleRt.anchoredPosition = new Vector2(60, -10);
+            UI.CreateLabel(m_DepWhitelistUGUIPanel, "Dependency Whitelist", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-120, 60), anchoredPosition: new Vector2(60, -10), name: "Title");
 
             // Draggable overlay for the whole title bar (excluding the close button area).
             var titleDrag = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0f, 0f, 0f, 0.01f), AnchorPresets.hStretchTop, 0, 60, Vector2.zero);
@@ -321,22 +308,9 @@ namespace VPB
                 refreshBtnRt.anchoredPosition = new Vector2(-20, -80);
             }
 
-            var helpGo = new GameObject("Help");
-            helpGo.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var helpText = helpGo.AddComponent<Text>();
-            helpText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            helpText.text = "Checked = whitelisted (ignored by Force Latest).";
-            helpText.fontSize = 16;
-            helpText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
-            helpText.alignment = TextAnchor.MiddleLeft;
-            var helpRt = helpGo.GetComponent<RectTransform>();
-            helpRt.anchorMin = new Vector2(0, 1);
-            helpRt.anchorMax = new Vector2(1, 1);
-            helpRt.pivot = new Vector2(0.5f, 1);
-            helpRt.sizeDelta = new Vector2(-40, 30);
-            helpRt.anchoredPosition = new Vector2(20, -130);
+            UI.CreateLabel(m_DepWhitelistUGUIPanel, "Checked = whitelisted (ignored by Force Latest).", GalleryUiDesignTokens.FontBodyRef, new Color(0.85f, 0.85f, 0.85f, 1f), TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-40, 30), anchoredPosition: new Vector2(20, -130), name: "Help");
 
-            var scrollBg = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0.10f, 0.10f, 0.10f, 0.95f), AnchorPresets.stretchAll, -40, -190, new Vector2(0, -30));
+            var scrollBg = UI.AddChildGOImage(m_DepWhitelistUGUIPanel, new Color(0.10f, 0.10f, 0.10f, 0.95f), AnchorPresets.stretchAll, -40, -190, new Vector2(0, -30), rounded: true);
             scrollBg.name = "ScrollBG";
             var scrollBgRt = scrollBg.GetComponent<RectTransform>();
             scrollBgRt.anchorMin = new Vector2(0, 0);
@@ -348,30 +322,10 @@ namespace VPB
             CreateDependencyWhitelistScroll(scrollBg);
 
             // Resize handle (triangle style, like Gallery panel).
-            var resizeHandle = new GameObject("ResizeHandle");
-            resizeHandle.transform.SetParent(m_DepWhitelistUGUIPanel.transform, false);
-            var rhImg = resizeHandle.AddComponent<Image>();
-            rhImg.color = new Color(0f, 0f, 0f, 0.01f); // Invisible hit area
-            var rhRT = resizeHandle.GetComponent<RectTransform>();
-            rhRT.anchorMin = new Vector2(1, 0);
-            rhRT.anchorMax = new Vector2(1, 0);
-            rhRT.pivot = new Vector2(1, 0);
-            rhRT.sizeDelta = new Vector2(60, 60);
-            rhRT.anchoredPosition = new Vector2(20, -20);
+            var resizeHandle = UI.CreateChildRT(m_DepWhitelistUGUIPanel, "ResizeHandle", AnchorPresets.bottomRight, new Vector2(60, 60), new Vector2(20, -20));
+            var rhImg = UI.AddImage(resizeHandle, new Color(0f, 0f, 0f, 0.01f)); // Invisible hit area
 
-            var triGO = new GameObject("Triangle");
-            triGO.transform.SetParent(resizeHandle.transform, false);
-            var triText = triGO.AddComponent<Text>();
-            triText.raycastTarget = false;
-            triText.text = "◢";
-            triText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            triText.fontSize = 36;
-            triText.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-            triText.alignment = TextAnchor.MiddleCenter;
-            var triRT = triGO.GetComponent<RectTransform>();
-            triRT.anchorMin = Vector2.zero;
-            triRT.anchorMax = Vector2.one;
-            triRT.sizeDelta = Vector2.zero;
+            UI.CreateLabel(resizeHandle, "◢", GalleryUiMetrics.GlyphFontFromControlHeight(40f, 1f, GalleryUiDesignTokens.FontMinRef), new Color(0.6f, 0.6f, 0.6f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "Triangle");
 
             // Border-only hover (no fill/text color change)
             var rhHoverBorder = resizeHandle.AddComponent<UIHoverBorder>();
@@ -386,24 +340,14 @@ namespace VPB
 
         private void CreateDependencyWhitelistScroll(GameObject parent)
         {
-            GameObject viewportGO = new GameObject("Viewport");
-            viewportGO.transform.SetParent(parent.transform, false);
-            RectTransform viewportRT = viewportGO.AddComponent<RectTransform>();
-            viewportRT.anchorMin = Vector2.zero;
-            viewportRT.anchorMax = Vector2.one;
-            viewportRT.pivot = new Vector2(0.5f, 0.5f);
+            GameObject viewportGO = UI.CreateChildRT(parent, "Viewport", AnchorPresets.stretchAll);
+            RectTransform viewportRT = viewportGO.GetComponent<RectTransform>();
             viewportRT.offsetMin = new Vector2(0, 0);
             viewportRT.offsetMax = new Vector2(-18, 0);
             viewportGO.AddComponent<RectMask2D>();
 
-            GameObject contentGO = new GameObject("Content");
-            contentGO.transform.SetParent(viewportGO.transform, false);
-            RectTransform contentRT = contentGO.AddComponent<RectTransform>();
-            contentRT.anchorMin = new Vector2(0, 1);
-            contentRT.anchorMax = new Vector2(1, 1);
-            contentRT.pivot = new Vector2(0.5f, 1);
-            contentRT.anchoredPosition = Vector2.zero;
-            contentRT.sizeDelta = new Vector2(0, 0);
+            GameObject contentGO = UI.CreateChildRT(viewportGO, "Content", AnchorPresets.hStretchTop);
+            RectTransform contentRT = contentGO.GetComponent<RectTransform>();
 
             var scrollbarGO = UI.CreateScrollBar(parent, 15f, 0f, Scrollbar.Direction.BottomToTop);
             RectTransform sbRT = scrollbarGO.GetComponent<RectTransform>();

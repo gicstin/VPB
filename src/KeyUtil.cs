@@ -1,10 +1,31 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VPB
 {
 	public class KeyUtil
 	{
+		/// <summary>Mouse buttons cannot be plugin hotkeys (clicks would fire them constantly).</summary>
+		public static bool IsDisallowedHotkeyKey(KeyCode kc)
+		{
+			if (kc == KeyCode.None) return true;
+			return kc >= KeyCode.Mouse0 && kc <= KeyCode.Mouse6;
+		}
+
+		public static bool UsesDisallowedHotkeyKey(string keyPattern)
+		{
+			if (keyPattern == null) return false;
+			if (keyPattern.Trim().Length == 0) return false;
+			try
+			{
+				return IsDisallowedHotkeyKey(Parse(keyPattern).key);
+			}
+			catch
+			{
+				return true;
+			}
+		}
 		public List<KeyCode> supportKeys = new List<KeyCode>();
 
 		public KeyCode key;

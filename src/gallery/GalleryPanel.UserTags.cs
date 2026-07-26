@@ -21,6 +21,18 @@ namespace VPB
 
         private readonly List<UserTagSideTabEntry> _userTagEditorVisibleRows = new List<UserTagSideTabEntry>(1024);
         private readonly List<UserTagEditorRowVisual> _userTagEditorRowVisuals = new List<UserTagEditorRowVisual>(1024);
+        /// <summary>Scratch for filter/sort build — reused to avoid per-keystroke List alloc (warm UI).</summary>
+        private readonly List<UserTagSideTabEntry> _userTagEditorBuildScratch = new List<UserTagSideTabEntry>(1024);
+        /// <summary>Hard cap on Database-mode visible rows (same family as Apply menu). Filter narrows; overflow hint shown.</summary>
+        private const int UserTagEditorMaxVisibleRows = 64;
+        private static readonly Comparison<UserTagSideTabEntry> UserTagEditorSortNameAsc =
+            (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+        private static readonly Comparison<UserTagSideTabEntry> UserTagEditorSortNameDesc =
+            (a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase);
+        private static readonly Comparison<UserTagSideTabEntry> UserTagEditorSortCountDesc =
+            (a, b) => b.Count.CompareTo(a.Count);
+        private static readonly Comparison<UserTagSideTabEntry> UserTagEditorSortCountAsc =
+            (a, b) => a.Count.CompareTo(b.Count);
         private Color _userTagEditorRowBaseCol = new Color(0.2f, 0.2f, 0.22f, 1f);
         private Color _userTagEditorRowSelCol = new Color(0.28f, 0.38f, 0.32f, 1f);
         private static readonly Color UserTagEditorNewTagChromeBaseCol = new Color(0.07f, 0.07f, 0.09f, 1f);
@@ -109,12 +121,55 @@ namespace VPB
             userTagAppliedRemoveSelection.Clear();
             userTagAppliedRemoveAnchor = null;
             updatePanelForSelection();
+            // Detail strip tags line must refresh when selection (or applied tags) change.
+            // Skip during thumb scrub — commit path rebuilds strip once on idle.
+            if (_detailStripScrubActive) return;
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+        }
+
+        private void ClearUntaggedTaggedPinKeys()
+        {
+            _untaggedTaggedPinKeys.Clear();
+        }
+
+        /// <summary>Not Tagged: drop pinned tagged rows the user just deselected (O(deselected) scan, no SQLite).</summary>
+        private void PruneUntaggedGridAfterSelectionChange(HashSet<string> deselectedSelKeys)
+        {
+            if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return;
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged) return;
+            if (!TryPruneUntaggedGridForDeselectedPins(deselectedSelKeys)) return;
+
+            if (recyclingGrid != null)
+            {
+                recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                recyclingGrid.Refresh();
+            }
+            try { UpdatePaginationText(); } catch { }
+        }
+
+        private static HashSet<string> SnapshotSelectionIdentityKeys(GalleryPanel panel)
+        {
+            if (panel == null || panel.selectedFilePaths == null || panel.selectedFilePaths.Count == 0)
+                return null;
+            return new HashSet<string>(panel.selectedFilePaths, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static HashSet<string> BuildDeselectedSelectionKeys(HashSet<string> before, HashSet<string> after)
+        {
+            if (before == null || before.Count == 0) return null;
+            var deselected = new HashSet<string>(before, StringComparer.OrdinalIgnoreCase);
+            if (after != null)
+            {
+                foreach (string k in after)
+                    deselected.Remove(k);
+            }
+            return deselected.Count > 0 ? deselected : null;
         }
 
         private void updatePanelForSelection()
         {
             CacheAppliedUserTagsForSelection();
-            try { RefreshVisibleUserTagRows(); } catch { }
+            try { EnsureUserTagAvailViewReflectsSelection(); } catch { }
             try
             {
                 if (leftActiveContent == ContentType.UserTags && leftSubTabContainerGO != null
@@ -129,6 +184,124 @@ namespace VPB
                     UpdateTabs(ContentType.UserTagsApplied, rightSubTabContainerGO, rightSubActiveTabButtons, false);
             }
             catch { }
+        }
+
+        private string BuildUserTagSelectionVirtSignature()
+        {
+            if (_userTagSelectionRowCount <= 0 || _userTagSelectionStates.Count == 0) return "";
+            var names = new List<string>(_userTagSelectionStates.Count);
+            foreach (var kv in _userTagSelectionStates)
+            {
+                if (!string.IsNullOrEmpty(kv.Key)) names.Add(kv.Key);
+            }
+            names.Sort((a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase));
+            var sb = new StringBuilder(Math.Max(32, names.Count * 8));
+            sb.Append(_userTagSelectionRowCount);
+            for (int i = 0; i < names.Count; i++)
+            {
+                sb.Append('\u001f');
+                sb.Append(names[i]);
+                sb.Append(':');
+                UserTagSelectionState st;
+                sb.Append(_userTagSelectionStates.TryGetValue(names[i], out st) ? (int)st : 0);
+            }
+            return sb.ToString();
+        }
+
+        private void EnsureSelectionUserTagsInAvailList(List<UserTagSideTabEntry> rows)
+        {
+            if (rows == null) return;
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags || _userTagSelectionRowCount <= 0) return;
+
+            foreach (var kv in _userTagSelectionStates)
+            {
+                string name = kv.Key;
+                if (string.IsNullOrEmpty(name)) continue;
+                bool found = false;
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (string.Equals(rows[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) continue;
+
+                int selCount = 0;
+                for (int i = 0; i < cachedAppliedUserTagsSelection.Count; i++)
+                {
+                    if (string.Equals(cachedAppliedUserTagsSelection[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selCount = cachedAppliedUserTagsSelection[i].Count;
+                        break;
+                    }
+                }
+                rows.Add(new UserTagSideTabEntry { Name = name, Count = selCount });
+            }
+        }
+
+        private void EnsureUserTagAvailViewReflectsSelection()
+        {
+            bool leftOpen = leftActiveContent == ContentType.UserTags && leftTabContainerGO != null;
+            bool rightOpen = rightActiveContent == ContentType.UserTags && rightTabContainerGO != null;
+            if (!leftOpen && !rightOpen) return;
+
+            if (_userTagAvailMode == UserTagAvailMode.FilterByTags)
+            {
+                string sigNew = ComputeUserTagVirtDataSignature();
+                if (!string.Equals(_userTagVirtViewSig, sigNew, StringComparison.Ordinal))
+                {
+                    _userTagVirtViewSig = sigNew;
+                    if (leftOpen)
+                    {
+                        SnapshotUserTagAvailScrollForPreserve(true);
+                        RebuildUserTagVirtViewList(true, resetScrollToTop: false);
+                        RestorePreservedUserTagAvailScroll();
+                    }
+                    if (rightOpen)
+                    {
+                        SnapshotUserTagAvailScrollForPreserve(false);
+                        RebuildUserTagVirtViewList(false, resetScrollToTop: false);
+                        RestorePreservedUserTagAvailScroll();
+                    }
+                }
+            }
+            RefreshVisibleUserTagRows(skipSelectionCache: true);
+        }
+
+        private static bool TagsIntersectActiveUserTagFilter(IEnumerable<string> tags, HashSet<string> activeFilterTags)
+        {
+            if (tags == null || activeFilterTags == null || activeFilterTags.Count == 0) return false;
+            foreach (string raw in tags)
+            {
+                string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(raw);
+                if (!string.IsNullOrEmpty(norm) && activeFilterTags.Contains(norm)) return true;
+            }
+            return false;
+        }
+
+        private void SyncGridAfterUserTagRemoveInFilterMode(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows, List<string> tags)
+        {
+            if (!IsUserTagIncludeFilterArmed()) return;
+            if (activeUserTags == null || activeUserTags.Count == 0) return;
+            if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable) return;
+
+            if (TryPruneVisibleGridAfterUserTagRemove(updatedRows))
+            {
+                if (recyclingGrid != null)
+                {
+                    recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+                    recyclingGrid.Refresh();
+                }
+                try { UpdatePaginationText(); } catch { }
+                return;
+            }
+
+            if (tags != null && TagsIntersectActiveUserTagFilter(tags, activeUserTags))
+            {
+                try { RefreshFiles(true, false, false, "user_tag_remove_filter_resync"); } catch { }
+            }
         }
 
         private void OnLeftSubSortButtonClicked()
@@ -240,31 +413,30 @@ namespace VPB
             ApplyUserTagsToFileEntries(new List<string> { tagName }, selectedFiles, remove);
         }
 
-        /// <summary>Must match EnsureUserTagSideTabBulkBlock padding, spacing, and title/font scale (u = s*1.38).</summary>
-        private static float UserTagsAvailStickyHeightPx()
+        /// <summary>Must match EnsureUserTagSideTabBulkBlock padding, spacing, and title/font scale (s).</summary>
+        private float UserTagsAvailStickyHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float u = s * 1.38f;
-            int fs = Mathf.Max(15, Mathf.RoundToInt(19f * u));
+            float s = ChromeScale;
+            int fs = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             float padTop = Mathf.RoundToInt(4f * s);
             float padBottom = Mathf.RoundToInt(10f * s);
             // LayoutElement preferred 34*s is short when font is ~19*u; keep viewport/shrink in sync.
             float titleBand = Mathf.Max(34f * s, fs * 1.22f);
-            return padTop + titleBand + 7f * s + 48f * s + padBottom;
+            return padTop + titleBand + 7f * s + 36f * s + padBottom;
         }
 
-        private static float UserTagsAvailFooterHeightPx()
+        private float UserTagsAvailFooterHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             // Match EnsureUserTagInheritVarToChildrenButtonInFooter row height + padding.
             float rowH = Mathf.Max(28f, 34f * s);
             float pad = Mathf.RoundToInt(4f * s);
             return rowH + pad * 2;
         }
 
-        private static float UserTagsAppliedStickyHeightPx()
+        private float UserTagsAppliedStickyHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = Mathf.Max(34f * s, Mathf.Max(32f, 42f * s));
             return 4f * s + rowH + 8f * s;
         }
@@ -272,6 +444,8 @@ namespace VPB
         /// <summary>Pins Available / Applied toolbars; shrinks scroll viewports. Defaults restored when not UserTags.</summary>
         private void ApplyUserTagsStickyScrollChrome(float _)
         {
+            // Last-wins: do not first-wins frame-gate. UpdateTabs applies chrome before content settles;
+            // skipping later same-frame applies left one-frame wrong insets (Filter↔Tag flicker).
             ApplyUserTagsAvailStickyOneSide(true);
             ApplyUserTagsAvailStickyOneSide(false);
             ApplyUserTagsAppliedStickyOneSide(true);
@@ -328,7 +502,28 @@ namespace VPB
                     pinnedStrip.SetActive(false);
             }
 
+            // Measure Def-restored viewport before inset. Never shrink Mask below a usable strip —
+            // over-inset → height≈0, Tags(N) still correct, rows clipped (black empty under chrome).
+            float availH = vp.rect.height;
+            if (availH < 1f)
+            {
+                try
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(vp);
+                    Canvas.ForceUpdateCanvases();
+                    availH = vp.rect.height;
+                }
+                catch { }
+            }
             float topChrome = h + pinnedH;
+            float minVp = Mathf.Max(72f, SideTabVirtRowStridePx() * 3f);
+            if (availH > 1f)
+            {
+                float maxChrome = Mathf.Max(0f, availH - minVp);
+                if (topChrome > maxChrome)
+                    topChrome = maxChrome;
+            }
+
             vp.offsetMin = defMin;
             vp.offsetMax = new Vector2(defMax.x, defMax.y - topChrome);
 
@@ -357,7 +552,14 @@ namespace VPB
                     frt.pivot = new Vector2(0.5f, 0f);
                     frt.offsetMin = new Vector2(defMin.x, 0f);
                     frt.offsetMax = new Vector2(defMax.x, fh);
-                    vp.offsetMin = new Vector2(defMin.x, defMin.y + fh);
+                    float bottomInset = fh;
+                    // Keep min viewport after footer inset too.
+                    if (availH > 1f)
+                    {
+                        float maxBottom = Mathf.Max(0f, availH - topChrome - minVp);
+                        if (bottomInset > maxBottom) bottomInset = maxBottom;
+                    }
+                    vp.offsetMin = new Vector2(defMin.x, defMin.y + bottomInset);
 
                     EnsureUserTagInheritVarToChildrenButtonInFooter(footer.transform);
                 }
@@ -477,7 +679,7 @@ namespace VPB
                 UnityEngine.Object.Destroy(sticky.Find("VPB_UserTagsAppliedToolbar_v2").gameObject);
             if (sticky.Find("VPB_UserTagsAppliedToolbar_v3") != null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
 
             GameObject root = new GameObject("VPB_UserTagsAppliedToolbar_v3");
@@ -488,50 +690,24 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            VerticalLayoutGroup vlg = root.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 6f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(8 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(root, 6f * s, UI.Pad(6f, 6f, 4f, 8f, s), TextAnchor.UpperCenter);
 
-            LayoutElement rootLe = root.AddComponent<LayoutElement>();
-            rootLe.flexibleWidth = 1f;
+            LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
             rootCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject titleRow = new GameObject("AppliedTitleRow");
-            titleRow.transform.SetParent(root.transform, false);
-            HorizontalLayoutGroup trH = titleRow.AddComponent<HorizontalLayoutGroup>();
-            trH.spacing = 8f * s;
-            trH.padding = new RectOffset(0, 0, 0, 0);
-            trH.childAlignment = TextAnchor.MiddleLeft;
-            trH.childControlWidth = true;
-            trH.childControlHeight = true;
-            trH.childForceExpandWidth = true;
-            trH.childForceExpandHeight = false;
+            GameObject titleRow = UI.CreateChildRT(root, "AppliedTitleRow");
+            UI.AddHLG(titleRow, 8f * s);
 
             float delSz = Mathf.Max(32f, 42f * s);
 
-            LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
-            titleRowLe.minHeight = Mathf.Max(30f * s, delSz);
-            titleRowLe.preferredHeight = Mathf.Max(34f * s, delSz);
-            titleRowLe.flexibleWidth = 1f;
+            LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: Mathf.Max(30f * s, delSz), preferredHeight: Mathf.Max(34f * s, delSz), flexibleWidth: 1f);
 
-            GameObject titleGo = new GameObject("AppliedTitleText");
-            titleGo.transform.SetParent(titleRow.transform, false);
-            Text titleTxt = titleGo.AddComponent<Text>();
-            titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            titleTxt.fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * u));
-            titleTxt.fontStyle = FontStyle.Bold;
-            titleTxt.color = new Color(0.88f, 0.88f, 0.92f, 1f);
-            titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0);
-            LayoutElement titleLe = titleGo.AddComponent<LayoutElement>();
-            titleLe.flexibleWidth = 1f;
-            titleLe.minHeight = Mathf.Max(28f * s, delSz * 0.85f);
+            Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.applied_with_count", "Applied ({0})"), 0),
+                GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, u, GalleryUiDesignTokens.FontMinRef),
+                new Color(0.88f, 0.88f, 0.92f, 1f), name: "AppliedTitleText");
+            LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: Mathf.Max(28f * s, delSz * 0.85f), flexibleWidth: 1f);
             Sprite delSpr = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
             GameObject delBtn = UI.CreateSideTabSquareIconButton(titleRow, delSz, delSpr, RemoveFocusedAppliedUserTagFromSelection, new Color(0.5f, 0.22f, 0.22f, 1f), 6f * s);
             delBtn.name = "RemoveAppliedIconBtn";
@@ -545,23 +721,16 @@ namespace VPB
         {
             if (container == null) return;
             Transform tb = container.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null) tb = container.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null && leftUserTagsAppliedStickyGO != null)
                 tb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null && leftUserTagsAppliedStickyGO != null)
-                tb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null && rightUserTagsAppliedStickyGO != null)
                 tb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (tb == null && rightUserTagsAppliedStickyGO != null)
-                tb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (tb == null) return;
             GameObject rootGo = tb.gameObject;
             Image rayImg = rootGo.GetComponent<Image>();
             if (rayImg == null)
             {
-                rayImg = rootGo.AddComponent<Image>();
-                rayImg.color = new Color(1f, 1f, 1f, 0.02f);
-                rayImg.raycastTarget = true;
+                rayImg = UI.AddImage(rootGo, new Color(1f, 1f, 1f, 0.02f));
             }
             UserTagApplyDropZone dz = rootGo.GetComponent<UserTagApplyDropZone>();
             if (dz == null) dz = rootGo.AddComponent<UserTagApplyDropZone>();
@@ -584,20 +753,15 @@ namespace VPB
         {
             if (container == null) return;
             const string stripName = "VPB_UserTagApplyDropCatchStrip";
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             Transform stripT = container.Find(stripName);
             GameObject stripGo;
             if (stripT == null)
             {
                 stripGo = new GameObject(stripName);
                 stripGo.transform.SetParent(container, false);
-                Image img = stripGo.AddComponent<Image>();
-                img.color = new Color(1f, 1f, 1f, 0.03f);
-                img.raycastTarget = true;
-                LayoutElement le = stripGo.AddComponent<LayoutElement>();
-                le.minHeight = 2f;
-                le.preferredHeight = 4f * s;
-                le.flexibleWidth = 1f;
+                Image img = UI.AddImage(stripGo, new Color(1f, 1f, 1f, 0.03f));
+                LayoutElement le = UI.AddLE(stripGo, minHeight: 2f, preferredHeight: 4f * s, flexibleWidth: 1f);
                 UserTagApplyDropZone dz = stripGo.AddComponent<UserTagApplyDropZone>();
                 dz.Panel = this;
                 AddTooltipPlain(stripGo, VPBTranslation.T("gallery.usertags.apply_drop_zone_tip", "Drop tags here to apply to selection."));
@@ -640,9 +804,7 @@ namespace VPB
                 LayoutElement le = go.AddComponent<LayoutElement>();
                 le.ignoreLayout = true;
 
-                Image img = go.AddComponent<Image>();
-                img.color = new Color(1f, 1f, 1f, 0.0f);
-                img.raycastTarget = true;
+                Image img = UI.AddImage(go, new Color(1f, 1f, 1f, 0.0f));
 
                 // Only participate in raycasts while a tag-drag session active.
                 var gate = go.AddComponent<UserTagDropRaycastGate>();
@@ -729,6 +891,7 @@ namespace VPB
             _userTagDropPulseKey = GetSelectionIdentityKey(galleryRowHit, false);
             _userTagDropPulseUntil = Time.unscaledTime + UserTagVisualPulseSeconds;
             EnsureUserTagVisualPulse();
+            RefreshUserTagDropVisualForFile(galleryRowHit);
             ApplyUserTagsToFileEntries(new List<string>(tags), new List<FileEntry> { galleryRowHit }, remove: false);
         }
 
@@ -741,25 +904,88 @@ namespace VPB
             return !string.IsNullOrEmpty(k) && string.Equals(k, _userTagDropPulseKey, StringComparison.OrdinalIgnoreCase);
         }
 
+        private float GetUserTagDropFlashAlpha(FileEntry file)
+        {
+            if (file == null) return 0f;
+            bool hover = _userTagDragHoverFile != null && ReferenceEquals(_userTagDragHoverFile, file);
+            bool dropPulse = Time.unscaledTime < _userTagDropPulseUntil
+                && !string.IsNullOrEmpty(_userTagDropPulseKey)
+                && string.Equals(GetSelectionIdentityKey(file, false), _userTagDropPulseKey, StringComparison.OrdinalIgnoreCase);
+            if (dropPulse)
+            {
+                // Brief bright flash then fade — clear "applied" cue.
+                float remaining = _userTagDropPulseUntil - Time.unscaledTime;
+                float u = Mathf.Clamp01(remaining / UserTagVisualPulseSeconds); // 1 → 0
+                return Mathf.Lerp(0.08f, 0.55f, u * u);
+            }
+            if (hover) return 0.22f;
+            return 0f;
+        }
+
         private void ApplyUserTagDropVisual(GameObject btnGO, FileEntry file)
         {
-            if (btnGO == null || !IsUserTagDropVisualActive(file)) return;
-            UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
-            if (hoverBorder != null)
+            if (btnGO == null) return;
+            bool active = IsUserTagDropVisualActive(file);
+            float flashAlpha = GetUserTagDropFlashAlpha(file);
+
+            // Full-cell flash so apply/hover is obvious (border alone is easy to miss).
+            Transform flashTr = btnGO.transform.Find(UserTagDropFlashName);
+            GameObject flashGO = flashTr != null ? flashTr.gameObject : null;
+            if (active)
             {
-                hoverBorder.enabled = true;
-                hoverBorder.hoverColor = UserTagDropGlowColor;
-                hoverBorder.isSelected = true;
-                hoverBorder.borderSize = Mathf.Max(hoverBorder.borderSize, 4f);
-                hoverBorder.ApplyBorderSettings();
+                Color flashCol = new Color(
+                    UserTagDropGlowColor.r, UserTagDropGlowColor.g, UserTagDropGlowColor.b, flashAlpha);
+                if (flashGO == null)
+                {
+                    flashGO = new GameObject(UserTagDropFlashName);
+                    flashGO.transform.SetParent(btnGO.transform, false);
+                    flashGO.transform.SetAsLastSibling();
+                    UI.AddImage(flashGO, flashCol, raycastTarget: false);
+                    RectTransform frt = flashGO.GetComponent<RectTransform>();
+                    if (frt != null)
+                    {
+                        frt.anchorMin = Vector2.zero;
+                        frt.anchorMax = Vector2.one;
+                        frt.offsetMin = Vector2.zero;
+                        frt.offsetMax = Vector2.zero;
+                    }
+                    LayoutElement fle = flashGO.GetComponent<LayoutElement>();
+                    if (fle == null) fle = flashGO.AddComponent<LayoutElement>();
+                    fle.ignoreLayout = true;
+                }
+                else
+                {
+                    flashGO.SetActive(true);
+                    flashGO.transform.SetAsLastSibling();
+                    Image flashImg = flashGO.GetComponent<Image>();
+                    if (flashImg != null)
+                    {
+                        flashImg.raycastTarget = false;
+                        flashImg.color = flashCol;
+                    }
+                }
+
+                UIHoverBorder hoverBorder = btnGO.GetComponent<UIHoverBorder>();
+                if (hoverBorder != null)
+                {
+                    hoverBorder.enabled = true;
+                    hoverBorder.hoverColor = UserTagDropGlowColor;
+                    hoverBorder.isSelected = true;
+                    hoverBorder.borderSize = Mathf.Max(hoverBorder.borderSize, 4f);
+                    hoverBorder.ApplyBorderSettings();
+                }
+                Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
+                GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
+                if (innerBorderGO != null)
+                {
+                    SetBorderThickness(innerBorderGO, Mathf.Max(EffectiveGridSelectedBorderWidth(), 4f));
+                    SetGalleryInnerBorderEdgeTint(innerBorderGO, UserTagDropGlowColor);
+                    innerBorderGO.SetActive(true);
+                }
             }
-            Transform innerBorderTr = btnGO.transform.Find("GridInnerBorder");
-            GameObject innerBorderGO = innerBorderTr != null ? innerBorderTr.gameObject : null;
-            if (innerBorderGO != null)
+            else if (flashGO != null)
             {
-                SetBorderThickness(innerBorderGO, Mathf.Max(EffectiveGridSelectedBorderWidth(), 4f));
-                SetGalleryInnerBorderEdgeTint(innerBorderGO, UserTagDropGlowColor);
-                innerBorderGO.SetActive(true);
+                flashGO.SetActive(false);
             }
         }
 
@@ -774,16 +1000,19 @@ namespace VPB
         private void RefreshVisibleGalleryFileButtonsForKey(string wantedKey)
         {
             if (string.IsNullOrEmpty(wantedKey)) return;
-            if (recyclingGrid != null && recyclingGrid.content != null)
+            if (recyclingGrid != null)
             {
-                foreach (Transform child in recyclingGrid.content)
+                int n = recyclingGrid.ActiveItemCount;
+                for (int i = 0; i < n; i++)
                 {
-                    if (child == null || !child.gameObject.activeSelf) continue;
-                    FileEntry fe = ResolveVisibleFileEntryFromButton(child.gameObject);
+                    RecyclingGridItem rgv = recyclingGrid.GetActiveItemAt(i);
+                    if (rgv == null || rgv.gameObject == null || !rgv.gameObject.activeSelf) continue;
+                    GameObject btn = rgv.gameObject;
+                    FileEntry fe = ResolveVisibleFileEntryFromItem(rgv, rgv.binder);
                     if (fe == null) continue;
                     string key = GetSelectionIdentityKey(fe, false);
                     if (string.Equals(key, wantedKey, StringComparison.OrdinalIgnoreCase))
-                        UpdateFileButtonVisuals(child.gameObject, fe);
+                        UpdateFileButtonVisuals(btn, fe);
                 }
                 return;
             }
@@ -800,11 +1029,29 @@ namespace VPB
             }
         }
 
+        private FileEntry ResolveVisibleFileEntryFromItem(RecyclingGridItem rgvItem, FileButtonBinder binder)
+        {
+            if (rgvItem == null) return null;
+            if (binder == null) binder = rgvItem.binder;
+            if (binder == null) binder = FileButtonBinder.GetOrAdd(rgvItem.gameObject);
+            UIDraggableItem diag = binder != null ? binder.draggable : null;
+            try
+            {
+                if (settingsListViewActive && currentFilteredFiles != null
+                    && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
+                    return currentFilteredFiles[rgvItem.index];
+                if (diag != null) return diag.FileEntry;
+            }
+            catch { return diag != null ? diag.FileEntry : null; }
+            return null;
+        }
+
         private FileEntry ResolveVisibleFileEntryFromButton(GameObject btn)
         {
             if (btn == null) return null;
-            var diag = btn.GetComponent<UIDraggableItem>();
-            var rgvItem = btn.GetComponent<RecyclingGridItem>();
+            FileButtonBinder binder = FileButtonBinder.GetOrAdd(btn);
+            UIDraggableItem diag = binder != null ? binder.draggable : null;
+            RecyclingGridItem rgvItem = binder != null ? binder.gridItem : null;
             try
             {
                 if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
@@ -840,8 +1087,10 @@ namespace VPB
             _userTagVisualPulseCoroutine = null;
         }
 
-        private void RefreshVisibleUserTagRows()
+        private void RefreshVisibleUserTagRows(bool skipSelectionCache = false)
         {
+            if (!skipSelectionCache)
+                CacheAppliedUserTagsForSelection();
             try
             {
                 if (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null)
@@ -898,39 +1147,41 @@ namespace VPB
                 rt.sizeDelta = new Vector2(size, size);
                 rt.anchoredPosition = new Vector2(-8f * scale, 0f);
             }
+            LayoutElement iconLe = iconGo.GetComponent<LayoutElement>();
+            if (iconLe == null) iconLe = iconGo.AddComponent<LayoutElement>();
+            iconLe.ignoreLayout = true;
             iconGo.SetActive(true);
             iconGo.transform.SetAsLastSibling();
         }
 
+        /// <summary>
+        /// Sticky pin-strip row height only — must match virt/side-tab rows.
+        /// VLG spacing is separate; do not bake <see cref="GalleryUiDesignTokens.SideTabRowSpacingRef"/> here
+        /// (that was double-counting and made pin/filter toggles jump row gaps).
+        /// </summary>
         private float UserTagPinnedRowHeightPx()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float rowH = 35f * s;
-            try
-            {
-                float virt = CreatorVirtRowHeight();
-                if (virt > 1f) rowH = virt;
-            }
-            catch { }
-            return rowH;
+            return SideTabRowHeightPx(ChromeScale);
         }
 
         private float UserTagsAvailPinnedStickyHeightPx()
         {
             int n = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
             if (n <= 0) return 0f;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+            float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * gap + 4f * s;
         }
 
         private float UserTagsAppliedPinnedStickyHeightPx()
         {
             int n = _userTagAppliedPinnedRows != null ? _userTagAppliedPinnedRows.Count : 0;
             if (n <= 0) return 0f;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float rowH = UserTagPinnedRowHeightPx();
-            return n * rowH + Mathf.Max(0f, n - 1) * 2f * s + 4f * s;
+            float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * s;
+            return n * rowH + Mathf.Max(0f, n - 1) * gap + 4f * s;
         }
 
         private GameObject EnsureUserTagsAvailPinnedStickyGO(bool isLeft)
@@ -947,15 +1198,8 @@ namespace VPB
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
-            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            vlg.spacing = 2f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            float s = ChromeScale;
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAvailPinnedStickyGO = go;
             else rightUserTagsAvailPinnedStickyGO = go;
@@ -976,15 +1220,8 @@ namespace VPB
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = Vector2.zero;
-            VerticalLayoutGroup vlg = go.AddComponent<VerticalLayoutGroup>();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            vlg.spacing = 2f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(5 * s), Mathf.RoundToInt(5 * s), 0, Mathf.RoundToInt(4 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            float s = ChromeScale;
+            UI.AddVLG(go, GalleryUiDesignTokens.SideTabRowSpacingRef * s, UI.Pad(5f, 5f, 0f, 4f, s), TextAnchor.UpperCenter);
             go.transform.SetAsLastSibling();
             if (isLeft) leftUserTagsAppliedPinnedStickyGO = go;
             else rightUserTagsAppliedPinnedStickyGO = go;
@@ -993,10 +1230,11 @@ namespace VPB
 
         private void SyncUserTagAvailPinnedStickyRows(bool isLeft, Color utAccent, Transform tabContainer)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             GameObject strip = EnsureUserTagsAvailPinnedStickyGO(isLeft);
             if (strip == null) return;
-            for (int i = strip.transform.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+            if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.UserTagPinnedRebuild++;
+            UI.DestroyAllChildren(strip.transform);
 
             int count = _userTagStickyRows != null ? _userTagStickyRows.Count : 0;
             if (count == 0)
@@ -1006,15 +1244,16 @@ namespace VPB
             }
 
             strip.SetActive(true);
-            string pickTip = _userTagAvailFilterMode
-                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.")
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag: tag item under pointer.");
+            string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
+                ? GetUserTagPickRowTooltipFilter()
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
             float rowH = UserTagPinnedRowHeightPx();
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
 
+            // Create rows first, layout stretch, then bind labels.
+            // Bind-before-layout used CreateUIButton width (~170) with scaled font → "Create Tag: ab" then "...".
+            var stickyBtns = new GameObject[count];
             for (int ri = 0; ri < count; ri++)
             {
-                UserTagSideTabEntry ut = _userTagStickyRows[ri];
                 GameObject btnGO = UI.CreateUIButton(strip, 170, 35, "", 18, 0, 0, AnchorPresets.middleLeft, null);
                 AddHoverDelegate(btnGO);
                 LayoutElement le = btnGO.GetComponent<LayoutElement>();
@@ -1022,18 +1261,23 @@ namespace VPB
                 le.minHeight = rowH;
                 le.preferredHeight = rowH;
                 le.flexibleWidth = 1f;
-                BindUserTagVirtButton(btnGO, ut, utAccent, pickTip, isLeft);
+                stickyBtns[ri] = btnGO;
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
+
+            for (int ri = 0; ri < count; ri++)
+            {
+                if (stickyBtns[ri] == null) continue;
+                BindUserTagVirtButton(stickyBtns[ri], _userTagStickyRows[ri], utAccent, pickTip, isLeft);
+            }
         }
 
         private void SyncUserTagAppliedPinnedStickyRows(bool isLeft, List<UserTagSideTabEntry> pinnedRows, Color accent, float scale)
         {
             GameObject strip = EnsureUserTagsAppliedPinnedStickyGO(isLeft);
             if (strip == null) return;
-            for (int i = strip.transform.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(strip.transform.GetChild(i).gameObject);
+            UI.DestroyAllChildren(strip.transform);
 
             int count = pinnedRows != null ? pinnedRows.Count : 0;
             if (count == 0)
@@ -1059,7 +1303,7 @@ namespace VPB
                     null, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInset, 0f);
                 Transform last = strip.transform.GetChild(strip.transform.childCount - 1);
                 if (last != null)
-                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale, isLeft);
+                    SyncUserTagRowPinButton(last.gameObject, tagFocusSnap, false, scale, isLeft, appliedRow: true);
             }
 
             try { LayoutRebuilder.ForceRebuildLayoutImmediate(strip.GetComponent<RectTransform>()); } catch { }
@@ -1079,19 +1323,36 @@ namespace VPB
                 }
             }
             catch { }
-            if (viewportH < rowH * 2f)
+            // Invent only while sticky chrome is off (Def viewport / layout settling).
+            // Sticky-on + ≤0.5 = collapsed Mask; inventing binds rows that clip forever (Tags(N), black list).
+            bool stickyOn = (leftUserTagsAvailStickyGO != null && leftUserTagsAvailStickyGO.activeSelf)
+                || (rightUserTagsAvailStickyGO != null && rightUserTagsAvailStickyGO.activeSelf);
+            if (viewportH <= 0.5f && !stickyOn)
                 viewportH = rowH * 10f;
             return viewportH;
         }
 
+        private void InvalidateUserTagVirtWindowGate(bool isLeft)
+        {
+            if (isLeft)
+            {
+                _lastUserTagVirtFirstIdxLeft = int.MinValue;
+                _lastUserTagVirtVisibleLeft = -1;
+                _lastUserTagVirtTotalLeft = -1;
+            }
+            else
+            {
+                _lastUserTagVirtFirstIdxRight = int.MinValue;
+                _lastUserTagVirtVisibleRight = -1;
+                _lastUserTagVirtTotalRight = -1;
+            }
+        }
+
         private void RequestUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool preserveScroll)
         {
+            if (!IsUserTagsSideTabOpen(isLeft)) return;
             if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
-            if (_userTagVirtLayoutCo != null)
-            {
-                try { StopCoroutine(_userTagVirtLayoutCo); } catch { }
-                _userTagVirtLayoutCo = null;
-            }
+            StopCo(ref _userTagVirtLayoutCo);
             float offsetPx = preserveScroll ? (TryGetUserTagAvailScrollOffsetPx(isLeft) ?? 0f) : 0f;
             bool resetTop = !preserveScroll;
             _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer, resetTop, offsetPx));
@@ -1100,9 +1361,17 @@ namespace VPB
         private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool resetScrollToTop, float preserveOffsetPx)
         {
             yield return null;
+            if (!IsUserTagsSideTabOpen(isLeft))
+            {
+                _userTagVirtLayoutCo = null;
+                yield break;
+            }
             try
             {
+                // Sticky first so Mask height is final before virt window measure/bind.
+                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
                 Canvas.ForceUpdateCanvases();
+                InvalidateUserTagVirtWindowGate(isLeft);
                 if (resetScrollToTop)
                 {
                     ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
@@ -1112,7 +1381,6 @@ namespace VPB
                     ApplyUserTagAvailScrollOffsetPx(isLeft, preserveOffsetPx);
                 if (tabContainer != null)
                     UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
-                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
             }
             catch { }
             _userTagVirtLayoutCo = null;
@@ -1120,6 +1388,54 @@ namespace VPB
 
         private const char UserTagPinnedOrderLegacySep = '\x1e';
         private const string UserTagPinBtnName = "VPB_UserTagPinBtn";
+        private const string UserTagAppliedRemoveBtnName = "VPB_UserTagAppliedRemoveBtn";
+        private Sprite _userTagAppliedRemoveSprite;
+
+        private static Image AddUserTagSideChromeRoundedBg(GameObject go, Color color)
+        {
+            return UI.AddGalleryElementRoundedBg(go, color);
+        }
+
+        private static void EnsureUserTagSideChromeRoundedBg(GameObject go, Color? colorOverride = null)
+        {
+            if (go == null) return;
+            RoundedRect rr = go.GetComponent<RoundedRect>();
+            if (rr == null)
+            {
+                Image legacy = go.GetComponent<Image>();
+                if (legacy == null) return;
+                Color c = colorOverride ?? legacy.color;
+                bool ray = legacy.raycastTarget;
+                UnityEngine.Object.Destroy(legacy);
+                rr = go.AddComponent<RoundedRect>();
+                rr.color = c;
+                rr.raycastTarget = ray;
+            }
+            else if (colorOverride.HasValue)
+            {
+                rr.color = colorOverride.Value;
+            }
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            Button btn = go.GetComponent<Button>();
+            if (btn != null) btn.targetGraphic = rr;
+            UIHoverBorder hb = go.GetComponent<UIHoverBorder>();
+            if (hb != null)
+            {
+                try { hb.ApplyBorderSettings(); } catch { }
+            }
+        }
+
+        private static void SyncUserTagSideChromeRoundedBg(GameObject go)
+        {
+            EnsureUserTagSideChromeRoundedBg(go, null);
+        }
+
+        private static bool UserTagSideChromeButtonNeedsRoundedUpgrade(GameObject go)
+        {
+            if (go == null) return false;
+            Image img = go.GetComponent<Image>();
+            return img != null && !(img is RoundedRect);
+        }
 
         private static void ParseUserTagPinnedOrderSpec(string spec, List<string> dest)
         {
@@ -1206,11 +1522,7 @@ namespace VPB
             VPBConfig.Instance.GalleryUserTagPinnedOrder = EncodeUserTagPinOrder(_userTagPinOrderRuntime);
             if (immediate)
             {
-                if (_userTagPinSaveCo != null)
-                {
-                    try { StopCoroutine(_userTagPinSaveCo); } catch { }
-                    _userTagPinSaveCo = null;
-                }
+                StopCo(ref _userTagPinSaveCo);
                 try { VPBConfig.Instance.Save(false); } catch { }
                 return;
             }
@@ -1220,10 +1532,7 @@ namespace VPB
         private void ScheduleUserTagPinOrderSave()
         {
             if (!isActiveAndEnabled) return;
-            if (_userTagPinSaveCo != null)
-            {
-                try { StopCoroutine(_userTagPinSaveCo); } catch { }
-            }
+            StopCo(ref _userTagPinSaveCo);
             _userTagPinSaveCo = StartCoroutine(CoDeferredUserTagPinOrderSave());
         }
 
@@ -1316,9 +1625,126 @@ namespace VPB
                 _userTagPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
         }
 
-        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale, bool isLeft)
+        private void EnsureUserTagAppliedRemoveSprite()
+        {
+            if (_userTagAppliedRemoveSprite == null)
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/list_remove.png", Color.white);
+            if (_userTagAppliedRemoveSprite == null)
+                _userTagAppliedRemoveSprite = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
+        }
+
+        private bool ShouldShowUserTagRemoveForRow(bool appliedRow, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (selectedFiles == null || selectedFiles.Count == 0) return false;
+            if (appliedRow) return true;
+            return availSelectionState == UserTagSelectionState.On
+                || availSelectionState == UserTagSelectionState.Mixed;
+        }
+
+        private void SyncUserTagRowRemoveButton(GameObject rowGo, string tagName, float scale)
         {
             if (rowGo == null) return;
+            Transform existing = rowGo.transform.Find(UserTagAppliedRemoveBtnName);
+            GameObject removeGo = existing != null ? existing.gameObject : null;
+            if (removeGo != null && UserTagSideChromeButtonNeedsRoundedUpgrade(removeGo))
+            {
+                UnityEngine.Object.Destroy(removeGo);
+                removeGo = null;
+            }
+
+            if (removeGo == null)
+            {
+                removeGo = new GameObject(UserTagAppliedRemoveBtnName);
+                removeGo.transform.SetParent(rowGo.transform, false);
+                Image bg = AddUserTagSideChromeRoundedBg(removeGo, new Color(0.62f, 0.14f, 0.14f, 1f));
+                Button btn = removeGo.AddComponent<Button>();
+                ColorBlock cb = btn.colors;
+                cb.normalColor = Color.white;
+                cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
+                cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
+                btn.colors = cb;
+                UI.ConfigButtonFlat(btn);
+                btn.targetGraphic = bg;
+                removeGo.AddComponent<UIHoverBorder>();
+            }
+
+            string norm = VpbLocalDatabase.NormalizeGalleryUserTagName(tagName);
+            if (string.IsNullOrEmpty(norm))
+            {
+                removeGo.SetActive(false);
+                return;
+            }
+
+            EnsureUserTagAppliedRemoveSprite();
+
+            Image bgImg = removeGo.GetComponent<Image>();
+            if (bgImg != null) bgImg.color = new Color(0.62f, 0.14f, 0.14f, 1f);
+
+            Button removeBtn = removeGo.GetComponent<Button>();
+            if (removeBtn != null)
+            {
+                removeBtn.onClick.RemoveAllListeners();
+                string snap = norm;
+                removeBtn.onClick.AddListener(() => RemoveSingleAppliedUserTagFromSelection(snap));
+            }
+
+            Image iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
+            if (iconImg == null && _userTagAppliedRemoveSprite != null)
+            {
+                // Pass the red backdrop (not white): AddIconToButton overwrites the button background
+                // with its 4th arg, so Color.white here flashed the button white on the frame the icon
+                // was first created (corrected only on a later refresh once the icon child exists).
+                UI.AddIconToButton(removeGo, _userTagAppliedRemoveSprite, 6f, bgImg != null ? bgImg.color : new Color(0.62f, 0.14f, 0.14f, 1f));
+                iconImg = removeGo.transform.Find("Icon")?.GetComponent<Image>();
+            }
+            if (iconImg != null)
+            {
+                if (_userTagAppliedRemoveSprite != null) iconImg.sprite = _userTagAppliedRemoveSprite;
+                iconImg.color = Color.white;
+                iconImg.raycastTarget = false;
+            }
+
+            float edge = Mathf.Clamp(26f * scale, 20f, 36f);
+            RectTransform rt = removeGo.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = new Vector2(0f, 0.5f);
+                rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(edge, edge);
+                rt.anchoredPosition = new Vector2(6f * scale, 0f);
+            }
+            LayoutElement remLe = removeGo.GetComponent<LayoutElement>();
+            if (remLe == null) remLe = removeGo.AddComponent<LayoutElement>();
+            remLe.ignoreLayout = true;
+            removeGo.SetActive(true);
+            removeGo.transform.SetAsLastSibling();
+            SyncUserTagSideChromeRoundedBg(removeGo);
+
+            AddTooltipPlain(removeGo, VPBTranslation.T("gallery.usertags.remove_applied_row_tip", "Remove this tag from selected item(s)."));
+        }
+
+        private void HideUserTagRowRemoveButton(GameObject rowGo)
+        {
+            if (rowGo == null) return;
+            Transform existing = rowGo.transform.Find(UserTagAppliedRemoveBtnName);
+            if (existing != null) existing.gameObject.SetActive(false);
+        }
+
+        private void SyncUserTagRowPinButton(GameObject rowGo, string tagName, bool hide, float scale, bool isLeft, bool appliedRow = false, UserTagSelectionState availSelectionState = UserTagSelectionState.Off)
+        {
+            if (rowGo == null) return;
+
+            if (ShouldShowUserTagRemoveForRow(appliedRow, availSelectionState))
+            {
+                Transform pinHide = rowGo.transform.Find(UserTagPinBtnName);
+                if (pinHide != null) pinHide.gameObject.SetActive(false);
+                SyncUserTagRowRemoveButton(rowGo, tagName, scale);
+                return;
+            }
+
+            HideUserTagRowRemoveButton(rowGo);
             Transform existing = rowGo.transform.Find(UserTagPinBtnName);
             GameObject pinGo = existing != null ? existing.gameObject : null;
             if (hide)
@@ -1333,21 +1759,25 @@ namespace VPB
             bool pinned = IsUserTagPinned(norm);
             EnsureUserTagPinSprites();
 
+            if (pinGo != null && UserTagSideChromeButtonNeedsRoundedUpgrade(pinGo))
+            {
+                UnityEngine.Object.Destroy(pinGo);
+                pinGo = null;
+            }
+
             if (pinGo == null)
             {
                 pinGo = new GameObject(UserTagPinBtnName);
                 pinGo.transform.SetParent(rowGo.transform, false);
-                Image bg = pinGo.AddComponent<Image>();
-                bg.color = new Color(0.14f, 0.14f, 0.16f, 0.92f);
-                bg.raycastTarget = true;
+                Image bg = AddUserTagSideChromeRoundedBg(pinGo, new Color(0.14f, 0.14f, 0.16f, 0.92f));
                 Button btn = pinGo.AddComponent<Button>();
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
                 cb.highlightedColor = new Color(1.15f, 1.15f, 1.15f, 1f);
                 cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
                 btn.colors = cb;
-                btn.transition = Selectable.Transition.None;
-                btn.navigation = new Navigation { mode = Navigation.Mode.None };
+                UI.ConfigButtonFlat(btn);
+                btn.targetGraphic = bg;
                 pinGo.AddComponent<UIHoverBorder>();
             }
 
@@ -1380,8 +1810,12 @@ namespace VPB
                 rt.sizeDelta = new Vector2(edge, edge);
                 rt.anchoredPosition = new Vector2(6f * scale, 0f);
             }
+            LayoutElement pinLe = pinGo.GetComponent<LayoutElement>();
+            if (pinLe == null) pinLe = pinGo.AddComponent<LayoutElement>();
+            pinLe.ignoreLayout = true;
             pinGo.SetActive(true);
             pinGo.transform.SetAsLastSibling();
+            SyncUserTagSideChromeRoundedBg(pinGo);
 
             string tipKey = pinned ? "gallery.usertags.pin_off_tip" : "gallery.usertags.pin_on_tip";
             string tipDefault = pinned ? "Unpin — return tag to sorted position." : "Pin — keep tag at top of list.";
@@ -1589,6 +2023,19 @@ namespace VPB
             userTagAppliedRemoveAnchor = null;
         }
 
+        private void RemoveSingleAppliedUserTagFromSelection(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return;
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                ShowTemporaryStatus(VPBTranslation.T("gallery.usertags.none_selected", "Nothing selected."), 1.5f);
+                return;
+            }
+            userTagAppliedRemoveSelection.Clear();
+            userTagAppliedRemoveAnchor = null;
+            ApplyTagsToSelectedPackages(new List<string> { tagName }, remove: true);
+        }
+
         private void ApplyActiveFilterUserTagsToSelection()
         {
             if (activeUserTags == null || activeUserTags.Count == 0)
@@ -1620,7 +2067,7 @@ namespace VPB
         private bool TryPruneVisibleGridAfterUserTagRemove(List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
         {
             if (updatedRows == null || updatedRows.Count == 0) return false;
-            if (!_userTagAvailFilterMode || activeUserTags == null || activeUserTags.Count == 0)
+            if (!IsUserTagIncludeFilterArmed() || activeUserTags == null || activeUserTags.Count == 0)
                 return false;
             if (activeContentType != ContentType.Category || !VpbSqlite3.IsAvailable)
                 return false;
@@ -1645,8 +2092,99 @@ namespace VPB
                 if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
                 string k = (pkg ?? "") + "\n" + (ip ?? "");
                 if (!updatedKeys.Contains(k)) continue;
-                if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(cat, pkg, ip, activeUserTags))
+                if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(cat, pkg, ip, activeUserTags, UserTagFilterRequiresAllTags()))
                     removeRefs.Add(fe);
+            }
+
+            if (removeRefs.Count == 0) return false;
+
+            RemoveFileEntriesFromLists(currentFilteredFiles, removeRefs);
+            RemoveFileEntriesFromLists(lastFilteredFiles, removeRefs);
+            InvalidateGalleryPreHideFileListSnapshot();
+            RemoveFileEntriesFromLists(topSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(filterSearchBaseFiles, removeRefs);
+            RemoveFileEntriesFromLists(selectedFiles, removeRefs);
+            return true;
+        }
+
+        private bool TryGetSelectionKeyForGalleryUserTagRow(string pkgUid, string internalPath, out string selKey)
+        {
+            selKey = null;
+            if (selectedFiles != null)
+            {
+                for (int i = 0; i < selectedFiles.Count; i++)
+                {
+                    FileEntry fe = selectedFiles[i];
+                    if (fe == null) continue;
+                    if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                    if (!string.Equals(pkg ?? "", pkgUid ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(ip ?? "", internalPath ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    selKey = GetSelectionIdentityKey(fe, false);
+                    return !string.IsNullOrEmpty(selKey);
+                }
+            }
+            if (currentFilteredFiles != null)
+            {
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    FileEntry fe = currentFilteredFiles[i];
+                    if (fe == null) continue;
+                    if (!TryGetGalleryRowKeysForUserTags(fe, out string pkg, out string ip)) continue;
+                    if (!string.Equals(pkg ?? "", pkgUid ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(ip ?? "", internalPath ?? "", StringComparison.OrdinalIgnoreCase)) continue;
+                    selKey = GetSelectionIdentityKey(fe, false);
+                    return !string.IsNullOrEmpty(selKey);
+                }
+            }
+            return false;
+        }
+
+        private void SyncUntaggedTaggedPinKeysAfterMutate(bool remove, List<VpbLocalDatabase.GalleryUserTagRowKey> updatedRows)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterUntagged || updatedRows == null || updatedRows.Count == 0)
+                return;
+            if (!VpbSqlite3.IsAvailable) return;
+
+            string cat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+            if (string.IsNullOrEmpty(cat)) return;
+
+            for (int i = 0; i < updatedRows.Count; i++)
+            {
+                var r = updatedRows[i];
+                if (!TryGetSelectionKeyForGalleryUserTagRow(r.PkgUid, r.InternalPath, out string selKey))
+                    continue;
+                if (!remove)
+                {
+                    _untaggedTaggedPinKeys.Add(selKey);
+                    continue;
+                }
+                if (VpbLocalDatabase.TryGalleryRowHasNoUserTags(cat, r.PkgUid, r.InternalPath))
+                    _untaggedTaggedPinKeys.Remove(selKey);
+            }
+        }
+
+        /// <summary>Remove grid rows for deselected keys that were pinned as tagged overrides.</summary>
+        private bool TryPruneUntaggedGridForDeselectedPins(HashSet<string> deselectedSelKeys)
+        {
+            if (deselectedSelKeys == null || deselectedSelKeys.Count == 0) return false;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return false;
+
+            bool anyPin = false;
+            foreach (string k in deselectedSelKeys)
+            {
+                if (_untaggedTaggedPinKeys.Contains(k)) { anyPin = true; break; }
+            }
+            if (!anyPin) return false;
+
+            var removeRefs = new HashSet<FileEntry>();
+            for (int i = 0; i < currentFilteredFiles.Count; i++)
+            {
+                FileEntry fe = currentFilteredFiles[i];
+                if (fe == null) continue;
+                string selKey = GetSelectionIdentityKey(fe, false);
+                if (string.IsNullOrEmpty(selKey) || !deselectedSelKeys.Contains(selKey)) continue;
+                if (!_untaggedTaggedPinKeys.Remove(selKey)) continue;
+                removeRefs.Add(fe);
             }
 
             if (removeRefs.Count == 0) return false;
@@ -1677,26 +2215,16 @@ namespace VPB
             }
 
             CacheAppliedUserTagsForSelection();
+            try { SyncUntaggedTaggedPinKeysAfterMutate(remove, updatedRows); } catch { }
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
 
-            bool filterModeRemove = remove
-                && _userTagAvailFilterMode
-                && activeUserTags != null && activeUserTags.Count > 0
-                && activeContentType == ContentType.Category
-                && VpbSqlite3.IsAvailable;
+            bool filterModeRemove = remove && IsUserTagIncludeExcludeFilterArmed();
 
             if (filterModeRemove)
             {
-                if (TryPruneVisibleGridAfterUserTagRemove(updatedRows))
-                {
-                    if (recyclingGrid != null)
-                    {
-                        recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                        recyclingGrid.Refresh();
-                    }
-                    try { UpdatePaginationText(); } catch { }
-                }
+                SyncGridAfterUserTagRemoveInFilterMode(updatedRows, tags);
                 try { RefreshSelectionVisuals(); } catch { }
-                try { UpdateTabs(); } catch { }
             }
             else
             {
@@ -1874,7 +2402,7 @@ namespace VPB
                 return;
             }
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
 
             GameObject root = new GameObject("VPB_UserTagBulkBlock_v3");
@@ -1885,60 +2413,41 @@ namespace VPB
             rootRT.pivot = new Vector2(0.5f, 1f);
             rootRT.sizeDelta = Vector2.zero;
 
-            VerticalLayoutGroup vlg = root.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 7f * s;
-            vlg.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(4 * s), Mathf.RoundToInt(10 * s));
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
+            UI.AddVLG(root, 7f * s, UI.Pad(6f, 6f, 4f, 10f, s), TextAnchor.UpperCenter);
 
-            LayoutElement rootLe = root.AddComponent<LayoutElement>();
-            rootLe.flexibleWidth = 1f;
+            LayoutElement rootLe = UI.AddLE(root, flexibleWidth: 1f);
             ContentSizeFitter rootCsf = root.AddComponent<ContentSizeFitter>();
             rootCsf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject titleGo = new GameObject("BulkTitle");
-            titleGo.transform.SetParent(root.transform, false);
-            Text titleTxt = titleGo.AddComponent<Text>();
-            titleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            int titleFs = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            float titleBand = Mathf.Max(30f * s, titleFs * 1.22f);
-            titleTxt.fontSize = titleFs;
-            titleTxt.fontStyle = FontStyle.Bold;
-            titleTxt.color = Color.white;
-            titleTxt.text = string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0);
-            titleTxt.horizontalOverflow = HorizontalWrapMode.Overflow;
-            titleTxt.verticalOverflow = VerticalWrapMode.Truncate;
-            LayoutElement titleLe = titleGo.AddComponent<LayoutElement>();
-            titleLe.minHeight = Mathf.Min(30f * s, titleBand);
-            titleLe.preferredHeight = titleBand;
-            titleLe.flexibleWidth = 1f;
+            int titleFs = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
+            float miniSq = 34f * s;
+            float titleBand = Mathf.Max(miniSq, Mathf.Max(30f * s, titleFs * 1.22f));
 
-            GameObject btnRow = new GameObject("BulkBtnRow");
-            btnRow.transform.SetParent(root.transform, false);
-            HorizontalLayoutGroup hlg = btnRow.AddComponent<HorizontalLayoutGroup>();
-            hlg.padding = new RectOffset(0, 0, 0, 0);
-            hlg.spacing = 6f * s;
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.childControlWidth = true;
-            hlg.childControlHeight = true;
+            GameObject titleRow = UI.CreateChildRT(root, "TagsTitleRow");
+            UI.AddHLG(titleRow, 5f * s, childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false);
+            LayoutElement titleRowLe = UI.AddLE(titleRow, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
+
+            Text titleTxt = UI.CreateLabel(titleRow, string.Format(VPBTranslation.T("gallery.usertags.tags_with_count", "Tags ({0})"), 0),
+                titleFs, Color.white, TextAnchor.MiddleCenter, HorizontalWrapMode.Overflow, name: "BulkTitle");
+            LayoutElement titleLe = UI.AddLE(titleTxt.gameObject, minHeight: titleBand, preferredHeight: titleBand, flexibleWidth: 1f);
+
+            CreateUserTagModeMiniButton(titleRow, "F", UserTagAvailMode.FilterByTags, miniSq, s,
+                VPBTranslation.T("gallery.usertags.mini_filter_tip", "Filter Mode: grid shows items matching selected tags."));
+            CreateUserTagModeMiniButton(titleRow, "T", UserTagAvailMode.Tag, miniSq, s,
+                VPBTranslation.T("gallery.usertags.mini_tag_tip", "Tag Mode: click tags to apply them to the selection."));
+
             // false: only Apply (flexibleWidth 1) grows; true spreads width across all children and crushes the label.
-            hlg.childForceExpandWidth = false;
-            hlg.childForceExpandHeight = false;
-            LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
-            rowLe.minHeight = 46f * s;
-            rowLe.preferredHeight = 48f * s;
-            rowLe.flexibleWidth = 1f;
+            GameObject btnRow = UI.CreateChildRT(root, "BulkBtnRow");
+            UI.AddHLG(btnRow, 6f * s, childForceExpandWidth: false);
+            LayoutElement rowLe = UI.AddLE(btnRow, minHeight: 34f * s, preferredHeight: 36f * s, flexibleWidth: 1f);
 
-            float editSq = 44f * s;
+            float editSq = 36f * s;
             Sprite editSpr = UI.LoadIconSprite("vpb_icons/edit.png", new Color(0.88f, 0.88f, 0.9f, 1f));
             Color editBackdrop = new Color(0.38f, 0.26f, 0.52f, 1f);
             GameObject editBtn = UI.CreateSideTabSquareIconButton(btnRow, editSq, editSpr, ShowUserTagListEditor, editBackdrop, 8f * s);
             editBtn.name = "VPB_UserTagEditBtn";
-            AddTooltipPlain(editBtn, VPBTranslation.T("gallery.usertags.btn_edit_tooltip", "Open tag database editor: search, sort, create/remove/merge tags."));
+            AddTooltipPlain(editBtn, VPBTranslation.T("gallery.usertags.btn_edit_tooltip", "Open tag editor (Database mode): create / purge / merge / rename / categories / YAML. Same window as Set Tags."));
             if (isLeft) { leftUserTagAvailTitleText = titleTxt; leftUserTagApplyBtnText = null; }
             else { rightUserTagAvailTitleText = titleTxt; rightUserTagApplyBtnText = null; }
 
@@ -1949,9 +2458,9 @@ namespace VPB
         {
             if (footerRoot == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             float u = s * 1.38f;
-            int font = Mathf.Max(12, Mathf.RoundToInt(14f * u));
+            int font = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, u, GalleryUiDesignTokens.FontMinRef);
 
             Transform existing = footerRoot.Find("VPB_UserTagInheritVarToggleRow_v1");
             GameObject rowGo;
@@ -1971,10 +2480,7 @@ namespace VPB
                 float pad = Mathf.RoundToInt(4f * s);
                 rrt.offsetMin = new Vector2(pad, pad);
                 rrt.offsetMax = new Vector2(-pad, -pad);
-                LayoutElement le = rowGo.AddComponent<LayoutElement>();
-                le.minHeight = Mathf.Max(28f, 34f * s);
-                le.preferredHeight = Mathf.Max(28f, 34f * s);
-                le.flexibleWidth = 1f;
+                LayoutElement le = UI.AddLE(rowGo, minHeight: Mathf.Max(28f, 34f * s), preferredHeight: Mathf.Max(28f, 34f * s), flexibleWidth: 1f);
 
                 string tip = VPBTranslation.T(
                     "gallery.usertags.inherit_tags_tip",
@@ -2071,7 +2577,7 @@ namespace VPB
         private void SyncUserTagInheritVarToChildrenBtnVisual(GameObject btnGo)
         {
             if (btnGo == null) return;
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             Image img = btnGo.GetComponent<Image>();
             if (img != null)
             {
@@ -2092,7 +2598,7 @@ namespace VPB
                     : VPBTranslation.T("gallery.usertags.inherit_off", "Inherit OFF");
                 t.alignment = TextAnchor.MiddleCenter;
                 // Slight extra padding via text margins not available; keep size readable via font scaling already applied.
-                t.fontSize = Mathf.Max(12, Mathf.RoundToInt(14f * (s * 1.38f)));
+                GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.FontBodyRef, s * 1.38f, GalleryUiDesignTokens.FontMinRef);
             }
         }
 
@@ -2133,8 +2639,8 @@ namespace VPB
             Transform btnRow = bulkBlockV3.Find("BulkBtnRow");
             if (btnRow == null) return;
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float sq = 44f * s;
+            float s = ChromeScale;
+            float sq = 36f * s;
 
             Transform filterT = btnRow.Find("VPB_UserTagFilterModeBtn");
             if (filterT != null) UnityEngine.Object.Destroy(filterT.gameObject);
@@ -2146,7 +2652,7 @@ namespace VPB
                 Sprite editSpr = UI.LoadIconSprite("vpb_icons/edit.png", new Color(0.88f, 0.88f, 0.9f, 1f));
                 GameObject editGo = UI.CreateSideTabSquareIconButton(btnRow.gameObject, sq, editSpr, ShowUserTagListEditor, new Color(0.38f, 0.26f, 0.52f, 1f), 8f * s);
                 editGo.name = "VPB_UserTagEditBtn";
-                AddTooltipPlain(editGo, VPBTranslation.T("gallery.usertags.btn_edit_tooltip", "Open tag database editor: search, sort, create/remove/merge tags."));
+                AddTooltipPlain(editGo, VPBTranslation.T("gallery.usertags.btn_edit_tooltip", "Open tag editor (Database mode): create / purge / merge / rename / categories / YAML. Same window as Set Tags."));
             }
 
             GameObject filterGo = UI.CreateUIButton(
@@ -2154,14 +2660,14 @@ namespace VPB
                 0f,
                 0f,
                 VPBTranslation.T("gallery.usertags.filter_button_label", "Filter"),
-                Mathf.Max(12, Mathf.RoundToInt(13f * (s * 1.38f))),
+                GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef),
                 0f,
                 0f,
                 AnchorPresets.stretchAll,
                 OnUserTagAvailFilterModeClicked);
             filterGo.name = "VPB_UserTagFilterModeBtn";
             AddUserTagFilterButtonIconAndLabel(filterGo, s);
-            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "When on, clicking tag rows filters the main grid by those tags. When off, clicking tag rows toggles tags on selected item(s)."));
+            AddTooltipPlain(filterGo, VPBTranslation.T("gallery.usertags.filter_mode_toggle_tip", "Cycles: Tag Mode (apply tags) \u2194 Filter Mode (grid matches selected tags). Not tagged filter lives in title-bar Filter menu."));
             filterGo.transform.SetSiblingIndex(Mathf.Min(1, filterGo.transform.GetSiblingIndex()));
 
             HorizontalLayoutGroup hlg = btnRow.GetComponent<HorizontalLayoutGroup>();
@@ -2196,42 +2702,218 @@ namespace VPB
             Transform oldIcon = filterGo.transform.Find("Icon");
             if (oldIcon != null) UnityEngine.Object.Destroy(oldIcon.gameObject);
 
+            float iconSize = Mathf.Clamp(22f * s, 16f, 30f);
+            float iconPad = 10f * s;
+            float iconRightEdge = iconPad + iconSize;
+
             GameObject iconGo = new GameObject("Icon");
             iconGo.transform.SetParent(filterGo.transform, false);
-            Image iconImg = iconGo.AddComponent<Image>();
-            iconImg.raycastTarget = false;
+            Image iconImg = UI.AddImage(iconGo, Color.white, false);
             iconImg.preserveAspect = true;
-            iconImg.color = Color.white;
             RectTransform irt = iconGo.GetComponent<RectTransform>();
             if (irt != null)
             {
-                float size = Mathf.Clamp(22f * s, 16f, 30f);
                 irt.anchorMin = new Vector2(0f, 0.5f);
                 irt.anchorMax = new Vector2(0f, 0.5f);
                 irt.pivot = new Vector2(0f, 0.5f);
-                irt.sizeDelta = new Vector2(size, size);
-                irt.anchoredPosition = new Vector2(12f * s, 0f);
+                irt.sizeDelta = new Vector2(iconSize, iconSize);
+                irt.anchoredPosition = new Vector2(iconPad, 0f);
             }
 
             Text t = filterGo.GetComponentInChildren<Text>(true);
             if (t != null)
             {
                 t.gameObject.SetActive(true);
-                t.alignment = TextAnchor.MiddleRight;
+                t.alignment = TextAnchor.MiddleCenter;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 t.verticalOverflow = VerticalWrapMode.Truncate;
                 RectTransform trt = t.GetComponent<RectTransform>();
                 if (trt != null)
                 {
-                    trt.offsetMin = new Vector2(42f * s, trt.offsetMin.y);
-                    trt.offsetMax = new Vector2(-10f * s, trt.offsetMax.y);
+                    // Mirror the icon inset on both sides so the label is visually centered
+                    // in the button while never overlapping the icon on the left.
+                    float inset = iconRightEdge + 8f * s;
+                    trt.offsetMin = new Vector2(inset, trt.offsetMin.y);
+                    trt.offsetMax = new Vector2(-inset, trt.offsetMax.y);
                 }
             }
         }
 
+        private UserTagAvailMode ResolveDefaultUserTagAvailMode()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.ResolveDefaultUserTagAvailMode();
+            }
+            catch { }
+            return UserTagAvailMode.FilterByTags;
+        }
+
+        /// <summary>True when multi-tag grid filter uses Isolate (all tags); false for Compound (any tag).</summary>
+        internal bool UserTagFilterRequiresAllTags()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    return VPBConfig.Instance.IsGalleryUserTagFilterIsolate();
+            }
+            catch { }
+            return false;
+        }
+
+        private string GetUserTagPickRowTooltipFilter()
+        {
+            return UserTagFilterRequiresAllTags()
+                ? VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_all", "Tap: include on/off (all must match). Right-click or drag to Exclude row to hide items with this tag. Drag to Applied below.")
+                : VPBTranslation.T("gallery.usertags.pick_row_tooltip_filter_any", "Tap: include on/off (any can match). Right-click or drag to Exclude row to hide items with this tag. Drag to Applied below.");
+        }
+
+        /// <summary>
+        /// Include/exclude user-tag sets arm the grid filter independent of F/T work mode.
+        /// FilterUntagged browse is exclusive and ignores include/exclude until dismissed.
+        /// </summary>
+        private bool IsUserTagIncludeExcludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            if (activeUserTags != null && activeUserTags.Count > 0) return true;
+            if (excludedUserTags != null && excludedUserTags.Count > 0) return true;
+            return false;
+        }
+
+        private bool IsUserTagIncludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            return activeUserTags != null && activeUserTags.Count > 0;
+        }
+
+        private bool IsUserTagExcludeFilterArmed()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return false;
+            return excludedUserTags != null && excludedUserTags.Count > 0;
+        }
+
+        private bool UserTagNameIsInIncludeOrExcludeFilter(string tagName)
+        {
+            if (string.IsNullOrEmpty(tagName)) return false;
+            if (activeUserTags != null && activeUserTags.Contains(tagName)) return true;
+            if (excludedUserTags != null && excludedUserTags.Contains(tagName)) return true;
+            return false;
+        }
+
+        /// <summary>True when available tag row should be omitted in filter-by-tags mode (unused in current category).</summary>
+        private bool ShouldHideUnusedUserTagInFilterAvailList(UserTagSideTabEntry ut)
+        {
+            if (_userTagAvailMode != UserTagAvailMode.FilterByTags) return false;
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
+                    return false;
+            }
+            catch { return false; }
+            // Side-list search: match full vocabulary (including zero-count).
+            if (!string.IsNullOrEmpty(userTagFilter)) return false;
+            // Wait until per-category counts are ready; vocabulary-only cache must not hide everything as Count=0.
+            if (!_userTagSideTabCountsReady) return false;
+            // Fresh/wiped DB: vocabulary exists but no assignments yet — hide-unused would empty the list.
+            if (!_userTagAnyAssignmentExists) return false;
+            if (ut.Count == UserTagCreateRowCountSentinel) return false;
+            if (ut.Count == UserTagUnusedBucketHeaderSentinel) return false;
+            // Expanded Unused bucket shows zero-count rows explicitly.
+            if (_userTagShowUnusedBucket) return false;
+            if (_userTagSelectionRowCount > 0 && !string.IsNullOrEmpty(ut.Name))
+            {
+                UserTagSelectionState st = GetUserTagSelectionState(ut.Name);
+                if (st != UserTagSelectionState.Off) return false;
+            }
+            // Armed filter tags stay visible even when Count=0.
+            if (UserTagNameIsInIncludeOrExcludeFilter(ut.Name)) return false;
+            return ut.Count <= 0;
+        }
+
+        /// <summary>When User Tags side panel opens, apply configured default work mode (filter / apply). Not tagged browse filter stays until manual clear.</summary>
+        internal void ApplyDefaultUserTagAvailModeOnTagsPanelOpen()
+        {
+            UserTagAvailMode mode = ResolveDefaultUserTagAvailMode();
+            // Opening the tags rail must not dismiss title-bar Not tagged (browse filter ≠ panel work mode).
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                if (mode == UserTagAvailMode.Tag || mode == UserTagAvailMode.FilterByTags)
+                    _userTagModeBeforeUntagged = mode;
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+                try { SyncBrowseFilterChipChrome(); } catch { }
+                return;
+            }
+            if (mode == UserTagAvailMode.FilterUntagged)
+            {
+                SetUserTagAvailMode(UserTagAvailMode.FilterUntagged);
+                return;
+            }
+            if (_userTagAvailMode == mode)
+            {
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+                return;
+            }
+            RequestUserTagWorkMode(mode);
+        }
+
         private void OnUserTagAvailFilterModeClicked()
         {
-            _userTagAvailFilterMode = !_userTagAvailFilterMode;
+            // Tag \u2194 Filter only. Not tagged is title-bar browse filter — keep it armed.
+            UserTagAvailMode chrome = ResolveUserTagWorkModeForChrome();
+            if (chrome == UserTagAvailMode.Tag)
+                RequestUserTagWorkMode(UserTagAvailMode.FilterByTags);
+            else
+                RequestUserTagWorkMode(UserTagAvailMode.Tag);
+        }
+
+        /// <summary>
+        /// Switch Tag / Filter work mode. While Not tagged browse filter is on, only updates
+        /// remembered work mode + chrome — does not clear the browse filter (manual dismiss only).
+        /// </summary>
+        private void RequestUserTagWorkMode(UserTagAvailMode mode)
+        {
+            if (mode != UserTagAvailMode.Tag && mode != UserTagAvailMode.FilterByTags)
+            {
+                SetUserTagAvailMode(mode);
+                return;
+            }
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                if (_userTagModeBeforeUntagged == mode)
+                {
+                    try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                    return;
+                }
+                _userTagModeBeforeUntagged = mode;
+                try
+                {
+                    string t = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
+                    string p = currentPath ?? "";
+                    if (!string.IsNullOrEmpty(t) || !string.IsNullOrEmpty(p))
+                        SaveCurrentCategoryFilterState(t, p);
+                }
+                catch { }
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                return;
+            }
+            SetUserTagAvailMode(mode);
+        }
+
+        private void SetUserTagAvailMode(UserTagAvailMode mode)
+        {
+            UserTagAvailMode prev = _userTagAvailMode;
+            if (prev == mode) return;
+            if (mode == UserTagAvailMode.FilterUntagged
+                && prev != UserTagAvailMode.FilterUntagged)
+                _userTagModeBeforeUntagged = prev == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
+            _userTagAvailMode = mode;
+            if (prev == UserTagAvailMode.FilterUntagged || _userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                ClearUntaggedTaggedPinKeys();
             try
             {
                 string t = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
@@ -2241,8 +2923,113 @@ namespace VPB
             }
             catch { }
             SyncUserTagFilterModeToggleVisualsEverywhere();
-            try { RefreshFiles(true, false, false, null); } catch { }
-            try { UpdateTabs(); } catch { }
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            try { SyncBrowseFilterChipChrome(); } catch { }
+            if (globalSourceFilterMenuRoot != null && globalSourceFilterMenuRoot.activeSelf)
+            {
+                try { RebuildGlobalSourceFilterMenuOptions(); } catch { }
+            }
+
+            // Grid only changes when untagged browse toggles. Include/exclude filters stay live across F↔T
+            // (work mode is list density + click binding only — never re-arm/disarm filter sets).
+            bool untaggedInvolved = prev == UserTagAvailMode.FilterUntagged
+                || mode == UserTagAvailMode.FilterUntagged;
+            if (untaggedInvolved)
+            {
+                try { RefreshFiles(true, false, false, null); } catch { }
+            }
+
+            // Prefer in-place User Tags rebuild over full UpdateTabs — avoids left-panel flash on F↔T.
+            _userTagVirtViewSig = null;
+            bool leftOpen = IsUserTagsSideTabOpen(true);
+            bool rightOpen = IsUserTagsSideTabOpen(false);
+            if (leftOpen || rightOpen)
+            {
+                if (leftOpen)
+                {
+                    try { RefreshUserTagsAvailPaneInPlace(true); } catch { }
+                    if (leftTabContainerGO != null)
+                        try { RequestUserTagVirtLayoutRefresh(true, leftTabContainerGO.transform, preserveScroll: true); } catch { }
+                }
+                if (rightOpen)
+                {
+                    try { RefreshUserTagsAvailPaneInPlace(false); } catch { }
+                    if (rightTabContainerGO != null)
+                        try { RequestUserTagVirtLayoutRefresh(false, rightTabContainerGO.transform, preserveScroll: true); } catch { }
+                }
+            }
+            else
+            {
+                try { UpdateTabs(); } catch { }
+            }
+        }
+
+        /// <summary>Backdrop colour for Tag / Filter work modes (F/T mini + sticky toggle).</summary>
+        private Color UserTagAvailModeColor(UserTagAvailMode mode)
+        {
+            switch (mode)
+            {
+                case UserTagAvailMode.Tag: return new Color(0.20f, 0.50f, 0.25f, 1f);
+                case UserTagAvailMode.FilterByTags: return new Color(0.18f, 0.38f, 0.62f, 1f);
+                default: return new Color(0.18f, 0.38f, 0.62f, 1f);
+            }
+        }
+
+        /// <summary>Work mode shown on side-rail chrome while Not tagged browse filter is on.</summary>
+        private UserTagAvailMode ResolveUserTagWorkModeForChrome()
+        {
+            if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+            {
+                return _userTagModeBeforeUntagged == UserTagAvailMode.Tag
+                    ? UserTagAvailMode.Tag
+                    : UserTagAvailMode.FilterByTags;
+            }
+            return _userTagAvailMode;
+        }
+
+        private void CreateUserTagModeMiniButton(GameObject parent, string letter, UserTagAvailMode mode, float sq, float s, string tip)
+        {
+            GameObject go = new GameObject("VPB_UserTagModeMiniBtn_" + mode);
+            go.transform.SetParent(parent.transform, false);
+            Image img = AddUserTagSideChromeRoundedBg(go, UserTagAvailModeColor(mode));
+            Button btn = go.AddComponent<Button>();
+            UI.ConfigButtonFlat(btn);
+            btn.targetGraphic = img;
+            UserTagAvailMode target = mode;
+            btn.onClick.AddListener(() => RequestUserTagWorkMode(target));
+            go.AddComponent<UIHoverBorder>();
+
+            LayoutElement le = UI.AddLE(go, minWidth: sq, minHeight: sq, preferredWidth: sq, preferredHeight: sq, flexibleWidth: 0f, flexibleHeight: 0f);
+
+            UI.CreateLabel(go, letter, GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef),
+                Color.white, TextAnchor.MiddleCenter, raycastTarget: false);
+
+            AddTooltipPlain(go, tip);
+        }
+
+        private void SyncUserTagModeMiniButtons(Transform bulkBlockV3)
+        {
+            if (bulkBlockV3 == null) return;
+            Transform row = bulkBlockV3.Find("TagsTitleRow");
+            if (row == null) return;
+            // Legacy N mini: Not tagged moved to title-bar Filter menu.
+            Transform legacyN = row.Find("VPB_UserTagModeMiniBtn_" + UserTagAvailMode.FilterUntagged);
+            if (legacyN != null) UnityEngine.Object.Destroy(legacyN.gameObject);
+            SyncUserTagModeMiniButton(row, UserTagAvailMode.FilterByTags);
+            SyncUserTagModeMiniButton(row, UserTagAvailMode.Tag);
+        }
+
+        private void SyncUserTagModeMiniButton(Transform row, UserTagAvailMode mode)
+        {
+            Transform tr = row.Find("VPB_UserTagModeMiniBtn_" + mode);
+            if (tr == null) return;
+            bool active = _userTagAvailMode == mode;
+            Color baseCol = UserTagAvailModeColor(mode);
+            Color showCol = active ? baseCol : new Color(baseCol.r * 0.42f, baseCol.g * 0.42f, baseCol.b * 0.42f, 0.85f);
+            EnsureUserTagSideChromeRoundedBg(tr.gameObject, showCol);
+            Text lbl = tr.GetComponentInChildren<Text>(true);
+            if (lbl != null)
+                lbl.color = active ? Color.white : UI.TextMuted;
         }
 
         private void SyncUserTagFilterModeToggleVisualsEverywhere()
@@ -2262,6 +3049,7 @@ namespace VPB
         private void SyncUserTagFilterModeToggleVisualSticky(Transform bulkBlockV3)
         {
             if (bulkBlockV3 == null) return;
+            SyncUserTagModeMiniButtons(bulkBlockV3);
             Transform btnRow = bulkBlockV3.Find("BulkBtnRow");
             if (btnRow == null) return;
             Transform filterBtn = btnRow.Find("VPB_UserTagFilterModeBtn");
@@ -2274,602 +3062,91 @@ namespace VPB
             Sprite tagSpr = UI.LoadIconSprite("vpb_icons/gallery_tags.png", iconTint);
             if (tagSpr == null) tagSpr = UI.LoadIconSprite("vpb_icons/tags.png", iconTint);
             if (tagSpr == null) tagSpr = offSpr;
+            UserTagAvailMode chromeMode = ResolveUserTagWorkModeForChrome();
             if (iconImg != null)
             {
-                iconImg.sprite = _userTagAvailFilterMode ? onSpr : tagSpr;
+                if (chromeMode == UserTagAvailMode.FilterByTags)
+                    iconImg.sprite = onSpr;
+                else
+                    iconImg.sprite = tagSpr;
                 iconImg.color = Color.white;
             }
             Text label = filterBtn.GetComponentInChildren<Text>(true);
             if (label != null)
             {
                 label.gameObject.SetActive(true);
-                label.text = _userTagAvailFilterMode
-                    ? VPBTranslation.T("gallery.usertags.filter_button_on_label", "Filter Mode")
-                    : VPBTranslation.T("gallery.usertags.tag_mode_button_label", "Tag Mode");
+                if (chromeMode == UserTagAvailMode.FilterByTags)
+                    label.text = VPBTranslation.T("gallery.usertags.filter_button_on_label", "Filter Mode");
+                else
+                    label.text = VPBTranslation.T("gallery.usertags.tag_mode_button_label", "Tag Mode");
             }
             Image bd = filterBtn.GetComponent<Image>();
             if (bd != null)
             {
                 Color tagModeBackdrop = new Color(0.20f, 0.50f, 0.25f, 1f);
                 Color filterModeBackdrop = new Color(0.18f, 0.38f, 0.62f, 1f);
-                bd.color = _userTagAvailFilterMode ? filterModeBackdrop : tagModeBackdrop;
+                bd.color = chromeMode == UserTagAvailMode.FilterByTags
+                    ? filterModeBackdrop
+                    : tagModeBackdrop;
             }
         }
 
-        private void ShowUserTagListEditor()
+        // ShowUserTagListEditor / HideUserTagListEditor / EnsureUserTagEditorUiBuilt live in
+        // GalleryPanel.TagEditor.cs — unified DetailStripTagMenu (Tag | Database modes).
+
+        /// <summary>
+        /// Shared merge/rename name dialog: dim root, centered panel, title, single-line input, Cancel/OK row.
+        /// </summary>
+        private static void UserTagEditorBuildNameDialog(
+            Transform parent,
+            string rootName,
+            string panelName,
+            string inputName,
+            string buttonsName,
+            string title,
+            string titleObjectName,
+            string placeholder,
+            string cancelLabel,
+            string confirmLabel,
+            int titleFont,
+            int bodyFont,
+            int smallFont,
+            float s,
+            UnityAction onCancel,
+            UnityAction onConfirm,
+            out GameObject rootGo,
+            out Text titleText,
+            out InputField input)
         {
-            if (backgroundBoxGO == null) return;
-            EnsureUserTagEditorUiBuilt();
-            if (_userTagEditorRoot == null) return;
-            _userTagEditorRowSelection.Clear();
-            _userTagEditorAnchorTag = null;
-            _userTagEditorSortMode = 0;
-            if (_userTagEditorFilterInput != null) _userTagEditorFilterInput.text = "";
-            if (_userTagEditorNewTagInput != null) _userTagEditorNewTagInput.text = "";
-            if (_userTagEditorMergeModalGo != null) _userTagEditorMergeModalGo.SetActive(false);
-            if (_userTagEditorMergeModalInput != null) _userTagEditorMergeModalInput.text = "";
-            if (_userTagEditorRenameModalGo != null) _userTagEditorRenameModalGo.SetActive(false);
-            if (_userTagEditorRenameModalInput != null) _userTagEditorRenameModalInput.text = "";
-            _userTagEditorRenameSourcePrefix = null;
-            UserTagEditorSyncSortIcon();
-            RebuildUserTagEditorRows();
-            _userTagEditorRoot.SetActive(true);
-            _userTagEditorRoot.transform.SetAsLastSibling();
-        }
+            GameObject panel;
+            rootGo = UI.CreateModalChrome(
+                parent.gameObject, rootName, 420f * s, 200f * s,
+                new Color(0.14f, 0.14f, 0.17f, 1f), null, out panel, dimAlpha: 0.5f);
+            panel.name = panelName;
+            rootGo.SetActive(false);
+            UI.AddVLG(panel, 10f * s, UI.Pad(14f, 14f, 12f, 12f, s));
 
-        private void HideUserTagListEditor()
-        {
-            if (_userTagEditorRoot != null)
-                _userTagEditorRoot.SetActive(false);
-        }
+            titleText = UI.CreateLabel(panel, title, titleFont, Color.white, name: titleObjectName);
+            UI.AddLE(titleText.gameObject, minHeight: 24f * s, flexibleWidth: 1f);
 
-        private void EnsureUserTagEditorUiBuilt()
-        {
-            if (_userTagEditorRoot != null && _userTagEditorRoot.name != "VPB_UserTagEditorOverlay")
-            {
-                UnityEngine.Object.Destroy(_userTagEditorRoot);
-                _userTagEditorRoot = null;
-                _userTagEditorRowsParent = null;
-                _userTagEditorFilterInput = null;
-                _userTagEditorNewTagInput = null;
-                _userTagEditorNewTagInputChrome = null;
-                UserTagEditorStopNewTagChromeFlash();
-                _userTagEditorSortIconImage = null;
-                _userTagEditorTitleText = null;
-                _userTagEditorMergeModalGo = null;
-                _userTagEditorMergeModalTitleText = null;
-                _userTagEditorMergeModalInput = null;
-                _userTagEditorRenameModalGo = null;
-                _userTagEditorRenameModalTitleText = null;
-                _userTagEditorRenameModalInput = null;
-                _userTagEditorRenameSourcePrefix = null;
-            }
-            if (_userTagEditorRoot != null && _userTagEditorRoot.transform.Find("UserTagEditorPanel/TitleRow/TagsDbTitle") == null)
-            {
-                UnityEngine.Object.Destroy(_userTagEditorRoot);
-                _userTagEditorRoot = null;
-                _userTagEditorRowsParent = null;
-                _userTagEditorFilterInput = null;
-                _userTagEditorNewTagInput = null;
-                _userTagEditorNewTagInputChrome = null;
-                UserTagEditorStopNewTagChromeFlash();
-                _userTagEditorSortIconImage = null;
-                _userTagEditorTitleText = null;
-                _userTagEditorMergeModalGo = null;
-                _userTagEditorMergeModalTitleText = null;
-                _userTagEditorMergeModalInput = null;
-                _userTagEditorRenameModalGo = null;
-                _userTagEditorRenameModalTitleText = null;
-                _userTagEditorRenameModalInput = null;
-                _userTagEditorRenameSourcePrefix = null;
-            }
-            if (_userTagEditorRoot != null) return;
-            if (backgroundBoxGO == null) return;
+            input = UI.CreateChromeLayoutInputField(
+                panel.transform, bodyFont, 36f * s, 1f, 8f * s, 4f * s,
+                new Color(0.07f, 0.07f, 0.09f, 1f), new Color(0.42f, 0.42f, 0.45f, 1f),
+                placeholder, inputName);
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float u = s * 1.38f;
-            int smallFont = Mathf.Max(11, Mathf.RoundToInt(13f * u));
-            int bodyFont = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            float headerChromeSq = Mathf.Max(30f, 36f * s);
-            float searchBarH = headerChromeSq;
+            GameObject btnRow = UI.CreateChildRT(panel, buttonsName);
+            UI.AddHLG(btnRow, 8f * s, childAlignment: TextAnchor.MiddleCenter);
+            UI.AddLE(btnRow, minHeight: 40f * s, flexibleWidth: 1f);
 
-            GameObject dim = new GameObject("VPB_UserTagEditorOverlay");
-            dim.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform dimRT = dim.AddComponent<RectTransform>();
-            dimRT.anchorMin = Vector2.zero;
-            dimRT.anchorMax = Vector2.one;
-            dimRT.sizeDelta = Vector2.zero;
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
-            dimImg.raycastTarget = true;
-            Button dimBtn = dim.AddComponent<Button>();
-            ColorBlock dcb = dimBtn.colors;
-            dcb.normalColor = Color.white;
-            dimBtn.colors = dcb;
-            dimBtn.transition = Selectable.Transition.None;
-            dimBtn.onClick.AddListener(HideUserTagListEditor);
+            GameObject cancel = UI.CreateUIButton(btnRow, 0f, 0f, cancelLabel, smallFont, 0f, 0f, AnchorPresets.stretchAll, onCancel);
+            cancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
+            UI.AddLE(cancel, minHeight: 38f * s, flexibleWidth: 1f);
 
-            GameObject panel = new GameObject("UserTagEditorPanel");
-            panel.transform.SetParent(dim.transform, false);
-            RectTransform prt = panel.AddComponent<RectTransform>();
-            prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-            prt.pivot = new Vector2(0.5f, 0.5f);
-            prt.sizeDelta = new Vector2(620f * s, 720f * s);
+            GameObject ok = UI.CreateUIButton(btnRow, 0f, 0f, confirmLabel, smallFont, 0f, 0f, AnchorPresets.stretchAll, onConfirm);
+            ok.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
+            UI.AddLE(ok, minHeight: 38f * s, flexibleWidth: 1f);
 
-            Image pbg = panel.AddComponent<Image>();
-            pbg.color = new Color(0.11f, 0.11f, 0.13f, 1f);
-            pbg.raycastTarget = true;
-
-            VerticalLayoutGroup pvlg = panel.AddComponent<VerticalLayoutGroup>();
-            pvlg.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            pvlg.spacing = 8f * s;
-            pvlg.childControlWidth = true;
-            pvlg.childControlHeight = true;
-            pvlg.childForceExpandWidth = true;
-            pvlg.childForceExpandHeight = false;
-
-            GameObject titleRow = new GameObject("TitleRow");
-            titleRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup trh = titleRow.AddComponent<HorizontalLayoutGroup>();
-            trh.childAlignment = TextAnchor.UpperLeft;
-            trh.spacing = 0f;
-            trh.childControlWidth = true;
-            trh.childControlHeight = true;
-            trh.childForceExpandWidth = true;
-            trh.childForceExpandHeight = false;
-            LayoutElement titleRowLe = titleRow.AddComponent<LayoutElement>();
-            titleRowLe.minHeight = Mathf.Max(26f * s, headerChromeSq * 0.72f);
-            titleRowLe.preferredHeight = titleRowLe.minHeight;
-
-            GameObject titleGo = new GameObject("TagsDbTitle");
-            titleGo.transform.SetParent(titleRow.transform, false);
-            Text headerTitleTxt = titleGo.AddComponent<Text>();
-            headerTitleTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            headerTitleTxt.fontSize = Mathf.Max(14, Mathf.RoundToInt(17f * u));
-            headerTitleTxt.fontStyle = FontStyle.Bold;
-            headerTitleTxt.color = new Color(0.92f, 0.92f, 0.95f, 1f);
-            headerTitleTxt.alignment = TextAnchor.UpperLeft;
-            _userTagEditorTitleText = headerTitleTxt;
-            LayoutElement titleHLe = titleGo.AddComponent<LayoutElement>();
-            titleHLe.flexibleWidth = 0f;
-            titleHLe.minHeight = titleRowLe.minHeight;
-            ContentSizeFitter titleCsf = titleGo.AddComponent<ContentSizeFitter>();
-            titleCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            titleCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            GameObject headerRow = new GameObject("HeaderRow");
-            headerRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup hh = headerRow.AddComponent<HorizontalLayoutGroup>();
-            hh.childAlignment = TextAnchor.MiddleLeft;
-            hh.spacing = 6f * s;
-            hh.childControlWidth = true;
-            hh.childControlHeight = true;
-            hh.childForceExpandWidth = false;
-            hh.childForceExpandHeight = false;
-            LayoutElement hle = headerRow.AddComponent<LayoutElement>();
-            hle.minHeight = Mathf.Max(headerChromeSq, searchBarH);
-            hle.preferredHeight = headerChromeSq;
-
-            float sortSq = headerChromeSq;
-            Color sortBackdropCol = new Color(0.22f, 0.42f, 0.58f, 1f);
-            Sprite sortSpr0 = sceneSourceSortModeSprites != null && sceneSourceSortModeSprites.Length > 0 ? sceneSourceSortModeSprites[0] : null;
-            GameObject sortBtnGo = UI.CreateSideTabSquareIconButton(headerRow, sortSq, sortSpr0, UserTagEditorCycleSort, sortBackdropCol, 5f * s);
-            sortBtnGo.name = "UserTagEditorSortBtn";
-            Transform sortIconTr = sortBtnGo.transform.Find("Icon");
-            _userTagEditorSortIconImage = sortIconTr != null ? sortIconTr.GetComponent<Image>() : null;
-            UserTagEditorSyncSortIcon();
-            AddTooltipPlain(sortBtnGo, VPBTranslation.T("gallery.usertags.editor_sort_cycle_tip", "Sort list: tap to cycle name A→Z / Z→A / count high→low / low→high."));
-
-            GameObject filterGo = new GameObject("FilterInput");
-            filterGo.transform.SetParent(headerRow.transform, false);
-            Image fiBg = filterGo.AddComponent<Image>();
-            fiBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
-            LayoutElement fiLe = filterGo.AddComponent<LayoutElement>();
-            fiLe.flexibleWidth = 1f;
-            fiLe.minWidth = 0f;
-            fiLe.minHeight = searchBarH;
-
-            GameObject fta = new GameObject("TextArea");
-            fta.transform.SetParent(filterGo.transform, false);
-            RectTransform ftaRt = fta.AddComponent<RectTransform>();
-            ftaRt.anchorMin = Vector2.zero;
-            ftaRt.anchorMax = Vector2.one;
-            ftaRt.offsetMin = new Vector2(8f * s, 2f * s);
-            ftaRt.offsetMax = new Vector2(-8f * s, -2f * s);
-            GameObject fph = new GameObject("Placeholder");
-            fph.transform.SetParent(fta.transform, false);
-            Text fphT = fph.AddComponent<Text>();
-            fphT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            fphT.fontSize = bodyFont;
-            fphT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            fphT.alignment = TextAnchor.MiddleLeft;
-            fphT.text = VPBTranslation.T("gallery.usertags.editor_filter_ph", "Filter list…");
-            RectTransform fphRt = fph.GetComponent<RectTransform>();
-            fphRt.anchorMin = Vector2.zero;
-            fphRt.anchorMax = Vector2.one;
-            fphRt.sizeDelta = Vector2.zero;
-            GameObject ftc = new GameObject("Text");
-            ftc.transform.SetParent(fta.transform, false);
-            Text ftcT = ftc.AddComponent<Text>();
-            ftcT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ftcT.fontSize = bodyFont;
-            ftcT.color = Color.white;
-            ftcT.alignment = TextAnchor.MiddleLeft;
-            RectTransform ftcRt = ftc.GetComponent<RectTransform>();
-            ftcRt.anchorMin = Vector2.zero;
-            ftcRt.anchorMax = Vector2.one;
-            ftcRt.sizeDelta = Vector2.zero;
-            _userTagEditorFilterInput = filterGo.AddComponent<InputField>();
-            _userTagEditorFilterInput.textComponent = ftcT;
-            _userTagEditorFilterInput.placeholder = fphT;
-            _userTagEditorFilterInput.lineType = InputField.LineType.SingleLine;
-            _userTagEditorFilterInput.onValueChanged.AddListener(_ => RebuildUserTagEditorRows());
-
-            float clearSz = searchBarH;
-            Sprite clearSpr = UI.LoadIconSprite("vpb_icons/clear_selection.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            Color clearSearchBackdrop = new Color(0.44f, 0.36f, 0.20f, 1f);
-            GameObject clearBtn = UI.CreateSideTabSquareIconButton(headerRow, clearSz, clearSpr, UserTagEditorClearFilter, clearSearchBackdrop, 5f * s);
-            AddTooltipPlain(clearBtn, VPBTranslation.T("gallery.usertags.editor_clear_search_tip", "Clear filter text and highlighted row selection"));
-
-            float closeSz = searchBarH;
-            Sprite closeSpr = UI.LoadIconSprite("vpb_icons/close.png", new Color(0.9f, 0.9f, 0.9f, 1f));
-            Color closeBackdrop = new Color(0.52f, 0.30f, 0.32f, 1f);
-            GameObject closeBtn = UI.CreateSideTabSquareIconButton(headerRow, closeSz, closeSpr, HideUserTagListEditor, closeBackdrop, 6f * s);
-            AddTooltipPlain(closeBtn, VPBTranslation.T("gallery.usertags.editor_close_tip", "Close"));
-
-            GameObject scrollGO = UI.CreateVScrollableContent(panel, new Color(0, 0, 0, 0), AnchorPresets.stretchAll, 0f, 300f * s, Vector2.zero, 14f * s, 3f * s, false);
-            LayoutElement scLe = scrollGO.AddComponent<LayoutElement>();
-            scLe.flexibleHeight = 1f;
-            scLe.minHeight = 280f * s;
-            Transform vp = scrollGO.transform.Find("Viewport");
-            _userTagEditorRowsParent = vp != null ? vp.Find("Content") : null;
-
-            GameObject newTagBlock = new GameObject("NewTagBlock");
-            newTagBlock.transform.SetParent(panel.transform, false);
-            VerticalLayoutGroup ntbV = newTagBlock.AddComponent<VerticalLayoutGroup>();
-            ntbV.spacing = 4f * s;
-            ntbV.childAlignment = TextAnchor.UpperLeft;
-            ntbV.childControlWidth = true;
-            ntbV.childControlHeight = true;
-            ntbV.childForceExpandWidth = true;
-            ntbV.childForceExpandHeight = false;
-            LayoutElement ntbLe = newTagBlock.AddComponent<LayoutElement>();
-            ntbLe.flexibleWidth = 1f;
-            ntbLe.minHeight = 152f * s;
-            ntbLe.preferredHeight = 168f * s;
-
-            GameObject newInGo = new GameObject("NewTagInput");
-            newInGo.transform.SetParent(newTagBlock.transform, false);
-            Image nBg = newInGo.AddComponent<Image>();
-            nBg.color = UserTagEditorNewTagChromeBaseCol;
-            _userTagEditorNewTagInputChrome = nBg;
-            LayoutElement nLe = newInGo.AddComponent<LayoutElement>();
-            nLe.flexibleWidth = 1f;
-            nLe.minHeight = 160f * s;
-            nLe.preferredHeight = 168f * s;
-            GameObject nta = new GameObject("TextArea");
-            nta.transform.SetParent(newInGo.transform, false);
-            RectTransform ntaRt = nta.AddComponent<RectTransform>();
-            ntaRt.anchorMin = Vector2.zero;
-            ntaRt.anchorMax = Vector2.one;
-            ntaRt.offsetMin = new Vector2(8f * s, 6f * s);
-            ntaRt.offsetMax = new Vector2(-8f * s, -6f * s);
-            GameObject nph = new GameObject("Placeholder");
-            nph.transform.SetParent(nta.transform, false);
-            Text nphT = nph.AddComponent<Text>();
-            nphT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            nphT.fontSize = bodyFont;
-            nphT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            nphT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            nphT.verticalOverflow = VerticalWrapMode.Overflow;
-            nphT.text = VPBTranslation.T("gallery.usertags.editor_new_ph", "Type or paste tag names here…");
-            RectTransform nphRt = nph.GetComponent<RectTransform>();
-            nphRt.anchorMin = Vector2.zero;
-            nphRt.anchorMax = Vector2.one;
-            nphRt.sizeDelta = Vector2.zero;
-            GameObject ntx = new GameObject("Text");
-            ntx.transform.SetParent(nta.transform, false);
-            Text ntxT = ntx.AddComponent<Text>();
-            ntxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ntxT.fontSize = bodyFont;
-            ntxT.color = Color.white;
-            ntxT.horizontalOverflow = HorizontalWrapMode.Wrap;
-            ntxT.verticalOverflow = VerticalWrapMode.Overflow;
-            RectTransform ntxRt = ntx.GetComponent<RectTransform>();
-            ntxRt.anchorMin = Vector2.zero;
-            ntxRt.anchorMax = Vector2.one;
-            ntxRt.sizeDelta = Vector2.zero;
-            _userTagEditorNewTagInput = newInGo.AddComponent<InputField>();
-            _userTagEditorNewTagInput.textComponent = ntxT;
-            _userTagEditorNewTagInput.placeholder = nphT;
-            _userTagEditorNewTagInput.lineType = InputField.LineType.MultiLineNewline;
-            _userTagEditorNewTagInput.characterLimit = 0;
-            FixMultilineHomeEndBehavior(_userTagEditorNewTagInput);
-
-            string userTagEditorInfoWisdom =
-                VPBTranslation.T(
-                    "gallery.usertags.editor_paste_hint",
-                    "Create-tag button: one tag per line (newline split). Blank lines ignored; trim line ends. Other fields may still use comma / tab / semicolon where noted.")
-                + "\n"
-                + VPBTranslation.T(
-                    "gallery.usertags.editor_tag_rules_hint",
-                    "Each tag: 1–512 characters; unicode / emoji / punctuation / spaces allowed. No line breaks inside name; control chars rejected (tab allowed). Names fold lowercase for dedupe.")
-                + "\n"
-                + VPBTranslation.T(
-                    "gallery.usertags.editor_limits_hint",
-                    "Up to 10 000 distinct names per paste; library holds up to 10 000 tag names; each item may have up to 100 tags.");
-
-            float actSq = 1.618f * headerChromeSq;
-
-            GameObject actionRow = new GameObject("ActionRow");
-            actionRow.transform.SetParent(panel.transform, false);
-            HorizontalLayoutGroup arH = actionRow.AddComponent<HorizontalLayoutGroup>();
-            arH.spacing = 8f * s;
-            arH.childAlignment = TextAnchor.MiddleCenter;
-            arH.childControlWidth = true;
-            arH.childControlHeight = true;
-            arH.childForceExpandWidth = false;
-            arH.childForceExpandHeight = false;
-            LayoutElement arLe = actionRow.AddComponent<LayoutElement>();
-            arLe.minHeight = actSq + 4f * s;
-            arLe.preferredHeight = actSq + 4f * s;
-
-            GameObject arPadL = new GameObject("PadL");
-            arPadL.transform.SetParent(actionRow.transform, false);
-            LayoutElement arPadLle = arPadL.AddComponent<LayoutElement>();
-            arPadLle.flexibleWidth = 1f;
-            arPadLle.minWidth = 0f;
-
-            Color createCol = new Color(0.25f, 0.45f, 0.28f, 1f);
-            Color removeCol = new Color(0.45f, 0.22f, 0.22f, 1f);
-            Color mergeCol = new Color(0.22f, 0.38f, 0.55f, 1f);
-            Color ioImpCol = new Color(0.24f, 0.40f, 0.35f, 1f);
-            Color ioExpCol = new Color(0.24f, 0.32f, 0.48f, 1f);
-            Sprite sprPlus = UI.LoadIconSprite("vpb_icons/tag_plus.png", Color.white);
-            Sprite sprMinus = UI.LoadIconSprite("vpb_icons/tag_minus.png", Color.white);
-            Sprite sprMerge = UI.LoadIconSprite("vpb_icons/arrow_merge.png", Color.white);
-            Sprite sprImp = UI.LoadIconSprite("vpb_icons/file_import.png", Color.white);
-            Sprite sprExp = UI.LoadIconSprite("vpb_icons/file_export.png", Color.white);
-            Sprite sprInfo = UI.LoadIconSprite("vpb_icons/info_square.png", Color.white);
-            GameObject createTagsBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprPlus, UserTagEditorOnCreateTagsClicked, createCol, 10f * s);
-            AddTooltipPlain(createTagsBtn, VPBTranslation.T("gallery.usertags.editor_create_tags_tip", "Create tag rows: one tag per line (newline split). Blank lines skipped; trim line ends."));
-            GameObject removeSelBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprMinus, UserTagEditorRemoveSelectedFromDb, removeCol, 10f * s);
-            AddTooltipPlain(removeSelBtn, VPBTranslation.T("gallery.usertags.editor_remove_selected_tip", "Delete selected tag(s) from the database for all items (cannot undo)."));
-            GameObject mergeBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprMerge, UserTagEditorOpenMergeDialog, mergeCol, 10f * s);
-            AddTooltipPlain(mergeBtn, VPBTranslation.T("gallery.usertags.editor_merge_tip", "Merge selected tags into one name (opens confirmation)."));
-            Color renameCol = new Color(0.26f, 0.34f, 0.46f, 1f);
-            Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
-            GameObject renameBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprRename, UserTagEditorOpenRenameDialog, renameCol, 10f * s);
-            AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.usertags.editor_rename_tip", "Rename the selected tag (opens dialog)."));
-            GameObject impBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprImp, UserTagEditorBeginImportYaml, ioImpCol, 10f * s);
-            AddTooltipPlain(impBtn, VPBTranslation.T("gallery.usertags.editor_import_tip", "Import tag assignments from a YAML file (tag→items or item→tags)."));
-            GameObject expBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprExp, UserTagEditorBeginExportYaml, ioExpCol, 10f * s);
-            AddTooltipPlain(expBtn, VPBTranslation.T("gallery.usertags.editor_export_tip", "Export two YAML files: tag→items and item→tags (same folder, shared base name)."));
-
-            Color infoBackdrop = new Color(0.30f, 0.34f, 0.38f, 1f);
-            GameObject infoBtn = UI.CreateSideTabSquareIconButton(actionRow, actSq, sprInfo, null, infoBackdrop, 10f * s);
-            AddTooltipPlain(infoBtn, userTagEditorInfoWisdom);
-
-            GameObject arPadR = new GameObject("PadR");
-            arPadR.transform.SetParent(actionRow.transform, false);
-            LayoutElement arPadRle = arPadR.AddComponent<LayoutElement>();
-            arPadRle.flexibleWidth = 1f;
-            arPadRle.minWidth = 0f;
-
-            _userTagEditorMergeModalGo = new GameObject("UserTagEditorMergeModal");
-            _userTagEditorMergeModalGo.transform.SetParent(dim.transform, false);
-            RectTransform mmRootRt = _userTagEditorMergeModalGo.AddComponent<RectTransform>();
-            mmRootRt.anchorMin = Vector2.zero;
-            mmRootRt.anchorMax = Vector2.one;
-            mmRootRt.sizeDelta = Vector2.zero;
-            Image mmDim = _userTagEditorMergeModalGo.AddComponent<Image>();
-            mmDim.color = new Color(0f, 0f, 0f, 0.5f);
-            mmDim.raycastTarget = true;
-            _userTagEditorMergeModalGo.SetActive(false);
-
-            GameObject mmPanel = new GameObject("MergeDialogPanel");
-            mmPanel.transform.SetParent(_userTagEditorMergeModalGo.transform, false);
-            RectTransform mmPanelRt = mmPanel.AddComponent<RectTransform>();
-            mmPanelRt.anchorMin = mmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            mmPanelRt.pivot = new Vector2(0.5f, 0.5f);
-            mmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image mmPbg = mmPanel.AddComponent<Image>();
-            mmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
-            mmPbg.raycastTarget = true;
-            VerticalLayoutGroup mmV = mmPanel.AddComponent<VerticalLayoutGroup>();
-            mmV.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            mmV.spacing = 10f * s;
-            mmV.childControlWidth = true;
-            mmV.childControlHeight = true;
-            mmV.childForceExpandWidth = true;
-
-            GameObject mmTitleGo = new GameObject("MergeTitle");
-            mmTitleGo.transform.SetParent(mmPanel.transform, false);
-            _userTagEditorMergeModalTitleText = mmTitleGo.AddComponent<Text>();
-            _userTagEditorMergeModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorMergeModalTitleText.fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            _userTagEditorMergeModalTitleText.fontStyle = FontStyle.Bold;
-            _userTagEditorMergeModalTitleText.color = Color.white;
-            _userTagEditorMergeModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_merge_dialog_title", "Merge tags into…");
-            LayoutElement mmTle = mmTitleGo.AddComponent<LayoutElement>();
-            mmTle.minHeight = 24f * s;
-            mmTle.flexibleWidth = 1f;
-
-            GameObject mmInGo = new GameObject("MergeDialogInput");
-            mmInGo.transform.SetParent(mmPanel.transform, false);
-            Image mmIBg = mmInGo.AddComponent<Image>();
-            mmIBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
-            LayoutElement mmILe = mmInGo.AddComponent<LayoutElement>();
-            mmILe.flexibleWidth = 1f;
-            mmILe.minHeight = 36f * s;
-            GameObject mmTa = new GameObject("TextArea");
-            mmTa.transform.SetParent(mmInGo.transform, false);
-            RectTransform mmTaRt = mmTa.AddComponent<RectTransform>();
-            mmTaRt.anchorMin = Vector2.zero;
-            mmTaRt.anchorMax = Vector2.one;
-            mmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
-            mmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            GameObject mmPh = new GameObject("Placeholder");
-            mmPh.transform.SetParent(mmTa.transform, false);
-            Text mmPhT = mmPh.AddComponent<Text>();
-            mmPhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            mmPhT.fontSize = bodyFont;
-            mmPhT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            mmPhT.text = VPBTranslation.T("gallery.usertags.editor_merge_ph", "New tag name…");
-            RectTransform mmPhRt = mmPh.GetComponent<RectTransform>();
-            mmPhRt.anchorMin = Vector2.zero;
-            mmPhRt.anchorMax = Vector2.one;
-            mmPhRt.sizeDelta = Vector2.zero;
-            GameObject mmTx = new GameObject("Text");
-            mmTx.transform.SetParent(mmTa.transform, false);
-            Text mmTxT = mmTx.AddComponent<Text>();
-            mmTxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            mmTxT.fontSize = bodyFont;
-            mmTxT.color = Color.white;
-            RectTransform mmTxRt = mmTx.GetComponent<RectTransform>();
-            mmTxRt.anchorMin = Vector2.zero;
-            mmTxRt.anchorMax = Vector2.one;
-            mmTxRt.sizeDelta = Vector2.zero;
-            _userTagEditorMergeModalInput = mmInGo.AddComponent<InputField>();
-            _userTagEditorMergeModalInput.textComponent = mmTxT;
-            _userTagEditorMergeModalInput.placeholder = mmPhT;
-            _userTagEditorMergeModalInput.lineType = InputField.LineType.SingleLine;
-
-            GameObject mmBtnRow = new GameObject("MergeDialogButtons");
-            mmBtnRow.transform.SetParent(mmPanel.transform, false);
-            HorizontalLayoutGroup mmBH = mmBtnRow.AddComponent<HorizontalLayoutGroup>();
-            mmBH.spacing = 8f * s;
-            mmBH.childAlignment = TextAnchor.MiddleCenter;
-            mmBH.childForceExpandWidth = true;
-            LayoutElement mmBRle = mmBtnRow.AddComponent<LayoutElement>();
-            mmBRle.minHeight = 40f * s;
-            mmBRle.flexibleWidth = 1f;
-
-            GameObject mmCancel = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseMergeDialog);
-            mmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement mmCL = mmCancel.AddComponent<LayoutElement>();
-            mmCL.flexibleWidth = 1f;
-            mmCL.minHeight = 38f * s;
-
-            GameObject mmOk = UI.CreateUIButton(mmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_confirm", "Merge"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmMergeFromDialog);
-            mmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement mmOL = mmOk.AddComponent<LayoutElement>();
-            mmOL.flexibleWidth = 1f;
-            mmOL.minHeight = 38f * s;
-
-            _userTagEditorMergeModalGo.transform.SetAsLastSibling();
-
-            _userTagEditorRenameModalGo = new GameObject("UserTagEditorRenameModal");
-            _userTagEditorRenameModalGo.transform.SetParent(dim.transform, false);
-            RectTransform rmRootRt = _userTagEditorRenameModalGo.AddComponent<RectTransform>();
-            rmRootRt.anchorMin = Vector2.zero;
-            rmRootRt.anchorMax = Vector2.one;
-            rmRootRt.sizeDelta = Vector2.zero;
-            Image rmDim = _userTagEditorRenameModalGo.AddComponent<Image>();
-            rmDim.color = new Color(0f, 0f, 0f, 0.5f);
-            rmDim.raycastTarget = true;
-            _userTagEditorRenameModalGo.SetActive(false);
-
-            GameObject rmPanel = new GameObject("RenameDialogPanel");
-            rmPanel.transform.SetParent(_userTagEditorRenameModalGo.transform, false);
-            RectTransform rmPanelRt = rmPanel.AddComponent<RectTransform>();
-            rmPanelRt.anchorMin = rmPanelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            rmPanelRt.pivot = new Vector2(0.5f, 0.5f);
-            rmPanelRt.sizeDelta = new Vector2(420f * s, 200f * s);
-            Image rmPbg = rmPanel.AddComponent<Image>();
-            rmPbg.color = new Color(0.14f, 0.14f, 0.17f, 1f);
-            rmPbg.raycastTarget = true;
-            VerticalLayoutGroup rmV = rmPanel.AddComponent<VerticalLayoutGroup>();
-            rmV.padding = new RectOffset(Mathf.RoundToInt(14 * s), Mathf.RoundToInt(14 * s), Mathf.RoundToInt(12 * s), Mathf.RoundToInt(12 * s));
-            rmV.spacing = 10f * s;
-            rmV.childControlWidth = true;
-            rmV.childControlHeight = true;
-            rmV.childForceExpandWidth = true;
-
-            GameObject rmTitleGo = new GameObject("RenameTitle");
-            rmTitleGo.transform.SetParent(rmPanel.transform, false);
-            _userTagEditorRenameModalTitleText = rmTitleGo.AddComponent<Text>();
-            _userTagEditorRenameModalTitleText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _userTagEditorRenameModalTitleText.fontSize = Mathf.Max(13, Mathf.RoundToInt(15f * u));
-            _userTagEditorRenameModalTitleText.fontStyle = FontStyle.Bold;
-            _userTagEditorRenameModalTitleText.color = Color.white;
-            _userTagEditorRenameModalTitleText.text = VPBTranslation.T("gallery.usertags.editor_rename_dialog_title_idle", "Rename to…");
-            LayoutElement rmTle = rmTitleGo.AddComponent<LayoutElement>();
-            rmTle.minHeight = 24f * s;
-            rmTle.flexibleWidth = 1f;
-
-            GameObject rmInGo = new GameObject("RenameDialogInput");
-            rmInGo.transform.SetParent(rmPanel.transform, false);
-            Image rmIBg = rmInGo.AddComponent<Image>();
-            rmIBg.color = new Color(0.07f, 0.07f, 0.09f, 1f);
-            LayoutElement rmILe = rmInGo.AddComponent<LayoutElement>();
-            rmILe.flexibleWidth = 1f;
-            rmILe.minHeight = 36f * s;
-            GameObject rmTa = new GameObject("TextArea");
-            rmTa.transform.SetParent(rmInGo.transform, false);
-            RectTransform rmTaRt = rmTa.AddComponent<RectTransform>();
-            rmTaRt.anchorMin = Vector2.zero;
-            rmTaRt.anchorMax = Vector2.one;
-            rmTaRt.offsetMin = new Vector2(8f * s, 4f * s);
-            rmTaRt.offsetMax = new Vector2(-8f * s, -4f * s);
-            GameObject rmPh = new GameObject("Placeholder");
-            rmPh.transform.SetParent(rmTa.transform, false);
-            Text rmPhT = rmPh.AddComponent<Text>();
-            rmPhT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            rmPhT.fontSize = bodyFont;
-            rmPhT.color = new Color(0.42f, 0.42f, 0.45f, 1f);
-            rmPhT.text = VPBTranslation.T("gallery.usertags.editor_rename_ph", "New tag name…");
-            RectTransform rmPhRt = rmPh.GetComponent<RectTransform>();
-            rmPhRt.anchorMin = Vector2.zero;
-            rmPhRt.anchorMax = Vector2.one;
-            rmPhRt.sizeDelta = Vector2.zero;
-            GameObject rmTx = new GameObject("Text");
-            rmTx.transform.SetParent(rmTa.transform, false);
-            Text rmTxT = rmTx.AddComponent<Text>();
-            rmTxT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            rmTxT.fontSize = bodyFont;
-            rmTxT.color = Color.white;
-            RectTransform rmTxRt = rmTx.GetComponent<RectTransform>();
-            rmTxRt.anchorMin = Vector2.zero;
-            rmTxRt.anchorMax = Vector2.one;
-            rmTxRt.sizeDelta = Vector2.zero;
-            _userTagEditorRenameModalInput = rmInGo.AddComponent<InputField>();
-            _userTagEditorRenameModalInput.textComponent = rmTxT;
-            _userTagEditorRenameModalInput.placeholder = rmPhT;
-            _userTagEditorRenameModalInput.lineType = InputField.LineType.SingleLine;
-
-            GameObject rmBtnRow = new GameObject("RenameDialogButtons");
-            rmBtnRow.transform.SetParent(rmPanel.transform, false);
-            HorizontalLayoutGroup rmBH = rmBtnRow.AddComponent<HorizontalLayoutGroup>();
-            rmBH.spacing = 8f * s;
-            rmBH.childAlignment = TextAnchor.MiddleCenter;
-            rmBH.childForceExpandWidth = true;
-            LayoutElement rmBRle = rmBtnRow.AddComponent<LayoutElement>();
-            rmBRle.minHeight = 40f * s;
-            rmBRle.flexibleWidth = 1f;
-
-            GameObject rmCancel = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_merge_cancel", "Cancel"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorCloseRenameDialog);
-            rmCancel.GetComponent<Image>().color = new Color(0.32f, 0.32f, 0.36f, 1f);
-            LayoutElement rmCL = rmCancel.AddComponent<LayoutElement>();
-            rmCL.flexibleWidth = 1f;
-            rmCL.minHeight = 38f * s;
-
-            GameObject rmOk = UI.CreateUIButton(rmBtnRow, 0f, 0f, VPBTranslation.T("gallery.usertags.editor_rename_confirm", "Rename"), smallFont, 0f, 0f, AnchorPresets.stretchAll, UserTagEditorConfirmRenameFromDialog);
-            rmOk.GetComponent<Image>().color = new Color(0.22f, 0.42f, 0.58f, 1f);
-            LayoutElement rmOL = rmOk.AddComponent<LayoutElement>();
-            rmOL.flexibleWidth = 1f;
-            rmOL.minHeight = 38f * s;
-
-            _userTagEditorRenameModalGo.transform.SetAsLastSibling();
-
-            SetLayerRecursive(dim, backgroundBoxGO.layer);
-
-            userTagsCached = false;
-            CacheUserTagsSideTab();
-            UserTagEditorSetTitleCount(cachedUserTagSideTab.Count);
-
-            _userTagEditorRoot = dim;
-            _userTagEditorRoot.SetActive(false);
+            rootGo.transform.SetAsLastSibling();
         }
 
         private void UserTagEditorSetTitleCount(int totalInDatabase)
@@ -2878,6 +3155,9 @@ namespace VPB
             _userTagEditorTitleText.text = string.Format(
                 VPBTranslation.T("gallery.usertags.editor_db_title_fmt", "Tags Database ({0})"),
                 totalInDatabase);
+            _userTagEditorTitleText.fontStyle = FontStyle.Bold;
+            _userTagEditorTitleText.color = UI.PopupText;
+            _userTagEditorTitleText.alignment = TextAnchor.MiddleCenter;
         }
 
         private void UserTagEditorCycleSort()
@@ -2906,11 +3186,18 @@ namespace VPB
         {
             _userTagEditorRowSelection.Clear();
             _userTagEditorAnchorTag = null;
-            bool hadFilter = _userTagEditorFilterInput != null && !string.IsNullOrEmpty(_userTagEditorFilterInput.text);
-            if (_userTagEditorFilterInput != null && hadFilter)
+            bool hadFilter = !string.IsNullOrEmpty(_detailStripTagMenuFilter)
+                || (_userTagEditorFilterInput != null && !string.IsNullOrEmpty(_userTagEditorFilterInput.text));
+            if (hadFilter)
             {
-                // onValueChanged handler triggers rebuild once
-                _userTagEditorFilterInput.text = "";
+                _detailStripTagMenuFilter = "";
+                if (_userTagEditorFilterInput != null)
+                {
+                    // onValueChanged / shared search handler triggers rebuild once
+                    try { _userTagEditorFilterInput.text = ""; } catch { }
+                    return;
+                }
+                RebuildUserTagEditorRows();
                 return;
             }
             UserTagEditorSyncRowSelectionVisuals();
@@ -2973,11 +3260,7 @@ namespace VPB
 
         private void UserTagEditorStopNewTagChromeFlash()
         {
-            if (_userTagEditorNewTagFlashCo != null)
-            {
-                try { StopCoroutine(_userTagEditorNewTagFlashCo); } catch { }
-                _userTagEditorNewTagFlashCo = null;
-            }
+            StopCo(ref _userTagEditorNewTagFlashCo);
         }
 
         private IEnumerator UserTagEditorNewTagChromeFlashRoutine(Color flashCol, float holdSec, float fadeSec)
@@ -3174,7 +3457,21 @@ namespace VPB
             InvalidateTags();
             userTagsCached = false;
             RebuildUserTagEditorRows();
-            try { UpdateTabs(); } catch { }
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
+            // Fresh vocabulary rows have Count=0; default Filter Mode hide-unused omits them.
+            // Land in Tag Mode so Create tag rows is visible without hunting F/T.
+            if (created > 0
+                && _userTagAvailMode == UserTagAvailMode.FilterByTags
+                && VPBConfig.Instance != null
+                && VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode)
+            {
+                try { RequestUserTagWorkMode(UserTagAvailMode.Tag); }
+                catch { try { UpdateTabs(); } catch { } }
+            }
+            else
+            {
+                try { UpdateTabs(); } catch { }
+            }
         }
 
         private void UserTagEditorRemoveSelectedFromDb()
@@ -3210,6 +3507,7 @@ namespace VPB
             }
             try { RefreshFilesThenUpdateTabs(true); } catch { }
             RebuildUserTagEditorRows();
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.usertags.editor_purge_done", "Removed tag(s); cleared {0} assignment(s)."), total), 2.5f);
         }
 
@@ -3279,6 +3577,7 @@ namespace VPB
             }
             try { RefreshFilesThenUpdateTabs(true); } catch { }
             RebuildUserTagEditorRows();
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             ShowTemporaryStatus(
                 string.Format(VPBTranslation.T("gallery.usertags.editor_merge_done", "Merged into «{0}». Updated {1} item-tag link(s)."), normTarget, nTouch),
                 2.5f);
@@ -3403,6 +3702,7 @@ namespace VPB
             userTagsCached = false;
             try { RefreshFilesThenUpdateTabs(true); } catch { }
             RebuildUserTagEditorRows();
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             ShowTemporaryStatus(
                 string.Format(VPBTranslation.T("gallery.usertags.editor_rename_done", "Renamed to «{0}». Updated {1} item-tag link(s)."), normTarget, nTouch),
                 2.5f);
@@ -3502,8 +3802,9 @@ namespace VPB
                 }
             }
 
-            string yamlTag = GalleryUserTagYamlBrain.BuildTagToItemsYaml(tagToItems);
-            string yamlItem = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags);
+            List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> categoriesExport = BuildUserTagCategoryExportList();
+            string yamlTag = GalleryUserTagYamlBrain.BuildTagToItemsYaml(tagToItems, categoriesExport);
+            string yamlItem = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags, categoriesExport);
             try
             {
                 FileManager.WriteAllText(pathTag, yamlTag);
@@ -3579,6 +3880,7 @@ namespace VPB
                     text,
                     out Dictionary<string, List<string>> tagToItemKeys,
                     out Dictionary<string, List<string>> itemKeyToTags,
+                    out List<GalleryUserTagYamlBrain.GalleryUserTagCategoryYaml> importedCategories,
                     out string err))
             {
                 ShowTemporaryStatus(
@@ -3588,10 +3890,13 @@ namespace VPB
             }
 
             int nLinks = UserTagEditorApplyImportedAssignments(tagToItemKeys, itemKeyToTags, out int nUnassigned, out List<string> skippedInvalidTags);
+            int nCategories = UserTagEditorApplyImportedCategories(importedCategories);
             InvalidateTags();
             userTagsCached = false;
+            if (nCategories > 0) InvalidateUserTagCategoryColorCache();
             try { RefreshFilesThenUpdateTabs(true); } catch { }
             RebuildUserTagEditorRows();
+            try { DetailStripRefreshTagMenuAfterMutation(); } catch { }
             string importMsg;
             if (nUnassigned > 0)
             {
@@ -3606,6 +3911,10 @@ namespace VPB
                     VPBTranslation.T("gallery.usertags.editor_import_done", "Import applied: {0} tag link(s) updated."),
                     nLinks);
             }
+            if (nCategories > 0)
+                importMsg += " " + string.Format(
+                    VPBTranslation.T("gallery.usertags.editor_import_done_categories", "{0} categor(y/ies) applied."),
+                    nCategories);
             ShowTemporaryStatus(importMsg, 2.8f);
             UserTagEditorNotifyImportSkippedTags(skippedInvalidTags);
         }
@@ -3729,91 +4038,126 @@ namespace VPB
         {
             if (_userTagEditorRowsParent == null) return;
 
-            for (int i = _userTagEditorRowsParent.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(_userTagEditorRowsParent.GetChild(i).gameObject);
+            UI.DestroyAllChildren(_userTagEditorRowsParent);
 
             if (!userTagsCached) CacheUserTagsSideTab();
             UserTagEditorSetTitleCount(cachedUserTagSideTab.Count);
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            float u = s * 1.38f;
-            int rowFont = Mathf.Max(12, Mathf.RoundToInt(14f * u));
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            int rowFont = GalleryUiMetrics.ScaledFontSize(
+                GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
 
-            var rows = new List<UserTagSideTabEntry>(cachedUserTagSideTab);
-            string filt = _userTagEditorFilterInput != null ? _userTagEditorFilterInput.text : "";
-            if (!string.IsNullOrEmpty(filt))
+            // Build into scratch (no full-copy + RemoveAt reverse walk).
+            _userTagEditorBuildScratch.Clear();
+            string filt = _detailStripTagMenuFilter;
+            if (string.IsNullOrEmpty(filt) && _userTagEditorFilterInput != null)
+                filt = _userTagEditorFilterInput.text ?? "";
+            bool hasFilt = !string.IsNullOrEmpty(filt);
+            int srcCount = cachedUserTagSideTab.Count;
+            for (int i = 0; i < srcCount; i++)
             {
-                for (int i = rows.Count - 1; i >= 0; i--)
-                {
-                    if (rows[i].Name.IndexOf(filt, StringComparison.OrdinalIgnoreCase) < 0)
-                        rows.RemoveAt(i);
-                }
+                UserTagSideTabEntry e = cachedUserTagSideTab[i];
+                if (hasFilt && (e.Name == null || e.Name.IndexOf(filt, StringComparison.OrdinalIgnoreCase) < 0))
+                    continue;
+                _userTagEditorBuildScratch.Add(e);
             }
 
             switch (_userTagEditorSortMode)
             {
                 case 1:
-                    rows.Sort((a, b) => string.Compare(b.Name, a.Name, StringComparison.OrdinalIgnoreCase));
+                    _userTagEditorBuildScratch.Sort(UserTagEditorSortNameDesc);
                     break;
                 case 2:
-                    rows.Sort((a, b) => b.Count.CompareTo(a.Count));
+                    _userTagEditorBuildScratch.Sort(UserTagEditorSortCountDesc);
                     break;
                 case 3:
-                    rows.Sort((a, b) => a.Count.CompareTo(b.Count));
+                    _userTagEditorBuildScratch.Sort(UserTagEditorSortCountAsc);
                     break;
                 default:
-                    rows.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                    _userTagEditorBuildScratch.Sort(UserTagEditorSortNameAsc);
                     break;
             }
 
+            int matchCount = _userTagEditorBuildScratch.Count;
+            int showCount = matchCount;
+            if (showCount > UserTagEditorMaxVisibleRows)
+                showCount = UserTagEditorMaxVisibleRows;
+
             Color baseCol = new Color(0.2f, 0.2f, 0.22f, 1f);
             Color selCol = new Color(0.28f, 0.38f, 0.32f, 1f);
-            float rowH = 34f * s;
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightCompactRef * s;
 
             _userTagEditorRowBaseCol = baseCol;
             _userTagEditorRowSelCol = selCol;
             _userTagEditorVisibleRows.Clear();
-            _userTagEditorVisibleRows.AddRange(rows);
             _userTagEditorRowVisuals.Clear();
 
-            for (int ri = 0; ri < rows.Count; ri++)
+            for (int ri = 0; ri < showCount; ri++)
             {
-                UserTagSideTabEntry e = rows[ri];
+                UserTagSideTabEntry e = _userTagEditorBuildScratch[ri];
                 string nameSnap = e.Name;
-                string label = e.Name + " (" + e.Count + ")";
+                _userTagEditorVisibleRows.Add(e);
+
+                string label = nameSnap + " (" + e.Count.ToString() + ")";
 
                 GameObject rowGo = new GameObject("EditorTagRow");
                 rowGo.transform.SetParent(_userTagEditorRowsParent, false);
-                Image bg = rowGo.AddComponent<Image>();
                 bool sel = _userTagEditorRowSelection.Contains(nameSnap);
-                bg.color = sel ? selCol : baseCol;
+                Image bg = UI.AddGalleryElementRoundedBg(rowGo, sel ? selCol : baseCol);
                 _userTagEditorRowVisuals.Add(new UserTagEditorRowVisual { Name = nameSnap, Bg = bg });
-                LayoutElement rle = rowGo.AddComponent<LayoutElement>();
-                rle.minHeight = rowH;
-                rle.preferredHeight = rowH;
-                rle.flexibleWidth = 1f;
+                UI.AddLE(rowGo, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
 
                 Button btn = rowGo.AddComponent<Button>();
+                btn.targetGraphic = bg;
                 ColorBlock cb = btn.colors;
                 cb.normalColor = Color.white;
                 btn.colors = cb;
                 btn.transition = Selectable.Transition.None;
                 int riCapture = ri;
-                btn.onClick.AddListener(() => UserTagEditorOnRowClicked(nameSnap, riCapture, rows, bg, baseCol, selCol));
+                string nameCapture = nameSnap;
+                // Capture index + name only; shift-range reads live _userTagEditorVisibleRows.
+                btn.onClick.AddListener(() => UserTagEditorOnRowClicked(
+                    nameCapture, riCapture, _userTagEditorVisibleRows, bg, baseCol, selCol));
 
-                GameObject txtGo = new GameObject("Label");
-                txtGo.transform.SetParent(rowGo.transform, false);
-                Text txt = txtGo.AddComponent<Text>();
-                txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                txt.fontSize = rowFont;
-                txt.color = new Color(0.93f, 0.93f, 0.95f, 1f);
-                txt.text = label;
-                txt.alignment = TextAnchor.MiddleLeft;
-                RectTransform trt = txtGo.GetComponent<RectTransform>();
-                trt.anchorMin = Vector2.zero;
-                trt.anchorMax = Vector2.one;
-                trt.offsetMin = new Vector2(10f * s, 2f * s);
-                trt.offsetMax = new Vector2(-10f * s, -2f * s);
+                Color? catColor = TryGetUserTagCategoryColor(nameSnap);
+                float swSize = rowH * 0.46f;
+                GameObject swGo = new GameObject("CatSwatch");
+                swGo.transform.SetParent(rowGo.transform, false);
+                UI.AddImage(swGo, catColor.HasValue ? catColor.Value : new Color(1f, 1f, 1f, 0.06f), false);
+                RectTransform swRt = swGo.GetComponent<RectTransform>();
+                swRt.anchorMin = new Vector2(0f, 0.5f);
+                swRt.anchorMax = new Vector2(0f, 0.5f);
+                swRt.pivot = new Vector2(0f, 0.5f);
+                swRt.sizeDelta = new Vector2(swSize, swSize);
+                swRt.anchoredPosition = new Vector2(12f * s, 0f);
+
+                float labelLeft = 12f * s + swSize + 8f * s;
+                Text txt = UI.CreateLabel(rowGo, label, rowFont, new Color(0.93f, 0.93f, 0.95f, 1f), TextAnchor.MiddleLeft, name: "Label");
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                RectTransform trt = txt.GetComponent<RectTransform>();
+                trt.offsetMin = new Vector2(labelLeft, 2f * s);
+                trt.offsetMax = new Vector2(-14f * s, -2f * s);
+            }
+
+            int skipped = matchCount - showCount;
+            if (skipped > 0)
+            {
+                GameObject moreGo = new GameObject("EditorTagOverflow");
+                moreGo.transform.SetParent(_userTagEditorRowsParent, false);
+                UI.AddLE(moreGo, minHeight: rowH, preferredHeight: rowH, flexibleWidth: 1f);
+                string moreLabel = string.Format(
+                    VPBTranslation.T("gallery.usertags.editor_overflow_fmt", "+{0} more — narrow filter"),
+                    skipped);
+                Text moreTxt = UI.CreateLabel(
+                    moreGo, moreLabel, rowFont, UI.PopupMutedText, TextAnchor.MiddleCenter, name: "Label");
+                GalleryUiMetrics.ApplyFont(moreTxt, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
+                RectTransform mrt = moreTxt.GetComponent<RectTransform>();
+                if (mrt != null)
+                {
+                    mrt.offsetMin = new Vector2(8f * s, 0f);
+                    mrt.offsetMax = new Vector2(-8f * s, 0f);
+                }
             }
         }
     }
@@ -3823,11 +4167,40 @@ namespace VPB
         public static List<string> PendingTags;
         /// <summary>True when dragging from Applied rows — apply drop zones must ignore <see cref="IDropHandler.OnDrop"/>.</summary>
         public static bool PendingIsAppliedRowRemove;
+        /// <summary>Index into panel title-search chips while dragging a committed chip (Incl↔Excl). −1 = none.</summary>
+        public static int PendingTitleSearchChipIndex = -1;
+        public static GalleryPanel PendingTitleSearchChipPanel;
+        /// <summary>While chip-move drag active: whether Exclude drop is valid.</summary>
+        public static bool PendingTitleSearchChipCanExclude;
+
+        public static bool HasPendingTags
+        {
+            get { return PendingTags != null && PendingTags.Count > 0; }
+        }
+
+        /// <summary>Side/detail tag drag that may land on title-search Incl/Excl (not Applied-remove).</summary>
+        public static bool IsTitleSearchTagDropActive
+        {
+            get { return HasPendingTags && !PendingIsAppliedRowRemove; }
+        }
+
+        public static bool IsTitleSearchChipMoveActive
+        {
+            get { return PendingTitleSearchChipIndex >= 0 && PendingTitleSearchChipPanel != null; }
+        }
+
+        public static bool IsTitleSearchDropActive
+        {
+            get { return IsTitleSearchTagDropActive || IsTitleSearchChipMoveActive; }
+        }
 
         public static void Clear()
         {
             PendingTags = null;
             PendingIsAppliedRowRemove = false;
+            PendingTitleSearchChipIndex = -1;
+            PendingTitleSearchChipPanel = null;
+            PendingTitleSearchChipCanExclude = false;
         }
     }
 
@@ -3837,10 +4210,14 @@ namespace VPB
         public string PrimaryTag;
         /// <summary>When true, drag originates from Applied list — drop targets remove control only (not apply zones).</summary>
         public bool IsAppliedRowDrag;
+        /// <summary>Quick-tagger Applied column: same pick-drag can reorder in-list via insert line.</summary>
+        public bool DetailStripAppliedReorder;
         private CanvasGroup _cg;
         private bool _pressed;
         private bool _dragging;
         private Vector2 _pressPos;
+        private Vector2 _lastScreenPos;
+        private Camera _pressEventCamera;
         private float _pressTime;
         private GameObject _ghost;
         private Text _ghostText;
@@ -3849,6 +4226,9 @@ namespace VPB
         private readonly List<RaycastResult> _raycastHits = new List<RaycastResult>(16);
         public bool ConsumedByDrag { get; private set; }
         private bool _releaseProcessed;
+        /// <summary>Desktop: small screen slack past press. VR laser+world canvas barely moves screen px — skip (same as UIDraggableItem).</summary>
+        private const float DesktopMinScreenPixelsForTagDrag = 10f;
+        private const float VrHoldSecondsForTagDrag = 0.25f;
 
         private void Awake()
         {
@@ -3872,6 +4252,8 @@ namespace VPB
             ConsumedByDrag = false;
             _releaseProcessed = false;
             _pressPos = eventData.position;
+            _lastScreenPos = eventData.position;
+            _pressEventCamera = eventData.pressEventCamera;
             _pressTime = Time.unscaledTime;
         }
 
@@ -3884,8 +4266,8 @@ namespace VPB
             _releaseProcessed = true;
             if (_dragging)
             {
+                if (eventData != null) _lastScreenPos = eventData.position;
                 EndManualDrag(eventData);
-                ConsumedByDrag = true;
             }
         }
 
@@ -3895,9 +4277,32 @@ namespace VPB
 
             if (_dragging)
             {
+                // Desktop Update-started drags may never get OnDrag — keep screen pos fresh.
+                if (!XrUtils.IsVrActive())
+                    _lastScreenPos = (Vector2)Input.mousePosition;
                 UpdateGhostPosition();
                 if (!IsAppliedRowDrag)
-                    RefreshUserTagApplyDragHoverStatus();
+                {
+                    bool reorderHint = false;
+                    if (DetailStripAppliedReorder && Panel != null)
+                    {
+                        try { reorderHint = Panel.DetailStripUpdateAppliedReorderHint(PrimaryTag, _lastScreenPos); }
+                        catch { reorderHint = false; }
+                        try
+                        {
+                            bool overAvail = !reorderHint
+                                && Panel.DetailStripScreenPosOverAvailableList(_lastScreenPos);
+                            Panel.DetailStripSetTagMenuRemoveDragHint(true, overAvail);
+                        }
+                        catch { }
+                    }
+                    if (reorderHint)
+                    {
+                        try { Panel.dragHoverItem(null, null); } catch { }
+                    }
+                    else
+                        RefreshUserTagApplyDragHoverStatus();
+                }
                 if (!_releaseProcessed && Input.GetMouseButtonUp(0))
                     EndManualDrag(null);
                 return;
@@ -3905,16 +4310,14 @@ namespace VPB
 
             if (!_pressed) return;
 
-            bool isVR = XrUtils.IsVrActive();
-            float distThreshold = isVR ? 50f : 10f;
-            float holdThreshold = isVR ? 0.25f : 0f;
+            // VR: EventSystem OnBeginDrag starts drag (no extra pixel gate — laser barely moves).
+            // Do not auto-start from hold alone (would steal long taps).
+            if (XrUtils.IsVrActive()) return;
 
             Vector2 cur = Input.mousePosition;
-            float dist = (cur - _pressPos).magnitude;
-            if (dist < distThreshold) return;
-
-            float held = Time.unscaledTime - _pressTime;
-            if (held < holdThreshold) return;
+            _lastScreenPos = cur;
+            if ((cur - _pressPos).sqrMagnitude < DesktopMinScreenPixelsForTagDrag * DesktopMinScreenPixelsForTagDrag)
+                return;
 
             BeginManualDrag();
         }
@@ -3922,17 +4325,17 @@ namespace VPB
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (Panel == null) return;
+            if (eventData != null)
+            {
+                _lastScreenPos = eventData.position;
+                if (eventData.pressEventCamera != null)
+                    _pressEventCamera = eventData.pressEventCamera;
+            }
 
+            // VR: hold only — pixel delta vs press unreliable (same note as UIDraggableItem).
             if (XrUtils.IsVrActive())
             {
-                float held = Time.unscaledTime - _pressTime;
-                if (held < 0.25f) return;
-
-                if (eventData != null)
-                {
-                    float dist = (eventData.position - _pressPos).magnitude;
-                    if (dist < 50f) return;
-                }
+                if (Time.unscaledTime - _pressTime < VrHoldSecondsForTagDrag) return;
             }
 
             BeginManualDrag();
@@ -3940,13 +4343,15 @@ namespace VPB
 
         public void OnDrag(PointerEventData eventData)
         {
+            if (eventData != null) _lastScreenPos = eventData.position;
             if (_dragging) UpdateGhostPosition();
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            if (_dragging)
-                EndManualDrag(eventData);
+            if (!_dragging) return;
+            if (eventData != null) _lastScreenPos = eventData.position;
+            EndManualDrag(eventData);
         }
 
         private void BeginManualDrag()
@@ -3962,8 +4367,10 @@ namespace VPB
             if (list.Count == 0) return;
 
             UserTagDragSession.PendingTags = list;
-            UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag;
+            // Applied-column quick-tagger: treat as remove-mode so strip/gallery apply zones ignore the drag.
+            UserTagDragSession.PendingIsAppliedRowRemove = IsAppliedRowDrag || DetailStripAppliedReorder;
             _dragging = true;
+            ConsumedByDrag = true;
 
             if (_cg != null)
             {
@@ -3973,10 +4380,19 @@ namespace VPB
 
             CreateGhostLabel(list);
             UpdateGhostPosition();
+            if (DetailStripAppliedReorder && Panel != null)
+            {
+                try { Panel.DetailStripSetTagMenuRemoveDragHint(true, false); } catch { }
+            }
+            if (!UserTagDragSession.PendingIsAppliedRowRemove && Panel != null)
+            {
+                try { Panel.TitleSearchOnExternalTagDragBegan(); } catch { }
+            }
         }
 
         private void EndManualDrag(PointerEventData eventData)
         {
+            if (!_dragging) return;
             if (IsAppliedRowDrag)
                 TryDropToRemoveZone(eventData);
             else
@@ -3984,17 +4400,28 @@ namespace VPB
             CleanupDragVisuals();
         }
 
+        private Vector2 ResolveDropScreenPos(PointerEventData eventData)
+        {
+            if (eventData != null) return eventData.position;
+            return _lastScreenPos;
+        }
+
         private void TryDropToRemoveZone(PointerEventData eventData)
         {
-            if (Panel == null) return;
+            TryDropToRemoveZoneAt(ResolveDropScreenPos(eventData), eventData);
+        }
+
+        private bool TryDropToRemoveZoneAt(Vector2 screenPos, PointerEventData eventData)
+        {
+            if (Panel == null) return false;
             List<string> tags = UserTagDragSession.PendingTags;
-            if (tags == null || tags.Count == 0) return;
+            if (tags == null || tags.Count == 0) return false;
 
             EventSystem es = EventSystem.current;
-            if (es == null) return;
+            if (es == null) return false;
 
             var ped = eventData ?? new PointerEventData(es);
-            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            ped.position = screenPos;
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
             for (int i = 0; i < _raycastHits.Count; i++)
@@ -4005,9 +4432,10 @@ namespace VPB
                 if (dz != null && dz.Panel == Panel)
                 {
                     Panel.UserTagRemoveDroppedTags(tags);
-                    break;
+                    return true;
                 }
             }
+            return false;
         }
 
         private void TryDropToApplyZone(PointerEventData eventData)
@@ -4017,6 +4445,21 @@ namespace VPB
             if (tags == null || tags.Count == 0) return;
 
             EventSystem es = EventSystem.current;
+            Vector2 screenPos = ResolveDropScreenPos(eventData);
+
+            // Quick-tagger Applied: reorder in-list, or drop on Available → remove.
+            if (DetailStripAppliedReorder)
+            {
+                try
+                {
+                    if (Panel.DetailStripTryCommitAppliedReorder(PrimaryTag, screenPos))
+                        return;
+                }
+                catch { }
+                TryDropToRemoveZoneAt(screenPos, eventData);
+                return;
+            }
+
             if (es == null)
             {
                 Panel.UserTagApplyDroppedTags(tags);
@@ -4024,9 +4467,33 @@ namespace VPB
             }
 
             var ped = eventData ?? new PointerEventData(es);
-            ped.position = (eventData != null) ? eventData.position : (Vector2)Input.mousePosition;
+            ped.position = screenPos;
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
+
+            // Title-search Incl/Excl rows win over gallery apply (search filter, not item tag).
+            if (!UserTagDragSession.PendingIsAppliedRowRemove)
+            {
+                for (int i = 0; i < _raycastHits.Count; i++)
+                {
+                    GameObject go = _raycastHits[i].gameObject;
+                    if (go == null) continue;
+                    TitleSearchChipDropZone tdz = go.GetComponentInParent<TitleSearchChipDropZone>();
+                    if (tdz != null && tdz.Panel == Panel)
+                    {
+                        Panel.TitleSearchAcceptDroppedTags(tags, tdz.TargetPolarity);
+                        return;
+                    }
+                }
+            }
+
+            // Gallery row before Applied/selection zones — drop on item tags that item.
+            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
+            {
+                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
+                return;
+            }
+
             for (int i = 0; i < _raycastHits.Count; i++)
             {
                 GameObject go = _raycastHits[i].gameObject;
@@ -4037,12 +4504,6 @@ namespace VPB
                     Panel.UserTagApplyDroppedTags(tags);
                     return;
                 }
-            }
-
-            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
-            {
-                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
-                return;
             }
 
             // Fallback: drop anywhere inside this panel's canvas applies (selection-targeted).
@@ -4075,7 +4536,7 @@ namespace VPB
                 Panel.dragHoverItem(null, tags);
                 return;
             }
-            var ped = new PointerEventData(es) { position = (Vector2)Input.mousePosition };
+            var ped = new PointerEventData(es) { position = _lastScreenPos };
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
             if (!GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry rowHit))
@@ -4088,11 +4549,16 @@ namespace VPB
 
         private void CleanupDragVisuals()
         {
+            bool wasDragging = _dragging;
             _pressed = false;
             _dragging = false;
-            ConsumedByDrag = false;
             _releaseProcessed = false;
+            // Keep ConsumedByDrag until next PointerDown so Button onClick skips post-drag click.
+            if (!wasDragging) ConsumedByDrag = false;
             try { if (Panel != null && !IsAppliedRowDrag) Panel.dragHoverItem(null, null); } catch { }
+            try { if (Panel != null) Panel.DetailStripClearAppliedReorderHint(); } catch { }
+            try { if (Panel != null) Panel.DetailStripSetTagMenuRemoveDragHint(false, false); } catch { }
+            try { if (Panel != null) Panel.TitleSearchOnDragEnded(); } catch { }
             if (_cg != null)
             {
                 _cg.alpha = 1f;
@@ -4114,42 +4580,102 @@ namespace VPB
             if (root == null) return;
             _rootCanvas = root;
 
+            float s = 1f;
+            try { if (Panel != null && Panel.ChromeScale > 0f) s = Panel.ChromeScale; } catch { }
+            float pad = Mathf.Round(10f * s);
+
             _ghost = new GameObject("VPB_UserTagDragGhost");
             _ghost.layer = root.gameObject.layer;
             _ghostRT = _ghost.AddComponent<RectTransform>();
             _ghostRT.SetParent(root.transform, false);
-            _ghostRT.anchorMin = new Vector2(0f, 0f);
-            _ghostRT.anchorMax = new Vector2(0f, 0f);
-            _ghostRT.pivot = new Vector2(0f, 0f);
-            _ghostRT.sizeDelta = new Vector2(240f, 34f);
+            _ghostRT.anchorMin = new Vector2(0.5f, 0.5f);
+            _ghostRT.anchorMax = new Vector2(0.5f, 0.5f);
+            _ghostRT.pivot = new Vector2(0.5f, 0.5f);
+            _ghostRT.sizeDelta = Vector2.zero;
 
-            Image bg = _ghost.AddComponent<Image>();
-            bg.color = new Color(0.15f, 0.15f, 0.18f, 0.85f);
-            bg.raycastTarget = false;
+            UI.AddImage(_ghost, new Color(0.12f, 0.12f, 0.14f, 0.94f), raycastTarget: false);
+            UI.AddHLG(
+                _ghost,
+                spacing: 0f,
+                padding: UI.Pad(pad, pad, pad * 0.7f, pad * 0.7f),
+                childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: false,
+                childControlHeight: false,
+                childForceExpandWidth: false,
+                childForceExpandHeight: false);
+            ContentSizeFitter rootCsf = _ghost.AddComponent<ContentSizeFitter>();
+            rootCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            rootCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(_ghost.transform, false);
-            RectTransform trt = tgo.AddComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero;
-            trt.anchorMax = Vector2.one;
-            trt.offsetMin = new Vector2(10f, 6f);
-            trt.offsetMax = new Vector2(-10f, -6f);
+            string label = tags.Count == 1
+                ? (VPBTranslation.T("gallery.usertags.drag_ghost_one", "Tag: ") + tags[0])
+                : string.Format(VPBTranslation.T("gallery.usertags.drag_ghost_many", "Tags: {0}"), tags.Count);
+            _ghostText = UI.CreateLabel(
+                _ghost,
+                label,
+                GalleryUiDesignTokens.FontRef,
+                UI.PopupText,
+                TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Overflow,
+                VerticalWrapMode.Overflow,
+                raycastTarget: false,
+                richText: true,
+                anchorPreset: AnchorPresets.middleCenter);
+            if (_ghostText != null)
+            {
+                try { GalleryUiMetrics.ApplyFont(_ghostText, GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef); }
+                catch { }
+                _ghostText.alignment = TextAnchor.MiddleCenter;
+                _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                _ghostText.verticalOverflow = VerticalWrapMode.Overflow;
+                ContentSizeFitter textCsf = _ghostText.gameObject.GetComponent<ContentSizeFitter>();
+                if (textCsf == null) textCsf = _ghostText.gameObject.AddComponent<ContentSizeFitter>();
+                textCsf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+                textCsf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                // Stretch insets from CreateLabel fight preferred-size fit — clear them.
+                RectTransform trt = _ghostText.rectTransform;
+                if (trt != null)
+                {
+                    trt.anchorMin = new Vector2(0.5f, 0.5f);
+                    trt.anchorMax = new Vector2(0.5f, 0.5f);
+                    trt.pivot = new Vector2(0.5f, 0.5f);
+                    trt.anchoredPosition = Vector2.zero;
+                    trt.sizeDelta = Vector2.zero;
+                }
+            }
 
-            _ghostText = tgo.AddComponent<Text>();
-            _ghostText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            _ghostText.fontSize = 16;
-            _ghostText.color = new Color(0.95f, 0.95f, 0.97f, 1f);
-            _ghostText.alignment = TextAnchor.MiddleLeft;
-            _ghostText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            _ghostText.verticalOverflow = VerticalWrapMode.Truncate;
-            _ghostText.text = tags.Count == 1 ? ("Tag: " + tags[0]) : ("Tags: " + tags.Count);
+            try { LayoutRebuilder.ForceRebuildLayoutImmediate(_ghostRT); } catch { }
         }
 
         private void UpdateGhostPosition()
         {
             if (_ghostRT == null) return;
-            Vector2 pos = Input.mousePosition;
-            _ghostRT.position = new Vector3(pos.x + 14f, pos.y + 14f, 0f);
+            Canvas root = _rootCanvas;
+            if (root == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+
+            RectTransform parent = root.transform as RectTransform;
+            if (parent == null)
+            {
+                _ghostRT.SetAsLastSibling();
+                return;
+            }
+
+            // Overlay: cam null. World/floating: press camera or canvas worldCamera.
+            Camera cam = null;
+            if (root.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                cam = _pressEventCamera;
+                if (cam == null)
+                    cam = root.worldCamera != null ? root.worldCamera : Camera.main;
+            }
+
+            Vector3 world;
+            if (RectTransformUtility.ScreenPointToWorldPointInRectangle(parent, _lastScreenPos, cam, out world))
+                _ghostRT.position = world;
             _ghostRT.SetAsLastSibling();
         }
     }
@@ -4190,13 +4716,13 @@ namespace VPB
 
         public bool IsRaycastLocationValid(Vector2 sp, Camera eventCamera)
         {
-            return UserTagDragSession.PendingTags != null && UserTagDragSession.PendingTags.Count > 0;
+            return UserTagDragSession.HasPendingTags;
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (Image == null) return;
-            if (UserTagDragSession.PendingTags == null || UserTagDragSession.PendingTags.Count == 0) return;
+            if (!UserTagDragSession.HasPendingTags) return;
             Image.color = new Color(1f, 1f, 1f, HoverAlpha);
         }
 

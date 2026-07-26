@@ -25,10 +25,8 @@ namespace VPB
 
 		public void OnClick()
 		{
-			//if ((bool)browser)
-			//{
-			//	browser.OnDirectoryClick(this);
-			//}
+			if (browser != null)
+				browser.OnDirectoryClick(this);
 		}
 
 		public void Set(FileBrowser b, string pkg, string pkgFilter, string txt, string path)

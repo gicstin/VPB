@@ -63,6 +63,46 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Recursive listing rule for on-disk <c>Saves/scene</c> scenes: any real <c>.json</c> under
+        /// <c>Saves/scene</c> (incl. nested subfolders), excluding subscenes and VPB-generated scenes.
+        /// Unlike VaM's native browser, a sibling <c>.jpg</c> preview is NOT required \u2014 preview-less
+        /// scenes are listed and render with the gallery's thumbnail placeholder.
+        /// </summary>
+        public static bool IsVaMLocalSceneListingCandidate(string jsonPath)
+        {
+            if (string.IsNullOrEmpty(jsonPath)) return false;
+            if (!jsonPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
+            if (IsVpbGeneratedLocalScenePath(jsonPath)) return false;
+
+            string full;
+            try
+            {
+                if (Path.IsPathRooted(jsonPath))
+                    full = Path.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+                else
+                    full = FileManager.GetFullPath(jsonPath.Replace('/', Path.DirectorySeparatorChar));
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(full) || !File.Exists(full)) return false;
+
+            string sceneRoot = GetSavesSceneDirectoryFullPath();
+            if (string.IsNullOrEmpty(sceneRoot) || !IsStrictFilePathInsideDirectory(full, sceneRoot))
+                return false;
+
+            string norm = full.Replace('\\', '/');
+            string lower = norm.ToLowerInvariant();
+            if (lower.Contains("/subscene/") || lower.Contains("/subscenedata/")) return false;
+
+            // A sibling .jpg is intentionally NOT required: preview-less scenes (and scenes in subfolders
+            // that lack a preview) still list and fall back to the gallery thumbnail placeholder.
+            return true;
+        }
+
         public static bool IsVpbGeneratedLocalScenePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;

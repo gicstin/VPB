@@ -168,6 +168,14 @@ namespace VPB
             }
         }
 
+        public void ToggleGalleryVisibility()
+        {
+            if (Gallery.singleton != null && Gallery.singleton.IsVisible)
+                Gallery.singleton.Hide();
+            else
+                OpenGallery();
+        }
+
         public void OpenCreateGallery()
         {
             if (Gallery.singleton != null)
@@ -181,7 +189,7 @@ namespace VPB
 		// liu modification: show/hide
 		public void LgShow()
 		{
-			VamHookPlugin.m_Show = !VamHookPlugin.m_Show;
+			ToggleGalleryVisibility();
 		}
         void OpenFileBrowser(string msg)
         {
@@ -468,19 +476,16 @@ namespace VPB
         /// </summary>
         public void Refresh(string reason)
         {
-            FileManager.Refresh(reason, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh(reason, RefreshScope.Both, init: true);
             RemoveEmptyFolder("AllPackages");
         }
         public void RemoveInvalidVars()
         {
-            FileManager.Refresh(true, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh("remove_invalid_vars", RefreshScope.Both, init: true, clean: true);
         }
         public void RemoveOldVersion()
         {
-            FileManager.Refresh(true, true, true);
-            MVR.FileManagement.FileManager.Refresh();
+            FileManagerBridge.Refresh("remove_old_version", RefreshScope.Both, init: true, clean: true, removeOldVersion: true);
         }
         //https://stackoverflow.com/questions/2811509/c-sharp-remove-all-empty-subdirectories
         private static void RemoveEmptyFolder(string startLocation)

@@ -82,6 +82,7 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(jsonPath)) return;
 
+            bool createBlankConfig = false;
             lock (lockObj)
             {
                 _whitelistedFolders.Clear();
@@ -114,10 +115,17 @@ namespace VPB
                 // proactive scan. VPB on-demand registration still allows needed packages.
                 _enabled = true;
                 hasLoadedSuccessfully = true; // fresh start
-                if (!mainExists && !backupExists)
-                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — defaulting to enabled empty whitelist (fail-closed)");
+                createBlankConfig = !mainExists && !backupExists;
+                if (createBlankConfig)
+                    LogUtil.LogWarning("[VPB ScanWhitelist] No config found — creating blank enabled whitelist (fail-closed)");
                 else
                     LogUtil.LogWarning("[VPB ScanWhitelist] Config unreadable — defaulting to enabled empty whitelist (fail-closed)");
+            }
+
+            if (createBlankConfig)
+            {
+                try { Save(); } catch { }
+                LogUtil.Log("[VPB ScanWhitelist] Created blank scan_whitelist.json (enabled, no folders or UID overrides)");
             }
         }
 
@@ -433,27 +441,78 @@ namespace VPB
 
         // --- Gallery helpers ---
 
+        /// <summary>True when UID is included only via runtime temporary override (not persisted JSON).</summary>
+        public bool IsUidTemporaryOverrideOnly(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            lock (lockObj)
+            {
+                if (!_enabled) return false;
+                string key = uid.Trim();
+                return _temporaryIncludedPackageUids.Contains(key) && !_includedPackageUids.Contains(key);
+            }
+        }
+
+        private static VarPackage TryResolveGalleryVarPackage(FileEntry entry)
+        {
+            if (entry == null) return null;
+            if (entry is VarFileEntry vfe && vfe.Package != null) return vfe.Package;
+            if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null) return sfe.package;
+            if (entry is PackageListEntry ple && ple.Package != null) return ple.Package;
+            return null;
+        }
+
+        /// <summary>Gallery W-badge / rim kind for scan-whitelist inclusion.</summary>
+        public enum GalleryScanWlBadgeKind : byte
+        {
+            None = 0,
+            /// <summary>Folder whitelist or persisted UID override.</summary>
+            Persistent = 1,
+            /// <summary>Session-only temporary UID override (not folder / not persisted).</summary>
+            Temporary = 2
+        }
+
         /// <summary>
-        /// Returns true if this file entry should show the gallery "W" badge.
-        /// Current gallery behavior shows this only for packages effectively included by VaM's scan whitelist
-        /// (whitelisted folder or UID override), and hides it for VPB-only scan-excluded packages.
+        /// Primary gallery status for scan-whitelist inclusion.
+        /// Persistent wins over temporary when both could apply (folder or saved UID).
+        /// </summary>
+        public static GalleryScanWlBadgeKind GetGalleryScanWhitelistBadgeKind(FileEntry entry)
+        {
+            if (entry == null) return GalleryScanWlBadgeKind.None;
+            try
+            {
+                if (!Instance.IsEnabled) return GalleryScanWlBadgeKind.None;
+                VarPackage pkg = TryResolveGalleryVarPackage(entry);
+                if (pkg == null) return GalleryScanWlBadgeKind.None;
+
+                if (Instance.IsPathWhitelisted(pkg.Path ?? "") || Instance.IsUidOverridePersisted(pkg.Uid))
+                    return GalleryScanWlBadgeKind.Persistent;
+                if (Instance.IsUidTemporaryOverrideOnly(pkg.Uid))
+                    return GalleryScanWlBadgeKind.Temporary;
+                return GalleryScanWlBadgeKind.None;
+            }
+            catch { return GalleryScanWlBadgeKind.None; }
+        }
+
+        /// <summary>Folder-whitelisted or persisted UID override (not session-only temporary).</summary>
+        public static bool IsGalleryPersistentScanWhitelistBorderVisible(FileEntry entry)
+        {
+            return GetGalleryScanWhitelistBadgeKind(entry) == GalleryScanWlBadgeKind.Persistent;
+        }
+
+        /// <summary>Session-only temporary UID override (excludes folder/persisted inclusion).</summary>
+        public static bool IsGalleryTemporaryScanWhitelistBorderVisible(FileEntry entry)
+        {
+            return GetGalleryScanWhitelistBadgeKind(entry) == GalleryScanWlBadgeKind.Temporary;
+        }
+
+        /// <summary>
+        /// True when gallery should show the "W" badge: package is included in VaM scan whitelist
+        /// (folder, persisted UID, or session temporary UID).
         /// </summary>
         public static bool IsScanExcludedBadgeVisible(FileEntry entry)
         {
-            if (entry == null) return false;
-            try
-            {
-                if (!Instance.IsEnabled) return false;
-
-                VarPackage pkg = null;
-                if (entry is VarFileEntry vfe && vfe.Package != null) pkg = vfe.Package;
-                else if (entry is SystemFileEntry sfe && sfe.isVar && sfe.package != null) pkg = sfe.package;
-                else if (entry is PackageListEntry ple && ple.Package != null) pkg = ple.Package;
-
-                if (pkg == null) return false;
-                return !Instance.IsPackageScanExcluded(pkg.Uid, pkg.Path ?? "");
-            }
-            catch { return false; }
+            return GetGalleryScanWhitelistBadgeKind(entry) != GalleryScanWlBadgeKind.None;
         }
 
         // --- Helpers ---

@@ -2,9 +2,19 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace VPB
 {
+    /// <summary>Commits a deferred settings slider's value when the drag/click is released.
+    /// Lives on the slider host alongside the Slider so it receives the same pointer-up/end-drag events.</summary>
+    internal sealed class SettingsSliderReleaseCommit : MonoBehaviour, IPointerUpHandler, IEndDragHandler
+    {
+        public Action OnRelease;
+        public void OnPointerUp(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
+        public void OnEndDrag(PointerEventData eventData) { try { OnRelease?.Invoke(); } catch { } }
+    }
+
     public partial class GalleryPanel
     {
         private enum InternalSettingControlType
@@ -15,12 +25,17 @@ namespace VPB
             TextArea,
             Button,
             ColorRgb,
+            Hotkey,
         }
 
         private sealed class InternalSettingDefinition
         {
             public string Key;
             public string GroupKey;
+            /// <summary>Authoring sub-classifier. After <c>RemapSettingDefinitionGroups</c> this holds the
+            /// fine-grained group key (e.g. <c>hover</c>) used for behavioural special-cases; the legacy
+            /// <c>categories</c> group also uses it pre-remap to pick <c>options</c> vs <c>visibility</c>.</summary>
+            public string SubGroupKey;
             public string Label;
             public string Tooltip;
             public InternalSettingControlType ControlType;
@@ -35,6 +50,12 @@ namespace VPB
             public float Step;
             public int Decimals;
             public bool AllowNegative;
+
+            /// <summary>Slider only: when true, the live value is shown while dragging but
+            /// <see cref="SetFloat"/> is committed on pointer/drag release. Used by settings whose
+            /// change rebuilds the settings list rows (UI scale) — applying live would destroy the
+            /// slider mid-drag and drop the gesture.</summary>
+            public bool DeferLiveApply;
 
             public string[] Options;
             public Func<string> GetString;
@@ -61,6 +82,138 @@ namespace VPB
             _internalSettingsDefsCacheSig = int.MinValue;
         }
 
+        // ── Settings group consolidation ──
+        // Each row's original fine-grained group key is mapped onto one of a small set of broad
+        // groups shown as a single layer of top-level settings tabs (no sub-tabs). row[0] is the
+        // displayed group key; row[1..] are the fine keys folded into it, in authoring order.
+        private static readonly string[][] SettingsGroupStructure = new[]
+        {
+            new[] { "appearance",      "visuals", "hover" },
+            new[] { "grid_highlights", "grid", "scan_wl_border" },
+            new[] { "layout",          "follow", "desktop", "vr" },
+            new[] { "browsing",        "lists", "cat_general", "tags", "search" },
+            new[] { "cat_visibility",  "cat_visibility" },
+            new[] { "interaction",     "interaction", "plugin_hotkeys", "plugin_quickmenu" },
+            new[] { "performance",     "performance", "plugin_zstd", "plugin_scan_whitelist" },
+            new[] { "maintenance",     "helpers", "updater", "ba_migration", "plugin_bench" },
+        };
+
+        private static Dictionary<string, string> _settingsFineToGroup;
+
+        private static Dictionary<string, string> SettingsFineToGroup()
+        {
+            if (_settingsFineToGroup == null)
+            {
+                var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var row in SettingsGroupStructure)
+                    for (int i = 1; i < row.Length; i++) d[row[i]] = row[0];
+                _settingsFineToGroup = d;
+            }
+            return _settingsFineToGroup;
+        }
+
+        private sealed class SettingsGroupTab { public string Key; public string Label; }
+
+        private static string SettingsGroupLabel(string key)
+        {
+            switch (key)
+            {
+                case "appearance":      return VPBTranslation.T("settings.group.tab.appearance", "Appearance");
+                case "grid_highlights": return VPBTranslation.T("settings.group.tab.grid_highlights", "Grid & Highlights");
+                case "layout":          return VPBTranslation.T("settings.group.tab.layout", "Layout & Position");
+                case "browsing":        return VPBTranslation.T("settings.group.tab.browsing", "Browsing");
+                case "cat_visibility":  return VPBTranslation.T("settings.group.category_visibility", "Category visibility");
+                case "interaction":     return VPBTranslation.T("settings.group.tab.interaction", "Interaction");
+                case "performance":     return VPBTranslation.T("settings.group.tab.performance", "Performance");
+                case "maintenance":     return VPBTranslation.T("settings.group.tab.maintenance", "Maintenance");
+                default:                return key;
+            }
+        }
+
+        /// <summary>Ordered single-layer settings group tabs.</summary>
+        private List<SettingsGroupTab> GetSettingsGroupTabs()
+        {
+            var list = new List<SettingsGroupTab>(SettingsGroupStructure.Length);
+            foreach (var row in SettingsGroupStructure)
+                list.Add(new SettingsGroupTab { Key = row[0], Label = SettingsGroupLabel(row[0]) });
+            return list;
+        }
+
+#if DEBUG
+        // Fine keys already flagged as unmapped, so the dev warning fires at most once per key
+        // (the remap runs on every settings-defs cache rebuild).
+        private static HashSet<string> _settingsUnmappedFineWarned;
+#endif
+
+        /// <summary>Re-point each definition's GroupKey onto its single-layer display group. The fine
+        /// key is preserved in SubGroupKey (used only for the hover live-preview special-case). The
+        /// legacy two-level "categories" group is split into "cat_general" (-> Browsing) and
+        /// "cat_visibility" (-> its own tab). A missing/unmapped key falls back to "maintenance" so no
+        /// setting is ever left without a group; in DEBUG this is reported once per key so a new fine
+        /// group is added to <see cref="SettingsGroupStructure"/> rather than silently absorbed.</summary>
+        private void RemapSettingDefinitionGroups(List<InternalSettingDefinition> defs)
+        {
+            if (defs == null) return;
+            var map = SettingsFineToGroup();
+            for (int i = 0; i < defs.Count; i++)
+            {
+                var d = defs[i];
+                if (d == null) continue;
+
+                string fine;
+                if (string.IsNullOrEmpty(d.GroupKey))
+                    fine = "";
+                else if (string.Equals(d.GroupKey, "categories", StringComparison.OrdinalIgnoreCase))
+                    fine = string.Equals(d.SubGroupKey, "visibility", StringComparison.OrdinalIgnoreCase)
+                        ? "cat_visibility" : "cat_general";
+                else
+                    fine = d.GroupKey;
+
+                string group;
+                if (string.IsNullOrEmpty(fine) || !map.TryGetValue(fine, out group))
+                {
+                    group = "maintenance";
+#if DEBUG
+                    string warnKey = string.IsNullOrEmpty(fine) ? ("<empty:" + (d.Key ?? "?") + ">") : fine;
+                    if (_settingsUnmappedFineWarned == null)
+                        _settingsUnmappedFineWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (_settingsUnmappedFineWarned.Add(warnKey))
+                        Debug.LogWarning("VPB settings: definition '" + (d.Key ?? "?") + "' has group key '" + warnKey
+                            + "' with no entry in SettingsGroupStructure; routed to 'maintenance'. Add it to a group.");
+#endif
+                }
+                d.GroupKey = group;
+                d.SubGroupKey = fine;
+            }
+        }
+
+        /// <summary>Resolve a display group key, a fine key (e.g. "updater", "performance",
+        /// "ba_migration") or "all" into the active settings group tab.</summary>
+        private void SetActiveSettingsGroup(string key)
+        {
+            if (string.IsNullOrEmpty(key)) key = "all";
+            if (string.Equals(key, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                currentSettingsGroup = "all";
+                return;
+            }
+            foreach (var row in SettingsGroupStructure)
+            {
+                if (string.Equals(row[0], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentSettingsGroup = row[0];
+                    return;
+                }
+            }
+            string group;
+            if (SettingsFineToGroup().TryGetValue(key, out group))
+            {
+                currentSettingsGroup = group;
+                return;
+            }
+            currentSettingsGroup = "all";
+        }
+
         private int ComputeInternalSettingsDefsCacheSignature()
         {
             int sig = 0;
@@ -73,6 +226,16 @@ namespace VPB
             catch { }
             if (BaImporter.TryDetectBaDataDir(out _)) sig = unchecked(sig * 31 + 1);
             if (BaImporter.MigrationManifestExists()) sig = unchecked(sig * 31 + 2);
+            try
+            {
+                var c = VPBConfig.Instance;
+                if (c != null)
+                {
+                    sig = unchecked(sig * 31 + (c.PerfApplyHair ? 1 : 0));
+                    sig = unchecked(sig * 31 + (c.PerfApplyMirrors ? 2 : 0));
+                }
+            }
+            catch { }
             return sig;
         }
 
@@ -83,6 +246,7 @@ namespace VPB
                 return _internalSettingsDefsCache;
 
             var defs = BuildInternalSettingDefinitions();
+            RemapSettingDefinitionGroups(defs);
             var byKey = new Dictionary<string, InternalSettingDefinition>(defs.Count, StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < defs.Count; i++)
             {
@@ -137,6 +301,18 @@ namespace VPB
             catch { return false; }
         }
 
+        private static bool GalleryElementCornerRadiusSubSettingsVisible()
+        {
+            try { return VPBConfig.Instance != null && VPBConfig.Instance.EnableGalleryElementRounding; }
+            catch { return false; }
+        }
+
+        private static void ApplyGalleryElementCornerRadiusFromSettings()
+        {
+            try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }
+            try { VPBConfig.Instance?.TriggerChange(); } catch { }
+        }
+
         private sealed class InternalSettingsSnapshot
         {
             public bool DisableGalleryTransparency;
@@ -146,12 +322,17 @@ namespace VPB
             public bool EnableGalleryFade;
             public bool EnableGalleryTranslucency;
             public bool GalleryManualRefreshOnly;
+            public bool GalleryDetailStripSideInfoEnabled;
+            public bool GalleryDetailStripThumbOnRight;
+            public float GalleryDetailStripHeightRef;
             public float GalleryOpacity;
             public float SideButtonScaleVR;
             public float SideButtonScaleDesktop;
             public float InnerPaneScaleVR;
             public float InnerPaneScaleDesktop;
             public bool EnableButtonGaps;
+            public bool EnableGalleryElementRounding;
+            public float GalleryElementCornerRadiusFraction;
             public string ShowSideButtons;
             public string FollowAngle;
             public string FollowEyeHeight;
@@ -160,8 +341,10 @@ namespace VPB
             public float MovementThreshold;
             public float BringToFrontDistance;
             public bool EnableDragDrop;
+            public bool GalleryTboxToolbarPinned;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
+            public bool VerticalMoveKeysEnabled;
             public bool RequireDragHoldBeforeMove;
             public float DragHoldThreshold;
             public float HoldToLaunchHoldSeconds;
@@ -170,12 +353,20 @@ namespace VPB
             public string InitialGalleryCategory;
             public string GalleryDefaultLeftSidePanel;
             public string GalleryDefaultRightSidePanel;
+            public string GalleryDefaultUserTagAvailMode;
+            public bool GalleryHideUnusedUserTagsInFilterMode;
+            public string GalleryUserTagFilterCombineMode;
             public float GalleryScrollButtonStepViewportFraction;
             public bool GalleryScrollButtonsEnabled;
+            public string SpringScrollButtonMode;
             public bool GalleryVrThumbstickScrollEnabled;
             public bool GalleryHideCreatorSideButtons;
+            public bool GalleryShowCategoryIcons;
             public bool GalleryConsolidateCreatorNames;
             public bool PluginGalleryGridThumbnails;
+            public bool PluginGalleryCategoryLabelsOnly;
+            public bool GalleryThumbPlaceholderLabelsEnabled;
+            public float GalleryThumbPlaceholderSizeScale;
             public bool GalleryListNamesLegacyFileName;
             public string GalleryHoverPreviewMode;
             public float GalleryListHoverPreviewSize;
@@ -183,6 +374,7 @@ namespace VPB
             public float GalleryListHoverPreviewOffsetY;
             public bool GalleryGridLabelsEnabled;
             public bool GalleryGridLabelsAutoHideAtHighDensity;
+            public bool GalleryGridHoverBadgesEnabled;
             public float GalleryGridLabelFontSize;
             public float GalleryGridSpacingX;
             public float GalleryGridSpacingY;
@@ -194,11 +386,43 @@ namespace VPB
             public float GalleryGridBorderColorG;
             public float GalleryGridBorderColorB;
             public float GalleryGridBorderColorA;
+            public bool GalleryScanWlBorderEnabled;
+            public bool GalleryScanWlBorderShowInGrid;
+            public bool GalleryScanWlBorderShowInList;
+            public float GalleryScanWlBorderWidth;
+            public float GalleryScanWlGridFrameInset;
+            public float GalleryScanWlListFrameInset;
+            public bool GalleryScanWlBorderOnThumbnail;
+            public float GalleryScanWlBorderColorR;
+            public float GalleryScanWlBorderColorG;
+            public float GalleryScanWlBorderColorB;
+            public float GalleryScanWlBorderColorA;
+            public bool GalleryScanWlTempBorderEnabled;
+            public bool GalleryScanWlTempBorderShowInGrid;
+            public bool GalleryScanWlTempBorderShowInList;
+            public float GalleryScanWlTempBorderWidth;
+            public float GalleryScanWlTempGridFrameInset;
+            public float GalleryScanWlTempListFrameInset;
+            public bool GalleryScanWlTempBorderOnThumbnail;
+            public float GalleryScanWlTempBorderColorR;
+            public float GalleryScanWlTempBorderColorG;
+            public float GalleryScanWlTempBorderColorB;
+            public float GalleryScanWlTempBorderColorA;
             public bool GalleryOnlyWhenVamMenuVisible;
             public bool GalleryAnchorToVamMenu;
             public string GalleryCategoryQuickOrder;
             public string GalleryCategoryQuickSwitchHidden;
             public HashSet<string> HiddenCategories;
+
+            public string PluginGalleryKey;
+            public string PluginCreateGalleryKey;
+            public string PluginHubKey;
+            public string PluginClearConsoleKey;
+            public bool PluginDownscale8kTo4k;
+            public bool PluginScanWhitelistEnabled;
+            public string BlockInGameMessages;
+            public bool HideMissingDependencyLogs;
+            public bool ClearInGameLogsOnSceneLaunch;
         }
 
         private static string NextOf(string cur, string[] options)
@@ -384,35 +608,53 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryManualRefreshOnly = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.sideScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_scale_vr", "Side Button Scale (VR)"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_scale_vr", "Scales the size of the side buttons in VR mode. 1.0 = default size."),
-                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.SideButtonScaleVR,
-                SetFloat = v => { VPBConfig.Instance.SideButtonScaleVR = v; ApplySideButtonScale(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
+                Key = "visuals.detailStripSideInfo", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.detail_strip_side_info", "Show description & package tags"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.detail_strip_side_info",
+                    "When on (default), a wide selection detail strip can show a right column with the package description and native package tags. Turn off to keep the strip compact — description stays under the actions when available."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = v;
+                    try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.sideScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.side_button_scale_desktop", "Side Button Scale (Desktop)"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_scale_desktop", "Scales the size of the side buttons in Desktop mode. 1.0 = default size."),
-                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.SideButtonScaleDesktop,
-                SetFloat = v => { VPBConfig.Instance.SideButtonScaleDesktop = v; ApplySideButtonScale(); },
-                Min = 0.5f, Max = 2.0f, Step = 0.1f, Decimals = 1,
-                RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
+                Key = "visuals.detailStripThumbSide", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.detail_strip_thumb_side", "Detail preview side"),
+                Tooltip = VPBTranslation.T(
+                    "settings.tip.detail_strip_thumb_side",
+                    "Place the selection detail-strip image preview on the left or right. Drag the thin bar at the top of the strip to resize height; the preview stays square."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Left", "Right" },
+                GetString = () => VPBConfig.Instance.GalleryDetailStripThumbOnRight ? "Right" : "Left",
+                SetString = v =>
+                {
+                    bool right = string.Equals(v, "Right", StringComparison.OrdinalIgnoreCase);
+                    VPBConfig.Instance.GalleryDetailStripThumbOnRight = right;
+                    try { DetailStripApplyLayoutPrefs(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.innerScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_vr", "Inner Pane Scale (VR)"),
-                Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_vr", "Scales all UI elements inside the gallery pane in VR mode. 1.0 = default size."),
+                Key = "visuals.galleryUiScaleVr", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_vr", "Gallery UI Scale (VR)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_vr", "Scales gallery chrome, side buttons, and in-pane controls in VR. 1.0 = default size."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleVR,
                 SetFloat = v => { VPBConfig.Instance.InnerPaneScaleVR = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
                 Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
+                DeferLiveApply = true,
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "visuals.innerScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.inner_pane_scale_desktop", "Inner Pane Scale (Desktop)"),
-                Tooltip = VPBTranslation.T("settings.tip.inner_pane_scale_desktop", "Scales all UI elements inside the gallery pane in Desktop mode. 1.0 = default size."),
+                Key = "visuals.galleryUiScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_desktop", "Gallery UI Scale (Desktop)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_desktop", "Scales gallery chrome, side buttons, and in-pane controls on desktop. Also follows VaM's UI Scale setting."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleDesktop,
                 SetFloat = v => { VPBConfig.Instance.InnerPaneScaleDesktop = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
                 Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
+                DeferLiveApply = true,
                 RowVisible = () => VPBConfig.Instance != null && !VPBConfig.Instance.IsVR
             });
             defs.Add(new InternalSettingDefinition {
@@ -420,6 +662,33 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.side_button_gaps", "Adds small gaps between groups of side buttons for better visual separation."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableButtonGaps,
                 SetBool = v => { VPBConfig.Instance.EnableButtonGaps = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.elementRounding", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_element_rounding", "Rounded element corners"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_element_rounding", "Rounds gallery buttons and other UI element corners. Turn off for square corners."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.EnableGalleryElementRounding,
+                SetBool = v => {
+                    VPBConfig.Instance.EnableGalleryElementRounding = v;
+                    ApplyGalleryElementCornerRadiusFromSettings();
+                    if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "visuals.elementCornerRadius", GroupKey = "visuals",
+                Label = VPBTranslation.T("settings.gallery_element_corner_radius", "Element corner radius"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_element_corner_radius", "Corner roundness as a fraction of each element's shorter side (0.05 = subtle, 0.5 = maximum)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryElementCornerRadiusFraction,
+                SetFloat = v => {
+                    VPBConfig.Instance.GalleryElementCornerRadiusFraction = VPBConfig.ClampGalleryElementCornerRadiusFraction(v);
+                    ApplyGalleryElementCornerRadiusFromSettings();
+                },
+                Min = VPBConfig.MinGalleryElementCornerRadiusFraction,
+                Max = VPBConfig.MaxGalleryElementCornerRadiusFraction,
+                Step = 0.01f, Decimals = 2,
+                RowVisible = GalleryElementCornerRadiusSubSettingsVisible
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.showSideButtons", GroupKey = "visuals", Label = VPBTranslation.T("settings.show_side_buttons", "Show Side Buttons"),
@@ -482,7 +751,21 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "interaction.autoGenderFilter", GroupKey = "interaction", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
+                Key = "interaction.pinToolboxToolbar", GroupKey = "interaction",
+                Label = VPBTranslation.T("settings.pin_toolbox_toolbar", "Pin toolbox toolbar"),
+                Tooltip = VPBTranslation.T("settings.tip.pin_toolbox_toolbar", "Keep the selection toolbox expanded even when nothing is selected."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryTboxToolbarPinned,
+                SetBool = v =>
+                {
+                    VPBConfig.Instance.GalleryTboxToolbarPinned = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    try { SyncTboxPinnedFromConfig(); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "interaction.autoGenderFilter", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.gallery_auto_gender_filter", "Auto gender filter (Hair/Clothing)"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_auto_gender_filter", "When ON, Hair/Clothing categories auto-filter Male/Female items to match selected target atom gender."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAutoGenderFilter,
                 SetBool = v => { VPBConfig.Instance.GalleryAutoGenderFilter = v; VPBConfig.Instance.TriggerChange(); }
@@ -492,6 +775,18 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.gallery_collapse_on_scene_launch", "When ON, visible gallery panes collapse to the dock edge (fixed mode) or hide (floating) when you launch a scene."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
                 SetBool = v => { VPBConfig.Instance.GalleryCollapseOnSceneLaunch = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "interaction.tryOnMode", GroupKey = "interaction", Label = VPBTranslation.T("settings.try_on_mode", "Try-On Mode"),
+                Tooltip = VPBTranslation.T("settings.tip.try_on_mode", "When ON, applying clothing/hair/skin/morphs/appearance/pose/plugin presets is non-destructive: a Keep / Compare (hold to peek) / Revert bar appears so you can preview before committing. Works in desktop and VR."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.TryOnModeEnabled,
+                SetBool = v => { VPBConfig.Instance.TryOnModeEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "interaction.verticalMoveKeys", GroupKey = "interaction", Label = VPBTranslation.T("settings.vertical_move_keys", "Vertical move keys (E/C)"),
+                Tooltip = VPBTranslation.T("settings.tip.vertical_move_keys", "When ON, press E to move up and C to move down in the world, complementing WASD. Ignored while typing in a text field."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.VerticalMoveKeysEnabled,
+                SetBool = v => { VPBConfig.Instance.VerticalMoveKeysEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.dragHoldSec", GroupKey = "interaction", Label = VPBTranslation.T("settings.drag_hold_threshold", "Hold duration (s)"),
@@ -511,8 +806,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "interaction.appearanceClothing", GroupKey = "interaction", Label = VPBTranslation.T("settings.appearance_clothing", "Appearance clothing"),
-                Tooltip = VPBTranslation.T("settings.tip.appearance_clothing", "Preset outfit, keep body clothes, or clothes-only apply mode."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "replace", "keep", "clothingonly" },
+                Tooltip = VPBTranslation.T("settings.tip.appearance_clothing", "Full look, keep outfit, outfit only, or merge outfit (pick items to add on top)."),
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "replace", "keep", "clothingonly", "mergeoutfit" },
                 GetString = () => VPBConfig.Instance.AppearanceClothingApplyMode,
                 SetString = v => { VPBConfig.Instance.AppearanceClothingApplyMode = v; RefreshAppearanceClothingSideButton(); VPBConfig.Instance.TriggerChange(); }
             });
@@ -562,7 +857,7 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedEnforceDockSide
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "desktop.initialCategory", GroupKey = "desktop", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
+                Key = "desktop.initialCategory", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
                 Tooltip = VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when gallery opens."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" },
                 GetString = () => VPBConfig.NormalizeInitialGalleryCategory(VPBConfig.Instance.InitialGalleryCategory),
@@ -571,8 +866,8 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultLeft", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_left_panel", "Left side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list opens on the left for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list or Import sidebar opens on the left for new panes."),
+                ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultLeftSidePanel = v;
@@ -583,8 +878,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultRight", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list opens on the right for new panes."),
-                ControlType = InternalSettingControlType.Cycle, Options = new[] { "None", "Category", "Creator", "Tags" },
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list or Import sidebar opens on the right for new panes."),
+                ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel),
                 SetString = v => {
                     VPBConfig.Instance.GalleryDefaultRightSidePanel = v;
@@ -594,10 +889,63 @@ namespace VPB
                 }
             });
             defs.Add(new InternalSettingDefinition {
+                Key = "tags.defaultAction", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_default_user_tag_mode", "Tags panel default action"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_user_tag_mode", "Mode when opening the User Tags side panel: filter grid by tags, or apply tags to selection. Untagged only also available from title-bar Filter menu."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Filter tags", "Apply tags", "Untagged only" },
+                GetString = () => VPBConfig.FormatGalleryDefaultUserTagAvailModeForSettings(VPBConfig.Instance.GalleryDefaultUserTagAvailMode),
+                SetString = v => {
+                    VPBConfig.Instance.GalleryDefaultUserTagAvailMode = VPBConfig.NormalizeGalleryDefaultUserTagAvailMode(v);
+                    VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "tags.hideUnusedInFilterMode", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_hide_unused_user_tags_in_filter", "Hide unused tags in filter mode"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_hide_unused_user_tags_in_filter", "In filter-by-tags mode, hide tags that are not on any item in the current category view."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode = v;
+                    VPBConfig.Instance.TriggerChange();
+                    try { UpdateTabs(); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "tags.filterCombineMode", GroupKey = "tags",
+                Label = VPBTranslation.T("settings.gallery_user_tag_filter_combine", "Multi-tag filter combine"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_user_tag_filter_combine", "With multiple tags selected in filter mode: Compound shows items with any selected tag; Isolate shows items that have all selected tags."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Compound", "Isolate" },
+                GetString = () => VPBConfig.NormalizeGalleryUserTagFilterCombineMode(VPBConfig.Instance.GalleryUserTagFilterCombineMode),
+                SetString = v => {
+                    VPBConfig.Instance.GalleryUserTagFilterCombineMode = VPBConfig.NormalizeGalleryUserTagFilterCombineMode(v);
+                    VPBConfig.Instance.TriggerChange();
+                    try { RefreshFiles(true, false, false, "user_tag_filter_combine"); } catch { }
+                    try { UpdateTabs(); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
                 Key = "lists.scrollButtons", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_scroll_buttons", "VR scroll buttons"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery_scroll_buttons", "Shows large up/down scroll buttons on gallery and tag lists in VR mode."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryScrollButtonsEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryScrollButtonsEnabled = v; VPBConfig.Instance.TriggerChange(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.springScrollButton", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.spring_scroll_button", "Spring scroll button"),
+                Tooltip = VPBTranslation.T("settings.tip.spring_scroll_button", "Shows the floating spring-scroll drag control next to the scrollbar. Off / Desktop Only / VR Only / Desktop & VR."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Off", "Desktop Only", "VR Only", "Desktop & VR" },
+                GetString = () => VPBConfig.NormalizeSpringScrollButtonMode(VPBConfig.Instance.SpringScrollButtonMode),
+                SetString = v =>
+                {
+                    VPBConfig.Instance.SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(v);
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                    try { ApplySpringScrollButtonFromConfig(); } catch { }
+                }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.vrThumbstickScroll", GroupKey = "lists",
@@ -625,6 +973,21 @@ namespace VPB
                     VPBConfig.Instance.GalleryHideCreatorSideButtons = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
                     VPBConfig.Instance.TriggerChange();
+                    try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+                    try { UpdateSideButtonPositions(); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.showCategoryIcons", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.gallery_show_category_icons", "Show category icons"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_show_category_icons", "Shows per-category icons on the left of each row in side-rail Category mode."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryShowCategoryIcons,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryShowCategoryIcons = v;
+                    try { VPBConfig.Instance.Save(false); } catch { }
+                    VPBConfig.Instance.TriggerChange();
+                    try { UpdateTabs(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -637,7 +1000,7 @@ namespace VPB
                     VPBConfig.Instance.GalleryConsolidateCreatorNames = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
                     try { ClearCreatorFilters(); } catch { }
-                    try { GalleryFileListSnapshotCache.Clear(); } catch { }
+                    GalleryFileListSnapshotCache.Clear();
                     PushCreatorFilterSqlModeForDatabase();
                     InvalidateDisplayCreatorsCache();
                     unchecked { creatorSideTabDataRevision++; }
@@ -645,6 +1008,80 @@ namespace VPB
                     try { UpdateTabs(); } catch { }
                     try { RefreshFilesAndTabs(); } catch { }
                     VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hairSwapKeepVisible", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_hair_swap_keep_visible", "Keep hair visible during swap"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_hair_swap_keep_visible", "While a hair preset loads, keep the previous hair visible (and its colors) until the new hair is ready. Outgoing hair collisions turn off first; old hair hides only after incoming hair finishes loading."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.HairSwapKeepVisibleUntilLoaded != null
+                            && Settings.Instance.HairSwapKeepVisibleUntilLoaded.Value;
+                    } catch { return true; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.HairSwapKeepVisibleUntilLoaded != null)
+                            Settings.Instance.HairSwapKeepVisibleUntilLoaded.Value = v;
+                        Settings.SaveConfig();
+                    } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.returnToSceneViewOnStartup", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_return_to_scene_on_startup", "Return to scene view on startup"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_return_to_scene_on_startup", "On startup, skip VaM main menu (World UI) and go straight to scene view — same as Return To Scene View."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.ReturnToSceneViewOnStartup != null
+                            && Settings.Instance.ReturnToSceneViewOnStartup.Value;
+                    } catch { return false; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.ReturnToSceneViewOnStartup != null)
+                            Settings.Instance.ReturnToSceneViewOnStartup.Value = v;
+                        Settings.SaveConfig();
+                    } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.blockInGameMessages", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_block_ingame_messages", "Block in-game messages"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_block_ingame_messages", "Suppress VaM in-game error and warning notification popups. Off = show all; VR Only = suppress in VR; Desktop Only = suppress on desktop; Both = always suppress."),
+                ControlType = InternalSettingControlType.Cycle,
+                Options = new[] { "Off", "VR Only", "Desktop Only", "Both" },
+                GetString = () => VPBConfig.Instance?.BlockInGameMessages ?? "Off",
+                SetString = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.BlockInGameMessages = v ?? "Off";
+                    try { VPBConfig.Instance?.Save(false); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.hideMissingDependencyLogs", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_hide_missing_dep_logs", "Hide missing dependency logs"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_hide_missing_dep_logs", "Suppress VaM \"Missing addon package … depends on …\" messages in the in-game error log and BepInEx console. Turn off to see missing dependency warnings again."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance?.HideMissingDependencyLogs ?? true,
+                SetBool = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.HideMissingDependencyLogs = v;
+                    try { VPBConfig.Instance?.Save(false); } catch { }
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "helpers.clearInGameLogsOnSceneLaunch", GroupKey = "helpers",
+                Label = VPBTranslation.T("settings.helpers_clear_logs_on_scene_launch", "Clear logs on scene launch"),
+                Tooltip = VPBTranslation.T("settings.tip.helpers_clear_logs_on_scene_launch", "Clear VaM in-game error and message logs when a full scene is loaded. Merge loads are not cleared. Logs from the previous scene otherwise stay until you clear them manually."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance?.ClearInGameLogsOnSceneLaunch ?? false,
+                SetBool = v => {
+                    if (VPBConfig.Instance != null) VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = v;
+                    try { VPBConfig.Instance?.Save(false); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -656,6 +1093,39 @@ namespace VPB
                     if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
                     else RefreshFiles(true);
                     VPBConfig.Instance.TriggerChange();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.pluginLabelsOnly", GroupKey = "categories", SubGroupKey = "options",
+                Label = VPBTranslation.T("settings.plugin_gallery_category_labels_only", "Plugins category: labels only"),
+                Tooltip = VPBTranslation.T("settings.tip.plugin_gallery_category_labels_only", "In the Plugins category, hide all thumbnails and show in-preview labels for every plugin row, including items that have sister images."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.PluginGalleryCategoryLabelsOnly,
+                SetBool = v => {
+                    VPBConfig.Instance.PluginGalleryCategoryLabelsOnly = v;
+                    RefreshThumbPlaceholderLabelLayout();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "lists.pluginConsolidateCslist", GroupKey = "lists",
+                Label = VPBTranslation.T("settings.plugin_consolidate_cslist", "Plugins: consolidate .cslist source files"),
+                Tooltip = VPBTranslation.T("settings.tip.plugin_consolidate_cslist", "Hide .cs files that a .cslist already references, so multi-file plugins show as a single .cslist row. Standalone .cs files (not in any .cslist) always show."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => {
+                    try {
+                        return Settings.Instance != null
+                            && Settings.Instance.PluginConsolidateCslist != null
+                            && Settings.Instance.PluginConsolidateCslist.Value;
+                    } catch { return false; }
+                },
+                SetBool = v => {
+                    try {
+                        if (Settings.Instance != null && Settings.Instance.PluginConsolidateCslist != null)
+                            Settings.Instance.PluginConsolidateCslist.Value = v;
+                        Settings.SaveConfig();
+                        if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                        else RefreshFiles(true);
+                    } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -699,7 +1169,7 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "hover.mode", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_mode", "Hover preview"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_mode", "Show larger image preview while hovering items."),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_mode", "Show larger image preview while hovering items. Position is fixed (drag the placeholder here to place it)."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Off", "List", "Grid", "Both" },
                 GetString = () => VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
                 SetString = v => { VPBConfig.Instance.GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(v); VPBConfig.Instance.TriggerChange(); }
@@ -713,19 +1183,19 @@ namespace VPB
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "hover.offsetX", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_x", "Hover preview X offset"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_x", "Move hover preview left/right."),
+                Key = "hover.offsetX", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_x", "Hover preview X"),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_x", "Horizontal position. Prefer drag the on-screen placeholder while Settings is open."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryListHoverPreviewOffsetX,
                 SetFloat = v => { VPBConfig.Instance.GalleryListHoverPreviewOffsetX = v; VPBConfig.Instance.TriggerChange(); },
-                Min = -2000f, Max = 2000f, Step = 25f, Decimals = 0, AllowNegative = true,
+                Min = -4000f, Max = 4000f, Step = 25f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "hover.offsetY", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_y", "Hover preview Y offset"),
-                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_y", "Move hover preview up/down."),
+                Key = "hover.offsetY", GroupKey = "hover", Label = VPBTranslation.T("settings.hover_preview_offset_y", "Hover preview Y"),
+                Tooltip = VPBTranslation.T("settings.tip.hover_preview_offset_y", "Vertical position. Prefer drag the on-screen placeholder while Settings is open."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryListHoverPreviewOffsetY,
                 SetFloat = v => { VPBConfig.Instance.GalleryListHoverPreviewOffsetY = v; VPBConfig.Instance.TriggerChange(); },
-                Min = -2000f, Max = 2000f, Step = 25f, Decimals = 0, AllowNegative = true,
+                Min = -4000f, Max = 4000f, Step = 25f, Decimals = 0, AllowNegative = true,
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
 
@@ -734,6 +1204,12 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.grid_labels_enabled", "Show Creator.Package.Version labels under grid thumbnails."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridLabelsEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.hoverBadges", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_badges", "Hover rating star"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_hover_badges", "Show rating star on grid hover for quick rate. Off keeps dense grids faster."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryGridHoverBadgesEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "grid.autoHideHighDensity", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_labels_auto_hide_high_density", "Hide labels at max grid density"),
@@ -749,6 +1225,30 @@ namespace VPB
                 SetFloat = v => { VPBConfig.Instance.GalleryGridLabelFontSize = v; RebuildGridLayout(); },
                 Min = 8f, Max = 32f, Step = 1f, Decimals = 0,
                 RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsEnabled
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.thumbPlaceholder", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.gallery_thumb_placeholder_labels", "In-preview labels (no thumbnail)"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_thumb_placeholder_labels", "Show creator, package, and item name inside the preview when no thumbnail is available or the image is blank."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled,
+                SetBool = v => {
+                    VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled = v;
+                    RefreshThumbPlaceholderLabelLayout();
+                }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "grid.thumbPlaceholderScale", GroupKey = "grid",
+                Label = VPBTranslation.T("settings.gallery_thumb_placeholder_size", "In-preview label size"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_thumb_placeholder_size", "Scales placeholder text with grid cell size. Lower values avoid overlap in dense grids."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GetGalleryThumbPlaceholderSizeScale(),
+                SetFloat = v => {
+                    VPBConfig.Instance.GalleryThumbPlaceholderSizeScale = VPBConfig.ClampGalleryThumbPlaceholderSizeScale(v);
+                    RefreshThumbPlaceholderLabelLayout();
+                },
+                Min = 0.25f, Max = 2f, Step = 0.05f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled
             });
 
             defs.Add(new InternalSettingDefinition {
@@ -806,23 +1306,203 @@ namespace VPB
             });
 
             defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.enabled", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_enabled", "Legacy: persistent full-cell rim"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_enabled", "Optional legacy cue. Off by default — gallery uses the W badge for whitelist status (teal = saved/folder, amber ring = temporary). Full-cell rims fight hover/selection borders."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.showGrid", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_show_grid", "Show in grid view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_show_grid", "Show scan-whitelist border on included packages in grid layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderShowInGrid,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderShowInGrid = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.showList", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_show_list", "Show in list view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_show_list", "Show scan-whitelist border on included packages in list layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderShowInList,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderShowInList = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.width", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_width", "Border width"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_width", "Thickness of the scan-whitelist border (pixels). Set to 0 to hide without disabling."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlBorderWidth = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 12f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.color", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_color", "Border color"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_color", "Color of the scan-whitelist border in grid and list layout."),
+                ControlType = InternalSettingControlType.ColorRgb,
+                GetColor = () => VPBConfig.Instance.GetGalleryScanWlBorderColor(),
+                SetColor = c => { VPBConfig.Instance.SetGalleryScanWlBorderColor(c); RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.gridInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_grid_inset", "Grid frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_grid_inset", "Inset of the border frame from the grid cell or thumbnail edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlGridFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlGridFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.listInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_list_inset", "List frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_list_inset", "Inset of the border frame from the list row edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlListFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlListFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlBorder.onThumbnail", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_border_on_thumbnail", "Grid: border on thumbnail"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_border_on_thumbnail", "When enabled, grid border hugs the thumbnail. When off, border uses the full cell."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlBorderOnThumbnail,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlBorderOnThumbnail = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.enabled", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_enabled", "Legacy: temporary full-cell rim"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_enabled", "Optional legacy cue. Off by default — temporary whitelist uses the W badge with an amber outline ring instead of painting the whole cell."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderEnabled,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderEnabled = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.showGrid", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_show_grid", "Temporary: show in grid view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_show_grid", "Show temporary whitelist border in grid layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.showList", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_show_list", "Temporary: show in list view"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_show_list", "Show temporary whitelist border in list layout."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderShowInList,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderShowInList = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.width", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_width", "Temporary border width"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_width", "Thickness of the temporary whitelist border (pixels). Set to 0 to hide without disabling."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempBorderWidth,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempBorderWidth = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 12f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.color", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_color", "Temporary border color"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_color", "Color of the temporary whitelist border in grid and list layout."),
+                ControlType = InternalSettingControlType.ColorRgb,
+                GetColor = () => VPBConfig.Instance.GetGalleryScanWlTempBorderColor(),
+                SetColor = c => { VPBConfig.Instance.SetGalleryScanWlTempBorderColor(c); RefreshGalleryScanWlBorderVisuals(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.gridInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_grid_inset", "Temporary grid frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_grid_inset", "Inset of the temporary border frame from the grid cell or thumbnail edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempGridFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempGridFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.listInset", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_list_inset", "Temporary list frame inset"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_list_inset", "Inset of the temporary border frame from the list row edge (pixels)."),
+                ControlType = InternalSettingControlType.Slider,
+                GetFloat = () => VPBConfig.Instance.GalleryScanWlTempListFrameInset,
+                SetFloat = v => { VPBConfig.Instance.GalleryScanWlTempListFrameInset = v; RefreshGalleryScanWlBorderVisuals(); },
+                Min = 0f, Max = 16f, Step = 1f, Decimals = 0
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "scanWlTempBorder.onThumbnail", GroupKey = "scan_wl_border",
+                Label = VPBTranslation.T("settings.scan_wl_temp_border_on_thumbnail", "Temporary grid: border on thumbnail"),
+                Tooltip = VPBTranslation.T("settings.tip.scan_wl_temp_border_on_thumbnail", "When enabled, temporary grid border hugs the thumbnail. When off, border uses the full cell."),
+                ControlType = InternalSettingControlType.Toggle,
+                GetBool = () => VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail,
+                SetBool = v => { VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail = v; RefreshGalleryScanWlBorderVisuals(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
                 Key = "vr.menuGate", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_gate", "Show only when VaM menu is visible"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_gate", "Hide gallery panes automatically when VaM menu is closed."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
-                SetBool = v => { VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = v; VPBConfig.Instance.TriggerChange(); },
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
+                SetBool = v => { VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = v; VPBConfig.Instance.TriggerChange(); }
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "vr.anchor", GroupKey = "vr", Label = VPBTranslation.T("settings.gallery.vam_menu_anchor", "Anchor to VaM Menu in VR"),
                 Tooltip = VPBTranslation.T("settings.tip.gallery.vam_menu_anchor", "Anchor pane relative to VaM menu in VR."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryAnchorToVamMenu,
-                SetBool = v => { VPBConfig.Instance.GalleryAnchorToVamMenu = v; VPBConfig.Instance.TriggerChange(); ResetFollowOffsets(); },
-                RowVisible = () => VPBConfig.Instance != null && VPBConfig.Instance.IsVR
+                SetBool = v => { VPBConfig.Instance.GalleryAnchorToVamMenu = v; VPBConfig.Instance.TriggerChange(); ResetFollowOffsets(); }
+            });
+
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchVisible", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_visible", "Show VR wrist watch"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_visible", "Show the assignable quick-menu grid on a controller as a wrist watch."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchVisible,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchVisible = v; VPBConfig.Instance.TriggerChange(); UpdateFooterVrWatchState(); }
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchMode", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_mode", "Watch hand"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_mode", "Which hand the watch rides on. 'Opposite to menu' uses the hand opposite the one that opened the VaM menu; 'Same hand' uses the hand that opened it."),
+                ControlType = InternalSettingControlType.Cycle, Options = new[] { "Off", "Left only", "Right only", "Opposite to menu", "Same hand" },
+                GetString = () => VPBConfig.Instance.QuickMenuVrWatchMode, SetString = v => { VPBConfig.Instance.QuickMenuVrWatchMode = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchOnlyWithMenu", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_only_with_menu", "Watch only when VaM menu open"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_only_with_menu", "When on, the watch only appears while the VaM menu is open; when off, it shows at all times in VR."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchOnlyWithMenu,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchOnlyWithMenu = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchFaceUser", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_face_user", "Watch faces player"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_face_user", "Watch face always points at the player's eye regardless of hand angle."),
+                ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.QuickMenuVrWatchFaceUser,
+                SetBool = v => { VPBConfig.Instance.QuickMenuVrWatchFaceUser = v; VPBConfig.Instance.TriggerChange(); },
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchScale", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_scale", "Watch scale"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_scale", "Size of the watch face (1.0 = default)."),
+                // Stored as a tiny world-space scale; present a friendly multiplier where 1.0 == default (0.0005).
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchScale / 0.0005f,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchScale = v * 0.0005f; VPBConfig.Instance.TriggerChange(); },
+                Min = 0.4f, Max = 3.0f, Step = 0.1f, Decimals = 1,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
+            });
+            defs.Add(new InternalSettingDefinition {
+                Key = "vr.watchToward", GroupKey = "vr", Label = VPBTranslation.T("settings.vr.watch_toward", "Watch pull toward you"),
+                Tooltip = VPBTranslation.T("settings.tip.vr.watch_toward", "Distance the watch is offset from the controller. Positive pulls it toward your eye (off the pointer ray); negative pushes it back behind the hand so you can reach it with the same hand."),
+                ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.QuickMenuVrWatchTowardUserDist,
+                SetFloat = v => { VPBConfig.Instance.QuickMenuVrWatchTowardUserDist = v; VPBConfig.Instance.TriggerChange(); },
+                Min = -0.5f, Max = 0.5f, Step = 0.01f, Decimals = 2,
+                RowVisible = () => VPBConfig.Instance.QuickMenuVrWatchVisible
             });
 
             defs.Add(new InternalSettingDefinition {
                 Key = "quick.categoryEditor",
-                GroupKey = "quick",
+                GroupKey = "categories",
+                SubGroupKey = "options",
                 Label = VPBTranslation.T("settings.category_quick.editor.title", "Edit header category dropdown"),
                 Tooltip = VPBTranslation.T("settings.tip.category_quick.editor", "Edit header dropdown order + hidden list."),
                 ControlType = InternalSettingControlType.TextArea,
@@ -839,6 +1519,7 @@ namespace VPB
                 {
                     Key = "categories.show." + capturedName,
                     GroupKey = "categories",
+                    SubGroupKey = "visibility",
                     Label = VPBTranslation.T("settings.category_visibility.show", "Show category: ") + capturedName,
                     Tooltip = VPBTranslation.T("settings.tip.category_visibility.show", "Toggle whether this category appears in the Categories side list."),
                     ControlType = InternalSettingControlType.Toggle,
@@ -966,11 +1647,15 @@ namespace VPB
                         OnAction = () =>
                         {
                             updater.ClearStagedUpdate();
+                            InvalidateInternalSettingsDefsCache();
                             RefreshInternalSettingsListRows(true);
                         }
                     });
                 }
             }
+
+            AppendGalleryPerfSettings(defs);
+            AppendPluginInternalSettingDefinitions(defs);
 
             return defs;
         }
@@ -1002,7 +1687,7 @@ namespace VPB
 
         private InternalSettingsSnapshot CreateInternalSettingsSnapshot()
         {
-            return new InternalSettingsSnapshot
+            var snap = new InternalSettingsSnapshot
             {
                 DisableGalleryTransparency = VPBConfig.Instance.DisableGalleryTransparency,
                 DisableGalleryPaneTransparency = VPBConfig.Instance.DisableGalleryPaneTransparency,
@@ -1011,12 +1696,17 @@ namespace VPB
                 EnableGalleryFade = VPBConfig.Instance.EnableGalleryFade,
                 EnableGalleryTranslucency = VPBConfig.Instance.EnableGalleryTranslucency,
                 GalleryManualRefreshOnly = VPBConfig.Instance.GalleryManualRefreshOnly,
+                GalleryDetailStripSideInfoEnabled = VPBConfig.Instance.GalleryDetailStripSideInfoEnabled,
+                GalleryDetailStripThumbOnRight = VPBConfig.Instance.GalleryDetailStripThumbOnRight,
+                GalleryDetailStripHeightRef = VPBConfig.Instance.GalleryDetailStripHeightRef,
                 GalleryOpacity = VPBConfig.Instance.GalleryOpacity,
                 SideButtonScaleVR = VPBConfig.Instance.SideButtonScaleVR,
                 SideButtonScaleDesktop = VPBConfig.Instance.SideButtonScaleDesktop,
                 InnerPaneScaleVR = VPBConfig.Instance.InnerPaneScaleVR,
                 InnerPaneScaleDesktop = VPBConfig.Instance.InnerPaneScaleDesktop,
                 EnableButtonGaps = VPBConfig.Instance.EnableButtonGaps,
+                EnableGalleryElementRounding = VPBConfig.Instance.EnableGalleryElementRounding,
+                GalleryElementCornerRadiusFraction = VPBConfig.Instance.GalleryElementCornerRadiusFraction,
                 ShowSideButtons = VPBConfig.Instance.ShowSideButtons,
                 FollowAngle = VPBConfig.Instance.FollowAngle,
                 FollowEyeHeight = VPBConfig.Instance.FollowEyeHeight,
@@ -1025,8 +1715,10 @@ namespace VPB
                 MovementThreshold = VPBConfig.Instance.MovementThreshold,
                 BringToFrontDistance = VPBConfig.Instance.BringToFrontDistance,
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
+                GalleryTboxToolbarPinned = VPBConfig.Instance.GalleryTboxToolbarPinned,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
+                VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
                 RequireDragHoldBeforeMove = VPBConfig.Instance.RequireDragHoldBeforeMove,
                 DragHoldThreshold = VPBConfig.Instance.DragHoldThreshold,
                 HoldToLaunchHoldSeconds = VPBConfig.Instance.HoldToLaunchHoldSeconds,
@@ -1035,12 +1727,20 @@ namespace VPB
                 InitialGalleryCategory = VPBConfig.Instance.InitialGalleryCategory,
                 GalleryDefaultLeftSidePanel = VPBConfig.Instance.GalleryDefaultLeftSidePanel,
                 GalleryDefaultRightSidePanel = VPBConfig.Instance.GalleryDefaultRightSidePanel,
+                GalleryDefaultUserTagAvailMode = VPBConfig.Instance.GalleryDefaultUserTagAvailMode,
+                GalleryHideUnusedUserTagsInFilterMode = VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode,
+                GalleryUserTagFilterCombineMode = VPBConfig.Instance.GalleryUserTagFilterCombineMode,
                 GalleryScrollButtonStepViewportFraction = VPBConfig.Instance.GalleryScrollButtonStepViewportFraction,
                 GalleryScrollButtonsEnabled = VPBConfig.Instance.GalleryScrollButtonsEnabled,
+                SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(VPBConfig.Instance.SpringScrollButtonMode),
                 GalleryVrThumbstickScrollEnabled = VPBConfig.Instance.GalleryVrThumbstickScrollEnabled,
                 GalleryHideCreatorSideButtons = VPBConfig.Instance.GalleryHideCreatorSideButtons,
+                GalleryShowCategoryIcons = VPBConfig.Instance.GalleryShowCategoryIcons,
                 GalleryConsolidateCreatorNames = VPBConfig.Instance.GalleryConsolidateCreatorNames,
                 PluginGalleryGridThumbnails = VPBConfig.Instance.PluginGalleryGridThumbnails,
+                PluginGalleryCategoryLabelsOnly = VPBConfig.Instance.PluginGalleryCategoryLabelsOnly,
+                GalleryThumbPlaceholderLabelsEnabled = VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled,
+                GalleryThumbPlaceholderSizeScale = VPBConfig.Instance.GetGalleryThumbPlaceholderSizeScale(),
                 GalleryListNamesLegacyFileName = VPBConfig.Instance.GalleryListNamesLegacyFileName,
                 GalleryHoverPreviewMode = VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode),
                 GalleryListHoverPreviewSize = VPBConfig.Instance.GalleryListHoverPreviewSize,
@@ -1048,6 +1748,7 @@ namespace VPB
                 GalleryListHoverPreviewOffsetY = VPBConfig.Instance.GalleryListHoverPreviewOffsetY,
                 GalleryGridLabelsEnabled = VPBConfig.Instance.GalleryGridLabelsEnabled,
                 GalleryGridLabelsAutoHideAtHighDensity = VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity,
+                GalleryGridHoverBadgesEnabled = VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
                 GalleryGridLabelFontSize = VPBConfig.Instance.GalleryGridLabelFontSize,
                 GalleryGridSpacingX = VPBConfig.Instance.GalleryGridSpacingX,
                 GalleryGridSpacingY = VPBConfig.Instance.GalleryGridSpacingY,
@@ -1059,14 +1760,41 @@ namespace VPB
                 GalleryGridBorderColorG = VPBConfig.Instance.GalleryGridBorderColorG,
                 GalleryGridBorderColorB = VPBConfig.Instance.GalleryGridBorderColorB,
                 GalleryGridBorderColorA = VPBConfig.Instance.GalleryGridBorderColorA,
+                GalleryScanWlBorderEnabled = VPBConfig.Instance.GalleryScanWlBorderEnabled,
+                GalleryScanWlBorderShowInGrid = VPBConfig.Instance.GalleryScanWlBorderShowInGrid,
+                GalleryScanWlBorderShowInList = VPBConfig.Instance.GalleryScanWlBorderShowInList,
+                GalleryScanWlBorderWidth = VPBConfig.Instance.GalleryScanWlBorderWidth,
+                GalleryScanWlGridFrameInset = VPBConfig.Instance.GalleryScanWlGridFrameInset,
+                GalleryScanWlListFrameInset = VPBConfig.Instance.GalleryScanWlListFrameInset,
+                GalleryScanWlBorderOnThumbnail = VPBConfig.Instance.GalleryScanWlBorderOnThumbnail,
+                GalleryScanWlBorderColorR = VPBConfig.Instance.GalleryScanWlBorderColorR,
+                GalleryScanWlBorderColorG = VPBConfig.Instance.GalleryScanWlBorderColorG,
+                GalleryScanWlBorderColorB = VPBConfig.Instance.GalleryScanWlBorderColorB,
+                GalleryScanWlBorderColorA = VPBConfig.Instance.GalleryScanWlBorderColorA,
+                GalleryScanWlTempBorderEnabled = VPBConfig.Instance.GalleryScanWlTempBorderEnabled,
+                GalleryScanWlTempBorderShowInGrid = VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid,
+                GalleryScanWlTempBorderShowInList = VPBConfig.Instance.GalleryScanWlTempBorderShowInList,
+                GalleryScanWlTempBorderWidth = VPBConfig.Instance.GalleryScanWlTempBorderWidth,
+                GalleryScanWlTempGridFrameInset = VPBConfig.Instance.GalleryScanWlTempGridFrameInset,
+                GalleryScanWlTempListFrameInset = VPBConfig.Instance.GalleryScanWlTempListFrameInset,
+                GalleryScanWlTempBorderOnThumbnail = VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail,
+                GalleryScanWlTempBorderColorR = VPBConfig.Instance.GalleryScanWlTempBorderColorR,
+                GalleryScanWlTempBorderColorG = VPBConfig.Instance.GalleryScanWlTempBorderColorG,
+                GalleryScanWlTempBorderColorB = VPBConfig.Instance.GalleryScanWlTempBorderColorB,
+                GalleryScanWlTempBorderColorA = VPBConfig.Instance.GalleryScanWlTempBorderColorA,
                 GalleryOnlyWhenVamMenuVisible = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible,
                 GalleryAnchorToVamMenu = VPBConfig.Instance.GalleryAnchorToVamMenu,
                 GalleryCategoryQuickOrder = VPBConfig.Instance.GalleryCategoryQuickOrder ?? "",
                 GalleryCategoryQuickSwitchHidden = VPBConfig.Instance.GalleryCategoryQuickSwitchHidden ?? "",
                 HiddenCategories = VPBConfig.Instance.HiddenCategories != null
                     ? new HashSet<string>(VPBConfig.Instance.HiddenCategories, StringComparer.OrdinalIgnoreCase)
-                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                BlockInGameMessages = VPBConfig.Instance.BlockInGameMessages ?? "Off",
+                HideMissingDependencyLogs = VPBConfig.Instance.HideMissingDependencyLogs,
+                ClearInGameLogsOnSceneLaunch = VPBConfig.Instance.ClearInGameLogsOnSceneLaunch
             };
+            CapturePluginSettingsIntoSnapshot(snap);
+            return snap;
         }
 
         private void EnsureInternalSettingsSession()
@@ -1077,14 +1805,46 @@ namespace VPB
             internalSettingsPreSessionScrollNormalized = (scrollRect != null) ? scrollRect.verticalNormalizedPosition : 1f;
             internalSettingsHadPreSessionViewState = true;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
+            PluginSettingsBeginSession();
             internalSettingsSessionActive = true;
         }
 
         public void NotifyUpdaterStatusChanged()
         {
             InvalidateInternalSettingsDefsCache();
+            try { FooterPluginInfoRefreshChrome(); } catch { }
+            if (_footerPluginInfoHovering)
+            {
+                _footerPluginInfoTooltipKey = int.MinValue;
+                try { FooterPluginInfoPollHoverTooltip(); } catch { }
+            }
             if (IsSettingsPanelOpen())
                 RefreshInternalSettingsListRows(true);
+        }
+
+        /// <summary>Open gallery Settings side tab (title bar gear / shortcuts).</summary>
+        public void OpenSettingsSideTab()
+        {
+            if (IsSettingsPanelOpen()) return;
+            try { CancelPluginHotkeyCapture(false); } catch { }
+            if (isFixedLocally)
+                ToggleLeft(ContentType.Settings);
+            else
+                ToggleRight(ContentType.Settings);
+        }
+
+        /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
+        public void OpenSettingsGroup(string groupKey)
+        {
+            SetActiveSettingsGroup(groupKey);
+            try { CancelPluginHotkeyCapture(false); } catch { }
+            if (!IsSettingsPanelOpen())
+                OpenSettingsSideTab();
+            else
+            {
+                try { UpdateTabs(); } catch { }
+                RefreshInternalSettingsListRows(true);
+            }
         }
 
         private bool IsSettingsPanelOpen()
@@ -1122,7 +1882,7 @@ namespace VPB
                 return;
             if (leftActiveContent == ContentType.Settings) leftActiveContent = null;
             if (rightActiveContent == ContentType.Settings) rightActiveContent = null;
-            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
             SyncInternalSettingsListView();
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
@@ -1133,6 +1893,7 @@ namespace VPB
             if (open)
             {
                 settingsListViewActive = true;
+                InvalidateInternalSettingsDefsCache();
                 RefreshInternalSettingsListRows();
                 return;
             }
@@ -1151,14 +1912,15 @@ namespace VPB
             internalSettingsHadPreSessionViewState = false;
         }
 
+        private void RefreshGalleryScanWlBorderVisuals()
+        {
+            try { Gallery.RefreshVisiblePanelRowVisuals(); } catch { }
+        }
+
         private void RefreshInternalSettingsListRows(bool keepScroll = false)
         {
             if (!IsSettingsPanelOpen()) return;
-            if (refreshCoroutine != null)
-            {
-                try { StopCoroutine(refreshCoroutine); } catch { }
-                refreshCoroutine = null;
-            }
+            StopCo(ref refreshCoroutine);
             try
             {
                 string c = CanonicalSettingsSideSearchText();
@@ -1169,9 +1931,8 @@ namespace VPB
             settingsListViewActive = true;
             EnsureInternalSettingsSession();
             // Settings list view: always minimum row height (no +/- scaling),
-            // but still respect InnerPaneScale so text/controls remain readable.
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
+            // but still respect chrome scale so text/controls remain readable.
+            float paneScale = ChromeScale;
             internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
 
             if (titleText != null)
@@ -1291,14 +2052,20 @@ namespace VPB
 
         internal bool HandleInternalSettingsRowClick(FileEntry file, bool secondary)
         {
+            if (hoverPreviewSuppressSettingsClick || hoverPreviewDragging)
+            {
+                hoverPreviewSuppressSettingsClick = false;
+                return true;
+            }
             var row = file as InternalSettingRowEntry;
             if (row == null) return false;
             InternalSettingDefinition def = GetInternalSettingDefinition(row.RowKey);
             if (def == null) return false;
             if (def.ControlType == InternalSettingControlType.TextArea) return false;
             if (def.ControlType == InternalSettingControlType.ColorRgb) return false;
+            if (def.ControlType == InternalSettingControlType.Hotkey) return false;
             ApplyInternalSettingDefinition(def, secondary);
-            if (string.Equals(row.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                 NotifyInternalSettingsHoverPreviewChanged();
 
             RefreshInternalSettingsListRows(true);
@@ -1317,43 +2084,38 @@ namespace VPB
             }
         }
 
-        private static GameObject CreateMiniButton(Transform parent, string label, float width, Color bg, Action onClick)
+        private float InternalSettingsChromeScale()
+        {
+            float s = ChromeScale;
+            return s <= 0f ? 1f : s;
+        }
+
+        private static Image AddSettingsControlRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
+        private GameObject CreateMiniButton(Transform parent, string label, float width, Color bg, Action onClick)
         {
             GameObject go = new GameObject("SettingsControlBtn");
             go.transform.SetParent(parent, false);
-            Image img = go.AddComponent<Image>();
-            img.color = bg;
+            Image img = AddSettingsControlRoundedBg(go, bg);
             Button b = go.AddComponent<Button>();
+            b.targetGraphic = img;
             if (onClick != null) b.onClick.AddListener(() => onClick());
-            var cb = b.colors;
-            cb.normalColor = Color.white;
-            cb.highlightedColor = new Color(1.2f, 1.2f, 1.2f, 1f);
-            cb.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-            b.colors = cb;
-            b.transition = Selectable.Transition.None;
-            b.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.NeutralizeSelectableColorTint(b);
 
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
-            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+            float uiS = InternalSettingsChromeScale();
+            float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.preferredWidth = width * paneScale;
-            le.minWidth = width * paneScale;
-            le.preferredHeight = 32f * paneScale;
-            le.minHeight = 32f * paneScale;
-            le.flexibleWidth = 0f;
+            LayoutElement le = UI.AddLE(go, minWidth: width * uiS, minHeight: chipH, preferredWidth: width * uiS, preferredHeight: chipH, flexibleWidth: 0f);
 
-            GameObject tgo = new GameObject("Text");
-            tgo.transform.SetParent(go.transform, false);
-            Text t = tgo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.text = label;
-            RectTransform trt = tgo.GetComponent<RectTransform>();
-            trt.anchorMin = Vector2.zero; trt.anchorMax = Vector2.one; trt.sizeDelta = Vector2.zero;
+            Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
+            GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
             return go;
         }
 
@@ -1363,9 +2125,9 @@ namespace VPB
 
             AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
 
-            float paneScale = 1f;
-            try { if (VPBConfig.Instance != null) paneScale = VPBConfig.Instance.CurrentInnerPaneScale; } catch { paneScale = 1f; }
-            paneScale = Mathf.Clamp(paneScale, 0.01f, 100f);
+            float rowH = EffectiveListRowHeightForGallery();
+            float uiS = InternalSettingsChromeScale();
+            float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
             Transform listRowTr = btnGO.transform.Find("ListRow");
             if (listRowTr == null) return;
@@ -1381,13 +2143,12 @@ namespace VPB
                 if (nameText != null)
                 {
                     nameText.resizeTextForBestFit = false;
-                    nameText.fontSize = Mathf.Max(12, Mathf.RoundToInt(28f * paneScale));
+                    GalleryUiMetrics.ApplyFont(nameText, GalleryUiDesignTokens.SettingsListRowNameFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
+                    nameText.fontStyle = FontStyle.Normal;
                 }
                 LayoutElement nameLe = nameTr != null ? nameTr.GetComponent<LayoutElement>() : null;
                 if (nameLe != null)
-                {
-                    nameLe.minHeight = 32f * paneScale;
-                }
+                    nameLe.minHeight = chipH;
             }
             catch { }
 
@@ -1399,28 +2160,21 @@ namespace VPB
             }
             detailsTr.gameObject.SetActive(true);
             DestroyChildrenByName(detailsTr, "SettingsControlContainer");
+            DestroyChildrenByName(detailsTr, "SettingsHotkeyHost");
 
             GameObject controls = new GameObject("SettingsControlContainer");
             controls.transform.SetParent(detailsTr, false);
-            HorizontalLayoutGroup hlg = controls.AddComponent<HorizontalLayoutGroup>();
-            hlg.childAlignment = TextAnchor.MiddleRight;
-            hlg.childControlHeight = true;
-            hlg.childControlWidth = true;
-            hlg.childForceExpandHeight = false;
-            hlg.childForceExpandWidth = false;
-            hlg.spacing = 6f * paneScale;
-            LayoutElement cle = controls.AddComponent<LayoutElement>();
-            cle.flexibleWidth = 1f;
-            cle.minHeight = 32f * paneScale;
+            HorizontalLayoutGroup hlg = UI.AddHLG(controls, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+            LayoutElement cle = UI.AddLE(controls, minHeight: chipH, flexibleWidth: 1f);
 
             if (def.ControlType == InternalSettingControlType.Toggle && def.GetBool != null && def.SetBool != null)
             {
                 bool cur = def.GetBool();
-                CreateMiniButton(controls.transform, "OFF", 58f, cur ? new Color(0.2f, 0.2f, 0.2f, 1f) : new Color(0.6f, 0.2f, 0.2f, 1f), () => {
+                CreateMiniButton(controls.transform, "OFF", 58f, cur ? UI.ChromePanel : UI.AccentRed, () => {
                     def.SetBool(false);
                     RefreshInternalSettingsListRows(true);
                 });
-                CreateMiniButton(controls.transform, "ON", 58f, cur ? new Color(0.2f, 0.6f, 0.2f, 1f) : new Color(0.2f, 0.2f, 0.2f, 1f), () => {
+                CreateMiniButton(controls.transform, "ON", 58f, cur ? UI.AccentGreen : UI.ChromePanel, () => {
                     def.SetBool(true);
                     RefreshInternalSettingsListRows(true);
                 });
@@ -1444,7 +2198,7 @@ namespace VPB
                         if (t != null) t.text = (next ?? "").ToUpperInvariant();
                     }
                     catch { }
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                     RefreshInternalSettingsListRows(true);
                 });
@@ -1462,15 +2216,8 @@ namespace VPB
             {
                 GameObject swatch = new GameObject("SettingsBorderColorSwatch");
                 swatch.transform.SetParent(controls.transform, false);
-                LayoutElement swle = swatch.AddComponent<LayoutElement>();
-                swle.preferredWidth = 72f * paneScale;
-                swle.minWidth = 48f * paneScale;
-                swle.preferredHeight = 28f * paneScale;
-                swle.minHeight = 28f * paneScale;
-                swle.flexibleWidth = 0f;
-                Image swImg = swatch.AddComponent<Image>();
-                swImg.color = def.GetColor();
-                swImg.raycastTarget = false;
+                LayoutElement swle = UI.AddLE(swatch, minWidth: 48f * uiS, minHeight: chipH - 4f * uiS, preferredWidth: 72f * uiS, preferredHeight: chipH - 4f * uiS, flexibleWidth: 0f);
+                Image swImg = UI.AddImage(swatch, def.GetColor(), false);
 
                 CreateMiniButton(
                     controls.transform,
@@ -1502,12 +2249,7 @@ namespace VPB
 
                 GameObject sliderHost = new GameObject("SettingsSliderHost");
                 sliderHost.transform.SetParent(controls.transform, false);
-                LayoutElement sle = sliderHost.AddComponent<LayoutElement>();
-                sle.preferredWidth = 320f * paneScale;
-                sle.minWidth = 120f * paneScale;
-                sle.preferredHeight = 32f * paneScale;
-                sle.minHeight = 32f * paneScale;
-                sle.flexibleWidth = 1f;
+                LayoutElement sle = UI.AddLE(sliderHost, minWidth: 120f * uiS, minHeight: chipH, preferredWidth: 320f * uiS, preferredHeight: chipH, flexibleWidth: 1f);
 
                 Slider slider = sliderHost.AddComponent<Slider>();
                 slider.minValue = def.Min;
@@ -1515,22 +2257,34 @@ namespace VPB
                 slider.value = Mathf.Clamp(cur, def.Min, def.Max);
                 slider.wholeNumbers = def.Decimals <= 0;
 
+                float handleW = 20f * uiS;
+                float trackEndPad = handleW * 0.5f;
+
+                // Full-height transparent raycast target so the whole control row area (not just the
+                // thin bar) receives hover, click, and drag events. Pointer events bubble up to the
+                // Slider on sliderHost, which fixes click-drag being swallowed by the parent scroll view.
+                GameObject hitbox = new GameObject("Hitbox");
+                hitbox.transform.SetParent(sliderHost.transform, false);
+                var hitImg = UI.AddImage(hitbox, new Color(1f, 1f, 1f, 0f));
+                RectTransform hitRT = hitbox.GetComponent<RectTransform>();
+                hitRT.anchorMin = Vector2.zero; hitRT.anchorMax = Vector2.one; hitRT.sizeDelta = Vector2.zero;
+
                 GameObject bg = new GameObject("Background");
                 bg.transform.SetParent(sliderHost.transform, false);
-                var bgImg = bg.AddComponent<Image>();
-                bgImg.color = new Color(0.2f, 0.2f, 0.2f);
+                var bgImg = AddSettingsControlRoundedBg(bg, new Color(0.2f, 0.2f, 0.2f), false);
                 RectTransform bgRT = bg.GetComponent<RectTransform>();
-                bgRT.anchorMin = new Vector2(0, 0.4f); bgRT.anchorMax = new Vector2(1, 0.6f); bgRT.sizeDelta = Vector2.zero;
+                bgRT.anchorMin = new Vector2(0, 0.28f); bgRT.anchorMax = new Vector2(1, 0.72f);
+                bgRT.offsetMin = new Vector2(trackEndPad, 0f); bgRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject fillArea = new GameObject("Fill Area");
                 fillArea.transform.SetParent(sliderHost.transform, false);
                 RectTransform faRT = fillArea.AddComponent<RectTransform>();
-                faRT.anchorMin = new Vector2(0, 0.4f); faRT.anchorMax = new Vector2(1, 0.6f); faRT.sizeDelta = Vector2.zero;
+                faRT.anchorMin = new Vector2(0, 0.28f); faRT.anchorMax = new Vector2(1, 0.72f);
+                faRT.offsetMin = new Vector2(trackEndPad, 0f); faRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject fill = new GameObject("Fill");
                 fill.transform.SetParent(fillArea.transform, false);
-                var fillImg = fill.AddComponent<Image>();
-                fillImg.color = new Color(0.25f, 0.5f, 0.8f);
+                var fillImg = AddSettingsControlRoundedBg(fill, new Color(0.25f, 0.5f, 0.8f), false);
                 RectTransform fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one; fillRT.sizeDelta = Vector2.zero;
                 slider.fillRect = fillRT;
@@ -1538,49 +2292,56 @@ namespace VPB
                 GameObject handleArea = new GameObject("Handle Area");
                 handleArea.transform.SetParent(sliderHost.transform, false);
                 RectTransform haRT = handleArea.AddComponent<RectTransform>();
-                haRT.anchorMin = Vector2.zero; haRT.anchorMax = Vector2.one; haRT.sizeDelta = Vector2.zero;
+                haRT.anchorMin = Vector2.zero; haRT.anchorMax = Vector2.one;
+                haRT.offsetMin = new Vector2(trackEndPad, 0f); haRT.offsetMax = new Vector2(-trackEndPad, 0f);
 
                 GameObject handle = new GameObject("Handle");
                 handle.transform.SetParent(handleArea.transform, false);
-                var handleImg = handle.AddComponent<Image>();
-                handleImg.color = Color.white;
+                var handleImg = AddSettingsControlRoundedBg(handle, Color.white);
                 RectTransform handleRT = handle.GetComponent<RectTransform>();
-                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(20f * paneScale, 0);
+                handleRT.anchorMin = new Vector2(0, 0); handleRT.anchorMax = new Vector2(0, 1); handleRT.sizeDelta = new Vector2(handleW, 0);
                 slider.handleRect = handleRT;
                 slider.targetGraphic = handleImg;
 
                 GameObject inputGO = new GameObject("SettingsValueInput");
                 inputGO.transform.SetParent(controls.transform, false);
-                LayoutElement ile = inputGO.AddComponent<LayoutElement>();
-                ile.preferredWidth = 78f * paneScale;
-                ile.minWidth = 78f * paneScale;
-                ile.preferredHeight = 32f * paneScale;
-                ile.minHeight = 32f * paneScale;
-                Image inputBg = inputGO.AddComponent<Image>();
-                inputBg.color = new Color(0.1f, 0.1f, 0.1f, 1f);
+                LayoutElement ile = UI.AddLE(inputGO, minWidth: 78f * uiS, minHeight: chipH, preferredWidth: 78f * uiS, preferredHeight: chipH);
+                Image inputBg = AddSettingsControlRoundedBg(inputGO, UI.ChromeDarker);
                 InputField input = inputGO.AddComponent<InputField>();
                 input.targetGraphic = inputBg;
                 input.contentType = def.AllowNegative ? InputField.ContentType.Standard : InputField.ContentType.DecimalNumber;
 
-                GameObject tgo = new GameObject("Text");
-                tgo.transform.SetParent(inputGO.transform, false);
-                Text it = tgo.AddComponent<Text>();
-                it.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                it.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * paneScale));
-                it.color = Color.white;
-                it.alignment = TextAnchor.MiddleCenter;
-                RectTransform itRT = tgo.GetComponent<RectTransform>();
-                itRT.anchorMin = Vector2.zero; itRT.anchorMax = Vector2.one; itRT.sizeDelta = Vector2.zero;
+                Text it = UI.CreateLabel(inputGO, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, Color.white, TextAnchor.MiddleCenter, name: "Text");
+                GalleryUiMetrics.ApplyFont(it, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
                 input.textComponent = it;
                 input.text = slider.value.ToString("F" + Math.Max(0, def.Decimals));
 
+                bool deferLive = def.DeferLiveApply;
                 slider.onValueChanged.AddListener(v =>
                 {
                     input.text = v.ToString("F" + Math.Max(0, def.Decimals));
+                    // Deferred sliders (e.g. UI scale) only show the live value while dragging; applying
+                    // would rebuild the settings list rows and destroy this slider mid-drag. Commit on release.
+                    if (deferLive) return;
                     def.SetFloat(v);
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                 });
+                if (deferLive)
+                {
+                    var commit = sliderHost.AddComponent<SettingsSliderReleaseCommit>();
+                    commit.OnRelease = () =>
+                    {
+                        def.SetFloat(slider.value);
+                        if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                            NotifyInternalSettingsHoverPreviewChanged();
+                        // UI-scale sliders defer until release; now that the gesture is over it is safe
+                        // to rescale the gallery chrome and rebuild the settings rows so the new scale
+                        // shows immediately without saving and re-opening Settings.
+                        try { ApplyInnerPaneScale(); } catch { }
+                        try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
+                    };
+                }
                 input.onEndEdit.AddListener(s =>
                 {
                     float parsed;
@@ -1593,7 +2354,7 @@ namespace VPB
                     slider.value = parsed;
                     def.SetFloat(parsed);
                     input.text = parsed.ToString("F" + Math.Max(0, def.Decimals));
-                    if (string.Equals(def.GroupKey, "hover", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                         NotifyInternalSettingsHoverPreviewChanged();
                 });
                 return;
@@ -1603,18 +2364,11 @@ namespace VPB
             {
                 if (string.Equals(def.Key, "quick.categoryEditor", StringComparison.OrdinalIgnoreCase))
                 {
-                    cle.minHeight = 40f * paneScale;
+                    cle.minHeight = 40f * uiS;
                     GameObject btnRow = new GameObject("SettingsTextAreaButtons");
                     btnRow.transform.SetParent(controls.transform, false);
-                    HorizontalLayoutGroup bh = btnRow.AddComponent<HorizontalLayoutGroup>();
-                    bh.childAlignment = TextAnchor.MiddleRight;
-                    bh.spacing = 6f * paneScale;
-                    bh.childControlWidth = true;
-                    bh.childControlHeight = true;
-                    bh.childForceExpandWidth = false;
-                    bh.childForceExpandHeight = false;
-                    LayoutElement ble = btnRow.AddComponent<LayoutElement>();
-                    ble.minHeight = 32f * paneScale;
+                    HorizontalLayoutGroup bh = UI.AddHLG(btnRow, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
+                    LayoutElement ble = UI.AddLE(btnRow, minHeight: chipH);
 
                     CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
                     {
@@ -1623,19 +2377,12 @@ namespace VPB
                     return;
                 }
 
-                cle.minHeight = 96f * paneScale;
+                cle.minHeight = 96f * uiS;
                 GameObject taHost = new GameObject("SettingsTextAreaHost");
                 taHost.transform.SetParent(controls.transform, false);
-                LayoutElement tle = taHost.AddComponent<LayoutElement>();
-                tle.flexibleWidth = 1f;
-                tle.preferredWidth = 320f * paneScale;
-                tle.minWidth = 120f * paneScale;
-                tle.preferredHeight = 72f * paneScale;
-                tle.minHeight = 72f * paneScale;
+                LayoutElement tle = UI.AddLE(taHost, minWidth: 120f * uiS, minHeight: 72f * uiS, preferredWidth: 320f * uiS, preferredHeight: 72f * uiS, flexibleWidth: 1f);
 
-                Image taBg = taHost.AddComponent<Image>();
-                taBg.color = new Color(0.16f, 0.16f, 0.18f, 1f);
-                taBg.raycastTarget = true;
+                Image taBg = AddSettingsControlRoundedBg(taHost, new Color(0.16f, 0.16f, 0.18f, 1f));
                 InputField inf = taHost.AddComponent<InputField>();
                 inf.lineType = InputField.LineType.MultiLineNewline;
                 inf.targetGraphic = taBg;
@@ -1650,21 +2397,11 @@ namespace VPB
                 cb.fadeDuration = 0f;
                 inf.colors = cb;
 
-                GameObject textGo = new GameObject("Text");
-                textGo.transform.SetParent(taHost.transform, false);
-                Text taTxt = textGo.AddComponent<Text>();
-                taTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                taTxt.fontSize = Mathf.Max(11, Mathf.RoundToInt(16f * paneScale));
-                taTxt.color = new Color(0.95f, 0.95f, 0.97f, 1f);
-                taTxt.alignment = TextAnchor.UpperLeft;
-                taTxt.supportRichText = false;
-                taTxt.raycastTarget = true;
-                try { VPBUiFont.ApplyTo(taTxt); } catch { }
-                RectTransform taTxtRt = textGo.GetComponent<RectTransform>();
-                taTxtRt.anchorMin = Vector2.zero;
-                taTxtRt.anchorMax = Vector2.one;
-                taTxtRt.offsetMin = new Vector2(6f * paneScale, 6f * paneScale);
-                taTxtRt.offsetMax = new Vector2(-6f * paneScale, -6f * paneScale);
+                Text taTxt = UI.CreateLabel(taHost, "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(0.95f, 0.95f, 0.97f, 1f), TextAnchor.UpperLeft, richText: false, name: "Text");
+                GalleryUiMetrics.ApplyFont(taTxt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
+                RectTransform taTxtRt = taTxt.GetComponent<RectTransform>();
+                taTxtRt.offsetMin = new Vector2(6f * uiS, 6f * uiS);
+                taTxtRt.offsetMax = new Vector2(-6f * uiS, -6f * uiS);
                 inf.textComponent = taTxt;
                 inf.text = def.GetString() ?? "";
 
@@ -1678,12 +2415,36 @@ namespace VPB
                 return;
             }
 
-            if (def.ControlType == InternalSettingControlType.Button && def.OnAction != null)
+            if (def.ControlType == InternalSettingControlType.Hotkey)
             {
-                CreateMiniButton(controls.transform, "CLICK", 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
-                    def.OnAction?.Invoke();
-                    RefreshInternalSettingsListRows(true);
-                });
+                RebuildPluginHotkeyRowControls(controls.transform, def, uiS);
+                return;
+            }
+
+            if (def.ControlType == InternalSettingControlType.Button)
+            {
+                if (def.OnAction == null
+                    && string.Equals(def.Key, "plugin.scan_whitelist.empty_warn", StringComparison.OrdinalIgnoreCase))
+                {
+                    Text wt = UI.CreateLabel(controls, def.Label ?? "", GalleryUiDesignTokens.SettingsListRowDetailFontRef, new Color(1f, 0.75f, 0.2f, 1f), TextAnchor.MiddleRight, richText: false, name: "SettingsWarningLabel");
+                    GalleryUiMetrics.ApplyFont(wt, GalleryUiDesignTokens.SettingsListRowDetailFontRef, uiS, GalleryUiDesignTokens.FontMinRef);
+                    LayoutElement wle = UI.AddLE(wt.gameObject, preferredHeight: chipH, flexibleWidth: 1f);
+                    return;
+                }
+                if (def.OnAction != null)
+                {
+                    string btnLabel = VPBTranslation.T("settings.row.action", "CLICK");
+                    if (string.Equals(def.Key, "plugin.scan_whitelist.manage", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.manage", "MANAGE");
+                    else if (string.Equals(def.Key, "plugin.qm_positions", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.adjust", "ADJUST");
+                    else if (string.Equals(def.Key, "plugin.bench.configure", StringComparison.OrdinalIgnoreCase))
+                        btnLabel = VPBTranslation.T("settings.row.configure", "CONFIGURE");
+                    CreateMiniButton(controls.transform, btnLabel, 150f, new Color(0.7f, 0.4f, 0.2f, 1f), () => {
+                        def.OnAction?.Invoke();
+                        RefreshInternalSettingsListRows(true);
+                    });
+                }
                 return;
             }
         }
@@ -1701,10 +2462,14 @@ namespace VPB
         private void SaveInternalSettingsSession()
         {
             if (!internalSettingsSessionActive) return;
+            if (!TryCommitPluginSettingsOnSave())
+                return;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             try { VPBConfig.Instance.Save(false); } catch { }
             VPBConfig.Instance.TriggerChange();
+            try { Settings.SaveConfig(); } catch { }
             try { SetHoverPreviewDummyActive(false); } catch { }
+            PluginSettingsEndSession();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
         }
@@ -1726,6 +2491,8 @@ namespace VPB
                 changed = true;
             }
 
+            try { ApplySidePanelDefaultsFromConfig(); } catch { }
+
             if (!changed) return;
             UpdateLayout();
             UpdateTabs();
@@ -1746,12 +2513,17 @@ namespace VPB
             VPBConfig.Instance.EnableGalleryFade = b.EnableGalleryFade;
             VPBConfig.Instance.EnableGalleryTranslucency = b.EnableGalleryTranslucency;
             VPBConfig.Instance.GalleryManualRefreshOnly = b.GalleryManualRefreshOnly;
+            VPBConfig.Instance.GalleryDetailStripSideInfoEnabled = b.GalleryDetailStripSideInfoEnabled;
+            VPBConfig.Instance.GalleryDetailStripThumbOnRight = b.GalleryDetailStripThumbOnRight;
+            VPBConfig.Instance.GalleryDetailStripHeightRef = b.GalleryDetailStripHeightRef;
             VPBConfig.Instance.GalleryOpacity = b.GalleryOpacity;
             VPBConfig.Instance.SideButtonScaleVR = b.SideButtonScaleVR;
             VPBConfig.Instance.SideButtonScaleDesktop = b.SideButtonScaleDesktop;
             VPBConfig.Instance.InnerPaneScaleVR = b.InnerPaneScaleVR;
             VPBConfig.Instance.InnerPaneScaleDesktop = b.InnerPaneScaleDesktop;
             VPBConfig.Instance.EnableButtonGaps = b.EnableButtonGaps;
+            VPBConfig.Instance.EnableGalleryElementRounding = b.EnableGalleryElementRounding;
+            VPBConfig.Instance.GalleryElementCornerRadiusFraction = VPBConfig.ClampGalleryElementCornerRadiusFraction(b.GalleryElementCornerRadiusFraction);
             VPBConfig.Instance.ShowSideButtons = b.ShowSideButtons;
             VPBConfig.Instance.FollowAngle = b.FollowAngle;
             VPBConfig.Instance.FollowEyeHeight = b.FollowEyeHeight;
@@ -1760,8 +2532,10 @@ namespace VPB
             VPBConfig.Instance.MovementThreshold = b.MovementThreshold;
             VPBConfig.Instance.BringToFrontDistance = b.BringToFrontDistance;
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
+            VPBConfig.Instance.GalleryTboxToolbarPinned = b.GalleryTboxToolbarPinned;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
+            VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;
             VPBConfig.Instance.RequireDragHoldBeforeMove = b.RequireDragHoldBeforeMove;
             VPBConfig.Instance.DragHoldThreshold = b.DragHoldThreshold;
             VPBConfig.Instance.HoldToLaunchHoldSeconds = b.HoldToLaunchHoldSeconds;
@@ -1770,12 +2544,20 @@ namespace VPB
             VPBConfig.Instance.InitialGalleryCategory = b.InitialGalleryCategory;
             VPBConfig.Instance.GalleryDefaultLeftSidePanel = b.GalleryDefaultLeftSidePanel;
             VPBConfig.Instance.GalleryDefaultRightSidePanel = b.GalleryDefaultRightSidePanel;
+            VPBConfig.Instance.GalleryDefaultUserTagAvailMode = b.GalleryDefaultUserTagAvailMode;
+            VPBConfig.Instance.GalleryHideUnusedUserTagsInFilterMode = b.GalleryHideUnusedUserTagsInFilterMode;
+            VPBConfig.Instance.GalleryUserTagFilterCombineMode = b.GalleryUserTagFilterCombineMode;
             VPBConfig.Instance.GalleryScrollButtonStepViewportFraction = b.GalleryScrollButtonStepViewportFraction;
             VPBConfig.Instance.GalleryScrollButtonsEnabled = b.GalleryScrollButtonsEnabled;
+            VPBConfig.Instance.SpringScrollButtonMode = VPBConfig.NormalizeSpringScrollButtonMode(b.SpringScrollButtonMode);
             VPBConfig.Instance.GalleryVrThumbstickScrollEnabled = b.GalleryVrThumbstickScrollEnabled;
             VPBConfig.Instance.GalleryHideCreatorSideButtons = b.GalleryHideCreatorSideButtons;
+            VPBConfig.Instance.GalleryShowCategoryIcons = b.GalleryShowCategoryIcons;
             VPBConfig.Instance.GalleryConsolidateCreatorNames = b.GalleryConsolidateCreatorNames;
             VPBConfig.Instance.PluginGalleryGridThumbnails = b.PluginGalleryGridThumbnails;
+            VPBConfig.Instance.PluginGalleryCategoryLabelsOnly = b.PluginGalleryCategoryLabelsOnly;
+            VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled = b.GalleryThumbPlaceholderLabelsEnabled;
+            VPBConfig.Instance.GalleryThumbPlaceholderSizeScale = VPBConfig.ClampGalleryThumbPlaceholderSizeScale(b.GalleryThumbPlaceholderSizeScale);
             VPBConfig.Instance.GalleryListNamesLegacyFileName = b.GalleryListNamesLegacyFileName;
             VPBConfig.Instance.GalleryHoverPreviewMode = b.GalleryHoverPreviewMode;
             VPBConfig.Instance.GalleryListHoverPreviewSize = b.GalleryListHoverPreviewSize;
@@ -1783,6 +2565,7 @@ namespace VPB
             VPBConfig.Instance.GalleryListHoverPreviewOffsetY = b.GalleryListHoverPreviewOffsetY;
             VPBConfig.Instance.GalleryGridLabelsEnabled = b.GalleryGridLabelsEnabled;
             VPBConfig.Instance.GalleryGridLabelsAutoHideAtHighDensity = b.GalleryGridLabelsAutoHideAtHighDensity;
+            VPBConfig.Instance.GalleryGridHoverBadgesEnabled = b.GalleryGridHoverBadgesEnabled;
             VPBConfig.Instance.GalleryGridLabelFontSize = b.GalleryGridLabelFontSize;
             VPBConfig.Instance.GalleryGridSpacingX = b.GalleryGridSpacingX;
             VPBConfig.Instance.GalleryGridSpacingY = b.GalleryGridSpacingY;
@@ -1794,6 +2577,28 @@ namespace VPB
             VPBConfig.Instance.GalleryGridBorderColorG = b.GalleryGridBorderColorG;
             VPBConfig.Instance.GalleryGridBorderColorB = b.GalleryGridBorderColorB;
             VPBConfig.Instance.GalleryGridBorderColorA = b.GalleryGridBorderColorA;
+            VPBConfig.Instance.GalleryScanWlBorderEnabled = b.GalleryScanWlBorderEnabled;
+            VPBConfig.Instance.GalleryScanWlBorderShowInGrid = b.GalleryScanWlBorderShowInGrid;
+            VPBConfig.Instance.GalleryScanWlBorderShowInList = b.GalleryScanWlBorderShowInList;
+            VPBConfig.Instance.GalleryScanWlBorderWidth = b.GalleryScanWlBorderWidth;
+            VPBConfig.Instance.GalleryScanWlGridFrameInset = b.GalleryScanWlGridFrameInset;
+            VPBConfig.Instance.GalleryScanWlListFrameInset = b.GalleryScanWlListFrameInset;
+            VPBConfig.Instance.GalleryScanWlBorderOnThumbnail = b.GalleryScanWlBorderOnThumbnail;
+            VPBConfig.Instance.GalleryScanWlBorderColorR = b.GalleryScanWlBorderColorR;
+            VPBConfig.Instance.GalleryScanWlBorderColorG = b.GalleryScanWlBorderColorG;
+            VPBConfig.Instance.GalleryScanWlBorderColorB = b.GalleryScanWlBorderColorB;
+            VPBConfig.Instance.GalleryScanWlBorderColorA = b.GalleryScanWlBorderColorA;
+            VPBConfig.Instance.GalleryScanWlTempBorderEnabled = b.GalleryScanWlTempBorderEnabled;
+            VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid = b.GalleryScanWlTempBorderShowInGrid;
+            VPBConfig.Instance.GalleryScanWlTempBorderShowInList = b.GalleryScanWlTempBorderShowInList;
+            VPBConfig.Instance.GalleryScanWlTempBorderWidth = b.GalleryScanWlTempBorderWidth;
+            VPBConfig.Instance.GalleryScanWlTempGridFrameInset = b.GalleryScanWlTempGridFrameInset;
+            VPBConfig.Instance.GalleryScanWlTempListFrameInset = b.GalleryScanWlTempListFrameInset;
+            VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail = b.GalleryScanWlTempBorderOnThumbnail;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorR = b.GalleryScanWlTempBorderColorR;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorG = b.GalleryScanWlTempBorderColorG;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorB = b.GalleryScanWlTempBorderColorB;
+            VPBConfig.Instance.GalleryScanWlTempBorderColorA = b.GalleryScanWlTempBorderColorA;
             VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible = b.GalleryOnlyWhenVamMenuVisible;
             VPBConfig.Instance.GalleryAnchorToVamMenu = b.GalleryAnchorToVamMenu;
             VPBConfig.Instance.GalleryCategoryQuickOrder = b.GalleryCategoryQuickOrder ?? "";
@@ -1801,16 +2606,24 @@ namespace VPB
             VPBConfig.Instance.HiddenCategories = b.HiddenCategories != null
                 ? new HashSet<string>(b.HiddenCategories, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            VPBConfig.Instance.BlockInGameMessages = b.BlockInGameMessages ?? "Off";
+            VPBConfig.Instance.HideMissingDependencyLogs = b.HideMissingDependencyLogs;
+            VPBConfig.Instance.ClearInGameLogsOnSceneLaunch = b.ClearInGameLogsOnSceneLaunch;
+
+            RestorePluginSettingsFromSnapshot(b);
 
             if (this != null)
             {
-                ApplySideButtonScale();
+                ApplyInnerPaneScale();
                 categoriesCached = false;
                 RebuildGridLayout();
                 RefreshFiles(true);
+                try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             }
             ApplyGalleryTransparencyToAllPanels();
+            try { UI.ApplyGalleryElementCornerRadiusGlobally(); } catch { }
             VPBConfig.Instance.TriggerChange();
+            PluginSettingsEndSession();
             internalSettingsSessionActive = false;
             internalSettingsBackup = null;
         }
@@ -1848,7 +2661,7 @@ namespace VPB
                 boxRt.sizeDelta = new Vector2(560f, 260f);
                 boxRt.anchoredPosition = Vector2.zero;
                 UnityEngine.UI.Image boxBg = box.AddComponent<UnityEngine.UI.Image>();
-                boxBg.color = new Color(0.15f, 0.15f, 0.15f, 1f);
+                boxBg.color = UI.ChromeDark;
 
                 // Layout for text + buttons
                 UnityEngine.UI.VerticalLayoutGroup vl = box.AddComponent<UnityEngine.UI.VerticalLayoutGroup>();
@@ -1859,16 +2672,9 @@ namespace VPB
                 vl.childForceExpandHeight = false;
 
                 // Message text
-                GameObject textGo = new GameObject("Message");
-                textGo.transform.SetParent(box.transform, false);
-                UnityEngine.UI.Text msg = textGo.AddComponent<UnityEngine.UI.Text>();
-                msg.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                msg.fontSize = 22;
-                msg.alignment = TextAnchor.MiddleCenter;
-                msg.color = Color.white;
-                msg.text = VPBTranslation.T("ba.prompt.msg",
-                    "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section.");
-                UnityEngine.UI.LayoutElement textLe = textGo.AddComponent<UnityEngine.UI.LayoutElement>();
+                Text msg = UI.CreateLabel(box, VPBTranslation.T("ba.prompt.msg",
+                    "BrowserAssist data detected.\nImport available in Settings.\nOpen Settings → BrowserAssist section."), GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, name: "Message");
+                UnityEngine.UI.LayoutElement textLe = msg.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
                 textLe.preferredHeight = 130f;
                 textLe.flexibleWidth = 1f;
 
@@ -1909,7 +2715,7 @@ namespace VPB
                         catch { }
                         try
                         {
-                            currentSettingsGroup = "ba_migration";
+                            SetActiveSettingsGroup("ba_migration");
                             UpdateTabs();
                             RefreshInternalSettingsListRows(false);
                         }

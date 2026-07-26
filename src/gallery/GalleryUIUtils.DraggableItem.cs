@@ -24,7 +24,6 @@ namespace VPB
         }
 
         public FileEntry FileEntry;
-        public Hub.GalleryHubItem HubItem;
         public RawImage ThumbnailImage;
         public GalleryPanel Panel;
         
@@ -93,7 +92,23 @@ namespace VPB
         }
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
+        private const int GlobalRegionCacheMaxEntries = 1024;
         private static string _lastAppearanceClothingMode = "keep";
+
+        /// <summary>Drop clothing/hair region L1 cache (package refresh / soak-test bound).</summary>
+        public static void ClearGlobalRegionCache()
+        {
+            _globalRegionCache.Clear();
+        }
+
+        private static void PutGlobalRegionCache(string cacheKey, HashSet<string> regions)
+        {
+            if (string.IsNullOrEmpty(cacheKey) || regions == null) return;
+            if (_globalRegionCache.Count >= GlobalRegionCacheMaxEntries
+                && !_globalRegionCache.ContainsKey(cacheKey))
+                _globalRegionCache.Clear();
+            _globalRegionCache[cacheKey] = regions;
+        }
 
         public static HashSet<string> GetTagSetForClothingItem(object item)
         {
@@ -257,19 +272,10 @@ namespace VPB
             if (rootCanvas == null && Panel != null) rootCanvas = Panel.canvas;
             if (rootCanvas == null) return;
 
-            _dragOverlay = new GameObject("DragInputBlocker");
+            _dragOverlay = UI.CreateChildRT(rootCanvas.gameObject, "DragInputBlocker", AnchorPresets.stretchAll);
             _dragOverlay.layer = rootCanvas.gameObject.layer;
 
-            RectTransform rt = _dragOverlay.AddComponent<RectTransform>();
-            rt.SetParent(rootCanvas.transform, false);
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-
-            Image img = _dragOverlay.AddComponent<Image>();
-            img.color = Color.clear;
-            img.raycastTarget = true;
+            Image img = UI.AddImage(_dragOverlay, Color.clear);
         }
 
         private void DestroyDragOverlay()
@@ -337,14 +343,6 @@ namespace VPB
                 if (Panel != null)
                 {
                     Panel.SetStatus("");
-                }
-
-                if (HubItem != null)
-                {
-                    LogUtil.Log("Dropped Hub Item: " + HubItem.Title);
-                    // Handle Hub Item drop (e.g. Download)
-                    dragCam = null;
-                    return;
                 }
 
                 ItemType itemType = GetItemType(FileEntry);
@@ -497,12 +495,6 @@ namespace VPB
             statusMsg = hitMsg;
             distance = (hit.collider != null) ? hit.distance : planeDistance;
 
-            if (HubItem != null)
-            {
-                statusMsg = $"Drop to download/view {HubItem.Title}";
-                return atom;
-            }
-
             ItemType itemType = GetItemType(FileEntry);
             
             if (itemType == ItemType.SubScene)
@@ -579,8 +571,7 @@ namespace VPB
             bool installed = EnsureInstalled();
             if (installed)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                FileManagerBridge.Refresh("dragdrop_cua", RefreshScope.Both, flushNativeImmediately: true);
                 yield return new WaitForSeconds(1.0f);
             }
 
@@ -670,8 +661,7 @@ namespace VPB
 
             if (installed)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                FileManager.Refresh();
+                FileManagerBridge.Refresh("dragdrop_subscene", RefreshScope.Both, flushNativeImmediately: true);
             }
 
             string normalizedPath = UI.NormalizePath(path);
@@ -1758,60 +1748,14 @@ namespace VPB
         {
             try
             {
-                LogUtil.Log($"[VPB] MergeSceneFile started: {path} (atPlayer: {atPlayer})");
                 FileEntry entryForPath = null;
                 try { entryForPath = VPB.FileManager.GetFileEntry(path); } catch { }
                 if (entryForPath == null) entryForPath = FileEntry;
-
-                bool installed = false;
-                try { installed = UI.EnsureInstalled(entryForPath); } catch { installed = false; }
-
-                if (installed)
-                {
-                    LogUtil.Log("[VPB] Refreshing FileManagers...");
-                    MVR.FileManagement.FileManager.Refresh();
-                    FileManager.Refresh();
-                }
-
-                string normalizedPath = UI.NormalizePath(path);
-                try
-                {
-                    if (SceneLoadingUtils.TryPrepareLocalSceneForLoad(entryForPath, out string rewritten))
-                    {
-                        normalizedPath = UI.NormalizePath(rewritten);
-                        LogUtil.Log($"[VPB] Using rewritten scene: {normalizedPath}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogWarning($"[VPB] Scene rewrite skipped due to error: {ex.Message}");
-                }
-                SuperController sc = SuperController.singleton;
-                if (sc != null)
-                {
-                    // Track atoms before merge to identify new ones if atPlayer is requested
-                    HashSet<string> atomsBefore = null;
-                    if (atPlayer)
-                    {
-                        atomsBefore = new HashSet<string>();
-                        foreach (Atom a in sc.GetAtoms()) atomsBefore.Add(a.uid);
-                    }
-
-                    if (!SceneLoadingUtils.LoadScene(normalizedPath, true))
-                    {
-                        LogUtil.LogError("[VPB] MergeSceneFile failed: scene load returned false");
-                    }
-
-                    if (atPlayer)
-                    {
-                        if (Panel != null) Panel.StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
-                        else StartCoroutine(TeleportNewAtomsToPlayer(atomsBefore));
-                    }
-                }
+                UI.MergeSceneFile(entryForPath, path, Panel, atPlayer, this);
             }
             catch (Exception ex)
             {
-                LogUtil.LogError($"[VPB] MergeSceneFile crash: {ex.Message}\n{ex.StackTrace}");
+                LogUtil.LogError("[VPB] MergeSceneFile error: " + ex.Message);
             }
         }
 

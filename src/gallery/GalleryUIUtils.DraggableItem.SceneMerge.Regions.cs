@@ -70,7 +70,7 @@ namespace VPB
             if (regions.Count == 0)
                 regions = heuristicFn(Path.GetFileNameWithoutExtension(entry.Path));
 
-            _globalRegionCache[cacheKey] = regions;
+            PutGlobalRegionCache(cacheKey, regions);
             return regions;
         }
 

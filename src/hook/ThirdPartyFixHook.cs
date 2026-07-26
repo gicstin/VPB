@@ -3,6 +3,7 @@ using System.Reflection;
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace VPB
 {
@@ -15,6 +16,7 @@ namespace VPB
         private static bool _loggerInternalLogEventPatched = false;
         private static bool _unityLogListenerPatched = false;
         private static bool _superControllerInGameLogPatched = false;
+        private static bool _superControllerLogUiFontPatched = false;
 
         private static int _ingameBurstLinesRemaining;
         private static float _ingameBurstUntilRealtime;
@@ -99,6 +101,8 @@ namespace VPB
                 {
                     PatchSuperControllerInGameLogs(harmony);
                 }
+
+                PatchSuperControllerLogUiFont(harmony);
             }
             catch (Exception ex)
             {
@@ -108,33 +112,129 @@ namespace VPB
 
         private static void PatchSuperControllerInGameLogs(Harmony harmony)
         {
-            MethodInfo prefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_ErrorOrLogError_Prefix));
+            MethodInfo errorPrefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_ErrorOrLogError_Prefix));
+            MethodInfo messagePrefix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_MessageOrLogMessage_Prefix));
             int patched = 0;
 
             foreach (MethodInfo method in typeof(SuperController).GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (method == null) continue;
-                if (method.Name != "Error" && method.Name != "LogError") continue;
                 if (method.ReturnType != typeof(void)) continue;
 
                 ParameterInfo[] parameters = method.GetParameters();
                 if (parameters == null || parameters.Length == 0 || parameters[0].ParameterType != typeof(string))
                     continue;
 
-                try
+                if (method.Name == "Error" || method.Name == "LogError")
                 {
-                    harmony.Patch(method, prefix: new HarmonyMethod(prefix));
-                    patched++;
+                    try { harmony.Patch(method, prefix: new HarmonyMethod(errorPrefix)); patched++; } catch { }
                 }
-                catch
+                else if (method.Name == "Message" || method.Name == "LogMessage")
                 {
+                    try { harmony.Patch(method, prefix: new HarmonyMethod(messagePrefix)); patched++; } catch { }
                 }
             }
 
             if (patched > 0)
             {
                 _superControllerInGameLogPatched = true;
-                LogUtil.Log("[VPB] Patched SuperController.Error/LogError x" + patched + " for CheesyFX in-game log suppression");
+                LogUtil.Log("[VPB] Patched SuperController.Error/LogError/Message/LogMessage x" + patched + " for in-game log suppression");
+            }
+        }
+
+        private static void PatchSuperControllerLogUiFont(Harmony harmony)
+        {
+            if (_superControllerLogUiFontPatched) return;
+
+            MethodInfo postfix = AccessTools.Method(typeof(ThirdPartyFixHook), nameof(SuperController_SyncMessageLogFont_Postfix));
+            if (postfix == null) return;
+
+            int patched = 0;
+            foreach (string methodName in new[] {
+                "Start",
+                "SyncAllMessagesInputFields",
+                "SyncAllErrorsInputFields",
+                "OpenMessageLogPanel",
+                "OpenErrorLogPanel"
+            })
+            {
+                MethodInfo method = AccessTools.Method(typeof(SuperController), methodName);
+                if (method == null) continue;
+                try
+                {
+                    harmony.Patch(method, postfix: new HarmonyMethod(postfix));
+                    patched++;
+                }
+                catch { }
+            }
+
+            if (patched > 0)
+            {
+                _superControllerLogUiFontPatched = true;
+                LogUtil.Log("[VPB] Patched SuperController message log font sync x" + patched);
+            }
+        }
+
+        private static void SuperController_SyncMessageLogFont_Postfix(SuperController __instance)
+        {
+            try { SyncMessageLogFontToErrorLog(__instance); } catch { }
+        }
+
+        private static void SyncMessageLogFontToErrorLog(SuperController sc)
+        {
+            if (sc == null) return;
+            ApplyMessageLogInputFieldStyle(sc.allErrorsInputField, sc.allMessagesInputField);
+            ApplyMessageLogInputFieldStyle(sc.allErrorsInputField2, sc.allMessagesInputField2);
+        }
+
+        private static void ApplyMessageLogInputFieldStyle(InputField reference, InputField messageField)
+        {
+            if (messageField == null) return;
+
+            Text msgText = messageField.textComponent;
+            if (msgText == null) return;
+
+            Text refText = reference != null ? reference.textComponent : null;
+
+            if (refText != null)
+            {
+                if (refText.fontSize > 0)
+                    msgText.fontSize = refText.fontSize;
+                if (refText.font != null)
+                    msgText.font = refText.font;
+                msgText.lineSpacing = refText.lineSpacing;
+                msgText.alignment = refText.alignment;
+                msgText.supportRichText = refText.supportRichText;
+                msgText.horizontalOverflow = refText.horizontalOverflow;
+                msgText.verticalOverflow = refText.verticalOverflow;
+
+                if (reference.lineType != InputField.LineType.SingleLine)
+                    messageField.lineType = reference.lineType;
+            }
+            else
+            {
+                if (messageField.lineType == InputField.LineType.SingleLine)
+                    messageField.lineType = InputField.LineType.MultiLineNewline;
+                msgText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                msgText.verticalOverflow = VerticalWrapMode.Overflow;
+                if (msgText.fontSize < 12)
+                    msgText.fontSize = 14;
+            }
+
+            // Message log prefab often uses best-fit/overflow; long lines shrink to fit width.
+            msgText.resizeTextForBestFit = false;
+            if (msgText.horizontalOverflow == HorizontalWrapMode.Overflow)
+                msgText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            if (messageField.lineType == InputField.LineType.SingleLine)
+                messageField.lineType = InputField.LineType.MultiLineNewline;
+
+            Graphic placeholder = messageField.placeholder;
+            Text phText = placeholder as Text;
+            if (phText != null)
+            {
+                phText.resizeTextForBestFit = false;
+                if (msgText.fontSize > 0)
+                    phText.fontSize = msgText.fontSize;
             }
         }
 
@@ -147,6 +247,19 @@ namespace VPB
                 return null; // Suppress the exception
             }
             return null;
+        }
+
+        internal static void TryClearInGameLogsOnSceneLaunch(SuperController sc, bool loadMerge)
+        {
+            if (sc == null || loadMerge) return;
+            try
+            {
+                var c = VPBConfig.Instance;
+                if (c == null || !c.ClearInGameLogsOnSceneLaunch) return;
+                sc.ClearErrors();
+                sc.ClearMessages();
+            }
+            catch { }
         }
 
         internal static bool ShouldSuppressCheesyFxUnityLog(string message, string stackTrace, LogType type)
@@ -174,6 +287,44 @@ namespace VPB
             {
                 return false;
             }
+        }
+
+        internal static bool IsMissingAddonDependencyMessage(string msg)
+        {
+            return !string.IsNullOrEmpty(msg)
+                && msg.IndexOf("Missing addon package", StringComparison.OrdinalIgnoreCase) >= 0
+                && msg.IndexOf("depends on", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        internal static bool ShouldSuppressMissingDependencyLog(string msg)
+        {
+            if (string.IsNullOrEmpty(msg) || !IsMissingAddonDependencyMessage(msg))
+                return false;
+            try
+            {
+                return VPBConfig.Instance != null && VPBConfig.Instance.HideMissingDependencyLogs;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static bool ShouldSuppressAllInGameMessages()
+        {
+            try
+            {
+                var c = VPBConfig.Instance;
+                if (c == null) return false;
+                string mode = c.BlockInGameMessages ?? "Off";
+                if (string.Equals(mode, "Off", StringComparison.OrdinalIgnoreCase)) return false;
+                if (string.Equals(mode, "Both", StringComparison.OrdinalIgnoreCase)) return true;
+                bool isVR = c.IsVR;
+                if (string.Equals(mode, "VR Only", StringComparison.OrdinalIgnoreCase)) return isVR;
+                if (string.Equals(mode, "Desktop Only", StringComparison.OrdinalIgnoreCase)) return !isVR;
+                return false;
+            }
+            catch { return false; }
         }
 
         private static void NoteCheesyFxErrorActivity()
@@ -272,8 +423,21 @@ namespace VPB
         {
             try
             {
-                if (ShouldSuppressCheesyFxInGameText(__0))
-                    return false;
+                if (ShouldSuppressAllInGameMessages()) return false;
+                if (ShouldSuppressMissingDependencyLog(__0)) return false;
+                if (ShouldSuppressCheesyFxInGameText(__0)) return false;
+            }
+            catch
+            {
+            }
+            return true;
+        }
+
+        private static bool SuperController_MessageOrLogMessage_Prefix()
+        {
+            try
+            {
+                if (ShouldSuppressAllInGameMessages()) return false;
             }
             catch
             {
@@ -283,6 +447,11 @@ namespace VPB
 
         private static bool UnityLogSource_OnUnityLogMessageReceived_Prefix(string message, string stackTrace, LogType type)
         {
+            try
+            {
+                VamStartupProfiler.OnUnityStartupLog(message);
+            }
+            catch { }
             try
             {
                 if (ShouldSuppressCheesyFxUnityLog(message, stackTrace, type))
@@ -305,8 +474,13 @@ namespace VPB
                     return true;
 
                 string data = eventArgs.Data as string;
-                if (!string.IsNullOrEmpty(data) && ShouldSuppressCheesyFxNullReferenceLog(data))
-                    return false;
+                if (!string.IsNullOrEmpty(data))
+                {
+                    if (ShouldSuppressMissingDependencyLog(data))
+                        return false;
+                    if (ShouldSuppressCheesyFxNullReferenceLog(data))
+                        return false;
+                }
             }
             catch
             {
@@ -322,12 +496,8 @@ namespace VPB
                 {
                     string msg = CombineUnityLogParts(__0, __1);
 
-                    if (!string.IsNullOrEmpty(msg)
-                        && msg.IndexOf("Missing addon package", StringComparison.OrdinalIgnoreCase) >= 0
-                        && msg.IndexOf("depends on", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
+                    if (ShouldSuppressMissingDependencyLog(msg))
                         return false;
-                    }
 
                     if (ShouldSuppressCheesyFxUnityLog(__0, __1, __2))
                         return false;

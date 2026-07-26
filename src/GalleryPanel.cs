@@ -42,8 +42,14 @@ namespace VPB
             if (VPBConfig.Instance == null) return;
             string ls = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
             string rs = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
-            ContentType? l = SidePanelStringToContentType(ls);
-            ContentType? r = SidePanelStringToContentType(rs);
+
+            bool leftImport = string.Equals(ls, "Import", StringComparison.OrdinalIgnoreCase);
+            bool rightImport = string.Equals(rs, "Import", StringComparison.OrdinalIgnoreCase);
+            if (leftImport && rightImport)
+                rightImport = false;
+
+            ContentType? l = leftImport ? null : SidePanelStringToContentType(ls);
+            ContentType? r = rightImport ? null : SidePanelStringToContentType(rs);
             if (VPBConfig.Instance.GalleryHideCreatorSideButtons)
             {
                 if (l == ContentType.Creator) l = null;
@@ -59,16 +65,42 @@ namespace VPB
             // opening a filter panel by default is surprising for VR users.
             bool isVR = XrUtils.IsVrActive();
             bool vrAnchorMode = isVR && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu;
-            if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue)
+            bool wantImport = !importSidebarInitAsClone && (leftImport || rightImport);
+            if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue && !wantImport)
                 targetR = ContentType.Category;
 
-            if (NullableContentTypeEqual(leftActiveContent, targetL) && NullableContentTypeEqual(rightActiveContent, targetR))
+            bool contentSame = NullableContentTypeEqual(leftActiveContent, targetL)
+                && NullableContentTypeEqual(rightActiveContent, targetR);
+            bool importSame = !wantImport
+                || (importSidebarOpenIntent && importSidebarOnLeft == leftImport);
+            if (contentSame && importSame)
                 return;
 
             leftActiveContent = targetL;
             rightActiveContent = targetR;
+
+            if (wantImport)
+            {
+                importSidebarOpenIntent = true;
+                importSidebarOpenIntentLoaded = true;
+                importSidebarForceOnLeft = leftImport;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+                try { PersistImportSidebarOpenIntent(); } catch { }
+            }
+            else if (!importSidebarInitAsClone && importSidebarOpenIntent)
+            {
+                importSidebarOpenIntent = false;
+                importSidebarOpenIntentLoaded = true;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
+                try { PersistImportSidebarOpenIntent(); } catch { }
+            }
+
             UpdateLayout();
             UpdateTabs();
+            if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
+                try { ApplyDefaultUserTagAvailModeOnTagsPanelOpen(); } catch { }
+            try { RefreshSceneImportSideButtonVisibility(); } catch { }
+            try { UpdateSideButtonPositions(); } catch { }
         }
 
         private static bool NullableContentTypeEqual(ContentType? a, ContentType? b)
@@ -84,8 +116,13 @@ namespace VPB
                 return ContentType.Category;
             if (string.Equals(normalized, "Creator", StringComparison.OrdinalIgnoreCase))
                 return ContentType.Creator;
-            if (string.Equals(normalized, "Tags", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(normalized, "Tags", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "UserTags", StringComparison.OrdinalIgnoreCase))
                 return ContentType.UserTags;
+            if (string.Equals(normalized, "Path", StringComparison.OrdinalIgnoreCase))
+                return ContentType.Path;
+            if (string.Equals(normalized, "History", StringComparison.OrdinalIgnoreCase))
+                return ContentType.History;
             return null;
         }
 
@@ -103,13 +140,23 @@ namespace VPB
 
         private void CreateResizeHandles()
         {
-            CreateResizeHandle(AnchorPresets.bottomRight, 0);
-            CreateResizeHandle(AnchorPresets.bottomLeft, -90);
-            CreateResizeHandle(AnchorPresets.topLeft, 180);
-            CreateFixedModeResizeHandle();
+            // Handles are seated as real children of the bar layout groups so they inherit the exact
+            // padding/spacing of the existing bar buttons. Only the show/hide (dock mode + anchor) differs.
+            GameObject leftSlot = _footerLeftSectionRT != null ? _footerLeftSectionRT.gameObject : backgroundBoxGO;
+            GameObject rightSlot = _footerRightSectionRT != null ? _footerRightSectionRT.gameObject : backgroundBoxGO;
+            Transform titleBarTr = backgroundBoxGO != null ? backgroundBoxGO.transform.Find("TitleBar") : null;
+            GameObject titleBar = titleBarTr != null ? titleBarTr.gameObject : backgroundBoxGO;
+
+            // Floating-mode corner handles, alongside the bar buttons.
+            _resizeHandleBottomRightGO = CreateFloatingResizeHandle(AnchorPresets.bottomRight, rightSlot, false);
+            _resizeHandleBottomLeftGO = CreateFloatingResizeHandle(AnchorPresets.bottomLeft, leftSlot, true);
+            _resizeHandleTopLeftGO = CreateTitleBarResizeHandle(titleBar);
+
+            // Fixed-dock handles share the same footer corner slots.
+            CreateFixedModeResizeHandle(leftSlot, rightSlot);
         }
 
-        private void CreateFixedModeResizeHandle()
+        private void CreateFixedModeResizeHandle(GameObject leftSlot, GameObject rightSlot)
         {
             // Create Preview Border
             GameObject previewGO = new GameObject("ResizePreviewBorder");
@@ -124,40 +171,20 @@ namespace VPB
             previewGO.SetActive(false);
             previewGO.transform.SetAsLastSibling();
 
-            // Handle for Right dock (existing): bottom-left inside panel, drags anchorMin.x (width)
+            // Handle for Right/Top dock: footer left slot, drags anchorMin.x (width) + height.
             {
-                GameObject handleGO = new GameObject("ResizeHandle_FixedBottom");
-                handleGO.transform.SetParent(backgroundBoxGO.transform, false);
-
-                Image img = handleGO.AddComponent<Image>();
-                img.color = new Color(0, 0, 0, 0.01f); // Invisible hit area
-
-                RectTransform handleRT = handleGO.GetComponent<RectTransform>();
-                handleRT.anchorMin = new Vector2(0, 0);
-                handleRT.anchorMax = new Vector2(0, 0);
-                handleRT.pivot = new Vector2(0.5f, 0.5f); 
-                handleRT.anchoredPosition = new Vector2(25, 25);
-                handleRT.sizeDelta = new Vector2(50, 50);
-
-                img.raycastTarget = true;
+                GameObject handleGO = UI.AddChildGOImage(leftSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
+                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
+                handleGO.name = "ResizeHandle_FixedBottom";
+                handleGO.GetComponent<Image>().raycastTarget = true;
                 handleGO.AddComponent<UIDragBlocker>();
                 handleGO.AddComponent<UIHoverBorder>();
 
-                GameObject textGO = new GameObject("Text");
-                textGO.transform.SetParent(handleGO.transform, false);
-                Text t = textGO.AddComponent<Text>();
-                t.raycastTarget = false;
-                t.text = "◢";
-                t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                t.fontSize = 24;
-                t.color = new Color(0.6f, 0.6f, 0.6f, 0.5f);
-                t.alignment = TextAnchor.MiddleCenter;
-
-                RectTransform textRT = textGO.GetComponent<RectTransform>();
-                textRT.anchorMin = Vector2.zero;
-                textRT.anchorMax = Vector2.one;
-                textRT.sizeDelta = Vector2.zero;
-                textRT.localRotation = Quaternion.Euler(0, 0, -90); // Point towards bottom-left
+                {
+                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevrons_down_left.png", UI.BarIconGlyphTint);
+                    if (chevron != null)
+                        UI.AddIconToButton(handleGO, chevron);
+                }
 
                 UIAnchorResizer resizer = handleGO.AddComponent<UIAnchorResizer>();
                 resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
@@ -192,46 +219,28 @@ namespace VPB
                      }
                 };
 
-                handleGO.AddComponent<UIHoverBorder>();
-
                 AddHoverDelegate(handleGO);
+                AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
+                handleGO.transform.SetAsFirstSibling();
+                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
                 handleGO.SetActive(false);
+                _resizeHandleFixedBottomGO = handleGO;
             }
 
-            // Handle for Left dock: bottom-right inside panel, drags anchorMax.x (width)
+            // Handle for Left dock: footer right slot, drags anchorMax.x (width) + height.
             {
-                GameObject handleGO = new GameObject("ResizeHandle_FixedBottomRight");
-                handleGO.transform.SetParent(backgroundBoxGO.transform, false);
-
-                Image img = handleGO.AddComponent<Image>();
-                img.color = new Color(0, 0, 0, 0.01f);
-
-                RectTransform handleRT = handleGO.GetComponent<RectTransform>();
-                handleRT.anchorMin = new Vector2(1, 0);
-                handleRT.anchorMax = new Vector2(1, 0);
-                handleRT.pivot = new Vector2(0.5f, 0.5f);
-                handleRT.anchoredPosition = new Vector2(-25, 25);
-                handleRT.sizeDelta = new Vector2(50, 50);
-
-                img.raycastTarget = true;
+                GameObject handleGO = UI.AddChildGOImage(rightSlot, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
+                    GalleryUiDesignTokens.ResizeHandleFixedHitRef, GalleryUiDesignTokens.ResizeHandleFixedHitRef, Vector2.zero, rounded: true);
+                handleGO.name = "ResizeHandle_FixedBottomRight";
+                handleGO.GetComponent<Image>().raycastTarget = true;
                 handleGO.AddComponent<UIDragBlocker>();
                 handleGO.AddComponent<UIHoverBorder>();
 
-                GameObject textGO = new GameObject("Text");
-                textGO.transform.SetParent(handleGO.transform, false);
-                Text t = textGO.AddComponent<Text>();
-                t.raycastTarget = false;
-                t.text = "◢";
-                t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                t.fontSize = 24;
-                t.color = new Color(0.6f, 0.6f, 0.6f, 0.5f);
-                t.alignment = TextAnchor.MiddleCenter;
-
-                RectTransform textRT = textGO.GetComponent<RectTransform>();
-                textRT.anchorMin = Vector2.zero;
-                textRT.anchorMax = Vector2.one;
-                textRT.sizeDelta = Vector2.zero;
-                textRT.localRotation = Quaternion.identity; // Points towards bottom-right
+                {
+                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevrons_down_right.png", UI.BarIconGlyphTint);
+                    if (chevron != null)
+                        UI.AddIconToButton(handleGO, chevron);
+                }
 
                 UIAnchorResizer resizer = handleGO.AddComponent<UIAnchorResizer>();
                 resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
@@ -247,8 +256,11 @@ namespace VPB
 
                 resizer.onResizedVec2 = (val) => {
                     if (VPBConfig.Instance != null) {
-                        // Left dock uses anchorMax.x; store as "right inset" ratio for symmetric behaviour.
-                        VPBConfig.Instance.DesktopCustomWidth = 1f - val.x;
+                        // Right/Top dock: height only (width anchored full). Left dock: anchorMax.x → "right inset".
+                        string dock = "Left";
+                        try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Left"; }
+                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
+                            VPBConfig.Instance.DesktopCustomWidth = 1f - val.x;
                         VPBConfig.Instance.DesktopCustomHeight = val.y;
                         if (VPBConfig.Instance.DesktopFixedHeightMode == 0 && val.y > 0.05f) {
                             VPBConfig.Instance.DesktopFixedHeightMode = 1;
@@ -264,69 +276,85 @@ namespace VPB
                      }
                 };
 
-                // Border-only hover (no fill/text color change)
-                // UIHoverBorder already added above.
-
                 AddHoverDelegate(handleGO);
+                AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
+                handleGO.transform.SetAsLastSibling();
+                { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
                 handleGO.SetActive(false);
+                _resizeHandleFixedBottomRightGO = handleGO;
             }
         }
 
-        private void CreateResizeHandle(int anchor, float rotationZ)
+        private static string CornerResizeChevronPath(int anchor)
         {
-            GameObject handleGO = new GameObject("ResizeHandle_" + anchor);
-            handleGO.transform.SetParent(backgroundBoxGO.transform, false);
+            if (anchor == AnchorPresets.bottomRight) return "vpb_icons/chevrons_down_right.png";
+            if (anchor == AnchorPresets.bottomLeft) return "vpb_icons/chevrons_down_left.png";
+            if (anchor == AnchorPresets.topRight) return "vpb_icons/chevrons_up_right.png";
+            return "vpb_icons/chevrons_up_left.png"; // topLeft
+        }
 
-            Image img = handleGO.AddComponent<Image>();
-            img.color = new Color(0, 0, 0, 0.01f); // Invisible hit area
-
-            // Add Hover Border
+        /// <summary>Floating-mode corner handle seated as a footer-bar layout child (inherits bar padding/spacing).</summary>
+        private GameObject CreateFloatingResizeHandle(int anchor, GameObject parent, bool asFirstSibling)
+        {
+            GameObject handleGO = UI.AddChildGOImage(parent, UI.IconButtonBackdrop, AnchorPresets.middleCenter,
+                GalleryUiDesignTokens.ResizeHandleCornerHitRef, GalleryUiDesignTokens.ResizeHandleCornerHitRef, Vector2.zero, rounded: true);
+            handleGO.name = "ResizeHandle_" + anchor;
+            handleGO.GetComponent<Image>().raycastTarget = true;
             handleGO.AddComponent<UIHoverBorder>();
 
-            RectTransform handleRT = handleGO.GetComponent<RectTransform>();
-            handleRT.anchorMin = AnchorPresets.GetAnchorMin(anchor);
-            handleRT.anchorMax = AnchorPresets.GetAnchorMax(anchor);
-            handleRT.pivot = AnchorPresets.GetPivot(anchor);
-            
-            // Push handles outwards
-            float offsetDist = 20f;
-            Vector2 offset = Vector2.zero;
-            if (anchor == AnchorPresets.bottomRight) offset = new Vector2(offsetDist, -offsetDist);
-            else if (anchor == AnchorPresets.bottomLeft) offset = new Vector2(-offsetDist, -offsetDist);
-            else if (anchor == AnchorPresets.topLeft) offset = new Vector2(-offsetDist, offsetDist);
-            else if (anchor == AnchorPresets.topRight) offset = new Vector2(offsetDist, offsetDist);
+            Sprite chevron = UI.LoadIconSprite(CornerResizeChevronPath(anchor), UI.BarIconGlyphTint);
+            if (chevron != null)
+                UI.AddIconToButton(handleGO, chevron);
 
-            handleRT.anchoredPosition = offset;
-            handleRT.sizeDelta = new Vector2(60, 60);
-
-            // Text
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(handleGO.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.raycastTarget = false;
-            t.text = "◢";
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 36; // Increased size
-            t.color = new Color(0.6f, 0.6f, 0.6f, 1f);
-            t.alignment = TextAnchor.MiddleCenter;
-
-            RectTransform textRT = textGO.GetComponent<RectTransform>();
-            textRT.anchorMin = Vector2.zero;
-            textRT.anchorMax = Vector2.one;
-            textRT.sizeDelta = Vector2.zero;
-            textRT.localRotation = Quaternion.Euler(0, 0, rotationZ);
-
-            // UIResizable
             UIResizable resizer = handleGO.AddComponent<UIResizable>();
             resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
             resizer.anchor = anchor;
-            resizer.onResizeStatusChange = (isResizing) => {
-                 this.isResizing = isResizing;
-            };
+            resizer.onResizeStatusChange = (isResizing) => { this.isResizing = isResizing; };
 
-            // Border-only hover (UIHoverBorder already added)
-            
-            AddHoverDelegate(handleGO); // Ensure tracking works here too
+            AddHoverDelegate(handleGO);
+            AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
+
+            if (asFirstSibling) handleGO.transform.SetAsFirstSibling();
+            else handleGO.transform.SetAsLastSibling();
+
+            // Match the bar buttons: 40px square scaled by chrome scale.
+            { var rt = handleGO.GetComponent<RectTransform>(); innerPaneScaleActions.Add(s => { if (rt) rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); }); }
+
+            return handleGO;
+        }
+
+        /// <summary>Floating-mode top-left handle in the (non-layout) title bar, vertically centred like its buttons.</summary>
+        private GameObject CreateTitleBarResizeHandle(GameObject titleBar)
+        {
+            const int anchor = AnchorPresets.topLeft;
+            GameObject handleGO = UI.AddChildGOImage(titleBar, UI.IconButtonBackdrop, AnchorPresets.topLeft,
+                GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef, Vector2.zero, rounded: true);
+            handleGO.name = "ResizeHandle_" + anchor;
+            handleGO.GetComponent<Image>().raycastTarget = true;
+            handleGO.AddComponent<UIHoverBorder>();
+
+            // Far-left of the title bar, vertically centred on the bar like the title-bar buttons.
+            RectTransform handleRT = handleGO.GetComponent<RectTransform>();
+            handleRT.pivot = new Vector2(0.5f, 0.5f);
+            float xInset = GalleryUiDesignTokens.ResizeHandleEdgeMarginRef + GalleryUiDesignTokens.ButtonSizeRef * 0.5f;
+            float yInset = GalleryUiDesignTokens.ResizeHandleTitleCenterYRef;
+            handleRT.anchoredPosition = new Vector2(xInset, -yInset);
+
+            Sprite chevron = UI.LoadIconSprite(CornerResizeChevronPath(anchor), UI.BarIconGlyphTint);
+            if (chevron != null)
+                UI.AddIconToButton(handleGO, chevron);
+
+            UIResizable resizer = handleGO.AddComponent<UIResizable>();
+            resizer.target = backgroundBoxGO.GetComponent<RectTransform>();
+            resizer.anchor = anchor;
+            resizer.onResizeStatusChange = (isResizing) => { this.isResizing = isResizing; };
+
+            AddHoverDelegate(handleGO);
+            AddTooltip(handleGO, "gallery.tooltip.resize_handle", "Drag to resize the panel");
+
+            { var rt = handleRT; innerPaneScaleActions.Add(s => { if (rt) { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.ButtonSizeRef * s, GalleryUiDesignTokens.ButtonSizeRef * s); rt.anchoredPosition = new Vector2(xInset * s, -yInset * s); } }); }
+
+            return handleGO;
         }
     }
 }

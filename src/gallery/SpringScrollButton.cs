@@ -180,19 +180,12 @@ namespace VPB
 
         public static GameObject Create(GameObject parent, ScrollRect targetScrollRect, float widthPx = 22f, float heightPx = 22f)
         {
-            var go = new GameObject("SpringScrollButton");
-            go.transform.SetParent(parent.transform, false);
-
-            var rt = go.AddComponent<RectTransform>();
             // Center on the scrollbar (parent).
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(widthPx, heightPx);
-            rt.anchoredPosition = Vector2.zero;
+            var go = UI.CreateChildRT(parent, "SpringScrollButton", AnchorPresets.middleCenter, new Vector2(widthPx, heightPx));
 
-            var img = go.AddComponent<Image>();
-            img.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+            var rr = go.AddComponent<RoundedRect>();
+            rr.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
 
             // Make it reliably hittable in world-space UI.
             var cg = go.AddComponent<CanvasGroup>();
@@ -207,7 +200,7 @@ namespace VPB
 
             var s = go.AddComponent<SpringScrollButton>();
             s.scrollRect = targetScrollRect;
-            s.normalColor = img.color;
+            s.normalColor = rr.color;
 
             // Subtle border/hover feedback if the project has it.
             try { go.AddComponent<UIHoverBorder>(); } catch { }

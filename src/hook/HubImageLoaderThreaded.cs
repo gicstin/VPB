@@ -671,6 +671,7 @@ namespace VPB
                                     byte[] rawTextureData2 = tex.GetRawTextureData();
                                     if (rawTextureData2 != null && rawTextureData2.Length > 0)
                                     {
+                                        TextureUtil.WriteMipFieldsToMeta(jSONClass, tex.width, tex.height, tex.format, rawTextureData2.Length, createMipMaps);
                                         File.WriteAllText(text + "meta", VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024));
                                         File.WriteAllBytes(text, rawTextureData2);
                                     }

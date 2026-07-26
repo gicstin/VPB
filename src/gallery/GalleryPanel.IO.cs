@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using UnityEngine;
@@ -47,8 +46,7 @@ namespace VPB
 
         private static void InvalidateSharedSideMetaIfPackageScanAdvanced()
         {
-            DateTime t = DateTime.MinValue;
-            try { t = FileManager.lastPackageRefreshTime; } catch { }
+            DateTime t = FileManager.lastPackageRefreshTime;
             if (t != s_SharedSideMetaPackageStamp)
             {
                 s_SharedSideMetaPackageStamp = t;
@@ -217,6 +215,11 @@ namespace VPB
             try { RestoreSelectedHoverPath(); } catch { }
         }
 
+        internal void InvalidateCachedPathTabs()
+        {
+            pathsCached = false;
+        }
+
         private static void RefreshVarRelatedPathsInList(List<FileEntry> list, HashSet<string> packageUids)
         {
             if (list == null || list.Count == 0 || packageUids == null || packageUids.Count == 0) return;
@@ -276,11 +279,48 @@ namespace VPB
                     label = file.Name;
                     return true;
                 }
-                if (file is PackageListEntry ple && ple.Package != null)
+                if (file is PackageListEntry ple)
                 {
-                    pkg = ple.Package;
-                    label = ple.Package.Uid;
-                    return true;
+                    string uid = ple.GetPackageUidForGalleryUserTags();
+                    VarPackage resolved = ple.Package;
+                    if (resolved != null)
+                    {
+                        pkg = resolved;
+                        label = !string.IsNullOrEmpty(resolved.Uid) ? resolved.Uid : uid;
+                        return true;
+                    }
+                    if (!string.IsNullOrEmpty(uid))
+                    {
+                        try
+                        {
+                            VarPackage live = FileManager.GetPackage(uid, ensureInstalled: false);
+                            if (live != null)
+                            {
+                                pkg = live;
+                                label = uid;
+                                VpbPackageIndexDiagnostics.Log(uid, "navResolve", "source=PackageListEntry_fallback");
+                                return true;
+                            }
+                        }
+                        catch { }
+                        VpbPackageIndexDiagnostics.Log(uid, "navResolveFail", "source=PackageListEntry");
+                    }
+                }
+                if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                {
+                    try
+                    {
+                        VarPackage live = FileManager.GetPackage(mple.RequestedUid, ensureInstalled: false);
+                        if (live != null)
+                        {
+                            pkg = live;
+                            label = mple.RequestedUid;
+                            VpbPackageIndexDiagnostics.Log(mple.RequestedUid, "navResolve", "source=MissingPackageListEntry");
+                            return true;
+                        }
+                    }
+                    catch { }
+                    VpbPackageIndexDiagnostics.Log(mple.RequestedUid, "navResolveFail", "source=MissingPackageListEntry");
                 }
             }
             catch { }
@@ -349,15 +389,44 @@ namespace VPB
         }
 
         /// <summary>
+        /// Package deps/dependents/missing filter enter/leave: title + side chrome only.
+        /// Never rebuilds side-tab button lists (see <see cref="UpdateTabs"/>).
+        /// </summary>
+        private void RefreshChromeAfterPackageFilterListChange()
+        {
+            if (titleText != null)
+            {
+                bool showTitle = !IsFilterActive;
+                if (titleText.gameObject.activeSelf != showTitle)
+                    titleText.gameObject.SetActive(showTitle);
+                if (showTitle)
+                {
+                    if (IsSettingsPanelOpen())
+                        titleText.text = VPBTranslation.T("settings.title", "Settings");
+                    else
+                        titleText.text = currentCategoryTitle;
+                }
+            }
+
+            try { SyncCategoryQuickSwitchChrome(); } catch { }
+            try { UpdateSideContextActions(); } catch { }
+            try { ApplyTitleBarResponsiveLayout(ChromeScale); } catch { }
+            try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
+            try { UpdateSideButtonsVisibility(); } catch { }
+            MarkGalleryPaneChromeDirty();
+        }
+
+        /// <summary>
         /// Rebind currently visible rows without rebuilding filters/sort/list contents.
         /// Used when badge-only state changes (e.g. temporary scan-whitelist UID overrides).
         /// </summary>
         internal void RefreshVisibleGridVisualsOnly()
         {
-            if (!HasLoadedContent || !IsVisible || IsHubMode) return;
+            if (!HasLoadedContent || !IsVisible) return;
             if (recyclingGrid == null) return;
             try { recyclingGrid.Refresh(); } catch { }
             try { RefreshSelectionVisuals(); } catch { }
+            try { UpdateEmptyGridState(); } catch { }
         }
 
         /// <summary>Scene category or already showing package-level rows — use package list for deps/dependents filter.</summary>
@@ -406,9 +475,9 @@ namespace VPB
             {
                 try { uids.Add(targetUid); } catch { }
             }
-            if (FileManager.PackagesByUid == null || string.IsNullOrEmpty(targetUid)) return uids;
+            if (string.IsNullOrEmpty(targetUid)) return uids;
 
-            // Prefer SQLite reverse edges when available.
+            // Prefer SQLite reverse edges when available (same source as count when ready).
             try
             {
                 var fromSql = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -416,6 +485,18 @@ namespace VPB
                 {
                     foreach (var d in fromSql) if (!string.IsNullOrEmpty(d)) uids.Add(d);
                     return uids;
+                }
+            }
+            catch { }
+
+            // Match ResolveDependentCount: when SQL stale/unavailable, use graph/bulk edges.
+            try
+            {
+                HashSet<string> deps;
+                if (DependencyGraph.TryGetTransitiveDependents(targetUid, out deps) && deps != null)
+                {
+                    foreach (var d in deps)
+                        if (!string.IsNullOrEmpty(d)) uids.Add(d);
                 }
             }
             catch { }
@@ -486,7 +567,7 @@ namespace VPB
         private void PushFilterFrame()
         {
             bool fromTopSearch = false;
-            try { fromTopSearch = nameFilterTerms != null && nameFilterTerms.Length > 0; } catch { }
+            try { fromTopSearch = HasActiveNameFilter(); } catch { }
 
             _filterStack.Push(new FilterFrame
             {
@@ -533,10 +614,8 @@ namespace VPB
                 // Clear the top search box so it's ready for in-filter searching
                 try
                 {
-                    nameFilter = "";
-                    nameFilterLower = "";
-                    nameFilterTerms = new string[0];
-                    if (titleSearchInput != null) titleSearchInput.text = "";
+                    ClearNameFilterState();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged);
                 }
                 catch { }
             }
@@ -554,10 +633,13 @@ namespace VPB
             }
             catch { }
 
-            try { UpdateTabs(); } catch { }
+            // Package filter only changes the file grid + title/footer chrome.
+            // Full UpdateTabs() rebuilds every side-tab button list (can take seconds) — avoid here.
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
             RefreshRecycleGridAfterFilterChange();
             ScrollGalleryToTop();
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         public void ApplySearchWithinFilter(string query)
@@ -588,8 +670,9 @@ namespace VPB
         private List<FileEntry> BuildFilterModeView(List<FileEntry> baseList, string searchQuery)
         {
             var source = baseList ?? new List<FileEntry>();
-            string[] terms = SplitSearchTerms(searchQuery);
-            bool needSearch = terms != null && terms.Length > 0;
+            var query = GallerySearchQuery.Parse(searchQuery);
+            bool needSearch = query != null && !query.IsEmpty;
+            var tagKeys = needSearch ? BuildTagKeyLookupForSearch(query) : null;
             var result = new List<FileEntry>();
 
             for (int i = 0; i < source.Count; i++)
@@ -608,7 +691,7 @@ namespace VPB
                     continue;
                 }
 
-                if (MatchesFileEntryByScope(e, terms))
+                if (MatchesFileEntryBySearchQuery(e, query, tagKeys))
                     result.Add(e);
             }
             return result;
@@ -680,12 +763,8 @@ namespace VPB
         private void ScheduleFilterScrollRestore(string anchorKey)
         {
             filterRestoreAnchorKey = anchorKey;
-            if (filterRestoreCoroutine != null)
-            {
-                try { StopCoroutine(filterRestoreCoroutine); } catch { }
-                filterRestoreCoroutine = null;
-            }
-            try { filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame()); } catch { }
+            StopCo(ref filterRestoreCoroutine);
+            filterRestoreCoroutine = StartCoroutine(RestoreFilterScrollAnchorNextFrame());
         }
 
         private List<FileEntry> BuildCategoryEntriesForPackageUids(HashSet<string> uids)
@@ -698,8 +777,8 @@ namespace VPB
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
             bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
                 && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-            string[] nameTerms = nameFilterTerms;
-            bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
+            GallerySearchQuery searchQ = nameFilterQuery ?? GallerySearchQuery.Empty;
+            bool hasNameFilt = searchQ != null && !searchQ.IsEmpty;
 
             foreach (var uid in uids)
             {
@@ -787,7 +866,7 @@ namespace VPB
                     if (!pathOk) continue;
 
                     // Name filter
-                    if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                    if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
                     var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
 
@@ -854,7 +933,11 @@ namespace VPB
                     try
                     {
                         var row = new PackageListEntry(uid, r.VarPath ?? "", wt, sz, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid);
-                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
+                        if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row))
+                        {
+                            VpbPackageIndexDiagnostics.Log(uid, "galleryRowSkip", "reason=hide_filter sqlPath='" + (r.VarPath ?? "") + "'");
+                            continue;
+                        }
                         result.Add(row);
                     }
                     catch
@@ -874,11 +957,22 @@ namespace VPB
                         if (PackageHidePrefs.IsExcludedByGalleryHideFilter(row)) continue;
                         result.Add(row);
                     }
-                    else result.Add(new MissingPackageListEntry(uid));
+                    else
+                    {
+                        VpbPackageIndexDiagnostics.Log(uid, "galleryBuildRow", "row=missing_no_registry");
+                        result.Add(new MissingPackageListEntry(uid));
+                    }
                 }
                 catch
                 {
                     result.Add(new MissingPackageListEntry(uid));
+                }
+                if (VpbPackageIndexDiagnostics.ShouldTrace(uid))
+                {
+                    bool added = result.Exists(e =>
+                        (e is PackageListEntry ple && string.Equals(ple.GetPackageUidForGalleryUserTags(), uid, StringComparison.OrdinalIgnoreCase))
+                        || (e is MissingPackageListEntry m && string.Equals(m.RequestedUid, uid, StringComparison.OrdinalIgnoreCase)));
+                    VpbPackageIndexDiagnostics.Log(uid, "galleryBuildRow", added ? "row=added" : "row=missing_entry");
                 }
             }
 
@@ -948,11 +1042,7 @@ namespace VPB
         private void StartPosePeopleIndexCoroutine(string groupId)
         {
             posePeopleIndexGroupId = groupId ?? "";
-            if (posePeopleIndexCoroutine != null)
-            {
-                StopCoroutine(posePeopleIndexCoroutine);
-                posePeopleIndexCoroutine = null;
-            }
+            StopCo(ref posePeopleIndexCoroutine);
             posePeopleIndexCoroutine = StartCoroutine(PosePeopleIndexRoutine(groupId));
         }
 
@@ -1289,11 +1379,8 @@ namespace VPB
             bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
             string norm = p.Replace('\\', '/');
-            bool isCustomLoose = !isVarPackageEntry &&
-                                (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                                 norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
-                                 norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                 norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isCustomItem = !isVarPackageEntry && ClothingLoadingUtils.IsLooseCustomClothingItemPath(norm);
+            bool isCustomPresetLoose = !isVarPackageEntry && ClothingLoadingUtils.IsLooseCustomClothingPresetPath(norm);
 
             ClothingLoadingUtils.ResourceKind k;
             ClothingLoadingUtils.ResourceGender g;
@@ -1302,16 +1389,14 @@ namespace VPB
 
             bool isDecal = ClothingLoadingUtils.IsDecalLikePath(p);
 
-            // Issue #101: when no clothing subfilter is active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs. Toggling "Presets" or "Custom"
-            // on the side panel re-enables preset visibility.
+            // Default view shows base items only: hide all .vap presets (VAR and custom).
             if (clothingSubfilter == 0)
             {
                 if (isPreset) return false;
             }
             else
             {
-                bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                bool wantsRealType = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                 bool wantsDecalType = ((clothingSubfilter & ClothingSubfilter.Decals) != 0);
 
                 bool typeExplicit = ((clothingSubfilter & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
@@ -1328,10 +1413,12 @@ namespace VPB
 
                 bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
                 bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
-                if (wantsPresets) { if (!isPreset) return false; }
-                if (wantsCustom) { if (!isCustomLoose) return false; }
-                // Default-hide presets unless user explicitly opts in via Presets/Custom toggle.
-                if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+                bool wantsCustomPreset = (clothingSubfilter & ClothingSubfilter.CustomPreset) != 0;
+                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+                if (wantsCustom) { if (!isCustomItem) return false; }
+                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
                 if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPreset) return false; }
                 // If gender unknown, keep visible under either toggle (VaM content often not in gendered folders).
                 if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -1353,19 +1440,15 @@ namespace VPB
             bool isPreset = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
             string norm = p.Replace('\\', '/');
-            bool isCustomLoose = !isVarPackageEntry &&
-                                (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                                 norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
-                                 norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                 norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isCustomItem = !isVarPackageEntry && ClothingLoadingUtils.IsLooseCustomHairItemPath(norm);
+            bool isCustomPresetLoose = !isVarPackageEntry && ClothingLoadingUtils.IsLooseCustomHairPresetPath(norm);
 
             ClothingLoadingUtils.ResourceKind k;
             ClothingLoadingUtils.ResourceGender g;
             ClothingLoadingUtils.ClassifyClothingHairPath(p, out k, out g);
             if (k != ClothingLoadingUtils.ResourceKind.Hair) return false;
 
-            // Issue #101 parity: when no hair subfilter active, default to base items only (.vam)
-            // so the grid does not show duplicate .vam + .vap pairs.
+            // Default view shows base items only: hide all .vap presets (VAR and custom).
             if (hairSubfilter == 0)
             {
                 if (isPreset) return false;
@@ -1374,10 +1457,12 @@ namespace VPB
             {
                 bool wantsPresets = (hairSubfilter & HairSubfilter.Presets) != 0;
                 bool wantsCustom = (hairSubfilter & HairSubfilter.Custom) != 0;
-                if (wantsPresets) { if (!isPreset) return false; }
-                if (wantsCustom) { if (!isCustomLoose) return false; }
-                // Default-hide presets unless user explicitly opts in via Presets/Custom toggle.
-                if (!wantsPresets && !wantsCustom) { if (isPreset) return false; }
+                bool wantsCustomPreset = (hairSubfilter & HairSubfilter.CustomPreset) != 0;
+                if (wantsPresets) { if (!isPreset || isCustomItem || isCustomPresetLoose) return false; }
+                if (wantsCustom) { if (!isCustomItem) return false; }
+                if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPreset) return false; }
+                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPreset) return false; }
                 if ((hairSubfilter & HairSubfilter.Items) != 0) { if (isPreset) return false; }
                 // If gender unknown, keep visible under either toggle.
                 if ((hairSubfilter & HairSubfilter.Male) != 0) { if (g != ClothingLoadingUtils.ResourceGender.Male && g != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -1405,9 +1490,13 @@ namespace VPB
                     if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
                         return false;
                 }
-                if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                    if (!MatchesFileEntryByScope(entry, nameFilterTerms))
+                if (HasActiveNameFilter())
+                {
+                    bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
+                    if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
+                            skipSqlOwnedPredicates: skipSqlOwned))
                         return false;
+                }
                 if (activeTags != null && activeTags.Count > 0)
                 {
                     bool tagMatch = false;
@@ -1454,11 +1543,12 @@ namespace VPB
                     return false;
             }
 
-            // Hair subfilter (Issue #101 parity with Clothing)
+            // Hair subfilter gate. Shares skipClothingGalleryFilters with clothing: when set, both
+            // subfilter gates are bypassed because the subfilter was applied upstream (SQL for VAR rows).
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("/Hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || cp.IndexOf("\\Hair", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (isHair)
+            if (isHair && !skipClothingGalleryFilters)
             {
                 string p = entry.Path;
                 bool isVarPackageEntry = (entry is VarFileEntry) || ((entry as SystemFileEntry) != null && ((SystemFileEntry)entry).isVar);
@@ -1486,24 +1576,12 @@ namespace VPB
             // Applies only when browsing Appearance category.
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            // Global source filter (early gate). Cheap type check, runs first. Bypassed when the
-            // per-category Local toggle is ON for this category (toggle has override semantics).
+            // Global source filter (early gate). Cheap type check, runs first.
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
             {
-                bool toggleOverridesGlobal = false;
-                if (isAppearance && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    toggleOverridesGlobal = true;
-                bool isScene = title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
-                               || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    toggleOverridesGlobal = true;
-
-                if (!toggleOverridesGlobal)
-                {
-                    bool isVarBackedForGate = IsVarBacked(entry);
-                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local && isVarBackedForGate) return false;
-                    if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var   && !isVarBackedForGate) return false;
-                }
+                bool isVarBackedForGate = IsVarBacked(entry);
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local && isVarBackedForGate) return false;
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var && !isVarBackedForGate) return false;
             }
 
             if (isAppearance)
@@ -1515,34 +1593,11 @@ namespace VPB
                 string ext = (lastDot >= 0 && lastDot < norm.Length - 1) ? norm.Substring(lastDot + 1) : "";
                 bool isVap = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
 
-                bool isVarEntry = (entry is VarFileEntry);
-
-                // Inside .var: identify by internal path prefix
-                bool isVarAppearanceVap = false;
-                var vfe = entry as VarFileEntry;
-                if (vfe != null)
-                {
-                    string ip = (vfe.InternalPath ?? "").Replace('\\', '/');
-                    isVarAppearanceVap = isVap && ip.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
-                }
-
-                // Outside .var: identify by VaM folders
-                bool isLocalAppearanceVap = (!isVarEntry) && isVap &&
-                    (
-                        norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) ||
-                        norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase)
-                    );
-
-                // Per-category Local toggle override. When ON, ignore global filter and show local-only.
-                // When OFF (empty string), the global filter applies at the earlier gate.
-                bool appearanceLocalToggleOn = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
-                if (appearanceLocalToggleOn)
-                {
-                    if (IsVarBacked(entry)) return false;
-                    if (AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
-                        && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
-                        return false;
-                }
+                // Global Local + Appearance folder browse: keep path-scope gate (was under legacy Local toggle).
+                if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local
+                    && AppearanceGenderClassifier.IsAppearanceFolderBrowsePath(cp)
+                    && !AppearanceGenderClassifier.EntryMatchesAppearanceBrowseScope(entry, cp, currentPaths))
+                    return false;
 
                 if (appearanceSubfilter != 0)
                 {
@@ -1596,25 +1651,17 @@ namespace VPB
                 else if (currentSizeFilter == "Very Large (> 1GB)") { if (size < 1024 * mb) return false; }
             }
 
-            // Scene Source Filter.
-            // Per-category Local toggle override. When ON, ignore global filter and show local-only.
-            // When OFF, the global filter applies at the earlier gate.
-            // Gated to scene categories so leftover toggle state cannot hide var rows in unrelated categories.
-            bool isSceneCategoryForLocal =
-                title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
-                || cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0
-                || cp.IndexOf("Saves\\scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool sceneLocalToggleOn = isSceneCategoryForLocal
-                && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
-            if (sceneLocalToggleOn)
-            {
-                if (IsVarBacked(entry)) return false;
-            }
+            // Scene Local is global Source Local (early gate). No per-category override.
 
-            // Name Filter
-            if (nameFilterTerms != null && nameFilterTerms.Length > 0)
-                if (!MatchesFileEntryByScope(entry, nameFilterTerms))
+            // Name Filter (bare terms OR user tags; tag:/creator:/status structured).
+            // Only skip SQL-owned time/loaded/tagged for VAR index rows — loose files need in-memory time match.
+            if (HasActiveNameFilter())
+            {
+                bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
+                if (!MatchesFileEntryBySearchQuery(entry, nameFilterQuery, GetSearchTagKeysCached(),
+                        skipSqlOwnedPredicates: skipSqlOwned))
                     return false;
+            }
 
             // Tag Filter
             if (activeTags != null && activeTags.Count > 0)
@@ -1639,10 +1686,11 @@ namespace VPB
                 if (!tagMatch) return false;
             }
 
-            // Gallery SQLite user tags (Available Filter Mode). VAR rows from SQLite bulk query already match tags;
+            // Gallery SQLite user tags. Include/exclude filter always live (orthogonal to F/T work mode).
+            // FilterUntagged browse is exclusive. VAR rows from SQLite bulk query already match tags;
             // loose Custom/Saves files merged afterward must still be checked (same keys as gallery_item_user_tag).
-            if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0
-                && activeContentType == ContentType.Category && VpbSqlite3.IsAvailable)
+            if (activeContentType == ContentType.Category && VpbSqlite3.IsAvailable
+                && (_userTagAvailMode == UserTagAvailMode.FilterUntagged || IsUserTagIncludeExcludeFilterArmed()))
             {
                 VarFileEntry vfeUt = entry as VarFileEntry;
                 bool bulkSqlAlreadyFilteredVar =
@@ -1653,11 +1701,32 @@ namespace VPB
                 if (!bulkSqlAlreadyFilteredVar)
                 {
                     string catUt = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
-                    if (string.IsNullOrEmpty(catUt)) return false;
                     string pkgK, ipK;
                     if (!TryGetGalleryRowKeysForUserTags(entry, out pkgK, out ipK)) return false;
-                    if (!VpbLocalDatabase.TryGalleryRowMatchesAllUserTags(catUt, pkgK, ipK, activeUserTags))
-                        return false;
+                    if (_userTagAvailMode == UserTagAvailMode.FilterUntagged)
+                    {
+                        if (!VpbLocalDatabase.TryGalleryRowHasNoUserTags(catUt, pkgK, ipK))
+                        {
+                            string selKeyUt = GetSelectionIdentityKey(entry, false);
+                            bool keepTaggedVisible = !string.IsNullOrEmpty(selKeyUt)
+                                && ((selectedFilePaths != null && selectedFilePaths.Contains(selKeyUt))
+                                    || _untaggedTaggedPinKeys.Contains(selKeyUt));
+                            if (!keepTaggedVisible) return false;
+                        }
+                    }
+                    else
+                    {
+                        if (activeUserTags != null && activeUserTags.Count > 0)
+                        {
+                            if (!VpbLocalDatabase.TryGalleryRowMatchesUserTags(catUt, pkgK, ipK, activeUserTags, UserTagFilterRequiresAllTags()))
+                                return false;
+                        }
+                        if (excludedUserTags != null && excludedUserTags.Count > 0)
+                        {
+                            if (!VpbLocalDatabase.TryGalleryRowHasNoneOfUserTags(catUt, pkgK, ipK, excludedUserTags))
+                                return false;
+                        }
+                    }
                 }
             }
 
@@ -1670,7 +1739,7 @@ namespace VPB
             float start = Time.realtimeSinceStartup;
             float nextWait = 0.05f;
             int polls = 0;
-            while (!Gallery.IsSuppressed() && !IsHubMode)
+            while (!Gallery.IsSuppressed())
             {
                 polls++;
                 bool scanning = false;
@@ -1687,7 +1756,7 @@ namespace VPB
                 yield return new WaitForSecondsRealtime(wait);
             }
 
-            if (!Gallery.IsSuppressed() && !IsHubMode)
+            if (!Gallery.IsSuppressed())
             {
                 if (LogGalleryRefreshDeepTiming)
                 {
@@ -1714,11 +1783,24 @@ namespace VPB
 
         public void RefreshFiles(bool keepScroll = false, bool scrollToBottom = false, bool isRetry = false, string refreshDebugSource = null)
         {
+            // Category switch / full reload owns this refresh — kill keystroke debounce so it cannot
+            // start a second RefreshFiles after we begin loading.
+            try { CancelTitleSearchSqlDebounce(); } catch { }
+            try { CancelTitleSearchInMemoryDebounce(); } catch { }
+
             // Clear any active dependency filter when refreshing
             ClearPackageFilter();
             // Reset in-memory top search base; RefreshFiles rebuilds the list.
-            topSearchBaseFiles = null;
-            _topSearchBaseIsClean = false;
+            // Title-bar SQL search may keep the snapshot so clear-search stays instant.
+            if (_keepTopSearchBaseAcrossRefresh)
+            {
+                _keepTopSearchBaseAcrossRefresh = false;
+            }
+            else
+            {
+                topSearchBaseFiles = null;
+                _topSearchBaseIsClean = false;
+            }
 
             // Check if gallery auto-refresh is suppressed (during scene/preset loading)
             if (Gallery.IsSuppressed())
@@ -1728,12 +1810,6 @@ namespace VPB
                 return;
             }
             
-            if (IsHubMode)
-            {
-                RefreshHubItems();
-                return;
-            }
-
             if (IsSettingsPanelOpen() || settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(keepScroll);
@@ -1746,34 +1822,18 @@ namespace VPB
             if (!isRetry)
                 _cacheRetryPending = false;
 
-            if (thumbnailCacheCoroutine != null) StopCoroutine(thumbnailCacheCoroutine);
-            thumbnailCacheCoroutine = null;
+            StopCo(ref thumbnailCacheCoroutine);
             if (pendingThumbnailCacheJobs != null) pendingThumbnailCacheJobs.Clear();
             _thumbCacheTotalEnqueued = 0;
             _thumbCacheSaved = 0;
             _thumbCacheFinishTime = -1f;
             _nextThumbPriority = 0;
             HideThumbnailCacheProgress();
-            if (_deferredGallerySideTabsCoroutine != null)
-            {
-                try { StopCoroutine(_deferredGallerySideTabsCoroutine); } catch { }
-                _deferredGallerySideTabsCoroutine = null;
-            }
-            if (_sideTabsTagCountSliceCo != null)
-            {
-                try { StopCoroutine(_sideTabsTagCountSliceCo); } catch { }
-                _sideTabsTagCountSliceCo = null;
-            }
-            if (_historyModeCountsCo != null)
-            {
-                try { StopCoroutine(_historyModeCountsCo); } catch { }
-                _historyModeCountsCo = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
+            StopCo(ref _deferredGallerySideTabsCoroutine);
+            StopCo(ref _sideTabsTagCountSliceCo);
+            StopCo(ref _appearanceLooseMergeCo);
+            StopCo(ref _historyModeCountsCo);
+            StopCo(ref _earlyMetaApplyCoroutine);
             // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
             // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
             // don't pollute the new session. The coroutine's yield-return-null would be too late.
@@ -1782,14 +1842,11 @@ namespace VPB
             currentLoadingGroupId = Guid.NewGuid().ToString();
             unchecked { _deferredSubPaneSessionId++; }
             System.Threading.Interlocked.Increment(ref galleryFileRefreshSequence);
-            if (refreshCoroutine != null) StopCoroutine(refreshCoroutine);
-            if (_refreshHistoryLightCo != null)
-            {
-                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
-                _refreshHistoryLightCo = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _refreshHistoryLightCo);
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
             _refreshFilesDebugSource = refreshDebugSource;
+            ShowLoadingOverlay(null);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
@@ -1802,18 +1859,51 @@ namespace VPB
         /// Falls back to a full <see cref="RefreshFiles"/> when the gallery hasn't loaded yet
         /// or the delta lists are null/empty (which shouldn't normally happen, but is safe).
         /// </summary>
-        public void ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
+        /// <returns>True when the grid or side metadata was updated.</returns>
+        public bool ApplyPackageDelta(List<VarPackage> added, List<VarPackage> removed)
         {
-            if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
-            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            lastPackageDeltaChangedGrid = false;
+            if (!VamOnDemandLoader.IsMainThread())
+            {
+                LogPackageDeltaSkip("background_thread");
+                return false;
+            }
+            if (Gallery.IsSuppressed())
+            {
+                LogPackageDeltaSkip("suppressed");
+                return false;
+            }
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                LogPackageDeltaSkip("settings_open");
+                return false;
+            }
+
+            // Path filter folder deleted in Explorer — incremental delta cannot rebuild loose Custom/Saves.
+            if (TryClearStalePackagePathFilter())
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (stale Path filter cleared)");
+                }
+                catch { }
+                pathsCached = false;
+                RefreshFiles(true);
+                return true;
+            }
 
             // If we have never loaded, the scan just completed and we have a full PackagesByUid
             // for the first time – do a clean initial load now.
             if (!hasLoadedContent || recyclingGrid == null || scrollRect == null)
             {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta full RefreshFiles (not loaded yet) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
                 RefreshFiles(false);
-                return;
+                return true;
             }
 
             // If neither list has entries the package set didn't change at all.
@@ -1826,21 +1916,24 @@ namespace VPB
             {
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
                 refreshOnNextShow = false;
-                return;
+                LogPackageDeltaSkip("empty_delta");
+                return false;
             }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta START title='" + (currentCategoryTitle ?? "")
+                    + "' ext='" + (currentExtension ?? "") + "' path='" + (currentPath ?? "")
+                    + "' added=" + (added != null ? added.Count : 0)
+                    + " removed=" + (removed != null ? removed.Count : 0)
+                    + " gridBefore=" + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0));
+            }
+            catch { }
 
             // If the refresh coroutine is still running (shouldn't normally happen after the
             // !init||flag gate, but be defensive) cancel it so we work on a stable list.
-            if (refreshCoroutine != null)
-            {
-                StopCoroutine(refreshCoroutine);
-                refreshCoroutine = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _earlyMetaApplyCoroutine);
 
             // ── Scroll anchor ─────────────────────────────────────────────────────────────
             // Save the UID of the item currently centred in the viewport so we can scroll
@@ -1852,6 +1945,7 @@ namespace VPB
                 anchorUid = currentFilteredFiles[centerIdx]?.Uid;
 
             bool changed = false;
+            bool skippedForNoCache = false;
 
             // ── Remove ────────────────────────────────────────────────────────────────────
             if (removed != null && removed.Count > 0)
@@ -1883,10 +1977,18 @@ namespace VPB
                     : currentExtension.Split('|');
                 bool hasExt = !Gallery.IsEverythingCategoryExtension(currentExtension)
                     && extensions.Length > 0 && !(extensions.Length == 1 && string.IsNullOrEmpty(extensions[0]));
-                string[] nameTerms = nameFilterTerms;
-                bool hasNameFilt = nameTerms != null && nameTerms.Length > 0;
+                GallerySearchQuery searchQ = nameFilterQuery ?? GallerySearchQuery.Empty;
+                bool hasNameFilt = searchQ != null && !searchQ.IsEmpty;
 
                 var newEntries = new List<FileEntry>();
+                var existingUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int fi = 0; fi < currentFilteredFiles.Count; fi++)
+                {
+                    FileEntry fe = currentFilteredFiles[fi];
+                    if (fe != null && !string.IsNullOrEmpty(fe.Uid))
+                        existingUids.Add(fe.Uid);
+                }
+
                 foreach (var pkg in added)
                 {
                     if (pkg == null) continue;
@@ -1895,7 +1997,15 @@ namespace VPB
                     if (!CreatorFilterMatchesPackageCreator(pkg.Creator)) continue;
 
                     List<string> names; List<long> ticks; List<long> sizes;
-                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null) continue;
+                    if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                    {
+                        try { pkg.Scan(); } catch { }
+                        if (!pkg.TryGetCachedFileEntryData(out names, out ticks, out sizes) || names == null)
+                        {
+                            skippedForNoCache = true;
+                            continue;
+                        }
+                    }
 
                     for (int i = 0; i < names.Count; i++)
                     {
@@ -1956,19 +2066,60 @@ namespace VPB
                         if (!pathOk) continue;
 
                         // Name filter
-                        if (hasNameFilt && !MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip, nameTerms)) continue;
+                        if (hasNameFilt && !MatchesPackageFallbackSearch(searchQ, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", ip)) continue;
 
-                        var entry = new VarFileEntry(pkg, ip, pkg.LastWriteTime, pkg.Size);
+                        DateTime entryTime = pkg.LastWriteTime;
+                        if (ticks != null && i < ticks.Count && ticks[i] != 0L)
+                        {
+                            try { entryTime = new DateTime(ticks[i], DateTimeKind.Utc).ToLocalTime(); }
+                            catch { entryTime = pkg.LastWriteTime; }
+                        }
+                        long entrySize = pkg.Size;
+                        if (sizes != null && i < sizes.Count)
+                            entrySize = sizes[i];
+
+                        var entry = new VarFileEntry(pkg, ip, entryTime, entrySize);
 
                         // Full filter check (clothing/appearance subfilters, tags, rating, size, scene source …)
                         if (!PassesFilters(entry, true)) continue;
+                        if (!existingUids.Add(entry.Uid)) continue;
 
                         newEntries.Add(entry);
                     }
                 }
 
+                if (newEntries.Count == 0 && added != null && added.Count > 0
+                    && string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+                {
+                    var addedUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int ai = 0; ai < added.Count; ai++)
+                    {
+                        VarPackage ap = added[ai];
+                        if (ap != null && !string.IsNullOrEmpty(ap.Uid))
+                            addedUids.Add(ap.Uid);
+                    }
+                    if (addedUids.Count > 0)
+                    {
+                        List<FileEntry> pkgRows = BuildPackageListEntriesForUids(addedUids);
+                        for (int pi = 0; pi < pkgRows.Count; pi++)
+                        {
+                            FileEntry row = pkgRows[pi];
+                            if (row == null || string.IsNullOrEmpty(row.Uid)) continue;
+                            if (!PassesFilters(row, true)) continue;
+                            if (!existingUids.Add(row.Uid)) continue;
+                            newEntries.Add(row);
+                        }
+                    }
+                }
+
                 if (newEntries.Count > 0)
                 {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta append entries=" + newEntries.Count
+                            + " title='" + (currentCategoryTitle ?? "") + "'");
+                    }
+                    catch { }
                     currentFilteredFiles.AddRange(newEntries);
                     lastFilteredFiles.AddRange(newEntries);
 
@@ -1977,10 +2128,24 @@ namespace VPB
                     {
                         GallerySortManager.Instance.SortFiles(currentFilteredFiles, sortState);
                         GallerySortManager.Instance.SortFiles(lastFilteredFiles, sortState);
+                        try { GallerySortManager.ApplyHideOldVersionsFilter(currentFilteredFiles); } catch { }
+                        try { GallerySortManager.ApplyHideOldVersionsFilter(lastFilteredFiles); } catch { }
+                        if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+                        {
+                            try { GallerySortManager.ApplyOldVersionsOnlyFilter(currentFilteredFiles); } catch { }
+                            try { GallerySortManager.ApplyOldVersionsOnlyFilter(lastFilteredFiles); } catch { }
+                        }
                     }
 
                     changed = true;
+                    lastPackageDeltaChangedGrid = true;
                 }
+            }
+
+            if (skippedForNoCache && !changed && !Gallery.IsSuppressed() && !_cacheRetryPending)
+            {
+                _cacheRetryPending = true;
+                StartCoroutine(RetryRefreshAfterNoCacheDelay());
             }
 
             if (!changed)
@@ -1988,13 +2153,25 @@ namespace VPB
                 // Nothing actually changed – keep gallery exactly as-is.
                 lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
                 refreshOnNextShow = false;
-                return;
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta NO_CHANGE title='" + (currentCategoryTitle ?? "")
+                        + "' skippedNoCache=" + (skippedForNoCache ? "1" : "0"));
+                }
+                catch { }
+                return false;
             }
+
+            // Grid mutated in place: bump the sub-pane session so the clothing chip-count memo
+            // (keyed on _deferredSubPaneSessionId) recomputes against the already-updated cat_mem
+            // index instead of returning its pre-change cache.
+            unchecked { _deferredSubPaneSessionId++; }
 
             InvalidateGalleryPreHideFileListSnapshot();
 
             // ── Update grid ───────────────────────────────────────────────────────────────
             recyclingGrid.SetItemCount(currentFilteredFiles.Count);
+            try { recyclingGrid.Refresh(); } catch { }
 
             // ── Restore scroll via UID anchor ─────────────────────────────────────────────
             if (anchorUid != null)
@@ -2010,29 +2187,67 @@ namespace VPB
 
             UpdatePaginationText();
             lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime;
+            lastPackageDeltaChangedGrid = true;
             refreshOnNextShow = false;
-            creatorsCached = false;
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 if (!TryRecomputeAppearanceGenderFacetCountsScoped())
-                {
-                    if (TryApplyAppearanceFacetCountsFromSql())
-                        TryMergeLooseVapAppearanceGenderFacetCounts();
-                }
+                    TryApplyAppearanceFacetCountsFromSql();
                 tagsCached = true;
             }
             else
                 tagsCached = false;
             userTagsCached = false;
-            categoriesCached = false;
             pathsCached = false;
+            RefreshSideTabsAfterPackageDelta();
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta CHANGED gridAfter="
+                    + (currentFilteredFiles != null ? currentFilteredFiles.Count : 0)
+                    + " title='" + (currentCategoryTitle ?? "") + "'");
+            }
+            catch { }
+            return true;
+        }
+
+        private void LogPackageDeltaSkip(string reason)
+        {
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta SKIP reason=" + reason
+                    + " title='" + (currentCategoryTitle ?? "") + "'");
+            }
+            catch { }
+        }
+
+        /// <summary>Rebuild category/creator side-tab counts after an in-memory package delta.</summary>
+        private void RefreshSideTabsAfterPackageDelta()
+        {
+            if (!VamOnDemandLoader.IsMainThread()) return;
+            InvalidateSharedSideMetaIfPackageScanAdvanced();
+            categoriesCached = false;
+            creatorsCached = false;
+            _deferSideTabCountsForceRefresh = true;
+            if (!IsVisible && !hasLoadedContent) return;
+            if (_packageDeltaSideTabsCoroutine != null) return;
+            _packageDeltaSideTabsCoroutine = StartCoroutine(CoRefreshSideTabsAfterPackageDelta());
+        }
+
+        private IEnumerator CoRefreshSideTabsAfterPackageDelta()
+        {
+            yield return null;
+            _packageDeltaSideTabsCoroutine = null;
+            try { CacheCategoryCounts(); } catch { }
+            try { CacheCreators(); } catch { }
+            if (!IsVisible && !hasLoadedContent) yield break;
+            try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
         }
 
         /// <summary>Key for <see cref="GalleryFileListSnapshotCache"/> when the full enumeration result is reproducible from panel state.</summary>
         private bool TryBuildFileListSnapshotCacheKey(out string key)
         {
             key = null;
-            if (IsHubMode) return false;
             if (IsFilterActive) return false;
 
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : null) ?? "";
@@ -2064,14 +2279,36 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
-                sb.Append(currentSceneSourceFilter ?? "").Append('\u001E');
-                sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
+                try
+                {
+                    sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
+                }
+                catch
+                {
+                    sb.Append("0").Append('\u001E');
+                }
                 sb.Append(currentRatingFilter ?? "").Append('\u001E');
                 sb.Append(currentSizeFilter ?? "").Append('\u001E');
                 sb.Append(categoryFilter ?? "").Append('\u001E');
                 sb.Append(creatorFilter ?? "").Append('\u001E');
                 sb.Append(tagFilter ?? "").Append('\u001E');
                 sb.Append(isRatingSortToggleEnabled ? '1' : '0').Append('\u001E');
+                sb.Append((VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) ? '1' : '0').Append('\u001E');
+                sb.Append(((int)_browseHiddenCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseAlwaysLoadedCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseOldVersionsCycle).ToString()).Append('\u001E');
+                sb.Append(((int)_browseLoadedMode).ToString()).Append('\u001E');
+                sb.Append(((int)_browseUnusedCycle).ToString()).Append('\u001E');
+                try
+                {
+                    sb.Append((Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value) ? '1' : '0').Append('\u001E');
+                }
+                catch
+                {
+                    sb.Append('0').Append('\u001E');
+                }
                 if (activeTags != null && activeTags.Count > 0)
                 {
                     var arr = new List<string>(activeTags);
@@ -2083,14 +2320,27 @@ namespace VPB
                     }
                 }
                 sb.Append('\u001E');
-                sb.Append(_userTagAvailFilterMode ? '1' : '0').Append('\u001E');
-                if (_userTagAvailFilterMode && activeUserTags != null && activeUserTags.Count > 0)
+                sb.Append((int)_userTagAvailMode).Append('\u001E');
+                if (IsUserTagIncludeFilterArmed())
                 {
                     var uarr = new List<string>(activeUserTags);
                     uarr.Sort(StringComparer.Ordinal);
                     for (int i = 0; i < uarr.Count; i++)
                     {
                         sb.Append(uarr[i] ?? "");
+                        sb.Append('\u001F');
+                    }
+                }
+                sb.Append('\u001E');
+                // Excluded (none-of) user tags must vary the key too, else toggling an exclude reuses the
+                // previously cached, unfiltered list and the exclusion appears to do nothing.
+                if (IsUserTagExcludeFilterArmed())
+                {
+                    var xarr = new List<string>(excludedUserTags);
+                    xarr.Sort(StringComparer.Ordinal);
+                    for (int i = 0; i < xarr.Count; i++)
+                    {
+                        sb.Append(xarr[i] ?? "");
                         sb.Append('\u001F');
                     }
                 }
@@ -2116,7 +2366,9 @@ namespace VPB
             if (isRatingSortToggleEnabled) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
-            if (!string.IsNullOrEmpty(currentSceneSourceFilter)) return false;
+            // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
+            // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.
+            if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All) return false;
             // nameFilterTerms and activeTags are now handled by SQL
             if (wantsPoseCountsLocal || posePeopleFilter != PosePeopleFilter.All) return false;
             // LoadedOnly/UnloadedOnly is applied in the SQLite query via loadedState.
@@ -2124,7 +2376,6 @@ namespace VPB
             string title = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
             if (title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (!string.IsNullOrEmpty(currentAppearanceSourceFilter)) return false;
                 if (appearanceSubfilter != 0) return false;
             }
 
@@ -2200,6 +2451,24 @@ namespace VPB
                 if (localLoadingGroupId != currentLoadingGroupId) return bulk;
 
                 VpbLocalDatabase.Row r = idxRows[ri];
+
+                // Local (non-package) history row, e.g. a loose Saves/scene scene. These have no
+                // package UID, so build a loose SystemFileEntry directly from the recorded path.
+                if (string.IsNullOrEmpty(r.PackageUid))
+                {
+                    string localPath = !string.IsNullOrEmpty(r.ListPath) ? r.ListPath : r.ItemUsageKey;
+                    if (string.IsNullOrEmpty(localPath)) continue;
+
+                    if (wantsLoadedStateForIndexMain == 0) continue; // loose files are always "loaded"
+
+                    SystemFileEntry sfe;
+                    try { sfe = new SystemFileEntry(localPath); }
+                    catch { continue; }
+                    if (!sfe.Exists) continue;
+                    bulk.Add(sfe);
+                    continue;
+                }
+
                 string internalPath = r.InternalPath;
                 // Launch from index paths; ItemUsageKey is for remove-from-history identity only (legacy keys can break load).
 
@@ -2264,7 +2533,6 @@ namespace VPB
         public void RefreshHistoryListInPlace(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
             if (activeContentType != ContentType.History)
             {
                 RefreshFiles(keepScroll);
@@ -2277,21 +2545,9 @@ namespace VPB
                 return;
             }
 
-            if (refreshCoroutine != null)
-            {
-                try { StopCoroutine(refreshCoroutine); } catch { }
-                refreshCoroutine = null;
-            }
-            if (_earlyMetaApplyCoroutine != null)
-            {
-                try { StopCoroutine(_earlyMetaApplyCoroutine); } catch { }
-                _earlyMetaApplyCoroutine = null;
-            }
-            if (_refreshHistoryLightCo != null)
-            {
-                try { StopCoroutine(_refreshHistoryLightCo); } catch { }
-                _refreshHistoryLightCo = null;
-            }
+            StopCo(ref refreshCoroutine);
+            StopCo(ref _earlyMetaApplyCoroutine);
+            StopCo(ref _refreshHistoryLightCo);
 
             if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
                 CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
@@ -2311,7 +2567,6 @@ namespace VPB
         public void RefreshHistoryBrowsePreferLight(bool keepScroll = true)
         {
             if (Gallery.IsSuppressed()) return;
-            if (IsHubMode) return;
             if (activeContentType != ContentType.History)
             {
                 lastHistoryQueryFailed = false;
@@ -2330,7 +2585,7 @@ namespace VPB
 
         public void RetryHistoryBrowseQuery()
         {
-            if (IsHubMode || activeContentType != ContentType.History) return;
+            if (activeContentType != ContentType.History) return;
             lastHistoryQueryFailed = false;
             lastHistoryQueryRejectReason = null;
             RefreshHistoryBrowsePreferLight(true);
@@ -2344,6 +2599,14 @@ namespace VPB
             lastHistoryQueryFailed = failed;
             lastHistoryQueryRejectReason = failed ? (stats.RejectReason ?? "history_query_failed") : null;
             lastHistoryQueryHadNameFilter = nameTermsSnapshot != null && nameTermsSnapshot.Length > 0;
+        }
+
+        private void SyncHistoryBrowseFailureFlagsFromStats(ContentType contentSnap, VpbLocalDatabase.GalleryCategoryQueryStats stats, GallerySearchQuery searchSnapshot)
+        {
+            string[] legacy = searchSnapshot != null && !searchSnapshot.IsEmpty
+                ? new string[] { "1" }
+                : new string[0];
+            SyncHistoryBrowseFailureFlagsFromStats(contentSnap, stats, legacy);
         }
 
         private IEnumerator RefreshHistoryListInPlaceRoutine(bool keepScroll)
@@ -2360,14 +2623,14 @@ namespace VPB
 
             string localId = currentLoadingGroupId;
             var histMode = galleryHistoryFilterMode;
-            string[] nameTerms = nameFilterTerms;
+            GallerySearchQuery searchSnap = nameFilterQuery ?? GallerySearchQuery.Empty;
+            string[] nameTerms = searchSnap.BroadTermsArray();
 
             int wantsLoadedStateForIndexMain = -1;
             try
             {
-                SortType st = GetSortState("Files").Type;
-                if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
-                else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+                if (FilesSortWantsLoadedOnly()) wantsLoadedStateForIndexMain = 1;
+                else if (FilesSortWantsUnloadedOnly()) wantsLoadedStateForIndexMain = 0;
             }
             catch { }
 
@@ -2375,7 +2638,7 @@ namespace VPB
             var workerDone = new int[1];
             bool historyQuerySucceeded = false;
             string historyRejectReason = null;
-            bool hadNameFilter = nameTerms != null && nameTerms.Length > 0;
+            bool hadNameFilter = searchSnap != null && !searchSnap.IsEmpty;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -2388,7 +2651,7 @@ namespace VPB
                     }
                     var idxRows = new List<VpbLocalDatabase.Row>();
                     VpbLocalDatabase.GalleryCategoryQueryStats histStats;
-                    if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, nameTerms, idxRows, out histStats))
+                    if (!VpbLocalDatabase.TryQueryGalleryHistoryRows(histMode, searchSnap, idxRows, out histStats))
                     {
                         historyRejectReason = histStats.RejectReason ?? "history_query_failed";
                         idxRows.Clear();
@@ -2514,7 +2777,13 @@ namespace VPB
             {
                 if (earlyBuildCreators)
                 {
-                    cachedCreators = earlyNewCreators ?? new List<CreatorCacheEntry>();
+                    cachedCreators.Clear();
+                    if (earlyNewCreators != null && earlyNewCreators.Count > 0)
+                    {
+                        if (cachedCreators.Capacity < earlyNewCreators.Count)
+                            cachedCreators.Capacity = earlyNewCreators.Count;
+                        cachedCreators.AddRange(earlyNewCreators);
+                    }
                     creatorsCached = true;
                     unchecked { creatorSideTabDataRevision++; }
                 }
@@ -2527,6 +2796,7 @@ namespace VPB
                     }
                     categoriesCached = true;
                     unchecked { categorySideTabDataRevision++; }
+                    StampSideTabCountsForCurrentScan();
                 }
                 if (allowStoreSharedSideMeta && sideMetaCacheKey != null && earlyBuildCreators && earlyBuildCats
                     && earlyNewCreators != null && earlyNewCatCounts != null)
@@ -2577,6 +2847,35 @@ namespace VPB
             bool deepSysCacheHit = false;
 
             if (swDeep != null) syncCpuBeforeFirstYieldMs = swDeep.ElapsedMilliseconds;
+
+            float packageWaitStart = Time.realtimeSinceStartup;
+            while (!Gallery.IsSuppressed())
+            {
+                long scanBin = FileManager.lastPackageRefreshTime.ToBinary();
+                if (scanBin != 0 && scanBin != DateTime.MinValue.ToBinary()) break;
+
+                bool inventoryBusy = false;
+                try { inventoryBusy = FileManager.IsScanning; } catch { inventoryBusy = false; }
+                if (!inventoryBusy && VamHookPlugin.IsFileManagerInited) break;
+
+                if (Time.realtimeSinceStartup - packageWaitStart >= 120f) break;
+                yield return null;
+            }
+            if (LogGalleryRefreshDeepTiming)
+            {
+                float waitedMs = (Time.realtimeSinceStartup - packageWaitStart) * 1000f;
+                if (waitedMs >= 50f)
+                {
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.DeepTiming] waited for package inventory ms=" + waitedMs.ToString("0")
+                            + " scanning=" + (FileManager.IsScanning ? "1" : "0")
+                            + " refreshTime=" + FileManager.lastPackageRefreshTime.ToString("o"));
+                    }
+                    catch { }
+                }
+            }
+
             yield return null; // Allow UI to render first — next MoveNext may wait while same click handler runs UpdateTabs() etc.
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_first_yield");
             if (swDeep != null)
@@ -2633,8 +2932,9 @@ namespace VPB
             }
             
             string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
-            string[] nameTerms = nameFilterTerms;
-            bool hasNameFilter = nameTerms != null && nameTerms.Length > 0;
+            GallerySearchQuery searchQuerySnap = nameFilterQuery ?? GallerySearchQuery.Empty;
+            string[] nameTerms = searchQuerySnap.BroadTermsArray();
+            bool hasNameFilter = searchQuerySnap != null && !searchQuerySnap.IsEmpty;
 
             int tagScanRefreshSeq = GalleryFileRefreshSequence;
             TagParallelWaiter tagParallelWaiterForThisRun = null;
@@ -2673,11 +2973,7 @@ namespace VPB
             {
                 // Cancel any outstanding pose indexing work when leaving Pose category.
                 posePeopleIndexGroupId = "";
-                if (posePeopleIndexCoroutine != null)
-                {
-                    try { StopCoroutine(posePeopleIndexCoroutine); } catch { }
-                    posePeopleIndexCoroutine = null;
-                }
+                StopCo(ref posePeopleIndexCoroutine);
                 lock (posePeopleIndexLock)
                 {
                     posePeopleIndexQueue.Clear();
@@ -2704,10 +3000,14 @@ namespace VPB
 
             string fileListSnapKey;
             bool canFileListCache = TryBuildFileListSnapshotCacheKey(out fileListSnapKey);
+            bool bypassFileListCache = string.Equals(_refreshFilesDebugSource, "sql_index_updated", StringComparison.Ordinal);
             List<FileEntry> snapList = null;
             bool fileListFromCache = false;
             bool fileListFromSibling = false;
-            if (canFileListCache && Gallery.singleton != null)
+            // Always build into reusable scratch — snapshot cache Put clones; never store _refreshBuildFiles itself.
+            _refreshBuildFiles.Clear();
+            List<FileEntry> files = _refreshBuildFiles;
+            if (!bypassFileListCache && canFileListCache && Gallery.singleton != null)
             {
                 var panels = Gallery.singleton.Panels;
                 for (int pi = 0; pi < panels.Count; pi++)
@@ -2717,15 +3017,18 @@ namespace VPB
                     string ok;
                     if (!o.TryBuildFileListSnapshotCacheKey(out ok) || !string.Equals(ok, fileListSnapKey, StringComparison.Ordinal)) continue;
                     if (o.currentFilteredFiles == null || o.currentFilteredFiles.Count == 0) continue;
-                    snapList = new List<FileEntry>(o.currentFilteredFiles);
+                    if (files.Capacity < o.currentFilteredFiles.Count)
+                        files.Capacity = o.currentFilteredFiles.Count;
+                    files.AddRange(o.currentFilteredFiles);
+                    snapList = files;
                     fileListFromCache = true;
                     fileListFromSibling = true;
                     break;
                 }
             }
-            if (!fileListFromCache && canFileListCache)
-                fileListFromCache = GalleryFileListSnapshotCache.TryGet(fileListSnapKey, out snapList);
-            List<FileEntry> files = (fileListFromCache && snapList != null) ? snapList : new List<FileEntry>();
+            if (!bypassFileListCache && !fileListFromCache && canFileListCache)
+                fileListFromCache = GalleryFileListSnapshotCache.TryCopyInto(fileListSnapKey, files);
+            if (fileListFromCache) snapList = files;
             if (fileListFromSibling && canFileListCache && fileListSnapKey != null && files.Count > 0)
                 GalleryFileListSnapshotCache.Put(fileListSnapKey, files);
 
@@ -2838,8 +3141,9 @@ namespace VPB
                                     }
                                 }
                             }
-                            earlyNewCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
-                                                     .OrderBy(c => c.Name).ToList();
+                            var creatorList = new List<CreatorCacheEntry>(counts.Count > 0 ? counts.Count : 16);
+                            FillCreatorCacheEntriesSorted(counts, creatorList);
+                            earlyNewCreators = creatorList;
                         }
 
                         if (_buildCats && _bCategories != null)
@@ -2951,9 +3255,8 @@ namespace VPB
                 int wantsLoadedStateForIndexMain = -1;
                 try
                 {
-                    SortType st = GetSortState("Files").Type;
-                    if (st == SortType.LoadedOnly) wantsLoadedStateForIndexMain = 1;
-                    else if (st == SortType.UnloadedOnly) wantsLoadedStateForIndexMain = 0;
+                    if (FilesSortWantsLoadedOnly()) wantsLoadedStateForIndexMain = 1;
+                    else if (FilesSortWantsUnloadedOnly()) wantsLoadedStateForIndexMain = 0;
                 }
                 catch { }
                 ContentType activeContentSnap = activeContentType;
@@ -2963,8 +3266,7 @@ namespace VPB
                 string workerPathSnap = pathForIndexMain;
                 List<string> workerPathsSnap = currentPaths != null ? new List<string>(currentPaths) : null;
                 bool appearanceWorkerLocalOnly = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
-                    && (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase)
-                        || ResolveEffectiveSourceFilterMode(true, pathForIndexMain) == 1);
+                    && ResolveEffectiveSourceFilterMode(true, pathForIndexMain) == 1;
                 bool appearanceWorkerSkipPathMatch = titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
                     && !appearanceWorkerLocalOnly;
                 List<string> pathInclusionsForSql = null;
@@ -2983,10 +3285,17 @@ namespace VPB
 
                 VpbLocalDatabase.GalleryCategoryQueryStats catQueryStats = new VpbLocalDatabase.GalleryCategoryQueryStats();
 
-                bool userTagGridFilterModeSnap = _userTagAvailFilterMode;
+                bool userTagGridFilterUntaggedSnap = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
+                bool userTagIncludeExcludeArmedSnap = !userTagGridFilterUntaggedSnap && IsUserTagIncludeExcludeFilterArmed();
+                bool userTagFilterIsolateSnap = userTagIncludeExcludeArmedSnap
+                    && activeUserTags != null && activeUserTags.Count > 0
+                    && UserTagFilterRequiresAllTags();
                 HashSet<string> userTagNamesForGridSqlSnap = null;
-                if (userTagGridFilterModeSnap && activeUserTags != null && activeUserTags.Count > 0)
+                if (userTagIncludeExcludeArmedSnap && activeUserTags != null && activeUserTags.Count > 0)
                     userTagNamesForGridSqlSnap = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+                HashSet<string> excludedUserTagNamesForGridSqlSnap = null;
+                if (userTagIncludeExcludeArmedSnap && excludedUserTags != null && excludedUserTags.Count > 0)
+                    excludedUserTagNamesForGridSqlSnap = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
                 int[] refreshDrainUtSqlFilterApplied = { 0 };
 
                 ThreadPool.QueueUserWorkItem((state) =>
@@ -3005,7 +3314,7 @@ namespace VPB
                         {
                             bool hr = VpbLocalDatabase.TryQueryGalleryHistoryRows(
                                 histFilterSnap,
-                                nameTerms,
+                                searchQuerySnap,
                                 idxRows,
                                 out catQueryStats);
                             if (!hr)
@@ -3048,13 +3357,16 @@ namespace VPB
                                 idxRows,
                                 out catQueryStats,
                                 sqliteWorkerClothingSub,
-                                loadedState: wantsLoadedStateForIndexMain,
-                                nameTerms: nameTerms,
-                                pathExclusions: pathExclusions,
-                                pathInclusions: pathInclusionsForSql,
-                                activeTags: activeTags,
-                                activeUserTags: userTagNamesForGridSqlSnap,
-                                sortState: fileListSortSnapForWorker);
+                                wantsLoadedStateForIndexMain,
+                                searchQuerySnap,
+                                pathExclusions,
+                                pathInclusionsForSql,
+                                activeTags,
+                                userTagNamesForGridSqlSnap,
+                                fileListSortSnapForWorker,
+                                userTagGridFilterUntaggedSnap,
+                                userTagFilterIsolateSnap,
+                                excludedUserTagNamesForGridSqlSnap);
                             }
                         }
                         else
@@ -3216,11 +3528,17 @@ namespace VPB
                             {
                                 HashSet<string> utCatMemKeyHits = null;
                                 if (activeContentSnap == ContentType.Category
-                                    && userTagGridFilterModeSnap && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0
+                                    && (userTagGridFilterUntaggedSnap
+                                        || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0))
                                     && !string.IsNullOrEmpty(titleForIndexMain) && VpbSqlite3.IsAvailable)
                                 {
                                     var utBuilt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                    if (VpbLocalDatabase.TryBuildCatMemRowKeysMatchingAllUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt))
+                                    bool utOk = false;
+                                    if (userTagGridFilterUntaggedSnap)
+                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysWithNoUserTags(titleForIndexMain, utBuilt);
+                                    else if (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                        utOk = VpbLocalDatabase.TryBuildCatMemRowKeysMatchingUserTags(titleForIndexMain, userTagNamesForGridSqlSnap, utBuilt, userTagFilterIsolateSnap);
+                                    if (utOk)
                                     {
                                         utCatMemKeyHits = utBuilt;
                                         System.Threading.Interlocked.Exchange(ref _refreshWorkerFallbackUserTagPrefilterFlag, 1);
@@ -3292,10 +3610,9 @@ namespace VPB
                                             if (!string.IsNullOrEmpty(packagePathFilterForIndexMain) &&
                                                 !GalleryPathFilterMatchesRawPath(pkg.Path, packagePathFilterForIndexMain))
                                                 continue;
-                                            if (hasNameFilter)
-                                            {
-                                                if (!MatchesPackageByScope(pkg.Uid ?? "", pkg.Path ?? "", null, nameTerms)) continue;
-                                            }
+                                            if (hasNameFilter
+                                                && !MatchesPackageFallbackSearch(searchQuerySnap, pkg.Uid ?? "", pkg.Path ?? "", null))
+                                                continue;
                                             if (utCatMemKeyHits != null)
                                             {
                                                 string utk = VpbLocalDatabase.FormatCatMemRowLookupKey(pkg.Uid, "meta.json");
@@ -3379,10 +3696,9 @@ namespace VPB
                                         && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
                                         continue;
 
-                                    if (hasNameFilter)
-                                    {
-                                        if (!MatchesPackageByScope(pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath, nameTerms)) continue;
-                                    }
+                                    if (hasNameFilter
+                                        && !MatchesPackageFallbackSearch(searchQuerySnap, pkg != null ? pkg.Uid : "", pkg != null ? pkg.Path : "", internalPath))
+                                        continue;
 
                                     if (utCatMemKeyHits != null)
                                     {
@@ -3406,10 +3722,16 @@ namespace VPB
                         try
                         {
                             if (useSqliteIndex && activeContentSnap == ContentType.Category
-                                && userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                && (userTagGridFilterUntaggedSnap
+                                    || (userTagNamesForGridSqlSnap != null && userTagNamesForGridSqlSnap.Count > 0)
+                                    || (excludedUserTagNamesForGridSqlSnap != null && excludedUserTagNamesForGridSqlSnap.Count > 0)))
                                 refreshDrainUtSqlFilterApplied[0] = 1;
                         }
                         catch { }
+                        if (useSqliteIndex)
+                        {
+                            try { FileManager.NotifyFirstGallerySqlRefreshComplete(); } catch { }
+                        }
                         if (LogGalleryRefreshDeepTiming)
                         {
                             try
@@ -3478,7 +3800,7 @@ namespace VPB
                         sqliteBulkConsumed = true;
                         _refreshSqliteBulkIncludedUserTagGridFilter = refreshDrainUtSqlFilterApplied[0] != 0;
                         if (activeContentSnap == ContentType.History)
-                            SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, nameTerms);
+                            SyncHistoryBrowseFailureFlagsFromStats(activeContentSnap, catQueryStats, searchQuerySnap);
                         long bulkBudgetMs = maxMsPerFrame;
                         int bc = bulk.Count;
                         if (bc >= 16000) bulkBudgetMs = System.Math.Max(maxMsPerFrame, 160L);
@@ -3510,9 +3832,9 @@ namespace VPB
                                         + " | ratingToggle=" + (isRatingSortToggleEnabled ? "1" : "0")
                                         + " | ratingFilter=" + (string.IsNullOrEmpty(currentRatingFilter) ? "0" : "1")
                                         + " | sizeFilter=" + (string.IsNullOrEmpty(currentSizeFilter) ? "0" : "1")
-                                        + " | sceneSrcFilter=" + (string.IsNullOrEmpty(currentSceneSourceFilter) ? "0" : "1")
+                                        + " | sceneSrcFilter=0"
                                         + " | poseFilter=" + ((posePeopleFilter != PosePeopleFilter.All || wantsPoseCounts) ? "1" : "0")
-                                        + " | appearanceFilter=" + ((!string.IsNullOrEmpty(currentAppearanceSourceFilter) || appearanceSubfilter != 0) ? "1" : "0"));
+                                        + " | appearanceFilter=" + (appearanceSubfilter != 0 ? "1" : "0"));
                                 }
                                 catch { }
                             }
@@ -3554,9 +3876,9 @@ namespace VPB
                 deepFilesCountAfterDrain = files != null ? files.Count : 0;
             }
 
-            List<string> pathsToSearch = new List<string>();
-            if (currentPaths != null && currentPaths.Count > 0) pathsToSearch.AddRange(currentPaths);
-            else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
+            _refreshPathsToSearch.Clear();
+            List<string> pathsToSearch = _refreshPathsToSearch;
+            Gallery.CollectLooseDiskSearchRoots(pathsToSearch, currentPaths, currentPath);
 
             if (activeContentType == ContentType.Category)
             {
@@ -3566,6 +3888,10 @@ namespace VPB
                     // Re-enumerating Saves/* (SafeGetFiles + PassesFilters per path) duplicates work and can burn 10s+ on large trees with sysAdded=0.
                     if (!fileListFromCache)
                     {
+                    string titleForLooseSceneScan = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
+                    bool applyVaMLocalSceneLooseFilter =
+                        titleForLooseSceneScan.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0
+                        && titleForLooseSceneScan.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) < 0;
                     // Fast path: reuse SQLite-cached loose-file listings for this category/path/ext combo when unchanged.
                     string sysCacheKey = null;
                     string sysCacheSig = null;
@@ -3573,9 +3899,15 @@ namespace VPB
                     bool sysCacheHit = false;
                     try
                     {
-                        // Cache key: category + extensions + search paths.
+                        // Cache key: format tag + category + extensions + search paths. The "sf5" tag marks resolved
+                        // disk roots + local-scene listing rules (any json under Saves/scene; sibling jpg NOT required).
+                        // Bumped sf3->sf4 so caches built under the old "jpg required" rule regenerate and pick up
+                        // preview-less scenes. Bumped sf4->sf5 so caches written under the OLD rule — where the live
+                        // filter state (user-tag "Untagged" mode, creator, source, pose, rating) was baked into cache
+                        // membership and silently hid tagged scenes next launch — are discarded and rebuilt with the
+                        // filter-independent membership rule (#64).
                         var sbKey = new System.Text.StringBuilder(256);
-                        sbKey.Append(currentCategoryTitle ?? "").Append("|ext=");
+                        sbKey.Append("sf5|").Append(currentCategoryTitle ?? "").Append("|ext=");
                         if (extensions != null && extensions.Length > 0)
                         {
                             var ex = new List<string>(extensions);
@@ -3587,8 +3919,12 @@ namespace VPB
                             }
                         }
                         sbKey.Append("|paths=");
-                        var p2 = new List<string>(pathsToSearch);
-                        p2.Sort(StringComparer.OrdinalIgnoreCase);
+                        _refreshPathKeySortScratch.Clear();
+                        if (_refreshPathKeySortScratch.Capacity < pathsToSearch.Count)
+                            _refreshPathKeySortScratch.Capacity = pathsToSearch.Count;
+                        _refreshPathKeySortScratch.AddRange(pathsToSearch);
+                        _refreshPathKeySortScratch.Sort(StringComparer.OrdinalIgnoreCase);
+                        List<string> p2 = _refreshPathKeySortScratch;
                         for (int i = 0; i < p2.Count; i++)
                         {
                             if (i != 0) sbKey.Append(';');
@@ -3609,7 +3945,8 @@ namespace VPB
                         }
                         sysCacheSig = sbSig.ToString();
 
-                        sysCachedRows = new List<VpbLocalDatabase.SystemFileRow>();
+                        _refreshSysCachedRowsScratch.Clear();
+                        sysCachedRows = _refreshSysCachedRowsScratch;
                         sysCacheHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysCachedRows);
                     }
                     catch { sysCacheHit = false; sysCachedRows = null; }
@@ -3619,7 +3956,10 @@ namespace VPB
                     if (sysCacheHit && sysCachedRows != null)
                     {
                         bool prunedMissingCachedRows = false;
-                        List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = new List<VpbLocalDatabase.SystemFileRow>(sysCachedRows.Count);
+                        _refreshSysRowsToKeepScratch.Clear();
+                        if (_refreshSysRowsToKeepScratch.Capacity < sysCachedRows.Count)
+                            _refreshSysRowsToKeepScratch.Capacity = sysCachedRows.Count;
+                        List<VpbLocalDatabase.SystemFileRow> sysRowsToKeep = _refreshSysRowsToKeepScratch;
                         string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                         bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                         for (int i = 0; i < sysCachedRows.Count; i++)
@@ -3644,8 +3984,38 @@ namespace VPB
                                 try { wt = DateTime.FromBinary(r.LastWriteBinaryOrInvalid); } catch { wt = DateTime.MinValue; }
                             }
                             long sz = r.SizeOrInvalid != long.MinValue ? r.SizeOrInvalid : 0;
-                            var sysEntryFast = new SystemFileEntry(r.Path, wt, sz, exists: true);
+                            if (applyVaMLocalSceneLooseFilter
+                                && r.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                                && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(r.Path))
+                                continue;
+
+                            // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
+                            // logic keys off VaM-relative paths, so normalize the entry path back.
+                            var sysEntryFast = new SystemFileEntry(FileManager.NormalizePath(r.Path), wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
+
+                            // Cache now stores the unfiltered candidate set, so pose/rating filters (which live
+                            // outside PassesFilters) must be re-applied here exactly as the live scan does — otherwise
+                            // they would not filter on a cache hit (#64).
+                            if (posePeopleFilter != PosePeopleFilter.All)
+                            {
+                                int pcPoseRead = 1;
+                                bool isJsonPoseRead = false;
+                                try { isJsonPoseRead = (sysEntryFast.Path != null && sysEntryFast.Path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)); } catch { isJsonPoseRead = false; }
+                                if (isJsonPoseRead)
+                                {
+                                    int knownRead;
+                                    if (TryGetKnownPosePeopleCount(sysEntryFast, out knownRead)) pcPoseRead = knownRead;
+                                    else { EnqueuePosePeopleIndex(sysEntryFast); pcPoseRead = 1; }
+                                }
+                                if (posePeopleFilter == PosePeopleFilter.Single && pcPoseRead >= 2) continue;
+                                if (posePeopleFilter == PosePeopleFilter.Dual && pcPoseRead < 2) continue;
+                            }
+                            if (isRatingSortToggleEnabled)
+                            {
+                                if (RatingsManager.Instance.GetRating(sysEntryFast) <= 0) continue;
+                            }
+
                             files.Add(sysEntryFast);
                             if (sysLooseFilesAddedCount != null) sysLooseFilesAddedCount[0]++;
                             if (swDeep != null) deepSysFilesAdded++;
@@ -3662,7 +4032,8 @@ namespace VPB
                     }
                     else
                     {
-                        var sysRowsForWrite = new List<VpbLocalDatabase.SystemFileRow>(256);
+                        _refreshSysRowsForWriteScratch.Clear();
+                        List<VpbLocalDatabase.SystemFileRow> sysRowsForWrite = _refreshSysRowsForWriteScratch;
                         string titleForGeneratedSceneSkip = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                         bool skipVpbGeneratedLocalScenes = titleForGeneratedSceneSkip.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
                     string[] diskExtsForLoose = Gallery.DiskScanExtensionsOrEverything(currentExtension, extensions);
@@ -3672,17 +4043,17 @@ namespace VPB
 
                         foreach (var ext in diskExtsForLoose)
                         {
-                            string[] sysFiles = new string[0];
+                            _refreshSysFilePathScratch.Clear();
                             try
                             {
-                                List<string> sysFileList = new List<string>();
-                                FileManager.SafeGetFiles(searchPath, "*." + ext, sysFileList);
-                                sysFiles = sysFileList.ToArray();
+                                FileManager.SafeGetFiles(searchPath, "*." + ext, _refreshSysFilePathScratch);
                             }
-                            catch { }
+                            catch { continue; }
 
-                            foreach (var sysPath in sysFiles)
+                            for (int sfi = 0; sfi < _refreshSysFilePathScratch.Count; sfi++)
                             {
+                                string sysPath = _refreshSysFilePathScratch[sfi];
+                                if (string.IsNullOrEmpty(sysPath)) continue;
                                 if (skipVpbGeneratedLocalScenes && LocalSceneGallerySupport.IsVpbGeneratedLocalScenePath(sysPath))
                                 {
                                     LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(sysPath);
@@ -3696,10 +4067,38 @@ namespace VPB
                                     yieldWatch.Start();
                                 }
 
-                                var sysEntry = new SystemFileEntry(sysPath);
+                                if (applyVaMLocalSceneLooseFilter
+                                    && string.Equals(ext, "json", StringComparison.OrdinalIgnoreCase)
+                                    && !LocalSceneGallerySupport.IsVaMLocalSceneListingCandidate(sysPath))
+                                    continue;
 
-                                bool baseOk = PassesFilters(sysEntry, true);
-                                if (!baseOk) continue;
+                                // Loose scan roots are resolved to absolute disk paths; gallery classify/filter
+                                // logic keys off VaM-relative paths, so normalize the entry path back.
+                                var sysEntry = new SystemFileEntry(FileManager.NormalizePath(sysPath));
+
+                                // Cache membership = every valid loose-scene candidate, INDEPENDENT of the live
+                                // filter state. The sf5 cache key is category|ext|paths only (no filter signature),
+                                // so the read path (above) re-applies PassesFilters/pose/rating per row. Writing the
+                                // row here, before any filter `continue`, prevents a scan performed while a transient
+                                // filter was active (e.g. user-tag "Untagged" mode during the tag-a-scene workflow)
+                                // from baking that filtering into the persisted cache and silently hiding tagged
+                                // scenes on the next launch until a folder mtime change invalidates the cache (#64).
+                                try
+                                {
+                                    var rr = new VpbLocalDatabase.SystemFileRow();
+                                    rr.Path = sysEntry.Path ?? sysPath;
+                                    long wtB = long.MinValue;
+                                    try { wtB = sysEntry.LastWriteTime.ToBinary(); } catch { wtB = long.MinValue; }
+                                    rr.LastWriteBinaryOrInvalid = wtB;
+                                    rr.SizeOrInvalid = sysEntry.Size;
+                                    sysRowsForWrite.Add(rr);
+                                }
+                                catch { }
+
+                                // From here down decides GRID membership only (cache row already written above).
+                                // The clothing/hair subfilter is skipped for the facet/pass gate and re-applied on read.
+                                if (!PassesFilters(sysEntry, true, true)) continue;
+                                bool gridOk = PassesFilters(sysEntry, true);
 
                                 int pcPose = 1;
                                 bool needPc = wantsPoseCounts || (posePeopleFilter != PosePeopleFilter.All);
@@ -3738,22 +4137,13 @@ namespace VPB
                                     if (RatingsManager.Instance.GetRating(sysEntry) <= 0) continue;
                                 }
 
-                                files.Add(sysEntry);
-                                if (sysLooseFilesAddedCount != null)
-                                    sysLooseFilesAddedCount[0]++;
-                                if (swDeep != null) deepSysFilesAdded++;
-
-                                try
+                                if (gridOk)
                                 {
-                                    var rr = new VpbLocalDatabase.SystemFileRow();
-                                    rr.Path = sysEntry.Path ?? sysPath;
-                                    long wtB = long.MinValue;
-                                    try { wtB = sysEntry.LastWriteTime.ToBinary(); } catch { wtB = long.MinValue; }
-                                    rr.LastWriteBinaryOrInvalid = wtB;
-                                    rr.SizeOrInvalid = sysEntry.Size;
-                                    sysRowsForWrite.Add(rr);
+                                    files.Add(sysEntry);
+                                    if (sysLooseFilesAddedCount != null)
+                                        sysLooseFilesAddedCount[0]++;
+                                    if (swDeep != null) deepSysFilesAdded++;
                                 }
-                                catch { }
                             }
                         }
                     }
@@ -3835,7 +4225,7 @@ namespace VPB
             currentFilteredFiles.AddRange(lastFilteredFiles);
             // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
             // as a trustworthy unfiltered base for in-memory search.
-            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
+            if (!HasActiveNameFilter())
                 _topSearchBaseIsClean = true;
 
             if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds;
@@ -3912,6 +4302,7 @@ namespace VPB
                 if (swDeep != null) deepGbSetItemMs = swDeep.ElapsedMilliseconds;
             }
             if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
+            try { UpdateEmptyGridState(); } catch { }
 
             // Legacy nav/file buttons (non-recycling): destroy in slices so main thread yields between batches (VaM stays responsive).
             int legacyBtnCount = activeButtons.Count;
@@ -3934,6 +4325,10 @@ namespace VPB
                 {
                     ApplyEarlyMetaRefreshResults(metaBuildGroupId, earlyBuildCreators, earlyBuildCats, sideMetaCacheKey, false,
                         earlyNewCreators, earlyNewCatCounts);
+                    if (metaBuildGroupId == currentLoadingGroupId)
+                    {
+                        try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
+                    }
                 }
                 else
                 {
@@ -4001,8 +4396,15 @@ namespace VPB
 
             // Hide overlay and stop pane timing before full UpdateTabs(): side-tab rebuild (hundreds of buttons) is not the file grid
             // and was inflating "until grid ready" by 1–2+ s. Thumbnails for visible rows use memory cache + threaded queue (BindFileButton/LoadThumbnail), not a full-grid decode here.
+            bool rebuildSideTabsAfterFirstLoad = _sideTabsNeedFullRebuildAfterFirstRefresh;
+            _deferSideTabCountsForceRefresh = rebuildSideTabsAfterFirstLoad;
             if (_sideTabsNeedFullRebuildAfterFirstRefresh)
+            {
+                categoriesCached = false;
+                creatorsCached = false;
+                InvalidateSharedSideMetaIfPackageScanAdvanced();
                 _sideTabsNeedFullRebuildAfterFirstRefresh = false;
+            }
 
             HideLoadingOverlay();
             hasLoadedContent = true;
@@ -4026,18 +4428,12 @@ namespace VPB
 
             // Show() used UpdateTabsImpl(false) while this coroutine ran, so category/creator/tag side lists stay stale until here.
             // Defer one frame (same as first-load / Pose) so we do not block overlay hide; covers every category switch.
-            if (!IsHubMode && (leftTabContainerGO != null || rightTabContainerGO != null))
+            if (leftTabContainerGO != null || rightTabContainerGO != null)
                 _deferredGallerySideTabsCoroutine = StartCoroutine(DeferredGallerySideTabsAfterGridReady(navSessionForThisRun, _deferredSubPaneSessionId, tagParallelWaiterForThisRun, tagScanRefreshSeq));
 
             // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
             // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
-            try
-            {
-                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
-            }
-            catch { }
-
-            // If packages were skipped because their content cache wasn't ready yet
+            StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
             // (FileManager scan still in progress), schedule a single retry — but only
             // if no retry is already pending/running. This prevents an infinite refresh
             // loop where each retry finds uncached packages and spawns yet another retry.
@@ -4080,22 +4476,12 @@ namespace VPB
         /// <summary>Scene split sub-pane uses <see cref="ContentType.SceneSource"/> only — no <see cref="GalleryPanel.CacheTagCounts"/> pass.</summary>
         private bool DeferredSubPaneNeedsTagCountCachePass()
         {
-            if (IsHubMode) return false;
             string title = titleText != null ? titleText.text : "";
             bool leftCat = leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Category;
             bool rightCat = rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Category;
             if (!leftCat && !rightCat) return false;
 
-            bool thickSplit =
-                title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (!thickSplit) return false;
-
-            if (title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0)
-                return false;
+            if (!CategoryNeedsTagCountCachePass(title)) return false;
 
             if (leftCat && leftSubTabScrollGO != null && leftSubTabContainerGO != null) return true;
             if (rightCat && rightSubTabScrollGO != null && rightSubTabContainerGO != null) return true;
@@ -4107,6 +4493,9 @@ namespace VPB
             yield return null;
             // Phase 1: main side strips (category/creator). Sub-pane is cleared here; tag UI fills in phase 2 after "interactive DONE".
             LogGalleryCategoryTypeNavPhase("deferred_sideTabs_phase1_main_before");
+            bool forceCounts = _deferSideTabCountsForceRefresh;
+            _deferSideTabCountsForceRefresh = false;
+            try { EnsureSideTabCountsFreshAfterGridReady(force: forceCounts); } catch { }
             try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: false); } catch { }
             if (DeferredSubPaneNeedsTagCountCachePass())
             {
@@ -4126,6 +4515,12 @@ namespace VPB
                     {
                         tagsCached = false;
                     }
+                    try { RebuildSubPaneSideTabListsOnly(); } catch { }
+                }
+                else if (titleSnap.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0
+                      || titleSnap.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    try { TryApplyHairClothingSubfilterCountsFromSql(); } catch { }
                     try { RebuildSubPaneSideTabListsOnly(); } catch { }
                 }
             }
@@ -4160,11 +4555,23 @@ namespace VPB
             if (ShouldSkipHeavyAppearanceTagParallelScan())
             {
                 bool primed = TryRecomputeAppearanceGenderFacetCountsScoped();
-                if (!primed && TryApplyAppearanceFacetCountsFromSql())
+                if (!primed)
+                    primed = TryApplyAppearanceFacetCountsFromSql();
+                // Source:Local already scheduled sliced recount inside TryRecompute.
+                // Non-Local: merge loose counts onto SQL/VAR totals in slices.
+                if (primed && ShouldCountLooseAppearanceGenderFiles() && !IsAppearanceLooseScopedBrowsing())
                 {
-                    TryMergeLooseVapAppearanceGenderFacetCounts();
-                    primed = true;
+                    IEnumerator looseMerge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, deferredSubPaneSessionWhenScheduled, resetCountsFirst: false);
+                    while (looseMerge.MoveNext())
+                    {
+                        if (deferredSubPaneSessionWhenScheduled != _deferredSubPaneSessionId)
+                            yield break;
+                        yield return looseMerge.Current;
+                    }
+                    ranSlicedTagScan = true;
                 }
+                if (IsAppearanceLooseScopedBrowsing())
+                    ranSlicedTagScan = true;
                 if (primed)
                 {
                     tagsCached = true;
@@ -4249,6 +4656,7 @@ namespace VPB
         {
             try
             {
+                if (_browseHiddenCycle != BrowseFilterCycle.Off) return true;
                 SortType t = GetSortState("Files").Type;
                 return t == SortType.Hidden || t == SortType.HiddenOnly;
             }
@@ -4257,21 +4665,36 @@ namespace VPB
 
         private bool FilesSortWantsLoadedOnly()
         {
-            try { return GetSortState("Files").Type == SortType.LoadedOnly; }
+            try
+            {
+                if (_browseLoadedMode == BrowseLoadedMode.LoadedOnly) return true;
+                return GetSortState("Files").Type == SortType.LoadedOnly;
+            }
             catch { return false; }
         }
 
         private bool FilesSortWantsUnloadedOnly()
         {
-            try { return GetSortState("Files").Type == SortType.UnloadedOnly; }
+            try
+            {
+                if (_browseLoadedMode == BrowseLoadedMode.UnloadedOnly) return true;
+                return GetSortState("Files").Type == SortType.UnloadedOnly;
+            }
             catch { return false; }
         }
 
-        /// <summary>Removes non-matching rows for Hidden-only / AutoInstall-only file sort modes (list is modified in place).</summary>
-        private static void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
+        /// <summary>Removes non-matching rows for exclusive browse/sort modes (list is modified in place).</summary>
+        private void ApplyFilesSortExclusiveFiltersInPlace(List<FileEntry> list, SortType type)
         {
             if (list == null) return;
-            if (type == SortType.HiddenOnly)
+
+            bool hiddenOnly = _browseHiddenCycle == BrowseFilterCycle.Only || type == SortType.HiddenOnly;
+            bool alwaysLoadedOnly = _browseAlwaysLoadedCycle == BrowseFilterCycle.Only || type == SortType.AutoInstallOnly;
+            bool loadedOnly = _browseLoadedMode == BrowseLoadedMode.LoadedOnly || type == SortType.LoadedOnly;
+            bool unloadedOnly = _browseLoadedMode == BrowseLoadedMode.UnloadedOnly || type == SortType.UnloadedOnly;
+            bool unusedOnly = _browseUnusedCycle == BrowseFilterCycle.Only || type == SortType.UnusedOnly;
+
+            if (hiddenOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4283,7 +4706,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.AutoInstallOnly)
+            if (alwaysLoadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4295,7 +4718,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.LoadedOnly)
+            if (loadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4317,7 +4740,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.UnloadedOnly)
+            if (unloadedOnly)
             {
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
@@ -4337,7 +4760,7 @@ namespace VPB
                     catch { try { list.RemoveAt(i); } catch { } }
                 }
             }
-            else if (type == SortType.UnusedOnly)
+            if (unusedOnly)
             {
                 try
                 {
@@ -4346,25 +4769,30 @@ namespace VPB
                         keys.Add(VpbLocalDatabase.BuildUsageKey(list[i]));
 
                     var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    if (!VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts))
-                        return;
-
-                    for (int i = list.Count - 1; i >= 0; i--)
+                    if (VpbLocalDatabase.TryReadItemUseCountsForKeys(keys, counts))
                     {
-                        try
+                        for (int i = list.Count - 1; i >= 0; i--)
                         {
-                            string k = VpbLocalDatabase.BuildUsageKey(list[i]);
-                            int c = 0;
-                            if (!string.IsNullOrEmpty(k) && counts.TryGetValue(k, out int got)) c = got;
-                            if (c != 0) list.RemoveAt(i);
+                            try
+                            {
+                                string k = VpbLocalDatabase.BuildUsageKey(list[i]);
+                                int c = 0;
+                                if (!string.IsNullOrEmpty(k) && counts.TryGetValue(k, out int got)) c = got;
+                                if (c != 0) list.RemoveAt(i);
+                            }
+                            catch { try { list.RemoveAt(i); } catch { } }
                         }
-                        catch { try { list.RemoveAt(i); } catch { } }
                     }
                 }
                 catch
                 {
                     // If usage DB is unavailable, keep the list unchanged (fail open).
                 }
+            }
+
+            if (_browseOldVersionsCycle == BrowseFilterCycle.Only)
+            {
+                try { GallerySortManager.ApplyOldVersionsOnlyFilter(list); } catch { }
             }
         }
 
@@ -4377,7 +4805,6 @@ namespace VPB
         /// <summary>Rebuilds file list for show-hidden toggle from last full drain snapshot — skips package scan, sort on worker, and <see cref="UpdateLayout"/>.</summary>
         private bool TryFastApplyGalleryShowHiddenToggle(bool keepScroll)
         {
-            if (IsHubMode) return false;
             try { if (Gallery.IsSuppressed()) return false; } catch { return false; }
             if (refreshCoroutine != null) return false;
             try { if (_refreshHistoryLightCo != null) return false; } catch { }
@@ -4387,10 +4814,10 @@ namespace VPB
             if (IsFilterActive) return false;
             if (currentPackageFilterMode != PackageFilterMode.None) return false;
             try { if (cleanupModeActive) return false; } catch { }
-            try { if (_userTagAvailFilterMode) return false; } catch { }
+            try { if (_userTagAvailMode != UserTagAvailMode.Tag) return false; } catch { }
             try
             {
-                if (nameFilterTerms != null && nameFilterTerms.Length > 0) return false;
+                if (HasActiveNameFilter()) return false;
             }
             catch { return false; }
             if (activeContentType == ContentType.History) return false;
@@ -4525,6 +4952,9 @@ namespace VPB
                         }
                     }
                     UpdatePaginationText();
+                    // Active chip reads currentFilteredFiles.Count; this pass just settled it (hide-strip +
+                    // hide-old-versions), so rebuild the sub-pane chips so the active chip shows the final count.
+                    try { if (clothingSubfilter != 0 || hairSubfilter != 0) RebuildSubPaneSideTabListsOnly(); } catch { }
                 }
                 catch { }
             }
@@ -4538,17 +4968,20 @@ namespace VPB
             // Try to handle as VarPackage first
             if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
             {
+                try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
                 List<FileEntry> filtered;
 
                 if (PackageFilterUsesPackageListRows())
                 {
                     HashSet<string> uids = BuildUidSetForDependenciesFilter(pkg);
+                    try { DependencyGraph.EnsureForUids(uids); } catch { }
                     filtered = BuildPackageListEntriesForUids(uids);
                     currentPackageFilterCount = Math.Max(0, uids.Count - 1);
                 }
                 else
                 {
                     HashSet<string> depUids = BuildUidSetForDependenciesFilter(pkg);
+                    try { DependencyGraph.EnsureForUids(depUids); } catch { }
                     if (!string.IsNullOrEmpty(pkg.Uid)) depUids.Remove(pkg.Uid);
                     filtered = new List<FileEntry> { file };
                     AddVarFileEntriesWithPackageInUidSet(filtered, file, currentFilteredFiles, depUids);
@@ -4567,6 +5000,7 @@ namespace VPB
                 {
                     // Deduplicate: keep only latest version of each Author.Name
                     deps = GallerySortManager.DeduplicateDependenciesByLatestVersion(deps);
+                    try { DependencyGraph.EnsureForUids(deps); } catch { }
 
                     List<FileEntry> filtered;
                     if (PackageFilterUsesPackageListRows())
@@ -4649,6 +5083,7 @@ namespace VPB
             if (!TryGetPackageFromEntry(file, out VarPackage pkg, out string label) || pkg == null) return;
 
             EnsureFilterBaseCaptured();
+            try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
 
             string targetUid = pkg.Uid;
             string targetShort = GetPackageGroupShortUid(targetUid);
@@ -4684,6 +5119,7 @@ namespace VPB
                 // Try to handle as VarPackage first
                 if (TryGetPackageFromEntry(file, out VarPackage pkg, out string label) && pkg != null)
                 {
+                    try { DependencyGraph.EnsureForPackage(pkg.Uid); } catch { }
                     var deps = pkg.RecursivePackageDependencies;
                     if (deps == null || deps.Count == 0)
                     {
@@ -4802,19 +5238,19 @@ namespace VPB
 
             try
             {
-                nameFilter = frame.savedNameFilter;
-                nameFilterLower = string.IsNullOrEmpty(frame.savedNameFilter) ? "" : frame.savedNameFilter.ToLowerInvariant();
-                nameFilterTerms = SplitSearchTerms(frame.savedNameFilter);
-                if (titleSearchInput != null) titleSearchInput.text = frame.savedNameFilter;
+                AssignNameFilterState(frame.savedNameFilter);
+                HydrateTitleSearchChipsFromCurrentFilter();
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
             }
             catch { }
 
             filterBaseAnchorKey = null;
             InvalidateGalleryPreHideFileListSnapshot();
             RefreshRecycleGridAfterFilterChange();
-            try { UpdateTabs(); } catch { }
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
             ScrollGalleryToTop();
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         /// <summary>Clear all filter levels and restore the original unfiltered list.</summary>
@@ -4839,7 +5275,7 @@ namespace VPB
             filterSearchLower = "";
 
             RefreshRecycleGridAfterFilterChange();
-            try { UpdateTabs(); } catch { }
+            try { RefreshChromeAfterPackageFilterListChange(); } catch { }
             try { UpdatePaginationText(); } catch { }
 
             filterBaseAnchorKey = null;
@@ -4851,10 +5287,8 @@ namespace VPB
             {
                 try
                 {
-                    nameFilter = "";
-                    nameFilterLower = "";
-                    nameFilterTerms = new string[0];
-                    if (titleSearchInput != null) titleSearchInput.text = "";
+                    ClearNameFilterState();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, "", _titleBarSearchOnValueChanged);
                 }
                 catch { }
                 try
@@ -4875,13 +5309,13 @@ namespace VPB
             {
                 try
                 {
-                    nameFilter = bottom.savedNameFilter;
-                    nameFilterLower = string.IsNullOrEmpty(bottom.savedNameFilter) ? "" : bottom.savedNameFilter.ToLowerInvariant();
-                    nameFilterTerms = SplitSearchTerms(bottom.savedNameFilter);
-                    if (titleSearchInput != null) titleSearchInput.text = bottom.savedNameFilter;
+                    AssignNameFilterState(bottom.savedNameFilter);
+                    HydrateTitleSearchChipsFromCurrentFilter();
+                    SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
                 }
                 catch { }
             }
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         /// <summary>Returns whether a filter is currently active.</summary>

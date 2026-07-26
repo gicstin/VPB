@@ -362,8 +362,7 @@ namespace VPB
 
             try
             {
-                try { FileManager.Refresh(); } catch { }
-                try { if (MVR.FileManagement.FileManager.singleton != null) MVR.FileManagement.FileManager.Refresh(); } catch { }
+                try { FileManagerBridge.Refresh("tbox_delete_local_scenes", RefreshScope.Both); } catch { }
             }
             catch { }
         }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Prime31.MessageKit;
 using UnityEngine;
 using VPB.src.util;
@@ -12,6 +13,8 @@ namespace VPB
     public class Gallery : MonoBehaviour
     {
         public static Gallery singleton;
+
+        private static int _pendingGallerySqlIndexUpdate;
 
         private DateTime lastObservedPackageRefreshTime = DateTime.MinValue;
         private bool _hasHadInitialRefresh = false;
@@ -100,6 +103,50 @@ namespace VPB
             return splitExtensions;
         }
 
+        /// <summary>
+        /// Resolves VaM-relative category roots (e.g. <c>Saves/scene</c>) to on-disk paths for
+        /// <see cref="FileManager.SafeGetFiles"/> / <see cref="Directory.Exists"/> (matches VaM cwd semantics).
+        /// </summary>
+        public static void CollectLooseDiskSearchRoots(List<string> dest, IList<string> categoryPaths, string categoryPath)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (categoryPaths != null && categoryPaths.Count > 0)
+            {
+                for (int i = 0; i < categoryPaths.Count; i++)
+                    TryAddLooseDiskSearchRoot(dest, categoryPaths[i]);
+            }
+            else
+                TryAddLooseDiskSearchRoot(dest, categoryPath);
+        }
+
+        private static void TryAddLooseDiskSearchRoot(List<string> dest, string path)
+        {
+            if (dest == null || string.IsNullOrEmpty(path)) return;
+            string full = null;
+            try
+            {
+                string norm = path.Replace('\\', '/').TrimEnd('/');
+                if (Path.IsPathRooted(norm))
+                    full = Path.GetFullPath(norm.Replace('/', Path.DirectorySeparatorChar));
+                else
+                    full = FileManager.GetFullPath(norm.Replace('/', Path.DirectorySeparatorChar));
+            }
+            catch
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(full) || !Directory.Exists(full)) return;
+
+            for (int i = 0; i < dest.Count; i++)
+            {
+                if (string.Equals(dest[i], full, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            dest.Add(full);
+        }
+
         private List<Category> categories = new List<Category>();
         
         // Panels management
@@ -144,6 +191,11 @@ namespace VPB
             // OnFileManagerRefresh / SetCategories instead.
         }
 
+        void Update()
+        {
+            DrainPendingSqlIndexUpdate();
+        }
+
         void OnEnable()
         {
             MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
@@ -167,7 +219,9 @@ namespace VPB
         {
             // Start immediately so this heavy task can overlap with startup work.
             // READY still waits on completion via StartupSettleUpdate pending checks.
+            VamStartupProfiler.BeginScope("gender_map_load");
             yield return JSONExtensions.LoadCharacterGenderMap();
+            VamStartupProfiler.EndScope("gender_map_load");
             genderMapInitCoroutine = null;
         }
 
@@ -179,27 +233,36 @@ namespace VPB
             for (int i = 0; i < ps.Count; i++)
             {
                 var p = ps[i];
-                if (p == null || p.IsHubMode) continue;
+                if (p == null) continue;
                 try { p.RefreshHistoryBrowseIfActive(true); } catch { }
             }
         }
 
         private void OnFileManagerRefresh()
         {
+            VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_enter");
+            bool pendingPackageDelta = false;
+            try { pendingPackageDelta = FileManager.HasPendingGalleryPackageDelta(); } catch { }
+
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryManualRefreshOnly)
             {
                 if (_hasHadInitialRefresh)
                 {
-                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                    if (!pendingPackageDelta)
+                    {
+                        LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh SKIPPED (manual refresh only)");
+                        return;
+                    }
                     try
                     {
-                        if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
-                            VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+                        LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh manualRefreshOnly -> pending delta apply");
                     }
-                    catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
-                    return;
+                    catch { }
                 }
-                LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
+                else
+                {
+                    LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh INITIAL (manual refresh only, first-run exemption)");
+                }
             }
 
             if (IsSuppressed())
@@ -212,19 +275,51 @@ namespace VPB
             try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
             // Ignore broadcasts that did not advance the package scan clock (e.g. legacy global pings).
+            // Still run when a pending add/remove delta exists (hub download under manual-refresh-only).
             if (lastObservedPackageRefreshTime != DateTime.MinValue &&
-                refreshTime <= lastObservedPackageRefreshTime)
+                refreshTime <= lastObservedPackageRefreshTime &&
+                !pendingPackageDelta)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnFileManagerRefresh SKIPPED stale clock scanTime="
+                        + refreshTime.ToString("o") + " lastObserved=" + lastObservedPackageRefreshTime.ToString("o"));
+                }
+                catch { }
+                VamStartupProfiler.Milestone("Gallery.OnFileManagerRefresh_skipped_stale_clock");
                 return;
+            }
 
             LogUtil.Log("[VPB] Gallery.OnFileManagerRefresh TRIGGERED");
-            GalleryFileListSnapshotCache.Clear();
-            GalleryTagCountSnapshotCache.Clear();
+            if (pendingPackageDelta)
+                GalleryFileListSnapshotCache.Clear();
+            else
+                GalleryFileListSnapshotCache.InvalidateAll();
+
+            // Process-lifetime static L1 caches: drop on package library change (stability / bound memory).
+            try { GallerySortManager.ClearSceneDependencyCache(); } catch { }
+            try { UIDraggableItem.ClearGlobalRegionCache(); } catch { }
+            try { LooseVapGenderProbe.InvalidateMemoryCache(); } catch { }
+            try { VpbLocalDatabase.ClearDeepDirMtimeCache(); } catch { }
+
+            // VAR scan rewrote per-uid cslist-referenced rows; drop the in-memory set so the
+            // next read sees the fresh SQLite state.
             try
             {
-                if (!VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory())
-                    VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan();
+                if (panels != null)
+                {
+                    for (int i = 0; i < panels.Count; i++)
+                    {
+                        var p = panels[i];
+                        if (p != null)
+                        {
+                            try { p.InvalidateCslistReferencedCache(); } catch { }
+                        }
+                    }
+                }
             }
-            catch { try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { } }
+            catch { }
+
             lastObservedPackageRefreshTime = refreshTime;
 
             _hasHadInitialRefresh = true;
@@ -304,22 +399,62 @@ namespace VPB
                     }
                     catch { }
 
+                    bool hasPackageDelta = (added != null && added.Count > 0) || (removed != null && removed.Count > 0);
+                    try
+                    {
+                        LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh scanTime=" + refreshTime.ToString("o")
+                            + " added=" + (added != null ? added.Count : 0)
+                            + " removed=" + (removed != null ? removed.Count : 0)
+                            + " hasDelta=" + (hasPackageDelta ? "1" : "0")
+                            + " pending=" + (autoRefreshPending ? "1" : "0"));
+                    }
+                    catch { }
+
+                    bool ackDelta = false;
                     foreach (var p in panels)
                     {
                         if (p == null) continue;
-                        if (p.IsHubMode) continue;
 
-                        bool changed = false;
-                        try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
-
-                        if (changed && (p.IsVisible || p.HasLoadedContent))
+                        if (!hasPackageDelta)
                         {
-                            // Keep hidden panels warm too. Otherwise hidden panels only set
-                            // refreshOnNextShow=true and pay a full RefreshFiles() stall on the
-                            // next open (~1-2s with large libraries) instead of applying the
-                            // incremental delta while the panel is out of view.
-                            p.ApplyPackageDelta(added, removed);
+                            bool changed = false;
+                            try { changed = p.NotifyPackagesChanged(refreshTime); } catch { changed = true; }
+                            if (!changed) continue;
+                            if (!p.HasLoadedContent && (p.HasDeferredStartupRefreshPending || p.IsStartupInitialRefreshInProgress))
+                                continue;
+                            if (changed && (p.IsVisible || p.HasLoadedContent))
+                            {
+                                try
+                                {
+                                    if (p.ApplyPackageDelta(added, removed))
+                                        ackDelta = true;
+                                }
+                                catch { }
+                            }
+                            continue;
                         }
+
+                        if (hasPackageDelta)
+                        {
+                            try
+                            {
+                                if (p.ApplyPackageDelta(added, removed))
+                                    ackDelta = true;
+                            }
+                            catch (Exception ex)
+                            {
+                                try { LogUtil.Log("[VPB.Gallery.Delta] ApplyPackageDelta error: " + ex.Message); } catch { }
+                            }
+                        }
+                    }
+
+                    if (hasPackageDelta && ackDelta)
+                    {
+                        try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+                    }
+                    else if (hasPackageDelta && !ackDelta)
+                    {
+                        try { LogUtil.Log("[VPB.Gallery.Delta] AutoRefresh kept pending delta (no panel applied changes)"); } catch { }
                     }
 
                     if (!autoRefreshPending) break;
@@ -366,8 +501,16 @@ namespace VPB
             try { hydrated = VpbLocalDatabase.TryRestoreReadyStateIfMetaMatchesInventory(); } catch { }
             if (!hydrated)
             {
-                try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
-                try { VpbLocalDatabase.ScheduleGalleryIndexRebuildAfterScan(); } catch { }
+                // Cold start: package inventory is still registering when categories first bind.
+                // Forcing rebuild here bypasses sqlRestore and blocks startup for ~15s. Scan completion
+                // calls ScheduleGalleryIndexUpdateAfterScan() once registry is complete.
+                bool startupReady = false;
+                try { startupReady = LogUtil.IsStartupReadyLogged() || LogUtil.IsReadyLogged(); } catch { }
+                if (startupReady)
+                {
+                    try { VpbLocalDatabase.InvalidateReadyStateOnCategoriesChanged(); } catch { }
+                    try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+                }
             }
             foreach (var p in panels)
             {
@@ -433,7 +576,8 @@ namespace VPB
 
             GameObject go = new GameObject("GalleryPanel_Clone");
             GalleryPanel p = go.AddComponent<GalleryPanel>();
-            
+            p.importSidebarInitAsClone = true;
+
             p.Init();
             // Force floating mode for clones
             p.SetFixedLocally(false);
@@ -448,6 +592,7 @@ namespace VPB
             if (cloneRight == ContentType.Settings) cloneRight = null;
             p.SetLeftActiveContent(cloneLeft);
             p.SetRightActiveContent(cloneRight);
+            p.CopyImportSidebarStateFrom(original);
             p.SetFollowMode(original.GetFollowMode());
             
             // Sync size
@@ -774,6 +919,27 @@ namespace VPB
         }
 
         /// <summary>
+        /// After SQLite <c>pkg.var_path</c> was corrected for Explorer moves (index reuse, no rebuild).
+        /// Clears Path side-panel folder counts and refreshes displayed VAR paths for changed UIDs.
+        /// </summary>
+        public static void NotifyAfterPkgVarPathsSynced(ICollection<string> packageUids)
+        {
+            if (singleton == null) return;
+            List<GalleryPanel> pl = singleton.Panels;
+            if (pl != null)
+            {
+                for (int i = 0; i < pl.Count; i++)
+                {
+                    GalleryPanel p = pl[i];
+                    if (p == null) continue;
+                    try { p.InvalidateCachedPathTabs(); } catch { }
+                }
+            }
+            if (packageUids != null && packageUids.Count > 0)
+                NotifyDisplayedPathsAfterPackagePathChanges(packageUids);
+        }
+
+        /// <summary>
         /// Refreshes row bindings for visible non-hub panels only (no full list rebuild).
         /// Useful for badge-only state changes while auto-refresh is suppressed.
         /// </summary>
@@ -815,6 +981,58 @@ namespace VPB
             singleton._baMigrationPromptPending = false;
             LogUtil.Log("[VPB BA] TryConsumeBaMigrationPromptPending: consuming pending prompt");
             return true;
+        }
+
+        internal IEnumerator DeferredGalleryIndexRebuildCoroutine(float delaySec)
+        {
+            try { VpbLocalDatabase.SetGalleryIndexBuildIndicatorPending(true); } catch { }
+            if (delaySec > 0f)
+            {
+                try { VamStartupProfiler.Milestone("sql_rebuild_delay sec=" + delaySec.ToString("0.##")); } catch { }
+                yield return new WaitForSeconds(delaySec);
+            }
+            while (FileManager.IsBulkDeepScanActive)
+                yield return null;
+            if (VpbLocalDatabase.TrySkipGalleryIndexRebuild())
+            {
+                try { VpbLocalDatabase.SetGalleryIndexBuildIndicatorPending(false); } catch { }
+                yield break;
+            }
+            try
+            {
+                LogUtil.Log(VamStartupOptimizations.LogTag + " running deferred gallery SQLite index update");
+                VamStartupProfiler.Milestone("sql_rebuild_deferred_run_begin");
+            }
+            catch { }
+            // Deferred coroutine runs post-startup-ready; force routes to full-rebuild instead of incremental.
+            try { VpbLocalDatabase.ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
+        }
+
+        /// <summary>After SQLite index patch completes, refresh visible gallery grids that use SQL.</summary>
+        internal static void NotifyGalleryIndexUpdateCompleted()
+        {
+            Interlocked.Exchange(ref _pendingGallerySqlIndexUpdate, 1);
+        }
+
+        /// <summary>Drain pending SQL-index gallery refresh (main thread only).</summary>
+        internal static void DrainPendingSqlIndexUpdate()
+        {
+            if (Interlocked.CompareExchange(ref _pendingGallerySqlIndexUpdate, 0, 1) != 1) return;
+            bool scanning = false;
+            try { scanning = FileManager.IsScanning; } catch { }
+            if (scanning)
+            {
+                Interlocked.Exchange(ref _pendingGallerySqlIndexUpdate, 1);
+                return;
+            }
+            var ps = singleton != null ? singleton.panels : null;
+            if (ps == null) return;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                var p = ps[i];
+                if (p == null) continue;
+                try { p.OnGallerySqlIndexUpdated(); } catch { }
+            }
         }
     }
 }

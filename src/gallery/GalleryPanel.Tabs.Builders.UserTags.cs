@@ -17,10 +17,9 @@ namespace VPB
             EnsureUserTagAvailScrollTrackingHooks();
             SnapshotUserTagAvailScrollForPreserve(isLeft);
             EnsureUserTagSideTabBulkBlock(container.transform, isLeft);
+            // Sticky before first virt measure — Mask height must be final or bind uses wrong window / invents into collapse.
             try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             Transform utBulk = container.transform.Find("VPB_UserTagBulkBlock_v3");
-            if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock_v2");
-            if (utBulk == null) utBulk = container.transform.Find("VPB_UserTagBulkBlock");
             if (utBulk == null && isLeft && leftUserTagsAvailStickyGO != null)
                 utBulk = leftUserTagsAvailStickyGO.transform.Find("VPB_UserTagBulkBlock_v3");
             if (utBulk == null && !isLeft && rightUserTagsAvailStickyGO != null)
@@ -39,7 +38,7 @@ namespace VPB
                 RebuildUserTagVirtViewList(isLeft, resetScrollToTop: false);
             }
 
-            if (activeUserTags.Count > 0)
+            if (activeUserTags.Count > 0 || excludedUserTags.Count > 0)
             {
                 CreateTabButton(container.transform,
                     VPBTranslation.T("gallery.usertags.clear_filters", "Clear user tag filters"),
@@ -47,8 +46,10 @@ namespace VPB
                     () =>
                     {
                         activeUserTags.Clear();
+                        excludedUserTags.Clear();
                         userTagsCached = false;
-                        if (_userTagAvailFilterMode) { try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { } }
+                        try { RefreshFiles(true, false, false, "user_tag_clear_filters"); } catch { }
+                        try { SyncBrowseFilterChipChrome(); } catch { }
                         try { RefreshUserTagsAvailPaneInPlace(isLeft); } catch { }
                     }, trackedButtons);
             }
@@ -56,11 +57,12 @@ namespace VPB
             GameObject utVirtHolder = EnsureUserTagPickVirtualHolder(container.transform);
             EnsureUserTagVirtScrollHook(isLeft, utVirtHolder);
             SyncUserTagAvailPinnedStickyRows(isLeft, UserTagStateOnColor, container.transform);
+            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
+            InvalidateUserTagVirtWindowGate(isLeft);
             UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, container.transform);
             RequestUserTagVirtLayoutRefresh(isLeft, container.transform, preserveScroll: true);
             SyncUserTagAvailTitleCount(isLeft);
             SyncUserTagApplyBtnCount(isLeft);
-            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
             RestorePreservedUserTagAvailScroll();
         }
 
@@ -69,16 +71,10 @@ namespace VPB
             try { EnsureUserTagPinOrderRuntimeLoaded(); } catch { }
             EnsureUserTagsAppliedToolbar(container.transform, isLeft);
             Transform utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v2");
-            if (utAppTb == null) utAppTb = container.transform.Find("VPB_UserTagsAppliedToolbar_v1");
             if (utAppTb == null && isLeft && leftUserTagsAppliedStickyGO != null)
                 utAppTb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null && isLeft && leftUserTagsAppliedStickyGO != null)
-                utAppTb = leftUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (utAppTb == null && !isLeft && rightUserTagsAppliedStickyGO != null)
                 utAppTb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v3");
-            if (utAppTb == null && !isLeft && rightUserTagsAppliedStickyGO != null)
-                utAppTb = rightUserTagsAppliedStickyGO.transform.Find("VPB_UserTagsAppliedToolbar_v2");
             if (utAppTb != null) utAppTb.SetAsFirstSibling();
 
             CacheAppliedUserTagsForSelection();
@@ -126,7 +122,7 @@ namespace VPB
             visibleApplied.Clear();
             visibleApplied.AddRange(normalApplied);
 
-            float sApp = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float sApp = ChromeScale;
             float pinInsetApp = 34f * sApp;
             SyncUserTagAppliedPinnedStickyRows(isLeft, pinnedApplied, utAppAccent, sApp);
             int appliedVisibleCount = pinnedApplied.Count + visibleApplied.Count;
@@ -145,7 +141,7 @@ namespace VPB
                     () => { OnAppliedUserTagRowClicked(viCapture, visibleApplied, tagFocusSnap); },
                     trackedButtons, null, null, tagFocusSnap, TextAnchor.MiddleCenter, pinInsetApp, 0f);
                 if (trackedButtons != null && trackedButtons.Count > trackedBefore)
-                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp, isLeft);
+                    SyncUserTagRowPinButton(trackedButtons[trackedButtons.Count - 1], tagFocusSnap, false, sApp, isLeft, appliedRow: true);
             }
 
             SyncUserTagAppliedTitleCount(appliedVisibleCount, isLeft);

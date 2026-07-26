@@ -1,7 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
+using VPB.src.util;
 
 namespace VPB
 {
@@ -13,13 +16,11 @@ namespace VPB
             return title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>Appearance grid narrowed to loose/custom only (per-category Local toggle or global Local).</summary>
+        /// <summary>Appearance grid narrowed to loose/custom only (global Source Local).</summary>
         private bool IsAppearanceLocalOnlyActive()
         {
             if (!IsAppearanceCategoryTitle()) return false;
-            if (string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                return true;
-            return ResolveEffectiveSourceFilterMode(true, currentPath ?? "") == 1;
+            return IsGlobalSourceFilterLocal();
         }
 
         /// <summary>Fast gender badges + skip heavy parallel tag scan when Source: Local is active.</summary>
@@ -75,7 +76,11 @@ namespace VPB
             else if (!string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath)) pathsToSearch.Add(currentPath);
         }
 
-        /// <summary>Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).</summary>
+        /// <summary>
+        /// Loose .vap facet counts (uses system_files cache + loose_vap_gender probe cache).
+        /// Prefer <see cref="CoMergeLooseVapAppearanceGenderFacetCounts"/> (sliced) from UI paths —
+        /// this sync path remains for tiny libraries / tests only.
+        /// </summary>
         private void AccumulateLooseVapAppearanceGenderCounts(bool resetCountsFirst)
         {
             if (resetCountsFirst)
@@ -126,6 +131,7 @@ namespace VPB
                 sysCached = null;
             }
 
+            var genderBulk = new LooseVapGenderBulkCache();
             for (int pi = 0; pi < pathsToSearch.Count; pi++)
             {
                 string searchPath = pathsToSearch[pi];
@@ -165,7 +171,7 @@ namespace VPB
                     if (isPresetLoose) appearanceSourceCountPresets++;
 
                     AppearanceGender lg;
-                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey); }
+                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
                     catch { lg = AppearanceGender.Unknown; }
 
                     appearanceSubfilterCountAll++;
@@ -193,22 +199,229 @@ namespace VPB
                     }
                 }
             }
+            genderBulk.Flush();
         }
 
-        /// <summary>After SQL var counts, add loose .vap gender chips from probe cache (skipped by heavy-scan fast path).</summary>
-        private void TryMergeLooseVapAppearanceGenderFacetCounts()
+        /// <summary>Time-sliced loose .vap merge/recount — keeps category switch responsive on huge libraries.</summary>
+        /// <param name="resetCountsFirst">True for Source:Local full recount; false to merge onto SQL/VAR totals.</param>
+        private IEnumerator CoMergeLooseVapAppearanceGenderFacetCounts(int maxMsPerSlice, int deferredSessionId, bool resetCountsFirst)
+        {
+            if (!ShouldCountLooseAppearanceGenderFiles()) yield break;
+
+            if (resetCountsFirst)
+                ResetAppearanceGenderFacetCounts();
+
+            string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            EnsureAppearanceGenderRefreshCaches(cat ?? "");
+
+            var pathsToSearch = new List<string>();
+            CollectAppearanceSearchPaths(pathsToSearch);
+            if (pathsToSearch.Count == 0) yield break;
+
+            AppearanceSubfilter aSub = appearanceSubfilter;
+            Stopwatch sliceWatch = maxMsPerSlice > 0 ? Stopwatch.StartNew() : null;
+
+            string sysCacheKey = null;
+            string sysCacheSig = null;
+            List<VpbLocalDatabase.SystemFileRow> sysCached = null;
+            bool sysCacheHit = false;
+            try
+            {
+                var p2 = new List<string>(pathsToSearch);
+                p2.Sort(StringComparer.OrdinalIgnoreCase);
+                var sbKey = new StringBuilder(256);
+                sbKey.Append("tags:loose:appearance|ext=vap|paths=");
+                for (int i = 0; i < p2.Count; i++)
+                {
+                    if (i != 0) sbKey.Append(';');
+                    sbKey.Append((p2[i] ?? "").Replace('\\', '/').TrimEnd('/'));
+                }
+                sysCacheKey = sbKey.ToString();
+
+                var sbSig = new StringBuilder(128);
+                for (int i = 0; i < p2.Count; i++)
+                {
+                    long t = 0;
+                    try { t = VpbLocalDatabase.DeepMaxDirMtimeBinary(p2[i]); } catch { t = 0; }
+                    if (i != 0) sbSig.Append('|');
+                    sbSig.Append(t.ToString());
+                }
+                sysCacheSig = sbSig.ToString();
+
+                sysCached = new List<VpbLocalDatabase.SystemFileRow>();
+                sysCacheHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(sysCacheKey, sysCacheSig, sysCached);
+            }
+            catch
+            {
+                sysCacheHit = false;
+                sysCached = null;
+            }
+
+            var genderBulk = new LooseVapGenderBulkCache();
+            for (int pi = 0; pi < pathsToSearch.Count; pi++)
+            {
+                if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
+
+                string searchPath = pathsToSearch[pi];
+                if (string.IsNullOrEmpty(searchPath) || !Directory.Exists(searchPath)) continue;
+
+                List<string> sysFileList;
+                if (sysCacheHit && sysCached != null && sysCached.Count > 0)
+                {
+                    sysFileList = new List<string>();
+                    for (int i = 0; i < sysCached.Count; i++)
+                    {
+                        string p = sysCached[i].Path ?? "";
+                        if (p.EndsWith(".vap", StringComparison.OrdinalIgnoreCase))
+                            sysFileList.Add(p);
+                    }
+                }
+                else
+                {
+                    sysFileList = new List<string>();
+                    try { FileManager.SafeGetFiles(searchPath, "*.vap", sysFileList); }
+                    catch { continue; }
+                }
+
+                for (int fi = 0; fi < sysFileList.Count; fi++)
+                {
+                    if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
+
+                    string sysPath = sysFileList[fi] ?? "";
+                    string norm = sysPath.Replace('\\', '/');
+                    if (!norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase) &&
+                        !norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
+                    bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
+
+                    appearanceSourceCountAll++;
+                    if (isCustomLoose) appearanceSourceCountCustom++;
+                    if (isPresetLoose) appearanceSourceCountPresets++;
+
+                    AppearanceGender lg;
+                    try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, cat ?? "", _appearanceUserTagsByRowKey, genderBulk); }
+                    catch { lg = AppearanceGender.Unknown; }
+
+                    appearanceSubfilterCountAll++;
+                    if (isPresetLoose) appearanceSubfilterCountPresets++;
+                    if (isCustomLoose) appearanceSubfilterCountCustom++;
+                    if (lg == AppearanceGender.Male) appearanceSubfilterCountMale++;
+                    if (lg == AppearanceGender.Female) appearanceSubfilterCountFemale++;
+                    if (lg == AppearanceGender.Futa) appearanceSubfilterCountFuta++;
+                    if (lg == AppearanceGender.Unknown) appearanceSubfilterCountUnknown++;
+
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Presets, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountPresets++;
+                    if (LoosePassesAppearanceSubfilter(aSub ^ AppearanceSubfilter.Custom, isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountCustom++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Male), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountMale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Female), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFemale++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Futa), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountFuta++;
+                    if (LoosePassesAppearanceSubfilter(AppearanceGenderClassifier.HypotheticalGenderFacet(aSub, AppearanceSubfilter.Unknown), isPresetLoose, isCustomLoose, lg)) appearanceSubfilterFacetCountUnknown++;
+
+                    if (LoosePassesAppearanceSubfilter(aSub, isPresetLoose, isCustomLoose, lg))
+                    {
+                        appearanceSubfilterCurrentCountAll++;
+                        if (lg == AppearanceGender.Male) appearanceSubfilterCurrentCountMale++;
+                        if (lg == AppearanceGender.Female) appearanceSubfilterCurrentCountFemale++;
+                        if (lg == AppearanceGender.Futa) appearanceSubfilterCurrentCountFuta++;
+                        if (lg == AppearanceGender.Unknown) appearanceSubfilterCurrentCountUnknown++;
+                    }
+
+                    if (sliceWatch != null && fi % 64 == 63 && sliceWatch.ElapsedMilliseconds >= maxMsPerSlice)
+                    {
+                        yield return null;
+                        if (deferredSessionId >= 0 && deferredSessionId != _deferredSubPaneSessionId) yield break;
+                        sliceWatch.Reset();
+                        sliceWatch.Start();
+                    }
+                }
+            }
+            genderBulk.Flush();
+        }
+
+        private void ScheduleAppearanceLooseMergeRefresh()
         {
             if (!ShouldCountLooseAppearanceGenderFiles()) return;
-            if (IsAppearanceLooseScopedBrowsing()) return;
-            AccumulateLooseVapAppearanceGenderCounts(resetCountsFirst: false);
+            // Source:Local uses ScheduleAppearanceLooseScopedSliceRecount (full reset).
+            if (IsAppearanceLooseScopedBrowsing())
+            {
+                ScheduleAppearanceLooseScopedSliceRecount(_deferredSubPaneSessionId);
+                return;
+            }
+            StopCo(ref _appearanceLooseMergeCo);
+            _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseMergeRefresh());
         }
 
-        /// <summary>Recount gender/source chips from loose .vap under the current path only (milliseconds).</summary>
+        private IEnumerator CoAppearanceLooseMergeRefresh()
+        {
+            try
+            {
+                IEnumerator merge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, -1, resetCountsFirst: false);
+                while (merge.MoveNext()) yield return merge.Current;
+                string tckPut;
+                if (TryBuildTagCountCacheKey(out tckPut))
+                {
+                    try { GalleryTagCountSnapshotCache.Put(tckPut, CaptureTagCountSnapshot()); } catch { }
+                }
+                try { RebuildSubPaneSideTabListsOnly(); } catch { }
+            }
+            finally
+            {
+                _appearanceLooseMergeCo = null;
+            }
+        }
+
+        /// <summary>
+        /// Source:Local Appearance — sliced full loose-.vap recount (never sync Accumulate on large trees).
+        /// </summary>
+        private void ScheduleAppearanceLooseScopedSliceRecount(int deferredSessionId)
+        {
+            if (!ShouldCountLooseAppearanceGenderFiles()) return;
+            if (!IsAppearanceLooseScopedBrowsing()) return;
+            StopCo(ref _appearanceLooseMergeCo);
+            int sessionSnap = deferredSessionId >= 0 ? deferredSessionId : _deferredSubPaneSessionId;
+            _appearanceLooseMergeCo = StartCoroutine(CoAppearanceLooseScopedSliceRecount(sessionSnap));
+        }
+
+        private IEnumerator CoAppearanceLooseScopedSliceRecount(int sessionWhenStarted)
+        {
+            try
+            {
+                IEnumerator merge = CoMergeLooseVapAppearanceGenderFacetCounts(TagCountScanDeferredSliceMs, sessionWhenStarted, resetCountsFirst: true);
+                while (merge.MoveNext())
+                {
+                    if (sessionWhenStarted >= 0 && sessionWhenStarted != _deferredSubPaneSessionId)
+                        yield break;
+                    yield return merge.Current;
+                }
+                if (sessionWhenStarted >= 0 && sessionWhenStarted != _deferredSubPaneSessionId)
+                    yield break;
+                tagsCached = true;
+                string tckPut;
+                if (TryBuildTagCountCacheKey(out tckPut))
+                {
+                    try { GalleryTagCountSnapshotCache.Put(tckPut, CaptureTagCountSnapshot()); } catch { }
+                }
+                try { RebuildSubPaneSideTabListsOnly(); } catch { }
+            }
+            finally
+            {
+                _appearanceLooseMergeCo = null;
+            }
+        }
+
+        /// <summary>
+        /// Source:Local Appearance: prefer SQL for instant chips; kick sliced loose recount.
+        /// Never runs sync <see cref="AccumulateLooseVapAppearanceGenderCounts"/> (can freeze VAM).
+        /// </summary>
         private bool TryRecomputeAppearanceGenderFacetCountsScoped()
         {
             if (!IsAppearanceLooseScopedBrowsing()) return false;
-            AccumulateLooseVapAppearanceGenderCounts(resetCountsFirst: true);
-            return true;
+            bool primedSql = false;
+            try { primedSql = TryApplyAppearanceFacetCountsFromSql(); } catch { primedSql = false; }
+            ScheduleAppearanceLooseScopedSliceRecount(_deferredSubPaneSessionId);
+            return primedSql;
         }
 
         private bool LoosePassesAppearanceSubfilter(AppearanceSubfilter f, bool isPresetLoose, bool isCustomLoose, AppearanceGender lg)

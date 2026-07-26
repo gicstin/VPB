@@ -117,10 +117,7 @@ namespace VPB
                                     bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
-                                        MVR.FileManagement.FileManager.Refresh();
-                                        VPB.FileManager.Refresh();
-                                        if (movedUids.Count > 0)
-                                            VPB.FileManager.NotifyInstalled(movedUids);
+                                        FileManagerBridge.Refresh("filebutton_json", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                                     }
                                 }
                             }
@@ -169,10 +166,7 @@ namespace VPB
                                     bool dirty = EnsureInstalledByText(aJSON, movedUids);
                                     if (dirty)
                                     {
-                                        MVR.FileManagement.FileManager.Refresh();
-                                        VPB.FileManager.Refresh();
-                                        if (movedUids.Count > 0)
-                                            VPB.FileManager.NotifyInstalled(movedUids);
+                                        FileManagerBridge.Refresh("filebutton_json", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
                                     }
                                 }
                             }
@@ -221,9 +215,7 @@ namespace VPB
             }
             if (flag)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                // Refresh this as well; this will raise events.
-                VPB.FileManager.Refresh();
+                FileManagerBridge.Refresh("filebutton_autoinstall_toggle", RefreshScope.Both);
             }
         }
         public void EnsureInstalled()
@@ -256,26 +248,58 @@ namespace VPB
             bool flag = false;
             foreach (var key in set)
             {
-                VarPackage package = FileManager.GetPackageForDependency(key, false);
-                if (package != null)
+                if (TryInstallDependencyKey(key, outMovedPackageUids, ref flag))
+                    continue;
+            }
+            return flag;
+        }
+
+        /// <summary>Install dependency set on main thread, yielding every <paramref name="yieldEvery"/> keys.</summary>
+        public static System.Collections.IEnumerator EnsureInstalledBySetCoroutine(
+            HashSet<string> set, List<string> outMovedPackageUids, int yieldEvery, System.Action<bool> onComplete)
+        {
+            bool flag = false;
+            if (set == null || set.Count == 0)
+            {
+                if (onComplete != null) onComplete(flag);
+                yield break;
+            }
+
+            int total = set.Count;
+            int idx = 0;
+            foreach (var key in set)
+            {
+                TryInstallDependencyKey(key, outMovedPackageUids, ref flag);
+                idx++;
+                if (yieldEvery > 0 && (idx % yieldEvery) == 0)
                 {
-                    string path = package.Path;
-                    bool dirty = outMovedPackageUids != null
-                        ? package.InstallRecursive(outMovedPackageUids)
-                        : package.InstallRecursive();
-                    if (dirty)
-                    {
-                        LogUtil.Log("Installed " + key + " path=" + path);
-                        flag = true;
-                    }
-                }
-                else
-                {
-                    LogUtil.LogError("Install Failed (package not found) " + key);
+                    try { VpbProgressService.ReportSceneLoadDepProgress(idx, total); } catch { }
+                    yield return null;
                 }
             }
-            if (flag)
+
+            try { VpbProgressService.ReportSceneLoadDepProgress(total, total); } catch { }
+            if (onComplete != null) onComplete(flag);
+        }
+
+        static bool TryInstallDependencyKey(string key, List<string> outMovedPackageUids, ref bool flag)
+        {
+            VarPackage package = FileManager.GetPackageForDependency(key, false);
+            if (package != null)
+            {
+                string path = package.Path;
+                bool dirty = outMovedPackageUids != null
+                    ? package.InstallRecursive(outMovedPackageUids)
+                    : package.InstallRecursive();
+                if (dirty)
+                {
+                    LogUtil.Log("Installed " + key + " path=" + path);
+                    flag = true;
+                }
                 return true;
+            }
+
+            LogUtil.LogError("Install Failed (package not found) " + key);
             return false;
         }
 
@@ -285,9 +309,7 @@ namespace VPB
             bool dirty = EnsureInstalledByText(text, movedUids);
             if (dirty)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                if (movedUids.Count > 0)
-                    VPB.FileManager.NotifyInstalled(movedUids);
+                FileManagerBridge.Refresh("filebutton_ensure_installed", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
             }
         }
 
@@ -356,9 +378,7 @@ namespace VPB
             }
             if (flag)
             {
-                MVR.FileManagement.FileManager.Refresh();
-                if (movedUids.Count > 0)
-                    VPB.FileManager.NotifyInstalled(movedUids);
+                FileManagerBridge.Refresh("filebutton_on_installed", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: false);
             }
         }
 

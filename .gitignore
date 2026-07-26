@@ -18,7 +18,6 @@
 /TODO.md
 /.zencoder/rules
 /vam_patch/BepInEx/plugins/VPB.pdb
-/.github/workflows
 /old
 /CHANGELOG.md
 /sample
@@ -28,3 +27,7 @@
 /FEEDBACK_PLAN.md
 /lib
 /VPB.local.props
+/.cursor/rules
+VPB.code-workspace
+.aider*
+/.vscode

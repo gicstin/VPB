@@ -428,6 +428,11 @@ namespace VPB
             return false;
         }
 
+        internal static bool IsTiffTexturePath(string path)
+        {
+            return TextureUtil.IsTiffTexturePath(path);
+        }
+
         static int CalculateImagePriority(string path)
         {
             if (string.IsNullOrEmpty(path)) return 1000;
@@ -508,6 +513,73 @@ namespace VPB
         {
             PatchFileExists(harmony);
             PatchProcessImage(harmony);
+            PatchGetFiles(harmony);
+        }
+
+        // VaM's FileManager.GetFiles THROWS "Attempted to get files at non-existent path" when the
+        // directory is not present in its registered (simulated) filesystem, instead of returning an
+        // empty array like standard .NET enumeration. With the scan whitelist enabled, package-content
+        // directories are only registered on demand, so plugins that enumerate a directory of a
+        // not-yet-registered package (e.g. MacGruber PostMagic's UserLUT enumerating its LUT folder
+        // inside a deferred image callback) crash the throw straight through their own callback.
+        //
+        // PREFIX: for a package-prefixed directory path, trigger on-demand registration so the
+        //         enumeration resolves to the real files.
+        // FINALIZER: swallow the "non-existent path" throw and return an empty array, matching the
+        //            standard semantics plugins assume, so an unregistered directory degrades to
+        //            "no files" instead of aborting the caller.
+        static void PatchGetFiles(Harmony harmony)
+        {
+            var fm = typeof(MVR.FileManagement.FileManager);
+            var prefix = AccessTools.Method(typeof(SuperControllerHook), nameof(PreGetFiles));
+            var finalizer = AccessTools.Method(typeof(SuperControllerHook), nameof(FinalizeGetFiles));
+            if (prefix == null && finalizer == null) return;
+            var candidates = new Type[][]
+            {
+                new[] { typeof(string), typeof(string), typeof(bool) },
+                new[] { typeof(string), typeof(string) },
+                new[] { typeof(string) }
+            };
+            foreach (var sig in candidates)
+            {
+                var m = AccessTools.Method(fm, "GetFiles", sig);
+                if (m == null) continue;
+                harmony.Patch(m,
+                    prefix: prefix != null ? new HarmonyMethod(prefix) : null,
+                    finalizer: finalizer != null ? new HarmonyMethod(finalizer) : null);
+                return;
+            }
+        }
+
+        public static void PreGetFiles(string __0)
+        {
+            try
+            {
+                if (VamOnDemandLoader.s_InOnDemand) return;
+                if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
+
+                string uid = VamOnDemandLoader.UidFromEntryPath(__0);
+                if (string.IsNullOrEmpty(uid)) return;
+
+                VamOnDemandLoader.s_InOnDemand = true;
+                try { VamOnDemandLoader.TryRegisterPackageOnDemand(uid); }
+                finally { VamOnDemandLoader.s_InOnDemand = false; }
+            }
+            catch { }
+        }
+
+        public static Exception FinalizeGetFiles(Exception __exception, string __0, ref string[] __result)
+        {
+            if (__exception == null) return null;
+            // Only neutralize the specific "directory does not exist in the simulated filesystem"
+            // throw; let any other failure (IO errors, etc.) propagate unchanged.
+            string msg = __exception.Message ?? string.Empty;
+            if (msg.IndexOf("non-existent path", StringComparison.OrdinalIgnoreCase) < 0)
+                return __exception;
+
+            __result = new string[0];
+            LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
+            return null;
         }
 
         static void PatchFileExists(Harmony harmony)
@@ -556,6 +628,32 @@ namespace VPB
             }
         }
 
+        static int s_ImgqEventLogged;
+        static int s_ImgqEventSilenced;
+        static bool s_ImgqEventSummaryLogged;
+        const int ImgqEventLogMax = 10;
+        static readonly object s_ImgqEventLogLock = new object();
+
+        static bool TryLogImgqEvent()
+        {
+            lock (s_ImgqEventLogLock)
+            {
+                if (s_ImgqEventLogged < ImgqEventLogMax)
+                {
+                    s_ImgqEventLogged++;
+                    return true;
+                }
+                s_ImgqEventSilenced++;
+                if (!s_ImgqEventSummaryLogged)
+                {
+                    s_ImgqEventSummaryLogged = true;
+                    LogUtil.Log("[VPB] Silenced further IMGQ logs (first " + ImgqEventLogMax
+                        + " shown; additional image queue events suppressed)");
+                }
+                return false;
+            }
+        }
+
         static void LogImageQueueEvent(string evt, ImageLoaderThreaded.QueuedImage qi, int queueCount, int numRealQueuedImages, bool moved)
         {
             if (qi == null) return;
@@ -567,6 +665,7 @@ namespace VPB
                 }
             }
             catch { }
+            if (!TryLogImgqEvent()) return;
             string scene = LogUtil.GetSceneLoadName();
             int pri = GetImagePriority(qi.imgPath);
             string cat = GetImageCategory(qi.imgPath);
@@ -585,34 +684,58 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "NormalizeLoadPath", new Type[] { typeof(string) })]
         public static void PreNormalizeLoadPath(ref string path)
         {
-            string rewritten = RewriteVdsPathIfNeeded(path);
-            if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+            // Defense in depth: NormalizeLoadPath is on the trigger-action restore path. Any
+            // exception escaping this prefix unwinds out of MacGruber's per-state loop in
+            // LateRestoreFromJSON and silently drops every state after the throw point.
+            try
             {
-                path = rewritten;
-            }
+                string rewritten = RewriteVdsPathIfNeeded(path);
+                if (!string.Equals(rewritten, path, StringComparison.Ordinal))
+                {
+                    path = rewritten;
+                }
 
-            // If VaM is about to resolve a var entry path, ensure it targets a concrete newest UID
-            // so plugin compiles/includes don't keep using an older missing versioned prefix.
-            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
-            if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
+                if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    path = best;
+                }
+            }
+            catch (Exception ex)
             {
-                path = best;
+                LogUtil.LogWarning("[VPB] PreNormalizeLoadPath swallowed exception for path='" + path + "': " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
-        public static void PreFileExists(ref string __0)
+        public static bool PreFileExists(string __0, ref bool __result)
         {
-            string rewritten = RewriteVdsPathIfNeeded(__0);
-            if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
+            if (VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0))
             {
-                __0 = rewritten;
+                __result = false;
+                return false;
             }
 
-            string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
-            if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+            // Same defensive wrap as PreNormalizeLoadPath: FileExists is on the trigger restore
+            // path too, and an unguarded throw breaks MacGruber-style per-state JSON loops.
+            try
             {
-                __0 = best;
+                string rewritten = RewriteVdsPathIfNeeded(__0);
+                if (!string.Equals(rewritten, __0, StringComparison.Ordinal))
+                {
+                    __0 = rewritten;
+                }
+
+                string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
+                if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
+                {
+                    __0 = best;
+                }
             }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] PreFileExists swallowed exception for path='" + __0 + "': " + ex.GetType().Name + ": " + ex.Message);
+            }
+            return true;
         }
 
         public static void PostFileExists3(string __0, bool __1, ref bool __result)
@@ -637,6 +760,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHook++;
                 if (result) return;
                 if (onlySystemFiles) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
@@ -649,6 +773,7 @@ namespace VPB
                 if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
                     return;
 
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHookHeavy++;
                 LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;
@@ -735,10 +860,45 @@ namespace VPB
             MessageKit.post(MessageDef.DeactivateWorldUI);
         }
 
+        static bool s_ReturnToSceneViewOnStartupApplied;
+
+        static bool IsReturnToSceneViewOnStartupEnabled()
+        {
+            try
+            {
+                return Settings.Instance != null
+                    && Settings.Instance.ReturnToSceneViewOnStartup != null
+                    && Settings.Instance.ReturnToSceneViewOnStartup.Value;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Re-arm so return-to-scene-view applies again after a scene reload (Hard Reset) re-shows the world UI.</summary>
+        public static void ResetReturnToSceneViewOnStartupForSceneReload()
+        {
+            s_ReturnToSceneViewOnStartupApplied = false;
+        }
+
+        static void TryReturnToSceneViewOnStartup(SuperController sc)
+        {
+            if (s_ReturnToSceneViewOnStartupApplied || sc == null) return;
+            if (!IsReturnToSceneViewOnStartupEnabled())
+            {
+                s_ReturnToSceneViewOnStartupApplied = true;
+                return;
+            }
+            if (LogUtil.IsSceneLoadActive()) return;
+
+            s_ReturnToSceneViewOnStartupApplied = true;
+            try { sc.DeactivateWorldUI(); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] ReturnToSceneViewOnStartup failed: " + ex.Message); }
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(SuperController), "ActivateWorldUI")]
         public static void PostActivateWorldUI(SuperController __instance)
         {
+            TryReturnToSceneViewOnStartup(__instance);
             LogUtil.LogStartupReadyOnce("World UI activated");
             LogUtil.MarkScenePhaseWorldUiActivated();
             LogUtil.EndSceneLoadTotal("WorldUI.Activate");
@@ -817,6 +977,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.ScriptCtrlCreate++;
                 string pluginName = "unknown";
                 try
                 {
@@ -931,6 +1092,7 @@ namespace VPB
             LogUtil.Log("PreLoadInternal " + saveName + " " + loadMerge + " " + editMode);
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
+            try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
             try
             {
                 // Clear sim texture registry for new scene
@@ -943,9 +1105,15 @@ namespace VPB
                 }
                 catch { }
 
+                try
+                {
+                    VpbPerfController.OnSceneLoadStarting(saveName, loadMerge);
+                }
+                catch { }
+
                 if (ImageLoadingMgr.singleton != null)
                 {
-                    ImageLoadingMgr.singleton.ClearCandidates();
+                    ImageLoadingMgr.singleton.PrepareForSceneLoad();
                 }
 
                 if (!string.IsNullOrEmpty(saveName))
@@ -1153,13 +1321,16 @@ namespace VPB
             string nativeCachePath = null;
             bool nativeExists = false;
             bool metaExists = false;
+            bool zstdExists = false;
             FileEntry fe = null;
 
             try { fe = FileManager.GetFileEntry(imgPath); } catch { fe = null; }
 
             try
             {
-                nativeCachePath = TextureUtil.GetNativeCachePath(imgPath);
+                nativeCachePath = TextureUtil.FindVaMNativeDiskCachePath(
+                    imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                    qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength);
                 if (!string.IsNullOrEmpty(nativeCachePath))
                 {
                     nativeExists = File.Exists(nativeCachePath);
@@ -1168,8 +1339,19 @@ namespace VPB
             }
             catch { }
 
+            try
+            {
+                string zstdPath = TextureUtil.ResolveServeZstdCachePath(
+                    imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert,
+                    qi.setSize ? qi.width : 0, qi.setSize ? qi.height : 0, qi.bumpStrength, IsSimulationTexturePath(imgPath));
+                zstdExists = !string.IsNullOrEmpty(zstdPath);
+            }
+            catch { }
+
             string feInfo = fe != null ? ("fe=1 size=" + fe.Size + " ts=" + fe.LastWriteTime.ToFileTime()) : "fe=0";
-            string cacheInfo = !string.IsNullOrEmpty(nativeCachePath) ? ("cache=1 exists=" + (nativeExists ? "1" : "0") + " meta=" + (metaExists ? "1" : "0")) : "cache=0";
+            string cacheInfo = "cache=1 native=" + (nativeExists ? "1" : "0")
+                + " zstd=" + (zstdExists ? "1" : "0")
+                + " meta=" + (metaExists ? "1" : "0");
             LogUtil.Log("[VPB] [VaMLoad] " + kind + " | " + imgPath + " | " + feInfo + " | " + cacheInfo);
         }
 
@@ -1249,10 +1431,10 @@ namespace VPB
                     string tName = (m != null && m.DeclaringType != null) ? (m.DeclaringType.FullName ?? m.DeclaringType.Name ?? "") : "";
 
                     bool looksLikeSimCallback =
-                        mName.IndexOf("OnSimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
-                        || mName.IndexOf("SimTextureLoaded", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.OrdinalIgnoreCase) >= 0
-                        || tName.IndexOf("DAZClothSettingsSimTextureReloader", StringComparison.OrdinalIgnoreCase) >= 0;
+                        mName.Equals("OnSimTextureLoaded", StringComparison.Ordinal)
+                        || mName.Equals("LoadSimTextureCallback", StringComparison.Ordinal)
+                        || (tName.IndexOf("DAZSkinWrapMaterialOptions", StringComparison.Ordinal) >= 0
+                            && mName.IndexOf("SimTexture", StringComparison.OrdinalIgnoreCase) >= 0);
 
                     if (looksLikeSimCallback)
                     {
@@ -1299,7 +1481,35 @@ namespace VPB
                 LogImageQueueEvent("enqueue.img", qi, qCount, realQ, moved);
             }
             catch { }
+
+            if (ImageLoadingMgr.singleton != null)
+            {
+                ImageLoadingMgr.singleton.TrackCandidate(qi);
+            }
             return true;
+        }
+
+        internal static void RequeueVaMImageLoad(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
+            try
+            {
+                qi.tex = null;
+                // Skip cache on requeue: if cache invalidation failed (file locked / permissions),
+                // VaM's loader would re-read the same corrupt cache, fail again, and bounce back here.
+                try { qi.skipCache = true; } catch { }
+                var loader = ImageLoaderThreaded.singleton;
+                if (loader == null)
+                {
+                    LogUtil.LogWarning("[VPB] RequeueVaMImageLoad: ImageLoaderThreaded.singleton is null for " + qi.imgPath);
+                    return;
+                }
+                loader.QueueImage(qi);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RequeueVaMImageLoad failed for " + qi.imgPath + ": " + ex.Message);
+            }
         }
 
         // It is added to cache before the callback, so we need to set skipCache one step earlier.
@@ -1368,6 +1578,7 @@ namespace VPB
                 if (ImageLoadingMgr.singleton != null)
                 {
                     ImageLoadingMgr.singleton.ResolveInflightForQueuedImage(__instance);
+                    ImageLoadingMgr.singleton.TryEnqueueResizeCache(__instance);
                 }
             }
 
@@ -1452,12 +1663,13 @@ namespace VPB
         {
             try
             {
-                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
                 if (VamOnDemandLoader.s_AllowRegistration) return true;
                 if (string.IsNullOrEmpty(__0)) return true;
 
                 string norm = __0.Replace('\\', '/');
                 if (!norm.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)) return true;
+
+                if (!ScanWhitelistManager.Instance.IsEnabled) return true;
 
                 string uid = System.IO.Path.GetFileNameWithoutExtension(norm);
                 if (ScanWhitelistManager.Instance.IsUidOverrideIncluded(uid))
@@ -1482,6 +1694,7 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PreRefreshResetScanCounters()
         {
+            if (VamStartupOptimizations.IsBootstrapNativeRefreshSkipArmed()) return;
             VamScanFilter.MarkVamRefreshBegin();
             VamScanFilter.ResetScanCounters();
         }
@@ -1490,6 +1703,17 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static void PostRefreshLogScanResult()
         {
+            if (VamStartupOptimizations.IsNativeRefreshInvocationSkipped())
+            {
+                VamStartupOptimizations.ClearNativeRefreshInvocationSkipped();
+                return;
+            }
+            try
+            {
+                if (!LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged())
+                    VamStartupOptimizations.NoteVpbInitNativeRefreshDone();
+            }
+            catch { }
             VamScanFilter.MarkVamRefreshed();
             VamScanFilter.LogScanResult();
         }
@@ -1498,6 +1722,8 @@ namespace VPB
         [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "Refresh")]
         public static Exception FinalizeRefresh(Exception __exception)
         {
+            if (VamStartupOptimizations.IsNativeRefreshInvocationSkipped())
+                return __exception;
             VamScanFilter.MarkVamRefreshEnd();
             return __exception;
         }
@@ -1514,6 +1740,7 @@ namespace VPB
         {
             try
             {
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
                 if (__result != null) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (VamOnDemandLoader.s_InOnDemand) return;
@@ -1525,6 +1752,7 @@ namespace VPB
                 if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
                     return;
 
+                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHookHeavy++;
                 LogUtil.RecordOnDemandRetry();
                 VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
                 VamOnDemandLoader.s_InOnDemand = true;

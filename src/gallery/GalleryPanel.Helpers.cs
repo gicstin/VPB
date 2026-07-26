@@ -10,7 +10,10 @@ namespace VPB
     {
         public Action<bool> OnHoverChange;
         public Action<PointerEventData> OnPointerEnterEvent;
+        // Detach slot for the latest tooltip closure; re-binds use it to avoid stacking on the multicast delegate.
+        public Action<bool> TooltipHandler;
         private bool isHovered = false;
+        public bool IsHovered { get { return isHovered; } }
 
         public void OnPointerEnter(PointerEventData d) 
         {
@@ -37,48 +40,173 @@ namespace VPB
         }
     }
 
+    internal sealed class InAppHelpIconPreviewFollower : MonoBehaviour
+    {
+        public RectTransform ParentRect;
+        public float LiftPx = 12f;
+        private bool _active;
+        private RectTransform _self;
+
+        private void Awake()
+        {
+            _self = transform as RectTransform;
+        }
+
+        public void SetFollowActive(bool active)
+        {
+            _active = active;
+            if (_active)
+                UpdatePosition();
+        }
+
+        private void Update()
+        {
+            if (!_active) return;
+            UpdatePosition();
+        }
+
+        private void UpdatePosition()
+        {
+            if (_self == null || ParentRect == null) return;
+
+            Camera cam = null;
+            try
+            {
+                Canvas canvas = ParentRect.GetComponentInParent<Canvas>();
+                if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    cam = canvas.worldCamera;
+            }
+            catch { }
+
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                ParentRect, Input.mousePosition, cam, out local))
+                return;
+
+            _self.anchorMin = new Vector2(0.5f, 0.5f);
+            _self.anchorMax = new Vector2(0.5f, 0.5f);
+            _self.pivot = new Vector2(0.5f, 0f);
+            _self.anchoredPosition = local + new Vector2(0f, LiftPx + _self.sizeDelta.y * 0.5f);
+        }
+    }
+
     public class UIRightClickDelegate : MonoBehaviour, IPointerClickHandler
     {
         public Action OnRightClick;
+        public Action OnMiddleClick;
+
         public void OnPointerClick(PointerEventData eventData)
         {
             if (eventData.button == PointerEventData.InputButton.Right)
-            {
                 OnRightClick?.Invoke();
-            }
+            else if (eventData.button == PointerEventData.InputButton.Middle)
+                OnMiddleClick?.Invoke();
         }
     }
 
     /// <summary>
-    /// Left selection on <see cref="IPointerUpHandler"/> with tap slop: ScrollRect only steals <b>left</b> drags,
-    /// so <see cref="Button.onClick"/> drops taps that moved past the drag threshold; right-click uses
-    /// <see cref="IPointerClickHandler"/> and does not fight the scroll view the same way.
+    /// Forwards non-left pointer events from child raycasts (thumbnail, list detail columns) to the row root handler.
     /// </summary>
-    /// <summary>
-    /// Thumbnail <see cref="RawImage"/> sits above row root and steals raycasts. Forward <see cref="IPointerUpHandler"/>
-    /// to root <see cref="UIFileEntryLeftReleaseSelect"/> so <see cref="UIDraggableItem"/> / hold-to-launch / slop logic
-    /// runs on correct GameObject (duplicate <c>UIFileEntryLeftReleaseSelect</c> on thumb used <c>GetComponent</c> on wrong transform).
-    /// </summary>
-    internal sealed class GalleryThumbPointerForwarder : MonoBehaviour, IPointerUpHandler
+    internal sealed class UIFileEntryPointerForwarder : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public UIFileEntryLeftReleaseSelect Target;
+        /// <summary>Thumbnail only: forward left pointer-up for row select / drag slop.</summary>
+        public bool ForwardLeftPointerUp;
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (Target != null) Target.OnPointerUp(eventData);
+            if (Target == null || eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+            {
+                if (ForwardLeftPointerUp) Target.OnPointerUp(eventData);
+                return;
+            }
+            Target.OnAlternatePointerUp(eventData);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (Target == null || eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left) return;
+            Target.OnAlternatePointerClick(eventData);
         }
     }
 
-    public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler
+    /// <summary>
+    /// Row pointer routing: left uses <see cref="IPointerUpHandler"/> + slop (ScrollRect-safe).
+    /// Right/middle use pointer-up plus click fallback; child forwarders relay hits from overlay graphics.
+    /// </summary>
+    public sealed class UIFileEntryLeftReleaseSelect : MonoBehaviour, IPointerUpHandler, IPointerClickHandler
     {
         public GalleryPanel Panel;
         public FileEntry File;
         private const float TapSlopPixels = 22f;
+        private int _lastAltClickToken = int.MinValue;
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData == null) return;
+            if (eventData.button == PointerEventData.InputButton.Left)
+                HandleLeftPointerUp(eventData);
+            else
+                OnAlternatePointerUp(eventData);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            OnAlternatePointerClick(eventData);
+        }
+
+        internal void OnAlternatePointerUp(PointerEventData eventData)
+        {
+            if (eventData == null || Panel == null || File == null) return;
+            if (eventData.button != PointerEventData.InputButton.Right
+                && eventData.button != PointerEventData.InputButton.Middle)
+                return;
+            if (!PassesTapSlop(eventData)) return;
+            if (!TryConsumeAlternateClick(eventData)) return;
+
+            if (eventData.button == PointerEventData.InputButton.Middle)
+                Panel.OnFileMiddleClick(File);
+            else
+                Panel.OnFileRightClick(File);
+        }
+
+        internal void OnAlternatePointerClick(PointerEventData eventData)
+        {
+            if (eventData == null || Panel == null || File == null) return;
+            if (eventData.button != PointerEventData.InputButton.Right
+                && eventData.button != PointerEventData.InputButton.Middle)
+                return;
+            if (!PassesTapSlop(eventData)) return;
+            if (!TryConsumeAlternateClick(eventData)) return;
+
+            if (eventData.button == PointerEventData.InputButton.Middle)
+                Panel.OnFileMiddleClick(File);
+            else
+                Panel.OnFileRightClick(File);
+        }
+
+        private bool TryConsumeAlternateClick(PointerEventData eventData)
+        {
+            int token = (Time.frameCount << 8) ^ (eventData.pointerId << 4)
+                ^ (eventData.button == PointerEventData.InputButton.Middle ? 2 : 1);
+            if (token == _lastAltClickToken) return false;
+            _lastAltClickToken = token;
+            return true;
+        }
+
+        private static bool PassesTapSlop(PointerEventData eventData)
+        {
+            Vector2 delta = (Vector2)eventData.position - eventData.pressPosition;
+            return delta.sqrMagnitude <= TapSlopPixels * TapSlopPixels;
+        }
+
+        private void HandleLeftPointerUp(PointerEventData eventData)
+        {
             if (Panel == null || File == null) return;
+            // Rating star / picker: do not treat as file select (would refresh visuals / steal click).
+            if (IsPointerOverRatingChrome(eventData)) return;
             var dragItem = GetComponent<UIDraggableItem>();
             if (dragItem != null && dragItem.IsLongPress) return;
             if (Panel.HoldToLaunchEnabled && dragItem != null && dragItem.LastPointerDownUnscaledTime >= 0f)
@@ -93,9 +221,27 @@ namespace VPB
                 if (Time.unscaledTime - dragItem.LastPointerDownUnscaledTime >= holdSec - 0.001f)
                     return;
             }
-            Vector2 delta = (Vector2)eventData.position - eventData.pressPosition;
-            if (delta.sqrMagnitude > TapSlopPixels * TapSlopPixels) return;
+            if (!PassesTapSlop(eventData)) return;
             Panel.OnFileClick(File);
+        }
+
+        private static bool IsPointerOverRatingChrome(PointerEventData eventData)
+        {
+            if (eventData == null) return false;
+            GameObject go = eventData.pointerPress != null ? eventData.pointerPress : eventData.pointerEnter;
+            if (go == null && eventData.pointerCurrentRaycast.gameObject != null)
+                go = eventData.pointerCurrentRaycast.gameObject;
+            Transform t = go != null ? go.transform : null;
+            while (t != null)
+            {
+                string n = t.name;
+                if (string.Equals(n, "Star", StringComparison.Ordinal)
+                    || string.Equals(n, "Rating", StringComparison.Ordinal)
+                    || string.Equals(n, "RatingSelector", StringComparison.Ordinal))
+                    return true;
+                t = t.parent;
+            }
+            return false;
         }
     }
 
@@ -111,6 +257,12 @@ namespace VPB
         private Image[] optionImages;
         private Text[] optionTexts;
         private GameObject[] borderGOs;
+        /// <summary>Grid hover: show 0–5 digit instead of colored ★ glyph.</summary>
+        private bool showDigitInsteadOfStar;
+        /// <summary>Host panel — grid picker reparents under background to escape ScrollRect mask.</summary>
+        public GalleryPanel panel;
+        private Transform _selectorHomeParent;
+        private int _selectorHomeSibling;
 
         public static readonly Color[] RatingColors = new Color[]
         {
@@ -161,19 +313,90 @@ namespace VPB
             UpdateDisplay();
         }
 
+        public bool IsSelectorOpen
+        {
+            get
+            {
+                if (selectorGO == null || !selectorGO.activeInHierarchy) return false;
+                if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
+                return selectorCG != null && selectorCG.alpha > 0.01f;
+            }
+        }
+
         private void SetSelectorVisible(bool visible)
         {
             if (selectorGO == null) return;
+            if (visible && !selectorGO.activeSelf)
+                selectorGO.SetActive(true);
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             if (selectorCG == null) selectorCG = selectorGO.AddComponent<CanvasGroup>();
+            // No nested Canvas/overrideSorting — breaks WorldSpace VaM raycasts (see CategoryQuickSwitch).
+            // Escape ScrollRect RectMask2D via maskable=false + ignoreParentGroups.
+            if (visible)
+            {
+                StripNestedSelectorCanvas(selectorGO);
+                TryReparentSelectorOutsideScroll(selectorGO);
+            }
+            else
+            {
+                RestoreSelectorHomeParent(selectorGO);
+            }
+            selectorCG.ignoreParentGroups = visible;
             selectorCG.alpha = visible ? 1f : 0f;
             selectorCG.interactable = visible;
             selectorCG.blocksRaycasts = visible;
+            if (visible)
+                selectorGO.transform.SetAsLastSibling();
+        }
+
+        private void TryReparentSelectorOutsideScroll(GameObject selectorGO)
+        {
+            if (selectorGO == null || panel == null) return;
+            if (panel.layoutMode != GalleryLayoutMode.Grid) return;
+            GameObject host = panel.backgroundBoxGO;
+            if (host == null) return;
+            Transform home = selectorGO.transform.parent;
+            if (home == host.transform) return;
+            _selectorHomeParent = home;
+            _selectorHomeSibling = selectorGO.transform.GetSiblingIndex();
+            // Keep world pose so it stays under the star after leaving the masked scroll content.
+            // (VaM Unity has no Graphic.maskable — reparent is the mask escape.)
+            selectorGO.transform.SetParent(host.transform, true);
+        }
+
+        private void RestoreSelectorHomeParent(GameObject selectorGO)
+        {
+            if (selectorGO == null || _selectorHomeParent == null) return;
+            try
+            {
+                selectorGO.transform.SetParent(_selectorHomeParent, true);
+                int max = Mathf.Max(0, _selectorHomeParent.childCount - 1);
+                selectorGO.transform.SetSiblingIndex(Mathf.Clamp(_selectorHomeSibling, 0, max));
+            }
+            catch { }
+            _selectorHomeParent = null;
+            _selectorHomeSibling = 0;
+        }
+
+        /// <summary>Remove leftover nested Canvas/GraphicRaycaster from earlier escape attempts (pooled cells).</summary>
+        private static void StripNestedSelectorCanvas(GameObject selectorGO)
+        {
+            if (selectorGO == null) return;
+            try
+            {
+                GraphicRaycaster gr = selectorGO.GetComponent<GraphicRaycaster>();
+                if (gr != null) UnityEngine.Object.Destroy(gr);
+                Canvas nested = selectorGO.GetComponent<Canvas>();
+                if (nested != null) UnityEngine.Object.Destroy(nested);
+            }
+            catch { }
         }
 
         public void ToggleSelector()
         {
             if (selectorGO == null) return;
+            if (!selectorGO.activeSelf)
+                selectorGO.SetActive(true);
             if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
             bool nextState = selectorCG == null || selectorCG.alpha <= 0.01f;
             SetSelectorVisible(nextState);
@@ -213,11 +436,28 @@ namespace VPB
             UpdateDisplay();
         }
 
+        /// <summary>Grid hover badges: digit label. List mode keeps colored ★.</summary>
+        public void SetShowDigitMode(bool digit)
+        {
+            if (showDigitInsteadOfStar == digit) return;
+            showDigitInsteadOfStar = digit;
+            UpdateDisplay();
+        }
+
+        public int CurrentRating => currentRating;
+
         private void UpdateDisplay()
         {
             Color c = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
             if (starIconText != null)
+            {
+                if (showDigitInsteadOfStar)
+                    starIconText.text = currentRating.ToString();
+                else
+                    starIconText.text = "★";
+                // Digit and ★ both use rating color scale.
                 starIconText.color = c;
+            }
             if (starIconImage != null)
                 starIconImage.color = c;
 
@@ -239,12 +479,14 @@ namespace VPB
     {
         private InputField inputField;
         private Button clearButton;
+        private Action onEscape;
         private bool refocusQueued;
 
-        public void Initialize(InputField input, Button clearBtn = null)
+        public void Initialize(InputField input, Button clearBtn = null, Action escapeOverride = null)
         {
             inputField = input;
             clearButton = clearBtn;
+            onEscape = escapeOverride;
         }
 
         private void OnGUI()
@@ -254,6 +496,12 @@ namespace VPB
             if (e != null && e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
             {
                 e.Use();
+                // Title-search override: blur / close popup only — do not wipe committed chips.
+                if (onEscape != null)
+                {
+                    try { onEscape.Invoke(); } catch { }
+                    return;
+                }
                 if (clearButton != null) clearButton.onClick?.Invoke();
                 else
                 {
@@ -364,6 +612,101 @@ namespace VPB
             {
                 OnScrollValue?.Invoke(eventData.scrollDelta.y * Sensitivity);
             }
+        }
+    }
+
+    /// <summary>
+    /// Top-edge drag on the selection detail strip to change height.
+    /// Forwards pointer events; panel converts screen → local and clamps min/max.
+    /// </summary>
+    public sealed class DetailStripHeightDragRelay : MonoBehaviour,
+        IBeginDragHandler, IDragHandler, IEndDragHandler
+    {
+        public Action<PointerEventData> OnBegin;
+        public Action<PointerEventData> OnMove;
+        public Action OnEnd;
+
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            try { OnBegin?.Invoke(eventData); } catch { }
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            try { OnMove?.Invoke(eventData); } catch { }
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            try { OnEnd?.Invoke(); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Thumb preview input: left double-click + right-hold tracking for wheel rating.
+    /// Does not implement <see cref="IScrollHandler"/> (unlike EventTrigger), so wheel reaches
+    /// <see cref="UIScrollWheelHandler"/> on the same hierarchy.
+    /// </summary>
+    public sealed class DetailStripThumbClickRelay : MonoBehaviour,
+        IPointerClickHandler, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+    {
+        public Action OnDoubleClick;
+        public Action<bool> OnRightHoldChanged;
+
+        public bool RightHeld { get; private set; }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
+            if (eventData.clickCount < 2) return;
+            try { OnDoubleClick?.Invoke(); } catch { }
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
+            SetRightHeld(true);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
+            SetRightHeld(false);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            // Keep hold if RMB still down (wheel can jitter exit); clear when released.
+            if (!RightHeld) return;
+            if (!Input.GetMouseButton(1))
+                SetRightHeld(false);
+        }
+
+        private void OnDisable()
+        {
+            SetRightHeld(false);
+        }
+
+        private void SetRightHeld(bool held)
+        {
+            if (RightHeld == held) return;
+            RightHeld = held;
+            try { OnRightHoldChanged?.Invoke(held); } catch { }
+        }
+    }
+
+    /// <summary>Mouse wheel on gallery footer quality toggle steps level up/down.</summary>
+    public sealed class FooterPerfToggleScroll : MonoBehaviour, IScrollHandler
+    {
+        public void OnScroll(PointerEventData data)
+        {
+            if (data == null || Mathf.Abs(data.scrollDelta.y) <= 0.01f) return;
+            if (!VpbPerfController.IsPerfModeWanted) return;
+
+            int delta = data.scrollDelta.y > 0f ? 1 : -1;
+            try { VpbPerfController.StepBy(delta, true, false); } catch { }
         }
     }
 }

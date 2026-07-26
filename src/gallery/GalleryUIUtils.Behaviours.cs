@@ -23,6 +23,7 @@ namespace VPB
         private Camera dragCam;
         private Button btn;
         private bool wasBtnEnabled;
+        private ScrollRect _pausedScroll;
 
         void Awake()
         {
@@ -31,12 +32,39 @@ namespace VPB
             btn = GetComponent<Button>();
         }
 
+        private void OnDisable()
+        {
+            if (_pausedScroll != null)
+            {
+                _pausedScroll.enabled = true;
+                _pausedScroll = null;
+            }
+        }
+
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
+            if (target == null) target = transform as RectTransform;
+            // Resolve parent from target at drag start — Awake may run before callers assign target.
+            parent = target != null ? target.parent : transform.parent;
             startIndex = target.GetSiblingIndex();
             dragCam = eventData.pressEventCamera;
             if (dragCam == null) dragCam = Camera.main;
+
+            // ScrollRect ancestors steal vertical drag — park them for the reorder.
+            _pausedScroll = null;
+            Transform walk = parent;
+            while (walk != null)
+            {
+                ScrollRect sr = walk.GetComponent<ScrollRect>();
+                if (sr != null && sr.enabled)
+                {
+                    _pausedScroll = sr;
+                    _pausedScroll.enabled = false;
+                    break;
+                }
+                walk = walk.parent;
+            }
             
             // Disable button during drag to prevent accidental click on release
             if (btn != null)
@@ -48,7 +76,7 @@ namespace VPB
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (parent == null || dragCam == null) return;
+            if (parent == null || dragCam == null || target == null) return;
 
             // Find which index we should be at based on vertical position
             int currentIndex = target.GetSiblingIndex();
@@ -90,10 +118,16 @@ namespace VPB
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            if (_pausedScroll != null)
+            {
+                _pausedScroll.enabled = true;
+                _pausedScroll = null;
+            }
+
             // Restore button state
             if (btn != null) btn.enabled = wasBtnEnabled;
 
-            if (target.GetSiblingIndex() != startIndex)
+            if (target != null && target.GetSiblingIndex() != startIndex)
             {
                 if (OnReorder != null) OnReorder();
             }
@@ -337,7 +371,9 @@ namespace VPB
                 if (onResized != null && resizeY)
                     onResized(resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y);
                 if (onResizedVec2 != null)
-                    onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? currentAnchorsMax : currentAnchorsMin);
+                    onResizedVec2(new Vector2(
+                        resizeAnchorMaxX ? currentAnchorsMax.x : currentAnchorsMin.x,
+                        resizeAnchorMaxY ? currentAnchorsMax.y : currentAnchorsMin.y));
             }
 
             if (previewTarget != null) previewTarget.gameObject.SetActive(false);
@@ -418,7 +454,9 @@ namespace VPB
                         if (onResized != null && resizeY)
                             onResized(resizeAnchorMaxY ? newMax.y : newMin.y);
                         if (onResizedVec2 != null)
-                            onResizedVec2(resizeAnchorMaxX || resizeAnchorMaxY ? newMax : newMin);
+                            onResizedVec2(new Vector2(
+                                resizeAnchorMaxX ? newMax.x : newMin.x,
+                                resizeAnchorMaxY ? newMax.y : newMin.y));
                     }
                 }
             }
@@ -441,10 +479,7 @@ namespace VPB
         public GameObject hoverBorderGO;
 
         private GameObject rimRoot;
-        private Image rimL;
-        private Image rimR;
-        private Image rimT;
-        private Image rimB;
+        private RoundedRectOutline rimBorder;
 
         /// <summary>True while pointer hovers so we combine with <see cref="isSelected"/> for rim visibility.</summary>
         private bool hovering;
@@ -494,13 +529,7 @@ namespace VPB
 
         void OnEnable()
         {
-            if (hoverBorderGO != null)
-            {
-                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
-                else hoverBorderGO.SetActive(isSelected);
-                return;
-            }
-            RefreshRimActive();
+            SyncIndicatorVisibility();
         }
 
         void OnDisable()
@@ -513,24 +542,28 @@ namespace VPB
         public void OnPointerEnter(PointerEventData eventData)
         {
             hovering = true;
-            if (hoverBorderGO != null)
-            {
-                hoverBorderGO.SetActive(true);
-                return;
-            }
-            RefreshRimActive();
+            SyncIndicatorVisibility();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             hovering = false;
+            SyncIndicatorVisibility();
+        }
+
+        /// <summary>Show/hide rim or <see cref="hoverBorderGO"/> from hover + selection; tint indicator to <see cref="hoverColor"/>.</summary>
+        public void SyncIndicatorVisibility()
+        {
             if (hoverBorderGO != null)
             {
-                if (hoverIndicatorUsesSeparateSelectionVisual) hoverBorderGO.SetActive(false);
-                else if (!isSelected) hoverBorderGO.SetActive(false);
+                bool show = hovering || (isSelected && !hoverIndicatorUsesSeparateSelectionVisual);
+                if (hoverBorderGO.activeSelf != show) hoverBorderGO.SetActive(show);
+                Graphic g = hoverBorderGO.GetComponent<Graphic>();
+                if (g != null && g.color != hoverColor) g.color = hoverColor;
                 return;
             }
             RefreshRimActive();
+            ApplyRimTint();
         }
 
         private void RefreshRimActive()
@@ -564,20 +597,17 @@ namespace VPB
             finally
             {
                 rimRoot = null;
-                rimL = rimR = rimT = rimB = null;
+                rimBorder = null;
             }
         }
 
-        private Image CreateRimPiece(string name)
+        private RoundedRectOutline CreateRimBorder()
         {
-            GameObject go = new GameObject(name);
-            go.transform.SetParent(rimRoot.transform, false);
-            RectTransform rt = go.AddComponent<RectTransform>();
-            rt.localScale = Vector3.one;
-            Image img = go.AddComponent<Image>();
-            img.color = hoverColor;
-            img.raycastTarget = false;
-            return img;
+            GameObject go = UI.CreateChildRT(rimRoot, "Border", AnchorPresets.stretchAll);
+            RoundedRectOutline outline = go.AddComponent<RoundedRectOutline>();
+            outline.color = hoverColor;
+            outline.raycastTarget = false;
+            return outline;
         }
 
         /// <summary>Place <see cref="rimRoot"/> rendered after backdrop so rims sit behind Text/Icon when possible.</summary>
@@ -601,14 +631,7 @@ namespace VPB
                 return;
             }
 
-            rimRoot = new GameObject("HoverRim");
-            rimRoot.transform.SetParent(transform, false);
-            RectTransform rr = rimRoot.AddComponent<RectTransform>();
-            rr.anchorMin = Vector2.zero;
-            rr.anchorMax = Vector2.one;
-            rr.offsetMin = Vector2.zero;
-            rr.offsetMax = Vector2.zero;
-            rr.localScale = Vector3.one;
+            rimRoot = UI.CreateChildRT(gameObject, "HoverRim", AnchorPresets.stretchAll);
 
             // Parent may have HorizontalLayoutGroup/VerticalLayoutGroup with childControlWidth/Height
             // that would squash the rim to ~0px (e.g. CategoryQuickSwitchChrome). Rim must always
@@ -616,22 +639,20 @@ namespace VPB
             var rimLe = rimRoot.AddComponent<LayoutElement>();
             rimLe.ignoreLayout = true;
 
-            rimL = CreateRimPiece("L");
-            rimR = CreateRimPiece("R");
-            rimT = CreateRimPiece("T");
-            rimB = CreateRimPiece("B");
+            rimBorder = CreateRimBorder();
 
             InsertRimAfterTargetGraphic();
         }
 
         private void RebuildRimLayout()
         {
-            if (rimL == null || rimR == null || rimT == null || rimB == null) return;
+            if (rimBorder == null) return;
 
             float t = borderSize;
             if (t < 1f) t = 1f;
 
-            // Match old Outline: outward = expand past rect, inward = shrink inside rect.
+            // Match old Outline: outward = expand past rect, inward = shrink inside rect. The rounded
+            // border band (thickness t) is then drawn along the inner edge of the expanded/shrunk rimRoot.
             var prt = rimRoot.GetComponent<RectTransform>();
             if (prt != null)
             {
@@ -647,49 +668,53 @@ namespace VPB
                 }
             }
 
-            void layoutV(Image img, float anchorX, float pivotX, float posX)
-            {
-                RectTransform rt = img.rectTransform;
-                rt.anchorMin = new Vector2(anchorX, 0f);
-                rt.anchorMax = new Vector2(anchorX, 1f);
-                rt.pivot = new Vector2(pivotX, 0.5f);
-                rt.anchoredPosition = new Vector2(posX, 0f);
-                rt.sizeDelta = new Vector2(t, 0f);
-            }
-
-            void layoutH(Image img, float anchorY, float pivotY, float posY)
-            {
-                RectTransform rt = img.rectTransform;
-                rt.anchorMin = new Vector2(0f, anchorY);
-                rt.anchorMax = new Vector2(1f, anchorY);
-                rt.pivot = new Vector2(0.5f, pivotY);
-                rt.anchoredPosition = new Vector2(0f, posY);
-                rt.sizeDelta = new Vector2(0f, t);
-            }
-
-            layoutV(rimL, 0f, 0f, t * 0.5f);
-            layoutV(rimR, 1f, 1f, -t * 0.5f);
-            layoutH(rimB, 0f, 0f, t * 0.5f);
-            layoutH(rimT, 1f, 1f, -t * 0.5f);
+            rimBorder.borderThickness = t;
+            // Match the button's own corner: rounded when the backdrop is a RoundedRect, square otherwise.
+            RoundedRect targetRounded = targetGraphic as RoundedRect;
+            rimBorder.cornerRadiusFraction = targetRounded != null ? targetRounded.cornerRadiusFraction : 0f;
         }
 
         private void ApplyRimTint()
         {
-            if (rimL != null) rimL.color = hoverColor;
-            if (rimR != null) rimR.color = hoverColor;
-            if (rimT != null) rimT.color = hoverColor;
-            if (rimB != null) rimB.color = hoverColor;
+            if (rimBorder != null) rimBorder.color = hoverColor;
         }
     }
 
     /// <summary>
-    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> every frame so dynamic UI and Unity defaults
-    /// cannot bring back ColorTint hover fill.
+    /// Re-applies <see cref="UI.ApplyGalleryPaneHoverPolicy"/> when marked dirty (UI rebuild),
+    /// rate-limited. Idle frames pay zero GetComponentsInChildren cost.
     /// </summary>
     public sealed class GalleryPaneChromeEnforcer : MonoBehaviour
     {
+        private const float MinIntervalSeconds = 0.5f;
+        private float _nextApplyUnscaledTime;
+        private bool _dirty = true;
+
+        public void MarkDirty()
+        {
+            _dirty = true;
+        }
+
+        public static void MarkDirtyOn(GameObject root)
+        {
+            if (root == null) return;
+            GalleryPaneChromeEnforcer e = root.GetComponent<GalleryPaneChromeEnforcer>();
+            if (e != null) e.MarkDirty();
+        }
+
+        private void OnEnable()
+        {
+            _dirty = true;
+            _nextApplyUnscaledTime = 0f;
+        }
+
         private void LateUpdate()
         {
+            if (!_dirty) return;
+            float now = Time.unscaledTime;
+            if (now < _nextApplyUnscaledTime) return;
+            _nextApplyUnscaledTime = now + MinIntervalSeconds;
+            _dirty = false;
             UI.ApplyGalleryPaneHoverPolicy(gameObject);
         }
     }
@@ -747,21 +772,107 @@ namespace VPB
         public GameObject card;
         public GalleryPanel panel;
         public FileEntry file;
-        
+        private Coroutine _gridBadgeExitCo;
+
         public void OnPointerEnter(PointerEventData eventData)
         {
-            // Card overlay only shows in grid mode when always-on labels are OFF
+            if (_gridBadgeExitCo != null)
+            {
+                StopCoroutine(_gridBadgeExitCo);
+                _gridBadgeExitCo = null;
+            }
+            // Name Card only when always-on grid labels are OFF.
             bool labelsActive = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible()
                                 && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
             if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 card.SetActive(true);
             if (panel != null && file != null) panel.SetHoverPath(file);
+            if (panel != null && file != null && panel.layoutMode == GalleryLayoutMode.Grid)
+                panel.ShowGridHoverBadges(gameObject, file);
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid) card.SetActive(false);
+            // Defer: rating popup hang outside/inside; exit fires before enter on sibling.
+            if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
+            {
+                if (_gridBadgeExitCo != null) StopCoroutine(_gridBadgeExitCo);
+                _gridBadgeExitCo = StartCoroutine(DeferredGridBadgeExit());
+                return;
+            }
+
+            if (card) card.SetActive(false);
             if (panel != null) panel.RestoreSelectedHoverPath();
+        }
+
+        private System.Collections.IEnumerator DeferredGridBadgeExit()
+        {
+            yield return null;
+            _gridBadgeExitCo = null;
+
+            // Picker open: never tear down (hangs outside cell; exit fires when moving onto it).
+            RatingHandler rh = GetComponent<RatingHandler>();
+            if (rh != null && rh.IsSelectorOpen)
+                yield break;
+
+            Vector2 pos = Input.mousePosition;
+            try
+            {
+                if (panel != null && panel.currentPointerData != null)
+                    pos = panel.currentPointerData.position;
+            }
+            catch { }
+
+            if (IsScreenPointInsideCell(pos) || IsScreenPointOverOpenRatingSelector(pos))
+                yield break;
+
+            if (card) card.SetActive(false);
+            if (panel != null) panel.HideGridHoverBadges(gameObject, force: false);
+            if (panel != null) panel.RestoreSelectedHoverPath();
+        }
+
+        void OnDisable()
+        {
+            if (_gridBadgeExitCo != null)
+            {
+                StopCoroutine(_gridBadgeExitCo);
+                _gridBadgeExitCo = null;
+            }
+            // Recycle / deactivate must clear hover rating so pooled grid cells stay clean.
+            if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
+                panel.HideGridHoverBadges(gameObject, force: true);
+            if (card != null) card.SetActive(false);
+        }
+
+        Camera ResolveUiCamera()
+        {
+            try
+            {
+                if (panel != null && panel.canvas != null && panel.canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    return panel.canvas.worldCamera != null ? panel.canvas.worldCamera : Camera.main;
+            }
+            catch { }
+            return null;
+        }
+
+        bool IsScreenPointInsideCell(Vector2 screenPos)
+        {
+            var rt = transform as RectTransform;
+            if (rt == null) return false;
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, ResolveUiCamera()); }
+            catch { return false; }
+        }
+
+        bool IsScreenPointOverOpenRatingSelector(Vector2 screenPos)
+        {
+            Transform sel = transform.Find("RatingSelector");
+            if (sel == null || !sel.gameObject.activeInHierarchy) return false;
+            var cg = sel.GetComponent<CanvasGroup>();
+            if (cg != null && cg.alpha <= 0.01f) return false;
+            var rt = sel as RectTransform;
+            if (rt == null) return false;
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, ResolveUiCamera()); }
+            catch { return false; }
         }
     }
 
@@ -956,6 +1067,15 @@ namespace VPB
         /// </summary>
         public int CachedCenterItemIndex { get; private set; }
 
+        /// <summary>Visible recycled cells — prefer over Transform foreach (no enumerator alloc).</summary>
+        public int ActiveItemCount { get { return activeItems != null ? activeItems.Count : 0; } }
+
+        public RecyclingGridItem GetActiveItemAt(int index)
+        {
+            if (activeItems == null || index < 0 || index >= activeItems.Count) return null;
+            return activeItems[index];
+        }
+
         private List<RecyclingGridItem> activeItems = new List<RecyclingGridItem>();
         private HashSet<int> _activeIndexSet = new HashSet<int>();
         private Stack<RectTransform> pool = new Stack<RectTransform>();
@@ -963,6 +1083,8 @@ namespace VPB
         // Grid State
         private float itemWidth = 100f;
         private float itemHeight = 100f;
+        public float CellWidth => itemWidth;
+        public float CellHeight => itemHeight;
         private float spacingX = 5f;
         private float spacingY = 5f;
         private int colCount = 1;
@@ -971,6 +1093,12 @@ namespace VPB
         // Adaptive Config
         public bool isAdaptive = false;
         public float minCellSize = 200f;
+        /// <summary>
+        /// Hard floor for grid cells when fixed column count is set. Below this, effective
+        /// columns drop (then cell size clamps) so a tiny pane cannot spawn 1px thumbs.
+        /// Softer than <see cref="minCellSize"/> so preferred columns stay until pane is truly narrow.
+        /// </summary>
+        private const float AbsoluteMinCellSize = 80f;
         public int fixedColumns = 0;
         public float targetAspectRatio = 1.0f;
         public bool useFixedHeight = false;
@@ -1047,12 +1175,15 @@ namespace VPB
                     layoutDirty = true;
                 else if (fixedColumns > 0)
                 {
-                    int cols = Mathf.Max(1, fixedColumns);
-                    float inner = usableWidth - (cols - 1) * spacingX;
+                    int cols = ResolveColumnCount(usableWidth);
+                    // Match PositionItem: left pad + (cols-1) gaps + right pad = (cols+1)*spacingX
+                    float inner = usableWidth - (cols + 1) * spacingX;
                     if (inner > 0.01f)
                     {
                         float newCellW = inner / cols;
-                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f)
+                        if (!useFixedHeight && newCellW < AbsoluteMinCellSize)
+                            newCellW = AbsoluteMinCellSize;
+                        if (Mathf.Abs(newCellW - itemWidth) > 0.5f || cols != colCount)
                             layoutDirty = true;
                     }
                     else if (Mathf.Abs(usableWidth - lastRectWidth) > 4f)
@@ -1102,6 +1233,35 @@ namespace VPB
             if (isAdaptive) _needsLayoutUpdate = true;
         }
 
+        /// <summary>
+        /// Effective column count for current viewport. Honors fixedColumns when set; in grid
+        /// mode drops columns so cells stay &gt;= <see cref="AbsoluteMinCellSize"/>.
+        /// </summary>
+        private int ResolveColumnCount(float usableWidth)
+        {
+            int cols = fixedColumns;
+            if (cols <= 0)
+            {
+                // Side pads = spacingX (same as PositionItem / vertical totalHeight).
+                cols = Mathf.FloorToInt((usableWidth - spacingX) / (minCellSize + spacingX));
+                if (cols < 1) cols = 1;
+                return cols;
+            }
+
+            cols = Mathf.Max(1, cols);
+            // List mode (useFixedHeight): keep requested columns. Grid: never shrink below floor.
+            if (!useFixedHeight)
+            {
+                while (cols > 1)
+                {
+                    float w = (usableWidth - (cols + 1) * spacingX) / cols;
+                    if (w >= AbsoluteMinCellSize) break;
+                    cols--;
+                }
+            }
+            return cols;
+        }
+
         /// <param name="deferFinalRefresh">When true, updates dimensions and content height only — caller must end with <see cref="Refresh"/> or <see cref="SetItemCountAtScroll"/> / <see cref="SetItemCount"/> without defer.</param>
         private void RecalculateLayout(bool deferFinalRefresh = false)
         {
@@ -1129,15 +1289,19 @@ namespace VPB
             lastRectWidth = wasZero ? 0f : usableWidth; // Store 0 if we defaulted, to allow next change to trigger
             lastFixedColumns = fixedColumns;
             
-            int cols = fixedColumns;
-            if (cols <= 0)
+            int cols = ResolveColumnCount(usableWidth);
+
+            // Width must match PositionItem: x = col*(w+sx)+sx  →  cols*w + (cols+1)*sx ≤ usableWidth
+            float cellWidth = (usableWidth - (cols + 1) * spacingX) / cols;
+            if (!useFixedHeight)
             {
-                cols = Mathf.FloorToInt((usableWidth + spacingX) / (minCellSize + spacingX));
-                if (cols < 1) cols = 1;
+                // Floor even when cols==1 and viewport still narrower — prevents 1px thumbs / huge visible set.
+                if (cellWidth < AbsoluteMinCellSize) cellWidth = AbsoluteMinCellSize;
             }
-            
-            float cellWidth = (usableWidth - (cols - 1) * spacingX) / cols;
-            if (cellWidth < 10f) cellWidth = 10f; // Sanity check
+            else if (cellWidth < 10f)
+            {
+                cellWidth = 10f;
+            }
 
             float cellHeight;
             if (useFixedHeight)
@@ -1390,7 +1554,8 @@ namespace VPB
                     if (item != null)
                     {
                         _activeIndexSet.Remove(item.index);
-                        Recycle(item.GetComponent<RectTransform>());
+                        RectTransform rt = item.cachedRT != null ? item.cachedRT : item.GetComponent<RectTransform>();
+                        Recycle(rt);
                     }
                     activeItems.RemoveAt(i);
                 }
@@ -1404,7 +1569,16 @@ namespace VPB
                 RectTransform itemRT = GetItem();
                 if (itemRT != null)
                 {
-                    RecyclingGridItem item = itemRT.GetComponent<RecyclingGridItem>();
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(itemRT.gameObject);
+                    RecyclingGridItem item = binder.gridItem;
+                    if (item == null)
+                    {
+                        item = itemRT.GetComponent<RecyclingGridItem>();
+                        if (item == null) item = itemRT.gameObject.AddComponent<RecyclingGridItem>();
+                        binder.gridItem = item;
+                    }
+                    item.cachedRT = itemRT;
+                    item.binder = binder;
                     item.index = i;
                     _activeIndexSet.Add(i);
                     PositionItem(itemRT, i);
@@ -1466,9 +1640,17 @@ namespace VPB
                 {
                     item = go.GetComponent<RectTransform>();
                     go.transform.SetParent(content, false);
-                    RecyclingGridItem rgi = go.GetComponent<RecyclingGridItem>();
-                    if (rgi == null) rgi = go.AddComponent<RecyclingGridItem>();
-                    
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(go);
+                    RecyclingGridItem rgi = binder.gridItem;
+                    if (rgi == null)
+                    {
+                        rgi = go.GetComponent<RecyclingGridItem>();
+                        if (rgi == null) rgi = go.AddComponent<RecyclingGridItem>();
+                        binder.gridItem = rgi;
+                    }
+                    rgi.cachedRT = item;
+                    rgi.binder = binder;
+
                     item.anchorMin = new Vector2(0, 1);
                     item.anchorMax = new Vector2(0, 1);
                     item.pivot = new Vector2(0, 1);
@@ -1489,7 +1671,9 @@ namespace VPB
         {
             for (int i = 0; i < activeItems.Count; i++)
             {
-                Recycle(activeItems[i].GetComponent<RectTransform>());
+                RecyclingGridItem ai = activeItems[i];
+                RectTransform rt = ai != null ? (ai.cachedRT != null ? ai.cachedRT : ai.GetComponent<RectTransform>()) : null;
+                Recycle(rt);
             }
             activeItems.Clear();
             _activeIndexSet.Clear();
@@ -1500,6 +1684,9 @@ namespace VPB
     public class RecyclingGridItem : MonoBehaviour
     {
         public int index;
+        /// <summary>Cached at create/pool warm — avoid GetComponent&lt;RectTransform&gt; on recycle.</summary>
+        public RectTransform cachedRT;
+        internal FileButtonBinder binder;
     }
 
     public class ScrollbarSync : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
@@ -1741,6 +1928,42 @@ namespace VPB
             {
                 _collider.center = targetCenter;
             }
+        }
+    }
+
+    /// <summary>Grid hover: open Hub detail for item (download missing deps there). Ctrl+click copies missing dep names.</summary>
+    public class GalleryDepsDownloadHoverButton : MonoBehaviour
+    {
+        public GalleryPanel panel;
+        public FileEntry file;
+        private bool _clickWired;
+
+        void OnEnable()
+        {
+            if (_clickWired) return;
+            Button b = GetComponent<Button>();
+            if (b == null) return;
+            b.onClick.AddListener(OnOpenHubClicked);
+            _clickWired = true;
+        }
+
+        void OnDestroy()
+        {
+            if (!_clickWired) return;
+            Button b = GetComponent<Button>();
+            if (b != null) b.onClick.RemoveListener(OnOpenHubClicked);
+            _clickWired = false;
+        }
+
+        private void OnOpenHubClicked()
+        {
+            if (panel == null || file == null) return;
+            bool ctrl = false;
+            try { ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl); } catch { }
+            if (ctrl)
+                panel.CopyMissingDependenciesToClipboard(file);
+            else
+                panel.OpenFileOnHub(file);
         }
     }
 }

@@ -510,6 +510,41 @@ namespace VPB
             return k + "|tj" + turboJpegScaleDenom;
         }
 
+        /// <summary>
+        /// Drop disk index rows for <paramref name="path"/> (all TurboJPEG tiers) so the next load re-reads the file from disk.
+        /// </summary>
+        public void InvalidateThumbnailForPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            string baseKey = GetCacheKey(path);
+            if (string.IsNullOrEmpty(baseKey)) return;
+
+            List<string> remove = null;
+            cacheLock.EnterWriteLock();
+            try
+            {
+                foreach (KeyValuePair<string, CacheEntry> kv in index)
+                {
+                    string k = kv.Key;
+                    if (string.Equals(k, baseKey, StringComparison.OrdinalIgnoreCase)
+                        || k.StartsWith(baseKey + "|", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (remove == null) remove = new List<string>(8);
+                        remove.Add(k);
+                    }
+                }
+                if (remove != null)
+                {
+                    for (int i = 0; i < remove.Count; i++)
+                        index.Remove(remove[i]);
+                }
+            }
+            finally
+            {
+                cacheLock.ExitWriteLock();
+            }
+        }
+
         public bool TryGetThumbnail(string path, long fileLastWriteTime, out byte[] data, out int width, out int height, out TextureFormat format, int turboJpegScaleDenom = 1)
         {
             if (IsPackagePath(path)) fileLastWriteTime = 0;

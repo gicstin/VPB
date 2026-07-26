@@ -124,6 +124,15 @@ namespace VPB
             if (length < 0) length = data.Length;
             if (length == 0) return new byte[0];
 
+            try
+            {
+                return CompressInternal(data, level, length);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] Zstd internal compress failed, trying external: " + ex.Message);
+            }
+
             return CompressExternal(data, level, length);
         }
 

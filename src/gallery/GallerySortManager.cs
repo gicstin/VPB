@@ -39,7 +39,9 @@ namespace VPB
         /// <summary>Family first added: MIN(first_scanned) across all .var versions sharing creator.packageName.</summary>
         DateAdded = 18,
         /// <summary>Family last updated: first_scanned of the highest-N .var version in creator.packageName.</summary>
-        DateUpdated = 19
+        DateUpdated = 19,
+        /// <summary>Random order (Fisher–Yates shuffle each time sort is applied).</summary>
+        Random = 20
     }
 
     public enum SortDirection
@@ -81,8 +83,25 @@ namespace VPB
 
         private GallerySortCache cache;
 
-        // Cache for scene dependencies to avoid re-parsing on every access
+        // Cache for scene dependencies to avoid re-parsing on every access.
+        // Bounded: clear-on-overflow (same pattern as GalleryFileListSnapshotCache).
         private static Dictionary<string, HashSet<string>> _sceneDependencyCache = new Dictionary<string, HashSet<string>>();
+        private const int SceneDependencyCacheMaxEntries = 512;
+
+        /// <summary>Drop in-memory scene-deps L1 cache (package refresh / soak-test bound).</summary>
+        public static void ClearSceneDependencyCache()
+        {
+            _sceneDependencyCache.Clear();
+        }
+
+        private static void PutSceneDependencyCache(string filePath, HashSet<string> deps)
+        {
+            if (string.IsNullOrEmpty(filePath) || deps == null) return;
+            if (_sceneDependencyCache.Count >= SceneDependencyCacheMaxEntries
+                && !_sceneDependencyCache.ContainsKey(filePath))
+                _sceneDependencyCache.Clear();
+            _sceneDependencyCache[filePath] = deps;
+        }
 
         // Background warmer: at-most-one running task that pre-populates the SQLite loose-deps cache.
         // Writes DB only — never touches _sceneDependencyCache — so it cannot race with main-thread binds.
@@ -237,6 +256,23 @@ namespace VPB
                     LogSortedHeadSample("DateUpdated", state.Direction, files, f => GetFamilyHighestVersionScanned(f, fam));
                     break;
                 }
+                case SortType.Random:
+                    ShuffleFiles(files);
+                    break;
+            }
+        }
+
+        /// <summary>Fisher–Yates shuffle; safe on worker threads (uses <see cref="System.Random"/>).</summary>
+        public static void ShuffleFiles(List<FileEntry> files)
+        {
+            if (files == null || files.Count < 2) return;
+            var rng = new System.Random();
+            for (int i = files.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                FileEntry tmp = files[i];
+                files[i] = files[j];
+                files[j] = tmp;
             }
         }
 
@@ -476,6 +512,9 @@ namespace VPB
                     });
                     return true;
                 }
+                case SortType.Random:
+                    ShuffleFiles(files);
+                    return true;
                 default:
                     return false;
             }
@@ -538,6 +577,19 @@ namespace VPB
             return uid.Substring(0, lastDot);
         }
 
+        /// <summary>
+        /// Convert to UTC kind before sort. DateTime.CompareTo compares Ticks ignoring Kind, so a
+        /// Local-kind value sorts the local UTC offset ahead of any UTC-kind value at the same
+        /// wall-clock minute; converting realigns Ticks so the comparison reflects the actual moment.
+        /// </summary>
+        private static DateTime NormalizeToUtcForCompare(DateTime dt)
+        {
+            if (dt == DateTime.MinValue) return dt;
+            if (dt.Kind == DateTimeKind.Local) return dt.ToUniversalTime();
+            if (dt.Kind == DateTimeKind.Unspecified) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            return dt;
+        }
+
         /// <summary>Per-row indexed first_scanned, with VarPackage fallback. Returns DateTime.MinValue when unknown.</summary>
         private static DateTime GetIndexedFirstScannedForFile(FileEntry file)
         {
@@ -545,22 +597,22 @@ namespace VPB
             DateTime dt;
             if (file is VarFileEntry vfe)
             {
-                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                if (vfe.TryGetGalleryIndexedFirstScanned(out dt)) return NormalizeToUtcForCompare(dt);
                 try
                 {
                     if (vfe.Package != null && vfe.Package.FirstScannedBinary != long.MinValue && vfe.Package.FirstScannedBinary != 0L)
-                        return DateTime.FromBinary(vfe.Package.FirstScannedBinary);
+                        return NormalizeToUtcForCompare(DateTime.FromBinary(vfe.Package.FirstScannedBinary));
                 }
                 catch { }
                 return DateTime.MinValue;
             }
             if (file is PackageListEntry ple)
             {
-                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return dt;
+                if (ple.TryGetGalleryIndexedFirstScanned(out dt)) return NormalizeToUtcForCompare(dt);
                 try
                 {
                     if (ple.Package != null && ple.Package.FirstScannedBinary != long.MinValue && ple.Package.FirstScannedBinary != 0L)
-                        return DateTime.FromBinary(ple.Package.FirstScannedBinary);
+                        return NormalizeToUtcForCompare(DateTime.FromBinary(ple.Package.FirstScannedBinary));
                 }
                 catch { }
             }
@@ -572,10 +624,10 @@ namespace VPB
                 try
                 {
                     DateTime ct = FileStat.GetCreationTimeOrMin(sfe.Path);
-                    if (ct != DateTime.MinValue) return ct;
+                    if (ct != DateTime.MinValue) return NormalizeToUtcForCompare(ct);
                 }
                 catch { }
-                return sfe.LastWriteTime;
+                return NormalizeToUtcForCompare(sfe.LastWriteTime);
             }
             return DateTime.MinValue;
         }
@@ -617,6 +669,10 @@ namespace VPB
                     try { added = FileStat.GetCreationTimeOrMin(sfe.Path); } catch { }
                     DateTime updated = sfe.LastWriteTime;
                     if (added == DateTime.MinValue) added = updated;
+                    // File timestamps come back as Local kind; normalize so loose-file families
+                    // sort against UTC-normalized VAR families on the same axis.
+                    added = NormalizeToUtcForCompare(added);
+                    updated = NormalizeToUtcForCompare(updated);
                     map[famKey] = new FamilyScanTimes { MinScanned = added, HighestVersion = 0, HighestVersionScanned = updated };
                     continue;
                 }
@@ -718,6 +774,52 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Keep only VAR rows whose uid version is less than the family's highest version (old versions).
+        /// Non-VAR entries removed. Mutates list in place.
+        /// </summary>
+        public static void ApplyOldVersionsOnlyFilter(List<FileEntry> files)
+        {
+            if (files == null || files.Count == 0) return;
+
+            var highest = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < files.Count; i++)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry)) continue;
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey)) continue;
+                int v = GetUidVersionNumber(f);
+                int existing;
+                if (!highest.TryGetValue(famKey, out existing) || v > existing) highest[famKey] = v;
+            }
+            if (highest.Count == 0)
+            {
+                files.Clear();
+                return;
+            }
+
+            for (int i = files.Count - 1; i >= 0; i--)
+            {
+                var f = files[i];
+                if (!(f is VarFileEntry) && !(f is PackageListEntry))
+                {
+                    files.RemoveAt(i);
+                    continue;
+                }
+                string famKey = ComputeFamilyKey(f);
+                if (string.IsNullOrEmpty(famKey))
+                {
+                    files.RemoveAt(i);
+                    continue;
+                }
+                int v = GetUidVersionNumber(f);
+                int top;
+                if (!highest.TryGetValue(famKey, out top) || v >= top)
+                    files.RemoveAt(i);
+            }
+        }
+
         private static DateTime GetFamilyHighestVersionScanned(FileEntry file, Dictionary<string, FamilyScanTimes> fam)
         {
             string k = ComputeFamilyKey(file);
@@ -805,8 +907,10 @@ namespace VPB
         {
             try
             {
-                if (file is VarFileEntry vfe && vfe.Package != null) return vfe.Package.DependentCount;
-                if (file is PackageListEntry ple && ple.Package != null) return ple.Package.DependentCount;
+                if (file is VarFileEntry vfe && vfe.Package != null)
+                    return FileManager.ResolveDependentCount(vfe.Package);
+                if (file is PackageListEntry ple && ple.Package != null)
+                    return FileManager.ResolveDependentCount(ple.Package);
             }
             catch { }
             return 0;
@@ -846,11 +950,8 @@ namespace VPB
                             int missingCount = 0;
                             foreach (var dep in deps)
                             {
-                                VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                                if (pkg == null)
-                                {
+                                if (!FileManager.IsDependencySatisfiedByInstalled(dep))
                                     missingCount++;
-                                }
                             }
                             return missingCount;
                         }
@@ -864,6 +965,55 @@ namespace VPB
             return 0;
         }
 
+        /// <summary>Missing dependency package ids for a gallery row (same rules as <see cref="GetMissingDepsCount"/>).</summary>
+        public static List<string> GetMissingDependencyIds(FileEntry file)
+        {
+            var missing = new List<string>();
+            try
+            {
+                VarPackage pkg = null;
+                if (file is VarFileEntry vfe) pkg = vfe.Package;
+                else if (file is PackageListEntry ple) pkg = ple.Package;
+
+                if (pkg != null)
+                {
+                    CollectUnsatisfiedDeps(pkg.RecursivePackageDependencies, missing, pkg);
+                    return missing;
+                }
+
+                if (file != null && (file.Path?.ToLowerInvariant().EndsWith(".json") ?? false))
+                {
+                    string pathLower = file.Path.ToLowerInvariant();
+                    if (pathLower.Contains("custom") || pathLower.Contains("saves"))
+                        CollectUnsatisfiedDeps(ExtractSceneDependencies(file), missing);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError($"[VPB] GetMissingDependencyIds error: {ex}");
+            }
+            return missing;
+        }
+
+        private static void CollectUnsatisfiedDeps(IEnumerable<string> deps, List<string> into)
+        {
+            CollectUnsatisfiedDeps(deps, into, null);
+        }
+
+        private static void CollectUnsatisfiedDeps(IEnumerable<string> deps, List<string> into, VarPackage consumer)
+        {
+            if (deps == null || into == null) return;
+            foreach (var dep in deps)
+            {
+                if (string.IsNullOrEmpty(dep)) continue;
+                bool satisfied = consumer != null
+                    ? FileManager.IsDependencySatisfiedByInstalled(dep, consumer)
+                    : FileManager.IsDependencySatisfiedByInstalled(dep);
+                if (!satisfied)
+                    into.Add(dep);
+            }
+        }
+
         private static int CalculateMissingDeps(VarPackage package)
         {
             try
@@ -874,11 +1024,8 @@ namespace VPB
                     int missingCount = 0;
                     foreach (var dep in deps)
                     {
-                        VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                        if (pkg == null)
-                        {
+                        if (!FileManager.IsDependencySatisfiedByInstalled(dep, package))
                             missingCount++;
-                        }
                     }
                     return missingCount;
                 }
@@ -928,7 +1075,7 @@ namespace VPB
                     var dbDeps = new HashSet<string>();
                     if (VpbLocalDatabase.TryReadLooseSceneDeps(filePath, wtBin, sz, dbDeps))
                     {
-                        _sceneDependencyCache[filePath] = dbDeps;
+                        PutSceneDependencyCache(filePath, dbDeps);
                         return dbDeps;
                     }
                 }
@@ -937,7 +1084,7 @@ namespace VPB
                 var deps = ExtractDependenciesStreaming(file);
 
                 if (deps != null && deps.Count > 0)
-                    _sceneDependencyCache[filePath] = deps;
+                    PutSceneDependencyCache(filePath, deps);
 
                 if (haveStat && deps != null)
                 {

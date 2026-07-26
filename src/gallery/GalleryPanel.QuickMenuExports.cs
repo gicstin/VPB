@@ -1,4 +1,8 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
+using SimpleJSON;
+using MVR.FileManagement;
 
 namespace VPB
 {
@@ -28,6 +32,185 @@ namespace VPB
         internal void QuickMenu_LoadRandom()
         {
             try { LoadRandom(); } catch { }
+        }
+
+        internal void QuickMenu_RandomSceneImport()
+        {
+            try { StartCoroutine(RandomSceneImportRoutine()); } catch { }
+        }
+
+        private IEnumerator RandomSceneImportRoutine()
+        {
+            // Capture current view state.
+            string prevTitle = null;
+            string prevExt = null;
+            string prevPath = null;
+            try { prevTitle = currentCategoryTitle; } catch { }
+            try { prevExt = currentExtension; } catch { }
+            try { prevPath = currentPath; } catch { }
+
+            bool navigated = false;
+
+            // Navigate to Scenes category when not already there so we get a scene file pool.
+            if (!string.Equals(prevTitle, "Scenes", StringComparison.Ordinal))
+            {
+                Gallery.Category cat = default(Gallery.Category);
+                bool catFound = false;
+                try
+                {
+                    if (categories != null)
+                    {
+                        for (int i = 0; i < categories.Count; i++)
+                        {
+                            var c = categories[i];
+                            if (string.Equals(c.name, "Scenes", StringComparison.OrdinalIgnoreCase))
+                            { cat = c; catFound = true; break; }
+                        }
+                    }
+                }
+                catch { catFound = false; }
+
+                if (catFound)
+                {
+                    try { Show(cat.name, cat.extension, cat.path); } catch { }
+                    navigated = true;
+                    yield return null;
+                    int guard = 0;
+                    while (refreshCoroutine != null && guard < 600) { guard++; yield return null; }
+                    if (guard == 0) yield return null;
+                }
+            }
+
+            // Pick from the current scene file pool.
+            var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
+                ? currentFilteredFiles : lastFilteredFiles;
+
+            if (pool == null || pool.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB] Random Scene Import: no scenes in pool.");
+                if (navigated && !string.IsNullOrEmpty(prevTitle))
+                    try { Show(prevTitle, prevExt, prevPath); } catch { }
+                yield break;
+            }
+
+            FileEntry sceneFile = pool[UnityEngine.Random.Range(0, pool.Count)];
+
+            // LoadSourceScene is synchronous: populates importSidebarSourcePersonIds + importSidebarLoadedSceneJSON.
+            try { LoadSourceScene(sceneFile); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] Random Scene Import: LoadSourceScene failed: " + ex.Message); }
+
+            // Restore view before any heavier work so the UI doesn't stay on Scenes.
+            if (navigated && !string.IsNullOrEmpty(prevTitle))
+                try { Show(prevTitle, prevExt, prevPath); } catch { }
+
+            if (importSidebarSourcePersonIds.Count == 0)
+            {
+                LogUtil.LogWarning("[VPB] Random Scene Import: no Person atoms in scene: "
+                    + (sceneFile.Path ?? sceneFile.Uid ?? "?"));
+                yield break;
+            }
+
+            // Pick the best female person atom from the scene.
+            importSidebarSourceAtomId = PickBestFemalePersonId(
+                importSidebarSourcePersonIds, importSidebarLoadedSceneJSON);
+
+            // Ensure a target atom is selected.
+            if (importSidebarTargetAtom == null)
+            {
+                try { RefreshTargetCandidates(); } catch { }
+                try { TryAutoSelectTargetIfUnset(); } catch { }
+                if (importSidebarTargetAtom == null)
+                    importSidebarTargetAtom = GetBestTargetAtom();
+            }
+
+            if (importSidebarTargetAtom == null)
+            {
+                LogUtil.LogWarning("[VPB] Random Scene Import: no target atom.");
+                yield break;
+            }
+
+            // Apply using current sidebar type/option settings.
+            try { OnImportSidebarApplyClicked(); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] Random Scene Import: apply failed: " + ex.Message); }
+
+            // Status feedback.
+            try
+            {
+                string sceneName = !string.IsNullOrEmpty(sceneFile.Path)
+                    ? System.IO.Path.GetFileName(sceneFile.Path)
+                    : (sceneFile.Uid ?? "?");
+                string typeName = ImportSidebarSelectedTypesSummary();
+                ShowTemporaryStatus(
+                    "Rnd Import: " + typeName + " \u2190 " + importSidebarSourceAtomId + " in " + sceneName,
+                    2.5f);
+            }
+            catch { }
+
+            // Refresh sidebar UI if open.
+            if (importSidebarActive)
+            {
+                try { RefreshImportSidebarWizardHeader(); } catch { }
+                try { RenderSourceList(); } catch { }
+                try { RefreshTargetSelectionVisual(); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Selects the most appropriate female Person atom from a scene.
+        /// Priority: geometry storable <c>useFemaleMorphSet=true</c> &gt; id name heuristic &gt; first atom.
+        /// </summary>
+        private static string PickBestFemalePersonId(List<string> personIds, JSONClass sceneJSON)
+        {
+            if (personIds == null || personIds.Count == 0) return null;
+            if (personIds.Count == 1) return personIds[0];
+
+            // JSON path: look for geometry storable with useFemaleMorphSet = true.
+            if (sceneJSON != null)
+            {
+                JSONArray atoms = sceneJSON["atoms"] != null ? sceneJSON["atoms"].AsArray : null;
+                if (atoms != null)
+                {
+                    foreach (string id in personIds)
+                    {
+                        for (int i = 0; i < atoms.Count; i++)
+                        {
+                            JSONClass atom = atoms[i].AsObject;
+                            if (atom == null) continue;
+                            if (atom["id"] == null || atom["id"].Value != id) continue;
+                            if (atom["storables"] == null) break;
+                            JSONArray storables = atom["storables"].AsArray;
+                            for (int j = 0; j < storables.Count; j++)
+                            {
+                                JSONClass s = storables[j].AsObject;
+                                if (s == null) continue;
+                                if (s["id"] == null || s["id"].Value != "geometry") continue;
+                                if (s.HasKey("useFemaleMorphSet") && s["useFemaleMorphSet"].AsBool)
+                                    return id;
+                                break;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: atom-id name heuristic — skip atoms whose id looks male.
+            foreach (string id in personIds)
+            {
+                if (!LooksLikeMalePersonId(id)) return id;
+            }
+            return personIds[0];
+        }
+
+        private static bool LooksLikeMalePersonId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            string lower = id.ToLowerInvariant();
+            if (lower.Contains("female")) return false; // "female" contains "male" — not male
+            if (lower == "male") return true;
+            if (lower.StartsWith("male") || lower.EndsWith("male")) return true;
+            if (lower.Contains(" male") || lower.Contains("_male") || lower.Contains(".male")) return true;
+            return false;
         }
 
         internal void QuickMenu_LoadRandomFromCategory(string categoryName, bool preserveUi, bool preserveTarget)
@@ -224,6 +407,11 @@ namespace VPB
             catch { }
         }
 
+        internal void QuickMenu_TogglePerfMode()
+        {
+            try { ToggleFooterPerfMode(); } catch { }
+        }
+
         internal void QuickMenu_RemoveAllHair()
         {
             try
@@ -294,6 +482,18 @@ namespace VPB
                 else TboxOpenCleanupView();
             }
             catch { }
+        }
+
+        /// <summary>Toggle the ★ rated-only filter (same as clicking the star button in the gallery title bar).</summary>
+        internal void QuickMenu_ToggleStarFilter()
+        {
+            try { ToggleRatingSort(); } catch { }
+        }
+
+        /// <summary>Returns true if the ★ rated-only filter is currently active.</summary>
+        internal bool QuickMenu_IsStarFilterEnabled()
+        {
+            try { return isRatingSortToggleEnabled; } catch { return false; }
         }
     }
 }

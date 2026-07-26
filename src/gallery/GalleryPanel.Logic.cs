@@ -89,6 +89,122 @@ namespace VPB
             catch { return false; }
         }
 
+        private bool EffectiveGalleryScanWlBorderEnabled()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderEnabled; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlBorderShowInGrid()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderShowInGrid; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlBorderShowInList()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderShowInList; } catch { }
+            return true;
+        }
+
+        private float EffectiveGalleryScanWlBorderWidth()
+        {
+            float v = 4f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 4f;
+            return Mathf.Clamp(v, 0f, 20f);
+        }
+
+        private float EffectiveGalleryScanWlGridFrameInset()
+        {
+            float v = 0f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlGridFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private float EffectiveGalleryScanWlListFrameInset()
+        {
+            float v = 2f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlListFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 2f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private bool EffectiveGalleryScanWlBorderOnThumbnail()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlBorderOnThumbnail; } catch { }
+            return true;
+        }
+
+        private Color EffectiveGalleryScanWlBorderColor()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null) return VPBConfig.Instance.GetGalleryScanWlBorderColor();
+            }
+            catch { }
+            return new Color(0.2f, 0.95f, 1f, 1f);
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderEnabled()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderEnabled; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderShowInGrid()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderShowInGrid; } catch { }
+            return true;
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderShowInList()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderShowInList; } catch { }
+            return true;
+        }
+
+        private float EffectiveGalleryScanWlTempBorderWidth()
+        {
+            float v = 4f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempBorderWidth; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 4f;
+            return Mathf.Clamp(v, 0f, 20f);
+        }
+
+        private float EffectiveGalleryScanWlTempGridFrameInset()
+        {
+            float v = 0f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempGridFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 0f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private float EffectiveGalleryScanWlTempListFrameInset()
+        {
+            float v = 2f;
+            try { if (VPBConfig.Instance != null) v = VPBConfig.Instance.GalleryScanWlTempListFrameInset; } catch { }
+            if (float.IsNaN(v) || float.IsInfinity(v)) v = 2f;
+            return Mathf.Clamp(v, 0f, 24f);
+        }
+
+        private bool EffectiveGalleryScanWlTempBorderOnThumbnail()
+        {
+            try { if (VPBConfig.Instance != null) return VPBConfig.Instance.GalleryScanWlTempBorderOnThumbnail; } catch { }
+            return true;
+        }
+
+        private Color EffectiveGalleryScanWlTempBorderColor()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null) return VPBConfig.Instance.GetGalleryScanWlTempBorderColor();
+            }
+            catch { }
+            return new Color(1f, 0.15f, 1f, 1f);
+        }
+
         /// <summary>
         /// Splits a search query into lowercase terms (whitespace separated), removing empties.
         /// </summary>
@@ -161,6 +277,457 @@ namespace VPB
                     try { path = file != null ? file.Path : null; } catch { path = null; }
                     return MatchesAllTermsInEither(path, name, termsLower);
             }
+        }
+
+        private bool HasActiveNameFilter()
+        {
+            return nameFilterQuery != null && !nameFilterQuery.IsEmpty;
+        }
+
+        /// <summary>
+        /// Fallback package-scan match when category SQL index unavailable.
+        /// Structured-only queries (tag:/creator:/status) cannot be evaluated here → reject.
+        /// </summary>
+        private static bool MatchesPackageFallbackSearch(GallerySearchQuery query, string packageUid, string packagePath, string internalPath)
+        {
+            if (query == null || query.IsEmpty) return true;
+            if (query.Branches == null || query.Branches.Count == 0) return true;
+
+            for (int bi = 0; bi < query.Branches.Count; bi++)
+            {
+                GallerySearchBranch br = query.Branches[bi];
+                if (br == null || br.IsEmpty) continue;
+                bool structured = (br.TagInclude != null && br.TagInclude.Count > 0)
+                    || (br.TagExclude != null && br.TagExclude.Count > 0)
+                    || (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                    || br.Status != GallerySearchQuery.StatusFlags.None;
+                string[] broad = br.BroadTerms != null && br.BroadTerms.Count > 0
+                    ? br.BroadTerms.ToArray()
+                    : new string[0];
+                bool hasBroad = broad.Length > 0;
+                bool hasBroadExcl = br.BroadExclude != null && br.BroadExclude.Count > 0;
+                if (structured && !hasBroad && !hasBroadExcl) continue; // this OR-branch cannot match on fallback
+                if (!hasBroad && !hasBroadExcl) continue;
+                if (hasBroad && !MatchesPackageByScope(packageUid, packagePath, internalPath, broad)) continue;
+                if (hasBroadExcl)
+                {
+                    bool hitExcl = false;
+                    for (int xi = 0; xi < br.BroadExclude.Count; xi++)
+                    {
+                        string xt = br.BroadExclude[xi];
+                        if (string.IsNullOrEmpty(xt)) continue;
+                        if (MatchesPackageByScope(packageUid, packagePath, internalPath, new string[] { xt }))
+                        {
+                            hitExcl = true;
+                            break;
+                        }
+                    }
+                    if (hitExcl) continue;
+                }
+                if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+                {
+                    string creator = "";
+                    if (!string.IsNullOrEmpty(packageUid))
+                    {
+                        int dot = packageUid.IndexOf('.');
+                        if (dot > 0) creator = packageUid.Substring(0, dot);
+                    }
+                    bool creatorOk = true;
+                    for (int i = 0; i < br.CreatorTerms.Count; i++)
+                    {
+                        string t = br.CreatorTerms[i];
+                        if (string.IsNullOrEmpty(t)) continue;
+                        if (creator.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            creatorOk = false;
+                            break;
+                        }
+                    }
+                    if (!creatorOk) continue;
+                }
+                if (br.TagInclude != null && br.TagInclude.Count > 0) continue;
+                if (br.TagExclude != null && br.TagExclude.Count > 0) continue;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Keep <see cref="nameFilter"/> / terms / parsed AST in sync.</summary>
+        private void AssignNameFilterState(string raw)
+        {
+            string f = raw ?? "";
+            nameFilter = f;
+            nameFilterLower = f.Length == 0 ? "" : f.ToLowerInvariant();
+            nameFilterQuery = GallerySearchQuery.Parse(f);
+            nameFilterTerms = nameFilterQuery != null ? nameFilterQuery.BroadTermsArray() : new string[0];
+            _searchTagKeysCache = null;
+            _searchTagKeysCacheFor = null;
+        }
+
+        private void ClearNameFilterState()
+        {
+            nameFilter = "";
+            nameFilterLower = "";
+            nameFilterQuery = GallerySearchQuery.Empty;
+            nameFilterTerms = new string[0];
+            _searchTagKeysCache = null;
+            _searchTagKeysCacheFor = null;
+            ClearTitleSearchChipsState();
+        }
+
+        private Dictionary<string, HashSet<string>> GetSearchTagKeysCached()
+        {
+            string key = nameFilter ?? "";
+            if (_searchTagKeysCache != null && string.Equals(_searchTagKeysCacheFor, key, StringComparison.Ordinal))
+                return _searchTagKeysCache;
+            _searchTagKeysCache = BuildTagKeyLookupForSearch(nameFilterQuery ?? GallerySearchQuery.Empty);
+            _searchTagKeysCacheFor = key;
+            return _searchTagKeysCache;
+        }
+
+        /// <summary>VAR / package-list rows come from category SQL (loaded/tagged already applied).</summary>
+        private static bool IsGallerySqlIndexedSearchEntry(FileEntry entry)
+        {
+            if (entry == null) return false;
+            if (entry is VarFileEntry) return true;
+            if (entry is PackageListEntry) return true;
+            return false;
+        }
+
+        private static string TryGetFileEntryCreatorHint(FileEntry file)
+        {
+            // Never resolve Package here — deferred gallery rows would stall the search keystroke path.
+            if (file == null) return "";
+            try
+            {
+                string uid = null;
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null)
+                {
+                    try { uid = vfe.GetRowPackageUid(); } catch { uid = null; }
+                }
+                if (string.IsNullOrEmpty(uid))
+                {
+                    PackageListEntry ple = file as PackageListEntry;
+                    if (ple != null)
+                    {
+                        try { uid = ple.GetPackageUidForGalleryUserTags(); } catch { uid = null; }
+                    }
+                }
+                if (string.IsNullOrEmpty(uid))
+                {
+                    try { uid = file.Uid; } catch { uid = null; }
+                }
+                if (string.IsNullOrEmpty(uid)) return "";
+                int cut = uid.IndexOf(":/", StringComparison.Ordinal);
+                if (cut > 0) uid = uid.Substring(0, cut);
+                int dot = uid.IndexOf('.');
+                if (dot > 0) return uid.Substring(0, dot);
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>
+        /// In-memory match for parsed title-bar search. OR of AND-branches.
+        /// <paramref name="tagKeysByTerm"/> maps each tag substring → row keys (<c>pkg\0path</c>).
+        /// When <paramref name="skipSqlOwnedPredicates"/> is true (post-SQL VAR rows), loaded/tagged
+        /// already applied in SQL are not re-checked here.
+        /// </summary>
+        private bool MatchesFileEntryBySearchQuery(
+            FileEntry file,
+            GallerySearchQuery query,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            bool skipSqlOwnedPredicates = false)
+        {
+            if (query == null || query.IsEmpty) return true;
+            if (file == null) return false;
+            if (query.Branches == null || query.Branches.Count == 0) return true;
+
+            string rowKey = null;
+            try
+            {
+                string pkg, ip;
+                if (TryGetGalleryRowKeysForUserTags(file, out pkg, out ip))
+                    rowKey = VpbLocalDatabase.MakeGalleryRowKey(pkg, ip);
+            }
+            catch { rowKey = null; }
+
+            for (int bi = 0; bi < query.Branches.Count; bi++)
+            {
+                GallerySearchBranch br = query.Branches[bi];
+                if (br == null || br.IsEmpty) continue;
+                if (MatchesFileEntrySearchBranch(file, br, tagKeysByTerm, rowKey, skipSqlOwnedPredicates))
+                    return true;
+            }
+            return false;
+        }
+
+        private bool MatchesFileEntrySearchBranch(
+            FileEntry file,
+            GallerySearchBranch br,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            string rowKey,
+            bool skipSqlOwnedPredicates)
+        {
+            if (br == null) return true;
+
+            bool needUserTagProbe = !skipSqlOwnedPredicates
+                && (br.HasFlag(GallerySearchQuery.StatusFlags.Tagged)
+                    || br.HasFlag(GallerySearchQuery.StatusFlags.Untagged));
+            bool hasUserTag = false;
+            if (needUserTagProbe)
+                hasUserTag = IsGalleryUserTagBadgeVisible(file);
+
+            if (br.TagInclude != null)
+            {
+                for (int i = 0; i < br.TagInclude.Count; i++)
+                {
+                    string t = br.TagInclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    HashSet<string> keys = null;
+                    if (tagKeysByTerm == null || !tagKeysByTerm.TryGetValue(t, out keys) || keys == null
+                        || string.IsNullOrEmpty(rowKey) || !keys.Contains(rowKey))
+                        return false;
+                }
+            }
+            if (br.TagExclude != null)
+            {
+                for (int i = 0; i < br.TagExclude.Count; i++)
+                {
+                    string t = br.TagExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    HashSet<string> keys = null;
+                    if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
+                        && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
+                        return false;
+                }
+            }
+
+            if (br.CreatorTerms != null && br.CreatorTerms.Count > 0)
+            {
+                string creator = TryGetFileEntryCreatorHint(file) ?? "";
+                for (int i = 0; i < br.CreatorTerms.Count; i++)
+                {
+                    string t = br.CreatorTerms[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    if (creator.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0)
+                        return false;
+                }
+            }
+
+            if (!skipSqlOwnedPredicates)
+            {
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Loaded))
+                {
+                    if (!IsFileEntryLoadedForSearch(file)) return false;
+                }
+                else if (br.HasFlag(GallerySearchQuery.StatusFlags.Unloaded))
+                {
+                    if (IsFileEntryLoadedForSearch(file)) return false;
+                }
+
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Tagged) && !hasUserTag)
+                    return false;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Untagged) && hasUserTag)
+                    return false;
+            }
+
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.Starred))
+            {
+                int r = 0;
+                try { r = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(file) : 0; }
+                catch { r = 0; }
+                if (r <= 0) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.AutoInstall))
+            {
+                bool ai = false;
+                try { ai = file.IsAutoInstall(); } catch { ai = false; }
+                if (!ai) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.Hidden))
+            {
+                bool hid = false;
+                try { hid = PackageHidePrefs.IsGalleryHideBadgeVisible(file); } catch { hid = false; }
+                if (!hid) return false;
+            }
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.ScanExcluded))
+            {
+                bool w = false;
+                try { w = ScanWhitelistManager.IsScanExcludedBadgeVisible(file); } catch { w = false; }
+                if (!w) return false;
+            }
+
+            string creatorHint = TryGetFileEntryCreatorHint(file) ?? "";
+            string uidHint = "";
+            try { uidHint = file.Uid ?? ""; } catch { uidHint = ""; }
+
+            if (br.BroadExclude != null && br.BroadExclude.Count > 0)
+            {
+                for (int i = 0; i < br.BroadExclude.Count; i++)
+                {
+                    string t = br.BroadExclude[i];
+                    if (string.IsNullOrEmpty(t)) continue;
+                    if (FileEntryMatchesBroadTerm(file, t, creatorHint, uidHint, tagKeysByTerm, rowKey))
+                        return false;
+                }
+            }
+
+            if (br.BroadTerms == null || br.BroadTerms.Count == 0)
+                return true;
+
+            for (int i = 0; i < br.BroadTerms.Count; i++)
+            {
+                string t = br.BroadTerms[i];
+                if (string.IsNullOrEmpty(t)) continue;
+                if (FileEntryMatchesBroadTerm(file, t, creatorHint, uidHint, tagKeysByTerm, rowKey))
+                    continue;
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Same surface as include broad: name/path (scope), creator, uid, or user-tag substring.</summary>
+        private bool FileEntryMatchesBroadTerm(
+            FileEntry file,
+            string t,
+            string creatorHint,
+            string uidHint,
+            Dictionary<string, HashSet<string>> tagKeysByTerm,
+            string rowKey)
+        {
+            if (file == null || string.IsNullOrEmpty(t)) return false;
+
+            string scope = VPBConfig.Instance != null
+                ? VPBConfig.NormalizeGallerySearchScope(VPBConfig.Instance.GallerySearchScope)
+                : "PathAndName";
+            string pretty = GetPrettyEntryDisplayName(file);
+            bool namePathOk;
+            if (scope == "NameStartsWith")
+                namePathOk = !string.IsNullOrEmpty(pretty) && pretty.StartsWith(t, StringComparison.OrdinalIgnoreCase);
+            else if (scope == "NameOnly")
+                namePathOk = !string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0;
+            else
+            {
+                string path = null;
+                try { path = file.Path; } catch { path = null; }
+                namePathOk = (!string.IsNullOrEmpty(pretty) && pretty.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                    || (!string.IsNullOrEmpty(path) && path.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+            if (namePathOk) return true;
+            if (!string.IsNullOrEmpty(creatorHint) && creatorHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (!string.IsNullOrEmpty(uidHint) && uidHint.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            HashSet<string> keys = null;
+            if (tagKeysByTerm != null && tagKeysByTerm.TryGetValue(t, out keys) && keys != null
+                && !string.IsNullOrEmpty(rowKey) && keys.Contains(rowKey))
+                return true;
+
+            return false;
+        }
+
+        private static bool IsFileEntryLoadedForSearch(FileEntry file)
+        {
+            if (file == null) return false;
+            try
+            {
+                SystemFileEntry sfe = file as SystemFileEntry;
+                if (sfe != null && !sfe.isVar) return true; // loose files always "loaded"
+            }
+            catch { }
+            try
+            {
+                string path = null;
+                VarFileEntry vfe = file as VarFileEntry;
+                if (vfe != null)
+                {
+                    try
+                    {
+                        if (vfe.Package != null) path = vfe.Package.Path;
+                    }
+                    catch { }
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        // Indexed rows: treat as loaded unless we know otherwise via Package resolve.
+                        return true;
+                    }
+                }
+                PackageListEntry ple = file as PackageListEntry;
+                if (ple != null)
+                {
+                    try { path = ple.Path; } catch { path = null; }
+                }
+                if (string.IsNullOrEmpty(path)) return true;
+                return VpbLocalDatabase.ComputePackageLoadedFlagFromVarPath(path) != 0;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>One SQLite connection for all tag substrings; reused across base-list filter.</summary>
+        private Dictionary<string, HashSet<string>> BuildTagKeyLookupForSearch(GallerySearchQuery query)
+        {
+            var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            if (query == null || query.IsEmpty) return map;
+            if (!VpbSqlite3.IsAvailable) return map;
+
+            // Explicit tag: always. Broad terms only when length≥2 (avoid LIKE '%x%' on every letter).
+            var need = new List<string>();
+            bool hasExplicitTag = (query.TagInclude != null && query.TagInclude.Count > 0)
+                || (query.TagExclude != null && query.TagExclude.Count > 0);
+            if (query.TagInclude != null)
+                for (int i = 0; i < query.TagInclude.Count; i++)
+                    if (!string.IsNullOrEmpty(query.TagInclude[i])) need.Add(query.TagInclude[i]);
+            if (query.TagExclude != null)
+                for (int i = 0; i < query.TagExclude.Count; i++)
+                    if (!string.IsNullOrEmpty(query.TagExclude[i])) need.Add(query.TagExclude[i]);
+            if (query.BroadTerms != null)
+            {
+                for (int i = 0; i < query.BroadTerms.Count; i++)
+                {
+                    string t = query.BroadTerms[i];
+                    if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
+                    need.Add(t);
+                }
+            }
+            if (query.BroadExclude != null)
+            {
+                for (int i = 0; i < query.BroadExclude.Count; i++)
+                {
+                    string t = query.BroadExclude[i];
+                    if (string.IsNullOrEmpty(t) || t.Length < 2) continue;
+                    need.Add(t);
+                }
+            }
+            if (need.Count == 0) return map;
+
+            // No user tags in DB → skip connection (cache empty probe).
+            if (hasExplicitTag)
+                _searchUserTagVocabEmpty = false;
+            else
+            {
+                if (!_searchUserTagVocabEmptyKnown)
+                {
+                    _searchUserTagVocabEmptyKnown = true;
+                    _searchUserTagVocabEmpty = true;
+                    try
+                    {
+                        var probe = new List<string>();
+                        if (VpbLocalDatabase.TryReadAllGalleryUserTagNames(probe) && probe.Count > 0)
+                            _searchUserTagVocabEmpty = false;
+                    }
+                    catch { _searchUserTagVocabEmpty = true; }
+                }
+                if (_searchUserTagVocabEmpty) return map;
+            }
+
+            string cat = currentCategoryTitle ?? "";
+            if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+            try { VpbLocalDatabase.TryCollectRowKeysWithUserTagSubstringsPerTerm(cat, need, map); }
+            catch { map.Clear(); }
+            return map;
         }
 
         /// <summary>
@@ -516,31 +1083,101 @@ namespace VPB
             AddLocalCustomScriptsCountToCategory(categoryCounts, currentPackagePathFilter);
             AddLocalCustomAppearanceCountToCategory(categoryCounts, currentPackagePathFilter);
 
+            if (CategoryCountsLookStaleAfterBuild())
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery] CacheCategoryCounts deferred (stale/zero while inventory loaded)");
+                }
+                catch { }
+                categoriesCached = false;
+                return;
+            }
+
             categoriesCached = true;
             unchecked { categorySideTabDataRevision++; }
+            StampSideTabCountsForCurrentScan();
+        }
+
+        private bool CategoryCountsLookStaleAfterBuild()
+        {
+            if (categoryCounts == null || categoryCounts.Count == 0) return true;
+            int sum = 0;
+            foreach (var kv in categoryCounts)
+            {
+                if (kv.Value > 0) sum += kv.Value;
+            }
+            if (sum > 0) return false;
+
+            try
+            {
+                int pkgCount = 0;
+                lock (FileManager.packagesLock)
+                {
+                    if (FileManager.PackagesByUid != null)
+                        pkgCount = FileManager.PackagesByUid.Count;
+                }
+                return pkgCount > 64;
+            }
+            catch { return false; }
+        }
+
+        private void StampSideTabCountsForCurrentScan()
+        {
+            try { _lastCategoryCountsScanTime = FileManager.lastPackageRefreshTime; } catch { }
+        }
+
+        /// <summary>Rebuild category/creator tabs when package scan advanced since last side-tab count build.</summary>
+        private void EnsureSideTabsFreshForPackageScan()
+        {
+            bool countsRefreshed = false;
+            try { countsRefreshed = EnsureSideTabCountsFreshAfterGridReady(force: false); } catch { }
+            if (!IsVisible && !hasLoadedContent) return;
+            // rebuildSubPaneSideTabLists must be true when main strips rebuild — (true, false) clears split sub lists with no refill.
+            if (countsRefreshed)
+            {
+                try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
+            }
+        }
+
+        /// <summary>Rebuild side-tab counts once SQL/index + package scan are ready.</summary>
+        /// <returns>True when category/creator counts were rebuilt (caller should refresh side-tab UI).</returns>
+        private bool EnsureSideTabCountsFreshAfterGridReady(bool force)
+        {
+            DateTime scanNow = DateTime.MinValue;
+            try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
+            bool stale = force
+                || !categoriesCached
+                || !creatorsCached
+                || (scanNow > DateTime.MinValue && scanNow > _lastCategoryCountsScanTime);
+            if (!stale) return false;
+
+            categoriesCached = false;
+            creatorsCached = false;
+            try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+            try { CacheCategoryCounts(); } catch { }
+            try { CacheCreators(); } catch { }
+            try
+            {
+                int sc = 0;
+                if (categoryCounts != null) categoryCounts.TryGetValue("Scenes", out sc);
+                LogUtil.Log("[VPB.Gallery] EnsureSideTabCountsFreshAfterGridReady scenes=" + sc
+                    + " cached=" + (categoriesCached ? "1" : "0"));
+            }
+            catch { }
+            return true;
         }
 
         /// <summary>
-        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
-        /// (Package-only counting misses almost all session plugins.)
+        /// SQLite-cached recursive file count under <paramref name="root"/> for the given extensions.
         /// </summary>
-        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
+        private static int CountLooseFilesCached(string root, string[] exts, string cacheKeyPrefix)
         {
-            if (counts == null || !counts.ContainsKey("Plugins")) return;
-            const string root = "Custom/Scripts";
-            if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) return;
-            try
-            {
-                if (!Directory.Exists(root)) return;
-            }
-            catch { return; }
-
-            // Prefer SQLite-cached enumeration to avoid recursive disk walks on every side-tab rebuild.
-            var exts = new[] { "cs", "cslist", "dll" };
             string sig = "0";
-            // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
             try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
-            string cacheKey = "plugins:custom_scripts|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=cs,cslist,dll";
+
+            string extList = string.Join(",", exts);
+            string cacheKey = cacheKeyPrefix + "|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=" + extList;
 
             int n = 0;
             try
@@ -579,6 +1216,76 @@ namespace VPB
                 }
             }
             catch { }
+            return n;
+        }
+
+        /// <summary>
+        /// Count .cs / .cslist / .dll under Custom/Scripts on disk so the Plugins category is not stuck at 0.
+        /// (Package-only counting misses almost all session plugins.)
+        /// </summary>
+        private static void AddLocalCustomScriptsCountToCategory(Dictionary<string, int> counts, string selectedPathFilter = "")
+        {
+            if (counts == null || !counts.ContainsKey("Plugins")) return;
+            const string root = "Custom/Scripts";
+            if (!GalleryPathFilterMatchesFolder(root, selectedPathFilter)) return;
+            try
+            {
+                if (!Directory.Exists(root)) return;
+            }
+            catch { return; }
+
+            int n = CountLooseFilesCached(root, new[] { "cs", "cslist", "dll" }, "plugins:custom_scripts");
+
+            // Ref cache has its own sig so it rebuilds even when the file-list cache is warm.
+            string sig = "0";
+            try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
+            const string refKey = "plugins:cslist_referenced_disk|root=Custom/Scripts";
+            try
+            {
+                var refProbe = new List<VpbLocalDatabase.SystemFileRow>(1);
+                bool refHit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(refKey, sig, refProbe);
+                if (!refHit)
+                {
+                    var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var cslistBuf = new List<string>();
+                    try { FileManager.SafeGetFiles(root, "*.cslist", cslistBuf); } catch { }
+                    for (int i = 0; i < cslistBuf.Count; i++)
+                    {
+                        string cslistRel = cslistBuf[i];
+                        if (string.IsNullOrEmpty(cslistRel)) continue;
+                        try
+                        {
+                            string cslistFullForIO;
+                            try { cslistFullForIO = Path.GetFullPath(cslistRel); } catch { cslistFullForIO = cslistRel; }
+                            string cslistRelN = cslistRel.Replace('\\', '/');
+                            string cslistRelDir;
+                            int lastSlash = cslistRelN.LastIndexOf('/');
+                            cslistRelDir = lastSlash > 0 ? cslistRelN.Substring(0, lastSlash) : string.Empty;
+                            using (var fs = new FileStream(cslistFullForIO, FileMode.Open, FileAccess.Read, FileShare.Read))
+                            {
+                                var refs = VPB.src.util.CslistParser.ParseReferencedCsPaths(fs, cslistRelDir);
+                                for (int ri = 0; ri < refs.Count; ri++)
+                                {
+                                    string rp = refs[ri];
+                                    if (!string.IsNullOrEmpty(rp)) referenced.Add(rp);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                    var refRows = new List<VpbLocalDatabase.SystemFileRow>(referenced.Count);
+                    foreach (var rp in referenced)
+                    {
+                        var rr = new VpbLocalDatabase.SystemFileRow();
+                        rr.Path = rp;
+                        rr.LastWriteBinaryOrInvalid = long.MinValue;
+                        rr.SizeOrInvalid = long.MinValue;
+                        refRows.Add(rr);
+                    }
+                    try { VpbLocalDatabase.TryWriteSystemFilesForCacheKey(refKey, sig, refRows); } catch { }
+                }
+            }
+            catch { }
             counts["Plugins"] += n;
         }
 
@@ -596,47 +1303,58 @@ namespace VPB
                 }
                 catch { continue; }
 
-                string sig = "0";
-                // Deep dir-mtime so additions in subfolders invalidate this cache (SafeGetFiles walks recursively).
-                try { sig = VpbLocalDatabase.DeepMaxDirMtimeBinary(root).ToString(); } catch { sig = "0"; }
-                string cacheKey = "appearance:custom_presets|root=" + (Path.GetFullPath(root).Replace('\\', '/').TrimEnd('/')) + "|exts=vap";
-
-                int n = 0;
-                try
-                {
-                    var cached = new List<VpbLocalDatabase.SystemFileRow>();
-                    bool hit = VpbLocalDatabase.TryReadSystemFilesForCacheKey(cacheKey, sig, cached);
-                    if (hit && cached.Count > 0)
-                    {
-                        n = cached.Count;
-                    }
-                    else
-                    {
-                        var rows = new List<VpbLocalDatabase.SystemFileRow>(256);
-                        var buf = new List<string>();
-                        try
-                        {
-                            FileManager.SafeGetFiles(root, "*.vap", buf);
-                            n = buf.Count;
-                            for (int i = 0; i < buf.Count; i++)
-                            {
-                                string p = buf[i];
-                                if (string.IsNullOrEmpty(p)) continue;
-                                var r = new VpbLocalDatabase.SystemFileRow();
-                                try { r.Path = Path.GetFullPath(p); } catch { r.Path = p; }
-                                r.LastWriteBinaryOrInvalid = long.MinValue;
-                                r.SizeOrInvalid = long.MinValue;
-                                rows.Add(r);
-                            }
-                        }
-                        catch { }
-                        if (rows.Count > 0) VpbLocalDatabase.TryWriteSystemFilesForCacheKey(cacheKey, sig, rows);
-                    }
-                }
-                catch { }
-                total += n;
+                total += CountLooseFilesCached(root, new[] { "vap" }, "appearance:custom_presets");
             }
             counts["Appearance"] += total;
+        }
+
+        /// <summary>
+        /// Fill dest from count map, sort by name (culture, matches former LINQ OrderBy).
+        /// Clear+reuse dest — no Select/ToList alloc. Safe on worker threads if dest is thread-local.
+        /// </summary>
+        internal static void FillCreatorCacheEntriesSorted(Dictionary<string, int> counts, List<CreatorCacheEntry> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (counts == null || counts.Count == 0) return;
+            if (dest.Capacity < counts.Count) dest.Capacity = counts.Count;
+            foreach (KeyValuePair<string, int> kv in counts)
+            {
+                CreatorCacheEntry e;
+                e.Name = kv.Key;
+                e.Count = kv.Value;
+                dest.Add(e);
+            }
+            dest.Sort(CompareCreatorCacheEntryByName);
+        }
+
+        private static int CompareCreatorCacheEntryByName(CreatorCacheEntry a, CreatorCacheEntry b)
+        {
+            return string.Compare(a.Name, b.Name, StringComparison.CurrentCulture);
+        }
+
+        /// <summary>
+        /// Fill dest from count map, sort path OrdinalIgnoreCase (matches former LINQ OrderBy).
+        /// </summary>
+        internal static void FillPathCacheEntriesSorted(Dictionary<string, int> counts, List<PathCacheEntry> dest)
+        {
+            if (dest == null) return;
+            dest.Clear();
+            if (counts == null || counts.Count == 0) return;
+            if (dest.Capacity < counts.Count) dest.Capacity = counts.Count;
+            foreach (KeyValuePair<string, int> kv in counts)
+            {
+                PathCacheEntry e;
+                e.Path = kv.Key;
+                e.Count = kv.Value;
+                dest.Add(e);
+            }
+            dest.Sort(ComparePathCacheEntryByPathIgnoreCase);
+        }
+
+        private static int ComparePathCacheEntryByPathIgnoreCase(PathCacheEntry a, PathCacheEntry b)
+        {
+            return string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
         }
 
         private void CacheCreators()
@@ -717,8 +1435,7 @@ namespace VPB
                 }
             }
 
-            cachedCreators = counts.Select(kv => new CreatorCacheEntry { Name = kv.Key, Count = kv.Value })
-                                   .OrderBy(c => c.Name).ToList();
+            FillCreatorCacheEntriesSorted(counts, cachedCreators);
             creatorsCached = true;
             unchecked { creatorSideTabDataRevision++; }
         }
@@ -750,22 +1467,25 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Parent folder of a normalized file path (slash-safe; avoids <see cref="Path.GetDirectoryName"/> quirks).
+        /// </summary>
+        internal static string TryGetParentFolderFromNormalizedPath(string normalizedFilePath)
+        {
+            if (string.IsNullOrEmpty(normalizedFilePath)) return null;
+            string p = normalizedFilePath.Replace('\\', '/').TrimEnd('/');
+            int slash = p.LastIndexOf('/');
+            if (slash <= 0) return null;
+            string folder = p.Substring(0, slash).TrimEnd('/');
+            return folder.Length == 0 ? null : folder;
+        }
+
         internal static string TryGetPathFilterFolderForEntry(FileEntry entry)
         {
             if (entry == null) return null;
             string normalized;
             if (!TryNormalizeGalleryPathUnderKnownRoots(entry.Path, out normalized)) return null;
-            try
-            {
-                string dir = Path.GetDirectoryName(normalized);
-                if (string.IsNullOrEmpty(dir)) return null;
-                dir = dir.Replace('\\', '/').TrimEnd('/');
-                return dir.Length == 0 ? null : dir;
-            }
-            catch
-            {
-                return null;
-            }
+            return TryGetParentFolderFromNormalizedPath(normalized);
         }
 
         internal static bool GalleryPathFilterMatchesFolder(string folderPath, string selectedFilter)
@@ -781,12 +1501,180 @@ namespace VPB
             if (string.IsNullOrEmpty(selectedFilter)) return true;
             string normalized;
             if (!TryNormalizeGalleryPathUnderKnownRoots(rawPath, out normalized)) return false;
-            string folder = "";
-            try { folder = Path.GetDirectoryName(normalized); } catch { folder = ""; }
+            string folder = TryGetParentFolderFromNormalizedPath(normalized);
             if (string.IsNullOrEmpty(folder)) return false;
-            folder = folder.Replace('\\', '/').TrimEnd('/');
-            if (folder.Length == 0) return false;
             return GalleryPathFilterMatchesFolder(folder, selectedFilter);
+        }
+
+        /// <summary>
+        /// True when <paramref name="filter"/> still matches at least one live .var path or an on-disk folder.
+        /// Used to drop Path filters whose folder was deleted in Explorer.
+        /// </summary>
+        internal static bool PackagePathFilterStillResolves(string filter)
+        {
+            if (string.IsNullOrEmpty(filter)) return true;
+            string f = filter.Replace('\\', '/').Trim().TrimEnd('/');
+            if (f.Length == 0) return true;
+
+            // Folder still on disk (incl. empty AddonPackages/new) — keep filter.
+            try
+            {
+                if (Directory.Exists(f)) return true;
+            }
+            catch { }
+
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid != null)
+                    {
+                        foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                        {
+                            VarPackage pkg = kv.Value;
+                            if (pkg == null) continue;
+                            if (GalleryPathFilterMatchesRawPath(pkg.Path, f))
+                                return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Clears <see cref="currentPackagePathFilter"/> when the selected folder no longer exists
+        /// (Explorer delete/move). Returns true when the filter was cleared.
+        /// </summary>
+        internal bool TryClearStalePackagePathFilter()
+        {
+            if (string.IsNullOrEmpty(currentPackagePathFilter)) return false;
+            if (PackagePathFilterStillResolves(currentPackagePathFilter)) return false;
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery] cleared stale Path filter '" + currentPackagePathFilter + "'");
+            }
+            catch { }
+            currentPackagePathFilter = "";
+            pathsCached = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Seed Custom/Saves roots that exist on disk (count 0). Folder tree stays visible even when
+        /// current category has no loose hits under those roots.
+        /// </summary>
+        private static void EnsureLoosePathRootsSeeded(Dictionary<string, int> folders)
+        {
+            if (folders == null) return;
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string rootWithSlash = GalleryPathFilterRoots[i];
+                if (rootWithSlash.StartsWith("AddonPackages", StringComparison.OrdinalIgnoreCase)) continue;
+                if (rootWithSlash.StartsWith("AllPackages", StringComparison.OrdinalIgnoreCase)) continue;
+
+                string root = rootWithSlash.TrimEnd('/');
+                try
+                {
+                    if (!Directory.Exists(root)) continue;
+                }
+                catch { continue; }
+
+                if (!folders.ContainsKey(root))
+                    folders[root] = 0;
+            }
+        }
+
+        /// <summary>
+        /// Category-agnostic Path folder tree: every known package/loose folder, counts start at 0.
+        /// Category-scoped counts overlay later in <see cref="CachePaths"/>.
+        /// </summary>
+        private static void SeedAgnosticPathFolders(Dictionary<string, int> folders)
+        {
+            if (folders == null) return;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid != null)
+                    {
+                        foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                        {
+                            VarPackage pkg = kv.Value;
+                            if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                            string normalized;
+                            if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
+                            string folder = TryGetParentFolderFromNormalizedPath(normalized);
+                            if (string.IsNullOrEmpty(folder)) continue;
+                            SeedPathFolderHierarchy(folders, folder);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try { VpbLocalDatabase.SeedPackageFoldersFromVarPathInventory(folders); } catch { }
+
+            EnsureLoosePathRootsSeeded(folders);
+        }
+
+        /// <summary>
+        /// When SQLite Path counts are unavailable, build AddonPackages/AllPackages folder hierarchy
+        /// from the live registry (full tree, not the path-filtered grid).
+        /// </summary>
+        private static void AddPathCountsFromLiveVarPackages(Dictionary<string, int> counts)
+        {
+            if (counts == null) return;
+            try
+            {
+                lock (FileManager.packagesLock)
+                {
+                    Dictionary<string, VarPackage> byUid = FileManager.PackagesByUid;
+                    if (byUid == null || byUid.Count == 0) return;
+                    foreach (KeyValuePair<string, VarPackage> kv in byUid)
+                    {
+                        VarPackage pkg = kv.Value;
+                        if (pkg == null || string.IsNullOrEmpty(pkg.Path)) continue;
+                        string normalized;
+                        if (!TryNormalizeGalleryPathUnderKnownRoots(pkg.Path, out normalized)) continue;
+                        string folder = TryGetParentFolderFromNormalizedPath(normalized);
+                        if (string.IsNullOrEmpty(folder)) continue;
+                        AddPathHierarchyCount(counts, folder);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Ensure folder + parents exist in the map with count 0 (do not inflate existing counts).
+        /// </summary>
+        private static void SeedPathFolderHierarchy(Dictionary<string, int> folders, string folderPath)
+        {
+            if (folders == null || string.IsNullOrEmpty(folderPath)) return;
+            string p = folderPath.Replace('\\', '/').Trim('/');
+            if (p.Length == 0) return;
+
+            for (int i = 0; i < GalleryPathFilterRoots.Length; i++)
+            {
+                string root = GalleryPathFilterRoots[i].TrimEnd('/');
+                if (!p.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                string[] seg = p.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                if (seg.Length == 0) return;
+                string running = seg[0];
+                for (int si = 1; si <= seg.Length; si++)
+                {
+                    if (!folders.ContainsKey(running))
+                        folders[running] = 0;
+                    if (si < seg.Length) running += "/" + seg[si];
+                }
+                return;
+            }
         }
 
         private static void AddPathHierarchyCount(Dictionary<string, int> counts, string folderPath)
@@ -831,8 +1719,12 @@ namespace VPB
 
         private void CachePaths()
         {
-            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            // 1) Category-agnostic folder tree (presence only — zeros until overlay).
+            var folders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            SeedAgnosticPathFolders(folders);
 
+            // 2) Category-scoped counts (SQL + loose grid; live registry only when SQL unavailable).
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             bool sqlOk = VpbLocalDatabase.TryReadPackageFolderCounts(
                 counts,
                 currentExtension,
@@ -843,22 +1735,34 @@ namespace VPB
                 GetCreatorFilterForQueries(),
                 null);
 
-            // SQL path is VAR-backed; include loose files from current loaded list so Custom/Saves are represented.
-            // If SQL is unavailable/stale, include VAR rows too from current loaded list.
             IList<FileEntry> source = currentFilteredFiles != null && currentFilteredFiles.Count > 0
                 ? (IList<FileEntry>)currentFilteredFiles
                 : (IList<FileEntry>)lastFilteredFiles;
             AddPathCountsFromEntries(counts, source, includeVarRows: !sqlOk, includeLooseRows: true);
 
-            cachedPaths = counts.Select(kv => new PathCacheEntry { Path = kv.Key, Count = kv.Value })
-                               .OrderBy(p => p.Path, StringComparer.OrdinalIgnoreCase)
-                               .ToList();
+            if (!sqlOk)
+                AddPathCountsFromLiveVarPackages(counts);
+
+            // 3) Overlay category counts onto agnostic tree (folders with no hits stay 0).
+            foreach (KeyValuePair<string, int> kv in counts)
+                folders[kv.Key] = kv.Value;
+
+            // Mid-refresh with nothing useful yet — keep previous Path list, rebuild when grid finishes.
+            if (refreshCoroutine != null && folders.Count == 0)
+            {
+                pathsCached = false;
+                return;
+            }
+
+            FillPathCacheEntriesSorted(folders, cachedPaths);
             pathsCached = true;
         }
 
         private void CacheUserTagsSideTab()
         {
             cachedUserTagSideTab.Clear();
+            _userTagSideTabCountsReady = false;
+            _userTagAnyAssignmentExists = false;
             string cat = currentCategoryTitle ?? "";
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
 
@@ -869,6 +1773,9 @@ namespace VPB
                 unchecked { userTagSideTabDataRevision++; }
                 return;
             }
+
+            bool anyAssignOk = VpbLocalDatabase.TryHasAnyGalleryUserTagAssignment(out bool anyExists);
+            if (anyAssignOk) _userTagAnyAssignmentExists = anyExists;
 
             var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             bool countsOk = false;
@@ -882,7 +1789,10 @@ namespace VPB
                 if (countsOk) dict.TryGetValue(name, out c);
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
-            userTagsCached = countsOk;
+            // Stick cache after vocabulary load so empty category / failed counts do not re-query every refresh.
+            // Hide-unused waits on counts-ready separately.
+            userTagsCached = true;
+            _userTagSideTabCountsReady = countsOk;
             unchecked { userTagSideTabDataRevision++; }
         }
 
@@ -891,7 +1801,7 @@ namespace VPB
             ClearAppearanceGenderRefreshCaches();
             tagsCached = false;
             userTagsCached = false;
-            try { GalleryTagCountSnapshotCache.Clear(); } catch { }
+            GalleryTagCountSnapshotCache.Clear();
         }
 
         /// <summary>When max slice ms is below this, <see cref="CoCacheTagCountsInternal"/> yields so the UI thread stays responsive.</summary>
@@ -931,6 +1841,10 @@ namespace VPB
             if (tagsCached) return;
             if (_sideTabsTagCountSliceCo != null)
                 return;
+            // RefreshFiles owns DeferredGallerySideTabsAfterGridReady (tag scan + sub-pane).
+            // Starting a parallel slice during an in-flight refresh races session id and is cancelled.
+            if (refreshCoroutine != null)
+                return;
             int sessionSnap = _deferredSubPaneSessionId;
             _sideTabsTagCountSliceCo = StartCoroutine(CoTagCountsForSideTabsSlice(sessionSnap));
         }
@@ -966,6 +1880,7 @@ namespace VPB
             clothingSubfilterCountReal = t.ClothingSubfilterCountReal;
             clothingSubfilterCountPresets = t.ClothingSubfilterCountPresets;
             clothingSubfilterCountCustom = t.ClothingSubfilterCountCustom;
+            clothingSubfilterCountCustomPreset = t.ClothingSubfilterCountCustomPreset;
             clothingSubfilterCountItems = t.ClothingSubfilterCountItems;
             clothingSubfilterCountMale = t.ClothingSubfilterCountMale;
             clothingSubfilterCountFemale = t.ClothingSubfilterCountFemale;
@@ -973,6 +1888,7 @@ namespace VPB
             hairSubfilterCountAll = t.HairSubfilterCountAll;
             hairSubfilterCountPresets = t.HairSubfilterCountPresets;
             hairSubfilterCountCustom = t.HairSubfilterCountCustom;
+            hairSubfilterCountCustomPreset = t.HairSubfilterCountCustomPreset;
             hairSubfilterCountItems = t.HairSubfilterCountItems;
             hairSubfilterCountMale = t.HairSubfilterCountMale;
             hairSubfilterCountFemale = t.HairSubfilterCountFemale;
@@ -986,12 +1902,14 @@ namespace VPB
             clothingSubfilterFacetCountReal = t.ClothingSubfilterFacetCountReal;
             clothingSubfilterFacetCountPresets = t.ClothingSubfilterFacetCountPresets;
             clothingSubfilterFacetCountCustom = t.ClothingSubfilterFacetCountCustom;
+            clothingSubfilterFacetCountCustomPreset = t.ClothingSubfilterFacetCountCustomPreset;
             clothingSubfilterFacetCountItems = t.ClothingSubfilterFacetCountItems;
             clothingSubfilterFacetCountMale = t.ClothingSubfilterFacetCountMale;
             clothingSubfilterFacetCountFemale = t.ClothingSubfilterFacetCountFemale;
             clothingSubfilterFacetCountDecals = t.ClothingSubfilterFacetCountDecals;
             hairSubfilterFacetCountPresets = t.HairSubfilterFacetCountPresets;
             hairSubfilterFacetCountCustom = t.HairSubfilterFacetCountCustom;
+            hairSubfilterFacetCountCustomPreset = t.HairSubfilterFacetCountCustomPreset;
             hairSubfilterFacetCountItems = t.HairSubfilterFacetCountItems;
             hairSubfilterFacetCountMale = t.HairSubfilterFacetCountMale;
             hairSubfilterFacetCountFemale = t.HairSubfilterFacetCountFemale;
@@ -1006,6 +1924,68 @@ namespace VPB
             appearanceSubfilterCurrentCountFemale = t.AppearanceSubfilterCurrentCountFemale;
             appearanceSubfilterCurrentCountFuta = t.AppearanceSubfilterCurrentCountFuta;
             appearanceSubfilterCurrentCountUnknown = t.AppearanceSubfilterCurrentCountUnknown;
+        }
+
+        /// <summary>Prime Hair/Clothing subfilter chip counts from SQLite VAR rows so split sub-pane buttons appear immediately.</summary>
+        private bool TryApplyHairClothingSubfilterCountsFromSql()
+        {
+            if (!VpbSqlite3.IsAvailable) return false;
+            string title = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
+            bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isClothing && !isHair) return false;
+
+            string cp = currentPath ?? "";
+            int sourceFilterMode = ResolveEffectiveSourceFilterMode(false, cp);
+            if (sourceFilterMode == 1) return false;
+
+            string extJ = string.IsNullOrEmpty(currentExtension) ? "" : currentExtension;
+            var tagCountsScratch = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            VpbLocalDatabase.TagScanTotals sqlFacets;
+            if (!VpbLocalDatabase.TryReadTagCounts(
+                    title,
+                    extJ,
+                    GetCreatorFilterForQueries(),
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    tagCountsScratch,
+                    out sqlFacets,
+                    clothingSubfilter,
+                    hairSubfilter,
+                    appearanceSubfilter,
+                    activeTags))
+                return false;
+
+            clothingSubfilterCountAll = sqlFacets.ClothingSubfilterCountAll;
+            clothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
+            clothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
+            clothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
+            clothingSubfilterCountCustomPreset = sqlFacets.ClothingSubfilterCountCustomPreset;
+            clothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
+            clothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
+            clothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
+            clothingSubfilterCountDecals = sqlFacets.ClothingSubfilterCountDecals;
+            hairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
+            hairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
+            hairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
+            hairSubfilterCountCustomPreset = sqlFacets.HairSubfilterCountCustomPreset;
+            hairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
+            hairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
+            hairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
+            clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
+            clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
+            clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
+            clothingSubfilterFacetCountCustomPreset = sqlFacets.ClothingSubfilterFacetCountCustomPreset;
+            clothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
+            clothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
+            clothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
+            clothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
+            hairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
+            hairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
+            hairSubfilterFacetCountCustomPreset = sqlFacets.HairSubfilterFacetCountCustomPreset;
+            hairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
+            hairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
+            hairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
+            return true;
         }
 
         private IEnumerator CoCacheTagCountsInternal(int maxMsPerSlice, int deferredSessionId)
@@ -1027,12 +2007,18 @@ namespace VPB
 
             if (IsAppearanceLooseScopedBrowsing())
             {
-                TryRecomputeAppearanceGenderFacetCountsScoped();
-                tagsCached = true;
-                if (TryBuildTagCountCacheKey(out tagCountCacheKey))
+                // Prefer SQL for instant chips; loose .vap recount is sliced (never sync Accumulate).
+                bool primedSql = false;
+                try { primedSql = TryApplyAppearanceFacetCountsFromSql(); } catch { primedSql = false; }
+                if (primedSql)
                 {
-                    try { GalleryTagCountSnapshotCache.Put(tagCountCacheKey, CaptureTagCountSnapshot()); } catch { }
+                    tagsCached = true;
+                    if (TryBuildTagCountCacheKey(out tagCountCacheKey))
+                    {
+                        try { GalleryTagCountSnapshotCache.Put(tagCountCacheKey, CaptureTagCountSnapshot()); } catch { }
+                    }
                 }
+                try { ScheduleAppearanceLooseScopedSliceRecount(deferredSessionId); } catch { }
                 yield break;
             }
 
@@ -1046,6 +2032,7 @@ namespace VPB
             clothingSubfilterCountReal = 0;
             clothingSubfilterCountPresets = 0;
             clothingSubfilterCountCustom = 0;
+            clothingSubfilterCountCustomPreset = 0;
             clothingSubfilterCountItems = 0;
             clothingSubfilterCountMale = 0;
             clothingSubfilterCountFemale = 0;
@@ -1054,6 +2041,7 @@ namespace VPB
             hairSubfilterCountAll = 0;
             hairSubfilterCountPresets = 0;
             hairSubfilterCountCustom = 0;
+            hairSubfilterCountCustomPreset = 0;
             hairSubfilterCountItems = 0;
             hairSubfilterCountMale = 0;
             hairSubfilterCountFemale = 0;
@@ -1069,6 +2057,7 @@ namespace VPB
             clothingSubfilterFacetCountReal = 0;
             clothingSubfilterFacetCountPresets = 0;
             clothingSubfilterFacetCountCustom = 0;
+            clothingSubfilterFacetCountCustomPreset = 0;
             clothingSubfilterFacetCountItems = 0;
             clothingSubfilterFacetCountMale = 0;
             clothingSubfilterFacetCountFemale = 0;
@@ -1076,6 +2065,7 @@ namespace VPB
 
             hairSubfilterFacetCountPresets = 0;
             hairSubfilterFacetCountCustom = 0;
+            hairSubfilterFacetCountCustomPreset = 0;
             hairSubfilterFacetCountItems = 0;
             hairSubfilterFacetCountMale = 0;
             hairSubfilterFacetCountFemale = 0;
@@ -1174,6 +2164,7 @@ namespace VPB
                     clothingSubfilterCountReal = sqlFacets.ClothingSubfilterCountReal;
                     clothingSubfilterCountPresets = sqlFacets.ClothingSubfilterCountPresets;
                     clothingSubfilterCountCustom = sqlFacets.ClothingSubfilterCountCustom;
+                    clothingSubfilterCountCustomPreset = sqlFacets.ClothingSubfilterCountCustomPreset;
                     clothingSubfilterCountItems = sqlFacets.ClothingSubfilterCountItems;
                     clothingSubfilterCountMale = sqlFacets.ClothingSubfilterCountMale;
                     clothingSubfilterCountFemale = sqlFacets.ClothingSubfilterCountFemale;
@@ -1181,6 +2172,7 @@ namespace VPB
                     hairSubfilterCountAll = sqlFacets.HairSubfilterCountAll;
                     hairSubfilterCountPresets = sqlFacets.HairSubfilterCountPresets;
                     hairSubfilterCountCustom = sqlFacets.HairSubfilterCountCustom;
+                    hairSubfilterCountCustomPreset = sqlFacets.HairSubfilterCountCustomPreset;
                     hairSubfilterCountItems = sqlFacets.HairSubfilterCountItems;
                     hairSubfilterCountMale = sqlFacets.HairSubfilterCountMale;
                     hairSubfilterCountFemale = sqlFacets.HairSubfilterCountFemale;
@@ -1194,12 +2186,14 @@ namespace VPB
                     clothingSubfilterFacetCountReal = sqlFacets.ClothingSubfilterFacetCountReal;
                     clothingSubfilterFacetCountPresets = sqlFacets.ClothingSubfilterFacetCountPresets;
                     clothingSubfilterFacetCountCustom = sqlFacets.ClothingSubfilterFacetCountCustom;
+                    clothingSubfilterFacetCountCustomPreset = sqlFacets.ClothingSubfilterFacetCountCustomPreset;
                     clothingSubfilterFacetCountItems = sqlFacets.ClothingSubfilterFacetCountItems;
                     clothingSubfilterFacetCountMale = sqlFacets.ClothingSubfilterFacetCountMale;
                     clothingSubfilterFacetCountFemale = sqlFacets.ClothingSubfilterFacetCountFemale;
                     clothingSubfilterFacetCountDecals = sqlFacets.ClothingSubfilterFacetCountDecals;
                     hairSubfilterFacetCountPresets = sqlFacets.HairSubfilterFacetCountPresets;
                     hairSubfilterFacetCountCustom = sqlFacets.HairSubfilterFacetCountCustom;
+                    hairSubfilterFacetCountCustomPreset = sqlFacets.HairSubfilterFacetCountCustomPreset;
                     hairSubfilterFacetCountItems = sqlFacets.HairSubfilterFacetCountItems;
                     hairSubfilterFacetCountMale = sqlFacets.HairSubfilterFacetCountMale;
                     hairSubfilterFacetCountFemale = sqlFacets.HairSubfilterFacetCountFemale;
@@ -1296,7 +2290,7 @@ namespace VPB
                                 // grid does not show duplicate base + preset pairs.
                                 if (f == 0) return !isPresetEntry;
 
-                                bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                                bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                                 bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
 
                                 bool typeExplicit = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
@@ -1313,10 +2307,12 @@ namespace VPB
 
                                 bool wantsPresets = (f & ClothingSubfilter.Presets) != 0;
 								bool wantsCustom = (f & ClothingSubfilter.Custom) != 0;
+                                bool wantsCustomPreset = (f & ClothingSubfilter.CustomPreset) != 0;
 								if (wantsPresets) { if (!isPresetEntry) return false; }
 								if (wantsCustom) { if (!isCustomPreset) return false; }
-                                // Default-hide presets unless Presets/Custom toggle is on.
-                                if (!wantsPresets && !wantsCustom) { if (isPresetEntry) return false; }
+                                if (wantsCustomPreset) return false;
+                                // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+                                if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPresetEntry) return false; }
 								if ((f & ClothingSubfilter.Items) != 0) { if (isPresetEntry) return false; }
 								if ((f & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
 								if ((f & ClothingSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -1328,6 +2324,7 @@ namespace VPB
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) clothingSubfilterFacetCountReal++;
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) clothingSubfilterFacetCountPresets++;
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) clothingSubfilterFacetCountCustom++;
+                            if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) clothingSubfilterFacetCountCustomPreset++;
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) clothingSubfilterFacetCountItems++;
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) clothingSubfilterFacetCountMale++;
 							if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) clothingSubfilterFacetCountFemale++;
@@ -1358,7 +2355,7 @@ namespace VPB
                                     }
 
                                     // If user also selected real-only constraints, decals won't match.
-                                    if ((clothingSubfilter & (ClothingSubfilter.Presets | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0) continue;
+                                    if ((clothingSubfilter & (ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0) continue;
                                 }
                             }
                             else
@@ -1385,10 +2382,12 @@ namespace VPB
                                     // Additional constraints
                                     bool wantsPresets = (clothingSubfilter & ClothingSubfilter.Presets) != 0;
                                     bool wantsCustom = (clothingSubfilter & ClothingSubfilter.Custom) != 0;
+                                    bool wantsCustomPreset = (clothingSubfilter & ClothingSubfilter.CustomPreset) != 0;
                                     if (wantsPresets) { if (!isPresetEntry) continue; }
-								if (wantsCustom) { if (!isCustomPreset) continue; }
-                                    // Default-hide presets unless Presets/Custom toggle is on.
-                                    if (!wantsPresets && !wantsCustom && isPresetEntry) continue;
+                                    if (wantsCustom) { if (!isCustomPreset) continue; }
+                                    if (wantsCustomPreset) continue;
+                                    // Default-hide presets unless Presets/Custom/Custom Preset toggle is on.
+                                    if (!wantsPresets && !wantsCustom && !wantsCustomPreset && isPresetEntry) continue;
                                     if ((clothingSubfilter & ClothingSubfilter.Items) != 0) { if (isPresetEntry) continue; }
                                     if ((clothingSubfilter & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) continue; }
                                     if ((clothingSubfilter & ClothingSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female && cg != ClothingLoadingUtils.ResourceGender.Unknown) continue; }
@@ -1629,11 +2628,8 @@ namespace VPB
                                 string sysPath = sysFileList[fi] ?? "";
                                 string norm = sysPath.Replace('\\', '/');
                                 bool isPresetEntry = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
-                                bool isCustomPreset =
-                                    (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                                     norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
-                                     norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                     norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+                                bool isCustomItem = ClothingLoadingUtils.IsLooseCustomClothingItemPath(norm);
+                                bool isCustomPresetLoose = ClothingLoadingUtils.IsLooseCustomClothingPresetPath(norm);
 
                                 ClothingLoadingUtils.ResourceKind ck = ClothingLoadingUtils.ResourceKind.Unknown;
                                 ClothingLoadingUtils.ResourceGender cg = ClothingLoadingUtils.ResourceGender.Unknown;
@@ -1645,11 +2641,9 @@ namespace VPB
                                 ClothingSubfilter cur = clothingSubfilter;
                                 bool PassesClothingSubfilters(ClothingSubfilter f)
                                 {
-                                    // Issue #101: with no flags set, default-hide .vap presets so the
-                                    // grid does not show duplicate base + preset pairs.
                                     if (f == 0) return !isPresetEntry;
 
-                                    bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
+                                    bool wantsRealType = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Presets | ClothingSubfilter.Custom | ClothingSubfilter.CustomPreset | ClothingSubfilter.Items | ClothingSubfilter.Male | ClothingSubfilter.Female)) != 0);
                                     bool wantsDecalType = ((f & ClothingSubfilter.Decals) != 0);
 
                                     bool typeExplicit = ((f & (ClothingSubfilter.RealClothing | ClothingSubfilter.Decals)) != 0);
@@ -1666,17 +2660,11 @@ namespace VPB
 
                                     bool wantsPresets = (f & ClothingSubfilter.Presets) != 0;
                                     bool wantsCustom = (f & ClothingSubfilter.Custom) != 0;
-                                    if (wantsPresets || wantsCustom)
-                                    {
-                                        if (!isPresetEntry) return false;
-                                        if (wantsPresets && !wantsCustom) { if (isCustomPreset) return false; }
-                                        if (wantsCustom && !wantsPresets) { if (!isCustomPreset) return false; }
-                                    }
-                                    else
-                                    {
-                                        // Default-hide presets unless Presets/Custom toggle is on.
-                                        if (isPresetEntry) return false;
-                                    }
+                                    bool wantsCustomPreset = (f & ClothingSubfilter.CustomPreset) != 0;
+                                    if (wantsPresets) { if (!isPresetEntry || isCustomItem || isCustomPresetLoose) return false; }
+                                    if (wantsCustom) { if (!isCustomItem) return false; }
+                                    if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPresetEntry) return false; }
+                                    if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPresetEntry) return false; }
                                     if ((f & ClothingSubfilter.Items) != 0) { if (isPresetEntry) return false; }
                                     if ((f & ClothingSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male) return false; }
                                     if ((f & ClothingSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female) return false; }
@@ -1687,6 +2675,7 @@ namespace VPB
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.RealClothing)) clothingSubfilterFacetCountReal++;
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Presets)) clothingSubfilterFacetCountPresets++;
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Custom)) clothingSubfilterFacetCountCustom++;
+                                if (PassesClothingSubfilters(cur ^ ClothingSubfilter.CustomPreset)) clothingSubfilterFacetCountCustomPreset++;
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Items)) clothingSubfilterFacetCountItems++;
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Male)) clothingSubfilterFacetCountMale++;
                                 if (PassesClothingSubfilters(cur ^ ClothingSubfilter.Female)) clothingSubfilterFacetCountFemale++;
@@ -1700,8 +2689,9 @@ namespace VPB
                                 else
                                 {
                                     clothingSubfilterCountReal++;
-                                    if (isPresetEntry) clothingSubfilterCountPresets++;
-                                    if (isCustomPreset) clothingSubfilterCountCustom++;
+                                    if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) clothingSubfilterCountPresets++;
+                                    if (isCustomItem) clothingSubfilterCountCustom++;
+                                    if (isCustomPresetLoose && isPresetEntry) clothingSubfilterCountCustomPreset++;
                                     if (!isPresetEntry) clothingSubfilterCountItems++;
                                     if (cg == ClothingLoadingUtils.ResourceGender.Male) clothingSubfilterCountMale++;
                                     else if (cg == ClothingLoadingUtils.ResourceGender.Female) clothingSubfilterCountFemale++;
@@ -1744,6 +2734,8 @@ namespace VPB
                     }
                 }
             }
+
+            // Tally override moved to BuildTagsTabs (last writer before chip render; covers the cache-hit and parallel-scan paths this coroutine doesn't).
 
             // Count Hair (local filesystem) entries for subfilter facet counts.
             // Separate from package loop above (mirrors Clothing block).
@@ -1840,11 +2832,8 @@ namespace VPB
                                 string sysPath = sysFileList[fi] ?? "";
                                 string norm = sysPath.Replace('\\', '/');
                                 bool isPresetEntry = string.Equals(ext, "vap", StringComparison.OrdinalIgnoreCase);
-                                bool isCustomPreset =
-                                    (norm.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
-                                     norm.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase) ||
-                                     norm.IndexOf("/Custom/", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                     norm.IndexOf("/Saves/", StringComparison.OrdinalIgnoreCase) >= 0);
+                                bool isCustomItem = ClothingLoadingUtils.IsLooseCustomHairItemPath(norm);
+                                bool isCustomPresetLoose = ClothingLoadingUtils.IsLooseCustomHairPresetPath(norm);
 
                                 ClothingLoadingUtils.ResourceKind ck = ClothingLoadingUtils.ResourceKind.Unknown;
                                 ClothingLoadingUtils.ResourceGender cg = ClothingLoadingUtils.ResourceGender.Unknown;
@@ -1857,9 +2846,11 @@ namespace VPB
                                     if (f == 0) return !isPresetEntry;
                                     bool wantsPresets = (f & HairSubfilter.Presets) != 0;
                                     bool wantsCustom = (f & HairSubfilter.Custom) != 0;
-                                    if (wantsPresets) { if (!isPresetEntry) return false; }
-                                    if (wantsCustom) { if (!isCustomPreset) return false; }
-                                    if (!wantsPresets && !wantsCustom) { if (isPresetEntry) return false; }
+                                    bool wantsCustomPreset = (f & HairSubfilter.CustomPreset) != 0;
+                                    if (wantsPresets) { if (!isPresetEntry || isCustomItem || isCustomPresetLoose) return false; }
+                                    if (wantsCustom) { if (!isCustomItem) return false; }
+                                    if (wantsCustomPreset) { if (!isCustomPresetLoose || !isPresetEntry) return false; }
+                                    if (!wantsPresets && !wantsCustom && !wantsCustomPreset) { if (isPresetEntry) return false; }
                                     if ((f & HairSubfilter.Items) != 0) { if (isPresetEntry) return false; }
                                     if ((f & HairSubfilter.Male) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Male && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
                                     if ((f & HairSubfilter.Female) != 0) { if (cg != ClothingLoadingUtils.ResourceGender.Female && cg != ClothingLoadingUtils.ResourceGender.Unknown) return false; }
@@ -1868,13 +2859,15 @@ namespace VPB
 
                                 if (PassesHairSubfilters(cur ^ HairSubfilter.Presets)) hairSubfilterFacetCountPresets++;
                                 if (PassesHairSubfilters(cur ^ HairSubfilter.Custom)) hairSubfilterFacetCountCustom++;
+                                if (PassesHairSubfilters(cur ^ HairSubfilter.CustomPreset)) hairSubfilterFacetCountCustomPreset++;
                                 if (PassesHairSubfilters(cur ^ HairSubfilter.Items)) hairSubfilterFacetCountItems++;
                                 if (PassesHairSubfilters(cur ^ HairSubfilter.Male)) hairSubfilterFacetCountMale++;
                                 if (PassesHairSubfilters(cur ^ HairSubfilter.Female)) hairSubfilterFacetCountFemale++;
 
                                 hairSubfilterCountAll++;
-                                if (isPresetEntry) hairSubfilterCountPresets++;
-                                if (isCustomPreset) hairSubfilterCountCustom++;
+                                if (isPresetEntry && !isCustomItem && !isCustomPresetLoose) hairSubfilterCountPresets++;
+                                if (isCustomItem) hairSubfilterCountCustom++;
+                                if (isCustomPresetLoose && isPresetEntry) hairSubfilterCountCustomPreset++;
                                 if (!isPresetEntry) hairSubfilterCountItems++;
                                 if (cg == ClothingLoadingUtils.ResourceGender.Male) hairSubfilterCountMale++;
                                 else if (cg == ClothingLoadingUtils.ResourceGender.Female) hairSubfilterCountFemale++;
@@ -1959,6 +2952,8 @@ namespace VPB
                 }
                 catch { sysCacheHit = false; sysCached = null; }
 
+                var genderBulk = new LooseVapGenderBulkCache();
+                string appearanceCat = currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? "";
                 for (int pi = 0; pi < pathsToSearch.Count; pi++)
                 {
                     string searchPath = pathsToSearch[pi];
@@ -2007,7 +3002,7 @@ namespace VPB
                         bool isCustomLoose = norm.StartsWith("Saves/Person/appearance", StringComparison.OrdinalIgnoreCase);
                         bool isPresetLoose = norm.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase);
                         AppearanceGender lg = AppearanceGender.Unknown;
-                        try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, currentCategoryTitle ?? (titleText != null ? titleText.text : "") ?? ""); }
+                        try { lg = AppearanceGenderClassifier.ClassifyLooseVapPath(sysPath, appearanceCat, _appearanceUserTagsByRowKey, genderBulk); }
                         catch { lg = AppearanceGender.Unknown; }
 
                         appearanceSubfilterCountAll++;
@@ -2053,6 +3048,8 @@ namespace VPB
                     }
                 }
 
+                try { genderBulk.Flush(); } catch { }
+
                 if (!sysCacheHit && !string.IsNullOrEmpty(sysCacheKey) && sysCacheSig != null)
                 {
                     try
@@ -2091,26 +3088,33 @@ namespace VPB
 
         /// <summary>Stable key for <see cref="GalleryTagCountSnapshotCache"/> when tag/facet counts depend only on category + filters + package scan.</summary>
         /// <summary>
-        /// Resolves the effective source filter for the tag scan / cache key. The per-category Local toggle on
-        /// Appearance / Scenes overrides the global filter; otherwise the global filter wins. Returned values:
-        /// 0=All, 1=Local, 2=Var.
+        /// Effective source filter for scans / cache keys. Single source of truth: title-bar global Source
+        /// (All / Local / .var). Legacy per-category Scene/Appearance Local toggles were merged into global Local.
+        /// Returned values: 0=All, 1=Local, 2=Var.
         /// </summary>
         private int ResolveEffectiveSourceFilterMode(bool isAppearanceTitle, string cp)
         {
-            bool localOverride = false;
-            try
-            {
-                if (isAppearanceTitle && string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    localOverride = true;
-                bool isScene = (!string.IsNullOrEmpty(cp)) && cp.IndexOf("Saves/scene", StringComparison.OrdinalIgnoreCase) >= 0;
-                if (isScene && string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase))
-                    localOverride = true;
-            }
-            catch { }
-            if (localOverride) return 1;
             if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local) return 1;
-            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var)   return 2;
+            if (currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Var) return 2;
             return 0;
+        }
+
+        private bool IsGlobalSourceFilterLocal()
+        {
+            return currentGlobalSourceFilter == VPBConfig.GlobalSourceFilterValue.Local;
+        }
+
+        /// <summary>Side-pane Local only: mirrors title-bar Source Local (one mental model).</summary>
+        private void ToggleGlobalLocalFromCategorySidePane(bool invalidateTags)
+        {
+            if (invalidateTags)
+            {
+                try { InvalidateTags(); } catch { }
+            }
+            if (IsGlobalSourceFilterLocal())
+                ApplyGlobalSourceFilterValue(VPBConfig.GlobalSourceFilterValue.All);
+            else
+                ApplyGlobalSourceFilterValue(VPBConfig.GlobalSourceFilterValue.Local);
         }
 
         private bool TryBuildTagCountCacheKey(out string key)
@@ -2135,7 +3139,7 @@ namespace VPB
                 sb.Append((int)clothingSubfilter).Append('\u001E');
                 sb.Append((int)hairSubfilter).Append('\u001E');
                 sb.Append((int)appearanceSubfilter).Append('\u001E');
-                sb.Append(currentAppearanceSourceFilter ?? "").Append('\u001E');
+                sb.Append((int)currentGlobalSourceFilter).Append('\u001E');
                 long pr = 0;
                 string ckTitle = !string.IsNullOrEmpty(currentCategoryTitle)
                     ? currentCategoryTitle
@@ -2148,6 +3152,9 @@ namespace VPB
                 try { utc = TagsManager.Instance.GetAllUserTags().Count; } catch { utc = 0; }
                 sb.Append(utc).Append('\u001E');
                 sb.Append(userTagSideTabDataRevision);
+                bool hov = false;
+                try { hov = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { hov = false; }
+                sb.Append('').Append(hov ? 1 : 0);
                 key = sb.ToString();
                 return true;
             }
@@ -2215,6 +3222,92 @@ namespace VPB
             return true;
         }
 
+        // Memo keyed on the refresh-session id (bumped in RefreshFiles, the routine that rebuilds the grid).
+        // The sub-pane rebuilds several times per refresh (left+right panes, multiple hooks); counts can't
+        // change within one session, so compute once and reuse. New refresh -> new session -> recompute,
+        // in lockstep with the grid, so the chip numbers stay consistent with what the grid shows.
+        private int _clothingChipCountsSession = -1;
+        private VpbLocalDatabase.ClothingChipCounts _clothingChipCountsCached;
+
+        // Counts each chip using the grid's own SQL WHERE builder (BuildGalleryCategoryWhere),
+        // so the number on each chip = what the grid shows when only that chip is active.
+        // Memoized per refresh session; called on every clothing sub-pane build.
+        private void ApplyClothingChipCountsFromSqlIfEnabled()
+        {
+            try
+            {
+                string cp = currentPath ?? "";
+                int sourceFilterMode = ResolveEffectiveSourceFilterMode(false, cp);
+                string creator = currentCreator ?? "";
+
+                // loadedState from current sort state (mirrors how RefreshFilesRoutine derives it).
+                int loadedState = -1;
+                try
+                {
+                    if (FilesSortWantsLoadedOnly()) loadedState = 1;
+                    else if (FilesSortWantsUnloadedOnly()) loadedState = 0;
+                }
+                catch { }
+
+                // User tag filter params (mirrors RefreshFilesRoutine worker snapshot).
+                // Include/exclude arm independent of F/T; FilterUntagged is exclusive.
+                bool utUntaggedOnly = _userTagAvailMode == UserTagAvailMode.FilterUntagged;
+                bool utIncludeExcludeArmed = IsUserTagIncludeExcludeFilterArmed();
+                bool utRequireAll = utIncludeExcludeArmed && UserTagFilterRequiresAllTags();
+                HashSet<string> utNames = null;
+                if (utIncludeExcludeArmed && activeUserTags != null && activeUserTags.Count > 0)
+                    utNames = new HashSet<string>(activeUserTags, StringComparer.OrdinalIgnoreCase);
+                HashSet<string> utExcludeNames = null;
+                if (utIncludeExcludeArmed && excludedUserTags != null && excludedUserTags.Count > 0)
+                    utExcludeNames = new HashSet<string>(excludedUserTags, StringComparer.OrdinalIgnoreCase);
+
+                int session = _deferredSubPaneSessionId;
+                bool memoHit = session == _clothingChipCountsSession;
+
+                VpbLocalDatabase.ClothingChipCounts chips;
+                if (memoHit)
+                {
+                    chips = _clothingChipCountsCached;
+                }
+                else
+                {
+                    bool hideOldVersions = false;
+                    try { hideOldVersions = Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; }
+                    catch { }
+
+                    if (!VpbLocalDatabase.TryQueryClothingChipCounts(
+                        creator, loadedState, nameFilterQuery ?? GallerySearchQuery.Empty,
+                        null, null, // pathExclusions/pathInclusions: both null for Clothing
+                        activeTags, utNames, utUntaggedOnly, utRequireAll,
+                        sourceFilterMode, hideOldVersions, out chips, utExcludeNames)) return;
+                    _clothingChipCountsCached = chips;
+                    _clothingChipCountsSession = session;
+                }
+
+                // Single-select: each chip shows count for that chip alone (not XOR toggle).
+                // Assign both Count and FacetCount equal so the chip shows the same number active or inactive.
+                clothingSubfilterCountAll       = chips.Default;
+                clothingSubfilterCountReal      = chips.Real;
+                clothingSubfilterCountPresets   = chips.Presets;
+                clothingSubfilterCountCustom    = chips.Custom;
+                clothingSubfilterCountCustomPreset = chips.CustomPreset;
+                clothingSubfilterCountItems     = chips.Items;
+                clothingSubfilterCountMale      = chips.Male;
+                clothingSubfilterCountFemale    = chips.Female;
+                clothingSubfilterCountDecals    = chips.Decals;
+
+                clothingSubfilterFacetCountReal     = chips.Real;
+                clothingSubfilterFacetCountPresets  = chips.Presets;
+                clothingSubfilterFacetCountCustom   = chips.Custom;
+                clothingSubfilterFacetCountCustomPreset = chips.CustomPreset;
+                clothingSubfilterFacetCountItems    = chips.Items;
+                clothingSubfilterFacetCountMale     = chips.Male;
+                clothingSubfilterFacetCountFemale   = chips.Female;
+                clothingSubfilterFacetCountDecals   = chips.Decals;
+            }
+            catch (Exception ex) { try { LogUtil.LogWarning("[VPB] ApplyClothingChipCountsFromSql failed: " + ex.Message); } catch { } }
+        }
+
         private TagCountSnapshot CaptureTagCountSnapshot()
         {
             var d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -2230,6 +3323,7 @@ namespace VPB
                 ClothingSubfilterCountReal = clothingSubfilterCountReal,
                 ClothingSubfilterCountPresets = clothingSubfilterCountPresets,
                 ClothingSubfilterCountCustom = clothingSubfilterCountCustom,
+                ClothingSubfilterCountCustomPreset = clothingSubfilterCountCustomPreset,
                 ClothingSubfilterCountItems = clothingSubfilterCountItems,
                 ClothingSubfilterCountMale = clothingSubfilterCountMale,
                 ClothingSubfilterCountFemale = clothingSubfilterCountFemale,
@@ -2237,6 +3331,7 @@ namespace VPB
                 HairSubfilterCountAll = hairSubfilterCountAll,
                 HairSubfilterCountPresets = hairSubfilterCountPresets,
                 HairSubfilterCountCustom = hairSubfilterCountCustom,
+                HairSubfilterCountCustomPreset = hairSubfilterCountCustomPreset,
                 HairSubfilterCountItems = hairSubfilterCountItems,
                 HairSubfilterCountMale = hairSubfilterCountMale,
                 HairSubfilterCountFemale = hairSubfilterCountFemale,
@@ -2250,12 +3345,14 @@ namespace VPB
                 ClothingSubfilterFacetCountReal = clothingSubfilterFacetCountReal,
                 ClothingSubfilterFacetCountPresets = clothingSubfilterFacetCountPresets,
                 ClothingSubfilterFacetCountCustom = clothingSubfilterFacetCountCustom,
+                ClothingSubfilterFacetCountCustomPreset = clothingSubfilterFacetCountCustomPreset,
                 ClothingSubfilterFacetCountItems = clothingSubfilterFacetCountItems,
                 ClothingSubfilterFacetCountMale = clothingSubfilterFacetCountMale,
                 ClothingSubfilterFacetCountFemale = clothingSubfilterFacetCountFemale,
                 ClothingSubfilterFacetCountDecals = clothingSubfilterFacetCountDecals,
                 HairSubfilterFacetCountPresets = hairSubfilterFacetCountPresets,
                 HairSubfilterFacetCountCustom = hairSubfilterFacetCountCustom,
+                HairSubfilterFacetCountCustomPreset = hairSubfilterFacetCountCustomPreset,
                 HairSubfilterFacetCountItems = hairSubfilterFacetCountItems,
                 HairSubfilterFacetCountMale = hairSubfilterFacetCountMale,
                 HairSubfilterFacetCountFemale = hairSubfilterFacetCountFemale,
@@ -2289,6 +3386,7 @@ namespace VPB
             clothingSubfilterCountReal = s.ClothingSubfilterCountReal;
             clothingSubfilterCountPresets = s.ClothingSubfilterCountPresets;
             clothingSubfilterCountCustom = s.ClothingSubfilterCountCustom;
+            clothingSubfilterCountCustomPreset = s.ClothingSubfilterCountCustomPreset;
             clothingSubfilterCountItems = s.ClothingSubfilterCountItems;
             clothingSubfilterCountMale = s.ClothingSubfilterCountMale;
             clothingSubfilterCountFemale = s.ClothingSubfilterCountFemale;
@@ -2296,6 +3394,7 @@ namespace VPB
             hairSubfilterCountAll = s.HairSubfilterCountAll;
             hairSubfilterCountPresets = s.HairSubfilterCountPresets;
             hairSubfilterCountCustom = s.HairSubfilterCountCustom;
+            hairSubfilterCountCustomPreset = s.HairSubfilterCountCustomPreset;
             hairSubfilterCountItems = s.HairSubfilterCountItems;
             hairSubfilterCountMale = s.HairSubfilterCountMale;
             hairSubfilterCountFemale = s.HairSubfilterCountFemale;
@@ -2309,12 +3408,14 @@ namespace VPB
             clothingSubfilterFacetCountReal = s.ClothingSubfilterFacetCountReal;
             clothingSubfilterFacetCountPresets = s.ClothingSubfilterFacetCountPresets;
             clothingSubfilterFacetCountCustom = s.ClothingSubfilterFacetCountCustom;
+            clothingSubfilterFacetCountCustomPreset = s.ClothingSubfilterFacetCountCustomPreset;
             clothingSubfilterFacetCountItems = s.ClothingSubfilterFacetCountItems;
             clothingSubfilterFacetCountMale = s.ClothingSubfilterFacetCountMale;
             clothingSubfilterFacetCountFemale = s.ClothingSubfilterFacetCountFemale;
             clothingSubfilterFacetCountDecals = s.ClothingSubfilterFacetCountDecals;
             hairSubfilterFacetCountPresets = s.HairSubfilterFacetCountPresets;
             hairSubfilterFacetCountCustom = s.HairSubfilterFacetCountCustom;
+            hairSubfilterFacetCountCustomPreset = s.HairSubfilterFacetCountCustomPreset;
             hairSubfilterFacetCountItems = s.HairSubfilterFacetCountItems;
             hairSubfilterFacetCountMale = s.HairSubfilterFacetCountMale;
             hairSubfilterFacetCountFemale = s.HairSubfilterFacetCountFemale;
@@ -2493,45 +3594,22 @@ namespace VPB
             try { atomUid = atom.uid; } catch { atomUid = null; }
             if (string.IsNullOrEmpty(atomUid)) return null;
 
-            Dictionary<string, bool> geometryToggleSnapshot = null;
-            List<JSONClass> storableSnapshots = new List<JSONClass>();
+            ClothingLoadingUtils.ClothingHairUndoState clothingHairSnapshot =
+                ClothingLoadingUtils.CaptureClothingHairUndoState(atom);
+            List<JSONClass> additionalStorableSnapshots = new List<JSONClass>();
 
-            bool ShouldSnapshotStorableId(string sid)
+            bool ShouldSnapshotAdditionalStorableId(string sid)
             {
                 if (string.IsNullOrEmpty(sid)) return false;
-                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+                if (ClothingLoadingUtils.ClothingHairUndoStateContainsStorable(clothingHairSnapshot, sid)) return false;
+                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return false;
                 if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) return true;
                 if (sid.EndsWith("Presets", StringComparison.OrdinalIgnoreCase)) return true;
                 if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) return true;
-                if (sid.IndexOf("clothing", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-                if (sid.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 if (sid.IndexOf("appearance", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (sid.IndexOf("morph", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 return false;
             }
-
-            try
-            {
-                JSONStorable geometry = null;
-                try { geometry = atom.GetStorableByID("geometry"); } catch { geometry = null; }
-                if (geometry != null)
-                {
-                    geometryToggleSnapshot = new Dictionary<string, bool>();
-                    List<string> names = null;
-                    try { names = geometry.GetBoolParamNames(); } catch { names = null; }
-                    if (names != null)
-                    {
-                        foreach (string key in names)
-                        {
-                            if (key == null) continue;
-                            if (!(key.StartsWith("clothing:") || key.StartsWith("hair:"))) continue;
-                            JSONStorableBool b = null;
-                            try { b = geometry.GetBoolJSONParam(key); } catch { b = null; }
-                            if (b != null) geometryToggleSnapshot[key] = b.val;
-                        }
-                    }
-                }
-            }
-            catch { geometryToggleSnapshot = null; }
 
             try
             {
@@ -2543,13 +3621,13 @@ namespace VPB
                     {
                         string sid = ids[i];
                         if (string.IsNullOrEmpty(sid)) continue;
-                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        if (!ShouldSnapshotAdditionalStorableId(sid)) continue;
                         JSONStorable s = null;
                         try { s = atom.GetStorableByID(sid); } catch { s = null; }
                         if (s == null) continue;
                         JSONClass snap = null;
                         try { snap = s.GetJSON(); } catch { snap = null; }
-                        if (snap != null) storableSnapshots.Add(snap);
+                        if (snap != null) additionalStorableSnapshots.Add(snap);
                     }
                 }
             }
@@ -2561,51 +3639,18 @@ namespace VPB
                 try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { targetAtom = null; }
                 if (targetAtom == null) return;
 
-                try
-                {
-                    if (geometryToggleSnapshot != null)
-                    {
-                        JSONStorable geo = null;
-                        try { geo = targetAtom.GetStorableByID("geometry"); } catch { geo = null; }
-                        if (geo != null)
-                        {
-                            foreach (var kvp in geometryToggleSnapshot)
-                            {
-                                JSONStorableBool b = null;
-                                try { b = geo.GetBoolJSONParam(kvp.Key); } catch { b = null; }
-                                if (b != null) b.val = kvp.Value;
-                            }
-
-                            List<string> currentNames = null;
-                            try { currentNames = geo.GetBoolParamNames(); } catch { currentNames = null; }
-                            if (currentNames != null)
-                            {
-                                foreach (string key2 in currentNames)
-                                {
-                                    if (string.IsNullOrEmpty(key2)) continue;
-                                    if ((key2.StartsWith("clothing:") || key2.StartsWith("hair:")) && !geometryToggleSnapshot.ContainsKey(key2))
-                                    {
-                                        JSONStorableBool b2 = null;
-                                        try { b2 = geo.GetBoolJSONParam(key2); } catch { b2 = null; }
-                                        if (b2 != null) b2.val = false;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                catch { }
+                try { ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot); } catch { }
 
                 try
                 {
-                    for (int i = 0; i < storableSnapshots.Count; i++)
+                    for (int i = 0; i < additionalStorableSnapshots.Count; i++)
                     {
-                        JSONClass snap = storableSnapshots[i];
+                        JSONClass snap = additionalStorableSnapshots[i];
                         if (snap == null) continue;
                         string sid = null;
                         try { sid = snap["id"].Value; } catch { sid = null; }
                         if (string.IsNullOrEmpty(sid)) continue;
-                        if (!ShouldSnapshotStorableId(sid)) continue;
+                        if (!ShouldSnapshotAdditionalStorableId(sid)) continue;
                         JSONStorable s = null;
                         try { s = targetAtom.GetStorableByID(sid); } catch { s = null; }
                         if (s == null) continue;

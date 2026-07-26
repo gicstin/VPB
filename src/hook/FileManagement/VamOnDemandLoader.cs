@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Diagnostics;
@@ -47,42 +48,93 @@ namespace VPB
 
         private static string ResolveBestAvailableUid(string requestUid)
         {
+            return ResolveBestAvailableUid(requestUid, null);
+        }
+
+        /// <summary>
+        /// Resolve an alternate UID when the requested versioned UID should be rewritten.
+        /// Keeps exact UID when that package is installed (native VaM behavior).
+        /// When exact is missing, applies meta ReferenceVersionOption / user settings.
+        /// </summary>
+        private static string ResolveBestAvailableUid(string requestUid, string entryPath)
+        {
             if (string.IsNullOrEmpty(requestUid)) return null;
 
             // Explicit ".latest" already handled by existing logic.
             if (requestUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                 return ResolveLatestUid(requestUid);
 
-            // If a specific version was requested but doesn't exist, serve the latest
-            // installed version for the same group (if newer).
             if (!TryParseUidGroupAndVersion(requestUid, out string group, out int requestedVer))
                 return null;
 
-            string latestUid = ResolveLatestUid(group + ".latest");
-            if (string.IsNullOrEmpty(latestUid)) return null;
+            // Force-latest list: upgrade even when exact exists.
+            if (FileManager.ShouldForceLatestForPackageGroup(group))
+            {
+                string forcedLatest = ResolveLatestUid(group + ".latest");
+                if (!string.IsNullOrEmpty(forcedLatest)
+                    && !string.Equals(forcedLatest, requestUid, StringComparison.OrdinalIgnoreCase))
+                    return forcedLatest;
+                return null;
+            }
 
-            if (!TryParseUidGroupAndVersion(latestUid, out _, out int latestVer))
+            // Exact version present → never rewrite (matches native NormalizeCommon).
+            if (IsExactUidAvailable(requestUid))
                 return null;
 
-            if (latestVer <= requestedVer) return null;
-            return latestUid;
+            VarPackage.ReferenceVersionOption option =
+                PackageReferenceVersionResolver.GetEffectiveOption(entryPath);
+            return PackageReferenceVersionResolver.ResolveMissingVersionUid(group, requestedVer, option);
         }
+
+        private static bool IsExactUidAvailable(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                VarPackage pkg = FileManager.GetPackage(uid, ensureInstalled: false);
+                if (pkg != null) return true;
+            }
+            catch { }
+
+            // Cheap existence only — no recursive Directory.GetFiles (warm NormalizeLoadPath).
+            try
+            {
+                if (VpbLocalDatabase.TryResolveIndexedVarPathForUid(uid, out string sqlPath)
+                    && !string.IsNullOrEmpty(sqlPath))
+                    return true;
+            }
+            catch { }
+
+            try
+            {
+                string filename = uid + ".var";
+                if (File.Exists(Path.Combine("AddonPackages", filename))) return true;
+                if (File.Exists(Path.Combine("AllPackages", filename))) return true;
+            }
+            catch { }
+
+            return IsUidAlreadyRegisteredInVam(uid);
+        }
+
+        private static MethodInfo s_VamGetPackageMethod;
+        private static bool s_VamGetPackageMethodResolved;
 
         private static bool IsUidAlreadyRegisteredInVam(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return false;
             try
             {
-                var fmType = typeof(MVR.FileManagement.FileManager);
-                // VaM has a static GetPackage(string) in most builds; use reflection to avoid hard dependency.
-                var m = fmType.GetMethod("GetPackage",
-                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
-                    null, new[] { typeof(string) }, null);
-                if (m != null)
+                if (!s_VamGetPackageMethodResolved)
                 {
-                    object r = m.Invoke(null, new object[] { uid });
-                    if (r != null) return true;
+                    s_VamGetPackageMethodResolved = true;
+                    var fmType = typeof(MVR.FileManagement.FileManager);
+                    s_VamGetPackageMethod = fmType.GetMethod("GetPackage",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                        null, new[] { typeof(string) }, null);
                 }
+                if (s_VamGetPackageMethod == null) return false;
+                object r = s_VamGetPackageMethod.Invoke(null, new object[] { uid });
+                return r != null;
             }
             catch { }
             return false;
@@ -90,6 +142,12 @@ namespace VPB
 
         private static readonly HashSet<string> s_RewriteLogOnceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RewriteLogLock = new object();
+        private const int PathRewriteProbeLogMax = 10;
+        private static int s_PathRewriteProbeLogged;
+        private static int s_PathRewriteProbeSilenced;
+        private static bool s_PathRewriteProbeSummaryLogged;
+        private static int s_CatalogMetaJsonProbeSuppressed;
+        private static bool s_CatalogMetaJsonProbeNoticeLogged;
 
         private static void LogRewriteOnce(string key, string message)
         {
@@ -99,6 +157,72 @@ namespace VPB
                 if (!s_RewriteLogOnceKeys.Add(key)) return;
             }
             LogUtil.Log(message);
+        }
+
+        /// <summary>
+        /// PluginAssist (and similar) probe meta.json using filesystem paths as fake UIDs
+        /// (AddonPackages/Foo.1.var:/meta.json). VPB manifest lookup cannot register these in VaM.
+        /// </summary>
+        private static bool IsCatalogMetaJsonFilesystemProbe(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return false;
+            string p = entryPath.Replace('\\', '/');
+            int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colonIdx <= 0 || colonIdx + 2 >= p.Length) return false;
+            string uid = p.Substring(0, colonIdx);
+            string internalPath = p.Substring(colonIdx + 2);
+            if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
+            if (!IsRawVarFilesystemPath(uid)) return false;
+            return string.Equals(internalPath, "meta.json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void SuppressCatalogMetaJsonProbe()
+        {
+            int n = Interlocked.Increment(ref s_CatalogMetaJsonProbeSuppressed);
+            if (n != 1 || s_CatalogMetaJsonProbeNoticeLogged) return;
+            s_CatalogMetaJsonProbeNoticeLogged = true;
+            LogUtil.Log("[VPB OnDemand] PluginAssist catalog meta.json probes detected — suppressing path rewrite logs");
+        }
+
+        /// <summary>
+        /// Caps noisy path rewrite probe logs (PluginAssist catalog scans, identity rewrites).
+        /// </summary>
+        private static void LogPathRewriteProbeLimited(string reqPath, string rewrittenPath, string detailMessage)
+        {
+            if (string.IsNullOrEmpty(detailMessage)) return;
+            if (!string.IsNullOrEmpty(reqPath) && !string.IsNullOrEmpty(rewrittenPath)
+                && string.Equals(reqPath.Replace('\\', '/'), rewrittenPath.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                Interlocked.Increment(ref s_PathRewriteProbeSilenced);
+                return;
+            }
+
+            lock (s_RewriteLogLock)
+            {
+                if (s_PathRewriteProbeLogged < PathRewriteProbeLogMax)
+                {
+                    s_PathRewriteProbeLogged++;
+                    LogUtil.Log(detailMessage);
+                    return;
+                }
+                s_PathRewriteProbeSilenced++;
+                if (s_PathRewriteProbeSummaryLogged) return;
+                s_PathRewriteProbeSummaryLogged = true;
+                LogUtil.Log("[VPB OnDemand] Silenced further path rewrite probe logs (first "
+                    + PathRewriteProbeLogMax + " shown; "
+                    + s_PathRewriteProbeSilenced + " additional probe(s) skipped)");
+            }
+        }
+
+        private static void AppendPathRewriteProbeSummaryIfNeeded(StringBuilder sb)
+        {
+            if (sb == null) return;
+            int catalog = Interlocked.CompareExchange(ref s_CatalogMetaJsonProbeSuppressed, 0, 0);
+            int silenced = s_PathRewriteProbeSilenced;
+            lock (s_RewriteLogLock) { silenced = s_PathRewriteProbeSilenced; }
+            if (catalog <= 0 && silenced <= 0) return;
+            sb.Append(" path_rewrite_catalog_probes=").Append(catalog);
+            if (silenced > 0) sb.Append(" path_rewrite_probes_silenced=").Append(silenced);
         }
 
         private static string TryRewritePluginCslistPathByFilename(string entryPath)
@@ -158,9 +282,19 @@ namespace VPB
             return rewritten;
         }
 
+        // Cached once; Path.GetInvalidPathChars allocates a fresh array per call on Mono.
+        private static readonly char[] s_InvalidPathChars = Path.GetInvalidPathChars();
+
         private static string TryRewriteMissingEntryPathWithinSamePackage(string entryPath)
         {
             if (string.IsNullOrEmpty(entryPath)) return null;
+
+            // Trigger action URLs in some VaM scenes contain trailing CR/LF (saved from
+            // dirty clipboard data). Path.GetDirectoryName throws ArgumentException on those,
+            // which would unwind out of MacGruber's per-state loop and drop every state after
+            // the bad one. Bail to "no rewrite" so VaM's caller falls back to the original path.
+            if (entryPath.IndexOfAny(s_InvalidPathChars) >= 0) return null;
+
             string p = entryPath.Replace('\\', '/');
 
             int colonIdx = p.IndexOf(":/", StringComparison.Ordinal);
@@ -170,6 +304,12 @@ namespace VPB
             string internalPath = p.Substring(colonIdx + 2);
             if (internalPath.StartsWith("/")) internalPath = internalPath.Substring(1);
             if (string.IsNullOrEmpty(uid) || string.IsNullOrEmpty(internalPath)) return null;
+
+            if (IsCatalogMetaJsonFilesystemProbe(p))
+            {
+                SuppressCatalogMetaJsonProbe();
+                return null;
+            }
 
             // If exact entry exists, no rewrite needed.
             try
@@ -200,7 +340,7 @@ namespace VPB
                 if (string.Equals(nn, reqNorm, StringComparison.OrdinalIgnoreCase))
                 {
                     string rewrittenExact = uid + ":/" + nn;
-                    LogRewriteOnce("casepath|" + uid + "|" + reqNorm,
+                    LogPathRewriteProbeLimited(p, rewrittenExact,
                         "[VPB OnDemand] Rewrote missing entry by case-insensitive path match: req=" + p + " -> " + rewrittenExact);
                     return rewrittenExact;
                 }
@@ -236,7 +376,7 @@ namespace VPB
             if (string.IsNullOrEmpty(best)) return null;
 
             string rewritten = uid + ":/" + best;
-            LogRewriteOnce("nameloc|" + uid + "|" + reqFile,
+            LogPathRewriteProbeLimited(p, rewritten,
                 "[VPB OnDemand] Rewrote missing entry by filename within same package: req=" + p
                 + " -> " + rewritten + " (matches=" + matchCount + ")");
             return rewritten;
@@ -307,6 +447,10 @@ namespace VPB
         private static float s_PendingVamRefreshFirstRequestedAt;
         private static int s_PendingVamRefreshRequestCount;
         private static string s_PendingVamRefreshReason;
+        // UIDs registered on-demand this session whose clothing/hair/morph catalogs may still be stale.
+        private static readonly HashSet<string> s_CatalogStaleUids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object s_CatalogStaleLock = new object();
 
         private const int MaxDrainPerFrame = 10;
         private const float CoalescedVamRefreshDelayStartupSeconds = 1.0f;
@@ -320,7 +464,7 @@ namespace VPB
             s_MainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
 
-        private static bool IsMainThread()
+        public static bool IsMainThread()
         {
             return s_MainThreadId < 0 || Thread.CurrentThread.ManagedThreadId == s_MainThreadId;
         }
@@ -431,19 +575,138 @@ namespace VPB
                 s_RefreshInProgressDeferredPaths.Clear();
                 s_RefreshInProgressDeferredUids.Clear();
             }
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Clear();
+        }
+
+        /// <summary>True when UID was on-demand registered this session and native catalogs may still be stale.</summary>
+        public static bool IsPromotedPackageCatalogStale(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            lock (s_CatalogStaleLock)
+                return s_CatalogStaleUids.Contains(uid);
+        }
+
+        /// <summary>Called when native FileManager.Refresh completes — DAZ catalogs are fresh again.</summary>
+        public static void NotifyNativeCatalogRefreshed()
+        {
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Clear();
         }
 
         /// <summary>
-        /// Called from the Harmony postfix on MVR.FileManagement.FileManager.GetPackage.
-        /// Attempts to register the requested package in VaM's FileManager if it exists
-        /// in VPB's registry but was excluded from VaM's scan.
-        /// Returns the VPB VarPackage path found, or null.
+        /// Whether a coalesced native refresh is needed after on-demand registration for these UIDs.
+        /// Skips refresh when every UID was already registered and no catalog is stale.
+        /// </summary>
+        public static bool ShouldRequestCoalescedNativeRefreshForUids(ICollection<string> uids, int newlyRegisteredCount)
+        {
+            if (!ScanWhitelistManager.Instance.IsEnabled) return false;
+            if (newlyRegisteredCount <= 0) return false;
+            if (uids == null || uids.Count == 0) return false;
+
+            foreach (string uid in uids)
+            {
+                if (string.IsNullOrEmpty(uid)) continue;
+                if (IsCatalogDependentUid(uid)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether native clothing/hair/morph catalogs need rebuilding after registering this package.
+        /// </summary>
+        public static bool PackageRegistrationNeedsNativeCatalogRefresh(string uid, string entryPath)
+        {
+            if (IsPluginEntryPath(entryPath)) return false;
+            if (!string.IsNullOrEmpty(entryPath) && IsCatalogDependentEntryPath(entryPath)) return true;
+            return IsCatalogDependentUid(uid);
+        }
+
+        static void MarkPromotedPackageCatalogStale(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            lock (s_CatalogStaleLock)
+                s_CatalogStaleUids.Add(uid);
+        }
+
+        static bool IsCatalogDependentEntryPath(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return false;
+            string p = entryPath.Replace('\\', '/');
+            return p.IndexOf(":/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf(":/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf(":/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        static bool IsCatalogDependentUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            try
+            {
+                SerializableVarPackage cached = VarPackageMgr.singleton.TryGetCache(uid);
+                if (cached != null && cached.FileEntryNames != null)
+                {
+                    List<string> names = cached.FileEntryNames;
+                    for (int i = 0; i < names.Count; i++)
+                    {
+                        string internalPath = names[i];
+                        if (string.IsNullOrEmpty(internalPath)) continue;
+                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    return false;
+                }
+
+                VarPackage pkg = FileManager.GetPackage(uid, false);
+                if (pkg == null) return true;
+
+                List<string> manifestNames;
+                List<long> ticks;
+                List<long> sizes;
+                if (pkg.TryGetCachedFileEntryData(out manifestNames, out ticks, out sizes) && manifestNames != null)
+                {
+                    for (int i = 0; i < manifestNames.Count; i++)
+                    {
+                        string internalPath = manifestNames[i];
+                        if (string.IsNullOrEmpty(internalPath)) continue;
+                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
+                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
+                    }
+                    return false;
+                }
+            }
+            catch { }
+            return true;
+        }
+
+        /// <summary>
+        /// True for bare filesystem paths like "AddonPackages/Creator.Pkg.1.var".
+        /// These are catalog/index probes, not real package-entry requests — skip on-demand.
+        /// </summary>
+        internal static bool IsRawVarFilesystemPath(string request)
+        {
+            if (string.IsNullOrEmpty(request)) return false;
+            string p = request.Replace('\\', '/').Trim();
+            if (p.IndexOf(":/", StringComparison.Ordinal) >= 0) return false;
+            if (!p.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                && !p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return p.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
+                || p.StartsWith("AllPackages/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Register a scan-excluded package in VaM's FileManager when a real runtime request
+        /// needs it (entry-path hooks, preset deps, script load). Returns the .var path or null.
         /// </summary>
         public static string TryRegisterPackageOnDemand(string uid, bool persistUidOverride = false)
         {
             if (string.IsNullOrEmpty(uid)) return null;
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
+            if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
 
             // Already registered this session?
             lock (s_RegisteredLock)
@@ -460,8 +723,25 @@ namespace VPB
             }
 
             if (!TryResolveVarPathForUid(uid, out string resolvedUid, out string varPath))
+            {
+                // Genuinely unresolvable: arm the failure cooldown so repeated probes for the same uid
+                // short-circuit instead of re-running the recursive AddonPackages walk on every hook call.
+                MarkFailure(uid);
                 return null;
+            }
             if (string.IsNullOrEmpty(varPath)) return null;
+
+            string deferUidCheck = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
+            string deferPathCheck = deferUidCheck + ":/";
+            if (ShouldDeferStartupOnDemandForPath(deferPathCheck, deferUidCheck))
+            {
+                lock (s_VamNotReadyLock)
+                {
+                    if (s_VamNotReadyDeferredUids.Add(deferUidCheck))
+                        s_VamNotReadyDeferredPaths.Enqueue(varPath);
+                }
+                return null;
+            }
 
             lock (s_RegisteredLock)
             {
@@ -473,9 +753,10 @@ namespace VPB
             if (!File.Exists(varPath)) return null;
 
             string normPath = NormalizePath(varPath);
-            if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase))
+            if (normPath.StartsWith("AddonPackages/", StringComparison.OrdinalIgnoreCase)
+                && ScanWhitelistManager.Instance.IsEnabled)
             {
-                // Ensure prefix whitelist patch allows this package registration.
+                // Legacy block-at-register: temporarily allow so RegisterPackage can run.
                 if (!ScanWhitelistManager.Instance.IsPathWhitelisted(normPath)
                     && !ScanWhitelistManager.Instance.IsUidOverrideIncluded(resolvedUid))
                 {
@@ -501,17 +782,11 @@ namespace VPB
                 }
             }
 
-            LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
-                + " resolved=" + resolvedUid + " path=" + normPath);
-            SafeRecordStartupOnDemandActivity();
-
-            // If VaM already has this UID registered, treat as success and avoid duplicate registration errors.
+            // If VaM already has this UID registered, skip duplicate register.
             if (!string.IsNullOrEmpty(resolvedUid) && IsUidAlreadyRegisteredInVam(resolvedUid))
             {
                 lock (s_RegisteredLock)
                     s_RegisteredOnDemand.Add(resolvedUid);
-                // IMPORTANT: callers use non-null as "newly registered"; returning null here
-                // prevents unnecessary catalog refreshes when VaM already had this package.
                 return null;
             }
 
@@ -547,6 +822,12 @@ namespace VPB
                 }
                 return null;
             }
+
+            try { VamStartupOptimizations.InvalidateVamXAbsentCacheIfVamXPackageTouched(resolvedUid ?? uid); } catch { }
+
+            LogUtil.Log("[VPB OnDemand] Registering package on demand: req=" + uid
+                + " resolved=" + resolvedUid + " path=" + normPath);
+            SafeRecordStartupOnDemandActivity();
 
             if (IsMainThread())
             {
@@ -588,8 +869,9 @@ namespace VPB
         }
 
         /// <summary>
-        /// For entry paths like "Author.Pkg.12:/Custom/...", rewrites to the latest available
-        /// installed version if the request version is not present but a newer version is.
+        /// For entry paths like "Author.Pkg.12:/Custom/...", rewrites only when the request
+        /// version is not installed (or ForceLatest / Latest policy applies). Exact pins stay
+        /// when that version exists on disk.
         /// </summary>
         public static string TryRewriteBestAvailableEntryPath(string entryPath, bool attemptRegister)
         {
@@ -600,7 +882,7 @@ namespace VPB
             string uid = entryPath.Substring(0, colonIdx);
             if (string.IsNullOrEmpty(uid)) return null;
 
-            string bestUid = ResolveBestAvailableUid(uid);
+            string bestUid = ResolveBestAvailableUid(uid, entryPath);
             if (string.IsNullOrEmpty(bestUid)) return null;
             if (string.Equals(bestUid, uid, StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -630,7 +912,7 @@ namespace VPB
                 if (!string.Equals(pkg.Uid, uid, StringComparison.OrdinalIgnoreCase)) return null;
 
                 string rewritten = pkg.Uid + p.Substring(colonIdx);
-                LogRewriteOnce("uidcase|" + uid,
+                LogPathRewriteProbeLimited(p, rewritten,
                     "[VPB OnDemand] Rewrote entry UID by case-insensitive package lookup: req=" + p + " -> " + rewritten);
                 return rewritten;
             }
@@ -638,12 +920,19 @@ namespace VPB
         }
 
         /// <summary>
-        /// Rewrites an entry path to a concrete, best-available UID if possible.
-        /// This handles both "*.latest:/..." and "Author.Pkg.12:/..." → newest installed.
+        /// Rewrites an entry path to a concrete UID when policy allows.
+        /// Handles "*.latest:/..." always, and versioned UIDs only when exact is missing
+        /// (or ForceLatest / meta Latest fallback applies).
         /// </summary>
         public static string RewriteEntryPathToBestAvailable(string entryPath, bool attemptRegister)
         {
             if (string.IsNullOrEmpty(entryPath)) return entryPath;
+
+            if (IsCatalogMetaJsonFilesystemProbe(entryPath))
+            {
+                SuppressCatalogMetaJsonProbe();
+                return entryPath;
+            }
 
             // First, normalize UID casing (VaM sometimes treats UID segment as case-sensitive).
             string uidCase = TryRewriteEntryPathUidByCaseInsensitiveLookup(entryPath);
@@ -735,20 +1024,42 @@ namespace VPB
         {
             string uid = UidFromEntryPath(entryPath);
             if (string.IsNullOrEmpty(uid)) return null;
-            string registeredPath = TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
-            if (!string.IsNullOrEmpty(registeredPath))
+            return TryRegisterPackageOnDemand(uid, persistUidOverride: IsPluginEntryPath(entryPath));
+        }
+
+        // Plugins resolve dependency morphs by display name (not by file path), so the reactive
+        // file-request hook never fires; register the parent's declared deps up front instead.
+        public static bool EnsureDeclaredDependenciesActivatedForParent(string parentUid)
+        {
+            if (string.IsNullOrEmpty(parentUid)) return false;
+            if (!ScanWhitelistManager.Instance.IsEnabled) return false;
+
+            // pkg_dep is keyed by concrete version; a plugin URL may carry ".latest".
+            string resolved = parentUid;
+            if (parentUid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    // Clothing/hair/morph catalogs are populated from Refresh package handlers.
-                    // Coalesce to avoid spamming refresh while still making newly on-demand
-                    // packages visible during active scene/bootstrap load.
-                    if (!IsPluginEntryPath(entryPath))
-                        RequestCoalescedVamRefresh("entrypath_on_demand_catalog");
-                }
-                catch { }
+                string r = ResolveLatestUid(parentUid);
+                if (!string.IsNullOrEmpty(r)) resolved = r;
             }
-            return registeredPath;
+
+            // Gated read is freshest when the index is ready; during scene/plugin load it bails on a
+            // stale scan, so only then fall back to a direct read (declared deps are immutable).
+            var deps = new HashSet<string>();
+            if (!VpbLocalDatabase.TryReadRecursiveDependencyUids(resolved, deps))
+                VpbLocalDatabase.TryReadDeclaredDependencyUidsDirect(resolved, deps);
+            if (deps.Count == 0) return false;
+
+            int registered = 0;
+            foreach (string dep in deps)
+            {
+                if (string.IsNullOrEmpty(dep)) continue;
+                // Resolves ".latest", dedupes, skips already-registered, defers when VaM not ready;
+                // non-null return means it registered the package this call.
+                if (!string.IsNullOrEmpty(TryRegisterPackageOnDemand(dep))) registered++;
+            }
+            if (registered > 0)
+                LogUtil.Log("[VPB PluginDep] " + resolved + ": registered " + registered + "/" + deps.Count + " declared dep(s)");
+            return registered > 0;
         }
 
         /// <summary>
@@ -773,6 +1084,7 @@ namespace VPB
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted + " deferred registrations");
+                try { VamStartupProfiler.Milestone("VamOnDemand.FileManager_ready promoted=" + promoted); } catch { }
         }
 
         /// <summary>
@@ -797,6 +1109,8 @@ namespace VPB
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM refresh completed - promoted " + promoted + " deferred registrations");
+
+            NotifyNativeCatalogRefreshed();
         }
 
         private static void RegisterNow(string uid, string varPath)
@@ -845,6 +1159,12 @@ namespace VPB
                     s_RegisteredOnDemand.Add(uid);
                 lock (s_FailedLock)
                     s_LastFailedAttemptTicksByUid.Remove(uid);
+                try { DependencyGraph.EnsureForPackage(uid); } catch { }
+                MarkPromotedPackageCatalogStale(uid);
+                if (PackageRegistrationNeedsNativeCatalogRefresh(uid, null))
+                {
+                    try { RequestCoalescedVamRefresh("ondemand_register_catalog"); } catch { }
+                }
             }
             else
             {
@@ -920,6 +1240,27 @@ namespace VPB
             if (string.IsNullOrEmpty(resolvedUid)) resolvedUid = candidateUid;
             varPath = NormalizePath(candidatePath);
             return !string.IsNullOrEmpty(varPath);
+        }
+
+        /// <summary>Newest installed UID for package group (e.g. MacGruber.PostMagic.3 -> .4 when .4 is installed).</summary>
+        internal static string TryGetNewestInstalledUid(string requestUid)
+        {
+            if (string.IsNullOrEmpty(requestUid)) return null;
+
+            string uid = requestUid.Trim();
+            if (uid.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                return ResolveLatestUid(uid);
+
+            if (TryParseUidGroupAndVersion(uid, out string group, out _))
+            {
+                string latest = ResolveLatestUid(group + ".latest");
+                if (!string.IsNullOrEmpty(latest)) return latest;
+            }
+
+            string latestFromBase = ResolveLatestUid(uid + ".latest");
+            if (!string.IsNullOrEmpty(latestFromBase)) return latestFromBase;
+
+            return uid;
         }
 
         private static string ResolveLatestUid(string requestUid)
@@ -1052,6 +1393,121 @@ namespace VPB
             DrainCoalescedVamRefresh();
         }
 
+        // Interactive FileManager.Refresh rebuilds every live Person's clothing/hair; on a female soft-body
+        // atom that NaNs the pelvic/genital sim and freezes the skin. Hold VaM's sim reset across the rebuild.
+        private static AsyncFlag s_RefreshSimFlag;
+        private static float s_RefreshSimHeldSince;
+        private static float s_LastDynamicItemLoad;
+        private static FieldInfo s_LoadingIconFlagsField;
+        private static bool s_LoadingIconFieldResolved;
+        private const float RefreshSimMinHoldSeconds = 0.3f;
+        private const float RefreshSimSettleSeconds = 0.5f;
+        private const float RefreshSimMaxHoldSeconds = 12f;
+
+        // Freeze via VaM's own onCharacterLoadedFlag mechanism: PauseSimulation(flag) holds the reset until
+        // the flag is raised, so the freeze spans the whole rebuild instead of a guessed frame count.
+        public static void PausePhysicsForCatalogRefresh()
+        {
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc == null) return;
+                if (s_RefreshSimFlag != null) return;            // already holding for an in-flight rebuild
+                if (sc.freezeAnimation) return;                  // already frozen (scene load / user freeze)
+                s_RefreshSimFlag = new AsyncFlag("vpb_catalog_refresh");
+                float now = Time.realtimeSinceStartup;
+                s_RefreshSimHeldSince = now;
+                s_LastDynamicItemLoad = now;
+                sc.PauseSimulation(s_RefreshSimFlag);
+            }
+            catch { s_RefreshSimFlag = null; }
+        }
+
+        // Called from a JSONStorableDynamic.OnLoadComplete postfix: extends the hold while items keep arriving.
+        public static void NotifyDynamicItemLoaded()
+        {
+            if (s_RefreshSimFlag != null)
+                try { s_LastDynamicItemLoad = Time.realtimeSinceStartup; } catch { }
+        }
+
+        // Polled every frame: release the hold once the rebuild's item loads settle (or the backstop elapses).
+        public static void TickRefreshSimHold()
+        {
+            var flag = s_RefreshSimFlag;
+            if (flag == null) return;
+            try
+            {
+                float now = Time.realtimeSinceStartup;
+                float held = now - s_RefreshSimHeldSince;
+                bool settled = held >= RefreshSimMinHoldSeconds
+                    && (now - s_LastDynamicItemLoad) >= RefreshSimSettleSeconds
+                    && !IsLoadingIconBusy();
+                if (settled || held >= RefreshSimMaxHoldSeconds)
+                {
+                    flag.Raise();
+                    s_RefreshSimFlag = null;
+                }
+            }
+            catch
+            {
+                try { flag.Raise(); } catch { }
+                s_RefreshSimFlag = null;
+            }
+        }
+
+        private static bool IsLoadingIconBusy()
+        {
+            try
+            {
+                var sc = SuperController.singleton;
+                if (sc == null) return false;
+                if (sc.isLoading) return true;
+                if (!s_LoadingIconFieldResolved)
+                {
+                    s_LoadingIconFlagsField = typeof(SuperController).GetField(
+                        "loadingIconFlags", BindingFlags.Instance | BindingFlags.NonPublic);
+                    s_LoadingIconFieldResolved = true;
+                }
+                var list = s_LoadingIconFlagsField != null
+                    ? s_LoadingIconFlagsField.GetValue(sc) as System.Collections.IList : null;
+                if (list == null) return false;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var f = list[i] as AsyncFlag;
+                    if (f != null && !f.Raised) return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Runs MVR.FileManagement.FileManager.Refresh immediately and clears any pending coalesced request.
+        /// </summary>
+        public static void RunVamFileManagerRefreshNow(string reason = null)
+        {
+            lock (s_RefreshRequestLock)
+            {
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] Running immediate FileManager.Refresh (reason="
+                    + (string.IsNullOrEmpty(reason) ? "immediate" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
+                MVR.FileManagement.FileManager.Refresh();
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] Immediate FileManager.Refresh failed: " + ex.Message);
+            }
+        }
+
         /// <summary>
         /// Request a single delayed VaM FileManager.Refresh. Multiple requests in a short
         /// burst are coalesced into one refresh to avoid repeated startup stalls.
@@ -1120,6 +1576,7 @@ namespace VPB
             {
                 LogUtil.Log("[VPB OnDemand] Running coalesced FileManager.Refresh (requests="
                     + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
                 MVR.FileManagement.FileManager.Refresh();
             }
             catch (Exception ex)
@@ -1159,6 +1616,7 @@ namespace VPB
             {
                 LogUtil.Log("[VPB OnDemand] Running forced FileManager.Refresh (pending_requests="
                     + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "forced" : reason) + ")");
+                PausePhysicsForCatalogRefresh();
                 MVR.FileManagement.FileManager.Refresh();
             }
             catch (Exception ex)
@@ -1203,17 +1661,25 @@ namespace VPB
             }
 
             long vamNotReady = Interlocked.Read(ref s_StartupVamNotReadyDeferredCount);
-            LogUtil.Log("[VPB OnDemand][Startup" + (ready ? ":final" : ":checkpoint") + "] attempts=" + a
-                + " success=" + s
-                + " fail=" + f
-                + " skipped_recent_fail=" + sk
-                + " deferred_non_script=" + dn
-                + " allowed_script=" + ascr
-                + " deferred_script=" + ds
-                + " deferred_vam_not_ready=" + vamNotReady
-                + " invoke_ms_total=" + ms
-                + " cooldown_ms=" + FailedRetryCooldownMs
-                + " top_fail_uids=" + (string.IsNullOrEmpty(topFail) ? "(none)" : topFail));
+            var summary = new StringBuilder();
+            summary.Append("[VPB OnDemand][Startup").Append(ready ? ":final" : ":checkpoint").Append("] attempts=").Append(a)
+                .Append(" success=").Append(s)
+                .Append(" fail=").Append(f)
+                .Append(" skipped_recent_fail=").Append(sk)
+                .Append(" deferred_non_script=").Append(dn)
+                .Append(" allowed_script=").Append(ascr)
+                .Append(" deferred_script=").Append(ds)
+                .Append(" deferred_vam_not_ready=").Append(vamNotReady)
+                .Append(" invoke_ms_total=").Append(ms)
+                .Append(" cooldown_ms=").Append(FailedRetryCooldownMs)
+                .Append(" top_fail_uids=").Append(string.IsNullOrEmpty(topFail) ? "(none)" : topFail);
+            AppendPathRewriteProbeSummaryIfNeeded(summary);
+            int catalogProbes = Interlocked.CompareExchange(ref s_CatalogMetaJsonProbeSuppressed, 0, 0);
+            if (ready && catalogProbes > 0 && s_CatalogMetaJsonProbeNoticeLogged)
+            {
+                summary.Append(" catalog_meta_json_probes_suppressed=").Append(catalogProbes);
+            }
+            LogUtil.Log(summary.ToString());
         }
 
         /// <summary>
@@ -1240,7 +1706,13 @@ namespace VPB
             {
                 // Do not treat absolute Windows paths (E:/...) as package UIDs.
                 if (colonIdx == 1 && char.IsLetter(p[0])) return null;
-                return p.Substring(0, colonIdx);
+                string uid = p.Substring(0, colonIdx);
+                // "SELF:/" is VaM's in-package self-reference, not a package UID, and resolves internally
+                // against the current package. Real UIDs are Author.Name[.ver] (always a dot); a bare token
+                // like SELF would otherwise drive a full recursive AddonPackages walk for "<token>.var" on
+                // every probe.
+                if (uid.IndexOf('.') < 0) return null;
+                return uid;
             }
             return null;
         }

@@ -524,16 +524,94 @@ namespace VPB
 
         public void ClearStagedUpdate()
         {
+            string stagingDir = GetStagingDir();
+            string pendingPath = GetPendingPath();
+            bool cleared = true;
+
             try
             {
-                string stagingDir = GetStagingDir();
+                if (File.Exists(pendingPath))
+                {
+                    try
+                    {
+                        File.SetAttributes(pendingPath, FileAttributes.Normal);
+                        File.Delete(pendingPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        cleared = false;
+                        LogUtil.LogWarning("[VpbUpdater] Could not delete pending.json: " + ex.Message);
+                    }
+                }
+
                 if (Directory.Exists(stagingDir))
-                    Directory.Delete(stagingDir, true);
-                HasPendingUpdate = false;
-                _config.LastStagedVersion = "";
-                _config.Save();
+                {
+                    if (!TryDeleteDirectoryRecursive(stagingDir))
+                        cleared = false;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                cleared = false;
+                LogUtil.LogError("[VpbUpdater] ClearStagedUpdate failed: " + ex.Message);
+            }
+
+            HasPendingUpdate = File.Exists(GetPendingPath());
+            _config.LastStagedVersion = "";
+            _config.Save();
+
+            if (HasPendingUpdate || !cleared)
+            {
+                Status = VpbUpdateStatus.Error;
+                StatusMessage = "Could not clear staged update (files may be in use). Close other apps and retry.";
+                try { OnStatusChanged?.Invoke(); } catch { }
+                return;
+            }
+
+            Status = VpbUpdateStatus.Idle;
+            StatusMessage = "";
+            AvailableVersion = null;
+            Progress = 0f;
+            try { OnStatusChanged?.Invoke(); } catch { }
+        }
+
+        private static bool TryDeleteDirectoryRecursive(string dir)
+        {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                return true;
+
+            bool ok = true;
+            try
+            {
+                foreach (string file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                        File.Delete(file);
+                    }
+                    catch
+                    {
+                        ok = false;
+                    }
+                }
+
+                string[] subDirs = Directory.GetDirectories(dir, "*", SearchOption.AllDirectories);
+                Array.Sort(subDirs, (a, b) => b.Length.CompareTo(a.Length));
+                for (int i = 0; i < subDirs.Length; i++)
+                {
+                    try { Directory.Delete(subDirs[i], false); }
+                    catch { ok = false; }
+                }
+
+                Directory.Delete(dir, false);
+            }
+            catch
+            {
+                ok = false;
+            }
+
+            return ok && !Directory.Exists(dir);
         }
 
         private class ManifestItem

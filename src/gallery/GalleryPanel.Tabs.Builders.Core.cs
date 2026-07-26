@@ -39,6 +39,9 @@ namespace VPB
                 if (VPBConfig.Instance != null && VPBConfig.Instance.IsHiddenCategory(c.name) && !isActive) continue;
 
                 string label = c.name + " (" + count + ")";
+                Sprite catIcon = GetCategoryTabIcon(c.name);
+                Color? catIconBackdrop = catIcon != null ? GetCategoryTabIconBackdrop(c.name) : (Color?)null;
+                TextAnchor labelAnchor = catIcon != null ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
 
                 CreateTabButton(container.transform, label, btnColor, isActive, () => {
                     if (LogGalleryCategoryTypeSwitchTiming)
@@ -65,8 +68,96 @@ namespace VPB
                     if (titleText != null) titleText.text = VPBTranslation.T("gallery.title.all_categories", "All Categories");
                     ClearFiltersForNewCategory();
                     RefreshFilesAndTabs();
-                });
+                }, null, null, labelAnchor, 0f, 0f, catIcon, catIconBackdrop);
             }
+        }
+
+        /// <summary>Per-category left icon for side-rail Category mode (c_*.png). Falls back to gallery_category. Null when setting off.</summary>
+        private Sprite GetCategoryTabIcon(string categoryName)
+        {
+            if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryShowCategoryIcons)
+                return null;
+
+            string path = null;
+            if (!string.IsNullOrEmpty(categoryName))
+            {
+                if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_scene.png";
+                else if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_subscene.png";
+                else if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_clothing.png";
+                else if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_hair.png";
+                else if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_pose.png";
+                else if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_appearance.png";
+                else if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_plugins.png";
+                else if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_skin.png";
+                else if (string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase))
+                    path = "vpb_icons/c_all.png";
+            }
+
+            if (path != null)
+            {
+                Sprite s = UI.LoadIconSprite(path, UI.SideRailIconGlyphTint);
+                if (s != null) return s;
+            }
+            return galleryCategorySprite;
+        }
+
+        /// <summary>Colored chip behind category side-rail icons. Dark accents so white glyphs stay readable.</summary>
+        private static Color GetCategoryTabIconBackdrop(string categoryName)
+        {
+            if (string.IsNullOrEmpty(categoryName))
+                return new Color(0.28f, 0.18f, 0.22f, 1f);
+
+            if (string.Equals(categoryName, Gallery.EverythingCategoryName, StringComparison.OrdinalIgnoreCase))
+                return new Color(0.42f, 0.12f, 0.12f, 1f); // dark red
+            if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.28f, 0.12f, 0.38f, 1f); // dark purple
+            if (string.Equals(categoryName, "Clothing", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.26f, 0.48f, 1f); // dark blue
+            if (string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.45f, 0.12f, 0.32f, 1f); // dark magenta
+            if (string.Equals(categoryName, "Pose", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.40f, 0.12f, 1f); // dark olive-lime
+            if (string.Equals(categoryName, "Scenes", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.10f, 0.36f, 0.38f, 1f); // dark teal
+            if (string.Equals(categoryName, "Hair", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.34f, 0.18f, 1f); // dark green
+            if (string.Equals(categoryName, "CUA", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.34f, 0.12f, 1f); // dark olive
+            if (string.Equals(categoryName, "Appearance", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.22f, 0.20f, 0.42f, 1f); // dark indigo
+            if (string.Equals(categoryName, "SubScenes", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.48f, 0.28f, 0.10f, 1f); // dark orange
+            if (string.Equals(categoryName, "Skin", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.36f, 0.26f, 0.16f, 1f); // dark brown
+            if (string.Equals(categoryName, "Plugin Presets", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.42f, 0.18f, 0.32f, 1f); // dark pink
+            if (string.Equals(categoryName, "Morphs", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.32f, 0.16f, 0.40f, 1f); // dark violet
+            if (string.Equals(categoryName, "Hair Presets", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.16f, 0.34f, 0.28f, 1f); // dark teal-green
+            if (string.Equals(categoryName, "Body Physics", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.36f, 0.22f, 0.14f, 1f); // dark warm brown
+            if (string.Equals(categoryName, "Animation", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.14f, 0.28f, 0.38f, 1f); // dark steel
+            if (string.Equals(categoryName, "General", StringComparison.OrdinalIgnoreCase))
+                return new Color(0.24f, 0.26f, 0.30f, 1f); // dark slate
+
+            // Unknown categories: stable dark hue from name hash (not launch-random).
+            int h = 0;
+            for (int i = 0; i < categoryName.Length; i++)
+                h = unchecked(h * 31 + char.ToLowerInvariant(categoryName[i]));
+            float hue = ((h % 360) + 360) % 360 / 360f;
+            return Color.HSVToRGB(hue, 0.55f, 0.38f);
         }
 
         private void BuildCreatorTabs(GameObject container, bool isLeft)
@@ -94,7 +185,7 @@ namespace VPB
 
                 // Build set of creators present in current filtered file list when name search active.
                 HashSet<string> creatorsInResults = null;
-                bool hasNameFilter = nameFilterTerms != null && nameFilterTerms.Length > 0;
+                bool hasNameFilter = HasActiveNameFilter();
                 if (hasNameFilter && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
                 {
                     creatorsInResults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -165,14 +256,19 @@ namespace VPB
                 if (!string.IsNullOrEmpty(filterNow) && pe.Path.IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) < 0) continue;
 
                 bool isActive = string.Equals(currentPackagePathFilter, pe.Path, StringComparison.OrdinalIgnoreCase);
-                if (pe.Count <= 0 && !isActive) continue;
+                bool zeroCount = pe.Count <= 0;
 
-                string label = pe.Path;
-                Color btnColor = isActive ? ColorPath : ColorInactiveRow;
+                // Keep zero-count folders visible (muted). Counts are category-scoped; folder tree is not.
+                string label = pe.Path + " (" + pe.Count + ")";
+                Color btnColor = isActive
+                    ? ColorPath
+                    : (zeroCount ? ColorPathZeroCount : ColorInactiveRow);
                 string pathValue = pe.Path;
+                int pathCountSnap = pe.Count;
                 CreateTabButton(container.transform, label, btnColor, isActive, () =>
                 {
-                    if (string.Equals(currentPackagePathFilter, pathValue, StringComparison.OrdinalIgnoreCase))
+                    bool selecting = !string.Equals(currentPackagePathFilter, pathValue, StringComparison.OrdinalIgnoreCase);
+                    if (!selecting)
                         currentPackagePathFilter = "";
                     else
                         currentPackagePathFilter = pathValue;
@@ -182,6 +278,17 @@ namespace VPB
                     tagsCached = false;
                     userTagsCached = false;
                     RefreshFilesAndTabs();
+
+                    if (selecting && pathCountSnap <= 0)
+                    {
+                        string cat = currentCategoryTitle ?? "";
+                        if (string.IsNullOrEmpty(cat) && titleText != null) cat = titleText.text ?? "";
+                        if (string.IsNullOrEmpty(cat))
+                            cat = VPBTranslation.T("gallery.status.path_empty_items", "items");
+                        ShowTemporaryStatus(string.Format(
+                            VPBTranslation.T("gallery.status.path_empty_for_category", "No {0} in this folder."),
+                            cat), 2f);
+                    }
                 }, trackedButtons, () =>
                 {
                     currentPackagePathFilter = "";
@@ -195,8 +302,8 @@ namespace VPB
                 GameObject pathBtnGO = trackedButtons.Count > 0 ? trackedButtons[trackedButtons.Count - 1] : null;
                 if (pathBtnGO != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
-                    float rowSingle = 35f * s;
+                    float s = ChromeScale;
+                    float rowSingle = GalleryUiDesignTokens.SideTabRowHeightRef * s;
                     LayoutElement le = pathBtnGO.GetComponent<LayoutElement>();
                     if (le == null) le = pathBtnGO.AddComponent<LayoutElement>();
                     le.minHeight = rowSingle;
@@ -209,6 +316,9 @@ namespace VPB
                         txt.verticalOverflow = VerticalWrapMode.Truncate;
                         txt.alignment = TextAnchor.MiddleLeft;
                         txt.resizeTextForBestFit = false;
+                        txt.color = (!isActive && zeroCount)
+                            ? ColorPathZeroCountText
+                            : Color.white;
 
                         RectTransform txtRT = txt.GetComponent<RectTransform>();
                         if (txtRT != null)

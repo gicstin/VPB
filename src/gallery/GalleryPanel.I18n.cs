@@ -8,7 +8,7 @@ namespace VPB
     {
         // ── Colors for the language button ──────────────────────────────────────
         private static readonly Color LangBtnColorNormal = new Color(0f, 0f, 0f, 0.5f);
-        private static readonly Color LangBtnColorOpen   = new Color(0.15f, 0.15f, 0.15f, 1f);
+        private static readonly Color LangBtnColorOpen   = UI.ChromeDark;
 
         private void SubscribeLocaleChanged()
         {
@@ -30,6 +30,7 @@ namespace VPB
                 RefreshLocalizedUi();
                 try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                 try { quickFiltersUI?.RefreshLocalizedUi(); } catch { }
+                try { ReloadInAppHelpContent(); } catch { }
             }
             catch { }
         }
@@ -48,32 +49,6 @@ namespace VPB
                 default:      return localeId.Length > 4
                                   ? localeId.Substring(0, 4).ToUpperInvariant()
                                   : localeId.ToUpperInvariant();
-            }
-        }
-
-        // ── Content-type search placeholder ─────────────────────────────────────
-
-        internal static string GetContentTypePlaceholder(ContentType type)
-        {
-            switch (type)
-            {
-                case ContentType.Category:     return VPBTranslation.T("gallery.search.categories", "Categories...");
-                case ContentType.Creator:
-                case ContentType.HubCreators:  return VPBTranslation.T("gallery.search.creators", "Search Creators...");
-                case ContentType.UserTags:     return VPBTranslation.T("gallery.search.user_tags", "Search your tags...");
-                case ContentType.UserTagsApplied: return VPBTranslation.T("gallery.search.user_tags_applied", "Search applied tags...");
-                case ContentType.Path:         return VPBTranslation.T("gallery.search.paths", "Search Paths...");
-                case ContentType.Tags:
-                case ContentType.HubTags:      return VPBTranslation.T("gallery.search.tags", "Search Tags...");
-                case ContentType.RemoveClothing: return VPBTranslation.T("gallery.search.clothing", "Filter Clothing...");
-                case ContentType.RemoveHair:     return VPBTranslation.T("gallery.search.hair", "Filter Hair...");
-                case ContentType.RemoveAtom:     return VPBTranslation.T("gallery.search.atoms", "Filter Atoms...");
-                case ContentType.Target:         return VPBTranslation.T("gallery.search.target", "Filter Targets...");
-                case ContentType.CleanupCategories: return VPBTranslation.T("gallery.search.cleanup", "Filter Cleanup Categories...");
-                case ContentType.CleanupStaleBuckets: return VPBTranslation.T("gallery.search.cleanup_stale", "Filter Stale Cache Buckets...");
-                case ContentType.History:      return VPBTranslation.T("gallery.search.history_tabs", "Filter history tabs...");
-                case ContentType.Settings:     return VPBTranslation.T("gallery.search.settings", "Filter settings...");
-                default:                       return VPBTranslation.T("gallery.search.main", "Search...");
             }
         }
 
@@ -140,6 +115,8 @@ namespace VPB
                 titleBarRefreshBtnText.text = VPBTranslation.T("gallery.title.refresh", "Refresh");
 
             UpdateSortButtonText(fileSortTypeText, fileSortDirText, GetSortState("Files"));
+            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+            try { HideGlobalSourceFilterDropdownIfOpen(); } catch { }
             try { SyncSceneSourceSortButtonHighlights(); } catch { }
             try { RebuildFileSortTypeMenuOptions(); } catch { }
             try { SyncSidePaneTopSortButtonVisuals(); } catch { }
@@ -150,33 +127,33 @@ namespace VPB
                 rightSubClearBtnText.text = VPBTranslation.T("gallery.tags.clear_selected", "Clear Selected");
 
             if (rightCategoryBtnIconImage == null && rightCategoryBtnText != null)
-                rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                rightCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
             if (leftCategoryBtnIconImage == null && leftCategoryBtnText != null)
-                leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Category");
+                leftCategoryBtnText.text = VPBTranslation.T("gallery.side.category", "Categories");
             if (rightCreatorBtnIconImage == null && rightCreatorBtnText != null)
-                rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                rightCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
             if (leftCreatorBtnIconImage == null && leftCreatorBtnText != null)
-                leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creator");
+                leftCreatorBtnText.text = VPBTranslation.T("gallery.side.creator", "Creators");
             if (rightPathBtnIconImage == null && rightPathBtnText != null)
                 rightPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             if (leftPathBtnIconImage == null && leftPathBtnText != null)
                 leftPathBtnText.text = VPBTranslation.T("gallery.side.path", "Path");
             RefreshGoText(footerHubBtnGO, "gallery.side.hub", "Hub");
-            if (rightReplaceBtnIconImage == null && rightReplaceBtnText != null)
-                rightReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
-            if (leftReplaceBtnIconImage == null && leftReplaceBtnText != null)
-                leftReplaceBtnText.text = VPBTranslation.T("gallery.side.add", "Add");
             try { UpdateTargetDropdownUI(); } catch { }
 
             // Buttons that store Text refs directly
-            if (titleBarSettingsBtnText != null) titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
+            if (titleBarSettingsBtnText != null)
+            {
+                bool hasIcon = _titleBarSettingsBtnRT != null && _titleBarSettingsBtnRT.Find("Icon") != null;
+                if (!hasIcon)
+                    titleBarSettingsBtnText.text = VPBTranslation.T("gallery.title.settings_abbrev", "S");
+            }
             if (rightCloneBtnIconImage == null && rightCloneBtnText != null)
                 rightCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
             if (leftCloneBtnIconImage == null && leftCloneBtnText != null)
                 leftCloneBtnText.text = VPBTranslation.T("gallery.side.clone", "Clone");
 
             // Buttons stored as GOs – reach the Text child at refresh time
-            RefreshGoText(footerLoadRandomBtn, "gallery.footer.random_abbrev", "Rdm");
             if (rightSaveBtnIconImage == null) RefreshGoText(rightSaveBtnGO, "gallery.side.save", "Save");
             if (leftSaveBtnIconImage == null) RefreshGoText(leftSaveBtnGO, "gallery.side.save", "Save");
             if (rightRemoveAtomBtnIconImage == null) RefreshGoText(rightRemoveAtomBtn, "gallery.side.remove", "Remove");
@@ -186,6 +163,13 @@ namespace VPB
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+            try
+            {
+                if (_detailStripExpandLabel != null)
+                    _detailStripExpandLabel.text = VPBTranslation.T("gallery.detail.expand", "Details");
+            }
+            catch { }
             RefreshGoText(tboxLoadBtn, "gallery.tbox.load", "Load");
             RefreshGoText(tboxUnloadBtn, "gallery.tbox.unload", "Unload");
             RefreshGoText(tboxLoadDepsBtn, "gallery.tbox.load_deps", "Load Deps");
@@ -203,8 +187,7 @@ namespace VPB
             try { UpdateUndoRedoButtonLabels(); } catch { }
 
             // Main search bar placeholder
-            if (titleSearchInput != null && titleSearchInput.placeholder is Text searchPh)
-                searchPh.text = VPBTranslation.T("gallery.search.main", "Search...");
+            try { SyncTitleSearchChromeForActiveMode(); } catch { }
 
             // Pagination text
             try { UpdatePaginationText(); } catch { }
@@ -221,12 +204,13 @@ namespace VPB
             UpdateTabs();
             UpdateFooterFollowStates();
             UpdateFooterHeightState();
-            UpdateFooterShowHiddenPackagesState();
             UpdateFooterAutoHideState();
             UpdateFooterLayoutState();
             SyncRatingSortToggleState();
 
             try { RebuildLanguageMenuOptions(); } catch { }
+            try { RefreshFirstRunHintStrip(); } catch { }
+            try { RefreshActiveFilterChips(); } catch { }
         }
 
         // ── Language switcher setup ──────────────────────────────────────────────
@@ -236,7 +220,7 @@ namespace VPB
             // Keep language beside the settings icon to avoid overlap with floating-mode top-left resize handle.
 
             languageSwitcherBtnGO = UI.CreateUIButton(
-                titleBarGO, 40, 40,
+                titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef,
                 GetLocaleShortCode(VPBTranslation.CurrentLocale),
                 14, 0, 0, AnchorPresets.middleCenter,
                 ToggleLanguageMenu);
@@ -262,8 +246,8 @@ namespace VPB
                 _langBtnText.color = Color.white;
                 _langBtnText.alignment = TextAnchor.MiddleCenter;
                 _langBtnText.resizeTextForBestFit = true;
-                _langBtnText.resizeTextMinSize = 10;
-                _langBtnText.resizeTextMaxSize = 16;
+                _langBtnText.resizeTextMinSize = GalleryUiDesignTokens.FontMinRef;
+                _langBtnText.resizeTextMaxSize = GalleryUiDesignTokens.FontBodyRef;
                 VPBUiFont.ApplyTo(_langBtnText);
             }
 
@@ -281,60 +265,62 @@ namespace VPB
             AddTooltip(languageSwitcherBtnGO, "i18n.switcher.tooltip", "Language / 语言 / 言語");
 
             // ── Full-screen backdrop (click-outside-to-close) ──────────────────
-            languageMenuPopupGO = new GameObject("LanguageMenuPopup");
-            languageMenuPopupGO.transform.SetParent(backgroundBoxGO.transform, false);
-
-            RectTransform popRT = languageMenuPopupGO.AddComponent<RectTransform>();
-            popRT.anchorMin = Vector2.zero;
-            popRT.anchorMax = Vector2.one;
-            popRT.offsetMin = Vector2.zero;
-            popRT.offsetMax = Vector2.zero;
-
-            Image popBg = languageMenuPopupGO.AddComponent<Image>();
-            popBg.color = new Color(0f, 0f, 0f, 0.001f);
-            popBg.raycastTarget = true;
-
-            Button popBtn = languageMenuPopupGO.AddComponent<Button>();
-            popBtn.transition = Selectable.Transition.None;
-            popBtn.onClick.AddListener(CloseLanguageMenu);
-
+            languageMenuPopupGO = UI.CreatePopupMenuRoot(backgroundBoxGO, "LanguageMenuPopup", CloseLanguageMenu);
             languageMenuPopupGO.SetActive(false);
 
             // ── Dropdown panel ─────────────────────────────────────────────────
             // Position below the language button on the left title-bar icon cluster.
-            GameObject panel = new GameObject("LanguageMenuPanel");
-            panel.transform.SetParent(languageMenuPopupGO.transform, false);
-
-            RectTransform panelRT = panel.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0f, 1f);
-            panelRT.anchorMax = new Vector2(0f, 1f);
-            panelRT.pivot     = new Vector2(0f, 1f);
-            panelRT.anchoredPosition = new Vector2(114f, -72f);
-            panelRT.sizeDelta = new Vector2(230f, 50f); // height grows via ContentSizeFitter
-
-            Image panelImg = panel.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
-
-            VerticalLayoutGroup vlg = panel.AddComponent<VerticalLayoutGroup>();
-            vlg.padding           = new RectOffset(6, 6, 6, 6);
-            vlg.spacing           = 4;
-            {
-                var v = vlg;
-                innerPaneScaleActions.Add(s => { if (v) { v.spacing = 4f * s; v.padding = new RectOffset(Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s)); } });
-            }
-            vlg.childControlHeight    = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth     = true;
-            vlg.childForceExpandWidth  = true;
-            vlg.childAlignment    = TextAnchor.UpperCenter;
-
-            ContentSizeFitter csf = panel.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            GameObject panel = UI.CreatePopupMenuPanel(
+                languageMenuPopupGO, "LanguageMenuPanel",
+                AnchorPresets.topLeft, new Vector2(230f, 50f), new Vector2(114f, -72f),
+                configureVlg: vlg =>
+                {
+                    innerPaneScaleActions.Add(s =>
+                    {
+                        if (vlg)
+                        {
+                            vlg.spacing = 4f * s;
+                            vlg.padding = new RectOffset(
+                                Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s),
+                                Mathf.RoundToInt(6 * s), Mathf.RoundToInt(6 * s));
+                        }
+                    });
+                });
 
             RebuildLanguageMenuOptions();
         }
 
         // ── Dropdown options ─────────────────────────────────────────────────────
+
+        private void RescaleLanguageMenuInternal(float s)
+        {
+            if (languageMenuPopupGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel");
+            if (panel == null) return;
+            ScaleVerticalPopupMenuRows(panel.gameObject, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.PopupMenuPanelWidthRef);
+            RectTransform panelRT = panel as RectTransform;
+            if (panelRT != null)
+            {
+                panelRT.anchorMin = new Vector2(0.5f, 1f);
+                panelRT.anchorMax = new Vector2(0.5f, 1f);
+                panelRT.pivot = new Vector2(0.5f, 1f);
+                if (languageSwitcherBtnGO != null)
+                {
+                    RectTransform btnRT = languageSwitcherBtnGO.GetComponent<RectTransform>();
+                    if (btnRT != null)
+                    {
+                        float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+                        panelRT.anchoredPosition = new Vector2(
+                            btnRT.anchoredPosition.x,
+                            -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+                    }
+                }
+            }
+        }
 
         private void RebuildLanguageMenuOptions()
         {
@@ -357,33 +343,22 @@ namespace VPB
                 // "\u2713" = ✓ checkmark; four spaces align non-active items
                 string label = (isCurrent ? "\u2713  " : "    ") + VPBTranslation.GetLocaleDisplayName(id);
 
-                GameObject row = UI.CreateUIButton(
-                    panel.gameObject, 218, 38, label, 14, 0, 0,
-                    AnchorPresets.middleCenter,
+                GameObject row = UI.AddPopupMenuRow(
+                    panel.gameObject,
+                    GalleryUiDesignTokens.PopupMenuPanelWidthRef - 12f,
+                    GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                    label,
+                    GalleryUiDesignTokens.PopupMenuRowFontRef,
+                    isCurrent,
                     () =>
                     {
                         VPBTranslation.SetLocale(id, saveConfig: true);
                         CloseLanguageMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color     = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                // Let layout control height
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 38f;
-                le.flexibleWidth   = 1f;
+                    },
+                    GalleryUiDesignTokens.PopupMenuRowHeightRef);
             }
 
+            try { RescaleLanguageMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel.GetComponent<RectTransform>());
         }
 
@@ -396,20 +371,7 @@ namespace VPB
             if (languageMenuOpen)
             {
                 RebuildLanguageMenuOptions();
-                try
-                {
-                    var panel = languageMenuPopupGO.transform.Find("LanguageMenuPanel") as RectTransform;
-                    var btnRT = languageSwitcherBtnGO != null ? languageSwitcherBtnGO.GetComponent<RectTransform>() : null;
-                    if (panel != null && btnRT != null)
-                    {
-                        panel.anchorMin = new Vector2(0.5f, 1f);
-                        panel.anchorMax = new Vector2(0.5f, 1f);
-                        panel.pivot = new Vector2(0.5f, 1f);
-                        // Drop directly under button, centered on its X (matches other title-bar dropdowns).
-                        panel.anchoredPosition = new Vector2(btnRT.anchoredPosition.x, -72f);
-                    }
-                }
-                catch { }
+                try { RescaleLanguageMenuInternal(ChromeScale); } catch { }
                 languageMenuPopupGO.transform.SetAsLastSibling();
             }
             languageMenuPopupGO.SetActive(languageMenuOpen);

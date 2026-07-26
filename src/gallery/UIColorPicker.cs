@@ -127,40 +127,20 @@ namespace VPB
             canvas.pixelPerfect = false;
             panelGO.AddComponent<GraphicRaycaster>();
 
-            GameObject dim = new GameObject("DimBackdrop");
-            dim.transform.SetParent(panelGO.transform, false);
-            StretchFull(dim);
-            Image dimImg = dim.AddComponent<Image>();
-            dimImg.color = new Color(0f, 0f, 0f, 0.55f);
-            dimImg.raycastTarget = true;
+            GameObject dim = UI.CreateChildRT(panelGO, "DimBackdrop", AnchorPresets.stretchAll);
+            Image dimImg = UI.AddImage(dim, new Color(0f, 0f, 0f, 0.55f));
 
-            GameObject window = new GameObject("ColorPickerWindow");
-            window.transform.SetParent(panelGO.transform, false);
-            RectTransform windowRT = window.AddComponent<RectTransform>();
-            windowRT.anchorMin = new Vector2(0.5f, 0.5f);
-            windowRT.anchorMax = new Vector2(0.5f, 0.5f);
-            windowRT.pivot = new Vector2(0.5f, 0.5f);
-            windowRT.anchoredPosition = Vector2.zero;
-            windowRT.sizeDelta = new Vector2(WindowWidth, WindowHeight);
+            GameObject window = UI.CreateChildRT(panelGO, "ColorPickerWindow", AnchorPresets.middleCenter, new Vector2(WindowWidth, WindowHeight));
 
-            Image winBg = window.AddComponent<Image>();
-            winBg.color = new Color(0.17f, 0.17f, 0.19f, 1f);
-            winBg.raycastTarget = true;
+            Image winBg = UI.AddImage(window, new Color(0.17f, 0.17f, 0.19f, 1f));
 
             Outline winOutline = window.AddComponent<Outline>();
             winOutline.effectDistance = new Vector2(2f, -2f);
             winOutline.effectColor = new Color(0f, 0f, 0f, 0.6f);
 
-            VerticalLayoutGroup vlg = window.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(20, 20, 22, 20);
-            vlg.spacing = 12;
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childForceExpandWidth = true;
+            VerticalLayoutGroup vlg = UI.AddVLG(window, spacing: 12, padding: UI.Pad(20, 20, 22, 20), childAlignment: TextAnchor.UpperCenter);
 
-            GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Bold, Color.white, TextAnchor.UpperCenter, true);
+            GameObject titleGo = CreateWindowText(window, "Pick a Color", 20, FontStyle.Normal, Color.white, TextAnchor.UpperCenter, true);
             titleTextComponent = titleGo.GetComponent<Text>();
 
             GameObject hintGo = CreateWindowText(
@@ -174,9 +154,7 @@ namespace VPB
             Text hintT = hintGo.GetComponent<Text>();
             hintT.horizontalOverflow = HorizontalWrapMode.Wrap;
             hintT.verticalOverflow = VerticalWrapMode.Truncate;
-            LayoutElement hintLe = hintGo.AddComponent<LayoutElement>();
-            hintLe.flexibleHeight = 0;
-            hintLe.preferredHeight = 52;
+            LayoutElement hintLe = UI.AddLE(hintGo, preferredHeight: 52, flexibleHeight: 0);
 
             previewImg = CreatePreviewStripe(window).GetComponent<Image>();
 
@@ -188,16 +166,8 @@ namespace VPB
 
             GameObject btnRow = new GameObject("ButtonRow");
             btnRow.transform.SetParent(window.transform, false);
-            HorizontalLayoutGroup hlg = btnRow.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = 14;
-            hlg.childAlignment = TextAnchor.MiddleCenter;
-            hlg.childControlWidth = true;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandWidth = true;
-            hlg.childForceExpandHeight = false;
-            LayoutElement rowLe = btnRow.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 48;
+            HorizontalLayoutGroup hlg = UI.AddHLG(btnRow, spacing: 14, childAlignment: TextAnchor.MiddleCenter);
+            LayoutElement rowLe = UI.AddLE(btnRow, preferredHeight: 48, flexibleHeight: 0);
 
             CreateDialogButton(hlg.transform, "Cancel", Hide);
             CreateDialogButton(hlg.transform, "OK", () =>
@@ -213,12 +183,8 @@ namespace VPB
         {
             GameObject go = new GameObject("Preview");
             go.transform.SetParent(parent.transform, false);
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleHeight = 0;
-            le.preferredHeight = 52;
-            Image img = go.AddComponent<Image>();
-            img.color = Color.white;
-            img.raycastTarget = false;
+            LayoutElement le = UI.AddLE(go, preferredHeight: 52, flexibleHeight: 0);
+            Image img = UI.AddImage(go, Color.white, false);
             return go;
         }
 
@@ -231,35 +197,20 @@ namespace VPB
             TextAnchor align,
             bool boldLine)
         {
-            GameObject go = new GameObject("Text_" + (boldLine ? "Title" : "Body"));
-            go.transform.SetParent(parent.transform, false);
-            Text t = go.AddComponent<Text>();
-            t.text = text;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = fontSize;
+            Text t = UI.CreateLabel(parent, text, fontSize, color, align, raycastTarget: false,
+                name: "Text_" + (boldLine ? "Title" : "Body"));
             t.fontStyle = style;
-            t.color = color;
-            t.alignment = align;
-            t.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleHeight = 0;
-            le.preferredHeight = boldLine ? 30 : 48;
-            le.minWidth = 1;
-            return go;
+            UI.AddLE(t.gameObject, minWidth: 1, preferredHeight: boldLine ? 30 : 48, flexibleHeight: 0);
+            return t.gameObject;
         }
 
         private static void CreateDialogButton(Transform row, string label, UnityAction onClick)
         {
             GameObject go = new GameObject("Btn_" + label);
             go.transform.SetParent(row, false);
-            LayoutElement le = go.AddComponent<LayoutElement>();
-            le.flexibleWidth = 1f;
-            le.preferredHeight = 44f;
+            LayoutElement le = UI.AddLE(go, preferredHeight: 44f, flexibleWidth: 1f);
 
-            Image img = go.AddComponent<Image>();
-            img.color = new Color(0.26f, 0.26f, 0.3f, 1f);
+            Image img = UI.AddGalleryElementRoundedBg(go, new Color(0.26f, 0.26f, 0.3f, 1f));
             img.raycastTarget = true;
 
             // Match gallery hover border behavior on buttons too.
@@ -281,60 +232,28 @@ namespace VPB
             cb.highlightedColor = new Color(1.1f, 1.1f, 1.1f, 1f);
             cb.pressedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
             btn.colors = cb;
-            btn.transition = Selectable.Transition.None;
-            btn.navigation = new Navigation { mode = Navigation.Mode.None };
+            UI.ConfigButtonFlat(btn);
+            btn.targetGraphic = img;
             if (onClick != null) btn.onClick.AddListener(onClick);
 
-            GameObject textGO = new GameObject("Text");
-            textGO.transform.SetParent(go.transform, false);
-            Text t = textGO.AddComponent<Text>();
-            t.text = label;
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 17;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            StretchFull(textGO);
+            Text t = UI.CreateLabel(go, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            StretchFull(t.gameObject);
         }
 
         private Slider CreateSliderRow(GameObject parent, string label, Color tint)
         {
             GameObject row = new GameObject("Row_" + label);
             row.transform.SetParent(parent.transform, false);
-            LayoutElement rowLe = row.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 34;
+            LayoutElement rowLe = UI.AddLE(row, preferredHeight: 34, flexibleHeight: 0);
 
-            HorizontalLayoutGroup h = row.AddComponent<HorizontalLayoutGroup>();
-            h.spacing = 10;
-            h.childAlignment = TextAnchor.MiddleLeft;
-            h.childControlWidth = true;
-            h.childControlHeight = true;
-            h.childForceExpandWidth = true;
-            h.childForceExpandHeight = false;
+            HorizontalLayoutGroup h = UI.AddHLG(row, spacing: 10);
 
-            GameObject lab = new GameObject("Label");
-            lab.transform.SetParent(row.transform, false);
-            Text lt = lab.AddComponent<Text>();
-            lt.text = label;
-            lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            lt.fontSize = 16;
-            lt.fontStyle = FontStyle.Bold;
-            lt.color = Color.white;
-            lt.alignment = TextAnchor.MiddleLeft;
-            lt.raycastTarget = false;
-            try { VPBUiFont.ApplyTo(lt); } catch { }
-            LayoutElement labLe = lab.AddComponent<LayoutElement>();
-            labLe.flexibleWidth = 0;
-            labLe.preferredWidth = 22;
+            Text lt = UI.CreateLabel(row, label, GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+            LayoutElement labLe = UI.AddLE(lt.gameObject, preferredWidth: 22, flexibleWidth: 0);
 
             GameObject sliderHost = new GameObject("Slider");
             sliderHost.transform.SetParent(row.transform, false);
-            LayoutElement shLe = sliderHost.AddComponent<LayoutElement>();
-            shLe.flexibleWidth = 1f;
-            shLe.minWidth = 50;
-            shLe.preferredHeight = 30;
+            LayoutElement shLe = UI.AddLE(sliderHost, minWidth: 50, preferredHeight: 30, flexibleWidth: 1f);
 
             Slider s = sliderHost.AddComponent<Slider>();
             s.minValue = 0;
@@ -342,8 +261,7 @@ namespace VPB
 
             GameObject bg = new GameObject("Background");
             bg.transform.SetParent(sliderHost.transform, false);
-            Image bgImg = bg.AddComponent<Image>();
-            bgImg.color = new Color(0.08f, 0.08f, 0.09f, 1f);
+            Image bgImg = UI.AddImage(bg, new Color(0.08f, 0.08f, 0.09f, 1f));
             RectTransform bgRT = bg.GetComponent<RectTransform>();
             bgRT.anchorMin = new Vector2(0, 0.2f);
             bgRT.anchorMax = new Vector2(1, 0.8f);
@@ -358,33 +276,19 @@ namespace VPB
             fillAreaRT.offsetMin = new Vector2(6, 0);
             fillAreaRT.offsetMax = new Vector2(-18, 0);
 
-            GameObject fill = new GameObject("Fill");
-            fill.transform.SetParent(fillArea.transform, false);
-            Image fillImg = fill.AddComponent<Image>();
-            fillImg.color = tint;
+            GameObject fill = UI.CreateChildRT(fillArea, "Fill", AnchorPresets.stretchAll);
+            Image fillImg = UI.AddImage(fill, tint);
             RectTransform fillRT = fill.GetComponent<RectTransform>();
-            fillRT.anchorMin = Vector2.zero;
-            fillRT.anchorMax = Vector2.one;
-            fillRT.offsetMin = Vector2.zero;
-            fillRT.offsetMax = Vector2.zero;
             s.fillRect = fillRT;
 
-            GameObject handleArea = new GameObject("Handle Area");
-            handleArea.transform.SetParent(sliderHost.transform, false);
-            RectTransform handleAreaRT = handleArea.AddComponent<RectTransform>();
-            handleAreaRT.anchorMin = Vector2.zero;
-            handleAreaRT.anchorMax = Vector2.one;
+            GameObject handleArea = UI.CreateChildRT(sliderHost, "Handle Area", AnchorPresets.stretchAll);
+            RectTransform handleAreaRT = handleArea.GetComponent<RectTransform>();
             handleAreaRT.offsetMin = new Vector2(10, 0);
             handleAreaRT.offsetMax = new Vector2(-18, 0);
 
-            GameObject handle = new GameObject("Handle");
-            handle.transform.SetParent(handleArea.transform, false);
-            Image handleImg = handle.AddComponent<Image>();
-            handleImg.color = Color.white;
+            GameObject handle = UI.CreateChildRT(handleArea, "Handle", AnchorPresets.middleCenter, new Vector2(12f, 16f));
+            Image handleImg = UI.AddImage(handle, Color.white);
             RectTransform handleRT = handle.GetComponent<RectTransform>();
-            handleRT.anchorMin = new Vector2(0.5f, 0.5f);
-            handleRT.anchorMax = new Vector2(0.5f, 0.5f);
-            handleRT.sizeDelta = new Vector2(12f, 16f);
 
             s.handleRect = handleRT;
             s.targetGraphic = handleImg;
@@ -396,12 +300,9 @@ namespace VPB
         {
             GameObject go = new GameObject("ColorCodeInput");
             go.transform.SetParent(parent.transform, false);
-            LayoutElement rowLe = go.AddComponent<LayoutElement>();
-            rowLe.flexibleHeight = 0;
-            rowLe.preferredHeight = 40;
+            LayoutElement rowLe = UI.AddLE(go, preferredHeight: 40, flexibleHeight: 0);
 
-            Image bgImg = go.AddComponent<Image>();
-            bgImg.color = new Color(0.07f, 0.07f, 0.08f, 1f);
+            Image bgImg = UI.AddImage(go, new Color(0.07f, 0.07f, 0.08f, 1f));
 
             InputField input = go.AddComponent<InputField>();
             GameObject textArea = new GameObject("TextArea");
@@ -412,25 +313,11 @@ namespace VPB
             textAreaRT.offsetMin = new Vector2(10, 5);
             textAreaRT.offsetMax = new Vector2(-10, -5);
 
-            GameObject textGo = new GameObject("Text");
-            textGo.transform.SetParent(textArea.transform, false);
-            Text t = textGo.AddComponent<Text>();
-            t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            t.fontSize = 15;
-            t.color = Color.white;
-            t.alignment = TextAnchor.MiddleLeft;
-            try { VPBUiFont.ApplyTo(t); } catch { }
-            StretchFull(textGo);
+            Text t = UI.CreateLabel(textArea, "", GalleryUiDesignTokens.FontBodyRef, Color.white, TextAnchor.MiddleLeft, name: "Text");
+            StretchFull(t.gameObject);
 
-            GameObject placeholder = new GameObject("Placeholder");
-            placeholder.transform.SetParent(textArea.transform, false);
-            Text ph = placeholder.AddComponent<Text>();
-            ph.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            ph.fontSize = 14;
-            ph.color = new Color(1f, 1f, 1f, 0.35f);
-            ph.text = "#RRGGBB or R,G,B";
-            try { VPBUiFont.ApplyTo(ph); } catch { }
-            StretchFull(placeholder);
+            Text ph = UI.CreateLabel(textArea, "#RRGGBB or R,G,B", GalleryUiDesignTokens.FontBodyRef, new Color(1f, 1f, 1f, 0.35f), name: "Placeholder");
+            StretchFull(ph.gameObject);
 
             input.textComponent = t;
             input.placeholder = ph;

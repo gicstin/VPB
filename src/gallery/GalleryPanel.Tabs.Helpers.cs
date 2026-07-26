@@ -1,11 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEngine;
+using UnityEngine.UI;
 using VPB.src.util;
 
 namespace VPB
 {
+    internal struct ThumbPlaceholderLabelParts
+    {
+        public string Header;
+        public string Item;
+    }
+
     public partial class GalleryPanel
     {
         // Pretty-name + search-scope diagnostics. Flip to true when investigating label/search behavior.
@@ -34,9 +43,12 @@ namespace VPB
         }
 
         private static readonly Color ColorInactiveRow = new Color(0.25f, 0.25f, 0.25f, 1f);
+        /// <summary>Path side row with category count 0 — still listed, visually quieter.</summary>
+        private static readonly Color ColorPathZeroCount = new Color(0.16f, 0.16f, 0.16f, 1f);
+        private static readonly Color ColorPathZeroCountText = new Color(0.55f, 0.55f, 0.55f, 1f);
         private static readonly Color ColorCancelRow = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private static readonly Color ColorGroupRow = new Color(0.2f, 0.2f, 0.2f, 1f);
-        private static readonly Color ColorDangerRow = new Color(0.6f, 0.2f, 0.2f, 1f);
+        private static readonly Color ColorGroupRow = UI.ChromePanel;
+        private static readonly Color ColorDangerRow = UI.AccentRed;
         private static readonly Color ColorDangerAllRow = new Color(0.8f, 0.2f, 0.2f, 1f);
         private static readonly Color ColorNewItemRow = new Color(0.2f, 0.5f, 0.4f, 1f);
         private static readonly Color ColorFacetActiveRow = new Color(0.35f, 0.35f, 0.6f, 1f);
@@ -213,12 +225,17 @@ namespace VPB
             if (IsSettingsPanelOpen() || settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(true);
-                UpdateTabs();
+                // Settings chrome only — full side-tab rebuild not required for settings list rows.
+                try { UpdateTabsImpl(rebuildSideTabLists: false, rebuildSubPaneSideTabLists: false); } catch { }
                 return;
             }
             ReconcileAutoGenderForCurrentTarget();
             RefreshFiles();
-            UpdateTabs();
+            // Do NOT call UpdateTabs() here. RefreshFiles bumps _deferredSubPaneSessionId, cancels
+            // tag/loose-merge coroutines, and schedules DeferredGallerySideTabsAfterGridReady — which
+            // rebuilds side strips + facets once the grid is ready. Sync UpdateTabs was a second full
+            // rebuild and restarted cancelled scans (chip/subfilter storm).
+            try { SyncBrowseFilterChipChrome(); } catch { }
         }
 
         private string GetSelectedTargetGenderLabel()
@@ -353,6 +370,629 @@ namespace VPB
             return seen.Select(k => new KeyValuePair<string, string>(k.Key, k.Value))
                 .OrderBy(kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static bool ShouldOfferThumbPlaceholderForEntry(FileEntry file)
+        {
+            if (file == null) return false;
+            if (file is InternalSettingRowEntry) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// True when row has no resolvable preview path. Must run after <see cref="GalleryPanel.LoadThumbnail"/>
+        /// so <see cref="ThumbnailBindingTag.ExpectedTag"/> reflects path resolution (texture may still be null while decoding).
+        /// </summary>
+        private static bool ShouldShowThumbPlaceholder(FileEntry file, RawImage thumbImg)
+        {
+            if (thumbImg == null) return true;
+            if (thumbImg.texture != null) return false;
+            ThumbnailBindingTag bind = thumbImg.GetComponent<ThumbnailBindingTag>();
+            if (bind != null)
+            {
+                if (bind.CurrentTexture != null) return false;
+                if (!string.IsNullOrEmpty(bind.ExpectedTag))
+                {
+                    int sep = bind.ExpectedTag.IndexOf('|');
+                    if (sep >= 0 && sep < bind.ExpectedTag.Length - 1)
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        private static string GetThumbPlaceholderItemLine(FileEntry file)
+        {
+            if (file == null) return "";
+            try
+            {
+                if (file is VarFileEntry vfe && !string.IsNullOrEmpty(vfe.InternalPath))
+                {
+                    string leaf = Path.GetFileName(vfe.InternalPath.Replace('\\', '/'));
+                    if (!string.IsNullOrEmpty(leaf))
+                    {
+                        int dot = leaf.LastIndexOf('.');
+                        return dot > 0 ? leaf.Substring(0, dot) : leaf;
+                    }
+                }
+            }
+            catch { }
+
+            string raw = file.Name;
+            if (string.IsNullOrEmpty(raw))
+            {
+                string p = file.Path;
+                if (string.IsNullOrEmpty(p)) return "";
+                raw = Path.GetFileName(p.Replace('\\', '/'));
+            }
+            if (string.IsNullOrEmpty(raw)) return "";
+            int dot2 = raw.LastIndexOf('.');
+            return dot2 > 0 ? raw.Substring(0, dot2) : raw;
+        }
+
+        private static VarPackage TryResolvePackageForThumbPlaceholder(FileEntry file)
+        {
+            if (file == null) return null;
+            try
+            {
+                if (file is VarFileEntry vfe)
+                {
+                    VarPackage pkg = null;
+                    try { pkg = vfe.Package; } catch { pkg = null; }
+                    if (pkg != null) return pkg;
+                    try
+                    {
+                        string rowUid = vfe.GetRowPackageUid();
+                        if (!string.IsNullOrEmpty(rowUid))
+                            return FileManager.GetPackage(rowUid, ensureInstalled: false);
+                    }
+                    catch { }
+                }
+                else if (file is PackageListEntry ple)
+                {
+                    try { return ple.Package; } catch { return null; }
+                }
+                else if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                {
+                    try { return FileManager.GetPackage(mple.RequestedUid, ensureInstalled: false); } catch { return null; }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static bool TryParseVarUidParts(string uid, out string creator, out string packageName, out int version)
+        {
+            creator = null;
+            packageName = null;
+            version = -1;
+            if (string.IsNullOrEmpty(uid)) return false;
+
+            int lastDot = uid.LastIndexOf('.');
+            if (lastDot <= 0 || lastDot >= uid.Length - 1) return false;
+            if (!int.TryParse(uid.Substring(lastDot + 1), out version) || version < 0) return false;
+
+            string rest = uid.Substring(0, lastDot);
+            int firstDot = rest.IndexOf('.');
+            if (firstDot <= 0 || firstDot >= rest.Length - 1) return false;
+            creator = rest.Substring(0, firstDot);
+            packageName = rest.Substring(firstDot + 1);
+            return creator.Length > 0 && packageName.Length > 0;
+        }
+
+        private static bool TryExtractVarPackageUidFromPath(string path, out string uid)
+        {
+            uid = null;
+            if (string.IsNullOrEmpty(path)) return false;
+            string p = path.Replace('\\', '/');
+            int sep = p.IndexOf(".var:", StringComparison.OrdinalIgnoreCase);
+            if (sep < 0) return false;
+            int slash = p.LastIndexOf('/', sep);
+            uid = slash >= 0 ? p.Substring(slash + 1, sep - slash - 1) : p.Substring(0, sep);
+            return !string.IsNullOrEmpty(uid);
+        }
+
+        private ThumbPlaceholderLabelParts BuildPluginThumbPlaceholderParts(FileEntry file)
+        {
+            if (file == null) return default;
+
+            string cacheKey = file.Uid;
+            if (string.IsNullOrEmpty(cacheKey)) cacheKey = file.Path;
+            if (!string.IsNullOrEmpty(cacheKey))
+            {
+                try
+                {
+                    if (thumbPlaceholderLabelCache != null
+                        && thumbPlaceholderLabelCache.TryGetValue(cacheKey, out ThumbPlaceholderLabelParts cached))
+                        return cached;
+                }
+                catch { }
+            }
+
+            string item = GetThumbPlaceholderItemLine(file);
+            string creator = null;
+            string pkgName = null;
+            int version = -1;
+
+            try
+            {
+                VarPackage pkg = TryResolvePackageForThumbPlaceholder(file);
+                if (pkg != null)
+                {
+                    creator = pkg.Creator;
+                    pkgName = pkg.Name;
+                    version = pkg.Version;
+                }
+                else
+                {
+                    string pkgUid = null;
+                    if (file is VarFileEntry vfe2)
+                    {
+                        string u = vfe2.Uid ?? file.Path;
+                        if (!string.IsNullOrEmpty(u))
+                        {
+                            int ix = u.IndexOf(":/", StringComparison.Ordinal);
+                            if (ix > 0) pkgUid = u.Substring(0, ix);
+                        }
+                    }
+                    else if (file is MissingPackageListEntry mple && !string.IsNullOrEmpty(mple.RequestedUid))
+                        pkgUid = mple.RequestedUid;
+                    if (string.IsNullOrEmpty(pkgUid))
+                        TryExtractVarPackageUidFromPath(file.Path, out pkgUid);
+                    if (!string.IsNullOrEmpty(pkgUid))
+                        TryParseVarUidParts(pkgUid, out creator, out pkgName, out version);
+                }
+            }
+            catch { }
+
+            var headerSb = new StringBuilder(64);
+            if (!string.IsNullOrEmpty(creator))
+                headerSb.Append(creator);
+            if (!string.IsNullOrEmpty(pkgName))
+            {
+                if (headerSb.Length > 0) headerSb.Append('\n');
+                headerSb.Append(pkgName);
+                if (version >= 0)
+                {
+                    headerSb.Append('.');
+                    headerSb.Append(version);
+                }
+            }
+
+            string header = headerSb.Length > 0 ? headerSb.ToString() : "";
+            string itemLine = item ?? "";
+            if (string.IsNullOrEmpty(header) && string.IsNullOrEmpty(itemLine))
+                itemLine = GetThumbPlaceholderItemLine(file);
+
+            var result = new ThumbPlaceholderLabelParts { Header = header, Item = itemLine };
+
+            try
+            {
+                if (!string.IsNullOrEmpty(cacheKey) && thumbPlaceholderLabelCache != null)
+                {
+                    if (thumbPlaceholderLabelCache.Count > 12000) thumbPlaceholderLabelCache.Clear();
+                    thumbPlaceholderLabelCache[cacheKey] = result;
+                }
+            }
+            catch { }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Square gallery cells share one side length; list mode uses list thumb height.
+        /// Font size is derived once from that canonical side and reused for every visible placeholder.
+        /// </summary>
+        private float GetCanonicalThumbCellSidePx(bool isListMode)
+        {
+            if (isListMode)
+                return Mathf.Max(16f, listThumbSize);
+
+            float side = 100f;
+            try
+            {
+                if (recyclingGrid != null)
+                    side = Mathf.Max(recyclingGrid.CellWidth, recyclingGrid.CellHeight);
+            }
+            catch { }
+
+            float pad = 3f;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    pad = Mathf.Clamp(VPBConfig.Instance.GalleryGridThumbnailPadding, 0f, 40f);
+            }
+            catch { pad = 3f; }
+            side = Mathf.Max(16f, side - pad * 2f);
+
+            bool showGridLabels = VPBConfig.Instance != null && VPBConfig.Instance.GalleryGridLabelsStripVisible();
+            if (showGridLabels)
+            {
+                float labelFrac = GetGridLabelFraction();
+                if (labelFrac > 0.01f && labelFrac < 0.99f)
+                    side = Mathf.Max(16f, side * (1f - labelFrac));
+            }
+
+            return side;
+        }
+
+        private const float ThumbPlaceholderLineHeightMul = 1.12f;
+        /// <summary>~4 lines: creator, name.version, item (+ wrap).</summary>
+        private const float ThumbPlaceholderTotalLineBudget = 4f;
+
+        private void InvalidateThumbPlaceholderFontCache()
+        {
+            _thumbPlaceholderFontLayoutSig = int.MinValue;
+        }
+
+        private static bool GalleryThumbPlaceholderLabelsActive()
+        {
+            try
+            {
+                return VPBConfig.Instance == null || VPBConfig.Instance.GalleryThumbPlaceholderLabelsEnabled;
+            }
+            catch { return true; }
+        }
+
+        private bool IsActivePluginsGalleryCategory()
+        {
+            string t = currentCategoryTitle;
+            if (string.IsNullOrEmpty(t) && titleText != null) t = titleText.text;
+            if (string.IsNullOrEmpty(t)) return false;
+            return t.IndexOf("Plugins", StringComparison.OrdinalIgnoreCase) >= 0
+                   && t.IndexOf("Preset", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        internal bool ShouldForcePluginsCategoryLabelOnly(FileEntry file)
+        {
+            if (file == null) return false;
+            try
+            {
+                if (VPBConfig.Instance == null || !VPBConfig.Instance.PluginGalleryCategoryLabelsOnly)
+                    return false;
+            }
+            catch { return false; }
+            if (!IsActivePluginsGalleryCategory()) return false;
+            return IsPluginScriptGalleryFile(file);
+        }
+
+        private static int FontSizeFromCanonicalCellSidePx(float cellSidePx, float sizeScale)
+        {
+            float inner = Mathf.Max(12f, cellSidePx - 6f);
+            sizeScale = VPBConfig.ClampGalleryThumbPlaceholderSizeScale(sizeScale);
+            float maxByHeight = inner / (ThumbPlaceholderTotalLineBudget * ThumbPlaceholderLineHeightMul);
+            float maxByWidth = inner / 5.5f;
+            int fs = Mathf.FloorToInt(Mathf.Min(maxByHeight, maxByWidth) * sizeScale);
+            return Mathf.Clamp(fs, 6, 28);
+        }
+
+        private int GetThumbPlaceholderFontSize(bool isListMode)
+        {
+            float side = GetCanonicalThumbCellSidePx(isListMode);
+            float sizeScale = 0.7f;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    sizeScale = VPBConfig.Instance.GetGalleryThumbPlaceholderSizeScale();
+            }
+            catch { }
+            int sig = Mathf.RoundToInt(side * 4f)
+                      ^ (Mathf.RoundToInt(sizeScale * 100f) << 8)
+                      ^ (isListMode ? unchecked((int)0x40000000) : 0);
+            if (sig == _thumbPlaceholderFontLayoutSig)
+                return _thumbPlaceholderFontSize;
+            _thumbPlaceholderFontLayoutSig = sig;
+            _thumbPlaceholderFontSize = FontSizeFromCanonicalCellSidePx(side, sizeScale);
+            return _thumbPlaceholderFontSize;
+        }
+
+        private void RefreshThumbPlaceholderLabelLayout()
+        {
+            InvalidateThumbPlaceholderFontCache();
+            try
+            {
+                if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true);
+                else RefreshFiles(true);
+                VPBConfig.Instance.TriggerChange();
+            }
+            catch { }
+        }
+
+        private static string SoftBreakLongUnspacedTokens(string text, int maxRun = 14)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxRun) return text ?? "";
+            if (text.IndexOf(' ') >= 0 || text.IndexOf('\n') >= 0) return text;
+
+            var sb = new StringBuilder(text.Length + text.Length / maxRun + 4);
+            int run = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                sb.Append(c);
+                run++;
+                if (run >= maxRun)
+                {
+                    sb.Append('\u200B');
+                    run = 0;
+                }
+            }
+            return sb.ToString();
+        }
+
+        private static string CombineThumbPlaceholderDisplayText(string header, string item)
+        {
+            if (!string.IsNullOrEmpty(header))
+                header = SoftBreakLongUnspacedTokens(header);
+            if (!string.IsNullOrEmpty(item))
+                item = SoftBreakLongUnspacedTokens(item);
+
+            var sb = new StringBuilder(96);
+            if (!string.IsNullOrEmpty(header))
+                sb.Append(header);
+            if (!string.IsNullOrEmpty(item))
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(item);
+            }
+            return sb.ToString();
+        }
+
+        private const bool ThumbPlaceholderBitmapLabelsEnabled = false;
+
+        private static bool PluginThumbPlaceholderRefsIsUsable(PluginThumbPlaceholderRefs refs)
+        {
+            return refs != null
+                   && refs.Root != null
+                   && refs.Label != null
+                   && refs.Root.GetComponent<RectMask2D>() != null;
+        }
+
+        private static void DestroyPluginThumbPlaceholderRefs(PluginThumbPlaceholderRefs refs)
+        {
+            if (refs == null) return;
+            try
+            {
+                if (refs.Root != null) UnityEngine.Object.Destroy(refs.Root);
+                UnityEngine.Object.Destroy(refs);
+            }
+            catch { }
+        }
+
+        private static void HidePluginThumbPlaceholder(Transform thumbTr)
+        {
+            if (thumbTr == null) return;
+            try
+            {
+                PluginThumbPlaceholderRefs refs = thumbTr.GetComponent<PluginThumbPlaceholderRefs>();
+                if (refs == null) return;
+                refs.WantsLabel = false;
+                if (refs.Root != null && refs.Root.activeSelf)
+                    refs.Root.SetActive(false);
+            }
+            catch { }
+        }
+
+        private static PluginThumbPlaceholderRefs GetOrCreatePluginThumbPlaceholderRefs(Transform thumbTr)
+        {
+            if (thumbTr == null) return null;
+
+            PluginThumbPlaceholderRefs[] all = thumbTr.GetComponents<PluginThumbPlaceholderRefs>();
+            for (int i = 0; i < all.Length; i++)
+                TryWirePluginThumbPlaceholderLabel(all[i]);
+
+            PluginThumbPlaceholderRefs primary = null;
+            for (int i = 0; i < all.Length; i++)
+            {
+                PluginThumbPlaceholderRefs r = all[i];
+                if (r == null) continue;
+                if (PluginThumbPlaceholderRefsIsUsable(r))
+                {
+                    primary = r;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i] != primary)
+                    DestroyPluginThumbPlaceholderRefs(all[i]);
+            }
+
+            if (primary != null)
+            {
+                if (primary.LabelImage == null && primary.Root != null)
+                    primary.LabelImage = CreatePluginThumbPlaceholderLabelImage(primary.Root.transform);
+                return primary;
+            }
+
+            for (int i = 0; i < all.Length; i++)
+                DestroyPluginThumbPlaceholderRefs(all[i]);
+
+            EnsurePluginThumbPlaceholderUi(thumbTr);
+            return thumbTr.GetComponent<PluginThumbPlaceholderRefs>();
+        }
+
+        private static void DestroyLegacyPluginThumbPlaceholder(Transform thumbTr)
+        {
+            if (thumbTr == null) return;
+            try
+            {
+                PluginThumbPlaceholderRefs[] all = thumbTr.GetComponents<PluginThumbPlaceholderRefs>();
+                for (int i = 0; i < all.Length; i++)
+                {
+                    if (!PluginThumbPlaceholderRefsIsUsable(all[i]))
+                        DestroyPluginThumbPlaceholderRefs(all[i]);
+                }
+            }
+            catch { }
+        }
+
+        private static void TryWirePluginThumbPlaceholderLabel(PluginThumbPlaceholderRefs refs)
+        {
+            if (refs == null || refs.Label != null || refs.Root == null) return;
+            try
+            {
+                Text t = refs.Root.GetComponentInChildren<Text>(true);
+                if (t != null) refs.Label = t;
+            }
+            catch { }
+        }
+
+        private static Text CreatePluginThumbPlaceholderLabelText(Transform phTr)
+        {
+            Text label = UI.CreateLabel(phTr.gameObject, "", GalleryUiDesignTokens.FontBodyRef, new Color(0.88f, 0.88f, 0.92f, 1f), TextAnchor.MiddleCenter, richText: false, raycastTarget: false, name: "Text");
+            return label;
+        }
+
+        private static RawImage CreatePluginThumbPlaceholderLabelImage(Transform phTr)
+        {
+            GameObject imgGO = UI.CreateChildRT(phTr.gameObject, "LabelImage", AnchorPresets.stretchAll);
+            RawImage labelImage = imgGO.AddComponent<RawImage>();
+            labelImage.raycastTarget = false;
+            labelImage.color = Color.white;
+            labelImage.gameObject.SetActive(false);
+            return labelImage;
+        }
+
+        private static void EnsurePluginThumbPlaceholderUi(Transform thumbTr)
+        {
+            if (thumbTr == null) return;
+            DestroyLegacyPluginThumbPlaceholder(thumbTr);
+            PluginThumbPlaceholderRefs existing = thumbTr.GetComponent<PluginThumbPlaceholderRefs>();
+            TryWirePluginThumbPlaceholderLabel(existing);
+            if (PluginThumbPlaceholderRefsIsUsable(existing)) return;
+
+            GameObject phGO = UI.CreateChildRT(thumbTr.gameObject, "PluginPlaceholder", AnchorPresets.stretchAll);
+            RectTransform phRT = phGO.GetComponent<RectTransform>();
+            phRT.offsetMin = new Vector2(3f, 3f);
+            phRT.offsetMax = new Vector2(-3f, -3f);
+            phGO.AddComponent<RectMask2D>();
+
+            Text label = CreatePluginThumbPlaceholderLabelText(phGO.transform);
+            RawImage labelImage = CreatePluginThumbPlaceholderLabelImage(phGO.transform);
+
+            phGO.SetActive(false);
+
+            PluginThumbPlaceholderRefs refs = thumbTr.gameObject.AddComponent<PluginThumbPlaceholderRefs>();
+            refs.Root = phGO;
+            refs.Label = label;
+            refs.LabelImage = labelImage;
+            refs.UseBitmapLabel = false;
+        }
+
+        private void ResolveThumbPlaceholderUi(
+            Transform thumbTr,
+            RawImage thumbImg,
+            FileEntry file,
+            bool isListMode,
+            out bool noUsableThumb,
+            out bool showThumbLabels)
+        {
+            noUsableThumb = false;
+            showThumbLabels = false;
+            if (file == null || thumbImg == null) return;
+
+            bool forcePluginLabelsOnly = ShouldForcePluginsCategoryLabelOnly(file);
+            noUsableThumb = ShouldOfferThumbPlaceholderForEntry(file)
+                            && (forcePluginLabelsOnly || ShouldShowThumbPlaceholder(file, thumbImg));
+            showThumbLabels = ShouldOfferThumbPlaceholderForEntry(file)
+                              && (forcePluginLabelsOnly
+                                  || (GalleryThumbPlaceholderLabelsActive() && noUsableThumb));
+            thumbImg.color = noUsableThumb
+                ? ThumbnailPlaceholderBackdrop
+                : (thumbImg.texture != null ? Color.white : ThumbnailPlaceholderBackdrop);
+        }
+
+        internal void SyncThumbPlaceholderForFile(Transform thumbTr, RawImage thumbImg, FileEntry file)
+        {
+            if (thumbTr == null || thumbImg == null || file == null) return;
+            try
+            {
+                bool listMode = layoutMode == GalleryLayoutMode.List || settingsListViewActive;
+                ResolveThumbPlaceholderUi(thumbTr, thumbImg, file, listMode, out bool noUsableThumb, out bool showThumbLabels);
+                ApplyPluginThumbPlaceholder(thumbTr, thumbImg, file, listMode, showThumbLabels);
+            }
+            catch { }
+        }
+
+        private static void ApplyThumbPlaceholderLabelContent(
+            PluginThumbPlaceholderRefs refs,
+            string display,
+            int fontSize,
+            int pixelSize)
+        {
+            if (refs == null || refs.Root == null || refs.Label == null) return;
+
+            long bitmapKey = ThumbPlaceholderLabelBitmapCache.MakeKey(display, fontSize, pixelSize);
+            bool canTryBitmap = ThumbPlaceholderBitmapLabelsEnabled
+                                && !string.IsNullOrEmpty(display)
+                                && refs.LabelImage != null
+                                && fontSize >= 1
+                                && pixelSize >= 32;
+
+            if (canTryBitmap
+                && (refs.UseBitmapLabel || refs.CachedBitmapKey != bitmapKey || refs.LabelImage.texture == null))
+            {
+                Texture2D labelTex;
+                if (ThumbPlaceholderLabelBitmapCache.TryGetTexture(display, fontSize, pixelSize, out labelTex)
+                    && labelTex != null)
+                {
+                    refs.LabelImage.texture = labelTex;
+                    refs.LabelImage.gameObject.SetActive(true);
+                    refs.Label.gameObject.SetActive(false);
+                    refs.UseBitmapLabel = true;
+                    refs.CachedBitmapKey = bitmapKey;
+                    refs.CachedText = display;
+                    refs.CachedFontSize = fontSize;
+                    return;
+                }
+            }
+
+            refs.UseBitmapLabel = false;
+            refs.CachedBitmapKey = 0;
+            if (refs.LabelImage != null)
+            {
+                refs.LabelImage.texture = null;
+                refs.LabelImage.gameObject.SetActive(false);
+            }
+            refs.Label.gameObject.SetActive(true);
+            if (!string.Equals(refs.CachedText, display, StringComparison.Ordinal))
+            {
+                refs.Label.text = display;
+                refs.CachedText = display;
+            }
+            if (refs.CachedFontSize != fontSize)
+            {
+                refs.Label.fontSize = fontSize;
+                refs.CachedFontSize = fontSize;
+            }
+        }
+
+        private void ApplyPluginThumbPlaceholder(Transform thumbTr, RawImage thumbImg, FileEntry file, bool isListMode, bool showPlaceholder)
+        {
+            if (thumbTr == null) return;
+
+            if (!showPlaceholder)
+            {
+                HidePluginThumbPlaceholder(thumbTr);
+                return;
+            }
+
+            PluginThumbPlaceholderRefs refs = GetOrCreatePluginThumbPlaceholderRefs(thumbTr);
+            if (refs == null || refs.Root == null || refs.Label == null) return;
+
+            refs.WantsLabel = true;
+
+            ThumbPlaceholderLabelParts parts = BuildPluginThumbPlaceholderParts(file);
+            int fontSize = GetThumbPlaceholderFontSize(isListMode);
+            string display = CombineThumbPlaceholderDisplayText(parts.Header, parts.Item);
+            if (string.IsNullOrEmpty(display))
+                display = GetThumbPlaceholderItemLine(file);
+            int pixelSize = ThumbPlaceholderLabelBitmapCache.QuantizeBakePixelSize(GetCanonicalThumbCellSidePx(isListMode));
+
+            ApplyThumbPlaceholderLabelContent(refs, display, fontSize, pixelSize);
+
+            if (!refs.Root.activeSelf) refs.Root.SetActive(true);
         }
     }
 }

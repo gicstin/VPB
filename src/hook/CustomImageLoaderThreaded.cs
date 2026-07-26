@@ -92,7 +92,19 @@ namespace VPB
                 debugStageAux = 0;
                 debugStageRealtime = 0f;
                 thumbVarIoPending = false;
+                onDemandCacheBuild = false;
+                onDemandDecodeFromSource = false;
+                suppressNativeDiskWrite = false;
             }
+
+            /// <summary>On-demand cache prewarm: use loader Process/Finish instead of a parallel Unity build path.</summary>
+            public bool onDemandCacheBuild;
+
+            /// <summary>When true with <see cref="onDemandCacheBuild"/>, skip gallery/VPB/VaM disk cache reads and decode from source file.</summary>
+            public bool onDemandDecodeFromSource;
+
+            /// <summary>When true with <see cref="onDemandCacheBuild"/>, do not write VaM <c>.vamcache</c> in <see cref="Finish"/> (zstd-only builds).</summary>
+            public bool suppressNativeDiskWrite;
 
             public int priority;
             public long insertionIndex;
@@ -262,6 +274,11 @@ namespace VPB
 				return result;
 			}
 
+			public string ResolveDiskCachePath()
+			{
+				return GetDiskCachePath();
+			}
+
 			protected string GetWebCachePath()
 			{
 				string result = null;
@@ -288,6 +305,33 @@ namespace VPB
 				return false;
 			}
 
+			/// <summary>Decode/file paths only supply base mip in <see cref="raw"/>; mip chain is built on <see cref="Texture2D.Apply"/>.</summary>
+			bool ShouldAllocateMipChainForRawLoad()
+			{
+				if (!createMipMaps) return false;
+				if (!preprocessed) return false;
+				int len = rawLength > 0 ? rawLength : (raw != null ? raw.Length : 0);
+				if (len <= 0) return false;
+				int baseSize = TextureUtil.GetExpectedRawDataSize(width, height, textureFormat);
+				if (baseSize <= 0) return true;
+				return len > baseSize;
+			}
+
+			void LogLoadRawDiagnostics(string pathLabel, string errorMsg)
+			{
+				int len = rawLength > 0 ? rawLength : (raw != null ? raw.Length : -1);
+				int expected = TextureUtil.GetExpectedRawDataSize(width, height, textureFormat);
+				LogUtil.LogError(
+					"[VPB] LoadRawTextureData failed (" + pathLabel + ") for " + imgPath
+					+ ": " + errorMsg
+					+ " | " + width + "x" + height + " fmt=" + textureFormat
+					+ " rawLen=" + len + " expectedBase=" + expected
+					+ " mips=" + createMipMaps + " mipAlloc=" + ShouldAllocateMipChainForRawLoad()
+					+ " pre=" + preprocessed + " fast=" + decodedFromFastPath
+					+ " onDemand=" + onDemandCacheBuild
+					+ " N=" + isNormalMap + " C=" + compress);
+			}
+
 			public void CreateTexture()
 			{
 				if (tex == null)
@@ -298,7 +342,7 @@ namespace VPB
 					}
 					try
 					{
-						tex = new Texture2D(width, height, textureFormat, createMipMaps, linear);
+						tex = new Texture2D(width, height, textureFormat, ShouldAllocateMipChainForRawLoad(), linear);
 					}
 					catch (Exception ex)
 					{
@@ -331,11 +375,61 @@ namespace VPB
 					}
 					try { loadedFromDownscaledCache = asObject["downscaled"].AsBool; }
 					catch { loadedFromDownscaledCache = false; }
+					try { createMipMaps = asObject["createMipMaps"].AsBool; }
+					catch { }
+					try
+					{
+						string mipStorage = asObject["mipStorage"];
+						if (!string.IsNullOrEmpty(mipStorage)
+							&& string.Equals(mipStorage, TextureUtil.MipStorageFull, StringComparison.OrdinalIgnoreCase))
+						{
+							createMipMaps = true;
+						}
+					}
+					catch { }
 				}
 			}
 
 			internal void ProcessFromStream(Stream st)
 			{
+				if (VaMCompatibleImageDecode.ShouldUseVaMDecode(isThumbnail, onDemandDecodeFromSource, imgPath))
+				{
+					try
+					{
+						try { debugStage = 22; debugStageAux = 1; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+						string decodeErr;
+						int w, h;
+						TextureFormat fmt;
+						byte[] decoded;
+						int decodedLen;
+						if (VaMCompatibleImageDecode.TryDecodeFromStream(
+							st, setSize, width, height, fillBackground, compress,
+							isNormalMap, createAlphaFromGrayscale, createNormalFromBump, bumpStrength, invert,
+							out w, out h, out fmt, out decoded, out decodedLen, out decodeErr))
+						{
+							width = w;
+							height = h;
+							textureFormat = fmt;
+							rawLength = decodedLen;
+							raw = ByteArrayPool.Rent(rawLength);
+							Buffer.BlockCopy(decoded, 0, raw, 0, rawLength);
+							needsDecoding = false;
+							preprocessed = false;
+							try { debugStage = 24; debugStageAux = rawLength; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+							return;
+						}
+						hadError = true;
+						errorText = decodeErr ?? "VaM GDI+ decode failed";
+						return;
+					}
+					catch (Exception exGdi)
+					{
+						hadError = true;
+						errorText = exGdi.Message;
+						return;
+					}
+				}
+
 				try
 				{
                     try { debugStage = 22; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
@@ -457,132 +551,107 @@ namespace VPB
 					{
 						// Assign the queued image's field, not a local — downstream skip logic reads it to avoid duplicate disk-cache jobs.
 						loadedFromGalleryCache = false;
-						if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
-						{
-                            long lastWriteTime = 0;
-                            bool foundTime = false;
-                            
-                            if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                            {
-                                lastWriteTime = 0;
-                                foundTime = true;
-                            }
-                            else
-                            {
-                                FileEntry fe = FileManager.GetFileEntry(imgPath);
-                                if (fe != null)
-                                {
-                                    lastWriteTime = fe.LastWriteTime.ToFileTime();
-                                    foundTime = true;
-                                }
-                            }
-
-							if (foundTime)
-							{
-								int w, h;
-								TextureFormat fmt;
-								byte[] data;
-								if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
-								{
-									raw = data;
-									width = w;
-									height = h;
-									textureFormat = fmt;
-									preprocessed = true;
-									loadedFromGalleryCache = true;
-									loadedFromCache = true;
-									loadedFromDownscaledCache = false;
-								}
-							}
-						}
-
-						string vpbCachePath = isThumbnail ? null : GetVPBCachePath();
-						string diskCachePath = isThumbnail ? null : GetDiskCachePath();
-
-						if (!loadedFromGalleryCache && vpbCachePath != null && File.Exists(vpbCachePath))
+						if (onDemandCacheBuild && onDemandDecodeFromSource)
 						{
 							try
 							{
-								string metaPath = vpbCachePath + "meta";
-								if (File.Exists(metaPath))
+								using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
 								{
-									string jsonString = File.ReadAllText(metaPath);
-									ReadMetaJson(jsonString);
-									byte[] compressed = File.ReadAllBytes(vpbCachePath);
-									raw = ZstdCompressor.Decompress(compressed);
-									preprocessed = true;
-									loadedFromCache = true;
+									ProcessFromStream(fileEntryStream.Stream);
 								}
 							}
-							catch (Exception ex)
+							catch (Exception ex4)
 							{
-								LogUtil.LogError("Exception during VPB cache file read " + ex);
-							}
-						}
-
-						if (!loadedFromGalleryCache && !preprocessed && MVR.FileManagement.CacheManager.CachingEnabled && diskCachePath != null && FileManager.FileExists(diskCachePath))
-						{
-							try
-							{
-								string text2 = diskCachePath + "meta";
-								if (FileManager.FileExists(text2))
-								{
-									string jsonString2 = FileManager.ReadAllText(text2);
-									ReadMetaJson(jsonString2);
-									using (Stream fs = new FileStream(diskCachePath, FileMode.Open, FileAccess.Read))
-									{
-										int len = (int)fs.Length;
-										raw = ByteArrayPool.Rent(len);
-										int read = 0;
-										while (read < len)
-										{
-											int r = fs.Read(raw, read, len - read);
-											if (r == 0) break;
-											read += r;
-										}
-									}
-									preprocessed = true;
-									loadedFromCache = true;
-								}
-								else
-								{
-									hadError = true;
-									errorText = "Missing cache meta file " + text2;
-								}
-							}
-							catch (Exception ex3)
-							{
-								LogUtil.LogError("Exception during cache file read " + ex3);
 								hadError = true;
-								errorText = ex3.ToString();
+								LogUtil.LogError("Exception " + ex4 + " " + imgPath);
+								errorText = ex4.ToString();
 							}
 						}
 						else
 						{
-							if (!loadedFromGalleryCache)
+							if (isThumbnail && !skipCache && !thumbnailUnityDecodeOnly)
+							{
+	                            long lastWriteTime = 0;
+	                            bool foundTime = false;
+	                            
+	                            if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+	                            {
+	                                lastWriteTime = 0;
+	                                foundTime = true;
+	                            }
+	                            else
+	                            {
+	                                lastWriteTime = GetLooseThumbnailLastWriteTime(imgPath);
+	                                foundTime = lastWriteTime != 0;
+	                                if (!foundTime)
+	                                {
+	                                    try { foundTime = FileManager.FileExists(imgPath); } catch { foundTime = false; }
+	                                }
+	                            }
+
+								if (foundTime)
+								{
+									int w, h;
+									TextureFormat fmt;
+									byte[] data;
+									if (GalleryThumbnailCache.Instance.TryGetThumbnail(imgPath, lastWriteTime, out data, out w, out h, out fmt, turboJpegScaleDenom))
+									{
+										raw = data;
+										width = w;
+										height = h;
+										textureFormat = fmt;
+										preprocessed = true;
+										loadedFromGalleryCache = true;
+										loadedFromCache = true;
+										loadedFromDownscaledCache = false;
+									}
+								}
+							}
+
+							if (!loadedFromGalleryCache && !preprocessed && !onDemandCacheBuild && ImageLoadingMgr.singleton != null)
+							{
+								byte[] cachedRaw;
+								int cachedLen;
+								int cw, ch;
+								TextureFormat cfmt;
+								bool cmips;
+								if (ImageLoadingMgr.singleton.TryFillPreprocessedRawForProcess(
+									imgPath, compress, linear, isNormalMap, createAlphaFromGrayscale, createNormalFromBump, invert, bumpStrength,
+									setSize, width, height, createMipMaps,
+									out cachedRaw, out cachedLen, out cw, out ch, out cfmt, out cmips))
+								{
+									raw = cachedRaw;
+									rawLength = cachedLen;
+									width = cw;
+									height = ch;
+									textureFormat = cfmt;
+									createMipMaps = cmips;
+									preprocessed = true;
+									loadedFromCache = true;
+								}
+							}
+
+							if (!preprocessed)
 							{
 								try
 								{
-									// Load image from a var package
-                                    try { debugStage = 20; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                                    bool isVarPath = false;
-                                    try { isVarPath = imgPath != null && imgPath.IndexOf(":/", StringComparison.Ordinal) > 0; } catch { isVarPath = false; }
+	                                try { debugStage = 20; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+	                                bool isVarPath = false;
+	                                try { isVarPath = imgPath != null && imgPath.IndexOf(":/", StringComparison.Ordinal) > 0; } catch { isVarPath = false; }
 
-                                    if (isThumbnail && isVarPath)
-                                    {
-                                        // VAR thumbnails read on the dedicated IO thread; concurrent FileManager.OpenStream
-                                        // from worker threads deadlocks inside FileManager. Return now; IO thread re-enqueues for decode.
-                                        return;
-                                    }
-                                    else
-                                    {
-                                        using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
-                                        {
-                                            try { debugStage = 21; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
-                                            Stream stream = fileEntryStream.Stream;
-                                            ProcessFromStream(stream);
-                                        }
-                                    }
+	                                if (isThumbnail && isVarPath)
+	                                {
+	                                    return;
+	                                }
+	                                else
+	                                {
+	                                    using (FileEntryStream fileEntryStream = FileManager.OpenStream(imgPath))
+	                                    {
+	                                        try { debugStage = 21; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
+	                                        Stream stream = fileEntryStream.Stream;
+	                                        ProcessFromStream(stream);
+	                                    }
+	                                }
 								}
 								catch (Exception ex4)
 								{
@@ -864,6 +933,100 @@ namespace VPB
                 }
             }
 
+			private void TrySaveGalleryThumbnail(ref bool savedToGalleryCache)
+			{
+				if (!isThumbnail || GalleryThumbnailCache.Instance == null || Regex.IsMatch(imgPath, "^http") || loadedFromGalleryCache || tex == null)
+				{
+					return;
+				}
+
+				try
+				{
+					if (!FileManager.FileExists(imgPath)) return;
+
+					long lastWriteTime = 0;
+					bool foundTime = false;
+					if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
+					{
+						lastWriteTime = 0;
+						foundTime = true;
+					}
+					else
+					{
+						lastWriteTime = GetLooseThumbnailLastWriteTime(imgPath);
+						foundTime = lastWriteTime != 0;
+					}
+
+					if (!foundTime || tex.width > 512 || tex.height > 512) return;
+
+					byte[] rawTextureData2 = tex.GetRawTextureData();
+					GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime, turboJpegScaleDenom);
+					savedToGalleryCache = true;
+					loadedFromGalleryCache = true;
+				}
+				catch (Exception ex)
+				{
+					LogUtil.LogError("Exception during gallery caching " + ex);
+				}
+			}
+
+			private void TryWriteVaMDiskCache(bool savedToGalleryCache)
+			{
+				if (tex == null || suppressNativeDiskWrite || savedToGalleryCache || !MVR.FileManagement.CacheManager.CachingEnabled)
+				{
+					return;
+				}
+
+				// On-demand prewarm builds zstd directly; skip interim native while job runs.
+				if (!onDemandCacheBuild)
+				{
+					try
+					{
+						if (NativeTextureOnDemandCache.IsOnDemandBusy
+							&& Settings.Instance != null
+							&& Settings.Instance.EnableZstdCompression != null
+							&& Settings.Instance.EnableZstdCompression.Value)
+						{
+							return;
+						}
+					}
+					catch { }
+				}
+
+				string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
+				if (text == null || FileManager.FileExists(text))
+				{
+					return;
+				}
+
+				try
+				{
+					string cacheDir = null;
+					try { cacheDir = Path.GetDirectoryName(text); } catch { cacheDir = null; }
+					if (!string.IsNullOrEmpty(cacheDir) && !Directory.Exists(cacheDir))
+					{
+						Directory.CreateDirectory(cacheDir);
+					}
+
+					JSONClass jSONClass = new JSONClass();
+					jSONClass["type"] = "image";
+					jSONClass["width"] = tex.width.ToString();
+					jSONClass["height"] = tex.height.ToString();
+					jSONClass["format"] = tex.format.ToString();
+					byte[] rawTextureData2 = tex.GetRawTextureData();
+					TextureUtil.WriteMipFieldsToMeta(jSONClass, tex.width, tex.height, tex.format, rawTextureData2 != null ? rawTextureData2.Length : 0, createMipMaps);
+					string contents = VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024);
+					File.WriteAllText(text + "meta", contents);
+					File.WriteAllBytes(text, rawTextureData2);
+				}
+				catch (Exception ex)
+				{
+					LogUtil.LogError("Exception during caching " + ex);
+					hadError = true;
+					errorText = "Exception during caching of " + imgPath + ": " + ex;
+				}
+			}
+
 			public void Finish()
 			{
 				if (needsDecoding) Decode();
@@ -899,7 +1062,7 @@ namespace VPB
 					}
 					catch (Exception ex)
 					{
-                        LogUtil.LogError($"[VPB] LoadRawTextureData failed (preprocessed) for {imgPath}. RawLength: {(raw != null ? raw.Length : -1)} | Format: {textureFormat} | Size: {width}x{height} | Error: {ex.Message}");
+                        LogLoadRawDiagnostics("preprocessed", ex.Message);
 						UnityEngine.Object.Destroy(tex);
 						tex = null;
 						createMipMaps = false;
@@ -911,7 +1074,9 @@ namespace VPB
                         }
 					}
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-					tex.Apply(false, !isSimTexture);
+					bool keepReadable = onDemandCacheBuild || isThumbnail;
+					bool genMipsOnApply = createMipMaps && !ShouldAllocateMipChainForRawLoad();
+					tex.Apply(genMipsOnApply, !keepReadable && !isSimTexture);
 					if (canCompress && textureFormat != TextureFormat.DXT1 && textureFormat != TextureFormat.DXT5)
 					{
 						try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -922,7 +1087,8 @@ namespace VPB
 					bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
 					// Thumbnails (TurboJPEG RGB24): keep CPU copy readable — non-readable breaks Blit/ReadPixels
 					// in gallery disk-cache pipeline and some UI paths; full-size loads keep original policy.
-					bool makeNoLongerReadable = !isThumbnail && !canCompress && !isSimTexture;
+					bool keepReadable = onDemandCacheBuild || isThumbnail;
+					bool makeNoLongerReadable = !keepReadable && !canCompress && !isSimTexture;
                     tex.Apply(createMipMaps, makeNoLongerReadable);
                     if (canCompress && tex.format != TextureFormat.DXT1 && tex.format != TextureFormat.DXT5)
                     {
@@ -943,7 +1109,7 @@ namespace VPB
 					    byte[] rawTextureData = texture2D.GetRawTextureData();
 					    tex.LoadRawTextureData(rawTextureData);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-					    tex.Apply(false, !isSimTexture);
+					    tex.Apply(false, !isSimTexture && !onDemandCacheBuild);
 					    UnityEngine.Object.Destroy(texture2D);
                     }
                     catch (Exception ex)
@@ -957,7 +1123,9 @@ namespace VPB
                     {
 					    TextureUtil.SafeLoadRawTextureData(tex, raw, width, height, textureFormat);
 						bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(imgPath);
-					    tex.Apply(false, !isSimTexture);
+						bool keepReadable = onDemandCacheBuild || isThumbnail;
+						bool genMipsOnApply = createMipMaps && !ShouldAllocateMipChainForRawLoad();
+					    tex.Apply(genMipsOnApply, !keepReadable && !isSimTexture);
 					    if (canCompress)
 					    {
 						    try { tex.Compress(true); } catch (Exception ex) { LogUtil.LogError("Compress failed " + ex + " path=" + imgPath); canCompress = false; }
@@ -965,77 +1133,22 @@ namespace VPB
                     }
                     catch (Exception ex)
                     {
-                        LogUtil.LogError($"[VPB] LoadRawTextureData failed (standard path) for {imgPath}: {ex.Message}");
+                        LogLoadRawDiagnostics("standard", ex.Message);
                     }
-                    bool savedToGalleryCache = loadedFromCache || loadedFromGalleryCache;
-                    if (isThumbnail && GalleryThumbnailCache.Instance != null && !Regex.IsMatch(imgPath, "^http") && !loadedFromGalleryCache)
-                    {
-                         try
-                         {
-                             if (FileManager.FileExists(imgPath))
-                             {
-                                 long lastWriteTime = 0;
-                                 bool foundTime = false;
-                                 if (GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                                 {
-                                     lastWriteTime = 0;
-                                     foundTime = true;
-                                 }
-                                 else
-                                 {
-                                     FileEntry fe = FileManager.GetFileEntry(imgPath);
-                                     if (fe != null)
-                                     {
-                                         lastWriteTime = fe.LastWriteTime.ToFileTime();
-                                         foundTime = true;
-                                     }
-                                 }
+				}
 
-                                 if (foundTime)
-                                 {
-                                     // Only save to thumbnail cache if it's reasonably small
-                                     if (tex.width <= 512 && tex.height <= 512)
-                                     {
-                                         byte[] rawTextureData2 = tex.GetRawTextureData();
-                                         GalleryThumbnailCache.Instance.SaveThumbnail(imgPath, rawTextureData2, rawTextureData2.Length, tex.width, tex.height, tex.format, lastWriteTime, turboJpegScaleDenom);
-                                         savedToGalleryCache = true;
-                                         loadedFromGalleryCache = true;
-                                     }
-                                 }
-                             }
-                         }
-                         catch (Exception ex)
-                         {
-                             LogUtil.LogError("Exception during gallery caching " + ex);
-                         }
-                    }
-
-					if (!savedToGalleryCache && MVR.FileManagement.CacheManager.CachingEnabled)
+				if (tex != null && !hadError)
+				{
+					// Disk I/O + GetRawTextureData during scroll hitch — gallery already queues delayed cache jobs.
+					bool skipDiskWhileScroll = isThumbnail && IsGalleryScrollHot;
+					if (!skipDiskWhileScroll)
 					{
-						string text = ((!Regex.IsMatch(imgPath, "^http")) ? GetDiskCachePath() : GetWebCachePath());
-						if (text != null && !FileManager.FileExists(text))
-						{
-							try
-							{
-								JSONClass jSONClass = new JSONClass();
-								jSONClass["type"] = "image";
-								jSONClass["width"] = tex.width.ToString();
-								jSONClass["height"] = tex.height.ToString();
-								jSONClass["format"] = tex.format.ToString();
-								string contents = VPB.src.util.JsonSerializationUtil.Serialize(jSONClass, 1024);
-								byte[] rawTextureData2 = tex.GetRawTextureData();
-								File.WriteAllText(text + "meta", contents);
-								File.WriteAllBytes(text, rawTextureData2);
-							}
-							catch (Exception ex)
-							{
-								LogUtil.LogError("Exception during caching " + ex);
-								hadError = true;
-								errorText = "Exception during caching of " + imgPath + ": " + ex;
-							}
-						}
+						bool savedToGalleryCache = loadedFromCache || loadedFromGalleryCache;
+						TrySaveGalleryThumbnail(ref savedToGalleryCache);
+						TryWriteVaMDiskCache(savedToGalleryCache);
 					}
 				}
+
                 if (raw != null)
                 {
                     ByteArrayPool.Return(raw);
@@ -1090,6 +1203,344 @@ namespace VPB
             return pool.Get();
         }
 
+        public void ReturnQueuedImage(QueuedImage qi)
+        {
+            pool.Return(qi);
+        }
+
+        public struct OnDemandCacheBuildResult
+        {
+            public bool success;
+            public string error;
+            public byte[] payload;
+            public int width;
+            public int height;
+            public TextureFormat format;
+            public bool wroteNativeCache;
+            public bool didDownscale;
+            public int sourceWidth;
+            public int sourceHeight;
+        }
+
+        /// <summary>Main-thread compress + optional native disk write from pre-decoded RGB(A) produced on a worker thread.</summary>
+        public static OnDemandCacheBuildResult BuildOnDemandFinishFromDecoded(
+            string imgUidPath,
+            byte[] decodedRaw,
+            int decodedRawLength,
+            int width,
+            int height,
+            TextureFormat textureFormat,
+            bool compress,
+            bool linear,
+            bool isNormalMap,
+            bool createAlphaFromGrayscale,
+            bool createNormalFromBump,
+            bool invert,
+            float bumpStrength,
+            bool suppressNativeDiskWrite)
+        {
+            var result = new OnDemandCacheBuildResult();
+            CustomImageLoaderThreaded loader = singleton;
+            if (loader == null)
+            {
+                result.error = "ImageLoader singleton missing";
+                return result;
+            }
+
+            if (string.IsNullOrEmpty(imgUidPath) || decodedRaw == null || decodedRawLength <= 0 || width <= 0 || height <= 0)
+            {
+                result.error = "Invalid decoded payload";
+                return result;
+            }
+
+            QueuedImage qi = loader.GetQI();
+            try
+            {
+                qi.onDemandCacheBuild = true;
+                qi.onDemandDecodeFromSource = true;
+                qi.suppressNativeDiskWrite = suppressNativeDiskWrite;
+                qi.isThumbnail = false;
+                qi.skipCache = true;
+                qi.imgPath = imgUidPath;
+                qi.compress = compress;
+                qi.linear = linear;
+                qi.isNormalMap = isNormalMap;
+                qi.createAlphaFromGrayscale = createAlphaFromGrayscale;
+                qi.createNormalFromBump = createNormalFromBump;
+                qi.invert = invert;
+                qi.bumpStrength = bumpStrength;
+                qi.createMipMaps = true;
+                qi.setSize = false;
+                qi.processed = true;
+                qi.needsDecoding = false;
+                qi.preprocessed = false;
+                qi.width = width;
+                qi.height = height;
+                qi.textureFormat = textureFormat;
+                qi.rawLength = decodedRawLength;
+                qi.raw = ByteArrayPool.Rent(decodedRawLength);
+                Buffer.BlockCopy(decodedRaw, 0, qi.raw, 0, decodedRawLength);
+
+                qi.Finish();
+
+                if (qi.hadError)
+                {
+                    result.error = qi.errorText;
+                    return result;
+                }
+
+                if (qi.tex == null)
+                {
+                    result.error = "Texture null after Finish";
+                    return result;
+                }
+
+                result.width = qi.tex.width;
+                result.height = qi.tex.height;
+                result.format = qi.tex.format;
+                result.sourceWidth = result.width;
+                result.sourceHeight = result.height;
+
+                try
+                {
+                    result.payload = qi.tex.GetRawTextureData();
+                }
+                catch (Exception ex)
+                {
+                    result.error = "GetRawTextureData: " + ex.Message;
+                    return result;
+                }
+
+                if (!suppressNativeDiskWrite)
+                {
+                    string nativePathAfter = qi.ResolveDiskCachePath();
+                    if (!string.IsNullOrEmpty(nativePathAfter))
+                    {
+                        result.wroteNativeCache = File.Exists(nativePathAfter) && File.Exists(nativePathAfter + "meta");
+                    }
+                }
+
+                result.success = result.payload != null && result.payload.Length > 0;
+
+                if (result.success && qi.tex != null)
+                {
+                    try { loader.TryRegisterOnDemandBuiltTexture(qi); } catch { }
+                }
+
+                return result;
+            }
+            finally
+            {
+                if (qi != null)
+                {
+                    if (qi.raw != null)
+                    {
+                        try { ByteArrayPool.Return(qi.raw); } catch { }
+                        qi.raw = null;
+                    }
+                    if (qi.tex != null)
+                    {
+                        UnityEngine.Object.Destroy(qi.tex);
+                        qi.tex = null;
+                    }
+                    loader.ReturnQueuedImage(qi);
+                }
+            }
+        }
+
+        /// <summary>Build DXT payload via the same Process/Finish path used at runtime (VaM-compatible .vamcache write when enabled).</summary>
+        public static OnDemandCacheBuildResult BuildOnDemandViaLoader(
+            string imgUidPath,
+            bool compress,
+            bool linear,
+            bool isNormalMap,
+            bool createAlphaFromGrayscale,
+            bool createNormalFromBump,
+            bool invert,
+            float bumpStrength,
+            int targetWidth,
+            int targetHeight,
+            bool decodeFromSourceOnly,
+            bool suppressNativeDiskWrite)
+        {
+            var result = new OnDemandCacheBuildResult();
+            CustomImageLoaderThreaded loader = singleton;
+            if (loader == null)
+            {
+                result.error = "ImageLoader singleton missing";
+                return result;
+            }
+
+            if (string.IsNullOrEmpty(imgUidPath))
+            {
+                result.error = "Empty image path";
+                return result;
+            }
+
+            QueuedImage qi = loader.GetQI();
+            string nativePathBefore = null;
+            bool nativeExisted = false;
+            try
+            {
+                qi.onDemandCacheBuild = true;
+                qi.onDemandDecodeFromSource = decodeFromSourceOnly;
+                qi.suppressNativeDiskWrite = suppressNativeDiskWrite;
+                qi.isThumbnail = false;
+                qi.skipCache = true;
+                qi.imgPath = imgUidPath;
+                qi.compress = compress;
+                qi.linear = linear;
+                qi.isNormalMap = isNormalMap;
+                qi.createAlphaFromGrayscale = createAlphaFromGrayscale;
+                qi.createNormalFromBump = createNormalFromBump;
+                qi.invert = invert;
+                qi.bumpStrength = bumpStrength;
+                qi.createMipMaps = true;
+                qi.setSize = targetWidth > 0 && targetHeight > 0;
+                if (qi.setSize)
+                {
+                    qi.width = targetWidth;
+                    qi.height = targetHeight;
+                }
+
+                nativePathBefore = qi.ResolveDiskCachePath();
+                if (!string.IsNullOrEmpty(nativePathBefore))
+                {
+                    nativeExisted = File.Exists(nativePathBefore) && File.Exists(nativePathBefore + "meta");
+                }
+
+                qi.Process();
+                qi.Finish();
+
+                if (qi.hadError)
+                {
+                    result.error = qi.errorText;
+                    try
+                    {
+                        int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0;
+                        if (lvl >= 1)
+                        {
+                            LogUtil.LogWarning(
+                                "[VPB OnDemand] Loader hadError path=" + imgUidPath
+                                + " err=" + (qi.errorText ?? string.Empty)
+                                + " N=" + isNormalMap + " C=" + compress + " L=" + linear
+                                + " decodeSrc=" + decodeFromSourceOnly + " noNativeWrite=" + suppressNativeDiskWrite);
+                        }
+                    }
+                    catch { }
+                    return result;
+                }
+
+                if (qi.tex == null)
+                {
+                    result.error = "Texture null after Finish";
+                    return result;
+                }
+
+                result.width = qi.tex.width;
+                result.height = qi.tex.height;
+                result.format = qi.tex.format;
+                result.sourceWidth = result.width;
+                result.sourceHeight = result.height;
+                if (qi.setSize)
+                {
+                    result.didDownscale = true;
+                }
+
+                try
+                {
+                    result.payload = qi.tex.GetRawTextureData();
+                }
+                catch (Exception ex)
+                {
+                    result.error = "GetRawTextureData: " + ex.Message;
+                    try
+                    {
+                        int lvl = Settings.Instance != null && Settings.Instance.TextureLogLevel != null ? Settings.Instance.TextureLogLevel.Value : 0;
+                        if (lvl >= 1)
+                        {
+                            LogUtil.LogWarning(
+                                "[VPB OnDemand] GetRawTextureData failed path=" + imgUidPath
+                                + " fmt=" + qi.tex.format + " " + qi.tex.width + "x" + qi.tex.height
+                                + " onDemandBuild=" + qi.onDemandCacheBuild + " err=" + ex.Message);
+                        }
+                    }
+                    catch { }
+                    return result;
+                }
+
+                if (!suppressNativeDiskWrite)
+                {
+                    string nativePathAfter = qi.ResolveDiskCachePath();
+                    if (!string.IsNullOrEmpty(nativePathAfter))
+                    {
+                        result.wroteNativeCache = File.Exists(nativePathAfter) && File.Exists(nativePathAfter + "meta");
+                    }
+                }
+
+                result.success = result.payload != null && result.payload.Length > 0;
+
+                if (result.success && qi.tex != null && targetWidth == 0 && targetHeight == 0)
+                {
+                    try { loader.TryRegisterOnDemandBuiltTexture(qi); } catch { }
+                }
+
+                return result;
+            }
+            finally
+            {
+                if (qi != null)
+                {
+                    if (qi.tex != null)
+                    {
+                        UnityEngine.Object.Destroy(qi.tex);
+                        qi.tex = null;
+                    }
+                    loader.ReturnQueuedImage(qi);
+                }
+            }
+        }
+
+        /// <summary>Mirror stock PostProcessImageQueue RAM cache after on-demand full-size build.</summary>
+        public void TryRegisterOnDemandBuiltTexture(QueuedImage qi)
+        {
+            if (qi == null || qi.hadError || qi.tex == null || qi.isThumbnail) return;
+            if (qi.setSize && (qi.width > 0 || qi.height > 0)) return;
+            if (string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return;
+
+            if (textureCache == null)
+            {
+                textureCache = new Dictionary<string, Texture2D>();
+                textureTrackedCache = new Dictionary<Texture2D, bool>();
+            }
+
+            string sig = qi.cacheSignature;
+            if (textureCache.ContainsKey(sig)) return;
+
+            Texture2D dup = null;
+            try
+            {
+                byte[] raw = qi.tex.GetRawTextureData();
+                dup = new Texture2D(qi.tex.width, qi.tex.height, qi.tex.format, qi.tex.mipmapCount > 1, qi.linear);
+                dup.name = sig;
+                dup.LoadRawTextureData(raw);
+                dup.Apply(false, false);
+            }
+            catch
+            {
+                if (dup != null)
+                {
+                    UnityEngine.Object.Destroy(dup);
+                    dup = null;
+                }
+            }
+
+            if (dup == null) return;
+
+            textureCache.Add(sig, dup);
+            textureTrackedCache.Add(dup, true);
+        }
+
         /// <summary>In-RAM thumbnail LRU key; matches disk <see cref="GalleryThumbnailCache.GetThumbnailCacheKey"/> tier suffix; <c>|uj</c> = Unity-only decode (hover preview).</summary>
         public static string ThumbnailMemoryCacheKey(string path, int turboJpegScaleDenom, bool unityDecodeOnly = false)
         {
@@ -1097,6 +1548,29 @@ namespace VPB
             string k = turboJpegScaleDenom <= 1 ? path : path + "|tj" + turboJpegScaleDenom;
             if (unityDecodeOnly) return k + "|uj";
             return k;
+        }
+
+        /// <summary>Live disk mtime for loose thumbs; FileEntry can stay stale after overwrite save.</summary>
+        private static long GetLooseThumbnailLastWriteTime(string imgPath)
+        {
+            if (string.IsNullOrEmpty(imgPath)) return 0;
+
+            try
+            {
+                string full = FileManager.GetFullPath(imgPath.Replace('\\', '/'));
+                if (!string.IsNullOrEmpty(full) && File.Exists(full))
+                    return File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
+            }
+            catch { }
+
+            try
+            {
+                FileEntry fe = FileManager.GetFileEntry(imgPath);
+                if (fe != null) return fe.LastWriteTime.ToFileTime();
+            }
+            catch { }
+
+            return 0;
         }
 
         private static int ClampInt(int v, int lo, int hi)
@@ -1344,6 +1818,28 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Gallery posts scroll unscaled time. Used only to skip disk I/O in Finish while scrolling —
+        /// decode + GPU upload + callbacks keep running (needed for spring-scroll prefetch).
+        /// </summary>
+        private static float s_galleryScrollUnscaledTime = -1000f;
+        private const float GalleryScrollHotWindowSec = 1.0f;
+        private const long PostProcessBudgetMs = 8;
+
+        public static void NotifyGalleryScrollUnscaledTime(float unscaledTime)
+        {
+            s_galleryScrollUnscaledTime = unscaledTime;
+        }
+
+        public static bool IsGalleryScrollHot
+        {
+            get
+            {
+                try { return (Time.unscaledTime - s_galleryScrollUnscaledTime) < GalleryScrollHotWindowSec; }
+                catch { return false; }
+            }
+        }
+
 		protected Dictionary<string, Texture2D> textureCache;
 
 		protected Dictionary<string, Texture2D> immediateTextureCache;
@@ -1361,10 +1857,6 @@ namespace VPB
 		protected int progressMax;
 
 		protected AsyncFlag loadFlag;
-
-        // MTTask removed
-        // StopThreads removed
-        // StartThreads removed
 
 		public bool RegisterTextureUse(Texture2D tex)
 		{
@@ -1845,82 +2337,21 @@ namespace VPB
 
 		protected void PostProcessImageQueue()
 		{
-            // Limit processing time to avoid UI freezes (target 8ms budget)
+            // 8ms budget — keep Finish/callback during scroll so spring-scroll prefetch stays useful.
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-            long maxTicks = 8 * 10000; // 8ms
+            long maxTicks = PostProcessBudgetMs * 10000L;
 
-            // 1. Process dispatched (in-flight) images that are done
             for (int i = dispatchedImages.Count - 1; i >= 0; i--)
             {
                 if (sw.ElapsedTicks > maxTicks) break;
 
                 QueuedImage value = dispatchedImages[i];
-                if (value.processed || value.cancel)
-                {
-                    dispatchedImages.RemoveAt(i);
-                    
-                    if (value.cancel)
-                    {
-                        if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
-						{
-                            DispatchPendingThumbnailCallbacks(value);
-						}
-                        pool.Return(value);
-                        continue;
-                    }
-
-                    if (!value.isThumbnail)
-                    {
-                        progress++;
-                        numRealQueuedImages--;
-                        
-                        if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
-                        {
-                            LogUtil.Log(ByteArrayPool.GetStatus());
-                        }
-
-                        if (numRealQueuedImages == 0)
-                        {
-                            progress = 0;
-                            progressMax = 0;
-                            if (progressHUD != null) progressHUD.SetActive(false);
-                            if(ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
-                        }
-                        else
-                        {
-                            if (progressHUD != null) progressHUD.SetActive(true);
-                            if (progressSlider != null)
-                            {
-                                progressSlider.maxValue = progressMax;
-                                progressSlider.value = progress;
-                            }
-                        }
-                    }
-
-                    value.Finish();
-
-                    if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
-                    {
-                        if (value.isThumbnail)
-                        {
-                            if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
-                        }
-                        else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
-                        {
-                            textureCache.Add(value.cacheSignature, value.tex);
-                            textureTrackedCache.Add(value.tex, true);
-                            if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
-                        }
-                    }
-                    value.DoCallback();
-                    if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
-                    // else if (value.isThumbnail) LogUtil.Log("[VPB-Debug] Finished: " + value.imgPath);
-                    pool.Return(value);
-                }
+                if (value == null) continue;
+                if (!(value.processed || value.cancel)) continue;
+                CompleteDispatchedImageAt(i, value);
             }
 
-            // 2. Cleanup canceled items from the pending queue (Peek only)
-            // We can't easily iterate the PriorityQueue, but we can peek the top.
+            // Cleanup canceled items from the pending queue (Peek only)
             while (queuedImages != null && queuedImages.Count > 0)
             {
                 if (queuedImages.Peek().cancel)
@@ -1952,6 +2383,67 @@ namespace VPB
 				loadFlag = null;
 			}
 		}
+
+        /// <summary>Finish + cache + callback + pool. Index must be valid; removes from <see cref="dispatchedImages"/>.</summary>
+        private void CompleteDispatchedImageAt(int index, QueuedImage value)
+        {
+            if (value == null || index < 0 || index >= dispatchedImages.Count) return;
+            dispatchedImages.RemoveAt(index);
+
+            if (value.cancel)
+            {
+                if (value.isThumbnail && !string.IsNullOrEmpty(value.imgPath))
+                    DispatchPendingThumbnailCallbacks(value);
+                pool.Return(value);
+                return;
+            }
+
+            if (!value.isThumbnail)
+            {
+                progress++;
+                numRealQueuedImages--;
+
+                if (progress % 50 == 0 && ByteArrayPool.TotalRented > 0)
+                    LogUtil.Log(ByteArrayPool.GetStatus());
+
+                if (numRealQueuedImages == 0)
+                {
+                    progress = 0;
+                    progressMax = 0;
+                    if (progressHUD != null) progressHUD.SetActive(false);
+                    if (ByteArrayPool.TotalRented > 0) LogUtil.Log(ByteArrayPool.GetStatus());
+                }
+                else
+                {
+                    if (progressHUD != null) progressHUD.SetActive(true);
+                    if (progressSlider != null)
+                    {
+                        progressSlider.maxValue = progressMax;
+                        progressSlider.value = progress;
+                    }
+                }
+            }
+
+            value.Finish();
+
+            if (!value.skipCache && value.imgPath != null && value.imgPath != "NULL")
+            {
+                if (value.isThumbnail)
+                {
+                    if (value.tex != null) CacheThumbnail(ThumbnailMemoryCacheKey(value.imgPath, value.turboJpegScaleDenom, value.thumbnailUnityDecodeOnly), value.tex);
+                }
+                else if (!textureCache.ContainsKey(value.cacheSignature) && value.tex != null)
+                {
+                    textureCache.Add(value.cacheSignature, value.tex);
+                    textureTrackedCache.Add(value.tex, true);
+                    if (value.loadedFromDownscaledCache) TextureUtil.MarkDownscaledActive("CIL:" + value.cacheSignature);
+                }
+            }
+            // Callbacks must stay RawImage/bind-only (gallery closure). Do not rebind UI listeners here.
+            value.DoCallback();
+            if (value.imgPath != null && value.imgPath.StartsWith("http")) LogUtil.Log("[VPB] [Loader] Finished: " + value.imgPath);
+            pool.Return(value);
+        }
 
 		protected void UseCachedTex(QueuedImage qi, Texture2D tex)
 		{
@@ -2317,7 +2809,6 @@ namespace VPB
                 }
             }
             catch { }
-            // StopThreads removed
 			if (loadFlag != null)
 			{
 				loadFlag.Raise();
@@ -2330,7 +2821,6 @@ namespace VPB
 		protected void OnApplicationQuit()
 		{
             try { _varThumbIoStop = true; } catch { }
-            // StopThreads removed
 		}
 
 		// Read-only counters for VpbPerfTelemetry. Snapshot only; safe to call any frame.

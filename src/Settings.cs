@@ -59,16 +59,35 @@ namespace VPB
         public ConfigEntry<int> MaxLoaderThreads;
         /// <summary>0 = auto from CPU count and TurboJPEG mode; else clamped 1–64.</summary>
         public ConfigEntry<int> MaxThumbnailThreads;
+        /// <summary>0 = auto: min(ProcessorCount, 12); else clamped 1–32 parallel VAR deep-scan workers.</summary>
+        public ConfigEntry<int> MaxDeepScanWorkers;
 
-        public ConfigEntry<bool> AutoOptimizeCache;
         public ConfigEntry<string> LastGalleryPage;
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<string> IndexDiagUidSubstring;
+        public ConfigEntry<bool> LogStartupTiming;
+        public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
+        public ConfigEntry<float> StartupDeferGallerySqlRebuildDelaySec;
+        public ConfigEntry<bool> StartupSkipRedundantSyncVamX;
+        public ConfigEntry<bool> StartupSkipGallerySqlRebuildIfValid;
+        public ConfigEntry<bool> StartupPreferIncrementalGallerySqlIndex;
+        public ConfigEntry<int> StartupIncrementalGallerySqlMaxDelta;
+        public ConfigEntry<bool> StartupDeferDependencyGraphRebuild;
+        public ConfigEntry<bool> StartupDeferPackageDeepScanUntilReady;
+        public ConfigEntry<bool> StartupUseCachedVarPathInventory;
+        public ConfigEntry<bool> StartupSkipBootstrapNativeRefresh;
+        public ConfigEntry<bool> StartupSqlBatchCatMem;
+        public ConfigEntry<int> StartupSqlBatchCatMemRows;
         public ConfigEntry<bool> LogHubRequests;
         public ConfigEntry<bool> LogPerfTelemetry;
+        public ConfigEntry<int> LogPerfTelemetryIntervalSeconds;
         public ConfigEntry<bool> LogPerfDiagnostics;
+        public ConfigEntry<bool> PerfSilenceVaMPerfMon;
+        public ConfigEntry<bool> PerfDetectGiveMeFpsConflict;
         public ConfigEntry<bool> LogSavePerf;
+        public ConfigEntry<bool> LogStateMachineApply;
 
         public ConfigEntry<string> HubHostedOption;
         public ConfigEntry<string> HubPayTypeFilter;
@@ -90,13 +109,21 @@ namespace VPB
         public ConfigEntry<bool> EnableUiTransparency;
         public ConfigEntry<float> UiTransparencyValue;
         public ConfigEntry<bool> ShowSceneLoadingOverlay;
+        public ConfigEntry<bool> ShowGalleryIndexBuildOverlay;
         public ConfigEntry<bool> AutoPageEnabled;
         public ConfigEntry<bool> HideOldVersions;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
         public ConfigEntry<bool> SyncRefreshOnPresetLoad;
+        public ConfigEntry<bool> HairSwapKeepVisibleUntilLoaded;
+        public ConfigEntry<bool> ReturnToSceneViewOnStartup;
         public ConfigEntry<bool> ForceLatestDependencies;
         public ConfigEntry<string> ForceLatestDependencyPackageGroups;
         public ConfigEntry<string> ForceLatestDependencyIgnorePackageGroups;
+        /// <summary>When true, honor meta.json standard/script ReferenceVersionOption (Exact/Minimum/Latest).</summary>
+        public ConfigEntry<bool> RespectPackageReferenceVersionOption;
+        /// <summary>When true, always treat package refs as Exact (never upgrade versioned UIDs).</summary>
+        public ConfigEntry<bool> ForceExactPackageVersions;
+        public ConfigEntry<bool> PluginConsolidateCslist;
 
         internal static void Init(ConfigFile config)
         {
@@ -134,17 +161,24 @@ namespace VPB
             ThumbnailThreshold = config.Bind<int>("Optimze", "ThumbnailThreshold", 600, "Resolution threshold (width & height) below which a texture is considered a thumbnail and skipped by VPB optimizations.");
             MaxLoaderThreads = config.Bind<int>("Optimze", "MaxLoaderThreads", 0, "Concurrent image decode workers (full-res queue). 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
             MaxThumbnailThreads = config.Bind<int>("Optimze", "MaxThumbnailThreads", 0, "Concurrent thumbnail decode workers. 0 = auto: scales with ProcessorCount; lower cap when TurboJPEG path active.");
+            MaxDeepScanWorkers = config.Bind<int>("Optimze", "MaxDeepScanWorkers", 0, "Parallel workers for deep VAR package scan (zip index). 0 = auto: min(ProcessorCount, 12); else clamped 1–32.");
 
             EnableUiTransparency = config.Bind<bool>("UI", "EnableUiTransparency", true, "Enable dynamic UI transparency (fade when idle).");
             UiTransparencyValue = config.Bind<float>("UI", "UiTransparencyValue", 0.5f, "Transparency level when idle (0.0 = Opaque, 1.0 = Invisible).");
             ShowSceneLoadingOverlay = config.Bind<bool>("UI", "ShowSceneLoadingOverlay", false, "Show VPB full-screen loading overlay during scene loads.");
+            ShowGalleryIndexBuildOverlay = config.Bind<bool>("UI", "ShowGalleryIndexBuildOverlay", true, "Show top progress banner while VAR packages are scanned and the gallery SQLite index is built at startup. Warns not to close VaM during first-time or full rebuild indexing.");
             AutoPageEnabled = config.Bind<bool>("UI", "AutoPageEnabled", false, "Enable Auto Paging in Gallery on scroll.");
             HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", false, "Hide older versions of VAR packages in the gallery; show only the newest version per Creator.Package family.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
-            SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. Disable only if it introduces unexpected stalls; coalesced refresh still fires ~250ms later.");
+            SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous coalesced native VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. When false: coalesced native refresh only (~250ms delay) — first-click preset apply for on-demand packages may miss catalog entries until refresh completes; safe to disable if sync refresh causes stalls. No full VPB rescan on preset apply.");
+            HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
+            ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View).");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
             ForceLatestDependencyPackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyPackageGroups", "", "Comma/space separated list of package groups (Author.Package) for which dependency version resolution should be forced to newest locally installed.");
             ForceLatestDependencyIgnorePackageGroups = config.Bind<string>("Settings", "ForceLatestDependencyIgnorePackageGroups", "", "Comma/space separated list of package groups (Author.Package) to ignore (do not force) even when ForceLatestDependencies is enabled.");
+            RespectPackageReferenceVersionOption = config.Bind<bool>("Settings", "RespectPackageReferenceVersionOption", true, "When true, honor meta.json standardReferenceVersionOption / scriptReferenceVersionOption (Exact, Minimum, Latest) when a pinned package version is missing. Exact pins that exist on disk are always kept.");
+            ForceExactPackageVersions = config.Bind<bool>("Settings", "ForceExactPackageVersions", false, "When true, never rewrite versioned package paths (Author.Pkg.N) to a newer version — always use the exact pin. Overrides meta Latest/Minimum for missing-version fallback.");
+            PluginConsolidateCslist = config.Bind<bool>("Settings", "PluginConsolidateCslist", true, "In the Plugins gallery category, hide .cs files that are referenced by a .cslist so each multi-file plugin shows as a single row (its .cslist). Standalone .cs files (not in any .cslist) always show. Turn off to see every individual .cs file.");
 
             TextureLogLevel = config.Bind<int>("Logging", "TextureLogLevel", 0, "0=off, 1=summary only, 2=verbose per-texture trace.");
             LogImageQueueEvents = config.Bind<bool>("Logging", "LogImageQueueEvents", false, "Log IMGQ enqueue/dequeue events (very verbose).");
@@ -152,10 +186,28 @@ namespace VPB
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
+            IndexDiagUidSubstring = config.Bind<string>("Logging", "IndexDiagUidSubstring", "", "When set (e.g. RunRudolf.AlternativeFuta), emit [VPB.IndexDiag] logs for that package through disk scan, registry, SQLite index, and gallery listing. Empty = off.");
+            LogStartupTiming = config.Bind<bool>("Logging", "LogStartupTiming", false, "Emit [VPB.Startup.Timing] milestones and a cold-start summary (native/VPB package refresh, SyncVamX, bootstrap). Also enabled when LogStartupDetails is true.");
+            StartupDeferGallerySqlRebuild = config.Bind<bool>("Startup", "DeferGallerySqlRebuildUntilReady", true, "Defer full gallery SQLite index rebuild until World UI / startup-ready milestone. Speeds cold start; gallery SQL queries wait until rebuild runs.");
+            StartupDeferGallerySqlRebuildDelaySec = config.Bind<float>("Startup", "DeferGallerySqlRebuildDelaySec", 2f, "Seconds after READY before deferred gallery SQLite rebuild starts (0 = immediate). Gives UI/gallery a short window on restored index.");
+            StartupSkipRedundantSyncVamX = config.Bind<bool>("Startup", "SkipRedundantSyncVamXWhenAbsent", true, "When vamX is absent, skip expensive vamX bootstrap FileExists/on-demand work during startup. SyncVamX always runs so main-menu Create tiles stay correct.");
+            StartupSkipGallerySqlRebuildIfValid = config.Bind<bool>("Startup", "SkipGallerySqlRebuildIfValid", true, "Skip full gallery SQLite rebuild when on-disk index meta matches current categories and package inventory (e.g. after sqlRestore).");
+            StartupPreferIncrementalGallerySqlIndex = config.Bind<bool>("Startup", "PreferIncrementalGallerySqlIndex", true, "When package inventory changes by a small delta (Hub download, few adds/removes), patch the gallery SQLite index instead of DELETE+rebuild of all rows.");
+            StartupIncrementalGallerySqlMaxDelta = config.Bind<int>("Startup", "IncrementalGallerySqlMaxDelta", 0, "Max package add+remove count for incremental SQL index (0 = auto: min(32, 20% of indexed packages)). Larger changes use full rebuild.");
+            StartupDeferDependencyGraphRebuild = config.Bind<bool>("Startup", "DeferDependencyGraphRebuildUntilReady", true, "After init package scan, post FileManagerRefresh immediately and rebuild dependency graph/counts after READY (avoids ~20s blocking SQLite per-package reads on large libraries).");
+            StartupDeferPackageDeepScanUntilReady = config.Bind<bool>("Startup", "DeferPackageDeepScanUntilReady", true, "When manifest/SQL cache is missing, register all .var paths immediately but defer per-package zip deep scan (DumpVarPackage) until World UI / startup-ready. Unblocks VPB UI on cold start without SQL; gallery SQL waits until scan completes.");
+            StartupUseCachedVarPathInventory = config.Bind<bool>("Startup", "UseCachedVarPathInventory", true, "Skip recursive AddonPackages/AllPackages .var walks when SQLite path inventory validates (parallel stat checks). Saves ~15s on large libraries when packages unchanged.");
+            StartupSkipBootstrapNativeRefresh = config.Bind<bool>("Startup", "SkipBootstrapNativeRefreshWhenUnchanged", true, "When VPB init already ran native FileManager.Refresh and .var path inventory is unchanged, skip the synchronous Refresh inside SuperController.SyncToKeyFile (Awake). Avoids redundant scan + OnPackageRefresh/SyncVamX stall.");
+            StartupSqlBatchCatMem = config.Bind<bool>("Startup", "SqlBatchCatMemInserts", false, "During gallery SQLite rebuild, batch cat_mem INSERT statements instead of one row per Step(). Off by default (prepared inserts are faster on large libraries).");
+            StartupSqlBatchCatMemRows = config.Bind<int>("Startup", "SqlBatchCatMemRows", 150, "Rows per batched cat_mem INSERT when SqlBatchCatMemInserts is enabled.");
             LogHubRequests = config.Bind<bool>("Logging", "LogHubRequests", false, "Log detailed Hub request timing and payload information (very verbose). Enable when troubleshooting Hub issues.");
-            LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line (30s interval) with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
+            LogPerfTelemetry = config.Bind<bool>("Logging", "LogPerfTelemetry", false, "Emit a periodic VPB_PERF_TELEMETRY line with cache sizes, queue depths, panel scroll-listener counts, and heap stats. Enable when diagnosing progressive FPS degradation.");
+            LogPerfTelemetryIntervalSeconds = config.Bind<int>("Logging", "LogPerfTelemetryIntervalSeconds", 30, "Seconds between VPB_PERF_TELEMETRY snapshots (clamped 1-30). Only used when LogPerfTelemetry is enabled.");
             LogPerfDiagnostics = config.Bind<bool>("Logging", "LogPerfDiagnostics", false, "Emit a 1Hz VPB.Diag line with per-frame call counters (quick-menu refresh, icon GO churn, gallery Update gating, pointer sibling reorders) plus one-shot transition logs for show/hide/menu-gate. Enable temporarily to pinpoint frame-cost hotspots; disable for normal use.");
+            PerfSilenceVaMPerfMon = config.Bind<bool>("Performance", "SilenceVaMPerfMonOnPerfPreset", true, "When gallery perf preset P1/P2 is active, silence MeshVR PerfMon camera/pre update hooks (reduces overlay cost).");
+            PerfDetectGiveMeFpsConflict = config.Bind<bool>("Performance", "DetectGiveMeFpsConflict", true, "Log a one-time warning if Redeyes GiveMeFPS session plugin is loaded alongside VPB perf presets.");
             LogSavePerf = config.Bind<bool>("Logging", "LogSavePerf", false, "Log scene-save timing split: bridge prep vs native SaveScene invocation. Enable when diagnosing save-time regressions vs native VaM baseline.");
+            LogStateMachineApply = config.Bind<bool>("Logging", "LogStateMachineApply", false, "Trace MacGruber StateMachine storable restore: Atom.Restore entry, Atom.RestoreFromLast match outcome, MVRPluginManager.CreateScriptController insideRestore field, JSONStorable.RestoreFromJSON payload size. Off by default. Enable only when investigating per-instance storable apply failures (ref. issue #52).");
 
             HubHostedOption = config.Bind<string>("HubBrowser", "HostedOption", "Hub And Dependencies", "Hub Browser: Hosted option filter.");
             HubPayTypeFilter = config.Bind<string>("HubBrowser", "PayTypeFilter", "All", "Hub Browser: Pay type filter.");
@@ -171,7 +223,6 @@ namespace VPB
             HubHideDownloaded = config.Bind<bool>("HubBrowser", "HideDownloaded", false, "Hub Browser: Hide packages already downloaded to disk.");
 
 
-            AutoOptimizeCache = config.Bind<bool>("Optimze", "AutoOptimizeCache", false, "When checked, clicking Compress Cache button will start compression without opening the confirmation window.");
             LastGalleryPage = config.Bind<string>("UI", "LastGalleryPage", "", "Last opened Gallery page.");
         }
     }

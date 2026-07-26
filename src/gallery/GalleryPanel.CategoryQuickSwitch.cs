@@ -13,6 +13,136 @@ namespace VPB
         internal const float CategoryQuickHoldOpenSeconds = 0.35f;
         private Transform _categoryQuickMenuParentTr;
 
+        private static RoundedRect AddCategoryQuickRoundedBg(GameObject go, Color color, bool raycastTarget = true)
+        {
+            RoundedRect rr = go.AddComponent<RoundedRect>();
+            rr.color = color;
+            rr.raycastTarget = raycastTarget;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+            return rr;
+        }
+
+        private static void SyncCategoryQuickRoundedBg(RoundedRect rr)
+        {
+            if (rr == null) return;
+            rr.cornerRadiusFraction = UI.ResolveGalleryElementCornerRadiusFraction();
+        }
+
+        /// <summary>Menu top Y on <c>backgroundBoxGO</c> (anchor top-left): flush under category chrome.</summary>
+        private static float CategoryQuickMenuTopOffsetY(float paneScale)
+        {
+            float s = paneScale <= 0f ? 1f : paneScale;
+            return -((GalleryUiDesignTokens.TitleBarHeightRef * 0.5f)
+                + (GalleryUiDesignTokens.TitleBarChipRef * 0.5f)
+                + GalleryUiDesignTokens.PopupMenuAnchorGapRef) * s;
+        }
+
+        private void ApplyCategoryQuickArrowChromeLayout(float paneScale)
+        {
+            if (paneScale <= 0f) paneScale = 1f;
+            float arrowW = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
+            float arrowH = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
+            if (_categoryQuickArrowLE != null)
+            {
+                _categoryQuickArrowLE.preferredWidth = arrowW;
+                _categoryQuickArrowLE.minWidth = arrowW;
+                _categoryQuickArrowLE.preferredHeight = arrowH;
+            }
+            if (_categoryQuickArrowIconRT != null)
+            {
+                float pad = GalleryUiDesignTokens.SearchIconButtonPadRef * paneScale;
+                _categoryQuickArrowIconRT.offsetMin = new Vector2(pad, pad);
+                _categoryQuickArrowIconRT.offsetMax = new Vector2(-pad, -pad);
+            }
+        }
+
+        /// <summary>
+        /// Narrow title bar: hide category label, show icon-only chip (gallery_category).
+        /// Wide: chevron + label. Never leave truncated label — always sync icon + visibility.
+        /// </summary>
+        private void SetCategoryQuickCompactMode(bool compact, float paneScale)
+        {
+            if (paneScale <= 0f) paneScale = 1f;
+            bool changed = _categoryQuickCompact != compact;
+            _categoryQuickCompact = compact;
+
+            Transform titleClipTr = null;
+            if (_categoryQuickChromeRootGO != null)
+                titleClipTr = _categoryQuickChromeRootGO.transform.Find("CategoryQuickTitleClip");
+
+            if (titleText != null)
+            {
+                if (titleText.gameObject.activeSelf == compact)
+                    titleText.gameObject.SetActive(!compact);
+            }
+            if (titleClipTr != null)
+            {
+                if (titleClipTr.gameObject.activeSelf == compact)
+                    titleClipTr.gameObject.SetActive(!compact);
+                LayoutElement clipLe = titleClipTr.GetComponent<LayoutElement>();
+                if (clipLe != null)
+                {
+                    clipLe.ignoreLayout = compact;
+                    clipLe.minWidth = compact ? 0f : 40f;
+                    clipLe.preferredWidth = compact ? 0f : 168f;
+                    clipLe.flexibleWidth = compact ? 0f : 1f;
+                    clipLe.preferredHeight = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
+                }
+            }
+
+            if (_categoryQuickChromeRootGO != null)
+            {
+                HorizontalLayoutGroup hlg = _categoryQuickChromeRootGO.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null)
+                {
+                    if (compact)
+                    {
+                        hlg.padding = new RectOffset(0, 0, 0, 0);
+                        hlg.spacing = 0f;
+                    }
+                    else
+                    {
+                        hlg.padding = UI.Pad(6, 0, 0, 0);
+                        hlg.spacing = 6f;
+                    }
+                }
+            }
+
+            // Always sync sprite — compact can flip without dirty-gate if layout early-outs elsewhere.
+            if (_categoryQuickArrowImage != null)
+            {
+                try
+                {
+                    string iconPath = compact
+                        ? "vpb_icons/gallery_category.png"
+                        : "vpb_icons/chevron_down.png";
+                    Sprite sp = UI.LoadIconSprite(iconPath, UI.BarIconGlyphTint);
+                    if (sp != null) _categoryQuickArrowImage.sprite = sp;
+                }
+                catch { }
+            }
+
+            ApplyCategoryQuickArrowChromeLayout(paneScale);
+            if (!compact)
+                SyncCategoryQuickTitleLabelRect();
+            if (changed)
+                _categoryQuickLayoutLastScale = float.NaN;
+        }
+
+        /// <summary>Keep category label stretched + middle-aligned inside title clip (survives scale/layout passes).</summary>
+        private void SyncCategoryQuickTitleLabelRect()
+        {
+            if (titleText == null) return;
+            RectTransform titleRT = titleText.rectTransform;
+            if (titleRT == null) return;
+            titleRT.anchorMin = Vector2.zero;
+            titleRT.anchorMax = Vector2.one;
+            titleRT.pivot = new Vector2(0f, 0.5f);
+            titleRT.offsetMin = new Vector2(0f, 0f);
+            titleRT.offsetMax = new Vector2(-4f, 0f);
+            titleText.alignment = TextAnchor.MiddleLeft;
+        }
+
         /// <summary>Default quick-switch order when <see cref="VPBConfig.GalleryCategoryQuickOrder"/> is empty.</summary>
         internal static readonly string[] s_DefaultGalleryQuickSwitchOrder =
         {
@@ -24,21 +154,12 @@ namespace VPB
             if (titleBarGO == null || canvas == null || galleryBackgroundGO == null || titleGO == null) return;
             _categoryQuickMenuParentTr = galleryBackgroundGO.transform;
 
-            var cqRoot = new GameObject("CategoryQuickSwitchChrome");
-            cqRoot.transform.SetParent(titleBarGO.transform, false);
-            var cqRootRT = cqRoot.AddComponent<RectTransform>();
-            cqRootRT.anchorMin = new Vector2(0, 0.5f);
-            cqRootRT.anchorMax = new Vector2(0, 0.5f);
-            cqRootRT.pivot = new Vector2(0, 0.5f);
-            cqRootRT.anchoredPosition = new Vector2(60, 0);
-            cqRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44);
+            var cqRoot = UI.CreateChildRT(titleBarGO, "CategoryQuickSwitchChrome", AnchorPresets.middleLeft, new Vector2(TitleBarCategoryClampMaxRef, 44), new Vector2(60, 0));
+            var cqRootRT = cqRoot.GetComponent<RectTransform>();
             _categoryQuickChromeRootGO = cqRoot;
             _categoryQuickChromeRootRT = cqRootRT;
 
-            var hitImg = cqRoot.AddComponent<Image>();
-            // Regular label look: no backdrop, but keep transparent Image for raycast target.
-            hitImg.color = new Color(0, 0, 0, 0);
-            hitImg.raycastTarget = true;
+            var hitImg = AddCategoryQuickRoundedBg(cqRoot, new Color(0f, 0f, 0f, 0.5f));
 
             // Regular label-button: click label toggles list underneath.
             var headerBtn = cqRoot.AddComponent<Button>();
@@ -49,47 +170,49 @@ namespace VPB
             var headerBehaviour = cqRoot.AddComponent<CategoryQuickSwitchHeaderBehaviour>();
             headerBehaviour.Panel = this;
 
-            var hlg = cqRoot.AddComponent<HorizontalLayoutGroup>();
             // Small left inset so arrow never touches edge.
-            hlg.padding = new RectOffset(6, 0, 0, 0);
-            hlg.spacing = 6;
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandHeight = true;
-            hlg.childControlWidth = true;
-            hlg.childForceExpandWidth = false;
+            var hlg = UI.AddHLG(cqRoot, spacing: 6, padding: UI.Pad(6, 0, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
 
-            // Down arrow indicator, left of label (header only; not settings rows).
+            // Chevron indicator, left of label (header only; not settings rows).
             {
                 var arrowGO = new GameObject("CategoryQuickArrow");
                 arrowGO.transform.SetParent(cqRoot.transform, false);
-                var arrowT = arrowGO.AddComponent<Text>();
-                arrowT.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                arrowT.fontSize = 32;
-                arrowT.fontStyle = FontStyle.Bold;
-                arrowT.color = Color.white;
-                arrowT.alignment = TextAnchor.MiddleLeft;
-                arrowT.raycastTarget = false;
-                arrowT.text = "▾";
-                var arrowLE = arrowGO.AddComponent<LayoutElement>();
-                arrowLE.preferredWidth = 28f;
-                arrowLE.minWidth = 28f;
-                arrowLE.preferredHeight = 44f;
+                var arrowLE = UI.AddLE(arrowGO, minWidth: GalleryUiDesignTokens.TitleBarChipRef, preferredWidth: GalleryUiDesignTokens.TitleBarChipRef, preferredHeight: GalleryUiDesignTokens.TitleBarChipRef);
+                _categoryQuickArrowLE = arrowLE;
+
+                GameObject iconGO = new GameObject("Icon");
+                iconGO.transform.SetParent(arrowGO.transform, false);
+                _categoryQuickArrowIconRT = iconGO.AddComponent<RectTransform>();
+                _categoryQuickArrowIconRT.anchorMin = Vector2.zero;
+                _categoryQuickArrowIconRT.anchorMax = Vector2.one;
+                _categoryQuickArrowImage = UI.AddImage(iconGO, Color.white, false);
+                _categoryQuickArrowImage.preserveAspect = true;
+                try
+                {
+                    Sprite chevron = UI.LoadIconSprite("vpb_icons/chevron_down.png", UI.BarIconGlyphTint);
+                    if (chevron != null) _categoryQuickArrowImage.sprite = chevron;
+                }
+                catch { }
             }
 
-            titleGO.transform.SetParent(cqRoot.transform, false);
-            var titleRT = titleGO.GetComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0f, 0f);
-            titleRT.anchorMax = new Vector2(1f, 1f);
-            titleRT.pivot = new Vector2(0f, 0.5f);
-            titleRT.offsetMin = Vector2.zero;
-            titleRT.offsetMax = Vector2.zero;
+            // Clip label only (not chrome root) so "Scenes" cannot bleed over Source; hover rim stays unmasked.
+            var titleClip = new GameObject("CategoryQuickTitleClip");
+            titleClip.transform.SetParent(cqRoot.transform, false);
+            var titleClipRT = titleClip.AddComponent<RectTransform>();
+            titleClipRT.anchorMin = new Vector2(0f, 0f);
+            titleClipRT.anchorMax = new Vector2(0f, 1f);
+            titleClipRT.pivot = new Vector2(0f, 0.5f);
+            titleClip.AddComponent<RectMask2D>();
+            var titleClipLe = titleClip.AddComponent<LayoutElement>();
+            titleClipLe.flexibleWidth = 1f;
+            titleClipLe.preferredWidth = 168f;
+            titleClipLe.minWidth = 40f;
+            titleClipLe.preferredHeight = GalleryUiDesignTokens.TitleBarChipRef;
+
+            titleGO.transform.SetParent(titleClip.transform, false);
             var titleLe = titleGO.GetComponent<LayoutElement>();
-            if (titleLe == null) titleLe = titleGO.AddComponent<LayoutElement>();
-            titleLe.flexibleWidth = 1f;
-            titleLe.preferredWidth = 168f;
-            titleLe.minWidth = 100f;
-            titleLe.preferredHeight = 44f;
+            if (titleLe != null) titleLe.ignoreLayout = true;
+            SyncCategoryQuickTitleLabelRect();
 
             // Ensure title text reads like label (no arrow dependency).
             try
@@ -97,8 +220,9 @@ namespace VPB
                 var t = titleGO.GetComponent<Text>();
                 if (t != null)
                 {
-                    t.alignment = TextAnchor.MiddleLeft;
                     t.color = Color.white;
+                    t.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    t.verticalOverflow = VerticalWrapMode.Truncate;
                 }
             }
             catch { }
@@ -106,40 +230,31 @@ namespace VPB
             try
             {
                 AddTooltip(cqRoot, "gallery.tooltip.category_quick_switch",
-                    "Tap: toggle list. Hold to open, move, release on row to switch. Keys 1\u20139 / 0. Gallery Settings \u2192 Header category menu, or plugin Settings \u2192 Gallery.");
+                    "Quick category switch. Tap: toggle list. Hold to open, move, release on row. Keys 1\u20139 / 0. Gallery Settings \u2192 Header category menu, or plugin Settings \u2192 Gallery.");
             }
             catch { }
 
-            _categoryQuickBlockerGO = new GameObject("CategoryQuickSwitchBlocker");
-            _categoryQuickBlockerGO.transform.SetParent(galleryBackgroundGO.transform, false);
-            var blkRT = _categoryQuickBlockerGO.AddComponent<RectTransform>();
-            blkRT.anchorMin = Vector2.zero;
-            blkRT.anchorMax = Vector2.one;
-            blkRT.offsetMin = Vector2.zero;
-            blkRT.offsetMax = Vector2.zero;
-            var blkImg = _categoryQuickBlockerGO.AddComponent<Image>();
-            blkImg.color = new Color(0, 0, 0, 0.001f);
-            blkImg.raycastTarget = true;
+            try
+            {
+                var chromeHover = cqRoot.AddComponent<UIHoverBorder>();
+                chromeHover.ApplyBorderSettings();
+            }
+            catch { }
+
+            _categoryQuickBlockerGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickSwitchBlocker", AnchorPresets.stretchAll);
+            var blkImg = UI.AddImage(_categoryQuickBlockerGO, new Color(0, 0, 0, 0.001f));
             var blkBtn = _categoryQuickBlockerGO.AddComponent<Button>();
             blkBtn.targetGraphic = blkImg;
             blkBtn.transition = Selectable.Transition.None;
             blkBtn.onClick.AddListener(() => SetCategoryQuickMenuVisible(false));
             _categoryQuickBlockerGO.SetActive(false);
 
-            _categoryQuickMenuOuterGO = new GameObject("CategoryQuickMenu");
             // Keep menu out of titlebar masks/clips.
-            _categoryQuickMenuOuterGO.transform.SetParent(galleryBackgroundGO.transform, false);
-            var outerRT = _categoryQuickMenuOuterGO.AddComponent<RectTransform>();
-            outerRT.anchorMin = new Vector2(0, 1);
-            outerRT.anchorMax = new Vector2(0, 1);
-            outerRT.pivot = new Vector2(0, 1);
-            outerRT.anchoredPosition = new Vector2(60, -68);
-            outerRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
+            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(TitleBarCategoryClampMaxRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
+            var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
             _categoryQuickMenuOuterRT = outerRT;
-            var outerImg = _categoryQuickMenuOuterGO.AddComponent<Image>();
-            outerImg.color = UI.PopupBackdrop;
-            outerImg.raycastTarget = true;
+            var outerImg = AddCategoryQuickRoundedBg(_categoryQuickMenuOuterGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
             // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
@@ -178,6 +293,15 @@ namespace VPB
                 sr.elasticity = 0f;
             }
             _categoryQuickMenuContentGO = sr != null ? sr.content.gameObject : null;
+            if (_categoryQuickMenuContentGO != null)
+            {
+                VerticalLayoutGroup menuVlg = _categoryQuickMenuContentGO.GetComponent<VerticalLayoutGroup>();
+                if (menuVlg != null)
+                {
+                    menuVlg.spacing = GalleryUiDesignTokens.PopupMenuRowSpacingRef;
+                    menuVlg.padding = new RectOffset(6, 6, 6, 6);
+                }
+            }
 
             _categoryQuickMenuOuterGO.SetActive(false);
 
@@ -206,34 +330,114 @@ namespace VPB
             if (_categoryQuickChromeRootRT == null) return;
             if (paneScale <= 0f) paneScale = 1f;
             bool flushLeft = CategoryQuickSwitchFlushLeftEdge();
-            float leftInset = flushLeft ? 0f : 60f * paneScale;
-            // Same vertical center as Language / Settings / sort row (title bar middleCenter, y=0)
-            float y = 0f;
-            _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, y);
-            _categoryQuickChromeRootRT.localScale = new Vector3(paneScale, paneScale, 1f);
-            _categoryQuickChromeRootRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 44f);
+            int rowCount = (_categoryQuickMenuContentGO != null) ? _categoryQuickMenuContentGO.transform.childCount : 0;
+            if (!float.IsNaN(_categoryQuickLayoutLastScale)
+                && Mathf.Abs(_categoryQuickLayoutLastScale - paneScale) < 0.0001f
+                && _categoryQuickLayoutLastFlush == flushLeft
+                && _categoryQuickLayoutLastMenuOpen == _categoryQuickMenuOpen
+                && _categoryQuickLayoutLastRowCount == rowCount
+                && _categoryQuickLayoutLastCompact == _categoryQuickCompact)
+            {
+                return;
+            }
+            _categoryQuickLayoutLastScale = paneScale;
+            _categoryQuickLayoutLastFlush = flushLeft;
+            _categoryQuickLayoutLastMenuOpen = _categoryQuickMenuOpen;
+            _categoryQuickLayoutLastRowCount = rowCount;
+            _categoryQuickLayoutLastCompact = _categoryQuickCompact;
+
+            float leftInset = flushLeft ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
+            // Same height as Source/settings chips so label cannot peek above neighbours.
+            float catH = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
+            float catW = _categoryQuickCompact
+                ? GalleryUiDesignTokens.TitleBarChipRef * paneScale
+                : TitleBarCategoryClampMaxRef * paneScale;
+            _categoryQuickChromeRootRT.localScale = Vector3.one;
+            _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, 0f);
+            _categoryQuickChromeRootRT.sizeDelta = new Vector2(catW, catH);
+            SyncCategoryQuickRoundedBg(_categoryQuickChromeRootGO != null ? _categoryQuickChromeRootGO.GetComponent<RoundedRect>() : null);
             if (_categoryQuickMenuOuterRT != null)
             {
-                _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(leftInset, -((44f * paneScale) + (24f * paneScale)));
-                _categoryQuickMenuOuterRT.localScale = new Vector3(paneScale, paneScale, 1f);
-                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef, 340f);
+                _categoryQuickMenuOuterRT.localScale = Vector3.one;
+                _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(
+                    leftInset,
+                    CategoryQuickMenuTopOffsetY(paneScale));
+                // Menu stays full width even when header is icon-only.
+                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef * paneScale, 340f * paneScale);
+                SyncCategoryQuickRoundedBg(_categoryQuickMenuOuterGO != null ? _categoryQuickMenuOuterGO.GetComponent<RoundedRect>() : null);
+            }
+            ApplyCategoryQuickArrowChromeLayout(paneScale);
+            ApplyCategoryQuickMenuRowsLayout(paneScale);
+        }
+
+        /// <summary>Scale category quick-switch dropdown row fonts/heights without full rebuild.</summary>
+        private void ApplyCategoryQuickMenuRowsLayout(float s)
+        {
+            if (_categoryQuickMenuContentGO == null) return;
+            if (s <= 0f) s = 1f;
+            Transform parent = _categoryQuickMenuContentGO.transform;
+            int pad = Mathf.RoundToInt(6f * s);
+            VerticalLayoutGroup contentVlg = _categoryQuickMenuContentGO.GetComponent<VerticalLayoutGroup>();
+            if (contentVlg != null)
+            {
+                contentVlg.padding = new RectOffset(pad, pad, pad, pad);
+                contentVlg.spacing = GalleryUiDesignTokens.PopupMenuRowSpacingRef * s;
+            }
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * s;
+            int padH = Mathf.RoundToInt(10f * s);
+            int padV = Mathf.RoundToInt(6f * s);
+            int gap = Mathf.RoundToInt(10f * s);
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform row = parent.GetChild(i);
+                if (row == null) continue;
+                HorizontalLayoutGroup hlg = row.GetComponent<HorizontalLayoutGroup>();
+                if (hlg != null)
+                {
+                    hlg.padding = new RectOffset(padH, padH, padV, padV);
+                    hlg.spacing = gap;
+                }
+                LayoutElement le = row.GetComponent<LayoutElement>();
+                if (le != null)
+                {
+                    le.preferredHeight = rowH;
+                    le.minHeight = rowH;
+                }
+                RoundedRect rowBg = row.GetComponent<RoundedRect>();
+                if (rowBg != null)
+                    SyncCategoryQuickRoundedBg(rowBg);
+                for (int c = 0; c < row.childCount; c++)
+                {
+                    Transform child = row.GetChild(c);
+                    if (child == null) continue;
+                    Text t = child.GetComponent<Text>();
+                    if (t != null)
+                        GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontLargeRef, s, 12);
+                    LayoutElement childLe = child.GetComponent<LayoutElement>();
+                    if (childLe != null && child.name == "Idx")
+                    {
+                        childLe.preferredWidth = 34f * s;
+                        childLe.minWidth = 34f * s;
+                    }
+                }
             }
         }
 
         private void SyncCategoryQuickSwitchChrome()
         {
             if (_categoryQuickChromeRootGO == null) return;
-            bool show = !IsHubMode && !IsFilterActive;
+            bool show = !IsFilterActive && !importSidebarActive;
             if (_categoryQuickChromeRootGO.activeSelf != show)
                 _categoryQuickChromeRootGO.SetActive(show);
             if (!show && _categoryQuickMenuOpen)
                 SetCategoryQuickMenuVisible(false);
             if (!show) HideGlobalSourceFilterDropdownIfOpen();
-            ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+            ApplyCategoryQuickChromeLayout(ChromeScale);
         }
 
         private void RefreshCategoryQuickSwitchOnConfigChanged()
         {
+            _categoryQuickMenuDirty = true;
             if (_categoryQuickMenuOpen)
                 RebuildCategoryQuickSwitchMenuRows();
         }
@@ -250,8 +454,8 @@ namespace VPB
             {
                 if (eventData != null && TryPickCategoryQuickSwitchFromRaycast(eventData, out Gallery.Category cat))
                     QueueDeferredCategoryQuickPick(cat);
-                else
-                    SetCategoryQuickMenuVisible(false);
+                // Released on empty space during hold-browse: leave the menu open so the user can
+                // make a deliberate tap selection rather than forcing a full reopen cycle.
                 return;
             }
             if (!openedByHoldGesture && durationSeconds < CategoryQuickHoldOpenSeconds)
@@ -310,11 +514,7 @@ namespace VPB
             string ext = c.extension ?? "";
             string p = c.path ?? "";
             if (string.IsNullOrEmpty(n)) return;
-            if (_categoryQuickApplyCoroutine != null)
-            {
-                try { StopCoroutine(_categoryQuickApplyCoroutine); } catch { }
-                _categoryQuickApplyCoroutine = null;
-            }
+            StopCo(ref _categoryQuickApplyCoroutine);
             _categoryQuickApplyCoroutine = StartCoroutine(CoDeferredCategoryQuickPick(n, ext, p));
         }
 
@@ -327,6 +527,12 @@ namespace VPB
             try
             {
                 if (string.IsNullOrEmpty(name)) yield break;
+                if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(name))
+                {
+                    ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
+                        "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
+                    yield break;
+                }
                 if (LogGalleryCategoryTypeSwitchTiming)
                     BeginGalleryCategoryTypeNavigationTiming(name);
                 Show(name, extension, path);
@@ -358,7 +564,14 @@ namespace VPB
                 _categoryQuickMenuOuterGO.SetActive(visible);
             if (visible)
             {
-                RebuildCategoryQuickSwitchMenuRows();
+                bool needsRebuild = _categoryQuickMenuDirty
+                    || _categoryQuickMenuContentGO == null
+                    || _categoryQuickMenuContentGO.transform.childCount == 0
+                    || !categoriesCached
+                    || _categoryQuickMenuLastPath != currentPath
+                    || _categoryQuickMenuLastExtension != currentExtension;
+                if (needsRebuild)
+                    RebuildCategoryQuickSwitchMenuRows();
                 if (_categoryQuickBlockerGO != null)
                     _categoryQuickBlockerGO.transform.SetAsLastSibling();
                 if (_categoryQuickMenuOuterGO != null)
@@ -496,8 +709,7 @@ namespace VPB
             if (_categoryQuickMenuContentGO == null) return;
             try
             {
-                for (int i = _categoryQuickMenuContentGO.transform.childCount - 1; i >= 0; i--)
-                    UnityEngine.Object.Destroy(_categoryQuickMenuContentGO.transform.GetChild(i).gameObject);
+                UI.DestroyAllChildren(_categoryQuickMenuContentGO.transform);
 
                 var ordered = BuildOrderedCategoriesForQuickSwitch();
 
@@ -509,18 +721,17 @@ namespace VPB
                     CreateCategoryQuickMenuRow(_categoryQuickMenuContentGO.transform, i, c, i + 1, keyNum, isActive);
                 }
 
+                ApplyCategoryQuickMenuRowsLayout(ChromeScale);
+
                 if (_categoryQuickMenuOuterGO != null && ordered.Count == 0)
                 {
-                    var empty = new GameObject("EmptyHint");
-                    empty.transform.SetParent(_categoryQuickMenuContentGO.transform, false);
-                    var t = empty.AddComponent<Text>();
-                    VPBUiFont.ApplyTo(t);
-                    t.fontSize = 14;
-                    t.color = new Color(0.7f, 0.7f, 0.75f);
-                    t.text = VPBTranslation.T("gallery.category_quick.empty", "No categories available.");
-                    var le = empty.AddComponent<LayoutElement>();
-                    le.preferredHeight = 28;
+                    var t = UI.CreateLabel(_categoryQuickMenuContentGO, VPBTranslation.T("gallery.category_quick.empty", "No categories available."), GalleryUiDesignTokens.FontBodyRef, new Color(0.7f, 0.7f, 0.75f), name: "EmptyHint");
+                    var le = UI.AddLE(t.gameObject, preferredHeight: 28);
                 }
+
+                _categoryQuickMenuDirty = false;
+                _categoryQuickMenuLastPath = currentPath;
+                _categoryQuickMenuLastExtension = currentExtension;
             }
             catch (Exception ex)
             {
@@ -545,12 +756,9 @@ namespace VPB
             hlg.childForceExpandHeight = false;
             hlg.childForceExpandWidth = false;
 
-            var rowLe = row.AddComponent<LayoutElement>();
-            rowLe.preferredHeight = 36;
-            rowLe.minHeight = 36;
+            var rowLe = UI.AddLE(row, minHeight: 36, preferredHeight: 36);
 
-            var bg = row.AddComponent<Image>();
-            bg.color = isActive ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
+            var bg = AddCategoryQuickRoundedBg(row, isActive ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop);
 
             var btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -560,30 +768,12 @@ namespace VPB
 
             string numPrefix = keyboardDigitLabel >= 0 ? (keyboardDigitLabel == 0 ? "0." : keyboardDigitLabel + ".") : rowLabelNumber + ".";
 
-            var numGO = new GameObject("Idx");
-            numGO.transform.SetParent(row.transform, false);
-            var numT = numGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(numT);
-            numT.fontSize = 17;
-            numT.fontStyle = FontStyle.Bold;
-            numT.color = UI.PopupMutedText;
-            numT.alignment = TextAnchor.MiddleLeft;
-            numT.text = numPrefix;
-            var numLe = numGO.AddComponent<LayoutElement>();
-            numLe.preferredWidth = 34;
-            numLe.minWidth = 34;
+            var numT = UI.CreateLabel(row, numPrefix, GalleryUiDesignTokens.FontBodyRef, UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Idx");
+            var numLe = UI.AddLE(numT.gameObject, minWidth: 34, preferredWidth: 34);
 
-            var nameGO = new GameObject("Name");
-            nameGO.transform.SetParent(row.transform, false);
-            var nameT = nameGO.AddComponent<Text>();
-            VPBUiFont.ApplyTo(nameT);
-            nameT.fontSize = 17;
-            nameT.color = UI.PopupText;
-            nameT.alignment = TextAnchor.MiddleLeft;
-            nameT.text = cat.name ?? "";
-            var nameLe = nameGO.AddComponent<LayoutElement>();
-            nameLe.flexibleWidth = 1;
-            nameLe.minWidth = 40;
+            int cnt = categoryCounts != null && categoryCounts.ContainsKey(cat.name ?? "") ? categoryCounts[cat.name] : 0;
+            var nameT = UI.CreateLabel(row, (cat.name ?? "") + " (" + cnt + ")", GalleryUiDesignTokens.FontBodyRef, isActive ? UI.PopupText : UI.PopupMutedText, TextAnchor.MiddleLeft, name: "Name");
+            var nameLe = UI.AddLE(nameT.gameObject, minWidth: 40, flexibleWidth: 1);
         }
 
         internal void ApplyCategoryQuickPick(Gallery.Category c)
@@ -594,7 +784,7 @@ namespace VPB
 
         private bool TryConsumeCategoryQuickNumberKey()
         {
-            if (!IsVisible || IsHubMode) return false;
+            if (!IsVisible) return false;
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
@@ -619,6 +809,7 @@ namespace VPB
             if (idx >= list.Count) return false;
 
             ApplyCategoryQuickPick(list[idx]);
+            try { ShowTemporaryStatus("\u2192 " + (list[idx].name ?? ""), 1.2f); } catch { }
             return true;
         }
     }

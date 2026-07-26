@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -21,14 +22,6 @@ namespace VPB
         private GameObject tboxRemoveHistoryBtn;
         private GameObject tboxCleanupBtn;
         private GameObject tboxCleanupApplyBtn;
-        private GameObject tboxCleanupFilterAllBtn;
-        private GameObject tboxCleanupFilterDupBtn;
-        private GameObject tboxCleanupFilterOldBtn;
-        private GameObject tboxCleanupFilterDamagedBtn;
-        private GameObject tboxCleanupSelectVisibleBtn;
-        private GameObject tboxCleanupSelectDupBtn;
-        private GameObject tboxCleanupSelectOldBtn;
-        private GameObject tboxCleanupSelectDamagedBtn;
         private GameObject tboxCleanupClearBtn;
         private GameObject tboxCleanupAddExcludeBtn;
         private GameObject tboxCleanupRemoveExcludeBtn;
@@ -38,14 +31,17 @@ namespace VPB
         private GameObject tboxUnhideBtn;
         private GameObject tboxScanWhitelistTemporaryBtn;
         private GameObject tboxLoadBtn;
+        private GameObject tboxLoadRandomBtn;
         private GameObject tboxUnloadBtn;
         private GameObject tboxLoadDepsBtn;
         private GameObject tboxCacheTexturesBtn;
         // Debug-only: dumps the selected row's thumbnail pipeline to Cache/VPB/_thumbdebug/. Visible when TextureLogLevel >= 2.
         private GameObject tboxThumbDebugBtn;
         private GameObject tboxOpenHubBtn;
-        private GameObject tboxSceneImportBtn;
+        private GameObject tboxOverwriteSceneBtn;
         private GameObject tboxSuppressScaleBtn;
+        private GameObject tboxReplaceBtn;
+        private Image tboxReplaceBtnIconImage;
         private GameObject tboxSelectAllBtn;
         private GameObject tboxClearSelectionBtn;
         private GameObject tboxGridRateBtn;
@@ -55,14 +51,21 @@ namespace VPB
         private GameObject tboxSettingsSaveBtn;
         private GameObject tboxSettingsCancelBtn;
 
-        // Dependency filter controls in toolbox
-        private GameObject tboxFilterModeRowGO;
-        private RectTransform tboxFilterModeRowRT;
-        private LayoutElement tboxFilterModeRowLE;
-        private HorizontalLayoutGroup tboxFilterModeRowHLG;
-        private GameObject tboxFilterBackBtn;
-        private GameObject tboxFilterClearBtn;
-        private Text tboxFilterModeText;
+        // Appearance clothing-apply-mode segmented row (Preset / Keep / Only). Shown in the
+        // toolbox only while the Appearance category is active; single-select, one click.
+        private GameObject tboxClothingModeRowGO;
+        private RectTransform tboxClothingModeRowRT;
+        private LayoutElement tboxClothingModeRowLE;
+        private HorizontalLayoutGroup tboxClothingModeRowHLG;
+        private Text tboxClothingModeLabel;
+        private Image tboxClothesPresetImg;
+        private Image tboxClothesKeepImg;
+        private Image tboxClothesOnlyImg;
+        private Image tboxClothesMergeImg;
+        private Text tboxClothesPresetText;
+        private Text tboxClothesKeepText;
+        private Text tboxClothesOnlyText;
+        private Text tboxClothesMergeText;
 
         private static void SetTboxButtonEnabledVisual(GameObject go, bool enabled, float disabledAlpha = 0.35f)
         {
@@ -114,7 +117,13 @@ namespace VPB
             public float flexW;
         }
         private readonly Dictionary<GameObject, TboxBaseWidthSpec> tboxBaseWidthSpec = new Dictionary<GameObject, TboxBaseWidthSpec>(64);
-        private const float tboxBtnRowGap = 4f;
+        private const float tboxBtnRowGapRef = 4f;
+        private float TboxBtnRowGapScaled()
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            return tboxBtnRowGapRef * s;
+        }
 
         private static void TboxConfigureActionButtonFlex(GameObject go, float minW, float prefW, float innerRowH)
         {
@@ -133,7 +142,17 @@ namespace VPB
             le.flexibleWidth = 1f;
             le.minHeight = innerRowH;
             le.preferredHeight = innerRowH;
-            le.flexibleHeight = 1f;
+            // Fixed button height (centered in the row) — do not stretch to fill the info row.
+            le.flexibleHeight = 0f;
+        }
+
+        /// <summary>
+        /// Uniform toolbox action-button height: ButtonSizeRef × ChromeScale, matching title chips
+        /// and side-rail buttons for a globally consistent 2× font ratio.
+        /// </summary>
+        private float TboxActionButtonInnerHeight()
+        {
+            return GalleryUiDesignTokens.ButtonSizeRef * ChromeScale;
         }
 
         private void TboxSetAllFlexActionButtonHeights(float innerRowH)
@@ -157,28 +176,36 @@ namespace VPB
             one(tboxRemoveHistoryBtn);
             one(tboxCleanupBtn);
             one(tboxCleanupApplyBtn);
-            one(tboxCleanupFilterAllBtn);
-            one(tboxCleanupFilterDupBtn);
-            one(tboxCleanupFilterOldBtn);
-            one(tboxCleanupFilterDamagedBtn);
-            one(tboxCleanupSelectVisibleBtn);
-            one(tboxCleanupSelectDupBtn);
-            one(tboxCleanupSelectOldBtn);
-            one(tboxCleanupSelectDamagedBtn);
             one(tboxCleanupClearBtn);
             one(tboxCleanupAddExcludeBtn);
             one(tboxCleanupRemoveExcludeBtn);
             one(tboxLoadBtn);
+            one(tboxLoadRandomBtn);
             one(tboxUnloadBtn);
             one(tboxLoadDepsBtn);
             one(tboxCacheTexturesBtn);
             one(tboxOpenHubBtn);
             one(tboxCopyPkgNamesBtn);
-            one(tboxSceneImportBtn);
+            one(tboxOverwriteSceneBtn);
             one(tboxSuppressScaleBtn);
+            one(tboxReplaceBtn);
             one(tboxSelectAllBtn);
             one(tboxClearSelectionBtn);
             one(tboxGridRateBtn);
+            foreach (var go in tboxPersonAtomBtns)
+            {
+                one(go);
+                // Also update inner children (e.g. the dropdown button inside the container row).
+                // minHeight on the inner button is a hard floor that prevents it from shrinking
+                // unless explicitly updated here.
+                if (go == null) continue;
+                foreach (Transform child in go.transform)
+                {
+                    if (child == null) continue;
+                    var cle = child.GetComponent<LayoutElement>();
+                    if (cle != null) { cle.minHeight = innerRowH; cle.preferredHeight = innerRowH; }
+                }
+            }
         }
 
         private void TboxDetachAllActionButtonsForLayout()
@@ -200,25 +227,19 @@ namespace VPB
             d(tboxRemoveHistoryBtn);
             d(tboxCleanupBtn);
             d(tboxCleanupApplyBtn);
-            d(tboxCleanupFilterAllBtn);
-            d(tboxCleanupFilterDupBtn);
-            d(tboxCleanupFilterOldBtn);
-            d(tboxCleanupFilterDamagedBtn);
-            d(tboxCleanupSelectVisibleBtn);
-            d(tboxCleanupSelectDupBtn);
-            d(tboxCleanupSelectOldBtn);
-            d(tboxCleanupSelectDamagedBtn);
             d(tboxCleanupClearBtn);
             d(tboxCleanupAddExcludeBtn);
             d(tboxCleanupRemoveExcludeBtn);
             d(tboxLoadBtn);
+            d(tboxLoadRandomBtn);
             d(tboxUnloadBtn);
             d(tboxLoadDepsBtn);
             d(tboxCacheTexturesBtn);
             d(tboxOpenHubBtn);
             d(tboxCopyPkgNamesBtn);
-            d(tboxSceneImportBtn);
+            d(tboxOverwriteSceneBtn);
             d(tboxSuppressScaleBtn);
+            d(tboxReplaceBtn);
             d(tboxSelectAllBtn);
             d(tboxClearSelectionBtn);
             d(tboxGridRateBtn);
@@ -254,16 +275,30 @@ namespace VPB
         {
             if (tboxButtonsFlexRootRT == null || tboxBtnRow0HLG == null || tboxBtnRow1HLG == null || tboxBtnRow2HLG == null) return;
 
-            float innerH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+            // Button rows use the button height as their slot height so no blank space appears
+            // when multiple rows are active.
+            float innerH = TboxActionButtonInnerHeight();
             if (tboxBtnRow0LE != null) { tboxBtnRow0LE.minHeight = innerH; tboxBtnRow0LE.preferredHeight = innerH; }
             if (tboxBtnRow1LE != null) { tboxBtnRow1LE.minHeight = innerH; tboxBtnRow1LE.preferredHeight = innerH; }
             if (tboxBtnRow2LE != null) { tboxBtnRow2LE.minHeight = innerH; tboxBtnRow2LE.preferredHeight = innerH; }
             TboxSetAllFlexActionButtonHeights(innerH);
 
+            // Details is one-row top-left chrome — pad only that band; wrap rows use full width.
+            try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
+
             Canvas.ForceUpdateCanvases();
-            float avail = tboxButtonsFlexRootRT.rect.width;
-            if (avail < 8f)
-                avail = (tboxLastFlexAvailW > 8f) ? tboxLastFlexAvailW : 640f;
+            float availFull = tboxButtonsFlexRootRT.rect.width;
+            if (availFull < 8f)
+                availFull = (tboxLastFlexAvailW > 8f) ? tboxLastFlexAvailW : 640f;
+
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float detailsReserve = DetailStripExpandLeftReserve(s);
+            bool clothingTop = tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf;
+            // Top action row shares vertical space with Details only when clothing row is off.
+            float availRow0 = (detailsReserve > 0f && !clothingTop)
+                ? Mathf.Max(8f, availFull - detailsReserve)
+                : availFull;
 
             const float gap = 10f;
 
@@ -306,7 +341,8 @@ namespace VPB
             }
             else
             {
-                // Person atom target buttons appear leftmost in the toolbar
+                // Person atom target buttons appear leftmost in the flex pack.
+                // Details restore is fixed chrome on the buttons layer (not flex-packed).
                 foreach (var go in tboxPersonAtomBtns) { if (vis(go)) ltr.Add(go); }
                 // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
                 if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
@@ -320,26 +356,20 @@ namespace VPB
                 if (vis(tboxRemoveHistoryBtn)) ltr.Add(tboxRemoveHistoryBtn);
                 if (vis(tboxCleanupBtn)) ltr.Add(tboxCleanupBtn);
                 if (vis(tboxCleanupApplyBtn)) ltr.Add(tboxCleanupApplyBtn);
-                if (vis(tboxCleanupFilterAllBtn)) ltr.Add(tboxCleanupFilterAllBtn);
-                if (vis(tboxCleanupFilterDupBtn)) ltr.Add(tboxCleanupFilterDupBtn);
-                if (vis(tboxCleanupFilterOldBtn)) ltr.Add(tboxCleanupFilterOldBtn);
-                if (vis(tboxCleanupFilterDamagedBtn)) ltr.Add(tboxCleanupFilterDamagedBtn);
-                if (vis(tboxCleanupSelectVisibleBtn)) ltr.Add(tboxCleanupSelectVisibleBtn);
-                if (vis(tboxCleanupSelectDupBtn)) ltr.Add(tboxCleanupSelectDupBtn);
-                if (vis(tboxCleanupSelectOldBtn)) ltr.Add(tboxCleanupSelectOldBtn);
-                if (vis(tboxCleanupSelectDamagedBtn)) ltr.Add(tboxCleanupSelectDamagedBtn);
                 if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
                 if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
                 if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
                 if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
+                if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
                 if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
                 if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
                 if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
                 if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
                 if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
                 if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
-                if (vis(tboxSceneImportBtn)) ltr.Add(tboxSceneImportBtn);
+                if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
                 if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
+                if (vis(tboxReplaceBtn)) ltr.Add(tboxReplaceBtn);
                 if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
                 if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
             }
@@ -380,11 +410,12 @@ namespace VPB
             List<GameObject> row1rtl = new List<GameObject>();
             List<GameObject> row2rtl = new List<GameObject>();
 
-            void ApplySlotWidths(List<GameObject> row, int slotCount)
+            void ApplySlotWidths(List<GameObject> row, int slotCount, float rowAvail)
             {
                 if (row == null || row.Count == 0) return;
                 if (slotCount <= 0) return;
-                float unitW = (avail - gap * (slotCount - 1)) / slotCount;
+                if (rowAvail < 8f) rowAvail = availFull;
+                float unitW = (rowAvail - gap * (slotCount - 1)) / slotCount;
                 for (int i = 0; i < row.Count; i++)
                 {
                     GameObject go = row[i];
@@ -415,10 +446,18 @@ namespace VPB
                     unitMinW = Mathf.Max(unitMinW, mw / Mathf.Max(1, w));
             }
             if (unitMinW < 8f) unitMinW = 56f;
-            int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((avail + gap) / (unitMinW + gap)));
+            // Wrap against the tighter top band when Details is reserving left on row0.
+            float wrapAvail = availRow0;
+            int maxSlotsPerRow = Mathf.Max(1, Mathf.FloorToInt((wrapAvail + gap) / (unitMinW + gap)));
+            int maxSlotsPerLowerRow = Mathf.Max(1, Mathf.FloorToInt((availFull + gap) / (unitMinW + gap)));
             int rowsNeed = Mathf.CeilToInt(totalSlots / Mathf.Max(1f, (float)maxSlotsPerRow));
             if (rowsNeed < 1) rowsNeed = 1;
             if (rowsNeed > 3) rowsNeed = 3;
+            // If lower rows are wider, a 2-row split may fit more on row1 — recompute after first pass if needed.
+            if (rowsNeed == 1 && totalSlots > maxSlotsPerRow)
+                rowsNeed = 2;
+            if (rowsNeed >= 2 && totalSlots > maxSlotsPerRow + maxSlotsPerLowerRow)
+                rowsNeed = 3;
 
             int row0SlotsTarget = totalSlots;
             int row1SlotsTarget = 0;
@@ -432,7 +471,7 @@ namespace VPB
             {
                 row0SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(totalSlots / 3f));
                 int rem = totalSlots - row0SlotsTarget;
-                row1SlotsTarget = Mathf.Min(maxSlotsPerRow, Mathf.CeilToInt(rem / 2f));
+                row1SlotsTarget = Mathf.Min(maxSlotsPerLowerRow, Mathf.CeilToInt(rem / 2f));
                 row2SlotsTarget = totalSlots - row0SlotsTarget - row1SlotsTarget;
             }
 
@@ -484,19 +523,19 @@ namespace VPB
             if (row1rtl.Count > 0) tboxButtonLayoutRows = 2;
             if (row2rtl.Count > 0) tboxButtonLayoutRows = 3;
 
-            // Apply widths per row based on slot counts actually used in row.
+            // Apply widths per row — row0 may be narrower beside Details; lower rows full-bleed.
             if (tboxButtonLayoutRows == 1)
-                ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0));
+                ApplySlotWidths(ltr, Mathf.Max(1, usedSlots0), availRow0);
             else if (tboxButtonLayoutRows == 2)
             {
-                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
-                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0), availRow0);
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1), availFull);
             }
             else
             {
-                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0));
-                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1));
-                ApplySlotWidths(row2rtl, Mathf.Max(1, usedSlots2));
+                ApplySlotWidths(row0rtl, Mathf.Max(1, usedSlots0), availRow0);
+                ApplySlotWidths(row1rtl, Mathf.Max(1, usedSlots1), availFull);
+                ApplySlotWidths(row2rtl, Mathf.Max(1, usedSlots2), availFull);
             }
 
             TboxDetachAllActionButtonsForLayout();
@@ -522,12 +561,16 @@ namespace VPB
                 TboxPopulateRowFromRtlPack(tboxBtnRow2HLG, row2rtl);
             }
 
-            float band = tboxInfoRowHeight * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (tboxBtnRowGap * (tboxButtonLayoutRows - 1)) : 0f);
-            // Add filter row height when active
-            if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                band += tboxInfoRowHeight + tboxBtnRowGap;
+            float rowGap = TboxBtnRowGapScaled();
+            float band = innerH * tboxButtonLayoutRows + (tboxButtonLayoutRows > 1 ? (rowGap * (tboxButtonLayoutRows - 1)) : 0f);
+            // Add appearance clothing-mode row height when active
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
+                band += tboxInfoRowHeight + rowGap;
             if (tboxButtonsLayerRT != null)
                 tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, band);
+
+            // Clothing / row pads depend on which top band is active.
+            try { DetailStripApplyToolboxFlexLeftInset(s); } catch { }
 
             LayoutRebuilder.MarkLayoutForRebuild(tboxButtonsFlexRootRT);
             tboxLastFlexAvailW = tboxButtonsFlexRootRT.rect.width;
@@ -541,18 +584,40 @@ namespace VPB
         private RectTransform tboxRT;
         private CanvasGroup tboxLabelCG;        // fades OUT when expanding
         private CanvasGroup tboxButtonsCG;      // fades IN when expanding
-        private GameObject tboxPinBtn;
-        private Text tboxPinBtnText;
 
         // Row height: matches the collapsed bar height set by the layout system.
         // Updated by layout code (UI.Layout.cs) and innerPaneScaleActions.
-        private float tboxInfoRowHeight = 60f;   // single row height (= collapsed bar height)
+        private float tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef;   // single row height (= collapsed bar height)
         private float tboxTopOffsetBase = 120f;   // bar's top offset (offsetMax.y) when fully collapsed
 
         private RectTransform tboxLabelLayerRT;   // reference for scale updates
         private RectTransform tboxButtonsLayerRT; // reference for scale updates
+        private RectTransform tboxRowSepRT;
 
         // ─────────────────────────────────────────────────────────────────────────
+
+        // Build one segment of the appearance clothing-mode row. Single-select: clicking sets
+        // the mode and re-styles the row (see UpdateKeepClothingButtonState).
+        private void TboxBuildClothingModeButton(string mode, string label, string tooltipKey, string tooltipText, out Image img, out Text text)
+        {
+            GameObject go = UI.CreateUIButton(
+                tboxClothingModeRowGO, 90, 40, label, GalleryUiDesignTokens.FontBodyRef,
+                0, 0, AnchorPresets.stretchAll, () => SetAppearanceClothingMode(mode));
+            go.name = "TboxClothesMode_" + mode;
+            img = go.GetComponent<Image>();
+            text = go.GetComponentInChildren<Text>();
+            // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
+            if (text != null)
+                GalleryUiMetrics.ApplyFont(text, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+            var le = go.GetComponent<LayoutElement>();
+            if (le == null) le = go.AddComponent<LayoutElement>();
+            le.minWidth = 72f;
+            le.preferredWidth = 100f;
+            le.flexibleWidth = 1f;
+            le.minHeight = tboxInfoRowHeight;
+            le.preferredHeight = tboxInfoRowHeight;
+            AddTooltip(go, tooltipKey, tooltipText);
+        }
 
         private void EnsureTboxUI()
         {
@@ -566,7 +631,7 @@ namespace VPB
 
             // Background already set to opaque grey in UI.cs; ensure raycastTarget on
             var img = tbox.GetComponent<Image>();
-            if (img != null) { img.color = new Color(0.15f, 0.15f, 0.15f, 1f); img.raycastTarget = true; }
+            if (img != null) { img.color = UI.ChromeDark; img.raycastTarget = true; }
 
             var hoverDel = tbox.AddComponent<UIHoverDelegate>();
             hoverDel.OnHoverChange = h => tboxIsHovered = h;
@@ -594,26 +659,12 @@ namespace VPB
             rowRT.offsetMin = Vector2.zero;
             rowRT.offsetMax = Vector2.zero;
 
-            var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-            rowHLG.childAlignment = TextAnchor.MiddleCenter;
-            rowHLG.spacing = 12f;
-            rowHLG.childForceExpandWidth = false;
-            rowHLG.childForceExpandHeight = true;
-            rowHLG.childControlWidth = true;
-            rowHLG.childControlHeight = true;
-            rowHLG.padding = new RectOffset(8, 8, 0, 0);
+            var rowHLG = UI.AddHLG(rowGO, spacing: 12f, padding: UI.Pad(8, 8, 0, 0), childAlignment: TextAnchor.MiddleCenter, childForceExpandWidth: false, childForceExpandHeight: true);
 
-            const int tboxCollapsedFont = 18;
+            const int tboxCollapsedFont = GalleryUiDesignTokens.FontBodyRef;
 
-            var labelTextGO = new GameObject("Text");
-            labelTextGO.transform.SetParent(rowGO.transform, false);
-            tboxLabel = labelTextGO.AddComponent<Text>();
-            tboxLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxLabel.fontSize = tboxCollapsedFont;
-            tboxLabel.fontStyle = FontStyle.Bold;
-            tboxLabel.color = Color.white;
-            tboxLabel.alignment = TextAnchor.MiddleCenter;
-            tboxLabel.raycastTarget = false;
+            tboxLabel = UI.CreateLabel(rowGO, "", tboxCollapsedFont, Color.white, TextAnchor.MiddleCenter, raycastTarget: false, name: "Text");
+            var labelTextGO = tboxLabel.gameObject;
             var labelShadow = labelTextGO.AddComponent<Shadow>();
             labelShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
             labelShadow.effectDistance = new Vector2(1f, -1f);
@@ -621,16 +672,8 @@ namespace VPB
             labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             labelCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            var hintTextGO = new GameObject("HoverHint");
-            hintTextGO.transform.SetParent(rowGO.transform, false);
-            tboxHintLabel = hintTextGO.AddComponent<Text>();
-            tboxHintLabel.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            tboxHintLabel.fontSize = tboxCollapsedFont;
-            tboxHintLabel.fontStyle = FontStyle.Normal;
-            tboxHintLabel.color = new Color(0.50f, 0.50f, 0.50f, 1f);
-            tboxHintLabel.alignment = TextAnchor.MiddleCenter;
-            tboxHintLabel.raycastTarget = false;
-            tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
+            tboxHintLabel = UI.CreateLabel(rowGO, VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand"), tboxCollapsedFont, new Color(0.50f, 0.50f, 0.50f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "HoverHint");
+            var hintTextGO = tboxHintLabel.gameObject;
             hintTextGO.SetActive(false);
             var hintShadow = hintTextGO.AddComponent<Shadow>();
             hintShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
@@ -668,14 +711,7 @@ namespace VPB
             tboxButtonsFlexRootRT.offsetMin = new Vector2(8f, 0f);
             tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f, 0f);
             tboxButtonsFlexRootRT.pivot = new Vector2(0.5f, 0f);
-            var flexVlg = flexGO.AddComponent<VerticalLayoutGroup>();
-            flexVlg.spacing = tboxBtnRowGap;
-            flexVlg.padding = new RectOffset(0, 0, 0, 0);
-            flexVlg.childAlignment = TextAnchor.UpperRight;
-            flexVlg.childControlWidth = true;
-            flexVlg.childForceExpandWidth = true;
-            flexVlg.childControlHeight = true;
-            flexVlg.childForceExpandHeight = false;
+            var flexVlg = UI.AddVLG(flexGO, spacing: TboxBtnRowGapScaled(), childAlignment: TextAnchor.UpperRight);
 
             // Hold buttons between relayout passes (sibling of flex root — not in the VLG).
             var stashGO = new GameObject("TboxBtnStash");
@@ -688,7 +724,7 @@ namespace VPB
             stashRT.sizeDelta = Vector2.zero;
             tboxButtonStash = stashGO;
 
-            float innerRowH = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+            float innerRowH = TboxActionButtonInnerHeight();
 
             tboxBtnRow0GO = new GameObject("TboxBtnRow0");
             tboxBtnRow0GO.transform.SetParent(flexGO.transform, false);
@@ -696,18 +732,8 @@ namespace VPB
             tboxBtnRow0RT.anchorMin = Vector2.zero;
             tboxBtnRow0RT.anchorMax = Vector2.one;
             tboxBtnRow0RT.sizeDelta = Vector2.zero;
-            tboxBtnRow0LE = tboxBtnRow0GO.AddComponent<LayoutElement>();
-            tboxBtnRow0LE.minHeight = innerRowH;
-            tboxBtnRow0LE.preferredHeight = innerRowH;
-            tboxBtnRow0LE.flexibleWidth = 1f;
-            tboxBtnRow0HLG = tboxBtnRow0GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow0HLG.spacing = 10f;
-            tboxBtnRow0HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow0HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow0HLG.childControlWidth = true;
-            tboxBtnRow0HLG.childForceExpandWidth = false;
-            tboxBtnRow0HLG.childControlHeight = true;
-            tboxBtnRow0HLG.childForceExpandHeight = true;
+            tboxBtnRow0LE = UI.AddLE(tboxBtnRow0GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow0HLG = UI.AddHLG(tboxBtnRow0GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
 
             tboxBtnRow1GO = new GameObject("TboxBtnRow1");
             tboxBtnRow1GO.transform.SetParent(flexGO.transform, false);
@@ -715,18 +741,8 @@ namespace VPB
             tboxBtnRow1RT.anchorMin = Vector2.zero;
             tboxBtnRow1RT.anchorMax = Vector2.one;
             tboxBtnRow1RT.sizeDelta = Vector2.zero;
-            tboxBtnRow1LE = tboxBtnRow1GO.AddComponent<LayoutElement>();
-            tboxBtnRow1LE.minHeight = innerRowH;
-            tboxBtnRow1LE.preferredHeight = innerRowH;
-            tboxBtnRow1LE.flexibleWidth = 1f;
-            tboxBtnRow1HLG = tboxBtnRow1GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow1HLG.spacing = 10f;
-            tboxBtnRow1HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow1HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow1HLG.childControlWidth = true;
-            tboxBtnRow1HLG.childForceExpandWidth = false;
-            tboxBtnRow1HLG.childControlHeight = true;
-            tboxBtnRow1HLG.childForceExpandHeight = true;
+            tboxBtnRow1LE = UI.AddLE(tboxBtnRow1GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow1HLG = UI.AddHLG(tboxBtnRow1GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow1GO.SetActive(false);
 
             tboxBtnRow2GO = new GameObject("TboxBtnRow2");
@@ -735,90 +751,77 @@ namespace VPB
             tboxBtnRow2RT.anchorMin = Vector2.zero;
             tboxBtnRow2RT.anchorMax = Vector2.one;
             tboxBtnRow2RT.sizeDelta = Vector2.zero;
-            tboxBtnRow2LE = tboxBtnRow2GO.AddComponent<LayoutElement>();
-            tboxBtnRow2LE.minHeight = innerRowH;
-            tboxBtnRow2LE.preferredHeight = innerRowH;
-            tboxBtnRow2LE.flexibleWidth = 1f;
-            tboxBtnRow2HLG = tboxBtnRow2GO.AddComponent<HorizontalLayoutGroup>();
-            tboxBtnRow2HLG.spacing = 10f;
-            tboxBtnRow2HLG.padding = new RectOffset(0, 0, 0, 0);
-            tboxBtnRow2HLG.childAlignment = TextAnchor.MiddleRight;
-            tboxBtnRow2HLG.childControlWidth = true;
-            tboxBtnRow2HLG.childForceExpandWidth = false;
-            tboxBtnRow2HLG.childControlHeight = true;
-            tboxBtnRow2HLG.childForceExpandHeight = true;
+            tboxBtnRow2LE = UI.AddLE(tboxBtnRow2GO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxBtnRow2HLG = UI.AddHLG(tboxBtnRow2GO, spacing: 10f, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
             tboxBtnRow2GO.SetActive(false);
 
-            // ── Dependency Filter Mode Row ─────────────────────────────────────
-            tboxFilterModeRowGO = new GameObject("TboxFilterModeRow");
-            tboxFilterModeRowGO.transform.SetParent(flexGO.transform, false);
-            tboxFilterModeRowGO.transform.SetAsFirstSibling();
-            tboxFilterModeRowRT = tboxFilterModeRowGO.AddComponent<RectTransform>();
-            tboxFilterModeRowRT.anchorMin = Vector2.zero;
-            tboxFilterModeRowRT.anchorMax = Vector2.one;
-            tboxFilterModeRowRT.sizeDelta = Vector2.zero;
-            tboxFilterModeRowLE = tboxFilterModeRowGO.AddComponent<LayoutElement>();
-            tboxFilterModeRowLE.minHeight = innerRowH;
-            tboxFilterModeRowLE.preferredHeight = innerRowH;
-            tboxFilterModeRowLE.flexibleWidth = 1f;
-            tboxFilterModeRowHLG = tboxFilterModeRowGO.AddComponent<HorizontalLayoutGroup>();
-            tboxFilterModeRowHLG.spacing = 12f;
-            tboxFilterModeRowHLG.padding = new RectOffset(8, 8, 0, 0);
-            tboxFilterModeRowHLG.childAlignment = TextAnchor.MiddleCenter;
-            tboxFilterModeRowHLG.childControlWidth = false;
-            tboxFilterModeRowHLG.childForceExpandWidth = false;
-            tboxFilterModeRowHLG.childControlHeight = true;
-            tboxFilterModeRowHLG.childForceExpandHeight = true;
-            tboxFilterModeRowGO.SetActive(false);
+            // ── Appearance Clothing Mode Row (Preset / Keep / Only) ────────────
+            // Segmented single-select control, shown only while the Appearance category is
+            // active. Replaces the old text side tab; one click picks the mode.
+            tboxClothingModeRowGO = new GameObject("TboxClothingModeRow");
+            tboxClothingModeRowGO.transform.SetParent(flexGO.transform, false);
+            tboxClothingModeRowGO.transform.SetAsFirstSibling();
+            tboxClothingModeRowRT = tboxClothingModeRowGO.AddComponent<RectTransform>();
+            tboxClothingModeRowRT.anchorMin = Vector2.zero;
+            tboxClothingModeRowRT.anchorMax = Vector2.one;
+            tboxClothingModeRowRT.sizeDelta = Vector2.zero;
+            tboxClothingModeRowLE = UI.AddLE(tboxClothingModeRowGO, minHeight: tboxInfoRowHeight, preferredHeight: tboxInfoRowHeight, flexibleWidth: 1f);
+            tboxClothingModeRowHLG = UI.AddHLG(tboxClothingModeRowGO, spacing: 8f, padding: UI.Pad(8, 8, 0, 0), childForceExpandWidth: false, childForceExpandHeight: true);
+            tboxClothingModeRowGO.SetActive(false);
 
-            // Filter Mode Label
+            // Leading label
             {
-                var filterLabelGO = new GameObject("FilterModeLabel");
-                filterLabelGO.transform.SetParent(tboxFilterModeRowGO.transform, false);
-                tboxFilterModeText = filterLabelGO.AddComponent<Text>();
-                tboxFilterModeText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                tboxFilterModeText.fontSize = 20;
-                tboxFilterModeText.fontStyle = FontStyle.Bold;
-                tboxFilterModeText.color = new Color(1f, 0.85f, 0f, 1f);
-                tboxFilterModeText.alignment = TextAnchor.MiddleCenter;
-                tboxFilterModeText.horizontalOverflow = HorizontalWrapMode.Overflow;
-                tboxFilterModeText.verticalOverflow = VerticalWrapMode.Truncate;
-                tboxFilterModeText.raycastTarget = false;
-                var labelRT = filterLabelGO.GetComponent<RectTransform>();
-                labelRT.sizeDelta = new Vector2(200, innerRowH);
+                tboxClothingModeLabel = UI.CreateLabel(tboxClothingModeRowGO, VPBTranslation.T("gallery.clothes.mode_label", "Appearance loading:"), GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.82f, 1f), TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, raycastTarget: false, name: "ClothingModeLabel");
+                // Match the rest of the toolbox chrome font (scales with InnerPaneScale).
+                GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+                // Wider than the text so there's clear right padding before the first button.
+                var lblLE = UI.AddLE(tboxClothingModeLabel.gameObject, minWidth: 240f, preferredWidth: 240f, flexibleWidth: 0f);
             }
 
-            // Back Button
-            tboxFilterBackBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_back", "Back"), 16, 0, 0, AnchorPresets.stretchAll, NavigateBack);
-            tboxFilterBackBtn.name = "TboxFilterBackBtn";
-            tboxFilterBackBtn.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.6f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/arrow_left.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterBackBtn, s, padding: 6f); }
-            AddTooltip(tboxFilterBackBtn, "gallery.tooltip.filter_back", VPBTranslation.T("gallery.tooltip.filter_back", "Back"));
+            TboxBuildClothingModeButton("replace",
+                VPBTranslation.T("gallery.clothes.preset_short", "Full Look"),
+                "gallery.tooltip.clothes_preset",
+                VPBTranslation.T("gallery.tooltip.clothes_preset", "Load the whole look including the preset's outfit (replaces your current clothing)."),
+                out tboxClothesPresetImg, out tboxClothesPresetText);
+            TboxBuildClothingModeButton("keep",
+                VPBTranslation.T("gallery.clothes.keep_short", "Keep My Outfit"),
+                "gallery.tooltip.clothes_keep",
+                VPBTranslation.T("gallery.tooltip.clothes_keep", "Load the look but keep your current outfit and its textures/colors; only body, skin and hair change."),
+                out tboxClothesKeepImg, out tboxClothesKeepText);
+            TboxBuildClothingModeButton("clothingonly",
+                VPBTranslation.T("gallery.clothes.only_short", "Outfit Only"),
+                "gallery.tooltip.clothes_only",
+                VPBTranslation.T("gallery.tooltip.clothes_only", "Load only the preset's outfit; keep your current body, skin and hair."),
+                out tboxClothesOnlyImg, out tboxClothesOnlyText);
+            TboxBuildClothingModeButton("mergeoutfit",
+                VPBTranslation.T("gallery.clothes.merge_short", "Merge Outfit"),
+                "gallery.tooltip.clothes_merge",
+                VPBTranslation.T("gallery.tooltip.clothes_merge", "Keep body, skin and hair. Pick clothing from the appearance to add on top of your current outfit."),
+                out tboxClothesMergeImg, out tboxClothesMergeText);
 
-            // Clear Filter Button
-            tboxFilterClearBtn = UI.CreateUIButton(tboxFilterModeRowGO, 80, 40, VPBTranslation.T("gallery.tbox.filter_clear", "Clear"), 16, 0, 0, AnchorPresets.stretchAll, ClearPackageFilter);
-            tboxFilterClearBtn.name = "TboxFilterClearBtn";
-            tboxFilterClearBtn.GetComponent<Image>().color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
-            { var s = UI.LoadIconSprite("vpb_icons/filter_off.png", Color.white); if (s != null) UI.AddIconToButton(tboxFilterClearBtn, s, padding: 6f); }
-            AddTooltip(tboxFilterClearBtn, "gallery.tooltip.filter_clear", VPBTranslation.T("gallery.tooltip.filter_clear", "Clear Filter"));
+            UpdateKeepClothingButtonState();
 
-            const int tboxActionBtnFont = 16;
+            const int tboxActionBtnFont = GalleryUiDesignTokens.FontBodyRef;
 
             // Placeholders — layout is resolved in RefreshTboxFlexButtonLayout (stretch + LayoutElement).
 
-            tboxSceneImportBtn = UI.CreateUIButton(
+            tboxOverwriteSceneBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
                 0, 0, AnchorPresets.stretchAll,
-                TboxSceneImportSelectedPackage
+                TboxOverwriteSaveSceneClicked
             );
-            tboxSceneImportBtn.name = "Tbox_SceneImport";
-            TboxConfigureActionButtonFlex(tboxSceneImportBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxSceneImportBtn, "gallery.tooltip.scene_import", "Import presets from a scene");
+            tboxOverwriteSceneBtn.name = "Tbox_OverwriteScene";
+            TboxConfigureActionButtonFlex(tboxOverwriteSceneBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(
+                tboxOverwriteSceneBtn,
+                "gallery.tooltip.overwrite_scene",
+                "Overwrite Save: open save dialog with the selected scene name prefilled.");
             try
             {
-                var s = UI.LoadIconSprite("vpb_icons/import.png", Color.white);
-                if (s != null) UI.AddIconToButton(tboxSceneImportBtn, s, padding: 6f);
+                var saveSpr = gallerySaveSprite ?? UI.LoadIconSprite("vpb_icons/gallery_save.png", Color.white);
+                if (saveSpr != null)
+                    UI.AddIconToButton(tboxOverwriteSceneBtn, saveSpr, padding: 6f, backdropOverride: new Color(0.18f, 0.42f, 0.28f, 0.96f));
             }
             catch { }
 
@@ -839,6 +842,32 @@ namespace VPB
             }
             catch { }
             RefreshSuppressScaleBtnVisual();
+
+            tboxReplaceBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                ToggleReplaceMode
+            );
+            tboxReplaceBtn.name = "Tbox_ReplaceMode";
+            TboxConfigureActionButtonFlex(tboxReplaceBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxReplaceBtn, "gallery.tooltip.replace_mode", "Toggle Add vs Replace when dropping on a person (same button).");
+            try
+            {
+                Sprite rpInit = DragDropReplaceMode
+                    ? (galleryReplaceSprite ?? galleryAddSprite)
+                    : (galleryAddSprite ?? galleryReplaceSprite);
+                if (rpInit != null)
+                {
+                    Color rpCol = DragDropReplaceMode
+                        ? new Color(0.6f, 0.15f, 0.15f, 1f)
+                        : new Color(0.15f, 0.45f, 0.15f, 1f);
+                    UI.AddIconToButton(tboxReplaceBtn, rpInit, padding: 6f, backdropOverride: rpCol);
+                    tboxReplaceBtnIconImage = tboxReplaceBtn.transform.Find("Icon")?.GetComponent<Image>();
+                }
+            }
+            catch { }
+            UpdateReplaceButtonState();
 
             tboxCopyPkgNamesBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
@@ -901,8 +930,7 @@ namespace VPB
                 selectorCg.interactable = false;
                 selectorCg.blocksRaycasts = false;
 
-                Image selectorBgImg = tboxGridRateSelectorGO.AddComponent<Image>();
-                selectorBgImg.color = new Color(0.05f, 0.05f, 0.05f, 0.96f);
+                Image selectorBgImg = UI.AddImage(tboxGridRateSelectorGO, new Color(0.05f, 0.05f, 0.05f, 0.96f));
 
                 GridLayoutGroup selectorGrid = tboxGridRateSelectorGO.AddComponent<GridLayoutGroup>();
                 selectorGrid.cellSize = new Vector2(38, 36);
@@ -913,6 +941,9 @@ namespace VPB
                 selectorGrid.childAlignment = TextAnchor.UpperLeft;
 
                 tboxGridRateHandler = tboxGridRateBtn.AddComponent<RatingHandler>();
+                // Reparent open selector to backgroundBoxGO (RatingHandler) so it stacks above
+                // VPB_DetailStrip — strip is a later sibling under InfoBar and covers upward overflow.
+                tboxGridRateHandler.panel = this;
                 Image[] grOptImages = new Image[6];
                 Text[] grOptTexts = new Text[6];
                 GameObject[] grOptBorders = new GameObject[6];
@@ -1116,6 +1147,27 @@ namespace VPB
             }
             catch { }
 
+            tboxLoadRandomBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                LoadRandom
+            );
+            tboxLoadRandomBtn.name = "Tbox_LoadRandom";
+            TboxConfigureActionButtonFlex(tboxLoadRandomBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxLoadRandomBtn, "gallery.tooltip.load_random", "Load random item");
+            try
+            {
+                var randomIcon = UI.LoadIconSprite("vpb_icons/random.png", Color.white);
+                if (randomIcon != null) UI.AddIconToButton(tboxLoadRandomBtn, randomIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxLoadRandomBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.footer.random_abbrev", "Rdm");
+                }
+            }
+            catch { }
+
             tboxDeleteBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1235,78 +1287,6 @@ namespace VPB
             TboxConfigureActionButtonFlex(tboxCleanupApplyBtn, 72f, 84f, innerRowH);
             AddTooltip(tboxCleanupApplyBtn, "gallery.tooltip.tbox_cleanup_apply", "Move selected cleanup candidates to DeletedPackages/DeletedScenes by type.");
 
-            tboxCleanupFilterAllBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_filter_all", "All"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxToggleCleanupFilterAll
-            );
-            tboxCleanupFilterAllBtn.name = "Tbox_CleanupFilterAll";
-            TboxConfigureActionButtonFlex(tboxCleanupFilterAllBtn, 56f, 68f, innerRowH);
-
-            tboxCleanupFilterDupBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_filter_dup", "Dup"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxToggleCleanupFilterDuplicate
-            );
-            tboxCleanupFilterDupBtn.name = "Tbox_CleanupFilterDup";
-            TboxConfigureActionButtonFlex(tboxCleanupFilterDupBtn, 56f, 68f, innerRowH);
-
-            tboxCleanupFilterOldBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_filter_old", "Old"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxToggleCleanupFilterOld
-            );
-            tboxCleanupFilterOldBtn.name = "Tbox_CleanupFilterOld";
-            TboxConfigureActionButtonFlex(tboxCleanupFilterOldBtn, 56f, 68f, innerRowH);
-
-            tboxCleanupFilterDamagedBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_filter_damaged", "Damaged"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxToggleCleanupFilterDamaged
-            );
-            tboxCleanupFilterDamagedBtn.name = "Tbox_CleanupFilterDamaged";
-            TboxConfigureActionButtonFlex(tboxCleanupFilterDamagedBtn, 78f, 90f, innerRowH);
-
-            tboxCleanupSelectVisibleBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_select_visible", "SelVisible"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                TboxSelectAllVisibleCleanup
-            );
-            tboxCleanupSelectVisibleBtn.name = "Tbox_CleanupSelectVisible";
-            TboxConfigureActionButtonFlex(tboxCleanupSelectVisibleBtn, 88f, 108f, innerRowH);
-
-            tboxCleanupSelectDupBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_select_dup", "SelDup"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                () => TboxSelectCleanupByType(CleanupCandidateType.Duplicate)
-            );
-            tboxCleanupSelectDupBtn.name = "Tbox_CleanupSelectDup";
-            TboxConfigureActionButtonFlex(tboxCleanupSelectDupBtn, 72f, 86f, innerRowH);
-
-            tboxCleanupSelectOldBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_select_old", "SelOld"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                () => TboxSelectCleanupByType(CleanupCandidateType.OldVersion)
-            );
-            tboxCleanupSelectOldBtn.name = "Tbox_CleanupSelectOld";
-            TboxConfigureActionButtonFlex(tboxCleanupSelectOldBtn, 72f, 86f, innerRowH);
-
-            tboxCleanupSelectDamagedBtn = UI.CreateUIButton(
-                tboxBtnRow0GO, 0, 0,
-                VPBTranslation.T("gallery.tbox.cleanup_select_damaged", "SelDamaged"), tboxActionBtnFont,
-                0, 0, AnchorPresets.stretchAll,
-                () => TboxSelectCleanupByType(CleanupCandidateType.Damaged)
-            );
-            tboxCleanupSelectDamagedBtn.name = "Tbox_CleanupSelectDamaged";
-            TboxConfigureActionButtonFlex(tboxCleanupSelectDamagedBtn, 88f, 112f, innerRowH);
-
             tboxCleanupClearBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 VPBTranslation.T("gallery.tbox.cleanup_clear", "ClearSel"), tboxActionBtnFont,
@@ -1348,14 +1328,6 @@ namespace VPB
             }
             catch { }
             tboxCleanupApplyBtn.SetActive(false);
-            tboxCleanupFilterAllBtn.SetActive(false);
-            tboxCleanupFilterDupBtn.SetActive(false);
-            tboxCleanupFilterOldBtn.SetActive(false);
-            tboxCleanupFilterDamagedBtn.SetActive(false);
-            tboxCleanupSelectVisibleBtn.SetActive(false);
-            tboxCleanupSelectDupBtn.SetActive(false);
-            tboxCleanupSelectOldBtn.SetActive(false);
-            tboxCleanupSelectDamagedBtn.SetActive(false);
             tboxCleanupClearBtn.SetActive(false);
             tboxCleanupAddExcludeBtn.SetActive(false);
             tboxCleanupRemoveExcludeBtn.SetActive(false);
@@ -1471,117 +1443,105 @@ namespace VPB
             }
             catch { }
 
-            // ── Pin toggle (right edge, always visible) ───────────────────────────
-            tboxPinBtn = UI.CreateUIButton(
-                tbox, 44, 0, "", 15,
-                0, 0, AnchorPresets.vStretchRight,
-                () =>
-                {
-                    tboxPinned = !tboxPinned;
-                    if (VPBConfig.Instance != null)
-                    {
-                        VPBConfig.Instance.GalleryTboxToolbarPinned = tboxPinned;
-                        try { VPBConfig.Instance.Save(true, true); } catch { }
-                    }
-                    RefreshTboxPinVisual();
-                }
-            );
-            tboxPinBtn.name = "Tbox_Pin";
-            // Pin button is anchored to the bottom row (tooltip row), not the full bar
-            var pinRT = tboxPinBtn.GetComponent<RectTransform>();
-            pinRT.anchorMin = new Vector2(1f, 0f);
-            pinRT.anchorMax = new Vector2(1f, 0f);
-            pinRT.pivot = new Vector2(1f, 0.5f);
-            pinRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight * 0.5f);
-            pinRT.sizeDelta = new Vector2(44f, 44f);
-
-            tboxPinBtnText = tboxPinBtn.GetComponentInChildren<Text>();
-
-            tboxPinOnSprite = UI.LoadIconSprite("vpb_icons/pin_on.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            tboxPinOffSprite = UI.LoadIconSprite("vpb_icons/pin_off.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            { Sprite init = tboxPinOffSprite ?? tboxPinOnSprite; if (init != null) { UI.AddIconToButton(tboxPinBtn, init); tboxPinIconImage = tboxPinBtn.transform.Find("Icon")?.GetComponent<Image>(); } }
-
-            // Left border line on pin button (visual separator)
-            {
-                var sep = new GameObject("Separator");
-                sep.transform.SetParent(tboxPinBtn.transform, false);
-                var sepImg = sep.AddComponent<Image>();
-                sepImg.color = new Color(1f, 1f, 1f, 0.08f);
-                sepImg.raycastTarget = false;
-                var sepRT = sep.GetComponent<RectTransform>();
-                sepRT.anchorMin = new Vector2(0f, 0.15f);
-                sepRT.anchorMax = new Vector2(0f, 0.85f);
-                sepRT.pivot = new Vector2(0f, 0.5f);
-                sepRT.anchoredPosition = Vector2.zero;
-                sepRT.sizeDelta = new Vector2(1f, 0f);
-            }
-
             // Thin separator line at the row boundary (between tooltip row and toolbox row)
             {
                 var rowSepGO = new GameObject("RowSeparator");
                 rowSepGO.transform.SetParent(tbox.transform, false);
-                var rowSepImg = rowSepGO.AddComponent<Image>();
-                rowSepImg.color = new Color(1f, 1f, 1f, 0.12f);
-                rowSepImg.raycastTarget = false;
-                var rowSepRT = rowSepGO.GetComponent<RectTransform>();
-                rowSepRT.anchorMin = new Vector2(0f, 0f);
-                rowSepRT.anchorMax = new Vector2(1f, 0f);
-                rowSepRT.pivot = new Vector2(0.5f, 0f);
-                rowSepRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight);
-                rowSepRT.sizeDelta = new Vector2(0f, 1f);
-
-                // Scale action to reposition separator when InnerPaneScale changes
-                var rsRT = rowSepRT;
-                innerPaneScaleActions.Add(s =>
-                {
-                    if (rsRT != null) rsRT.anchoredPosition = new Vector2(0f, 60f * s);
-                });
+                var rowSepImg = UI.AddImage(rowSepGO, new Color(1f, 1f, 1f, 0.12f), false);
+                tboxRowSepRT = rowSepGO.GetComponent<RectTransform>();
+                tboxRowSepRT.anchorMin = new Vector2(0f, 0f);
+                tboxRowSepRT.anchorMax = new Vector2(1f, 0f);
+                tboxRowSepRT.pivot = new Vector2(0.5f, 0f);
+                tboxRowSepRT.sizeDelta = new Vector2(0f, 1f);
             }
 
             // Scale actions to resize rows when InnerPaneScale changes
+            innerPaneScaleActions.Add(s =>
             {
-                var lRT = tboxLabelLayerRT;
-                var bRT = tboxButtonsLayerRT;
-                var pRT = pinRT;
-                var fRT = tboxFilterModeRowRT;
-                var fLE = tboxFilterModeRowLE;
-                innerPaneScaleActions.Add(s =>
+                try { SyncTboxFooterRowChrome(s); } catch { }
+                try { RescaleFooterInfoBarInternal(s); } catch { }
+                try { TboxSetAllFlexActionButtonHeights(TboxActionButtonInnerHeight()); } catch { }
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+                try
                 {
-                    float rowH = 60f * s;
-                    tboxInfoRowHeight = rowH;
-                    if (lRT != null) lRT.sizeDelta = new Vector2(lRT.sizeDelta.x, rowH);
-                    if (bRT != null) bRT.anchoredPosition = new Vector2(0f, rowH);
-                    if (pRT != null) pRT.sizeDelta = new Vector2(44f * s, 44f * s);
-                    if (fLE != null) { fLE.minHeight = rowH; fLE.preferredHeight = rowH; }
-                    try { TboxSetAllFlexActionButtonHeights(Mathf.Max(34f, rowH - 8f)); } catch { }
-                    try { RefreshTboxFlexButtonLayout(); } catch { }
-                });
-            }
+                    if (tboxTargetDropdownBtnText != null)
+                        GalleryUiMetrics.ApplyFont(tboxTargetDropdownBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothingModeLabel != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothingModeLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesPresetText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesPresetText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesKeepText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesKeepText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesOnlyText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxClothesMergeText != null)
+                        GalleryUiMetrics.ApplyFont(tboxClothesMergeText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                }
+                catch { }
+            });
 
-            if (VPBConfig.Instance != null)
-                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
-            RefreshTboxPinVisual();
-            AddTooltip(tboxPinBtn, "gallery.tooltip.tbox_pin", "Pin — keep toolbar expanded");
+            SyncTboxPinnedFromConfig();
 
             // Populate person atom buttons with whatever data is already loaded
             try { RefreshTboxPersonAtomButtons(); } catch { }
+            try { SyncTboxFooterRowChrome(UiMetrics.ChromeScale); } catch { }
         }
 
-        private void RefreshTboxPinVisual()
+        /// <summary>Sync pin state from config (settings toggle; no toolbar pin chrome).</summary>
+        private void SyncTboxPinnedFromConfig()
         {
-            if (tboxPinBtnText == null) return;
-            if (tboxPinned)
+            if (VPBConfig.Instance != null)
+                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
+        }
+
+        /// <summary>Footer info row geometry; must run on scale changes and UpdateLayout.</summary>
+        private void SyncTboxFooterRowChrome(float s)
+        {
+            if (tbox == null) return;
+            if (s <= 0f) s = 1f;
+            float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
+            float pinGutter = 48f * s;
+            float gap = TboxBtnRowGapScaled();
+            tboxInfoRowHeight = rowH;
+            if (tboxLabelLayerRT != null)
             {
-                tboxPinBtnText.text = "●";
-                tboxPinBtnText.color = new Color(0.45f, 0.75f, 0.90f, 1f); // teal accent
-                if (tboxPinIconImage != null && tboxPinOnSprite != null) tboxPinIconImage.sprite = tboxPinOnSprite;
+                tboxLabelLayerRT.sizeDelta = new Vector2(-pinGutter, rowH);
+                Transform labelRow = tboxLabelLayerRT.Find("TboxLabelRow");
+                if (labelRow != null)
+                {
+                    HorizontalLayoutGroup labelHlg = labelRow.GetComponent<HorizontalLayoutGroup>();
+                    if (labelHlg != null)
+                    {
+                        labelHlg.spacing = 12f * s;
+                        labelHlg.padding = UI.Pad(8, 8, 0, 0, s);
+                    }
+                }
             }
-            else
+            if (tboxButtonsLayerRT != null)
             {
-                tboxPinBtnText.text = "○";
-                tboxPinBtnText.color = new Color(0.45f, 0.45f, 0.45f, 1f);
-                if (tboxPinIconImage != null && tboxPinOffSprite != null) tboxPinIconImage.sprite = tboxPinOffSprite;
+                tboxButtonsLayerRT.anchoredPosition = new Vector2(0f, rowH);
+                tboxButtonsLayerRT.sizeDelta = new Vector2(-pinGutter, tboxButtonsLayerRT.sizeDelta.y);
             }
+            if (tboxButtonsFlexRootRT != null)
+            {
+                tboxButtonsFlexRootRT.offsetMax = new Vector2(-12f * s, 0f);
+                try { DetailStripApplyToolboxFlexLeftInset(s); } catch
+                {
+                    tboxButtonsFlexRootRT.offsetMin = new Vector2(8f * s, 0f);
+                }
+                VerticalLayoutGroup flexVlg = tboxButtonsFlexRoot != null
+                    ? tboxButtonsFlexRoot.GetComponent<VerticalLayoutGroup>() : null;
+                if (flexVlg != null) flexVlg.spacing = gap;
+            }
+            if (tboxRowSepRT != null)
+                tboxRowSepRT.anchoredPosition = new Vector2(0f, rowH);
+            if (tboxClothingModeRowLE != null)
+            {
+                tboxClothingModeRowLE.minHeight = rowH;
+                tboxClothingModeRowLE.preferredHeight = rowH;
+            }
+            try { DetailStripLayout(); } catch { }
+            try { DetailStripSyncExpandButtonChrome(s); } catch { }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1688,9 +1648,9 @@ namespace VPB
                 return;
             }
 
-            float innerRowH   = Mathf.Max(34f, tboxInfoRowHeight - 8f);
+            float innerRowH   = TboxActionButtonInnerHeight();
             Transform stash      = tboxButtonStash.transform;
-            Color inactiveColor  = new Color(0.18f, 0.18f, 0.20f, 1f);
+            Color inactiveColor  = UI.PopupRowBackdrop;
 
             // Single dropup button row (active person label). Click opens list of all people.
             tboxTargetDropdownRowGO = new GameObject("TboxTargetDropdownRow");
@@ -1699,20 +1659,12 @@ namespace VPB
             rowRT.anchorMin = Vector2.zero; rowRT.anchorMax = Vector2.one;
             rowRT.pivot = new Vector2(0.5f, 0.5f);
             rowRT.offsetMin = rowRT.offsetMax = Vector2.zero;
-            var rowHLG = tboxTargetDropdownRowGO.AddComponent<HorizontalLayoutGroup>();
-            rowHLG.spacing = 2f; rowHLG.childAlignment = TextAnchor.MiddleLeft;
-            rowHLG.childControlWidth = true; rowHLG.childForceExpandWidth = true;
-            rowHLG.childControlHeight = true; rowHLG.childForceExpandHeight = true;
-            var rowLE = tboxTargetDropdownRowGO.AddComponent<LayoutElement>();
-            rowLE.minWidth = 140f;
-            rowLE.preferredWidth = 220f;
-            rowLE.flexibleWidth = 1f;
-            rowLE.minHeight = innerRowH; rowLE.preferredHeight = innerRowH; rowLE.flexibleHeight = 1f;
+            var rowHLG = UI.AddHLG(tboxTargetDropdownRowGO, spacing: 2f, childForceExpandHeight: true);
+            var rowLE = UI.AddLE(tboxTargetDropdownRowGO, minWidth: 140f, minHeight: innerRowH, preferredWidth: 220f, preferredHeight: innerRowH, flexibleWidth: 1f, flexibleHeight: 0f);
             tboxPersonAtomBtns.Add(tboxTargetDropdownRowGO);
 
-            float sScale = 1f;
-            try { if (VPBConfig.Instance != null) sScale = VPBConfig.Instance.InnerPaneScale; } catch { sScale = 1f; }
-            int dropdownFont = Mathf.RoundToInt(Mathf.Max(18f, 18f * sScale));
+            float sScale = ChromeScale;
+            int dropdownFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, sScale, GalleryUiDesignTokens.FontMinRef);
 
             string activeLabel = IsSubSceneTargetMode()
                 ? VPBTranslation.T("gallery.tbox.subscene_target", "SubScene")
@@ -1770,9 +1722,7 @@ namespace VPB
             backdropRT.anchorMax = Vector2.one;
             backdropRT.offsetMin = Vector2.zero;
             backdropRT.offsetMax = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
-            backdropImg.raycastTarget = true;
+            Image backdropImg = UI.AddImage(backdropGO, new Color(0f, 0f, 0f, 0.001f));
             Button backdropBtn = backdropGO.AddComponent<Button>();
             backdropBtn.transition = Selectable.Transition.None;
             backdropBtn.onClick.AddListener(CloseTboxTargetMenu);
@@ -1785,20 +1735,12 @@ namespace VPB
             tboxTargetMenuPanelRT.anchoredPosition = Vector2.zero;
             tboxTargetMenuPanelRT.sizeDelta = new Vector2(380f, 50f);
 
-            Image panelImg = tboxTargetMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(0.09f, 0.09f, 0.16f, 0.97f);
+            Image panelImg = UI.AddImage(tboxTargetMenuPanelGO, new Color(0.09f, 0.09f, 0.16f, 0.97f));
             var outline = tboxTargetMenuPanelGO.AddComponent<Outline>();
             outline.effectColor = new Color(0.3f, 0.3f, 0.3f, 0.5f);
             outline.effectDistance = new Vector2(1f, -1f);
 
-            VerticalLayoutGroup vlg = tboxTargetMenuPanelGO.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.UpperCenter;
+            VerticalLayoutGroup vlg = UI.AddVLG(tboxTargetMenuPanelGO, spacing: 4, padding: UI.Pad(6, 6, 6, 6), childAlignment: TextAnchor.UpperCenter);
 
             ContentSizeFitter csf = tboxTargetMenuPanelGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -1812,16 +1754,15 @@ namespace VPB
             if (tboxTargetMenuPanelGO == null) return;
 
             Transform panel = tboxTargetMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
-            float sScale      = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float sScale      = ChromeScale;
             Sprite renameSpr  = UI.LoadIconSprite("vpb_icons/rename.png", new Color(0.78f, 0.78f, 0.78f, 1f));
             Sprite saveSpr    = gallerySaveSprite;
             Color renameBackdrop = new Color(0.35f, 0.35f, 0.42f, 1f);
             Color saveBackdrop   = new Color(0.20f, 0.35f, 0.22f, 1f);
             float rowH = Mathf.Max(44f, 44f * sScale);
-            int labelFont = Mathf.RoundToInt(Mathf.Max(16f, 16f * sScale));
+            int labelFont = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, sScale, GalleryUiDesignTokens.FontMinRef);
 
             int count = personAtoms != null ? personAtoms.Count : 0;
             for (int i = 0; i < count; i++)
@@ -1845,22 +1786,11 @@ namespace VPB
                 rowRT.pivot = new Vector2(0f, 1f);
                 rowRT.sizeDelta = new Vector2(0f, rowH);
 
-                var rowImg = rowGO.AddComponent<Image>();
-                rowImg.color = isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f);
-                rowImg.raycastTarget = false; // children handle clicks
+                var rowImg = UI.AddImage(rowGO, isCurrent ? new Color(0.15f, 0.30f, 0.52f, 1f) : new Color(0.16f, 0.16f, 0.24f, 1f), false); // children handle clicks
 
-                var rowHLG = rowGO.AddComponent<HorizontalLayoutGroup>();
-                rowHLG.padding = new RectOffset(4, 4, 2, 2);
-                rowHLG.spacing = 4f;
-                rowHLG.childControlHeight = true;
-                rowHLG.childControlWidth = true;
-                rowHLG.childForceExpandHeight = true;
-                rowHLG.childForceExpandWidth = false;
-                rowHLG.childAlignment = TextAnchor.MiddleLeft;
+                var rowHLG = UI.AddHLG(rowGO, spacing: 4f, padding: UI.Pad(4, 4, 2, 2), childForceExpandWidth: false, childForceExpandHeight: true);
 
-                var rowLE = rowGO.AddComponent<LayoutElement>();
-                rowLE.preferredHeight = rowH;
-                rowLE.flexibleWidth = 1f;
+                var rowLE = UI.AddLE(rowGO, preferredHeight: rowH, flexibleWidth: 1f);
 
                 string rowLabel = (isCurrent ? "\u2713  " : "    ") + label;
                 GameObject selectBtn = UI.CreateUIButton(
@@ -1885,7 +1815,7 @@ namespace VPB
                 if (rowT != null)
                 {
                     rowT.color = isCurrent ? Color.white : new Color(0.82f, 0.82f, 0.92f, 1f);
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
+                    rowT.fontStyle = FontStyle.Normal;
                     rowT.alignment = TextAnchor.MiddleLeft;
                     VPBUiFont.ApplyTo(rowT);
                     // VPBUiFont.ApplyTo may reset size; force our desired dropdown font.
@@ -1969,21 +1899,55 @@ namespace VPB
 
         // ─────────────────────────────────────────────────────────────────────────
 
+        // Records the active subfilter chip's label Text so UpdateSelectionContextMenu can keep its
+        // "(N)" equal to the grid's live count. The captured Text is the same one CreateTabButton ran
+        // EllipsizeTextPreferredWidth on; the chip labels here are short enough not to ellipsize.
+        private void CaptureActiveSubfilterChip(GameObject chipGO, string labelPrefix)
+        {
+            _activeSubfilterChipText = null;
+            _activeSubfilterChipLabelPrefix = null;
+            if (chipGO == null) return;
+            try
+            {
+                var t = chipGO.GetComponentInChildren<Text>();
+                if (t != null)
+                {
+                    _activeSubfilterChipText = t;
+                    _activeSubfilterChipLabelPrefix = labelPrefix;
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Recompute InfoBar <c>offsetMax</c> from current expand state + scale bases.
+        /// Call after changing <see cref="tboxTopOffsetBase"/> / chrome scale so tooltip row
+        /// is not left crushed or shifted (offsetMin updated alone is not enough).
+        /// </summary>
+        private void ApplyTboxBarHeightNow()
+        {
+            if (tboxRT == null) return;
+
+            float innerH = TboxActionButtonInnerHeight();
+            float gap = TboxBtnRowGapScaled();
+            float btnBand = innerH * Mathf.Max(1, tboxButtonLayoutRows)
+                + (tboxButtonLayoutRows > 1 ? gap * (tboxButtonLayoutRows - 1) : 0f);
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf)
+                btnBand += tboxInfoRowHeight + gap;
+            btnBand += TryOnToolboxReservedHeight();
+            float detailH = 0f;
+            try { detailH = DetailStripReservedHeight(); } catch { detailH = 0f; }
+            float targetTop = tboxTopOffsetBase + detailH + btnBand * tboxExpandT;
+            tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+        }
+
         private void UpdateSelectionContextMenu()
         {
             if (canvas == null) return;
             EnsureTboxUI();
             if (tbox == null) return;
 
-            if (VPBConfig.Instance != null)
-            {
-                bool cfgPin = VPBConfig.Instance.GalleryTboxToolbarPinned;
-                if (tboxPinned != cfgPin)
-                {
-                    tboxPinned = cfgPin;
-                    RefreshTboxPinVisual();
-                }
-            }
+            SyncTboxPinnedFromConfig();
 
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
@@ -2005,6 +1969,14 @@ namespace VPB
                 }
             }
 
+            // Active clothing/hair chip uses the same `total` as the bottom counter, so the selected
+            // chip's "(N)" can't diverge from the grid (survives package add/remove, hide-old-versions).
+            if (_activeSubfilterChipText != null)
+            {
+                try { _activeSubfilterChipText.text = _activeSubfilterChipLabelPrefix + " (" + total + ")"; }
+                catch { _activeSubfilterChipText = null; }
+            }
+
             // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
             bool isSettingsMode = IsSettingsPanelOpen();
@@ -2016,9 +1988,6 @@ namespace VPB
                 tboxIsHovered = false;
                 tboxButtonLayoutRows = 1;
                 float collapsedHeight = tboxInfoRowHeight;
-                // Account for filter row when active even when collapsed
-                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                    collapsedHeight += tboxInfoRowHeight + tboxBtnRowGap;
                 if (tboxButtonsLayerRT != null)
                     tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, collapsedHeight);
             }
@@ -2050,13 +2019,16 @@ namespace VPB
                     }
                 }
 
-                float btnBand = tboxInfoRowHeight * Mathf.Max(1, tboxButtonLayoutRows)
-                    + (tboxButtonLayoutRows > 1 ? tboxBtnRowGap : 0f);
-                // Add filter row height when active
-                if (tboxFilterModeRowGO != null && tboxFilterModeRowGO.activeSelf)
-                    btnBand += tboxInfoRowHeight + tboxBtnRowGap;
-                float targetTop = tboxTopOffsetBase + btnBand * tboxExpandT;
-                tboxRT.offsetMax = new Vector2(tboxRT.offsetMax.x, targetTop);
+                // Detail strip: visible on selection when expanded (not gated on toolbox hover).
+                try { DetailStripRefresh(); } catch { }
+                try { ApplyTboxBarHeightNow(); } catch { }
+                if (_tryOnActive) TryOnLayoutBar();
+                try { DetailStripLayout(); } catch { }
+                try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
+                // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
+                // button doesn't overlap the toolbox when it expands to two rows.
+                if (importSidebarActive && importSidebarRT != null)
+                    importSidebarRT.offsetMin = new Vector2(importSidebarRT.offsetMin.x, SideTabScrollBottomInsetY());
             }
 
             // Label is suppressed when path/status is actually visible, or buttons are expanded
@@ -2081,10 +2053,20 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            if (sel > 0 || cleanupModeActive || (!IsHubMode && activeContentType == ContentType.History))
-                RefreshTboxConditionalActionButtons();
-            else if (IsSettingsPanelOpen())
-                RefreshTboxConditionalActionButtons();
+            bool needsTboxActions = sel > 0 || cleanupModeActive || activeContentType == ContentType.History || IsSettingsPanelOpen();
+            if (needsTboxActions)
+            {
+                string tboxKey = BuildTboxConditionalRefreshCacheKey();
+                if (!string.Equals(tboxKey, _tboxConditionalRefreshCacheKey, StringComparison.Ordinal))
+                {
+                    _tboxConditionalRefreshCacheKey = tboxKey;
+                    RefreshTboxConditionalActionButtons();
+                }
+            }
+            else if (!string.IsNullOrEmpty(_tboxConditionalRefreshCacheKey))
+            {
+                _tboxConditionalRefreshCacheKey = "";
+            }
 
             // Keep grid / side tab scrollers above the footer while tbox height animates.
             try
@@ -2100,6 +2082,50 @@ namespace VPB
                 }
             }
             catch { }
+            // Side-rail fit uses stable pane chrome (not live InfoBar/detail-strip height).
+            try
+            {
+                float s = ChromeScale;
+                if (s <= 0f) s = 1f;
+                float stableBot = (GalleryUiDesignTokens.FooterBarHeightRef
+                    + GalleryUiDesignTokens.FooterToolboxTopRef
+                    + 20f) * s;
+                if (Mathf.Abs(stableBot - _sideRailLastBottomInset) > 0.5f)
+                {
+                    _sideRailLastBottomInset = stableBot;
+                    UpdateSideButtonPositions();
+                }
+            }
+            catch { }
+        }
+
+        private string BuildTboxConditionalRefreshCacheKey()
+        {
+            var sb = new StringBuilder(256);
+            sb.Append(cleanupModeActive ? 'C' : 'c');
+            sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
+            sb.Append(activeContentType == ContentType.History ? 'H' : 'h');
+            sb.Append(DetailStripIsExpanded() ? 'D' : 'd');
+            try { sb.Append(ScanWhitelistManager.Instance.IsEnabled ? 'W' : 'w'); }
+            catch { sb.Append('w'); }
+
+            if (selectedFiles == null || selectedFiles.Count == 0) return sb.ToString();
+
+            bool historyBrowse = activeContentType == ContentType.History;
+            var keys = new List<string>(selectedFiles.Count);
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                keys.Add(GetSelectionIdentityKey(f, historyBrowse));
+            }
+            keys.Sort(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < keys.Count; i++)
+            {
+                sb.Append('|');
+                sb.Append(keys[i]);
+            }
+            return sb.ToString();
         }
 
         /// <summary>Copy/Delete/Hide/Unhide/Autoinstall: counts in labels and compact layout for the hide/AI group.</summary>
@@ -2120,10 +2146,13 @@ namespace VPB
                         break;
                     }
                 }
-                if (!anyCleanupEntry) cleanupModeActive = false;
+                if (!anyCleanupEntry)
+                {
+                    try { ExitCleanupModeForSidePanelNavigation(); } catch { }
+                }
             }
             bool isCleanup = cleanupModeActive;
-            bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowse = activeContentType == ContentType.History;
             bool isSettings = IsSettingsPanelOpen();
             void show(GameObject go, bool on)
             {
@@ -2135,22 +2164,11 @@ namespace VPB
                 // Settings mode: only show SAVE/CANCEL. Hide all other toolbox actions and person target buttons.
                 show(tboxSettingsCancelBtn, true);
                 show(tboxSettingsSaveBtn, true);
-                show(tboxFilterModeRowGO, false);
-                show(tboxFilterBackBtn, false);
-                show(tboxFilterClearBtn, false);
                 for (int i = 0; i < tboxPersonAtomBtns.Count; i++) show(tboxPersonAtomBtns[i], false);
                 try { CloseTboxTargetMenu(); } catch { }
 
                 show(tboxCleanupBtn, false);
                 show(tboxCleanupApplyBtn, false);
-                show(tboxCleanupFilterAllBtn, false);
-                show(tboxCleanupFilterDupBtn, false);
-                show(tboxCleanupFilterOldBtn, false);
-                show(tboxCleanupFilterDamagedBtn, false);
-                show(tboxCleanupSelectVisibleBtn, false);
-                show(tboxCleanupSelectDupBtn, false);
-                show(tboxCleanupSelectOldBtn, false);
-                show(tboxCleanupSelectDamagedBtn, false);
                 show(tboxCleanupClearBtn, false);
                 show(tboxCleanupAddExcludeBtn, false);
                 show(tboxCleanupRemoveExcludeBtn, false);
@@ -2161,19 +2179,24 @@ namespace VPB
                 show(tboxUnhideBtn, false);
                 show(tboxScanWhitelistTemporaryBtn, false);
                 show(tboxLoadBtn, false);
+                show(tboxLoadRandomBtn, false);
                 show(tboxUnloadBtn, false);
                 show(tboxLoadDepsBtn, false);
                 show(tboxCacheTexturesBtn, false);
                 show(tboxThumbDebugBtn, false);
                 show(tboxOpenHubBtn, false);
                 show(tboxCopyPkgNamesBtn, false);
-                show(tboxSceneImportBtn, false);
+                show(tboxOverwriteSceneBtn, false);
                 show(tboxSuppressScaleBtn, false);
+                show(tboxReplaceBtn, false);
                 show(tboxDeleteBtn, false);
                 show(tboxRemoveHistoryBtn, false);
                 show(tboxSelectAllBtn, false);
                 show(tboxClearSelectionBtn, false);
+                show(_detailStripExpandBtnGO, false);
 
+                try { RefreshSceneImportSideButtonVisibility(); } catch { }
+                try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 try { RefreshTboxFlexButtonLayout(); } catch { }
                 return;
@@ -2189,15 +2212,6 @@ namespace VPB
 
             show(tboxCleanupBtn, !isCleanup);
             show(tboxCleanupApplyBtn, false);
-            // Filtering moved to cleanup side-tab list (Category-style), keep toolbox cleaner.
-            show(tboxCleanupFilterAllBtn, false);
-            show(tboxCleanupFilterDupBtn, false);
-            show(tboxCleanupFilterOldBtn, false);
-            show(tboxCleanupFilterDamagedBtn, false);
-            show(tboxCleanupSelectVisibleBtn, false);
-            show(tboxCleanupSelectDupBtn, false);
-            show(tboxCleanupSelectOldBtn, false);
-            show(tboxCleanupSelectDamagedBtn, false);
             show(tboxCleanupClearBtn, false);
             bool cleanupHasExcludedSelection = isCleanup && CleanupSelectionHasExcludedEntries();
             bool cleanupHasNonExcludedSelection = isCleanup && CleanupSelectionHasNonExcludedEntries();
@@ -2210,6 +2224,7 @@ namespace VPB
             show(tboxUnhideBtn, !isCleanup);
             show(tboxScanWhitelistTemporaryBtn, !isCleanup);
             show(tboxLoadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
+            show(tboxLoadRandomBtn, !isCleanup);
             show(tboxUnloadBtn, !isCleanup && !ScanWhitelistManager.Instance.IsEnabled);
             show(tboxLoadDepsBtn, !isCleanup);
             show(tboxCacheTexturesBtn, !isCleanup);
@@ -2219,8 +2234,9 @@ namespace VPB
             // Otherwise, once Settings hides them, they stay inactive forever.
             show(tboxCopyPkgNamesBtn, true);
             show(tboxDeleteBtn, true);
-            show(tboxSceneImportBtn, !isCleanup);
+            show(tboxOverwriteSceneBtn, !isCleanup);
             show(tboxSuppressScaleBtn, !isCleanup);
+            show(tboxReplaceBtn, !isCleanup);
             show(tboxSelectAllBtn, !isCleanup);
             show(tboxClearSelectionBtn, !isCleanup);
 
@@ -2230,14 +2246,6 @@ namespace VPB
                 int selectedCount = selectedFiles != null ? selectedFiles.Count : 0;
                 SetTboxButtonEnabledVisual(tboxDeleteBtn, selectedCount > 0);
                 SetTboxButtonEnabledVisual(tboxCleanupApplyBtn, false);
-                SetTboxButtonEnabledVisual(tboxCleanupFilterAllBtn, true);
-                SetTboxButtonEnabledVisual(tboxCleanupFilterDupBtn, true);
-                SetTboxButtonEnabledVisual(tboxCleanupFilterOldBtn, true);
-                SetTboxButtonEnabledVisual(tboxCleanupFilterDamagedBtn, true);
-                SetTboxButtonEnabledVisual(tboxCleanupSelectVisibleBtn, false);
-                SetTboxButtonEnabledVisual(tboxCleanupSelectDupBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
-                SetTboxButtonEnabledVisual(tboxCleanupSelectOldBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
-                SetTboxButtonEnabledVisual(tboxCleanupSelectDamagedBtn, currentFilteredFiles != null && currentFilteredFiles.Count > 0);
                 SetTboxButtonEnabledVisual(tboxCleanupClearBtn, false);
                 SetTboxButtonEnabledVisual(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
                 SetTboxButtonEnabledVisual(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
@@ -2253,7 +2261,10 @@ namespace VPB
                 SetTboxButtonEnabledVisual(tboxLoadDepsBtn, false);
                 SetTboxButtonEnabledVisual(tboxCacheTexturesBtn, false);
                 SetTboxButtonEnabledVisual(tboxOpenHubBtn, false);
+                show(tboxOverwriteSceneBtn, false);
 
+                try { RefreshSceneImportSideButtonVisibility(); } catch { }
+                try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 RefreshTboxFlexButtonLayout();
                 return;
@@ -2331,13 +2342,7 @@ namespace VPB
                             foreach (var depId in deps)
                             {
                                 if (string.IsNullOrEmpty(depId)) continue;
-                                try
-                                {
-                                    var depPkg = FileManager.GetPackage(depId, ensureInstalled: false);
-                                    string depUid = depPkg != null ? depPkg.Uid : depId;
-                                    if (!string.IsNullOrEmpty(depUid)) tempCandidates.Add(depUid);
-                                }
-                                catch { }
+                                tempCandidates.Add(depId);
                             }
                         }
                         catch { }
@@ -2416,6 +2421,19 @@ namespace VPB
                     tboxRemoveHistoryBtn,
                     historyBrowse && selectedFiles != null && selectedFiles.Count > 0);
 
+            bool canOverwriteScene = false;
+            try { canOverwriteScene = TryGetSceneOverwriteSaveContext(out _); } catch { canOverwriteScene = false; }
+            if (tboxOverwriteSceneBtn != null)
+                SetTboxButtonEnabledVisual(tboxOverwriteSceneBtn, canOverwriteScene);
+
+            // Details restore: leftmost toolbox action when strip collapsed + selection.
+            bool showDetailsExpand = selectedFiles != null
+                && selectedFiles.Count > 0
+                && !DetailStripIsExpanded();
+            show(_detailStripExpandBtnGO, showDetailsExpand);
+
+            try { RefreshSceneImportSideButtonVisibility(); } catch { }
+            try { UpdateSideButtonPositions(); } catch { }
             try { RefreshTboxGridRateControlState(); } catch { }
             RefreshTboxFlexButtonLayout();
         }
@@ -2509,6 +2527,7 @@ namespace VPB
             {
                 try { stableId = !string.IsNullOrEmpty(eligible[0].Uid) ? eligible[0].Uid : eligible[0].Path; } catch { stableId = null; }
             }
+            tboxGridRateHandler.panel = this;
             tboxGridRateHandler.Init(stableId ?? "", txt, tboxGridRateSelectorGO);
             tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
             if (tboxGridRateIconImage != null)
@@ -2606,7 +2625,6 @@ namespace VPB
                 selectionAnchorPath = null;
                 selectionAnchorIdentityKey = null;
                 selectedPath = null;
-                selectedHubItem = null;
                 RefreshSelectionVisuals();
             }
             catch { }
@@ -2658,22 +2676,27 @@ namespace VPB
 
         private void TboxOpenSelectedItemOnHub()
         {
+            if (selectedFiles == null || selectedFiles.Count != 1)
+            {
+                ShowTemporaryStatus("Select a single item.");
+                return;
+            }
+
+            OpenFileOnHub(selectedFiles[0]);
+        }
+
+        /// <summary>Open in-game Hub detail for this gallery row's package (deps download lives there).</summary>
+        public void OpenFileOnHub(FileEntry file)
+        {
             try
             {
-                if (selectedFiles == null || selectedFiles.Count != 1)
-                {
-                    ShowTemporaryStatus("Select a single item.");
-                    return;
-                }
-
-                var f = selectedFiles[0];
-                if (f == null)
+                if (file == null)
                 {
                     ShowTemporaryStatus("Nothing selected.");
                     return;
                 }
 
-                string uid = TryGetPackageUidForEntry(f);
+                string uid = TryGetPackageUidForEntry(file);
                 if (string.IsNullOrEmpty(uid))
                 {
                     ShowTemporaryStatus("This item has no Hub page.");
@@ -2706,6 +2729,41 @@ namespace VPB
             catch
             {
                 ShowTemporaryStatus("Failed to open Hub page. See log.");
+            }
+        }
+
+        /// <summary>Copy this item's missing dependency package ids to the system clipboard (newline-separated).</summary>
+        public void CopyMissingDependenciesToClipboard(FileEntry file)
+        {
+            try
+            {
+                if (file == null)
+                {
+                    ShowTemporaryStatus("Nothing selected.");
+                    return;
+                }
+
+                List<string> missing = GallerySortManager.GetMissingDependencyIds(file);
+                if (missing == null || missing.Count == 0)
+                {
+                    ShowTemporaryStatus(VPBTranslation.T(
+                        "gallery.hubdep.status.no_missing",
+                        "No missing dependencies."));
+                    return;
+                }
+
+                missing.Sort(StringComparer.OrdinalIgnoreCase);
+                GUIUtility.systemCopyBuffer = string.Join("\n", missing.ToArray());
+                ShowTemporaryStatus(string.Format(
+                    VPBTranslation.T(
+                        "gallery.hubdep.status.copied_missing",
+                        "Copied {0} missing dependency name(s) to clipboard."),
+                    missing.Count), 2f);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] CopyMissingDependenciesToClipboard error: " + ex);
+                ShowTemporaryStatus("Failed to copy missing dependencies. See log.");
             }
         }
 

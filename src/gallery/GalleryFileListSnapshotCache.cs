@@ -33,6 +33,24 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// Copy cached snapshot into <paramref name="dest"/> (Clear + AddRange). Prefer over <see cref="TryGet"/>
+        /// when caller reuses a scratch list across refreshes.
+        /// </summary>
+        public static bool TryCopyInto(string key, List<FileEntry> dest)
+        {
+            if (dest == null || string.IsNullOrEmpty(key)) return false;
+            lock (s_Lock)
+            {
+                List<FileEntry> src;
+                if (!s_ByKey.TryGetValue(key, out src) || src == null) return false;
+                dest.Clear();
+                if (dest.Capacity < src.Count) dest.Capacity = src.Count;
+                dest.AddRange(src);
+                return true;
+            }
+        }
+
         public static void Put(string key, List<FileEntry> files)
         {
             if (string.IsNullOrEmpty(key) || files == null) return;
@@ -43,5 +61,7 @@ namespace VPB
                 s_ByKey[key] = new List<FileEntry>(files);
             }
         }
+
+        internal static void InvalidateAll() { Clear(); GalleryTagCountSnapshotCache.Clear(); }
     }
 }

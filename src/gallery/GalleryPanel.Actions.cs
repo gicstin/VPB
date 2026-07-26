@@ -81,7 +81,7 @@ namespace VPB
             return null;
         }
 
-        private bool ExecuteAutoActionForFile(FileEntry file, Hub.GalleryHubItem hubItem = null)
+        private bool ExecuteAutoActionForFile(FileEntry file)
         {
             if (file == null) return false;
 
@@ -95,7 +95,6 @@ namespace VPB
                 {
                     var dragger = go.AddComponent<UIDraggableItem>();
                     dragger.FileEntry = file;
-                    dragger.HubItem = hubItem;
                     dragger.Panel = this;
 
                     string pathLower = (file.Path ?? "").ToLowerInvariant();
@@ -108,6 +107,7 @@ namespace VPB
                         try
                         {
                             // Not a user "open" — cache warm only; do not write History / item_usage.
+                            NativeTextureOnDemandCache.SetNextJobWriteModeOverride(NativeTextureOnDemandCache.CacheWriteMode.ZstdOnly);
                             NativeTextureOnDemandCache.TryBuildPackageCacheOnDemand(this, file.Path);
                             return true;
                         }
@@ -242,8 +242,6 @@ namespace VPB
                 selectedFiles.Add(file);
                 if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
                 selectedPath = file.Path;
-                selectedHubItem = null;
-
                 // Selection should not "stick" the hover path. Hover-only content comes from pointer enter.
                 SetHoverPath("");
                 RefreshSelectionVisuals();
@@ -274,37 +272,110 @@ namespace VPB
         /// <summary>
         /// Title-bar / side Refresh: rescan packages and reload the grid while preserving scroll when possible.
         /// Needed when <see cref="VPBConfig.GalleryManualRefreshOnly"/> blocks automatic file-manager updates.
+        /// Waits for the async package scan so Path listings / SQL <c>var_path</c> match disk after Explorer moves.
         /// </summary>
         public void UserRequestedPackageRefresh()
         {
             try
             {
-                if (!IsHubMode)
-                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
-
                 if (cleanupModeActive)
                 {
+                    ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 1.5f);
                     RebuildCleanupCandidates(true, true);
                     return;
                 }
 
-                try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-                FileManager.Refresh(true, false, false);
-                GalleryFileListSnapshotCache.Clear();
-                GalleryTagCountSnapshotCache.Clear();
-                creatorsCached = false;
-                categoriesCached = false;
-                tagsCached = false;
-                pathsCached = false;
-                refreshOnNextShow = true;
-                RefreshFiles(true);
-                refreshOnNextShow = false;
-                try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
-                try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
+                if (_userPackageRefreshCo != null)
+                {
+                    try { StopCoroutine(_userPackageRefreshCo); } catch { }
+                    _userPackageRefreshCo = null;
+                }
+                _userPackageRefreshCo = StartCoroutine(UserRequestedPackageRefreshCo());
             }
             catch (Exception ex)
             {
                 LogUtil.LogError("[VPB] Refresh packages failed: " + ex);
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
+            }
+        }
+
+        private Coroutine _userPackageRefreshCo;
+
+        private IEnumerator UserRequestedPackageRefreshCo()
+        {
+            ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_packages", "Refreshing packages..."), 2.5f);
+
+            DateTime scanBefore = DateTime.MinValue;
+            try { scanBefore = FileManager.lastPackageRefreshTime; } catch { }
+
+            try { FileManagerBridge.Refresh("gallery_manual", RefreshScope.Both, init: true); } catch { }
+
+            // Let RefreshCo start (or attach to an in-flight coalesced scan).
+            yield return null;
+
+            float waited = 0f;
+            const float maxWaitSec = 180f;
+            while (waited < maxWaitSec)
+            {
+                bool scanning = false;
+                try { scanning = FileManager.IsScanning; } catch { }
+                DateTime scanNow = DateTime.MinValue;
+                try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
+
+                if (!scanning && scanNow > scanBefore)
+                    break;
+                if (!scanning && waited > 0.5f)
+                    break;
+
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            // One frame for onRefreshHandlers / MessageKit after scan clock stamp.
+            yield return null;
+
+            try
+            {
+                VpbLocalDatabase.TrySyncAllPkgPathsFromLivePackages(
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+            catch { }
+
+            // Deleted/moved Path folder while still selected → clear so RefreshFiles is not empty-filtered.
+            try { TryClearStalePackagePathFilter(); } catch { }
+
+            GalleryFileListSnapshotCache.InvalidateAll();
+            creatorsCached = false;
+            categoriesCached = false;
+            tagsCached = false;
+            pathsCached = false;
+            refreshOnNextShow = true;
+            // RefreshFiles is async: Path tabs need Custom/Saves from the finished grid.
+            // Do not UpdateTabs here — CachePaths would mark pathsCached with SQL AddonPackages only.
+            RefreshFiles(true);
+            refreshOnNextShow = false;
+            try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
+            try { GallerySortManager.StartBackgroundWarmLooseDepsCache(); } catch { }
+
+            _userPackageRefreshCo = null;
+        }
+
+        /// <summary>
+        /// Right-click Refresh: native VaM FileManager.Refresh only (catalog / package handlers).
+        /// Does not rescan the VPB package index or reload the gallery grid.
+        /// </summary>
+        public void UserRequestedNativeFileManagerRefresh()
+        {
+            try
+            {
+                LogUtil.Log("[VPB] Gallery refresh right-click: native VaM FileManager.Refresh");
+                ShowTemporaryStatus(VPBTranslation.T("gallery.status.refreshing_vam_files", "Refreshing VaM file list..."), 1.5f);
+
+                FileManagerBridge.Refresh("gallery_native", RefreshScope.NativeOnly, flushNativeImmediately: true);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] Native file manager refresh failed: " + ex);
                 ShowTemporaryStatus(VPBTranslation.T("gallery.status.refresh_failed", "Refresh failed. See log."), 2f);
             }
         }
@@ -315,6 +386,35 @@ namespace VPB
             bool needsInit = canvas == null;
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
             _userHidden = false;
+
+            if (_benchPickModeActive && !BenchPickModeAllowsShowRequest(title))
+            {
+                ShowTemporaryStatus(VPBTranslation.T("bench.pick.block_nav",
+                    "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
+                return;
+            }
+
+            // Otherwise the next-frame yield path immediately hides us again.
+            if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
+                  && VPBConfig.Instance.AnchorYieldsToVamPanels && XrUtils.IsVrActive())
+            {
+                try
+                {
+                    var sc = SuperController.singleton;
+                    if (sc != null)
+                    {
+                        if (sc.activeUI != SuperController.ActiveUI.None)
+                            sc.activeUI = SuperController.ActiveUI.None;
+                        if (sc.fileBrowserUI != null && sc.fileBrowserUI.window != null && sc.fileBrowserUI.window.activeSelf)
+                            sc.fileBrowserUI.Hide();
+                        if (sc.mediaFileBrowserUI != null && sc.mediaFileBrowserUI.window != null && sc.mediaFileBrowserUI.window.activeSelf)
+                            sc.mediaFileBrowserUI.Hide();
+                        if (sc.GetSelectedController() != null) sc.ClearSelection();
+                    }
+                }
+                catch (Exception ex) { LogUtil.LogError("Show priority-takeover failed: " + ex.Message); }
+            }
+
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
@@ -348,6 +448,23 @@ namespace VPB
 
             titleText.text = title;
             bool paramsChanged = (currentExtension != extension || currentPath != path);
+            bool categoryTitleChanged = !string.Equals(title, currentCategoryTitle, StringComparison.Ordinal);
+
+            // Navigating to a different category while a Try-On preview is still pending should not
+            // silently discard it. Auto-commit (implicit Keep) so e.g. previewing clothing then moving
+            // to the Appearance category keeps that clothing instead of reverting when the next preset
+            // loads. Only fires on an actual category change, so flipping through looks in the same
+            // category still unstacks normally.
+            if (categoryTitleChanged && hasLoadedContent && _tryOnActive)
+            {
+                try { TryOnKeep(); } catch { }
+            }
+
+            if (cleanupModeActive && (paramsChanged || categoryTitleChanged))
+            {
+                try { ExitCleanupModeForSidePanelNavigation(restoreGalleryCategory: false, refreshGalleryFiles: false); } catch { }
+            }
+
             if (paramsChanged)
             {
                 // Save current category's filters before switching away
@@ -467,7 +584,12 @@ namespace VPB
                 {
                     refreshOnNextShow = false;
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
+                    try { RefreshVisibleGridVisualsOnly(); } catch { }
                 }
+                // Restore split sub-pane chrome (tags / scene source) after hide — no list rebuild.
+                try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
+                try { EnsureSideTabsFreshForPackageScan(); } catch { }
+                try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
                 LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
                 return;
@@ -505,19 +627,23 @@ namespace VPB
             else
             {
                 if (startupDeferredInitialRefresh)
+                {
+                    _sideTabsNeedFullRebuildAfterFirstRefresh = true;
                     LogUtil.Log("[VPB] GalleryPanel.Show: deferred initial RefreshFiles until startup ready");
+                }
                 LogGalleryCategoryTypeNavPhase("Show_skip_RefreshFiles");
+                try { TryApplyPendingPackageDeltaOnShow(); } catch { }
             }
 
-            // Same-view reopen: keep the existing side-tab/button tree and avoid synchronous count rebuilds.
-            // Full refresh path: keep UI lightweight while RefreshFilesRoutine rebuilds caches in the background.
-            if (sameViewReopen || refreshCoroutine != null)
+            // Same-view reopen / first load before grid refresh: avoid synchronous category count scans on stale inventory.
+            if (sameViewReopen || refreshCoroutine != null || startupDeferredInitialRefresh || !hasLoadedContent || _sideTabsNeedFullRebuildAfterFirstRefresh)
                 UpdateTabsImpl(rebuildSideTabLists: false);
             else
                 UpdateTabs();
             LogGalleryCategoryTypeNavPhase("Show_after_UpdateTabs");
             UpdateLayout(!sameViewReopen && refreshCoroutine == null);
             LogGalleryCategoryTypeNavPhase("Show_after_UpdateLayout_2");
+            RefreshImportSidebarCategoryGate();
 
             // Position it in front of the user if in VR, ONLY ONCE
             if (!hasBeenPositioned)
@@ -563,15 +689,26 @@ namespace VPB
             while (!LogUtil.IsStartupReadyLogged())
                 yield return null;
 
-            deferredStartupRefreshCoroutine = null;
-            if (hasLoadedContent) yield break;
-            if (canvas == null || !canvas.enabled) yield break;
+            if (hasLoadedContent)
+            {
+                deferredStartupRefreshCoroutine = null;
+                yield break;
+            }
+            if (canvas == null)
+            {
+                deferredStartupRefreshCoroutine = null;
+                yield break;
+            }
 
             try
             {
                 RefreshFiles(false);
             }
             catch { }
+            finally
+            {
+                deferredStartupRefreshCoroutine = null;
+            }
         }
 
         public void Hide()
@@ -604,11 +741,7 @@ namespace VPB
             if (!visible)
             {
                 _pendingVisibleAfterStartupReady = false;
-                if (_deferredSetVisibleCoroutine != null)
-                {
-                    try { StopCoroutine(_deferredSetVisibleCoroutine); } catch { }
-                    _deferredSetVisibleCoroutine = null;
-                }
+                StopCo(ref _deferredSetVisibleCoroutine);
                 ApplyImmediateVisibility(false);
                 _queuedRaycastRefreshOnVisible = false;
                 return;
@@ -693,8 +826,21 @@ namespace VPB
             var raycaster = canvas.GetComponent<GraphicRaycaster>();
             if (raycaster != null) raycaster.enabled = v;
             // canvas.enabled=false halts rendering but every child MonoBehaviour keeps ticking; deactivate the subtree too.
-            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != v)
-                backgroundBoxGO.SetActive(v);
+            bool wantSubtree = ShouldContentSubtreeBeActive();
+            if (backgroundBoxGO != null && backgroundBoxGO.activeSelf != wantSubtree)
+                backgroundBoxGO.SetActive(wantSubtree);
+        }
+
+        // Desired active state for the gallery content subtree (backgroundBoxGO).
+        // A collapsed fixed pane parks its content off-screen, but off-screen UI is still fully
+        // drawn and raycast-walked by the canvas every frame, so a loaded-but-collapsed pane keeps
+        // halving FPS. Deactivate the subtree in that state. Keep it active until the first content
+        // build finishes though: an inactive parent can leave the recycling grid with a zero viewport.
+        private bool ShouldContentSubtreeBeActive()
+        {
+            if (canvas == null || !canvas.enabled) return false;
+            if (isCollapsed && hasLoadedContent) return false;
+            return true;
         }
 
         private IEnumerator DeferredSetVisibleAfterStartupReady()
@@ -753,11 +899,55 @@ namespace VPB
 
             // The anchor-based gate only applies to the specific panel that is anchored.
             bool isAnchoredInstance = (GetAnchoredInstance() == this);
+            bool isAnchored = isVR && VPBConfig.Instance.GalleryAnchorToVamMenu && isAnchoredInstance;
 
-            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || (VPBConfig.Instance.GalleryAnchorToVamMenu && isVR && isAnchoredInstance);
+            bool gate = VPBConfig.Instance.GalleryOnlyWhenVamMenuVisible || isAnchored;
             bool menuVisible = IsVamMenuVisible();
 
-            if (!gate)
+            // SelectedOptions is VaM's idle default state; only treat as yield when a controller is actually selected.
+            bool yieldTrigger = false;
+            if (isAnchored && VPBConfig.Instance.AnchorYieldsToVamPanels)
+            {
+                var sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    var aui = sc.activeUI;
+                    yieldTrigger = aui == SuperController.ActiveUI.MainMenu
+                                || aui == SuperController.ActiveUI.MainMenuOnly
+                                || aui == SuperController.ActiveUI.OnlineBrowser
+                                || aui == SuperController.ActiveUI.PackageBuilder
+                                || aui == SuperController.ActiveUI.PackageManager
+                                || aui == SuperController.ActiveUI.PackageDownloader
+                                || aui == SuperController.ActiveUI.MultiButtonPanel
+                                || aui == SuperController.ActiveUI.EmbeddedScenePanel
+                                || aui == SuperController.ActiveUI.Custom;
+
+                    if (!yieldTrigger && aui == SuperController.ActiveUI.SelectedOptions)
+                    {
+                        // Edit to Play does not clear selectedController; without gameMode guard VPB stays hidden in Play.
+                        try
+                        {
+                            var ctrl = sc.GetSelectedController();
+                            yieldTrigger = ctrl != null && !ctrl.guihidden && sc.gameMode == SuperController.GameMode.Edit;
+                        }
+                        catch { }
+                    }
+
+                    if (!yieldTrigger)
+                    {
+                        try
+                        {
+                            if (sc.fileBrowserUI != null && sc.fileBrowserUI.window != null && sc.fileBrowserUI.window.activeSelf)
+                                yieldTrigger = true;
+                            else if (sc.mediaFileBrowserUI != null && sc.mediaFileBrowserUI.window != null && sc.mediaFileBrowserUI.window.activeSelf)
+                                yieldTrigger = true;
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            if (!gate && !yieldTrigger)
             {
                 if (_hiddenByMenuGate && !_userHidden)
                 {
@@ -768,7 +958,9 @@ namespace VPB
                 return;
             }
 
-            if (!menuVisible)
+            bool shouldHide = yieldTrigger || (gate && !menuVisible);
+
+            if (shouldHide)
             {
                 if (canvas.enabled)
                 {
@@ -791,10 +983,7 @@ namespace VPB
         private void ApplyVamMenuAnchoring()
         {
             if (VPBConfig.Instance == null || canvas == null) return;
-            
-            bool isVR = XrUtils.IsVrActive();
-            
-            if (!isVR) return;
+            if (!XrUtils.IsVrActive()) return;
             if (!VPBConfig.Instance.GalleryAnchorToVamMenu) return;
 
             // Priority check: only the first visible panel gets anchored.
@@ -803,28 +992,28 @@ namespace VPB
             // If we are the priority panel, check if menu is visible for snapping.
             if (!IsVamMenuVisible()) return;
 
-            Transform vamMenuTrans = SuperController.singleton.mainHUD.transform;
+            var sc = SuperController.singleton;
+            Transform vamMenuTrans = sc.mainHUD.transform;
             if (vamMenuTrans == null) return;
 
-            Vector3 localOffset = VPBConfig.Instance.GalleryAnchorOffset;
-            
+            // Land VPB's bottom at the dock's top using mainHUD's own RectTransform; lossyScale captures any HUD or world-scale.
             RectTransform canvasRT = canvas.GetComponent<RectTransform>();
             float galleryHalfHeight = (canvasRT.rect.height * 0.5f) * canvasRT.lossyScale.y;
+            RectTransform hudRT = vamMenuTrans.GetComponent<RectTransform>();
+            float hudHalfHeight = (hudRT != null) ? (hudRT.rect.height * 0.5f) * hudRT.lossyScale.y : 0.1f;
+            float gap = 0.01f;
+            Vector3 targetPos = vamMenuTrans.position + (vamMenuTrans.up * (hudHalfHeight + gap + galleryHalfHeight));
 
-            // Anchor the gallery such that its bottom matches the localOffset relative to the VAM menu top.
-            // In VaM, mainHUD has its own scale and rotation.
-            Vector3 targetBottomPos = vamMenuTrans.TransformPoint(localOffset);
-            Vector3 targetPos = targetBottomPos + vamMenuTrans.up * galleryHalfHeight;
-
-            // WorldSpace canvas transform writes force a full canvas rebuild; skip when menu hasn't moved.
+            // WorldSpace canvas transform writes force a full canvas rebuild; skip when nothing moved.
             if (canvas.transform.position != targetPos)
                 canvas.transform.position = targetPos;
 
+            // mainHUD's forward faces away from user; rotate 180 on local Y so the canvas faces the user.
             Quaternion targetRot = vamMenuTrans.rotation * Quaternion.Euler(0, 180, 0);
             if (canvas.transform.rotation != targetRot)
                 canvas.transform.rotation = targetRot;
 
-            // Keep offsets reset so follow mode captures the anchored position when anchoring ends
+            // Keep offsets reset so follow mode captures the anchored position when anchoring ends.
             offsetsInitialized = false;
         }
 
@@ -912,7 +1101,6 @@ namespace VPB
         {
             if (!hoverPathIsCountMode) return;
             if (hoverPathText == null) return;
-            if (IsHubMode) return;
             hoverPathText.text = GetFilteredVisibleItemsCountText();
         }
 
@@ -964,180 +1152,304 @@ namespace VPB
         {
             string f = val ?? "";
             if (f == nameFilter) return;
-            nameFilter = f;
-            nameFilterLower = string.IsNullOrEmpty(f) ? "" : f.ToLowerInvariant();
-            nameFilterTerms = SplitSearchTerms(f);
+            AssignNameFilterState(f);
 
-            // In package filter mode, keep search scoped to the current filtered list
-            // (do not refresh the whole gallery, which would clear filter mode).
-            if (IsFilterActive)
+            try
             {
-                ApplySearchWithinFilter(f);
-                return;
-            }
+                CancelTitleSearchSqlDebounce();
+                CancelTitleSearchInMemoryDebounce();
 
-            // Outside filter mode: perform top search in-memory so clearing search can instantly
-            // restore the full list without a rebuild (prevents stalls).
-            if (topSearchBaseFiles == null)
-            {
-                if (!_topSearchBaseIsClean)
+                // In package filter mode, keep search scoped to the current filtered list
+                // (do not refresh the whole gallery, which would clear filter mode).
+                if (IsFilterActive)
                 {
-                    // currentFilteredFiles may already be filtered (e.g. restored from per-category
-                    // memory after a SQL-filtered RefreshFiles). The unfiltered base is unknown.
-                    if (nameFilterTerms == null || nameFilterTerms.Length == 0)
-                    {
-                        // Clearing search — rebuild from scratch to get the full unfiltered list.
-                        RefreshFiles();
-                        return;
-                    }
-                    // Narrowing search — RefreshFiles will apply nameFilterTerms via SQL.
-                    RefreshFiles();
+                    ApplySearchWithinFilter(f);
+                    SyncBrowseFilterChipChrome();
                     return;
                 }
-                topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
-            }
 
-            if (nameFilterTerms == null || nameFilterTerms.Length == 0)
-            {
-                currentFilteredFiles.Clear();
-                currentFilteredFiles.AddRange(topSearchBaseFiles);
-                topSearchBaseFiles = null;
-                _topSearchBaseIsClean = true;
-            }
-            else
-            {
-                // Fast path for package list rows (dependency filters): query SQLite for matching packages,
-                // then rebuild results in the same order as the base list.
-                bool isPackageList = false;
-                try
+                bool active = HasActiveNameFilter();
+
+                // Outside filter mode: in-memory when base list known; SQL (debounced) for time
+                // windows or when base is dirty. Bare terms OR into user tags via one key lookup.
+                if (topSearchBaseFiles == null)
                 {
-                    if (topSearchBaseFiles.Count > 0)
+                    if (!_topSearchBaseIsClean)
                     {
-                        var head = topSearchBaseFiles[0];
-                        isPackageList = head is PackageListEntry || head is MissingPackageListEntry;
+                        if (!active)
+                        {
+                            RefreshFiles();
+                            return;
+                        }
+                        // Narrowing — SQL applies full search AST (name/tag/time).
+                        ScheduleTitleSearchSqlRefresh();
+                        return;
                     }
+                    topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
                 }
-                catch { isPackageList = false; }
 
-                if (isPackageList)
+                if (!active)
                 {
-                    var allowedUids = new List<string>(topSearchBaseFiles.Count);
-                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
-                    {
-                        var e = topSearchBaseFiles[i];
-                        if (e == null) continue;
-                        // PackageListEntry.Name is "<uid>.var" for both live and indexed rows.
-                        string n = null;
-                        try { n = e.Name; } catch { n = null; }
-                        if (string.IsNullOrEmpty(n)) continue;
-                        if (n.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
-                            n = n.Substring(0, n.Length - 4);
-                        if (!string.IsNullOrEmpty(n))
-                            allowedUids.Add(n);
-                    }
-
-                    var pkgRows = new List<VpbLocalDatabase.PackageRow>();
-                    bool gotSql = false;
-                    try
-                    {
-                        gotSql = VpbLocalDatabase.TryQueryPackageRowsForUidsWithAllTerms(allowedUids, nameFilterTerms, pkgRows);
-                    }
-                    catch { gotSql = false; }
-
-                    if (gotSql)
-                    {
-                        var byUid = new Dictionary<string, VpbLocalDatabase.PackageRow>(pkgRows.Count, StringComparer.OrdinalIgnoreCase);
-                        for (int i = 0; i < pkgRows.Count; i++)
-                        {
-                            var r = pkgRows[i];
-                            if (!string.IsNullOrEmpty(r.PackageUid))
-                                byUid[r.PackageUid] = r;
-                        }
-
-                        currentFilteredFiles.Clear();
-                        for (int i = 0; i < allowedUids.Count; i++)
-                        {
-                            var uid = allowedUids[i];
-                            if (string.IsNullOrEmpty(uid)) continue;
-                            if (!byUid.TryGetValue(uid, out var r)) continue;
-                            DateTime wt = DateTime.MinValue;
-                            if (r.LastWriteTicksOrInvalid != long.MinValue)
-                            {
-                                try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
-                            }
-                            currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
-                        }
-                    }
-                    else
-                    {
-                        // Fallback: tokenized in-memory filter.
-                        var filtered = new List<FileEntry>();
-                        for (int i = 0; i < topSearchBaseFiles.Count; i++)
-                        {
-                            var e = topSearchBaseFiles[i];
-                            if (e == null) continue;
-                            if (MatchesFileEntryByScope(e, nameFilterTerms))
-                                filtered.Add(e);
-                        }
-                        currentFilteredFiles.Clear();
-                        currentFilteredFiles.AddRange(filtered);
-                    }
+                    currentFilteredFiles.Clear();
+                    currentFilteredFiles.AddRange(topSearchBaseFiles);
+                    topSearchBaseFiles = null;
+                    _topSearchBaseIsClean = true;
+                    FinishTitleSearchUiRefresh();
+                }
+                else if (nameFilterQuery.RequiresSqlRefresh)
+                {
+                    // Time / loaded / tagged windows need SQL; keep snapshot for instant clear.
+                    ScheduleTitleSearchSqlRefresh();
+                    return;
                 }
                 else
                 {
-                    // Default: tokenized in-memory search (AND semantics across terms).
-                    var filtered = new List<FileEntry>();
-                    for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                    // Debounce name/tag in-memory filter — per-keystroke full-list scans stall VaM.
+                    ScheduleTitleSearchInMemoryApply();
+                    return;
+                }
+            }
+            finally
+            {
+                // Avoid chip rebuild + UpdateLayout on every keystroke; debounce with search apply.
+                if (!HasActiveNameFilter() || nameFilterQuery.RequiresSqlRefresh)
+                    SyncBrowseFilterChipChrome();
+            }
+        }
+
+        private void CancelTitleSearchSqlDebounce()
+        {
+            if (_titleSearchSqlDebounceCo == null) return;
+            try { StopCoroutine(_titleSearchSqlDebounceCo); } catch { }
+            _titleSearchSqlDebounceCo = null;
+        }
+
+        private void CancelTitleSearchInMemoryDebounce()
+        {
+            if (_titleSearchInMemoryDebounceCo == null) return;
+            try { StopCoroutine(_titleSearchInMemoryDebounceCo); } catch { }
+            _titleSearchInMemoryDebounceCo = null;
+        }
+
+        private void ScheduleTitleSearchInMemoryApply()
+        {
+            CancelTitleSearchInMemoryDebounce();
+            CancelTitleSearchSqlDebounce();
+            if (!isActiveAndEnabled)
+            {
+                ApplyTitleSearchToBaseListInMemory();
+                FinishTitleSearchUiRefresh();
+                SyncBrowseFilterChipChrome();
+                return;
+            }
+            _titleSearchInMemoryDebounceCo = StartCoroutine(TitleSearchInMemoryDebounceRoutine());
+        }
+
+        private IEnumerator TitleSearchInMemoryDebounceRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.12f);
+            _titleSearchInMemoryDebounceCo = null;
+            // Query may have changed again; apply current AST.
+            if (topSearchBaseFiles == null) yield break;
+            if (nameFilterQuery != null && nameFilterQuery.RequiresSqlRefresh)
+            {
+                ScheduleTitleSearchSqlRefresh();
+                yield break;
+            }
+            ApplyTitleSearchToBaseListInMemory();
+            FinishTitleSearchUiRefresh();
+            SyncBrowseFilterChipChrome();
+        }
+
+        private void ScheduleTitleSearchSqlRefresh()
+        {
+            CancelTitleSearchSqlDebounce();
+            CancelTitleSearchInMemoryDebounce();
+            if (!isActiveAndEnabled)
+            {
+                RunTitleSearchSqlRefreshNow();
+                return;
+            }
+            _titleSearchSqlDebounceCo = StartCoroutine(TitleSearchSqlDebounceRoutine());
+        }
+
+        private IEnumerator TitleSearchSqlDebounceRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.15f);
+            _titleSearchSqlDebounceCo = null;
+            RunTitleSearchSqlRefreshNow();
+        }
+
+        private void RunTitleSearchSqlRefreshNow()
+        {
+            // Preserve in-memory base so clearing search can restore without rebuild.
+            if (topSearchBaseFiles != null)
+                _keepTopSearchBaseAcrossRefresh = true;
+            else if (_topSearchBaseIsClean && currentFilteredFiles != null)
+            {
+                topSearchBaseFiles = new List<FileEntry>(currentFilteredFiles);
+                _keepTopSearchBaseAcrossRefresh = true;
+            }
+            try { RefreshFiles(); }
+            catch { }
+            finally { SyncBrowseFilterChipChrome(); }
+        }
+
+        private void ApplyTitleSearchToBaseListInMemory()
+        {
+            if (topSearchBaseFiles == null) return;
+            var query = nameFilterQuery ?? GallerySearchQuery.Empty;
+
+            bool isPackageList = false;
+            try
+            {
+                if (topSearchBaseFiles.Count > 0)
+                {
+                    var head = topSearchBaseFiles[0];
+                    isPackageList = head is PackageListEntry || head is MissingPackageListEntry;
+                }
+            }
+            catch { isPackageList = false; }
+
+            if (isPackageList && query.TagInclude.Count == 0 && query.TagExclude.Count == 0
+                && query.CreatorTerms.Count == 0 && query.BroadTerms.Count > 0
+                && (query.BroadExclude == null || query.BroadExclude.Count == 0))
+            {
+                // Package UID SQL fast path (name terms only).
+                var allowedUids = new List<string>(topSearchBaseFiles.Count);
+                for (int i = 0; i < topSearchBaseFiles.Count; i++)
+                {
+                    var e = topSearchBaseFiles[i];
+                    if (e == null) continue;
+                    string n = null;
+                    try { n = e.Name; } catch { n = null; }
+                    if (string.IsNullOrEmpty(n)) continue;
+                    if (n.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                        n = n.Substring(0, n.Length - 4);
+                    if (!string.IsNullOrEmpty(n))
+                        allowedUids.Add(n);
+                }
+
+                var pkgRows = new List<VpbLocalDatabase.PackageRow>();
+                bool gotSql = false;
+                try
+                {
+                    gotSql = VpbLocalDatabase.TryQueryPackageRowsForUidsWithAllTerms(allowedUids, query.BroadTermsArray(), pkgRows);
+                }
+                catch { gotSql = false; }
+
+                if (gotSql)
+                {
+                    var byUid = new Dictionary<string, VpbLocalDatabase.PackageRow>(pkgRows.Count, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < pkgRows.Count; i++)
                     {
-                        var e = topSearchBaseFiles[i];
-                        if (e == null) continue;
-                        if (MatchesFileEntryByScope(e, nameFilterTerms))
-                            filtered.Add(e);
+                        var r = pkgRows[i];
+                        if (!string.IsNullOrEmpty(r.PackageUid))
+                            byUid[r.PackageUid] = r;
                     }
+
                     currentFilteredFiles.Clear();
-                    currentFilteredFiles.AddRange(filtered);
+                    for (int i = 0; i < allowedUids.Count; i++)
+                    {
+                        var uid = allowedUids[i];
+                        if (string.IsNullOrEmpty(uid)) continue;
+                        VpbLocalDatabase.PackageRow r;
+                        if (!byUid.TryGetValue(uid, out r)) continue;
+                        DateTime wt = DateTime.MinValue;
+                        if (r.LastWriteTicksOrInvalid != long.MinValue)
+                        {
+                            try { wt = DateTime.FromBinary(r.LastWriteTicksOrInvalid); } catch { wt = DateTime.MinValue; }
+                        }
+                        currentFilteredFiles.Add(new PackageListEntry(r.PackageUid, r.VarPath, wt, r.PackageSizeOrInvalid, r.PackageCreationTicksOrInvalid, r.FirstScannedTicksOrInvalid));
+                    }
+                    return;
                 }
             }
 
+            // Name/path first; tag-key SQL only when terms warrant it (cached).
+            var tagKeys = GetSearchTagKeysCached();
+            var filtered = new List<FileEntry>(Math.Min(topSearchBaseFiles.Count, 256));
+            for (int i = 0; i < topSearchBaseFiles.Count; i++)
+            {
+                var e = topSearchBaseFiles[i];
+                if (e == null) continue;
+                if (MatchesFileEntryBySearchQuery(e, query, tagKeys))
+                    filtered.Add(e);
+            }
+            currentFilteredFiles.Clear();
+            currentFilteredFiles.AddRange(filtered);
+        }
+
+        private void FinishTitleSearchUiRefresh()
+        {
             if (recyclingGrid != null)
             {
                 recyclingGrid.SetItemCount(currentFilteredFiles.Count);
-                // Search should start at the top of results; otherwise the previous scroll position
-                // can clamp to the bottom when the filtered list is shorter.
                 ScrollGalleryToTop();
                 recyclingGrid.Refresh();
             }
             try { UpdatePaginationText(); } catch { }
 
-            // Refresh creator side tab if open so it shows only creators applicable to search results.
             bool creatorTabOpen = (leftActiveContent.HasValue && leftActiveContent.Value == ContentType.Creator)
                                || (rightActiveContent.HasValue && rightActiveContent.Value == ContentType.Creator);
             if (creatorTabOpen)
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
         }
 
-        private void OnFileRightClick(FileEntry file)
+        private bool PrepareFileEntryGestureSelection(FileEntry file)
         {
-            if (file == null) return;
+            bool historyBrowse = activeContentType == ContentType.History;
+            string idKey = GetSelectionIdentityKey(file, historyBrowse);
+            bool applyToSelection = selectedFiles != null && selectedFiles.Count > 0
+                && !string.IsNullOrEmpty(idKey)
+                && selectedFilePaths != null && selectedFilePaths.Contains(idKey);
 
-            // Right click selects if not selected.
-            // Note: We intentionally do NOT open the actions panel here; right-click should not
-            // force any bottom UI to appear (a separate context menu implementation will handle actions).
-            if (!selectedFilePaths.Contains(file.Path))
+            if (!applyToSelection)
             {
+                try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
+                HashSet<string> untaggedSelBefore = _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                    ? SnapshotSelectionIdentityKeys(this)
+                    : null;
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
-                selectedFiles.Add(file);
-                selectedFilePaths.Add(file.Path);
-                selectedPath = file.Path;
-                selectedHubItem = null;
-                selectionAnchorPath = file.Path;
-                
-                // Selection should not "stick" the hover path.
+                AddFileToSelection(file, historyBrowse);
+                selectedPath = !string.IsNullOrEmpty(file.Path) ? file.Path : idKey;
+                SetSelectionAnchor(file, historyBrowse);
+
+                if (untaggedSelBefore != null)
+                {
+                    try
+                    {
+                        HashSet<string> deselected = BuildDeselectedSelectionKeys(untaggedSelBefore, SnapshotSelectionIdentityKeys(this));
+                        if (deselected != null)
+                            PruneUntaggedGridAfterSelectionChange(deselected);
+                    }
+                    catch { }
+                }
+
                 SetHoverPath("");
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
+
+            return applyToSelection;
+        }
+
+        internal void OnFileRightClick(FileEntry file)
+        {
+            if (file == null || file is InternalSettingRowEntry) return;
+
+            // Right click selects if not selected.
+            // Note: We intentionally do NOT open the actions panel here; right-click should not
+            // force any bottom UI to appear (a separate context menu implementation will handle actions).
+            bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
+
+            try
+            {
+                bool temporary = IsCtrlHeld();
+                HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary);
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
 
             if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
             {
@@ -1145,6 +1457,16 @@ namespace VPB
                 UpdateFooterHeightState();
                 UpdateLayout();
             }
+        }
+
+        internal void OnFileMiddleClick(FileEntry file)
+        {
+            if (file == null || file is InternalSettingRowEntry) return;
+
+            bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
+
+            try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
+            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileMiddleClick scan whitelist: " + ex); }
         }
 
         internal void OnFileClick(FileEntry file)
@@ -1174,12 +1496,40 @@ namespace VPB
                 return;
             }
 
+            // Import sidebar active: a single click sets the import source (instead of launching the scene),
+            // but a double click still opens/launches the scene (falls through to the normal handling below).
+            if (importSidebarActive)
+            {
+                float importClickTime = Time.realtimeSinceStartup;
+                string importFileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
+                bool importDoubleClick = (importClickTime - lastClickTime < 0.3f)
+                    && string.Equals(selectedPath, importFileKey, StringComparison.OrdinalIgnoreCase);
+                lastClickTime = importClickTime;
+                if (!importDoubleClick)
+                {
+                    selectedFiles.Clear();
+                    selectedFilePaths.Clear();
+                    selectedFiles.Add(file);
+                    if (!string.IsNullOrEmpty(file.Path)) selectedFilePaths.Add(file.Path);
+                    selectionAnchorPath = file.Path;
+                    selectedPath = importFileKey;
+                    SetHoverPath("");
+                    RefreshSelectionVisuals();
+                    OpenImportSidebarWith(file, importSidebarTargetAtom);
+                    return;
+                }
+                // double click: continue to the normal launch path below.
+            }
+
             float time = Time.realtimeSinceStartup;
             string fileKey = !string.IsNullOrEmpty(file.Path) ? file.Path : file.Uid;
             bool isDoubleClick = (time - lastClickTime < 0.3f && string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase));
             lastClickTime = time;
 
             bool selectionChanged = false;
+            HashSet<string> untaggedSelBefore = _userTagAvailMode == UserTagAvailMode.FilterUntagged
+                ? SnapshotSelectionIdentityKeys(this)
+                : null;
 
             // Update selection set (Ctrl toggle / Shift range / single)
             if (shift && currentFilteredFiles != null && currentFilteredFiles.Count > 0)
@@ -1258,8 +1608,17 @@ namespace VPB
             // Keep primary selection path for double-click detection / hover path
             if (selectionChanged || !string.Equals(selectedPath, fileKey, StringComparison.OrdinalIgnoreCase))
             {
+                if (selectionChanged && untaggedSelBefore != null)
+                {
+                    try
+                    {
+                        HashSet<string> deselected = BuildDeselectedSelectionKeys(untaggedSelBefore, SnapshotSelectionIdentityKeys(this));
+                        if (deselected != null)
+                            PruneUntaggedGridAfterSelectionChange(deselected);
+                    }
+                    catch { }
+                }
                 selectedPath = fileKey;
-                selectedHubItem = null;
                 // Selection should not "stick" the hover path.
                 SetHoverPath("");
                 RefreshSelectionVisuals();
@@ -1267,6 +1626,12 @@ namespace VPB
             }
             else if (ItemApplyMode == ApplyMode.DoubleClick && !isDoubleClick)
             {
+                return;
+            }
+
+            if (_benchPickModeActive)
+            {
+                BenchOnGallerySelectionChangedInPickMode();
                 return;
             }
 
@@ -1285,12 +1650,14 @@ namespace VPB
         internal void ApplyFileFromHold(FileEntry file)
         {
             if (file == null) return;
+            if (_benchPickModeActive) return;
             ApplyFileEntryNow(file);
         }
 
         private void ApplyFileEntryNow(FileEntry file)
         {
             if (file == null) return;
+            if (_benchPickModeActive) return;
 
             FileEntry applyFile = file;
             FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);
@@ -1307,10 +1674,12 @@ namespace VPB
 
             if (!isScene)
             {
+                if (TryOnInterceptApply(applyFile)) return;
                 ExecuteAutoActionForFile(applyFile);
             }
             else
             {
+                TryOnAbandonForSceneLoad();
                 UI.LoadSceneFile(applyFile, this);
             }
         }
@@ -1430,22 +1799,36 @@ namespace VPB
 
         private void RefreshSelectionVisuals()
         {
-            // Iterate over active buttons in the recycling grid content
-            if (recyclingGrid != null && recyclingGrid.content != null)
+            RefreshSelectionVisualsCore(runHeavySideEffects: true);
+        }
+
+        /// <summary>
+        /// Grid selection chrome only. Heavy side effects (user-tags pane + toolbox/context menu)
+        /// are optional — skip during detail-strip thumb scrub for scroll performance.
+        /// </summary>
+        private void RefreshSelectionVisualsCore(bool runHeavySideEffects)
+        {
+            // Walk recycled activeItems only — no Transform foreach / GetComponent storm.
+            if (recyclingGrid != null)
             {
-                foreach (Transform child in recyclingGrid.content)
+                int n = recyclingGrid.ActiveItemCount;
+                for (int i = 0; i < n; i++)
                 {
-                    if (!child.gameObject.activeSelf) continue;
-                    GameObject btn = child.gameObject;
-                    
+                    RecyclingGridItem rgvItem = recyclingGrid.GetActiveItemAt(i);
+                    if (rgvItem == null) continue;
+                    GameObject btn = rgvItem.gameObject;
+                    if (btn == null || !btn.activeSelf) continue;
+
+                    FileButtonBinder binder = rgvItem.binder;
+                    if (binder == null) binder = FileButtonBinder.GetOrAdd(btn);
+
                     if (btn.name.StartsWith("FileButton_"))
                     {
-                        var diag = btn.GetComponent<UIDraggableItem>();
-                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        UIDraggableItem diag = binder != null ? binder.draggable : null;
                         FileEntry feForVisuals = null;
                         try
                         {
-                            if (settingsListViewActive && rgvItem != null && currentFilteredFiles != null
+                            if (settingsListViewActive && currentFilteredFiles != null
                                 && rgvItem.index >= 0 && rgvItem.index < currentFilteredFiles.Count)
                                 feForVisuals = currentFilteredFiles[rgvItem.index];
                             else if (diag != null) feForVisuals = diag.FileEntry;
@@ -1454,22 +1837,24 @@ namespace VPB
                         if (feForVisuals != null)
                             UpdateFileButtonVisuals(btn, feForVisuals);
                     }
-                    
-                    var ratingHandler = btn.GetComponent<RatingHandler>();
+
+                    RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
             // Fallback for non-recycled items (if any legacy usage remains)
-            else 
+            else
             {
-                foreach (var btn in activeButtons)
+                for (int i = 0; activeButtons != null && i < activeButtons.Count; i++)
                 {
+                    GameObject btn = activeButtons[i];
                     if (btn == null) continue;
-                    
+
+                    FileButtonBinder binder = FileButtonBinder.GetOrAdd(btn);
                     if (btn.name.StartsWith("FileButton_"))
                     {
-                        var diag = btn.GetComponent<UIDraggableItem>();
-                        var rgvItem = btn.GetComponent<RecyclingGridItem>();
+                        UIDraggableItem diag = binder != null ? binder.draggable : null;
+                        RecyclingGridItem rgvItem = binder != null ? binder.gridItem : null;
                         FileEntry feForVisuals = null;
                         try
                         {
@@ -1482,22 +1867,29 @@ namespace VPB
                         if (feForVisuals != null)
                             UpdateFileButtonVisuals(btn, feForVisuals);
                     }
-                    
-                    var ratingHandler = btn.GetComponent<RatingHandler>();
+
+                    RatingHandler ratingHandler = binder != null ? binder.ratingHandler : null;
                     if (ratingHandler != null) ratingHandler.CloseSelector();
                 }
             }
+            if (!runHeavySideEffects) return;
             // Keep toolbox grid-rate selector open during selection visual refresh.
             // Selector visibility is already managed by RefreshTboxGridRateControlState() (selection count / mode gating)
             // and by user interaction (ToggleSelector/SetRating). Auto-closing here makes it impossible to use in
             // some modes where RefreshSelectionVisuals is triggered frequently.
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
+            // Immediate detail-strip / toolbox height sync (avoid waiting for the 250ms poll).
+            try { UpdateSelectionContextMenu(); } catch { }
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)
         {
             if (refreshTime <= DateTime.MinValue) refreshTime = DateTime.Now;
             if (refreshTime <= lastAppliedPackageRefreshTime) return false;
+
+            // Folder moves keep the same UID set; Path side-panel counts must still rebuild.
+            pathsCached = false;
+            try { TryClearStalePackagePathFilter(); } catch { }
 
             // If content is already loaded, Gallery.AutoRefreshAfterPackageScan will apply
             // an incremental delta immediately. Do not arm refreshOnNextShow here, otherwise
@@ -1508,10 +1900,116 @@ namespace VPB
                 creatorsCached = false;
                 tagsCached = false;
                 categoriesCached = false;
-                pathsCached = false;
 			    try { if (IsVisible) UpdateTabs(); } catch { }
             }
             return true;
+        }
+
+        /// <summary>When manual-refresh-only blocked FileManager observer, apply hub/download delta on next Show.</summary>
+        private void TryApplyPendingPackageDeltaOnShow()
+        {
+            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (!hasLoadedContent || recyclingGrid == null) return;
+            bool hasPending = false;
+            try { hasPending = FileManager.HasPendingGalleryPackageDelta(); } catch { }
+            if (!hasPending) return;
+
+            List<VarPackage> added = null;
+            List<VarPackage> removed = null;
+            try
+            {
+                added = new List<VarPackage>(FileManager.lastAddedPackages);
+                removed = new List<VarPackage>(FileManager.lastRemovedPackages);
+            }
+            catch { return; }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] TryApplyPendingPackageDeltaOnShow title='"
+                    + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
+            }
+            catch { }
+
+            bool applied = false;
+            try { applied = ApplyPackageDelta(added, removed); } catch { }
+            if (applied)
+            {
+                try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+            }
+        }
+
+        internal void OnGallerySqlIndexUpdated()
+        {
+            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (!IsVisible && !hasLoadedContent) return;
+            if (activeContentType != ContentType.Category && activeContentType != ContentType.History) return;
+
+            bool scanning = false;
+            try { scanning = FileManager.IsScanning; } catch { }
+            if (scanning)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated deferred (package scan in progress) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
+                return;
+            }
+
+            DateTime refreshTime = DateTime.MinValue;
+            try { refreshTime = FileManager.lastPackageRefreshTime; } catch { }
+
+            if (lastPackageDeltaChangedGrid && refreshTime > DateTime.MinValue
+                && refreshTime <= lastAppliedPackageRefreshTime)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated SKIP (delta already applied) title='"
+                        + (currentCategoryTitle ?? "") + "'");
+                }
+                catch { }
+                return;
+            }
+
+            GalleryFileListSnapshotCache.InvalidateAll();
+
+            List<VarPackage> added = null;
+            List<VarPackage> removed = null;
+            bool hasPackageDelta = false;
+            try
+            {
+                added = new List<VarPackage>(FileManager.lastAddedPackages);
+                removed = new List<VarPackage>(FileManager.lastRemovedPackages);
+                hasPackageDelta = added.Count > 0 || removed.Count > 0;
+            }
+            catch { }
+
+            if (hasPackageDelta)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated ApplyPackageDelta title='"
+                        + (currentCategoryTitle ?? "") + "' added=" + (added != null ? added.Count : 0));
+                }
+                catch { }
+                bool applied = false;
+                try { applied = ApplyPackageDelta(added, removed); } catch { }
+                if (applied)
+                {
+                    try { FileManager.AckPackageGalleryDeltaConsumed(); } catch { }
+                    return;
+                }
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB.Gallery.Delta] OnGallerySqlIndexUpdated RefreshFiles title='"
+                    + (currentCategoryTitle ?? "") + "' deltaApplied=" + (lastPackageDeltaChangedGrid ? "1" : "0")
+                    + " pendingAdded=" + (added != null ? added.Count : 0));
+            }
+            catch { }
+            try { RefreshFiles(true, refreshDebugSource: "sql_index_updated"); } catch { }
         }
     }
 }

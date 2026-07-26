@@ -1,0 +1,274 @@
+name: Discord commit notifications
+
+on:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: discord-commit-notify-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    if: github.event.head_commit != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pushed revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Post push summary to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
+            echo "DISCORD_WEBHOOK_URL secret is not set. Skipping Discord notification."
+            exit 0
+          fi
+
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          import urllib.error
+          import urllib.request
+          from datetime import datetime, timezone
+
+          DISCORD_BLUE = 5793266
+          DISCORD_GREEN = 5763719
+          DISCORD_ORANGE = 15105570
+
+          def read_plugin_version_text(text):
+              lines = [line.strip() for line in text.splitlines() if line.strip()]
+              if len(lines) >= 2:
+                  return f"{lines[0]}.{lines[1]}"
+              if len(lines) == 1:
+                  return lines[0]
+              return None
+
+          def read_plugin_version_file(path):
+              if not os.path.isfile(path):
+                  return None
+              with open(path, encoding="utf-8") as handle:
+                  return read_plugin_version_text(handle.read())
+
+          def read_plugin_version_at_git_ref(ref):
+              if not ref or ref == "0" * 40:
+                  return None
+              try:
+                  result = subprocess.run(
+                      ["git", "show", f"{ref}:plugin_version.txt"],
+                      capture_output=True,
+                      text=True,
+                      check=True,
+                  )
+              except (subprocess.CalledProcessError, FileNotFoundError):
+                  return None
+              return read_plugin_version_text(result.stdout)
+
+          def truncate(text, limit):
+              text = (text or "").strip()
+              if len(text) <= limit:
+                  return text
+              return text[: limit - 3] + "..."
+
+          def first_line(message):
+              lines = (message or "").strip().splitlines()
+              return lines[0] if lines else "(no message)"
+
+          def commit_author(commit):
+              author = commit.get("author") or {}
+              return author.get("name") or author.get("username") or "unknown"
+
+          def format_commit_block(commit, include_body, body_limit=400):
+              sha = (commit.get("id") or "")[:7]
+              url = commit.get("url") or ""
+              message = (commit.get("message") or "").strip()
+              title = truncate(first_line(message), 220)
+              author = commit_author(commit)
+
+              block = f"[`{sha}`]({url}) **{title}**\n> {author}"
+
+              if include_body:
+                  body_lines = message.splitlines()[1:]
+                  body = "\n".join(body_lines).strip()
+                  if body:
+                      block += f"\n{truncate(body, body_limit)}"
+              return block
+
+          def discord_timestamp(iso_value):
+              if not iso_value:
+                  return None
+              try:
+                  normalized = iso_value.replace("Z", "+00:00")
+                  dt = datetime.fromisoformat(normalized)
+                  if dt.tzinfo is None:
+                      dt = dt.replace(tzinfo=timezone.utc)
+                  return int(dt.timestamp())
+              except ValueError:
+                  return None
+
+          event_path = os.environ.get("GITHUB_EVENT_PATH")
+          if not event_path:
+              print("GITHUB_EVENT_PATH missing.", file=sys.stderr)
+              sys.exit(1)
+
+          with open(event_path, encoding="utf-8") as handle:
+              event = json.load(handle)
+
+          head = event.get("head_commit") or {}
+          head_message = (head.get("message") or "").strip()
+          if re.search(r"\[skip discord\]", head_message, re.IGNORECASE):
+              print("Commit message contains [skip discord]. Skipping.")
+              sys.exit(0)
+
+          repo = os.environ.get("GITHUB_REPOSITORY", event.get("repository", {}).get("full_name", "unknown"))
+          branch = os.environ.get("GITHUB_REF_NAME") or event.get("ref", "").split("/")[-1]
+          actor = os.environ.get("GITHUB_ACTOR") or event.get("pusher", {}).get("name", "unknown")
+          compare_url = event.get("compare") or ""
+          before_sha = event.get("before") or ""
+          after_sha = head.get("id") or os.environ.get("GITHUB_SHA", "")
+
+          commits = event.get("commits") or []
+          if not commits and head:
+              commits = [head]
+
+          commit_count = len(commits)
+          current_version = read_plugin_version_file("plugin_version.txt")
+          previous_version = read_plugin_version_at_git_ref(before_sha)
+          version_changed = (
+              current_version is not None
+              and previous_version is not None
+              and current_version != previous_version
+          )
+
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          repo_url = f"{server}/{repo}"
+
+          version_label = current_version or "unknown"
+          if version_changed:
+              embed_author_name = f"VPB · {previous_version} → {current_version}"
+          else:
+              embed_author_name = f"VPB · {version_label}"
+
+          embed_author = {"name": embed_author_name, "url": repo_url}
+
+          if commit_count == 1:
+              commit = commits[0]
+              author = commit_author(commit)
+              sha = (commit.get("id") or after_sha or "")[:7]
+              commit_url = commit.get("url") or head.get("url") or ""
+              message = (commit.get("message") or "").strip()
+              title_line = truncate(first_line(message), 240)
+              body = "\n".join(message.splitlines()[1:]).strip()
+
+              fields = [
+                  {"name": "Branch", "value": f"`{branch}`", "inline": True},
+                  {"name": "Commit", "value": f"[`{sha}`]({commit_url})", "inline": True},
+                  {"name": "Author", "value": author, "inline": True},
+              ]
+              if actor and actor != author:
+                  fields.append({"name": "Pushed by", "value": actor, "inline": True})
+
+              embed = {
+                  "author": embed_author,
+                  "title": title_line,
+                  "url": commit_url or compare_url or repo_url,
+                  "color": DISCORD_GREEN if version_changed else DISCORD_BLUE,
+                  "fields": fields,
+                  "footer": {"text": f"{repo} · GitHub push"},
+              }
+
+              if body:
+                  embed["description"] = truncate(body, 1800)
+
+              ts = discord_timestamp(commit.get("timestamp") or head.get("timestamp"))
+              if ts is not None:
+                  embed["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+          else:
+              include_body = commit_count <= 3
+              blocks = []
+              for commit in commits:
+                  blocks.append(format_commit_block(commit, include_body=include_body))
+
+              description = "\n\n".join(blocks)
+              if len(description) > 3800:
+                  shown = []
+                  budget = 3800
+                  for block in blocks:
+                      if len(block) + (4 if shown else 0) > budget:
+                          break
+                      shown.append(block)
+                      budget -= len(block) + (4 if len(shown) > 1 else 0)
+                  hidden = commit_count - len(shown)
+                  description = "\n\n".join(shown)
+                  if hidden > 0 and compare_url:
+                      description += f"\n\n… and {hidden} more commit(s) in [compare view]({compare_url})"
+                  elif hidden > 0:
+                      description += f"\n\n… and {hidden} more commit(s)."
+
+              authors = sorted({commit_author(c) for c in commits})
+              author_summary = ", ".join(authors[:4])
+              if len(authors) > 4:
+                  author_summary += f", +{len(authors) - 4} more"
+
+              fields = [
+                  {"name": "Branch", "value": f"`{branch}`", "inline": True},
+                  {"name": "Authors", "value": author_summary or "unknown", "inline": True},
+              ]
+              if compare_url:
+                  fields.append(
+                      {
+                          "name": "Compare",
+                          "value": f"[View on GitHub]({compare_url})",
+                          "inline": True,
+                      }
+                  )
+              if actor and actor not in authors:
+                  fields.append({"name": "Pushed by", "value": actor, "inline": True})
+
+              embed = {
+                  "author": embed_author,
+                  "title": f"{commit_count} commits",
+                  "url": compare_url or repo_url,
+                  "description": description,
+                  "color": DISCORD_GREEN if version_changed else DISCORD_ORANGE,
+                  "fields": fields,
+                  "footer": {"text": f"{repo} · GitHub push"},
+              }
+
+              ts = discord_timestamp(head.get("timestamp"))
+              if ts is not None:
+                  embed["timestamp"] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+          payload = {
+              "username": "VPB GitHub",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "embeds": [embed],
+          }
+
+          data = json.dumps(payload).encode("utf-8")
+          request = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=data,
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "github-discord-notify/2.0",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  print(f"Discord webhook responded with HTTP {response.status}")
+          except urllib.error.HTTPError as error:
+              body = error.read().decode("utf-8", errors="replace")
+              print(f"Discord webhook failed: HTTP {error.code} {body}", file=sys.stderr)
+              sys.exit(1)
+          PY

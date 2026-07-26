@@ -34,6 +34,7 @@ namespace VPB
         {
             if (clothingMode == "replace") return "Replace Clothing";
             if (clothingMode == "merge") return "Merge Clothing";
+            if (string.Equals(clothingMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase)) return "Merge Outfit";
             if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase)) return "Steal Clothing";
             return "Keep Clothing";
         }
@@ -48,7 +49,9 @@ namespace VPB
                 else if (clothingMode == "replace") VPBConfig.Instance.AppearanceClothingApplyMode = "replace";
                 else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
                     VPBConfig.Instance.AppearanceClothingApplyMode = "clothingonly";
-                try { VPBConfig.Instance.Save(true, true); } catch { }
+                else if (string.Equals(clothingMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                    VPBConfig.Instance.AppearanceClothingApplyMode = "mergeoutfit";
+                try { VPBConfig.Instance.Save(false); } catch { }
             }
             action(clothingMode);
         }
@@ -58,25 +61,30 @@ namespace VPB
             string mode = string.IsNullOrEmpty(_lastAppearanceClothingMode) ? "keep" : _lastAppearanceClothingMode;
             string lastLabel = "Last Used (" + GetAppearanceModeLabel(mode) + ")";
 
+            // isSubMenu so the click handler skips Hide(); a later PushPage won't re-activate a hidden canvas.
             options.Add(new ContextMenuPanel.Option(lastLabel, () => {
                 ApplyAppearanceMode(mode, handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Keep Clothing", () => {
                 ApplyAppearanceMode("keep", handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Replace Clothing", () => {
                 ApplyAppearanceMode("replace", handler);
-            }));
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Merge Clothing", () => {
                 ApplyAppearanceMode("merge", handler);
-            }));
+            }, false, true));
+
+            options.Add(new ContextMenuPanel.Option("Merge Outfit", () => {
+                ApplyAppearanceMode("mergeoutfit", handler);
+            }, false, true));
 
             options.Add(new ContextMenuPanel.Option("Steal Clothing", () => {
                 ApplyAppearanceMode("clothingonly", handler);
-            }));
+            }, false, true));
         }
 
         private void ShowAppearanceClothingModes(FileEntry entry, Atom targetAtom)
@@ -174,6 +182,10 @@ namespace VPB
             {
                 applyMode = ClothingApplyMode.Merge;
             }
+            else if (string.Equals(clothingMode, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+            {
+                applyMode = ClothingApplyMode.MergeOutfit;
+            }
             else if (string.Equals(clothingMode, "clothingonly", StringComparison.OrdinalIgnoreCase))
             {
                 applyMode = ClothingApplyMode.ClothingOnly;
@@ -182,6 +194,17 @@ namespace VPB
             {
                 // Null or unrecognized defaults to Replace
                 applyMode = ClothingApplyMode.Replace;
+            }
+
+            if (applyMode == ClothingApplyMode.MergeOutfit && resourceType == VpbResourceType.Appearance)
+            {
+                ContextMenuPanel.Instance.Hide();
+                if (Panel != null)
+                {
+                    Panel.ShowMergeOutfitPicker(sourceEntry, targetAtom, preset);
+                    return;
+                }
+                LogUtil.LogWarning("[VPB] Merge Outfit: no gallery panel for picker; merging all clothing items.");
             }
 
             try

@@ -483,7 +483,7 @@ namespace VPB
 					}
 					list.AddRange(row.Tags);
 				}
-				string yaml = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags);
+				string yaml = GalleryUserTagYamlBrain.BuildItemToTagsYaml(itemToTags, null);
 				WriteTextSafe(GetAbsPath(LogRelPath), yaml);
 
 				// Step 7 - write reversibility manifest

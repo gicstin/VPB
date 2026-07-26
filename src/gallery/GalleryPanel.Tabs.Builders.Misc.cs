@@ -91,7 +91,7 @@ namespace VPB
             string filterNow = (CanonicalSettingsSideSearchText() ?? "").Trim();
             bool MatchFilter(string label) =>
                 string.IsNullOrEmpty(filterNow) || (label ?? "").IndexOf(filterNow, StringComparison.OrdinalIgnoreCase) >= 0;
-            float groupTabScale = (VPBConfig.Instance != null) ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float groupTabScale = ChromeScale;
             void AddGroupRow(string key, string label)
             {
                 if (!string.Equals(key, "all", StringComparison.OrdinalIgnoreCase) && !MatchFilter(label)) return;
@@ -99,27 +99,15 @@ namespace VPB
                 CreateTabButton(container.transform, label, isActive ? groupActive : groupInactive, isActive, () =>
                 {
                     currentSettingsGroup = key;
+                    try { CancelPluginHotkeyCapture(false); } catch { }
                     UpdateTabs();
                     RefreshInternalSettingsListRows(true);
                 }, trackedButtons, null, null, null, TextAnchor.MiddleLeft, 10f * groupTabScale, 8f * groupTabScale);
             }
 
             AddGroupRow("all", VPBTranslation.T("settings.group.all", "All"));
-            AddGroupRow("visuals", VPBTranslation.T("settings.header.visuals", "Visuals"));
-            AddGroupRow("follow", VPBTranslation.T("settings.header.follow_mode", "Follow Mode"));
-            AddGroupRow("interaction", VPBTranslation.T("settings.header.interaction", "Interaction"));
-            AddGroupRow("desktop", VPBTranslation.T("settings.header.desktop", "Desktop"));
-            AddGroupRow("lists", VPBTranslation.T("settings.header.gallery_side_lists", "Gallery side lists"));
-            AddGroupRow("helpers", VPBTranslation.T("settings.group.side_tabs", "Helpers"));
-            AddGroupRow("categories", VPBTranslation.T("settings.header.category_visibility", "Category Visibility"));
-            AddGroupRow("hover", VPBTranslation.T("settings.header.hover_preview", "Hover preview"));
-            AddGroupRow("grid", VPBTranslation.T("settings.header.grid_labels", "Grid Labels"));
-            AddGroupRow("search", VPBTranslation.T("settings.header.search", "Search"));
-            AddGroupRow("quick", VPBTranslation.T("settings.group.category_quick", "Header category menu"));
-            AddGroupRow("vr", VPBTranslation.T("settings.header.vr_integration", "VR & Game Integration"));
-            if (BaImporter.TryDetectBaDataDir(out _))
-                AddGroupRow("ba_migration", VPBTranslation.T("settings.group.ba_migration", "BrowserAssist Migration"));
-            AddGroupRow("updater", VPBTranslation.T("settings.group.updater", "Auto-Updater"));
+            foreach (var g in GetSettingsGroupTabs())
+                AddGroupRow(g.Key, g.Label);
         }
 
         private void BuildRatingsTabs(GameObject container, List<GameObject> trackedButtons)
@@ -138,6 +126,7 @@ namespace VPB
                     else currentRatingFilter = rating;
 
                     RefreshFilesAndTabs();
+                    SyncBrowseFilterChipChrome();
                 }, trackedButtons);
             }
         }
@@ -152,18 +141,15 @@ namespace VPB
                     ScheduleTagCountsForSideTabsNonBlocking();
             }
 
-            bool localOnly = string.Equals(currentAppearanceSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+            bool localOnly = IsGlobalSourceFilterLocal();
 
-            // Single toggle: "Local only" overrides the global source filter on Appearance when ON.
-            // When OFF, the title-bar global filter applies normally.
-            string label = "Local only";
+            // Mirrors title-bar Source Local (one Local story for Scenes + Appearance + global).
+            string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? appearanceColor : ColorInactiveRow;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                currentAppearanceSourceFilter = localOnly ? "" : "local";
-                InvalidateTags();
-                RefreshFilesAndTabs();
+                ToggleGlobalLocalFromCategorySidePane(invalidateTags: true);
             }, trackedButtons);
 
             {
@@ -317,16 +303,15 @@ namespace VPB
         {
             Color sceneColor = new Color(0.2f, 0.4f, 0.7f, 1f);
 
-            bool localOnly = string.Equals(currentSceneSourceFilter, "local", StringComparison.OrdinalIgnoreCase);
+            bool localOnly = IsGlobalSourceFilterLocal();
 
-            // Single toggle: "Local only" overrides the global source filter on Scenes when ON.
-            string label = "Local only";
+            // Mirrors title-bar Source Local (same control as Appearance Local only).
+            string label = VPBTranslation.T("gallery.filter.local_only", "Local only");
             Color btnColor = localOnly ? sceneColor : ColorInactiveRow;
 
             CreateTabButton(container.transform, label, btnColor, localOnly, () =>
             {
-                currentSceneSourceFilter = localOnly ? "" : "local";
-                RefreshFilesAndTabs();
+                ToggleGlobalLocalFromCategorySidePane(invalidateTags: false);
             }, trackedButtons);
         }
     }

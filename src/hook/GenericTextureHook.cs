@@ -587,9 +587,7 @@ namespace VPB
         private static bool TryLoadFromCache(Texture2D tex, string path, bool markNonReadable)
         {
             if (Settings.Instance == null || !Settings.Instance.EnableZstdCompression.Value) return false;
-
-            if (SuperControllerHook.IsSimulationTexturePath(path)) return false;
-            if (SuperControllerHook.IsLutTexturePath(path)) return false;
+            if (ImageLoadingMgr.singleton == null) return false;
 
             try
             {
@@ -605,116 +603,13 @@ namespace VPB
                     qi.createAlphaFromGrayscale = srcQI.createAlphaFromGrayscale;
                     qi.createNormalFromBump = srcQI.createNormalFromBump;
                     qi.invert = srcQI.invert;
+                    qi.bumpStrength = srcQI.bumpStrength;
+                    qi.setSize = srcQI.setSize;
+                    qi.width = srcQI.width;
+                    qi.height = srcQI.height;
                 }
 
-                bool isSim = SuperControllerHook.IsSimulationTexturePath(qi.imgPath);
-                string baseZstdPath = TextureUtil.GetZstdCachePath(qi.imgPath, qi.compress, qi.linear, qi.isNormalMap, qi.createAlphaFromGrayscale, qi.createNormalFromBump, qi.invert, 0, 0, qi.bumpStrength, isSim);
-                if (string.IsNullOrEmpty(baseZstdPath)) return false;
-
-                string metaPath = baseZstdPath + "meta";
-                if (!File.Exists(metaPath))
-                {
-                    return false;
-                }
-
-                try
-                {
-                    var json = JSON.Parse(File.ReadAllText(metaPath));
-                    int w = json["width"].AsInt;
-                    int h = json["height"].AsInt;
-                    int targetW = w;
-                    int targetH = h;
-                    string type = json["type"];
-                    string realCacheFile = baseZstdPath;
-
-                    if (File.Exists(realCacheFile))
-                    {
-                        byte[] fileBytes = File.ReadAllBytes(realCacheFile);
-                        byte[] bytes = null;
-                        
-                        // Zstd files should always be decompressed regardless of 'type' in meta, 
-                        // but we check for .zvamcache extension or 'compressed' type
-                        if (realCacheFile.EndsWith(".zvamcache") || type == "compressed")
-                        {
-                            try 
-                            { 
-                                bytes = ZstdCompressor.Decompress(fileBytes); 
-                                if (bytes == null) {
-                                    LogUtil.LogError("Zstd decompression returned null for: " + realCacheFile);
-                                    return false;
-                                }
-                            }
-                            catch (Exception ex) { LogUtil.LogError("Zstd decompress fail in hook: " + ex.Message); return false; }
-                        }
-                        else bytes = fileBytes;
-
-                        if (bytes != null)
-                        {
-                            try
-                            {
-                                TextureFormat tf = TextureFormat.DXT5;
-                                if (json["format"] != null)
-                                {
-                                    try { tf = (TextureFormat)Enum.Parse(typeof(TextureFormat), json["format"]); } catch { }
-                                }
-
-                                long expected = ExpectedRawDataSize(targetW, targetH, tf);
-                                if (expected > 0 && bytes.Length != (int)expected)
-                                {
-                                    if (ShouldLog(path))
-                                        LogUtil.LogWarning("Cache raw data size mismatch for ", path);
-                                    return false;
-                                }
-
-                                bool isSimTexture = SuperControllerHook.IsSimulationTexturePath(path);
-                                bool needsReinit = tex.width != targetW || tex.height != targetH || tex.format != tf;
-                                bool isCompressedTarget = tf == TextureFormat.DXT1 || tf == TextureFormat.DXT5;
-
-                                if (needsReinit && isCompressedTarget)
-                                {
-                                    Texture2D tmp = new Texture2D(targetW, targetH, tf, false, tex.anisoLevel > 0);
-                                    try
-                                    {
-                                        tmp.LoadRawTextureData(bytes);
-                                        tmp.Apply(false, false);
-                                        Graphics.CopyTexture(tmp, tex);
-                                        UnityEngine.Object.Destroy(tmp);
-                                    }
-                                    catch
-                                    {
-                                        try { UnityEngine.Object.Destroy(tmp); } catch { }
-                                        tex.Resize(targetW, targetH, tf, false);
-                                        tex.LoadRawTextureData(bytes);
-                                        tex.Apply(false, markNonReadable && !isSimTexture);
-                                    }
-                                }
-                                else
-                                {
-                                    if (needsReinit) tex.Resize(targetW, targetH, tf, false);
-                                    tex.LoadRawTextureData(bytes);
-                                    tex.Apply(false, markNonReadable && !isSimTexture);
-                                }
-
-                                if (isSimTexture)
-                                {
-                                    LogUtil.Log($"[VPB SIM] GenericHook: Applied READABLE sim texture: {path}");
-                                }
-
-                                return true;
-                            }
-                            catch (Exception ex)
-                            {
-                                LogUtil.LogError("TryLoadFromCache failed to apply cached texture: " + ex.Message);
-                                return false;
-                            }
-                        }
-                        }
-                    else
-                    {
-                        // LogUtil.Log("Cache file missing: " + realCacheFile);
-                    }
-                }
-                catch (Exception ex) { LogUtil.LogError("TryLoadFromCache error parsing meta: " + ex.Message); }
+                return ImageLoadingMgr.singleton.TryApplyDiskCacheToTexture(qi, tex, markNonReadable);
             }
             catch (Exception ex)
             {

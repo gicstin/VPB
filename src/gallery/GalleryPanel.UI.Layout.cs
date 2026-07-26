@@ -48,7 +48,7 @@ namespace VPB
             if (IsSettingsPanelOpen())
                 SetTitleSearchInputTextWithoutNotify(titleSearchInput, CanonicalSettingsSideSearchText(), _titleBarSearchOnValueChanged);
             else
-                SetTitleSearchInputTextWithoutNotify(titleSearchInput, nameFilter ?? "", _titleBarSearchOnValueChanged);
+                SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
         }
 
         private void SetSideSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
@@ -91,7 +91,8 @@ namespace VPB
             EnsureUserTagAvailScrollTrackingHooks();
             SnapshotUserTagAvailScrollForPreserveBoth();
 
-            float paneScale = VPBConfig.Instance.CurrentInnerPaneScale;
+            GalleryUiMetrics uiMetrics = UiMetrics;
+            float paneScale = uiMetrics.ChromeScale;
             if (backgroundBoxGO != null)
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
@@ -100,6 +101,8 @@ namespace VPB
             bool skipBrowseSideCaches = IsSettingsPanelOpen() || settingsListViewActive;
             if (allowSynchronousCreatorCategoryCaches && !skipBrowseSideCaches)
             {
+                // Prefer facet-specific caching from UpdateTabs builders when opening side panes
+                // (ToggleSide passes false here). Full sync only for cold layout / refresh paths.
                 if (!creatorsCached) CacheCreators();
                 if (!categoriesCached) CacheCategoryCounts();
             }
@@ -112,7 +115,9 @@ namespace VPB
             {
                 try { SyncTitleSearchInputWithActiveMode(); } catch { }
                 try { ApplyTitleBarResponsiveLayout(paneScale); } catch { }
+                try { ApplyFooterOverflowLayout(paneScale); } catch { }
                 try { ApplyTopDockSideButtonsLayout(paneScale); } catch { }
+                MarkGalleryPaneChromeDirty();
             }
             catch { }
 
@@ -120,109 +125,59 @@ namespace VPB
             UpdateReplaceButtonState();
             UpdateKeepClothingButtonState();
             
-            float leftOffset = 20;
-            float rightOffset = -20;
+            float closedInset = GalleryUiDesignTokens.SideTabClosedGridInsetRef * paneScale;
+            float leftOffset = SyncSideRailChrome(BuildLeftSideRailChrome(), closedInset);
+            float rightOffset = SyncSideRailChrome(BuildRightSideRailChrome(), -closedInset);
             
-            bool forceBoth = IsHubMode;
-            
-            // Left Side
-            if ((forceBoth || leftActiveContent.HasValue) && leftTabScrollGO != null)
+            // Import sidebar hides its own side's tab column and pushes the grid edge in by 230,
+            // so the sidebar replaces (not overlaps) the Category / Creator slot it occupies.
+            float importInset = GalleryUiDesignTokens.SideTabOpenGridInsetRef * paneScale;
+            if (importSidebarActive)
             {
-                leftTabScrollGO.SetActive(true);
-                leftOffset = 230; 
-                
-                if (leftSortBtn != null) leftSortBtn.SetActive(true);
-
-                if (leftSearchInput != null) 
+                if (importSidebarOnLeft)
                 {
-                    leftSearchInput.gameObject.SetActive(true);
-                    string target = "";
-                    ContentType type = leftActiveContent.HasValue ? leftActiveContent.Value : ContentType.Hub;
-
-                    if (type == ContentType.Category) target = categoryFilter;
-                    else if (type == ContentType.Creator) target = creatorFilter;
-                    else if (type == ContentType.UserTags) target = userTagFilter;
-                    else if (type == ContentType.Path) target = pathFilter;
-                    else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
-                    else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
-                    else if (type == ContentType.RemoveHair) target = removeHairFilter;
-                    else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
-                    else target = ""; // Status filter?
-
-                    SetSideSearchInputTextWithoutNotify(leftSearchInput, target, _leftMainSideSearchOnValueChanged);
-                    
-                    if (leftSearchInput.placeholder is Text ph)
-                    {
-                        ph.text = GetContentTypePlaceholder(type);
-                    }
+                    if (leftTabScrollGO != null) leftTabScrollGO.SetActive(false);
+                    if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
+                    if (leftSearchInput != null) leftSearchInput.gameObject.SetActive(false);
+                    if (leftSortBtn != null) leftSortBtn.SetActive(false);
+                    if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
+                    if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
+                    if (leftOffset < importInset) leftOffset = importInset;
                 }
-            }
-            else if (leftTabScrollGO != null)
-            {
-                leftTabScrollGO.SetActive(false);
-                if (leftSubTabScrollGO != null) leftSubTabScrollGO.SetActive(false);
-                if (leftSearchInput != null) leftSearchInput.gameObject.SetActive(false);
-                if (leftSortBtn != null) leftSortBtn.SetActive(false);
-                
-                // Ensure sub controls are hidden if main panel is closed
-                if (leftSubSortBtn != null) leftSubSortBtn.SetActive(false);
-                leftSubSceneSortBarActive = false;
-                if (leftSubSceneSortBtn != null) leftSubSceneSortBtn.SetActive(false);
-                if (leftSubSearchInput != null) leftSubSearchInput.gameObject.SetActive(false);
-            }
-            
-            // Right Side
-            if ((forceBoth || rightActiveContent.HasValue) && rightTabScrollGO != null)
-            {
-                rightTabScrollGO.SetActive(true);
-                rightOffset = -230;
-
-                if (rightSortBtn != null) rightSortBtn.SetActive(true);
-                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(true);
-
-                if (rightSearchInput != null) 
+                else
                 {
-                    rightSearchInput.gameObject.SetActive(true);
-                    string target = "";
-                    ContentType type = rightActiveContent.HasValue ? rightActiveContent.Value : ContentType.Hub;
-
-                    if (type == ContentType.Category) target = categoryFilter;
-                    else if (type == ContentType.Creator) target = creatorFilter;
-                    else if (type == ContentType.UserTags) target = userTagFilter;
-                    else if (type == ContentType.Path) target = pathFilter;
-                    else if (type == ContentType.History) target = historyTabFilter;
-                    else if (type == ContentType.Settings) target = CanonicalSettingsSideSearchText();
-                    else if (type == ContentType.RemoveClothing) target = removeClothingFilter;
-                    else if (type == ContentType.RemoveHair) target = removeHairFilter;
-                    else if (type == ContentType.RemoveAtom) target = removeAtomFilter;
-                    else target = "";
-
-                    SetSideSearchInputTextWithoutNotify(rightSearchInput, target, _rightMainSideSearchOnValueChanged);
-
-                    if (rightSearchInput.placeholder is Text ph)
-                    {
-                        ph.text = GetContentTypePlaceholder(type);
-                    }
+                    if (rightTabScrollGO != null) rightTabScrollGO.SetActive(false);
+                    if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
+                    if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
+                    if (rightSortBtn != null) rightSortBtn.SetActive(false);
+                    if (rightRefreshBtn != null) rightRefreshBtn.SetActive(false);
+                    if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
+                    if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
+                    if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                    if (rightOffset > -importInset) rightOffset = -importInset;
                 }
+                if (importSidebarRoot != null) importSidebarRoot.transform.SetAsLastSibling();
             }
-            else if (rightTabScrollGO != null)
+
+            try { SyncSidePanelHeaderChrome(paneScale); } catch { }
+            try { SuppressImportOccupiedSideColumnChrome(); } catch { }
+
+            try
             {
-                rightTabScrollGO.SetActive(false);
-                if (rightSubTabScrollGO != null) rightSubTabScrollGO.SetActive(false);
-                if (rightSearchInput != null) rightSearchInput.gameObject.SetActive(false);
-                if (rightSortBtn != null) rightSortBtn.SetActive(false);
-                if (rightRefreshBtn != null) rightRefreshBtn.SetActive(false);
-                
-                // Ensure sub controls are hidden if main panel is closed
-                if (rightSubSortBtn != null) rightSubSortBtn.SetActive(false);
-                rightSubSceneSortBarActive = false;
-                if (rightSubSceneSortBtn != null) rightSubSceneSortBtn.SetActive(false);
-                if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
+                float chipPad = FilterChipHorizontalPaddingRef * paneScale;
+                float panelW = backgroundBoxGO != null
+                    ? backgroundBoxGO.GetComponent<RectTransform>().rect.width
+                    : 0f;
+                // Bar spans [leftOffset+pad, panelW+rightOffset-pad] (rightOffset is negative).
+                float chipAvailW = panelW > 1f ? panelW + rightOffset - leftOffset - 2f * chipPad : -1f;
+                RefreshActiveFilterChips(chipAvailW);
             }
-            
-            float topOffset = -65f * paneScale;
-            float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top (65*s)
+            catch { }
+
+            float filterTopInset = 0f;
+            try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
+            float topOffset = -GalleryUiDesignTokens.SideTabTopOffsetRef * paneScale - filterTopInset;
+            float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top
             ApplySideTabFilterRowVerticalLayout(paneScale);
 
             // Footer first: main grid/tab insets use the top of this stack (grows when tbox expands).
@@ -230,24 +185,32 @@ namespace VPB
             {
                 // Footer bar: ALWAYS stretch to full width of backgroundBoxGO
                 paginationRT.offsetMin = new Vector2(0, 0);
-                paginationRT.offsetMax = new Vector2(0, 60 * paneScale);
+                paginationRT.offsetMax = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * paneScale);
 
                 if (hoverPathRT != null)
                 {
                     // Info bar: stretch to full width, sits above the buttons bar
-                    hoverPathRT.offsetMin = new Vector2(0, 60 * paneScale);
-                    // Only set offsetMax if toolbox is not yet initialized (tbox == null)
-                    // Once initialized, the animation system handles the height via tboxRT.offsetMax.y
-                    // Setting it here after initialization causes flashing during category switches
-                    if (tbox == null)
-                        hoverPathRT.offsetMax = new Vector2(0, 120 * paneScale);
+                    hoverPathRT.offsetMin = new Vector2(0, GalleryUiDesignTokens.FooterBarHeightRef * paneScale);
                     // Update tbox expansion references so animation uses the correct scale
-                    tboxTopOffsetBase  = 120f * paneScale;
-                    tboxInfoRowHeight  = 60f  * paneScale;
+                    tboxTopOffsetBase  = GalleryUiDesignTokens.FooterToolboxTopRef * paneScale;
+                    tboxInfoRowHeight  = GalleryUiDesignTokens.FooterInfoRowHeightRef * paneScale;
+                    if (tbox == null)
+                        hoverPathRT.offsetMax = new Vector2(0, tboxTopOffsetBase);
+                    else
+                    {
+                        // Height-only refresh — full UpdateSelectionContextMenu here flashes on category switch.
+                        try { SyncTboxFooterRowChrome(paneScale); } catch { }
+                        try { ApplyTboxBarHeightNow(); } catch { }
+                    }
                 }
             }
 
             SyncGalleryMainAreaBottomEdge(leftOffset, rightOffset, topOffset, tabTopOffset);
+            _lastBrowseGridLeftInset = leftOffset;
+            _lastBrowseGridRightInset = rightOffset;
+
+            try { ApplyFirstRunHintStripLayout(leftOffset, rightOffset, paneScale); } catch { }
+            try { ApplyActiveFilterChipBarLayout(leftOffset, rightOffset, paneScale); } catch { }
 
             // Side button stacks stay vertically fixed (do not ride the footer inset).
             if (leftSideContainer != null)
@@ -285,115 +248,242 @@ namespace VPB
             catch { }
 
             RestorePreservedUserTagAvailScroll();
+            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
         }
 
-        /// <summary>Places side-pane sort/refresh/search row so top edge matches <see cref="contentScrollRT"/> top (not title bar).</summary>
+        /// <summary>Places side-pane sort/refresh/search row below optional collapse header strip.</summary>
         private void ApplySideTabFilterRowVerticalLayout(float paneScale)
         {
-            float y = -65f * paneScale;
-            if (leftSearchInput != null)
+            ApplyMainSideSearchRowLayout(true, paneScale);
+            ApplyMainSideSearchRowLayout(false, paneScale);
+            SyncSideTabSubFilterRowChrome(paneScale);
+        }
+
+        /// <summary>Full horizontal + vertical layout for upper side-pane search row (sort / refresh / search).</summary>
+        private void ApplyMainSideSearchRowLayout(bool isLeft, float s)
+        {
+            if (s <= 0f) s = 1f;
+            float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+            float sortSz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+            float gap = GalleryUiDesignTokens.SideTabControlGapRef * s;
+            float refreshW = GalleryUiDesignTokens.SideTabRefreshBtnWidthRef * s;
+            float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+            ContentType? active = isLeft ? leftActiveContent : rightActiveContent;
+            bool showSort = active.HasValue
+                && !ContentTypeSuppressesSideSearch(active.Value)
+                && !ContentTypeSuppressesSideSort(active.Value);
+            float searchW = (GalleryUiDesignTokens.SideTabColumnWidthRef - GalleryUiDesignTokens.SideTabMainSearchSortReserveRef) * s;
+            if (!showSort) searchW += GalleryUiDesignTokens.SideTabMainSearchSortReserveRef * s;
+            float y = SidePanelFilterRowYForSide(isLeft, s);
+
+            if (isLeft)
             {
-                RectTransform rt = leftSearchInput.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (leftSortBtn != null)
+                {
+                    RectTransform sortRt = leftSortBtn.GetComponent<RectTransform>();
+                    if (sortRt != null)
+                    {
+                        sortRt.anchoredPosition = new Vector2(margin, y);
+                        sortRt.sizeDelta = new Vector2(sortSz, sortSz);
+                    }
+                }
+                if (leftSearchInput != null)
+                {
+                    RectTransform searchRt = leftSearchInput.GetComponent<RectTransform>();
+                    if (searchRt != null)
+                    {
+                        float searchX = margin + (showSort ? sortSz + gap : 0f);
+                        searchRt.anchoredPosition = new Vector2(searchX, y);
+                        searchRt.sizeDelta = new Vector2(searchW, rowH);
+                    }
+                    RescaleSearchInput(leftSearchInput, s, GalleryUiDesignTokens.SideTabRowHeightRef);
+                }
             }
-            if (rightSearchInput != null)
+            else
             {
-                RectTransform rt = rightSearchInput.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
-            }
-            if (leftSortBtn != null)
-            {
-                RectTransform rt = leftSortBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
-            }
-            if (rightSortBtn != null)
-            {
-                RectTransform rt = rightSortBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
-            }
-            if (rightRefreshBtn != null)
-            {
-                RectTransform rt = rightRefreshBtn.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y);
+                if (rightSearchInput != null)
+                {
+                    RectTransform searchRt = rightSearchInput.GetComponent<RectTransform>();
+                    if (searchRt != null)
+                    {
+                        searchRt.anchoredPosition = new Vector2(-margin, y);
+                        searchRt.sizeDelta = new Vector2(searchW, rowH);
+                    }
+                    RescaleSearchInput(rightSearchInput, s, GalleryUiDesignTokens.SideTabRowHeightRef);
+                }
+                if (rightRefreshBtn != null)
+                {
+                    RectTransform refreshRt = rightRefreshBtn.GetComponent<RectTransform>();
+                    if (refreshRt != null)
+                    {
+                        refreshRt.anchoredPosition = new Vector2(-(margin + searchW) + refreshW, y);
+                        refreshRt.sizeDelta = new Vector2(refreshW, rowH);
+                    }
+                    if (rightRefreshBtnText != null)
+                        GalleryUiMetrics.ApplyFont(rightRefreshBtnText, 18, s, 10);
+                }
+                if (rightSortBtn != null)
+                {
+                    RectTransform sortRt = rightSortBtn.GetComponent<RectTransform>();
+                    if (sortRt != null)
+                    {
+                        sortRt.anchoredPosition = new Vector2(-(margin + searchW + gap), y);
+                        sortRt.sizeDelta = new Vector2(sortSz, sortSz);
+                    }
+                }
             }
         }
 
-        /// <summary>Distance from panel bottom to the top edge of the bottom chrome (pagination + info/tbox bar).</summary>
+        /// <summary>Distance from panel bottom to the top edge of the bottom chrome (footer + info/tbox bar).</summary>
         private float GalleryMainAreaBottomInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+            float s = ChromeScale;
             if (hoverPathRT != null) return hoverPathRT.offsetMax.y;
-            return 120f * s;
+            return GalleryUiDesignTokens.GalleryMainBottomFallbackRef * s;
         }
 
-        /// <summary>Bottom inset for category/creator/tag tab scroll rects — keeps lists above pagination + info/tbox bar.</summary>
+        /// <summary>Bottom inset for category/creator/tag tab scroll rects — keeps lists above footer + info/tbox bar.</summary>
         private float SideTabScrollBottomInsetY()
         {
-            return GalleryMainAreaBottomInset() + 8f;
+            return GalleryMainAreaBottomInset() + GalleryUiDesignTokens.SideTabScrollBottomPadRef;
         }
 
         /// <summary>Small gap at the horizontal split only (upper pane — not footer clearance).</summary>
         private float SideTabSplitSeamInset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            return 5f * s;
+            float s = ChromeScale;
+            return GalleryUiDesignTokens.SideTabSplitSeamRef * s;
         }
 
         /// <summary>True for the upper stack in a split tab column (category / hub pay-type / etc.).</summary>
         private static bool IsUpperStackedSideTabPane(RectTransform rt)
         {
             if (rt == null) return false;
-            // Top stack in split column: UserTags (0.5/1), category/tags (0.5/1), hub right (0.7/1), etc.
-            return rt.anchorMax.y >= 0.85f && rt.anchorMin.y >= 0.4f;
+            // Top stack in split column: category/tags (φ major top), hub right (0.7/1), cleanup stale (0.5/1), etc.
+            return rt.anchorMax.y >= 0.85f && rt.anchorMin.y >= 0.25f;
         }
 
-        private static float SceneSourceSortBarBreadth(float s) => 35f * s;
+        private static float SideTabSubFilterRowAnchorY(ContentType activeContent)
+        {
+            return activeContent == ContentType.Category
+                ? GalleryUiDesignTokens.CategorySideSubPaneHeightFraction
+                : 0.5f;
+        }
+
+        private float ResolveSideTabSubFilterRowAnchorY(bool isLeft)
+        {
+            // Prefer live split from sub-pane (may rise when InfoBar is tall).
+            GameObject sub = isLeft ? leftSubTabScrollGO : rightSubTabScrollGO;
+            if (sub != null && sub.activeSelf)
+            {
+                RectTransform subRT = sub.GetComponent<RectTransform>();
+                if (subRT != null && subRT.anchorMax.y > 0.05f && subRT.anchorMax.y < 0.95f)
+                    return subRT.anchorMax.y;
+            }
+            ContentType? ac = isLeft ? leftActiveContent : rightActiveContent;
+            return ac.HasValue ? SideTabSubFilterRowAnchorY(ac.Value) : 0.5f;
+        }
+
+        private void ApplySideTabSubFilterRowAnchor(RectTransform rt, bool isLeft)
+        {
+            if (rt == null) return;
+            float y = ResolveSideTabSubFilterRowAnchorY(isLeft);
+            float xEdge = isLeft ? 0f : 1f;
+            rt.anchorMin = new Vector2(xEdge, y);
+            rt.anchorMax = new Vector2(xEdge, y);
+            rt.pivot = new Vector2(xEdge, 1f);
+        }
+
+        private void ApplySideTabSubSortButtonLayout(GameObject btn, bool isLeft, float s)
+        {
+            if (btn == null || !btn.activeSelf) return;
+            RectTransform rt = btn.GetComponent<RectTransform>();
+            if (rt == null) return;
+            ApplySideTabSubFilterRowAnchor(rt, isLeft);
+            float sz = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+            float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+            float subRowY = -GalleryUiDesignTokens.SideTabSubFilterRowTopGapRef * s;
+            rt.sizeDelta = new Vector2(sz, sz);
+            rt.anchoredPosition = new Vector2(isLeft ? margin : -margin, subRowY);
+        }
+
+        /// <summary>Re-anchor lower split filter row (sort + search) to match sub-pane top (φ minor for category).</summary>
+        private void SyncSideTabSubFilterRowChrome(float s)
+        {
+            if (s <= 0f) s = 1f;
+            if (leftSubTabScrollGO != null && leftSubTabScrollGO.activeSelf)
+            {
+                ApplySideTabSubSortButtonLayout(leftSubSortBtn, true, s);
+                ApplySideTabSubSortButtonLayout(leftSubSceneSortBtn, true, s);
+                ApplyLeftSubSearchLayoutScaled(s);
+            }
+            if (rightSubTabScrollGO != null && rightSubTabScrollGO.activeSelf)
+            {
+                ApplySideTabSubSortButtonLayout(rightSubSortBtn, false, s);
+                ApplySideTabSubSortButtonLayout(rightSubSceneSortBtn, false, s);
+                ApplyRightSubSearchLayoutScaled(s);
+            }
+        }
+
+        private static float SceneSourceSortBarBreadth(float s) => GalleryUiDesignTokens.SideTabRowHeightRef * s;
 
         private void ApplyLeftSubSearchLayoutScaled(float s)
         {
             if (leftSubSearchInput == null) return;
             RectTransform rt = leftSubSearchInput.GetComponent<RectTransform>();
-            const float tabAreaW = 220f;
+            ApplySideTabSubFilterRowAnchor(rt, true);
+            float tabAreaW = GalleryUiDesignTokens.SideTabColumnWidthRef * s;
+            float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+            float gap = GalleryUiDesignTokens.SideTabControlGapRef * s;
+            float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
             float bar = SceneSourceSortBarBreadth(s);
             bool reserveSortBar = leftSubSceneSortBarActive
                 || (leftSubSortBtn != null && leftSubSortBtn.activeSelf);
+            float subRowY = -GalleryUiDesignTokens.SideTabSubFilterRowTopGapRef * s;
             if (reserveSortBar)
             {
-                rt.anchoredPosition = new Vector2(10f + bar + 5f * s, -10f);
-                rt.sizeDelta = new Vector2(tabAreaW - 10f - bar - 5f * s - 10f, 35f * s);
+                rt.anchoredPosition = new Vector2(margin + bar + gap, subRowY);
+                rt.sizeDelta = new Vector2(tabAreaW - margin - bar - gap - margin, rowH);
             }
             else
             {
-                rt.anchoredPosition = new Vector2(10f, -10f);
-                rt.sizeDelta = new Vector2(tabAreaW - 20f, 35f * s);
+                rt.anchoredPosition = new Vector2(margin, subRowY);
+                rt.sizeDelta = new Vector2(tabAreaW - 2f * margin, rowH);
             }
+            RescaleSearchInput(leftSubSearchInput, s, GalleryUiDesignTokens.SideTabRowHeightRef);
         }
 
         private void ApplyRightSubSearchLayoutScaled(float s)
         {
             if (rightSubSearchInput == null) return;
             RectTransform rt = rightSubSearchInput.GetComponent<RectTransform>();
-            const float tabAreaW = 220f;
+            ApplySideTabSubFilterRowAnchor(rt, false);
+            float tabAreaW = GalleryUiDesignTokens.SideTabColumnWidthRef * s;
+            float margin = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+            float gap = GalleryUiDesignTokens.SideTabControlGapRef * s;
+            float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
             float bar = SceneSourceSortBarBreadth(s);
             bool reserveSortBar = rightSubSceneSortBarActive
                 || (rightSubSortBtn != null && rightSubSortBtn.activeSelf);
+            float subRowY = -GalleryUiDesignTokens.SideTabSubFilterRowTopGapRef * s;
             if (reserveSortBar)
             {
-                rt.anchoredPosition = new Vector2(-10f - bar - 5f * s, -10f);
-                rt.sizeDelta = new Vector2(tabAreaW - 10f - bar - 5f * s - 10f, 35f * s);
+                rt.anchoredPosition = new Vector2(-margin - bar - gap, subRowY);
+                rt.sizeDelta = new Vector2(tabAreaW - margin - bar - gap - margin, rowH);
             }
             else
             {
-                rt.anchoredPosition = new Vector2(-10f, -10f);
-                rt.sizeDelta = new Vector2(tabAreaW - 20f, 35f * s);
+                rt.anchoredPosition = new Vector2(-margin, subRowY);
+                rt.sizeDelta = new Vector2(tabAreaW - 2f * margin, rowH);
             }
+            RescaleSearchInput(rightSubSearchInput, s, GalleryUiDesignTokens.SideTabRowHeightRef);
         }
-
-        /// <summary>Top inset for sub-tab scroll rects (anchors end at mid-split / hub line). Do not use TabScrollTopOffset (title-bar row — far too large here).</summary>
         private float SubTabScrollPaneTopOffset()
         {
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            return -(15f + 35f * s + 5f * s);
+            float s = ChromeScale;
+            float topGap = GalleryUiDesignTokens.SideTabSubFilterRowTopGapRef * s;
+            float rowH = GalleryUiDesignTokens.SideTabRowHeightRef * s;
+            return -(topGap + rowH + topGap);
         }
 
         /// <summary>Keeps grid, side tab scrollers, and sub clear buttons above the footer; call after tbox height animates.</summary>
@@ -406,6 +496,9 @@ namespace VPB
 
             contentScrollRT.offsetMin = new Vector2(leftOffset, gridBottomInset);
             contentScrollRT.offsetMax = new Vector2(rightOffset, topOffset);
+
+            // Category/subcategory split: raise split line when tall InfoBar would crush sub-pane.
+            try { SyncSideTabSplitAgainstBottomChrome(tabBottomInset, tabTopOffset); } catch { }
 
             if (leftTabScrollGO != null && leftTabScrollGO.activeSelf)
             {
@@ -446,6 +539,68 @@ namespace VPB
             }
 
             try { ApplyUserTagsStickyScrollChrome(tabTopOffset); } catch { }
+        }
+
+        /// <summary>
+        /// When InfoBar/detail-strip grows, fixed φ-split subcategory pane can shrink below usable height.
+        /// Raise split (grow sub-pane) so category tags/subcategory lists stay scrollable above footer.
+        /// </summary>
+        private void SyncSideTabSplitAgainstBottomChrome(float tabBottomInset, float tabTopOffset)
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            if (backgroundBoxGO == null) return;
+            RectTransform bg = backgroundBoxGO.GetComponent<RectTransform>();
+            if (bg == null) return;
+            float parentH = bg.rect.height;
+            if (parentH < 120f) return;
+
+            float minSubH = GalleryUiDesignTokens.SideTabSubPaneMinHeightRef * s;
+            float minMainH = GalleryUiDesignTokens.SideTabMainPaneMinHeightRef * s;
+            float subTopReserve = -SubTabScrollPaneTopOffset();
+            if (subTopReserve < 0f) subTopReserve = 0f;
+            float mainTopReserve = -tabTopOffset;
+            if (mainTopReserve < 0f) mainTopReserve = 0f;
+            float seam = SideTabSplitSeamInset();
+
+            AdjustOneSideTabSplit(leftTabScrollGO, leftSubTabScrollGO, leftActiveContent,
+                tabBottomInset, tabTopOffset, parentH, minSubH, minMainH, subTopReserve, mainTopReserve, seam);
+            AdjustOneSideTabSplit(rightTabScrollGO, rightSubTabScrollGO, rightActiveContent,
+                tabBottomInset, tabTopOffset, parentH, minSubH, minMainH, subTopReserve, mainTopReserve, seam);
+
+            try { SyncSideTabSubFilterRowChrome(s); } catch { }
+        }
+
+        private static void AdjustOneSideTabSplit(
+            GameObject mainScroll, GameObject subScroll, ContentType? activeContent,
+            float tabBottomInset, float tabTopOffset, float parentH,
+            float minSubH, float minMainH, float subTopReserve, float mainTopReserve, float seam)
+        {
+            if (mainScroll == null || subScroll == null || !subScroll.activeSelf) return;
+            RectTransform mainRT = mainScroll.GetComponent<RectTransform>();
+            RectTransform subRT = subScroll.GetComponent<RectTransform>();
+            if (mainRT == null || subRT == null) return;
+            // Only adjust true split stacks (sub pane not full-height).
+            if (subRT.anchorMax.y >= 0.95f) return;
+
+            float ideal = activeContent.HasValue
+                ? SideTabSplitSubPaneTopAnchorY(activeContent.Value)
+                : subRT.anchorMax.y;
+            float minSplit = (tabBottomInset + subTopReserve + minSubH) / parentH;
+            float maxSplit = 1f - (mainTopReserve + seam + minMainH) / parentH;
+            float splitY = ideal;
+            if (splitY < minSplit) splitY = minSplit;
+            if (maxSplit > 0.2f && splitY > maxSplit) splitY = maxSplit;
+            if (minSplit > maxSplit)
+                splitY = Mathf.Clamp(minSplit, 0.22f, 0.72f);
+            else
+                splitY = Mathf.Clamp(splitY, 0.22f, 0.72f);
+
+            float x = mainRT.anchorMin.x;
+            mainRT.anchorMin = new Vector2(x, splitY);
+            mainRT.anchorMax = new Vector2(x, 1f);
+            subRT.anchorMin = new Vector2(x, 0f);
+            subRT.anchorMax = new Vector2(x, splitY);
         }
 
         private void UpdateButtonState(Text btnText, bool isRight, ContentType type)
@@ -501,7 +656,7 @@ namespace VPB
             string text = followUser
                 ? VPBTranslation.T("gallery.follow.follow", "Follow")
                 : VPBTranslation.T("gallery.follow.static", "Static");
-            Color color = followUser ? new Color(0.15f, 0.45f, 0.6f, 1f) : new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color color = followUser ? UI.AccentBlue : UI.ChromeMid;
             Sprite spr = followUser ? galleryFollowOnSprite : galleryFollowOffSprite;
 
             if (rightFollowBtnIconImage != null && spr != null)
@@ -533,116 +688,36 @@ namespace VPB
             if (leftFollowBtnImage != null) leftFollowBtnImage.color = color;
         }
 
-        public void ApplyInnerPaneScale()
-        {
-            float s = VPBConfig.Instance.CurrentInnerPaneScale;
-            foreach (var action in innerPaneScaleActions)
-            {
-                try { action(s); } catch { }
-            }
-            try { ApplySideTabFilterRowVerticalLayout(s); } catch { }
-            try { ApplyTitleBarResponsiveLayout(s); } catch { }
-            // Layout / tab scroll chrome: rely on VPBConfig.ConfigChanged (UpdateLayout then
-            // RefreshSideTabAreasForConfigChange — no side-tab list rebuild) when callers TriggerChange.
-            try { ApplyUserTagsStickyScrollChrome(TabScrollTopOffset()); } catch { }
-        }
-
-        public void ApplySideButtonScale()
-        {
-            float scale = VPBConfig.Instance.CurrentSideButtonScale;
-            float w = 120f * scale;
-            float h = 50f * scale;
-            const int baseFont = 20;
-            const int minFont = 11;
-            float fontScale = Mathf.Clamp(scale, (float)minFont / (float)baseFont, 100f);
-            int fontSize = Mathf.RoundToInt(baseFont * fontScale);
-            float extra = (fontScale > 0f) ? (scale / fontScale) : 1f;
-            float containerW = 130f * scale;
-            float containerOffset = 140f * scale;
-            float hoverStripW = GallerySideHoverStripWidth * scale;
-            float hoverStripOffset = GallerySideHoverStripOffset * scale;
-
-            float squareW = 50f * scale;
-            for (int i = 0; i < rightSideButtons.Count; i++)
-            {
-                RectTransform rt = rightSideButtons[i];
-                if (rt == null) continue;
-                bool square = UsesSquareChromeSideButton(rt, rightSideButtons);
-                rt.sizeDelta = new Vector2(square ? squareW : w, h);
-                var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
-            }
-            for (int i = 0; i < leftSideButtons.Count; i++)
-            {
-                RectTransform rt = leftSideButtons[i];
-                if (rt == null) continue;
-                bool square = UsesSquareChromeSideButton(rt, leftSideButtons);
-                rt.sizeDelta = new Vector2(square ? squareW : w, h);
-                var t = rt.GetComponentInChildren<Text>(true);
-                if (t != null) { t.fontSize = fontSize; t.transform.localScale = new Vector3(extra, extra, 1f); }
-            }
-
-            if (rightSideContainer != null)
-            {
-                var rt = rightSideContainer.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
-            }
-            if (rightSideHoverStrip != null)
-            {
-                var rt = rightSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(hoverStripOffset, 0); }
-            }
-            if (leftSideContainer != null)
-            {
-                var rt = leftSideContainer.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
-            }
-            if (leftSideHoverStrip != null)
-            {
-                var rt = leftSideHoverStrip.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(hoverStripW, 0f); rt.anchoredPosition = new Vector2(-hoverStripOffset, 0); }
-            }
-
-            // Scale submenu buttons proportionally
-            float subW = 120f * 1.6f * scale;
-            int subFontSize = Mathf.RoundToInt(16f * scale);
-            foreach (var go in rightSaveSubmenuButtons)
-            {
-                if (go == null) continue;
-                var rt = go.GetComponent<RectTransform>();
-                if (rt != null) rt.sizeDelta = new Vector2(subW, h);
-                var t = go.GetComponentInChildren<Text>();
-                if (t != null) t.fontSize = subFontSize;
-            }
-            foreach (var go in leftSaveSubmenuButtons)
-            {
-                if (go == null) continue;
-                var rt = go.GetComponent<RectTransform>();
-                if (rt != null) rt.sizeDelta = new Vector2(subW, h);
-                var t = go.GetComponentInChildren<Text>();
-                if (t != null) t.fontSize = subFontSize;
-            }
-
-            UpdateSideButtonPositions();
-        }
-
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
+            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
             if (IsFixedTopDockMode())
             {
-                ApplyTopDockSideButtonsLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                ApplyTopDockSideButtonsLayout(ChromeScale);
                 return;
             }
-            float scale = VPBConfig.Instance.CurrentSideButtonScale;
-            float spacing = 60f * scale;
-            float groupGap = VPBConfig.Instance.EnableButtonGaps ? 10f * scale : 0f;
+            float scale = ChromeScale;
+            float spacing;
+            float groupGap;
+            try { ApplySideRailHeightFit(scale, out spacing, out groupGap); }
+            catch
+            {
+                spacing = GalleryUiDesignTokens.SideButtonSpacingRef * scale;
+                groupGap = VPBConfig.Instance != null && VPBConfig.Instance.EnableButtonGaps
+                    ? GalleryUiDesignTokens.SideButtonGroupGapRef * scale
+                    : 0f;
+            }
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
+            if (_sideRailOverflowCollapsedIdx.Count > 0)
+                stackHeight += spacing;
             float topY = stackHeight * 0.5f;
 
             // Settings
-            UpdateListPositions(rightSideButtons, topY, spacing, groupGap);
-            UpdateListPositions(leftSideButtons, topY, spacing, groupGap);
+            UpdateListPositions(rightSideButtons, topY, spacing, groupGap, isLeftRail: false);
+            UpdateListPositions(leftSideButtons, topY, spacing, groupGap, isLeftRail: true);
+            try { PlaceSideRailOverflowButtons(topY, spacing, groupGap, scale); } catch { }
+            try { SyncSideRailOpenFacetChrome(); } catch { }
 
             try
             {
@@ -1009,6 +1084,11 @@ namespace VPB
                         }
                     }
                 }
+                if (_leftSideRailOverflowBtnRT != null && leftSideContainer != null
+                    && _leftSideRailOverflowBtnRT.parent != leftSideContainer.transform)
+                    _leftSideRailOverflowBtnRT.SetParent(leftSideContainer.transform, worldPositionStays: false);
+                if (_leftSideRailOverflowBtnGO != null) _leftSideRailOverflowBtnGO.SetActive(false);
+                if (_rightSideRailOverflowBtnGO != null) _rightSideRailOverflowBtnGO.SetActive(false);
                 return;
             }
 
@@ -1032,95 +1112,78 @@ namespace VPB
             float s = paneScale <= 0f ? 1f : paneScale;
             RectTransform footerRT = paginationRT;
 
+            if (footerRT != null && footerRT.gameObject.activeInHierarchy)
+            {
+                try { LayoutRebuilder.ForceRebuildLayoutImmediate(footerRT); } catch { }
+            }
+            try { Canvas.ForceUpdateCanvases(); } catch { }
+
             // Compute free space between left/right footer sections.
             Bounds bLeft = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerLeftSectionRT);
             Bounds bRight = RectTransformUtility.CalculateRelativeRectTransformBounds(footerRT, _footerRightSectionRT);
-            float gap = 6f * s;
-            float leftEdge = bLeft.max.x + gap;
-            float rightEdge = bRight.min.x - gap;
-            float spaceW = Mathf.Max(0f, rightEdge - leftEdge);
+            SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            List<RectTransform> buttonList = leftSideButtons;
+            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            float gap = 10f * s;
+            float btnSz = GalleryUiDesignTokens.ButtonSizeRef * s;
+            GameObject sceneImportGo = leftSceneImportSideBtn != null ? leftSceneImportSideBtn : rightSceneImportSideBtn;
 
-            // Build single row from visible buttons (never remove buttons in Top dock).
-            List<RectTransform> buttons = new List<RectTransform>(leftSideButtons.Count);
-            for (int i = 0; i < leftSideButtons.Count; i++)
-            {
-                RectTransform rt = leftSideButtons[i];
-                if (rt == null || !rt.gameObject.activeSelf) continue;
-                buttons.Add(rt);
-            }
+            float availW = Mathf.Max(btnSz, bRight.min.x - bLeft.max.x - 8f * s);
+            try { ApplyTopDockSideButtonsOverflowFit(s, buttonList, layout, availW, btnSz, ref gap); } catch { }
 
-            float GetWidth(RectTransform rt)
-            {
-                if (rt == null) return 0f;
-                float w = 0f;
-                try { w = rt.rect.width; } catch { w = rt.sizeDelta.x; }
-                if (w <= 1f) w = rt.sizeDelta.x;
-                return w;
-            }
-
-            float GetHeight(RectTransform rt)
-            {
-                if (rt == null) return 0f;
-                float h = 0f;
-                try { h = rt.rect.height; } catch { h = rt.sizeDelta.y; }
-                if (h <= 1f) h = rt.sizeDelta.y;
-                return h;
-            }
-
-            float rowH = 40f * s;
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                float h = GetHeight(buttons[i]);
-                if (h > rowH) rowH = h;
-            }
-
-            // Reset scale before measuring/layout.
             _footerSideButtonsGroupRT.localScale = Vector3.one;
 
-            float totalW = 0f;
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                float w = GetWidth(buttons[i]);
-                if (i > 0) totalW += gap;
-                totalW += w;
-            }
-
-            float scale = 1f;
-            if (spaceW > 1f && totalW > 1f && totalW > spaceW + 0.5f)
-            {
-                scale = spaceW / totalW;
-                // Clamp: keep usable, but still guarantee single row.
-                if (scale < 0.5f) scale = 0.5f;
-                if (scale > 1f) scale = 1f;
-            }
-            _footerSideButtonsGroupRT.localScale = new Vector3(scale, scale, 1f);
-
-            // Size group in unscaled units so visual width matches available space after scaling.
-            float groupW = totalW;
-            float groupH = rowH;
-            _footerSideButtonsGroupRT.sizeDelta = new Vector2(groupW, groupH);
-
-            // Layout row (unscaled coordinates).
             float x0 = 0f;
-            for (int i = 0; i < buttons.Count; i++)
+            bool firstInRow = true;
+            for (int i = 0; i < layout.Length; i++)
             {
-                RectTransform rt = buttons[i];
-                if (rt == null || !rt.gameObject.activeSelf) continue;
-                float w = GetWidth(rt);
+                int idx = layout[i].buttonIndex;
+                if (idx < 0 || idx >= buttonList.Count) continue;
+                if (_sideRailOverflowCollapsedIdx.Contains(idx)) continue;
+
+                RectTransform rt = buttonList[idx];
+                bool isSceneImport = sceneImportGo != null && rt != null && rt.gameObject == sceneImportGo;
+
+                if (rt == null || !rt.gameObject.activeSelf)
+                {
+                    if (isSceneImport && !showSceneImport)
+                    {
+                        if (!firstInRow) x0 += gap;
+                        x0 += btnSz;
+                        firstInRow = false;
+                    }
+                    continue;
+                }
+
+                if (!firstInRow) x0 += gap;
+
                 rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
                 rt.pivot = new Vector2(0f, 0.5f);
+                rt.sizeDelta = new Vector2(btnSz, btnSz);
                 rt.anchoredPosition = new Vector2(x0, 0f);
-                x0 += w + gap;
+                ScaleButtonIconPadding(rt, s);
+                x0 += btnSz;
+                firstInRow = false;
             }
 
-            // Center within available free space.
-            float cx = leftEdge + spaceW * 0.5f;
-            float half = (groupW * scale) * 0.5f;
-            if (spaceW > 1f)
+            if (_sideRailOverflowCollapsedIdx.Count > 0 && _leftSideRailOverflowBtnRT != null && _leftSideRailOverflowBtnGO != null
+                && _leftSideRailOverflowBtnGO.activeSelf)
             {
-                if (cx - half < leftEdge) cx = leftEdge + half;
-                if (cx + half > rightEdge) cx = rightEdge - half;
+                if (!firstInRow) x0 += gap;
+                RectTransform ov = _leftSideRailOverflowBtnRT;
+                ov.anchorMin = ov.anchorMax = new Vector2(0f, 0.5f);
+                ov.pivot = new Vector2(0f, 0.5f);
+                ov.sizeDelta = new Vector2(btnSz, btnSz);
+                ov.anchoredPosition = new Vector2(x0, 0f);
+                x0 += btnSz;
             }
+
+            float groupW = x0;
+            float groupH = btnSz;
+            _footerSideButtonsGroupRT.sizeDelta = new Vector2(groupW, groupH);
+
+            // Center in free gap between left/right packs (not panel mid / equal thirds).
+            float cx = (bLeft.max.x + bRight.min.x) * 0.5f;
             _footerSideButtonsGroupRT.anchoredPosition = new Vector2(cx, 0f);
         }
 
@@ -1149,6 +1212,21 @@ namespace VPB
             }
         }
 
+        private void CollectLayoutOrderedVisibleSideButtons(List<RectTransform> dest, List<RectTransform> buttonList)
+        {
+            if (dest == null || buttonList == null) return;
+            dest.Clear();
+            SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
+            for (int i = 0; i < layout.Length; i++)
+            {
+                int idx = layout[i].buttonIndex;
+                if (idx < 0 || idx >= buttonList.Count) continue;
+                RectTransform rt = buttonList[idx];
+                if (rt == null || !rt.gameObject.activeSelf) continue;
+                dest.Add(rt);
+            }
+        }
+
         private SideButtonLayoutEntry[] GetSideButtonsLayout()
         {
             string title = currentCategoryTitle ?? "";
@@ -1165,10 +1243,10 @@ namespace VPB
             int idxPath = -1;
             int idxHistory = -1;
             int idxUserTags = -1;
+            int idxSceneImport = -1;
             int idxTarget = -1;
             int idxApplyMode = -1;
-            int idxKeepOutfit = -1;
-            int idxReplace = -1;
+            int idxRemoveMode = -1;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
             int idxRemoveAtom = -1;
@@ -1187,12 +1265,14 @@ namespace VPB
 
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
-                    idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
+                    // Hide-creator setting: omit from layout so button never takes a rail/footer slot.
+                    if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryHideCreatorSideButtons)
+                        idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
+                    else
+                        idxCreator = -1;
                     idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
                     // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);
-                    idxKeepOutfit = FindIndexByTextRef(rightKeepClothingBtnText != null ? rightKeepClothingBtnText : leftKeepClothingBtnText);
-                    idxReplace = FindIndexByTextRef(rightReplaceBtnText != null ? rightReplaceBtnText : leftReplaceBtnText);
                     idxFloating = FindIndexByTextRef(rightDesktopModeBtnText != null ? rightDesktopModeBtnText : leftDesktopModeBtnText);
                     idxFollow = FindIndexByTextRef(rightFollowBtnText != null ? rightFollowBtnText : leftFollowBtnText);
 
@@ -1203,6 +1283,13 @@ namespace VPB
                     {
                         int i = refList.FindIndex(rt => rt != null && rt.gameObject == utGo);
                         if (i >= 0) idxUserTags = i;
+                    }
+
+                    GameObject impGo = rightSceneImportSideBtn != null ? rightSceneImportSideBtn : leftSceneImportSideBtn;
+                    if (impGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == impGo);
+                        if (i >= 0) idxSceneImport = i;
                     }
 
                     if (rightRemoveAllHairBtn != null)
@@ -1224,6 +1311,13 @@ namespace VPB
                         if (i >= 0) idxRemoveAtom = i;
                     }
 
+                    GameObject removeModeGo = rightRemoveModeSideBtn != null ? rightRemoveModeSideBtn : leftRemoveModeSideBtn;
+                    if (removeModeGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == removeModeGo);
+                        if (i >= 0) idxRemoveMode = i;
+                    }
+
                     GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
                     if (saveGo != null)
                     {
@@ -1242,28 +1336,34 @@ namespace VPB
             }
             catch { }
 
+            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            int zone = GalleryUiDesignTokens.SideButtonZoneGapTier;
+
             var layout = new List<SideButtonLayoutEntry>()
             {
-                new SideButtonLayoutEntry(idxFloating, 0, 2), // Floating
-                new SideButtonLayoutEntry(idxClone, 0, 0), // Clone
-                new SideButtonLayoutEntry(idxFollow, 0, 0), // Follow
+                // ── Layout zone ──────────────────────────────────────────────
+                new SideButtonLayoutEntry(idxFloating, 0, zone), // Floating / Fixed
+                new SideButtonLayoutEntry(idxClone, 0, 0),
+                new SideButtonLayoutEntry(idxFollow, 0, 0),
 
-                new SideButtonLayoutEntry(idxUserTags, 0, 2), // Tags (UserTags) — above Category
-                new SideButtonLayoutEntry(idxCategory, 0, 0), // Category
-                new SideButtonLayoutEntry(idxCreator, 0, 0), // Creator
-                new SideButtonLayoutEntry(idxPath, 0, 0), // Path
-                new SideButtonLayoutEntry(idxHistory, 0, 0), // History (directly under Path)
+                // ── Browse facets ────────────────────────────────────────────
+                new SideButtonLayoutEntry(idxSceneImport, 0, zone), // Import (Scenes only)
+                new SideButtonLayoutEntry(idxUserTags, 0, showSceneImport ? 0 : zone), // Tags — keep zone gap when Import hidden
+                new SideButtonLayoutEntry(idxCategory, 0, 0),
+                new SideButtonLayoutEntry(idxCreator, 0, 0),
+                new SideButtonLayoutEntry(idxPath, 0, 0),
+                new SideButtonLayoutEntry(idxHistory, 0, 0),
 
-                new SideButtonLayoutEntry(idxSave, 0, 2), // Save
+                // ── Tools ────────────────────────────────────────────────────
+                new SideButtonLayoutEntry(idxRemoveMode, 0, zone), // Remove Item Mode
+                new SideButtonLayoutEntry(idxApplyMode, 0, 0),
+                new SideButtonLayoutEntry(idxSave, 0, 0),
+                new SideButtonLayoutEntry(idxTarget, 0, 0), // legacy index (usually -1)
 
-                new SideButtonLayoutEntry(idxTarget, 0, 0), // Target
-                new SideButtonLayoutEntry(idxApplyMode, 0, 0), // Apply Mode
-                new SideButtonLayoutEntry(idxKeepOutfit, 0, 0), // Keep body clothes vs preset
-                new SideButtonLayoutEntry(idxReplace, 0, 0), // Replace
-
-                new SideButtonLayoutEntry(idxRemoveClothing, 0, 0), // Remove (clothing context)
-                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0), // Remove (scene context)
-                new SideButtonLayoutEntry(idxRemoveHair, 0, 0), // Remove (hair context)
+                // Category-context remove lists (same tools family, slight sub-gap)
+                new SideButtonLayoutEntry(idxRemoveClothing, 0, 2),
+                new SideButtonLayoutEntry(idxRemoveAtom, 0, 0),
+                new SideButtonLayoutEntry(idxRemoveHair, 0, 0),
             };
 
             return layout.ToArray();
@@ -1328,9 +1428,20 @@ namespace VPB
                 if (string.IsNullOrEmpty(atomUid)) return;
 
                 JSONNode atomNode = null;
+
+                // Primary: Atom.Store serializes the atom into a JSONArray (same call Try-On uses).
+                // This is the reliable path; the reflection probes below are a version fallback.
                 try
                 {
-                    // Try common serialization methods (VaM versions differ)
+                    JSONArray storeArr = new JSONArray();
+                    atom.Store(storeArr, true, true);
+                    if (storeArr.Count > 0) atomNode = storeArr[0];
+                }
+                catch { }
+
+                try
+                {
+                    // Reflection fallback only if Store did not capture (loop is gated on atomNode == null).
                     string[] candidates = new[] { "GetSaveJSON", "GetJSON", "GetAtomJSON", "GetSceneJSON" };
                     for (int i = 0; i < candidates.Length && atomNode == null; i++)
                     {
@@ -1652,26 +1763,69 @@ namespace VPB
             previewRemoveHairAllPrevVals.Clear();
         }
 
+        private void RefreshSceneImportSideButtonVisibility()
+        {
+            bool show = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            if (rightSceneImportSideBtn != null && rightSceneImportSideBtn.activeSelf != show)
+                rightSceneImportSideBtn.SetActive(show);
+            if (leftSceneImportSideBtn != null && leftSceneImportSideBtn.activeSelf != show)
+                leftSceneImportSideBtn.SetActive(show);
+        }
+
+        // True when the current selection contains an appearance preset. Used to reveal the
+        // appearance clothing-mode row in mixed views (History) only when it's relevant.
+        private bool SelectionContainsAppearance()
+        {
+            if (selectedFiles == null) return false;
+            for (int i = 0; i < selectedFiles.Count; i++)
+            {
+                FileEntry f = selectedFiles[i];
+                if (f == null) continue;
+                if (TryOnClassify(f) == TryOnKind.Appearance) return true;
+            }
+            return false;
+        }
+
         private void UpdateSideContextActions()
         {
+            RefreshSceneImportSideButtonVisibility();
+
             string title = currentCategoryTitle ?? "";
             bool isClothing = title.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isHair = title.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isSubScene = title.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isScene = !isSubScene && title.IndexOf("Scene", StringComparison.OrdinalIgnoreCase) >= 0;
             bool isAppearance = title.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool showSave = !IsHubMode;
+            bool showSave = true;
 
-            if (rightKeepClothingBtnGO != null) rightKeepClothingBtnGO.SetActive(isAppearance);
-            if (leftKeepClothingBtnGO != null) leftKeepClothingBtnGO.SetActive(isAppearance);
-            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(isClothing);
-            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(isClothing);
-            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(isHair);
-            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(isHair);
-            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(isScene);
-            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(isScene);
+            // Appearance clothing-apply-mode segmented row (Full Look / Keep My Outfit / Outfit Only / Merge Outfit)
+            // lives in the toolbox. Shown while browsing the Appearance category, and in History mode
+            // (mixed items) only when the selected item is actually an appearance preset — so it isn't
+            // always on when History contains scenes, clothing, etc.
+            bool isHistoryBrowse = activeContentType == ContentType.History
+                || leftActiveContent == ContentType.History
+                || rightActiveContent == ContentType.History;
+            bool showClothingMode = isAppearance || (isHistoryBrowse && SelectionContainsAppearance());
+            if (tboxClothingModeRowGO != null && tboxClothingModeRowGO.activeSelf != showClothingMode)
+            {
+                tboxClothingModeRowGO.SetActive(showClothingMode);
+                if (showClothingMode) UpdateKeepClothingButtonState();
+                try { RefreshTboxFlexButtonLayout(); } catch { }
+            }
+            if (rightRemoveAllClothingBtn != null) rightRemoveAllClothingBtn.SetActive(false);
+            if (leftRemoveAllClothingBtn != null) leftRemoveAllClothingBtn.SetActive(false);
+            if (rightRemoveAllHairBtn != null) rightRemoveAllHairBtn.SetActive(false);
+            if (leftRemoveAllHairBtn != null) leftRemoveAllHairBtn.SetActive(false);
+            if (rightRemoveAtomBtn != null) rightRemoveAtomBtn.SetActive(false);
+            if (leftRemoveAtomBtn != null) leftRemoveAtomBtn.SetActive(false);
             if (rightSaveBtnGO != null) rightSaveBtnGO.SetActive(showSave);
             if (leftSaveBtnGO != null) leftSaveBtnGO.SetActive(showSave);
+
+            // Keep remove-list siderail in sync while Remove Mode (bin) is on.
+            if (_removeModeActive)
+            {
+                try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
+            }
 
             // Update arrow indicators immediately (not only after submenu hover).
             bool anyClothingChanged = false;
@@ -1831,7 +1985,7 @@ namespace VPB
             return (visibleCount - 1) * spacing + gapUnits * gap;
         }
 
-        /// <summary>Square icon chrome on side rails: 50×50 when loaded sprites exist.</summary>
+        /// <summary>Square icon chrome on side rails: SideButtonSquareRef when loaded sprites exist.</summary>
         private bool UsesSquareChromeSideButton(RectTransform rt, List<RectTransform> list)
         {
             if (rt == null || list == null) return false;
@@ -1855,6 +2009,8 @@ namespace VPB
             if (leftSaveBtnGO != null && go == leftSaveBtnGO) return leftSaveBtnIconImage != null;
             if (isRight)
             {
+                if (rightSceneImportSideBtn != null && go == rightSceneImportSideBtn) return true;
+                if (rightRemoveModeSideBtn != null && go == rightRemoveModeSideBtn) return true;
                 if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
@@ -1866,8 +2022,6 @@ namespace VPB
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && rightApplyModeBtnIconImage != null && rightApplyModeBtnImage != null && go == rightApplyModeBtnImage.gameObject)
                     return true;
-                if ((galleryAddSprite != null || galleryReplaceSprite != null) && rightReplaceBtnIconImage != null && rightReplaceBtnImage != null && go == rightReplaceBtnImage.gameObject)
-                    return true;
                 if (galleryRemoveSprite != null && rightRemoveAtomBtnIconImage != null && rightRemoveAtomBtn != null && go == rightRemoveAtomBtn)
                     return true;
                 if (galleryRemoveSprite != null && rightRemoveAllClothingBtnIconImage != null && rightRemoveAllClothingBtn != null && go == rightRemoveAllClothingBtn)
@@ -1877,6 +2031,8 @@ namespace VPB
             }
             else
             {
+                if (leftSceneImportSideBtn != null && go == leftSceneImportSideBtn) return true;
+                if (leftRemoveModeSideBtn != null && go == leftRemoveModeSideBtn) return true;
                 if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;
@@ -1887,8 +2043,6 @@ namespace VPB
                 if (leftHistoryBtnImage != null && go == leftHistoryBtnImage.gameObject)
                     return true;
                 if ((galleryApplyOneClickSprite != null || galleryApplyTwoClickSprite != null) && leftApplyModeBtnIconImage != null && leftApplyModeBtnImage != null && go == leftApplyModeBtnImage.gameObject)
-                    return true;
-                if ((galleryAddSprite != null || galleryReplaceSprite != null) && leftReplaceBtnIconImage != null && leftReplaceBtnImage != null && go == leftReplaceBtnImage.gameObject)
                     return true;
                 if (galleryRemoveSprite != null && leftRemoveAtomBtnIconImage != null && leftRemoveAtomBtn != null && go == leftRemoveAtomBtn)
                     return true;
@@ -1904,8 +2058,7 @@ namespace VPB
         private void ApplySquareSideButtonEdgeAlignment(RectTransform rt, List<RectTransform> list, float y)
         {
             if (rt == null || list == null) return;
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.SideButtonScale : 1f;
-            float inset = 6f * scale;
+            float inset = GalleryUiDesignTokens.SideButtonEdgeInsetRef * ChromeScale;
             bool isRightRail = ReferenceEquals(list, rightSideButtons);
             if (UsesSquareChromeSideButton(rt, list))
             {
@@ -1921,55 +2074,174 @@ namespace VPB
             }
         }
 
-        private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap)
+        private void UpdateListPositions(List<RectTransform> buttons, float startY, float spacing, float gap, bool isLeftRail)
         {
             if (buttons == null) return;
 
             SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
             float y = startY;
             bool firstVisible = true;
+            int sepSlot = 0;
+            GameObject[] seps = EnsureSideRailZoneSeparators(isLeftRail);
+            bool showSeps = gap > 0.01f && seps != null;
+
+            for (int s = 0; s < SideRailZoneSepSlots; s++)
+            {
+                if (seps != null && seps[s] != null)
+                    seps[s].SetActive(false);
+            }
+
             for (int i = 0; i < layout.Length; i++)
             {
                 RectTransform rt = (layout[i].buttonIndex >= 0 && layout[i].buttonIndex < buttons.Count) ? buttons[layout[i].buttonIndex] : null;
                 if (rt == null || !rt.gameObject.activeSelf) continue;
 
-                if (!firstVisible) y -= (spacing + gap * layout[i].gapTier);
+                if (!firstVisible)
+                {
+                    float step = spacing + gap * layout[i].gapTier;
+                    if (showSeps && layout[i].gapTier > 0 && sepSlot < SideRailZoneSepSlots && seps[sepSlot] != null)
+                    {
+                        float sepY = y - step * 0.5f;
+                        PlaceSideRailZoneSep(seps[sepSlot], buttons, sepY, isLeftRail);
+                        seps[sepSlot].SetActive(true);
+                        sepSlot++;
+                    }
+                    y -= step;
+                }
                 ApplySquareSideButtonEdgeAlignment(rt, buttons, y);
                 firstVisible = false;
             }
+        }
 
-#if false
-            if (buttons == null || buttons.Count < 12) return;
-            
-            // 0: Fixed/Floating
-            buttons[0].anchoredPosition = new Vector2(0, startY);
-            // 1: Settings
-            buttons[1].anchoredPosition = new Vector2(0, startY - spacing);
-            // 2: Follow
-            buttons[2].anchoredPosition = new Vector2(0, startY - spacing * 2 - gap);
-            // 3: Clone
-            buttons[3].anchoredPosition = new Vector2(0, startY - spacing * 3 - gap);
-            // 4: Category
-            buttons[4].anchoredPosition = new Vector2(0, startY - spacing * 4 - gap * 2);
-            // 5: Creator
-            buttons[5].anchoredPosition = new Vector2(0, startY - spacing * 5 - gap * 2);
-            // 6: Status
-            buttons[6].anchoredPosition = new Vector2(0, startY - spacing * 6 - gap * 2);
-            // 7: Hub (under Status)
-            buttons[10].anchoredPosition = new Vector2(0, startY - spacing * 7 - gap * 2);
+        private GameObject[] EnsureSideRailZoneSeparators(bool isLeftRail)
+        {
+            GameObject container = isLeftRail ? leftSideContainer : rightSideContainer;
+            if (container == null) return null;
+            GameObject[] seps = isLeftRail ? _leftSideZoneSeps : _rightSideZoneSeps;
+            if (seps != null && seps.Length == SideRailZoneSepSlots && seps[0] != null)
+                return seps;
 
-            // 8: Target (start lower group with extra gap)
-            buttons[7].anchoredPosition = new Vector2(0, startY - spacing * 8 - gap * 4);
+            seps = new GameObject[SideRailZoneSepSlots];
+            for (int i = 0; i < SideRailZoneSepSlots; i++)
+            {
+                GameObject go = UI.AddChildGOImage(
+                    container,
+                    new Color(1f, 1f, 1f, 0.14f),
+                    AnchorPresets.middleCenter,
+                    GalleryUiDesignTokens.SideButtonZoneSepWidthRef,
+                    GalleryUiDesignTokens.SideButtonZoneSepHeightRef,
+                    Vector2.zero);
+                go.name = isLeftRail ? ("LeftSideZoneSep" + i) : ("RightSideZoneSep" + i);
+                go.SetActive(false);
+                try
+                {
+                    var img = go.GetComponent<Image>();
+                    if (img != null) img.raycastTarget = false;
+                }
+                catch { }
+                seps[i] = go;
+            }
+            if (isLeftRail) _leftSideZoneSeps = seps;
+            else _rightSideZoneSeps = seps;
+            return seps;
+        }
 
-            // 9: Apply Mode
-            buttons[8].anchoredPosition = new Vector2(0, startY - spacing * 9 - gap * 4);
+        private void PlaceSideRailZoneSep(GameObject sep, List<RectTransform> list, float y, bool isLeftRail)
+        {
+            if (sep == null || list == null) return;
+            RectTransform rt = sep.GetComponent<RectTransform>();
+            if (rt == null) return;
+            float scale = ChromeScale;
+            float w = GalleryUiDesignTokens.SideButtonZoneSepWidthRef * scale;
+            float h = Mathf.Max(1f, GalleryUiDesignTokens.SideButtonZoneSepHeightRef * scale);
+            rt.sizeDelta = new Vector2(w, h);
+            float inset = GalleryUiDesignTokens.SideButtonEdgeInsetRef * scale;
+            if (isLeftRail)
+            {
+                rt.anchorMin = rt.anchorMax = new Vector2(1f, 0.5f);
+                rt.pivot = new Vector2(1f, 0.5f);
+                rt.anchoredPosition = new Vector2(-inset - (GalleryUiDesignTokens.SideButtonSquareRef * scale - w) * 0.5f, y);
+            }
+            else
+            {
+                rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+                rt.pivot = new Vector2(0f, 0.5f);
+                rt.anchoredPosition = new Vector2(inset + (GalleryUiDesignTokens.SideButtonSquareRef * scale - w) * 0.5f, y);
+            }
+        }
 
-            // 10: Add/Replace
-            buttons[9].anchoredPosition = new Vector2(0, startY - spacing * 10 - gap * 4);
+        /// <summary>Rim open browse-facet buttons so active pane is not color-only (SidePanelHeader still names it).</summary>
+        private void SyncSideRailOpenFacetChrome()
+        {
+            SyncSideRailOpenFacetChromeForSide(isLeft: true);
+            SyncSideRailOpenFacetChromeForSide(isLeft: false);
+        }
 
-            // 11: Undo
-            buttons[11].anchoredPosition = new Vector2(0, startY - spacing * 12 - gap * 3);
-#endif
+        private void SyncSideRailOpenFacetChromeForSide(bool isLeft)
+        {
+            ContentType? active = isLeft ? leftActiveContent : rightActiveContent;
+            bool importOpen = importSidebarActive && importSidebarOnLeft == isLeft;
+
+            GameObject cat = isLeft
+                ? (leftCategoryBtnImage != null ? leftCategoryBtnImage.gameObject : null)
+                : (rightCategoryBtnImage != null ? rightCategoryBtnImage.gameObject : null);
+            GameObject cre = isLeft
+                ? (leftCreatorBtnImage != null ? leftCreatorBtnImage.gameObject : null)
+                : (rightCreatorBtnImage != null ? rightCreatorBtnImage.gameObject : null);
+            GameObject path = isLeft
+                ? (leftPathBtnImage != null ? leftPathBtnImage.gameObject : null)
+                : (rightPathBtnImage != null ? rightPathBtnImage.gameObject : null);
+            GameObject hist = isLeft
+                ? (leftHistoryBtnImage != null ? leftHistoryBtnImage.gameObject : null)
+                : (rightHistoryBtnImage != null ? rightHistoryBtnImage.gameObject : null);
+            GameObject tags = isLeft ? leftUserTagsSideBtn : rightUserTagsSideBtn;
+            GameObject imp = isLeft ? leftSceneImportSideBtn : rightSceneImportSideBtn;
+
+            SetSideRailFacetSelected(cat, active == ContentType.Category, ColorCategory);
+            SetSideRailFacetSelected(cre, active == ContentType.Creator, ColorCreator);
+            SetSideRailFacetSelected(path, active == ContentType.Path, ColorPath);
+            SetSideRailFacetSelected(hist, active == ContentType.History, ColorHistoryAccent);
+            SetSideRailFacetSelected(tags,
+                active == ContentType.UserTags || active == ContentType.UserTagsApplied,
+                new Color(0.14f, 0.42f, 0.48f, 1f));
+            SetSideRailFacetSelected(imp, importOpen, ColorSceneImport);
+        }
+
+        private static void SetSideRailFacetSelected(GameObject btn, bool selected, Color facetColor)
+        {
+            if (btn == null) return;
+            UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
+            if (hb == null) return;
+
+            // If a prior build installed an outside hover-dot, drop it so full rim highlight works again.
+            bool clearedDot = false;
+            if (hb.hoverBorderGO != null)
+            {
+                try { UnityEngine.Object.Destroy(hb.hoverBorderGO); } catch { }
+                hb.hoverBorderGO = null;
+                clearedDot = true;
+            }
+
+            // Selected: bright facet rim. Idle: default yellow hover (do not leave selected tint).
+            Color accent = selected
+                ? Color.Lerp(facetColor, Color.white, 0.55f)
+                : new Color(1f, 1f, 0f, 1f);
+
+            bool selChanged = hb.isSelected != selected;
+            bool colorChanged = hb.hoverColor != accent;
+            if (!selChanged && !colorChanged && !clearedDot) return;
+
+            hb.isSelected = selected;
+            hb.hoverColor = accent;
+            // Full ApplyBorderSettings only when tint/layout inputs change; selection-only = show/hide rim.
+            if (colorChanged || clearedDot)
+            {
+                try { hb.ApplyBorderSettings(); } catch { }
+            }
+            else
+            {
+                hb.SyncIndicatorVisibility();
+            }
         }
 
 

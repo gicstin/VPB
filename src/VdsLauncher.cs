@@ -785,5 +785,48 @@ namespace VPB
 
             return false;
         }
+
+        public static string BenchResolveScene(string sceneSpec)
+        {
+            return ResolveScene(sceneSpec);
+        }
+
+        public static bool BenchLoadScene(string resolved)
+        {
+            if (string.IsNullOrEmpty(resolved)) return false;
+            var sc = SuperController.singleton;
+            if (sc == null) return false;
+
+            try
+            {
+                string sceneJsonText = null;
+                if (File.Exists(resolved))
+                    sceneJsonText = File.ReadAllText(resolved);
+                else if (resolved.Contains(":/"))
+                {
+                    using (var fileEntryStream = MVR.FileManagement.FileManager.OpenStream(resolved, true))
+                    using (var sr = new StreamReader(fileEntryStream.Stream))
+                        sceneJsonText = sr.ReadToEnd();
+                }
+                if (!string.IsNullOrEmpty(sceneJsonText))
+                    FileButton.EnsureInstalledInternal(sceneJsonText);
+            }
+            catch { }
+
+            try
+            {
+                FileEntry entry = null;
+                try { entry = FileManager.GetFileEntry(resolved); } catch { entry = null; }
+                SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, resolved);
+            }
+            catch { }
+
+            return InvokeLoad(sc, resolved);
+        }
+
+        public static void BenchApplySetting(string fieldName, string rawValue)
+        {
+            TryApplySetting(fieldName, rawValue);
+        }
     }
 }

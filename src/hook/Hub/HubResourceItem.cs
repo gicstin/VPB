@@ -288,6 +288,7 @@ namespace VPB
 
         protected void SyncCreatorIconTexture(VPB.HubImageLoaderThreaded.QueuedImage qi)
         {
+            creatorIconQueuedImage = null;
             creatorIconTexture = qi.tex;
             if (creatorIconImage != null && creatorIconTexture != null)
             {
@@ -324,6 +325,7 @@ namespace VPB
 
         protected void SyncThumbnailTexture(VPB.HubImageLoaderThreaded.QueuedImage qi)
         {
+            thumbnailQueuedImage = null;
             thumbnailTexture = qi.tex;
             if (thumbnailImage != null)
             {
@@ -911,10 +913,12 @@ namespace VPB
             if (creatorIconQueuedImage != null)
             {
                 creatorIconQueuedImage.cancel = true;
+                creatorIconQueuedImage = null;
             }
             if (thumbnailQueuedImage != null)
             {
                 thumbnailQueuedImage.cancel = true;
+                thumbnailQueuedImage = null;
             }
         }
 
@@ -922,38 +926,29 @@ namespace VPB
         {
             if (VPB.HubImageLoaderThreaded.singleton == null) return;
 
-            if (creatorIconQueuedImage != null && !creatorIconQueuedImage.processed)
+            if (creatorIconQueuedImage == null)
             {
-                creatorIconQueuedImage.cancel = false;
-                if (useQueueImmediate)
+                if (creatorIconTexture != null && creatorIconImage != null)
                 {
-                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(creatorIconQueuedImage);
+                    creatorIconImage.texture = creatorIconTexture;
                 }
-                else
+                else if (!string.IsNullOrEmpty(creatorIconUrlJSON.val))
                 {
-                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(creatorIconQueuedImage);
+                    SyncCreatorIconUrl(creatorIconUrlJSON.val);
                 }
-            }
-            else if (creatorIconQueuedImage == null && !string.IsNullOrEmpty(creatorIconUrlJSON.val))
-            {
-                SyncCreatorIconUrl(creatorIconUrlJSON.val);
             }
 
-            if (thumbnailQueuedImage != null && !thumbnailQueuedImage.processed)
+            if (thumbnailQueuedImage == null)
             {
-                thumbnailQueuedImage.cancel = false;
-                if (useQueueImmediate)
+                if (thumbnailTexture != null && thumbnailImage != null)
                 {
-                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnailImmediate(thumbnailQueuedImage);
+                    thumbnailImage.texture = thumbnailTexture;
+                    thumbnailImage.color = Color.white;
                 }
-                else
+                else if (!string.IsNullOrEmpty(thumbnailUrlJSON.val))
                 {
-                    VPB.HubImageLoaderThreaded.singleton.QueueThumbnail(thumbnailQueuedImage);
+                    SyncThumbnailUrl(thumbnailUrlJSON.val);
                 }
-            }
-            else if (thumbnailQueuedImage == null && !string.IsNullOrEmpty(thumbnailUrlJSON.val))
-            {
-                SyncThumbnailUrl(thumbnailUrlJSON.val);
             }
         }
 
@@ -962,10 +957,12 @@ namespace VPB
             if (creatorIconQueuedImage != null)
             {
                 creatorIconQueuedImage.cancel = true;
+                creatorIconQueuedImage = null;
             }
             if (thumbnailQueuedImage != null)
             {
                 thumbnailQueuedImage.cancel = true;
+                thumbnailQueuedImage = null;
             }
         }
 

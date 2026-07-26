@@ -32,13 +32,48 @@ namespace VPB
         public List<string> ClothingTags;
         public List<string> HairFileEntryNames;
         public List<string> HairTags;
+        /// <summary>Windows code page for zip entry names; 0 = system default (legacy rows).</summary>
+        public int ZipNameCodePage;
 
 		public void Read(BinaryReader reader)
 		{
             Read(reader, true);
         }
 
+        public void ReadPayloadBody(BinaryReader reader)
+        {
+            Read(reader, false);
+        }
+
+        public byte[] SerializePayloadBody()
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (BinaryWriter writer = new BinaryWriter(ms))
+                {
+                    WritePayloadBody(writer);
+                    writer.Flush();
+                }
+                return ms.ToArray();
+            }
+        }
+
+        public void DeserializePayloadBody(byte[] data)
+        {
+            if (data == null || data.Length == 0) return;
+            using (MemoryStream ms = new MemoryStream(data, false))
+            using (BinaryReader reader = new BinaryReader(ms))
+            {
+                ReadPayloadBody(reader);
+            }
+        }
+
         public void Read(BinaryReader reader, bool includeVarMeta)
+        {
+            Read(reader, includeVarMeta, 7);
+        }
+
+        public void Read(BinaryReader reader, bool includeVarMeta, int legacyVersion)
         {
             //FileEntryNames
             {
@@ -143,11 +178,30 @@ namespace VPB
                 VarLastWriteTimeUtcTicks = reader.ReadInt64();
                 IsInvalid = reader.ReadBoolean();
                 VarInternalCreationTimeBinary = reader.ReadInt64();
+                ZipNameCodePage = 0;
+                // v7 added trailing ZipNameCodePage int. For v6, those 4 bytes belong to the next
+                // record's string-length prefix; reading them here shifts position and corrupts the rest.
+                if (legacyVersion >= 7
+                    && reader.BaseStream != null
+                    && reader.BaseStream.Length - reader.BaseStream.Position >= 4)
+                {
+                    try { ZipNameCodePage = reader.ReadInt32(); } catch { ZipNameCodePage = 0; }
+                }
             }
         }
 
 		public void Write(BinaryWriter writer)
 		{
+            WritePayloadBody(writer);
+            writer.Write(VarFileSize);
+            writer.Write(VarLastWriteTimeUtcTicks);
+            writer.Write(IsInvalid);
+            writer.Write(VarInternalCreationTimeBinary);
+            writer.Write(ZipNameCodePage);
+        }
+
+        public void WritePayloadBody(BinaryWriter writer)
+        {
             //FileEntryNames
             {
                 var count = FileEntryNames?.Count ?? 0;
@@ -245,10 +299,6 @@ namespace VPB
                     }
                 }
             }
-            writer.Write(VarFileSize);
-            writer.Write(VarLastWriteTimeUtcTicks);
-            writer.Write(IsInvalid);
-            writer.Write(VarInternalCreationTimeBinary);
         }
     }
 
@@ -288,6 +338,45 @@ namespace VPB
 		private static readonly object ZipNameEncodingCacheLock = new object();
 		private static readonly Dictionary<string, ZipNameEncodingCacheItem> ZipNameEncodingCache = new Dictionary<string, ZipNameEncodingCacheItem>(StringComparer.OrdinalIgnoreCase);
 
+		/// <summary>Per-package code page from manifest; <see cref="int.MinValue"/> when unset.</summary>
+		int _resolvedZipNameCodePage = int.MinValue;
+
+		/// <summary>
+		/// Opens a read-only zip; only central-directory name decode uses <see cref="ZipConstants.DefaultCodePage"/> under a brief lock.
+		/// Enumeration after open does not need the global lock.
+		/// </summary>
+		static ZipFile OpenZipFileForRead(string varPath, int codePage)
+		{
+			FileStream file = File.Open(varPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
+			if (codePage == CodePageSystemDefault)
+			{
+				ZipFile zf = new ZipFile(file);
+				zf.IsStreamOwner = true;
+				return zf;
+			}
+			lock (ZipDefaultCodePageLock)
+			{
+				int prev = ZipConstants.DefaultCodePage;
+				try
+				{
+					ZipConstants.DefaultCodePage = codePage;
+					ZipFile zf = new ZipFile(file);
+					zf.IsStreamOwner = true;
+					return zf;
+				}
+				finally
+				{
+					ZipConstants.DefaultCodePage = prev;
+				}
+			}
+		}
+
+		void RememberZipNameCodePage(int codePage)
+		{
+			if (codePage == 0) codePage = CodePageSystemDefault;
+			_resolvedZipNameCodePage = codePage;
+		}
+
 		static long scanTotal;
 		static long scanCacheValidatedHit;
 		static long scanCacheHit;
@@ -318,8 +407,25 @@ namespace VPB
 			LogUtil.LogWarning(context + " " + uid + " : " + msg);
 		}
 
-		private static int GetZipNameCodePageForVar(string varPath)
+		private int GetZipNameCodePageForVar(string varPath)
 		{
+			if (_resolvedZipNameCodePage != int.MinValue)
+				return _resolvedZipNameCodePage;
+
+			if (!string.IsNullOrEmpty(Uid) && VarPackageMgr.singleton != null)
+			{
+				try
+				{
+					SerializableVarPackage manifest = VarPackageMgr.singleton.TryGetCache(Uid);
+					if (manifest != null && manifest.ZipNameCodePage != 0)
+					{
+						RememberZipNameCodePage(manifest.ZipNameCodePage);
+						return _resolvedZipNameCodePage;
+					}
+				}
+				catch { }
+			}
+
 			if (string.IsNullOrEmpty(varPath))
 			{
 				return CodePageSystemDefault;
@@ -356,6 +462,7 @@ namespace VPB
 					&& cached.Size == size
 					&& cached.LastWriteTimeUtcTicks == ticks)
 				{
+					RememberZipNameCodePage(cached.CodePage);
 					return cached.CodePage;
 				}
 			}
@@ -370,6 +477,7 @@ namespace VPB
 					CodePage = detected
 				};
 			}
+			RememberZipNameCodePage(detected);
 			return detected;
 		}
 
@@ -411,51 +519,29 @@ namespace VPB
 			// Heuristic: penalize replacement chars, control chars, suspicious mojibake sequences, and excessive '?'.
 			try
 			{
-				lock (ZipDefaultCodePageLock)
+				using (ZipFile zf = OpenZipFileForRead(cleanPath, codePage))
 				{
-					int prev = ZipConstants.DefaultCodePage;
-					try
+					int inspected = 0;
+					double total = 0.0;
+					const int maxInspect = 60;
+					const double earlyExitAvgThreshold = 12.0;
+					foreach (ZipEntry ze in zf)
 					{
-						ZipConstants.DefaultCodePage = codePage;
-						using (FileStream file = File.Open(cleanPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete))
-						using (ZipFile zf = new ZipFile(file))
+						if (ze == null) continue;
+						string name = ze.Name;
+						total += ScoreNameString(name);
+						inspected++;
+						if (inspected >= maxInspect) break;
+						if (inspected >= 10)
 						{
-							zf.IsStreamOwner = true;
-							int inspected = 0;
-							double total = 0.0;
-							const int maxInspect = 60;
-							const double earlyExitAvgThreshold = 12.0;
-							foreach (ZipEntry ze in zf)
-							{
-								if (ze == null) continue;
-								string name = ze.Name;
-								total += ScoreNameString(name);
-								inspected++;
-								if (inspected >= maxInspect) break;
-								// Early exit if it is clearly bad.
-								if (inspected >= 10)
-								{
-									double avg = total / inspected;
-									if (avg >= earlyExitAvgThreshold) break;
-								}
-							}
-
-							if (inspected == 0)
-							{
-								// Empty archives aren't typical .var; treat as neutral.
-								return 0.0;
-							}
-							return total / inspected;
+							double avg = total / inspected;
+							if (avg >= earlyExitAvgThreshold) break;
 						}
 					}
-					catch
-					{
-						return 1e9;
-					}
-					finally
-					{
-						ZipConstants.DefaultCodePage = prev;
-					}
+
+					if (inspected == 0)
+						return 0.0;
+					return total / inspected;
 				}
 			}
 			catch
@@ -627,6 +713,7 @@ namespace VPB
 		}
 
 		readonly object m_ZipFileLock = new object();
+
 		ZipFile m_ZipFile;
 		public ZipFile ZipFile
 		{
@@ -639,30 +726,7 @@ namespace VPB
 						if (m_ZipFile == null)
 						{
 							int cp = GetZipNameCodePageForVar(Path);
-							if (cp == CodePageSystemDefault)
-							{
-								FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-								m_ZipFile = new ZipFile(file);
-								m_ZipFile.IsStreamOwner = true;
-							}
-							else
-							{
-								lock (ZipDefaultCodePageLock)
-								{
-									int prev = ZipConstants.DefaultCodePage;
-									try
-									{
-										ZipConstants.DefaultCodePage = cp;
-										FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-										m_ZipFile = new ZipFile(file);
-										m_ZipFile.IsStreamOwner = true;
-									}
-									finally
-									{
-										ZipConstants.DefaultCodePage = prev;
-									}
-								}
-							}
+							m_ZipFile = OpenZipFileForRead(Path, cp);
 						}
 					}
 				}
@@ -732,6 +796,41 @@ namespace VPB
 		{
 			get;
 			protected set;
+		}
+
+		private bool _referenceVersionOptionsLoaded;
+
+		internal void SetStandardReferenceVersionOption(ReferenceVersionOption option)
+		{
+			StandardReferenceVersionOption = option;
+		}
+
+		internal void SetScriptReferenceVersionOption(ReferenceVersionOption option)
+		{
+			ScriptReferenceVersionOption = option;
+		}
+
+		internal void MarkReferenceVersionOptionsLoaded()
+		{
+			_referenceVersionOptionsLoaded = true;
+		}
+
+		internal bool AreReferenceVersionOptionsLoaded
+		{
+			get { return _referenceVersionOptionsLoaded; }
+		}
+
+		/// <summary>
+		/// Ensure meta.json reference-version options are loaded (cache-hit scans skip DumpVarPackage).
+		/// Cold/warm UI and load-prep only — do not call from NormalizeLoadPath hot loop.
+		/// </summary>
+		public bool TryEnsureReferenceVersionOptions()
+		{
+			if (_referenceVersionOptionsLoaded)
+				return true;
+			TryEnsureMetaJsonLiteFields();
+			_referenceVersionOptionsLoaded = true;
+			return true;
 		}
 
 		public DateTime LastWriteTime
@@ -901,6 +1000,21 @@ namespace VPB
 			get;
 			protected set;
 		}
+
+		/// <summary>Top-level meta.json <c>licenseType</c> when present (CC BY, etc.).</summary>
+		public string LicenseType
+		{
+			get;
+			protected set;
+		}
+
+		/// <summary>Top-level meta.json <c>tags</c> (comma-separated), when present. Distinct from clothing/hair item tags.</summary>
+		public List<string> PackageMetaTags;
+
+		/// <summary>True after <see cref="TryEnsureMetaJsonLiteFields"/> ran (success or miss).</summary>
+		private bool _metaJsonLiteLoaded;
+		/// <summary>True after lite parse included <see cref="LicenseType"/> (migration for in-memory packages).</summary>
+		private bool _metaJsonLiteLicensePass;
 		public List<string> PackageDependencies
 		{
 			get;
@@ -912,8 +1026,8 @@ namespace VPB
 		public bool Scaned = false;
 		public List<string> RecursivePackageDependencies;
 		// Number of installed packages that list this package as a (transitive) dependency.
-		// Rebuilt by FileManager.RebuildDependentCounts() after each scan.
-		public int DependentCount;
+		// -1 = not computed; >=0 cached (FileManager.ResolveDependentCount / RebuildDependentCounts).
+		public int DependentCount = -1;
 		// Cached count of missing dependencies from the recursive dependency list
 		public int MissingDepsCount = -1;
 
@@ -1024,7 +1138,7 @@ namespace VPB
 			{
 				FileManager.DeleteFile(path);
 			}
-			FileManager.Refresh();
+			FileManagerBridge.Refresh("package_delete", RefreshScope.Both);
 		}
 
 		public void RestoreFromOriginal()
@@ -1124,9 +1238,244 @@ namespace VPB
 			ClothingTags = null;
 			HairFileEntryNames = null;
 			HairTags = null;
+			PackageMetaTags = null;
+			Description = null;
+			PromotionalLink = null;
+			LicenseType = null;
+			_metaJsonLiteLoaded = false;
+			_metaJsonLiteLicensePass = false;
+			_referenceVersionOptionsLoaded = false;
+			StandardReferenceVersionOption = ReferenceVersionOption.Latest;
+			ScriptReferenceVersionOption = ReferenceVersionOption.Latest;
 			RecursivePackageDependencies = null;
 			PackageDependencies = null;
 		}
+
+		/// <summary>
+		/// Cache-hit scan restores clothing/hair tags but skips meta.json prose.
+		/// Call before UI reads <see cref="Description"/> / <see cref="PromotionalLink"/> /
+		/// <see cref="LicenseType"/> / <see cref="PackageMetaTags"/>.
+		/// </summary>
+		public bool TryEnsureMetaJsonLiteFields()
+		{
+			if (_metaJsonLiteLoaded && _metaJsonLiteLicensePass && _referenceVersionOptionsLoaded)
+				return !string.IsNullOrEmpty(Description)
+					|| !string.IsNullOrEmpty(PromotionalLink)
+					|| !string.IsNullOrEmpty(LicenseType)
+					|| (PackageMetaTags != null && PackageMetaTags.Count > 0)
+					|| _referenceVersionOptionsLoaded;
+
+			_metaJsonLiteLoaded = true;
+			_metaJsonLiteLicensePass = true;
+			try
+			{
+				if (string.IsNullOrEmpty(Path) || !File.Exists(Path))
+					return false;
+
+				int cp = GetZipNameCodePageForVar(Path);
+				using (ZipFile zf = OpenZipFileForRead(Path, cp))
+				{
+					if (zf == null) return false;
+					ZipEntry entry = zf.GetEntry("meta.json");
+					if (entry == null || entry.IsDirectory) return false;
+					using (Stream stream = zf.GetInputStream(entry))
+					using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+					{
+						string aJSON = reader.ReadToEnd();
+						if (string.IsNullOrEmpty(aJSON)) return false;
+						JSONNode root = JSON.Parse(aJSON);
+						JSONClass asObject = root != null ? root.AsObject : null;
+						if (asObject == null) return false;
+
+						try
+						{
+							JSONNode descNode = asObject["description"];
+							if (descNode != null)
+							{
+								string d = descNode.Value;
+								if (!string.IsNullOrEmpty(d)) Description = d.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
+							JSONNode promoNode = asObject["promotionalLink"];
+							if (promoNode != null)
+							{
+								string p = promoNode.Value;
+								if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
+							JSONNode licenseNode = asObject["licenseType"];
+							if (licenseNode != null)
+							{
+								string lic = licenseNode.Value;
+								if (!string.IsNullOrEmpty(lic)
+									&& !string.Equals(lic, "null", StringComparison.OrdinalIgnoreCase))
+									LicenseType = lic.Trim();
+							}
+						}
+						catch { }
+
+						try
+						{
+							JSONNode tagsNode = asObject["tags"];
+							if (tagsNode != null)
+							{
+								string raw = tagsNode.Value;
+								if (!string.IsNullOrEmpty(raw))
+								{
+									var list = new List<string>();
+									string[] parts = raw.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries);
+									for (int i = 0; i < parts.Length; i++)
+									{
+										string t = parts[i] != null ? parts[i].Trim() : "";
+										if (!string.IsNullOrEmpty(t) && !list.Contains(t))
+											list.Add(t);
+									}
+									if (list.Count > 0) PackageMetaTags = list;
+								}
+							}
+						}
+						catch { }
+
+						try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
+					}
+				}
+			}
+			catch
+			{
+				return false;
+			}
+
+			return !string.IsNullOrEmpty(Description)
+				|| !string.IsNullOrEmpty(PromotionalLink)
+				|| !string.IsNullOrEmpty(LicenseType)
+				|| (PackageMetaTags != null && PackageMetaTags.Count > 0)
+				|| _referenceVersionOptionsLoaded;
+		}
+		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
+		// zero references, so a later sig check is a positive hit instead of a re-parse.
+		private void PersistCslistReferencedPathsToDb()
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(Uid)) return;
+
+				// Already persisted under this LastWriteTime: skip the zip-open and SQLite write.
+				// An unchanged VAR costs only the in-memory sig lookup.
+				string sig = "0";
+				try { sig = LastWriteTime.ToBinary().ToString(); } catch { }
+				string existingSig;
+				if (VpbLocalDatabase.TryGetCslistRefVarSig(Uid, out existingSig)
+					&& string.Equals(existingSig, sig, StringComparison.Ordinal))
+				{
+					return;
+				}
+
+				// Fast path populates cachedFileEntryNames; slow path populates FileEntries.
+				// Snapshot whichever is available to avoid holding the lock during zip I/O.
+				List<string> namesCopy = null;
+				lock (cachedEntriesLock)
+				{
+					if (cachedFileEntryNames != null && cachedFileEntryNames.Count > 0)
+					{
+						namesCopy = new List<string>(cachedFileEntryNames.Count);
+						for (int i = 0; i < cachedFileEntryNames.Count; i++)
+							namesCopy.Add(cachedFileEntryNames[i]);
+					}
+					else if (fileEntries != null && fileEntries.Count > 0)
+					{
+						namesCopy = new List<string>(fileEntries.Count);
+						for (int i = 0; i < fileEntries.Count; i++)
+						{
+							var fe = fileEntries[i];
+							if (fe != null && !string.IsNullOrEmpty(fe.InternalPath))
+								namesCopy.Add(fe.InternalPath);
+						}
+					}
+				}
+
+				var cslistNames = new List<string>();
+				if (namesCopy != null)
+				{
+					for (int i = 0; i < namesCopy.Count; i++)
+					{
+						string n = namesCopy[i];
+						if (string.IsNullOrEmpty(n)) continue;
+						string norm = n.Replace('\\', '/');
+						if (!norm.StartsWith("Custom/Scripts/", StringComparison.OrdinalIgnoreCase)) continue;
+						if (!norm.EndsWith(".cslist", StringComparison.OrdinalIgnoreCase)) continue;
+						cslistNames.Add(norm);
+					}
+				}
+
+				var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+				if (cslistNames.Count > 0 && File.Exists(Path))
+				{
+					int codePage = _resolvedZipNameCodePage != int.MinValue ? _resolvedZipNameCodePage : CodePageUtf8;
+					ZipFile zf = null;
+					try
+					{
+						zf = OpenZipFileForRead(Path, codePage);
+						for (int i = 0; i < cslistNames.Count; i++)
+						{
+							string cslistInternal = cslistNames[i];
+							try
+							{
+								ZipEntry ze = zf.GetEntry(cslistInternal);
+								if (ze == null)
+								{
+									// Try original-case lookup with backslashes (some packers write that form).
+									ze = zf.GetEntry(cslistInternal.Replace('/', '\\'));
+								}
+								if (ze == null) continue;
+
+								string cslistDir = cslistInternal;
+								int lastSlash = cslistDir.LastIndexOf('/');
+								cslistDir = lastSlash > 0 ? cslistDir.Substring(0, lastSlash) : string.Empty;
+
+								using (var s = zf.GetInputStream(ze))
+								{
+									var refs = VPB.src.util.CslistParser.ParseReferencedCsPaths(s, cslistDir);
+									for (int ri = 0; ri < refs.Count; ri++)
+									{
+										string rel = refs[ri];
+										if (string.IsNullOrEmpty(rel)) continue;
+										string fullAddr = (Uid + ":/" + rel).ToLowerInvariant();
+										referenced.Add(fullAddr);
+									}
+								}
+							}
+							catch { }
+						}
+					}
+					finally
+					{
+						try { if (zf != null) zf.Close(); } catch { }
+					}
+				}
+
+				var rows = new List<VpbLocalDatabase.SystemFileRow>(referenced.Count);
+				foreach (var rp in referenced)
+				{
+					var r = new VpbLocalDatabase.SystemFileRow();
+					r.Path = rp;
+					r.LastWriteBinaryOrInvalid = long.MinValue;
+					r.SizeOrInvalid = long.MinValue;
+					rows.Add(r);
+				}
+				try { VpbLocalDatabase.WriteCslistReferencedForVar(Uid, sig, rows); } catch { }
+			}
+			catch { }
+		}
+
 		public void Scan()
 		{
 			if (Scaned)
@@ -1192,9 +1541,12 @@ namespace VPB
 							if (vp.IsInvalid)
 							{
 								invalid = true;
+								VpbPackageIndexDiagnostics.Log(this.Uid, "scanCacheInvalid", "reason=manifest_IsInvalid path='" + (Path ?? "") + "'");
 								Scaned = true;
 								return;
 							}
+							if (vp.ZipNameCodePage != 0)
+								RememberZipNameCodePage(vp.ZipNameCodePage);
 							// Fast path: keep cached lists and defer VarFileEntry object creation
 							lock (cachedEntriesLock)
 							{
@@ -1213,6 +1565,7 @@ namespace VPB
 							flag = true;
 							Interlocked.Increment(ref scanCacheHit);
 							Interlocked.Increment(ref scanCacheValidatedHit);
+							PersistCslistReferencedPathsToDb();
 							Scaned = true;
 							return;
 						}
@@ -1220,9 +1573,8 @@ namespace VPB
 						if (!flag)
 						{
 							Interlocked.Increment(ref scanZip);
-							FileStream file = File.Open(Path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Delete);
-							zipFile = new ZipFile(file);
-							zipFile.IsStreamOwner = true;
+							int scanCodePage = GetZipNameCodePageForVar(Path);
+							zipFile = OpenZipFileForRead(Path, scanCodePage);
 							HashSet<string> set = new HashSet<string>();
 							IEnumerator enumerator = zipFile.GetEnumerator();
 							try
@@ -1390,6 +1742,7 @@ namespace VPB
 								VarPackageMgr.singleton.SetCache(this.Uid, bad);
 							}
 							catch { }
+							VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=zip_scan path='" + (Path ?? "") + "'");
 							Scaned = true;
 							return;
 						}
@@ -1423,6 +1776,7 @@ namespace VPB
 				if (!flag)
 				{
 					invalid = true;
+					VpbPackageIndexDiagnostics.Log(this.Uid, "scanInvalid", "reason=no_meta_json path='" + (Path ?? "") + "'");
 				}
 				else
 				{
@@ -1517,6 +1871,7 @@ namespace VPB
 						}
 					}
 				}
+				PersistCslistReferencedPathsToDb();
 				Scaned = true;
 			}
 		}
@@ -1659,6 +2014,32 @@ namespace VPB
 							var directList = directDepends.ToList();
 							try { this.PackageDependencies = directList; } catch { }
 							svp.RecursivePackageDependencies = depends.ToList();
+
+							try
+							{
+								var descNode = asObject["description"];
+								if (descNode != null)
+								{
+									string d = descNode.Value;
+									if (!string.IsNullOrEmpty(d)) Description = d.Trim();
+								}
+							}
+							catch { }
+							try
+							{
+								var promoNode = asObject["promotionalLink"];
+								if (promoNode != null)
+								{
+									string p = promoNode.Value;
+									if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
+								}
+							}
+							catch { }
+
+							try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
+
+							if (!FileManager.IsBulkDeepScanActive)
+								FindMissingDependenciesRecursive(asObject);
 						}
 					}
 				}
@@ -1705,20 +2086,12 @@ namespace VPB
 			this.HairFileEntryNames = svp.HairFileEntryNames;
 			this.HairTags = svp.HairTags;
 
-			// Detect missing dependencies after loading
 			try
 			{
-				using (VarFileEntryStreamReader varFileEntryStreamReader = new VarFileEntryStreamReader(metaEntry))
-				{
-					string aJSON = varFileEntryStreamReader.ReadToEnd();
-					JSONClass asObject = JSON.Parse(aJSON).AsObject;
-					if (asObject != null)
-					{
-						FindMissingDependenciesRecursive(asObject);
-					}
-				}
+				int cp = GetZipNameCodePageForVar(Path);
+				svp.ZipNameCodePage = cp != 0 ? cp : CodePageSystemDefault;
 			}
-			catch { }
+			catch { svp.ZipNameCodePage = CodePageSystemDefault; }
 
 		if (VarPackageMgr.singleton != null)
 			{
@@ -1736,6 +2109,21 @@ namespace VPB
 
 		protected void FindMissingDependenciesRecursive(JSONClass jc)
 		{
+			if (FileManager.IsBulkDeepScanActive)
+				return;
+			PackageReferenceVersionResolver.BeginReferrerContext(Uid);
+			try
+			{
+				FindMissingDependenciesRecursiveCore(jc);
+			}
+			finally
+			{
+				PackageReferenceVersionResolver.EndReferrerContext();
+			}
+		}
+
+		void FindMissingDependenciesRecursiveCore(JSONClass jc)
+		{
 			// First, try the explicit "dependencies" key (for well-formed packages)
 			JSONClass asObject = jc["dependencies"].AsObject;
 			if (asObject != null)
@@ -1751,7 +2139,7 @@ namespace VPB
 					JSONClass asObject2 = asObject[key].AsObject;
 					if (asObject2 != null)
 					{
-						FindMissingDependenciesRecursive(asObject2);
+						FindMissingDependenciesRecursiveCore(asObject2);
 					}
 				}
 			}
@@ -1835,14 +2223,22 @@ namespace VPB
 			//string linkvar = "AddonPackages/" + this.Uid + ".var";
             if (this.RecursivePackageDependencies != null)
             {
-				foreach (var key in this.RecursivePackageDependencies)
+				PackageReferenceVersionResolver.BeginReferrerContext(Uid);
+				try
 				{
-					VarPackage package = FileManager.GetPackageForDependency(key, false);
-					if (package != null)
+					foreach (var key in this.RecursivePackageDependencies)
 					{
-						bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
-						if (dirty2) flag = true;
+						VarPackage package = FileManager.GetPackageForDependency(key, false);
+						if (package != null)
+						{
+							bool dirty2= package.InstallRecursive(visited, outMovedPackageUids);
+							if (dirty2) flag = true;
+						}
 					}
+				}
+				finally
+				{
+					PackageReferenceVersionResolver.EndReferrerContext();
 				}
 			}
 			if(flag)

@@ -82,22 +82,29 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Populate appearance sub-pane counts immediately (folder recount or SQL fallback).</summary>
+        /// <summary>Populate appearance sub-pane counts immediately (SQL or schedule deferred loose recount).</summary>
         private bool TryPrimeAppearanceSubPaneCounts()
         {
             string cat = !string.IsNullOrEmpty(currentCategoryTitle) ? currentCategoryTitle : (titleText != null ? titleText.text : "");
             if (!string.IsNullOrEmpty(cat))
                 EnsureAppearanceGenderRefreshCaches(cat);
 
-            if (TryRecomputeAppearanceGenderFacetCountsScoped())
+            // Source:Local — SQL only here. Sliced loose recount is owned by Deferred phase 2 /
+            // TryRecomputeAppearanceGenderFacetCountsScoped (avoid starting then killing a coroutine).
+            if (IsAppearanceLooseScopedBrowsing())
             {
-                tagsCached = true;
-                return true;
+                if (TryApplyAppearanceFacetCountsFromSql())
+                {
+                    tagsCached = true;
+                    return true;
+                }
+                return false;
             }
 
             if (TryApplyAppearanceFacetCountsFromSql())
             {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
+                // Loose .vap merge is deferred to CoMergeLooseVapAppearanceGenderFacetCounts so category
+                // navigation stays interactive (sync ClassifyLooseVapPath over tens of thousands of files froze VAM).
                 tagsCached = true;
                 return true;
             }
@@ -115,14 +122,14 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
-            {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
-            }
             else
                 InvalidateTags();
 
             RefreshFilesAndTabs();
+            // Local path already scheduled sliced recount inside TryRecompute; non-Local merge here.
+            if (!IsAppearanceLooseScopedBrowsing())
+                ScheduleAppearanceLooseMergeRefresh();
         }
 
         /// <summary>
@@ -169,10 +176,9 @@ namespace VPB
             if (TryRecomputeAppearanceGenderFacetCountsScoped())
                 tagsCached = true;
             else if (TryApplyAppearanceFacetCountsFromSql())
-            {
-                TryMergeLooseVapAppearanceGenderFacetCounts();
                 tagsCached = true;
-            }
+
+            ScheduleAppearanceLooseMergeRefresh();
 
             string tckPut;
             if (TryBuildTagCountCacheKey(out tckPut))

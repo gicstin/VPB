@@ -452,9 +452,7 @@ namespace VPB
 
         private void RefreshAfterTboxPackageFileMoves(HashSet<string> movedPackageUids)
         {
-            try { MVR.FileManagement.FileManager.Refresh(); } catch { }
-            try { FileManager.NotifyInstalled(movedPackageUids); } catch { }
-            try { FileManager.Refresh(true, false, false); } catch { }
+            try { FileManagerBridge.Refresh("tbox_load_unload", RefreshScope.InstallOnly, movedPackageUids); } catch { }
             ResyncTboxSelectionPathsAfterVarMoves();
             try { if (recyclingGrid != null) recyclingGrid.Refresh(); } catch { }
             try { RefreshSelectionVisuals(); } catch { }

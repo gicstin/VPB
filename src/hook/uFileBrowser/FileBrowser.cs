@@ -1,9 +1,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading;
+using Prime31.MessageKit;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -269,6 +272,37 @@ namespace VPB
 				}
 			}
 
+			public FileAndDirInfo(string name, string fullName, bool isDirectory)
+			{
+				Name = name;
+				FullName = fullName;
+				_isDirectory = isDirectory;
+				_isWriteable = false;
+				LastWriteTime = DateTime.MinValue;
+				LastWriteTimePackage = DateTime.MinValue;
+			}
+
+			public void RefreshPathsFromEntry()
+			{
+				if (FileEntry == null)
+				{
+					return;
+				}
+				Name = FileEntry.Name;
+				FullName = FileEntry.Uid;
+				LastWriteTime = FileEntry.LastWriteTime;
+				VarFileEntry varFileEntry = FileEntry as VarFileEntry;
+				if (varFileEntry != null)
+				{
+					LastWriteTimePackage = varFileEntry.Package.LastWriteTime;
+					LastWriteTime = varFileEntry.Package.CreationTime;
+				}
+				else
+				{
+					LastWriteTimePackage = LastWriteTime;
+				}
+			}
+
 			//public void SetTemplate(bool b)
 			//{
 			//	if (_isWriteable && FileEntry != null)
@@ -343,11 +377,11 @@ namespace VPB
 		//[HideInInspector]
 		private List<string> drives;
 
-		//private List<DirectoryButton> dirButtons;
+		private List<DirectoryButton> dirButtons;
 
 		//private List<ShortCutButton> shortCutButtons;
 
-		//private List<GameObject> dirSpacers;
+		private List<GameObject> dirSpacers;
 
 		private FileButton selected;
 
@@ -531,7 +565,23 @@ namespace VPB
 
 		protected HashSet<FileButton> displayedFileButtons;
 
-		protected bool cacheDirty = true;
+		protected bool fileListDirty = true;
+		protected bool sortDirty = true;
+		protected bool installStatusDirty;
+
+		private int _cacheBuildGeneration;
+		private Coroutine _cacheBuildCo;
+		private const float SearchDebounceSeconds = 0.15f;
+		private Coroutine _searchDebounceCo;
+
+		private sealed class FileListCacheSnapshot
+		{
+			public List<FileAndDirInfo> files;
+			public bool hadException;
+			public string exceptionMessage;
+			public List<string> creatorChoices;
+			public string creatorChoice;
+		}
 
 		protected string lastCacheDir;
 
@@ -688,6 +738,7 @@ namespace VPB
 						onlyShowLatestToggle.isOn = _onlyShowLatest;
 					}
 					UpdateDirectoryList();
+					ResetDisplayedPage();
 				}
 			}
 		}
@@ -845,6 +896,17 @@ namespace VPB
 
 		public void SetDirectoryOption(string dirOptionString)
 		{
+			try
+			{
+				directoryOption = (UserPreferences.DirectoryOption)Enum.Parse(typeof(UserPreferences.DirectoryOption), dirOptionString);
+				sortDirty = true;
+				if (cachedFiles != null)
+					SyncSort();
+			}
+			catch (ArgumentException)
+			{
+				LogUtil.LogError("Attempted to set directory option to " + dirOptionString + " which is not a valid type");
+			}
 		}
 
 		public void SetSortBy(string sortByString)
@@ -856,6 +918,9 @@ namespace VPB
 				{
 					//UserPreferences.singleton.fileBrowserSortBy = fileBrowserSortBy;
 				}
+				sortDirty = true;
+				if (cachedFiles != null)
+					SyncSort();
 			}
 			catch (ArgumentException)
 			{
@@ -1552,6 +1617,8 @@ namespace VPB
 		public void GotoDirectory(string path, string pkgFilter = null, bool flatten = true, bool includeRegularDirs = false)
 		{
 			currentPackageFilter = pkgFilter;
+			if (string.IsNullOrEmpty(pkgFilter))
+				currentPackageUid = string.Empty;
 			useFlatten = flatten;
 			includeRegularDirsInFlatten = includeRegularDirs;
 			if (string.IsNullOrEmpty(path))
@@ -1577,6 +1644,12 @@ namespace VPB
 			}
 			selected = null;
 			_selectedFullPath = null;
+			fileListDirty = true;
+			if (_cacheBuildCo != null)
+			{
+				StopCoroutine(_cacheBuildCo);
+				_cacheBuildCo = null;
+			}
 			UpdateFileList();
 			if (filesScrollRect == null)
 			{
@@ -1735,8 +1808,39 @@ namespace VPB
 			}
 		}
 
+		public void OnDirectoryClick(DirectoryButton db)
+		{
+			if (db == null)
+				return;
+
+			currentPackageUid = db.package ?? string.Empty;
+			currentPackageFilter = db.packageFilter ?? string.Empty;
+
+			if (!string.IsNullOrEmpty(db.fullPath))
+			{
+				GotoDirectory(NormalizeBrowserPath(db.fullPath), currentPackageFilter, useFlatten, includeRegularDirsInFlatten);
+				return;
+			}
+
+			fileListDirty = true;
+			if (_useVirtualizedScrolling)
+			{
+				_virtualizedMatchHash = 0;
+				_virtualizedMatchSourceCount = -1;
+			}
+			UpdateFileList();
+		}
+
 		private void SelectFile(FileButton fb)
 		{
+			if (fb != null && fb.isDir)
+			{
+				if (!selectDirectory || selected == fb)
+				{
+					GotoDirectory(NormalizeBrowserPath(fb.fullPath), currentPackageFilter, false, includeRegularDirsInFlatten);
+					return;
+				}
+			}
 			//if (fb == selected && selectDirectory && fb.isDir)
 			//{
 			//	GotoDirectory(fb.fullPath, currentPackageFilter);
@@ -1794,17 +1898,79 @@ namespace VPB
 
 		public void SearchChanged()
 		{
-			if ((bool)searchField && !ignoreSearchChange)
+			if (searchField == null || ignoreSearchChange)
 			{
-				search = searchField.text.Trim();
-				searchLower = search.ToLowerInvariant();
+				return;
+			}
+			if (_searchDebounceCo != null)
+			{
+				StopCoroutine(_searchDebounceCo);
+			}
+			_searchDebounceCo = StartCoroutine(SearchDebounceRoutine());
+		}
+
+		private IEnumerator SearchDebounceRoutine()
+		{
+			yield return new WaitForSeconds(SearchDebounceSeconds);
+			_searchDebounceCo = null;
+			if (searchField == null || ignoreSearchChange)
+			{
+				yield break;
+			}
+
+			var sw = Stopwatch.StartNew();
+			search = searchField.text.Trim();
+			searchLower = search.ToLowerInvariant();
+			if (_useVirtualizedScrolling)
+			{
+				_virtualizedMatchHash = 0;
+				_virtualizedMatchSourceCount = -1;
+				_page = 1;
+				SyncDisplayed();
+			}
+			else
+			{
+				ResetDisplayedPage();
+			}
+			sw.Stop();
+			try
+			{
+				LogUtil.Log("[VPB.FileBrowser.DeepTiming] search filter "
+					+ sw.ElapsedMilliseconds + "ms q='" + (search ?? "") + "'");
+			}
+			catch { }
+		}
+
+		private void ApplySearchFilterNow()
+		{
+			if (searchField == null || ignoreSearchChange)
+			{
+				return;
+			}
+			search = searchField.text.Trim();
+			searchLower = search.ToLowerInvariant();
+			if (_useVirtualizedScrolling)
+			{
+				_virtualizedMatchHash = 0;
+				_virtualizedMatchSourceCount = -1;
+				_page = 1;
+				SyncDisplayed();
+			}
+			else
+			{
 				ResetDisplayedPage();
 			}
 		}
 
 		public void SearchCancelClick()
 		{
+			if (_searchDebounceCo != null)
+			{
+				StopCoroutine(_searchDebounceCo);
+				_searchDebounceCo = null;
+			}
 			searchField.text = string.Empty;
+			ApplySearchFilterNow();
 		}
 
 		protected void ClearSearch()
@@ -1971,6 +2137,7 @@ namespace VPB
 			{
 				InvalidateVirtualizedCache();
 			}
+			sortDirty = false;
 			ResetDisplayedPage();
 		}
 
@@ -2577,7 +2744,7 @@ namespace VPB
 			{
 				displayText = Regex.Replace(displayText, "\\.[^\\.]*$", string.Empty);
 			}
-			button.Set(this, displayText, info.FullName, false, info.isHidden, info.isHiddenModifiable, info.isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && info.isTemplate, info.isTemplateModifiable);
+			button.Set(this, displayText, info.FullName, info.isDirectory, info.isHidden, info.isHiddenModifiable, info.isAutoInstall, allowUseFileAsTemplateSelect, allowUseFileAsTemplateSelect && info.isTemplate, info.isTemplateModifiable);
 			SetupFileButtonThumbnail(button, info.FullName);
 		}
 
@@ -2661,7 +2828,24 @@ namespace VPB
 
 		private bool InfoPassesFilters(FileAndDirInfo info, HashSet<string> clothTag, HashSet<string> hairTag)
 		{
-			if (info == null || info.FileEntry == null)
+			if (info == null)
+			{
+				return false;
+			}
+
+			if (info.isDirectory)
+			{
+				if (!string.IsNullOrEmpty(searchLower))
+				{
+					string nameLower = info.Name == null ? string.Empty : info.Name.ToLowerInvariant();
+					string pathLower = info.FullName == null ? string.Empty : info.FullName.ToLowerInvariant();
+					if (!nameLower.Contains(searchLower) && !pathLower.Contains(searchLower))
+						return false;
+				}
+				return true;
+			}
+
+			if (info.FileEntry == null)
 			{
 				return false;
 			}
@@ -2819,6 +3003,26 @@ namespace VPB
 				}
 			}
 
+			if (!string.IsNullOrEmpty(currentPackageFilter))
+			{
+				VarFileEntry filteredEntry = fileEntry as VarFileEntry;
+				if (filteredEntry == null || filteredEntry.Package == null)
+					return false;
+				VarPackage filteredPkg = filteredEntry.Package;
+				string groupName = filteredPkg.Group != null ? filteredPkg.Group.Name : null;
+				if (!string.Equals(filteredPkg.Uid, currentPackageFilter, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(groupName, currentPackageFilter, StringComparison.OrdinalIgnoreCase)
+					&& !filteredPkg.Uid.StartsWith(currentPackageFilter + ".", StringComparison.OrdinalIgnoreCase))
+					return false;
+			}
+
+			if (_onlyShowLatest)
+			{
+				VarFileEntry latestEntry = fileEntry as VarFileEntry;
+				if (latestEntry != null && latestEntry.Package != null && !latestEntry.Package.isNewestEnabledVersion)
+					return false;
+			}
+
 			return true;
 		}
 
@@ -2886,207 +3090,262 @@ namespace VPB
 			return list;
 		}
 		
-		protected void UpdateFileListCacheThreadSafe()
+		private static void BuildCreatorFilterData(List<FileAndDirInfo> list, string currentCreatorFilter, out List<string> choices, out string choice)
 		{
-			List<FileAndDirInfo> list = new List<FileAndDirInfo>();
-			if (useFlatten)
+			choices = null;
+			choice = "All";
+			if (list == null)
 			{
-				List<FileEntry> list3 = new List<FileEntry>();
-				try
-				{
-					if (fileFormat == "var")
-                    {
-						var vars = FileManager.singleton.GetAllVars();
-						foreach (var item in vars)
-						{
-							var entry = new SystemFileEntry(item);
-							list3.Add(entry);
-						}
-					}
-					else if (inGame)
-                    {
-						List<string> fileList = new List<string>();
-						FileManager.SafeGetFiles(defaultPath, "*.*", fileList);
-						string[] files = fileList.ToArray();
-						foreach (var item in files)
-						{
-							// Temporarily hardcoded: appearance presets
-							if (fileFormat == "vap")
-							{
-								if (item.EndsWith(fileFormat))//.vap
-								{
-									if (File.Exists(item.Substring(0, item.Length - 3) + "jpg"))
-									{
-										list3.Add(new SystemFileEntry(item));
-									}
-								}
-							}
-							else if (fileFormat == "json")
-							{
-								if (item.EndsWith(fileFormat))
-								{
-									if (File.Exists(item.Substring(0, item.Length - 4) + "jpg"))
-									{
-										list3.Add(new SystemFileEntry(item));
-									}
-								}
-							}
-						}
-                    }
-                    else
-                    {
-						if (fileFormat != null)
-						{
-							string regex = "\\.(" + fileFormat + ")$";
-							FileManager.FindVarFilesRegex(currentPath, regex, list3);
-						}
-						else
-						{
-							FileManager.FindVarFiles(currentPath, "*", list3);
-						}
-					}
-
-					// Filter here
-					bool sceneFilterOther = defaultPath == "Saves" && fileFormat == "json";
-					bool presetFilterOther = defaultPath == "Custom" && fileFormat == "vap";
-					bool presetFilterPerson = defaultPath == "Custom/Atom/Person" && fileFormat == "vap";
-					foreach (FileEntry item7 in list3)
-					{
-						if (item7 is VarFileEntry)
-						{
-							VarFileEntry varFileEntry = item7 as VarFileEntry;
-							if (!varFileEntry.Package.isNewestEnabledVersion)
-							{
-								continue;
-							}
-                            if (sceneFilterOther)
-                            {
-								if (varFileEntry.InternalPath.StartsWith("Saves/scene/"))
-								{
-									continue;
-								}
-							}
-							else if (presetFilterOther)
-							{
-								// All presets
-								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
-									continue;// ignore pose
-								else if (varFileEntry.InternalPath.StartsWith("Custom/Hair/"))
-									continue;
-								else if (varFileEntry.InternalPath.StartsWith("Custom/Clothing/"))
-									continue;
-								else if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/"))
-									continue;
-							}
-							else if (presetFilterPerson)
-							{
-								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
-									continue;// ignore pose
-								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Hair/"))
-									continue;
-								if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Clothing/"))
-									continue;
-							}
-                        }
-                        if (item7.Exists || FileManager.IsPackage(item7.Path))
-                        {
-                            FileAndDirInfo item2 = new FileAndDirInfo(item7);
-                            list.Add(item2);
-                        }
-                        else
-						{
-							//LogUtil.LogError("Unable to read file " + item7.Path);
-							threadHadException = true;
-							threadException = "Unable to read file " + item7.Path;
-						}
-					}
-				}
-				catch (Exception ex2)
-				{
-					//LogUtil.LogError("uFileBrowser: " + ex2);
-					threadHadException = true;
-					threadException = ex2.Message;
-				}
-				list = FilterFormat(list, true);
+				return;
 			}
 
-			// Initialize the creator list for this page
-			// Filter by creator
+			string lastCreator = null;
+			if (currentCreatorFilter != "All")
+			{
+				int paren = currentCreatorFilter.IndexOf('(');
+				if (paren > 0)
+					lastCreator = currentCreatorFilter.Substring(0, paren);
+			}
+
+			Dictionary<string, int> dic = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			bool keepCreator = false;
+			for (int i = 0; i < list.Count; i++)
+			{
+				FileAndDirInfo item = list[i];
+				if (item == null || item.FileEntry == null)
+					continue;
+
+				string creator = null;
+				VarFileEntry varFileEntry = item.FileEntry as VarFileEntry;
+				if (varFileEntry != null)
+				{
+					string uid = item.FileEntry.Uid;
+					int dot = uid.IndexOf('.');
+					if (dot > 0)
+						creator = uid.Substring(0, dot);
+				}
+				else
+				{
+					SystemFileEntry systemFileEntry = item.FileEntry as SystemFileEntry;
+					if (systemFileEntry != null && systemFileEntry.package != null)
+						creator = systemFileEntry.package.Creator;
+				}
+
+				if (creator == null)
+					continue;
+
+				int count;
+				if (!dic.TryGetValue(creator, out count))
+					count = 0;
+				dic[creator] = count + 1;
+
+				if (creator == lastCreator)
+					keepCreator = true;
+			}
+
+			List<string> ret = new List<string>(dic.Count);
+			foreach (KeyValuePair<string, int> item in dic)
+				ret.Add(item.Key);
+			ret.Sort((a, b) =>
+			{
+				int ca = dic[a];
+				int cb = dic[b];
+				if (ca > cb) return -1;
+				if (ca < cb) return 1;
+				return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+			});
+
+			for (int i = 0; i < ret.Count; i++)
+			{
+				string creator = ret[i];
+				ret[i] = creator + "(" + dic[creator] + ")";
+				if (keepCreator && creator == lastCreator)
+					choice = ret[i];
+			}
+			ret.Insert(0, "All");
+			choices = ret;
+		}
+
+		private void CollectFlattenedFileEntries(List<FileEntry> list3, List<string> subdirs)
+		{
+			if (fileFormat == "var")
+			{
+				string browseDir = string.IsNullOrEmpty(currentPath) ? defaultPath : currentPath;
+				browseDir = FileManager.CleanDirectoryPath(browseDir) ?? string.Empty;
+				FileManager.CollectFilesystemVarEntries(browseDir, false, list3, subdirs);
+				return;
+			}
+
+			subdirs?.Clear();
+
+			if (inGame)
+			{
+				List<string> fileList = new List<string>();
+				FileManager.SafeGetFiles(defaultPath, "*.*", fileList);
+				for (int i = 0; i < fileList.Count; i++)
+				{
+					string item = fileList[i];
+					if (fileFormat == "vap")
+					{
+						if (item.EndsWith(fileFormat) && File.Exists(item.Substring(0, item.Length - 3) + "jpg"))
+							list3.Add(new SystemFileEntry(item));
+					}
+					else if (fileFormat == "json")
+					{
+						if (item.EndsWith(fileFormat) && File.Exists(item.Substring(0, item.Length - 4) + "jpg"))
+							list3.Add(new SystemFileEntry(item));
+					}
+				}
+				return;
+			}
+
+			if (fileFormat != null)
+			{
+				string regex = "\\.(" + fileFormat + ")$";
+				FileManager.FindVarFilesRegex(currentPath, regex, list3);
+			}
+			else
+			{
+				FileManager.FindVarFiles(currentPath, "*", list3);
+			}
+		}
+
+		private void CollectImmediateBrowseEntries(List<FileEntry> list3, List<string> subdirs)
+		{
+			if (fileFormat == "var")
+			{
+				string browseDir = string.IsNullOrEmpty(currentPath) ? defaultPath : currentPath;
+				FileManager.CollectFilesystemVarEntries(browseDir, false, list3, subdirs);
+				return;
+			}
+
+			string pattern = string.IsNullOrEmpty(fileFormat) ? "*" : "*." + fileFormat;
+			FileManager.FindVarBrowseImmediateChildren(currentPath, pattern, list3, subdirs);
+		}
+
+		private void AppendFilteredFileEntries(List<FileEntry> list3, List<FileAndDirInfo> list, ref bool hadException, ref string exceptionMessage)
+		{
+			bool sceneFilterOther = defaultPath == "Saves" && fileFormat == "json";
+			bool presetFilterOther = defaultPath == "Custom" && fileFormat == "vap";
+			bool presetFilterPerson = defaultPath == "Custom/Atom/Person" && fileFormat == "vap";
+			for (int i = 0; i < list3.Count; i++)
+			{
+				FileEntry item7 = list3[i];
+				if (item7 is VarFileEntry)
+				{
+					VarFileEntry varFileEntry = item7 as VarFileEntry;
+					if (!varFileEntry.Package.isNewestEnabledVersion)
+						continue;
+					if (sceneFilterOther)
+					{
+						if (varFileEntry.InternalPath.StartsWith("Saves/scene/"))
+							continue;
+					}
+					else if (presetFilterOther)
+					{
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
+							continue;
+						if (varFileEntry.InternalPath.StartsWith("Custom/Hair/"))
+							continue;
+						if (varFileEntry.InternalPath.StartsWith("Custom/Clothing/"))
+							continue;
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/"))
+							continue;
+					}
+					else if (presetFilterPerson)
+					{
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Pose/"))
+							continue;
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Hair/"))
+							continue;
+						if (varFileEntry.InternalPath.StartsWith("Custom/Atom/Person/Clothing/"))
+							continue;
+					}
+				}
+
+				if (item7.Exists || FileManager.IsPackage(item7.Path))
+				{
+					list.Add(new FileAndDirInfo(item7));
+				}
+				else
+				{
+					hadException = true;
+					exceptionMessage = "Unable to read file " + item7.Path;
+				}
+			}
+		}
+
+		private FileListCacheSnapshot BuildFileListCacheSnapshotWorker()
+		{
+			var snapshot = new FileListCacheSnapshot();
+			snapshot.files = new List<FileAndDirInfo>();
+			try
+			{
+				if (useFlatten)
+				{
+					List<FileEntry> list3 = new List<FileEntry>();
+					List<string> subdirs = new List<string>();
+					CollectFlattenedFileEntries(list3, subdirs);
+
+					for (int i = 0; i < subdirs.Count; i++)
+					{
+						string subdir = subdirs[i];
+						if (string.IsNullOrEmpty(subdir))
+							continue;
+						string normalized = subdir.Replace('\\', '/');
+						int slash = normalized.LastIndexOf('/');
+						string name = slash >= 0 ? normalized.Substring(slash + 1) : normalized;
+						snapshot.files.Add(new FileAndDirInfo(name, normalized, true));
+					}
+
+					AppendFilteredFileEntries(list3, snapshot.files, ref snapshot.hadException, ref snapshot.exceptionMessage);
+					snapshot.files = FilterFormat(snapshot.files, true);
+				}
+				else
+				{
+					List<FileEntry> list3 = new List<FileEntry>();
+					List<string> subdirs = new List<string>();
+					CollectImmediateBrowseEntries(list3, subdirs);
+
+					for (int i = 0; i < subdirs.Count; i++)
+					{
+						string subdir = subdirs[i];
+						if (string.IsNullOrEmpty(subdir))
+							continue;
+						string normalized = subdir.Replace('\\', '/');
+						int slash = normalized.LastIndexOf('/');
+						string name = slash >= 0 ? normalized.Substring(slash + 1) : normalized;
+						snapshot.files.Add(new FileAndDirInfo(name, normalized, true));
+					}
+
+					AppendFilteredFileEntries(list3, snapshot.files, ref snapshot.hadException, ref snapshot.exceptionMessage);
+					snapshot.files = FilterFormat(snapshot.files, true);
+				}
+			}
+			catch (Exception ex2)
+			{
+				snapshot.hadException = true;
+				snapshot.exceptionMessage = ex2.Message;
+			}
+
 			if (!inGame)
-            {
-				string lastCreator = null;
-                if (_creatorFilter != "All")
-                {
-					lastCreator = _creatorFilter.Substring(0, _creatorFilter.IndexOf('('));
-				}
-                Dictionary<string, int> dic = new Dictionary<string, int>();
-                List<string> ret = new List<string>();
-				bool keepCreator = false;
-                foreach (var item in list)
-                {
-					string creator = null;
-					if (item.FileEntry is VarFileEntry)
-                    {
-						string uid = item.FileEntry.Uid;
-						creator = uid.Substring(0, uid.IndexOf('.'));
-					}
-                    else if (item.FileEntry is SystemFileEntry)
-                    {
-                        var package = (item.FileEntry as SystemFileEntry).package;
-                        if (package != null)
-                        {
-                            creator = package.Creator;
-                        }
-                    }
-                    if (creator == null)
-                    {
-						//LogUtil.LogError("no creator:" + item.FileEntry.Path);
-                    }
-                    else
-                    {
-						if (!dic.ContainsKey(creator))
-							dic.Add(creator, 0);
-						dic[creator]++;
-
-						if (creator == lastCreator)
-						{
-							keepCreator = true;
-						}
-					}
-                    
-                }
-                foreach (var item in dic)
-                {
-                    ret.Add(item.Key);
-                }
-                ret.Sort((a, b) =>
-                {
-                    if (dic[a] > dic[b])
-                        return -1;
-                    else
-                        return 1;
-                });
-				string choice = "All";
-                for (int i = 0; i < ret.Count; i++)
-                {
-					string creator = ret[i];
-                    ret[i] += "(" + dic[ret[i]] + ")";
-					if (keepCreator)
-					{
-						if (creator == lastCreator)
-						{
-							choice = ret[i];
-						}
-					}
-				}
-                ret.Insert(0, "All");
-                creatorFilterChooser.choices = ret;
-				// This would invoke a callback and cause issues; only set the displayed value
-				creatorFilterChooser.valNoCallback=choice;
-				_creatorFilter = choice;
+			{
+				BuildCreatorFilterData(snapshot.files, _creatorFilter, out snapshot.creatorChoices, out snapshot.creatorChoice);
 			}
 
-            cachedFiles = list;
+			return snapshot;
+		}
+
+		private void ApplyFileListCacheSnapshot(FileListCacheSnapshot snapshot)
+		{
+			if (snapshot == null)
+			{
+				return;
+			}
+
+			threadHadException = snapshot.hadException;
+			threadException = snapshot.exceptionMessage;
+			cachedFiles = snapshot.files ?? new List<FileAndDirInfo>();
 			lastCacheFileFormat = fileFormat;
 			lastCacheFileRemovePrefix = fileRemovePrefix;
 			lastCacheUseFlatten = useFlatten;
@@ -3096,115 +3355,321 @@ namespace VPB
 			lastCacheForceOnlyShowTemplates = forceOnlyShowTemplates;
 			lastCacheDir = currentPath;
 			lastCacheInGame = inGame;
-			cacheDirty = false;
+			fileListDirty = false;
+			sortDirty = true;
+
+			if (!inGame && snapshot.creatorChoices != null && creatorFilterChooser != null)
+			{
+				creatorFilterChooser.choices = snapshot.creatorChoices;
+				creatorFilterChooser.valNoCallback = snapshot.creatorChoice ?? "All";
+				_creatorFilter = snapshot.creatorChoice ?? "All";
+			}
+
+			if (!FileManager.IsScanning)
+			{
+				try { UpdateDirectoryList(); } catch { }
+			}
+		}
+
+		private IEnumerator FileListCacheBuildRoutine(int generation)
+		{
+			var sw = Stopwatch.StartNew();
+			FileListCacheSnapshot snapshot = null;
+			Exception workerException = null;
+			int workerDone = 0;
+
+			ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try
+				{
+					snapshot = BuildFileListCacheSnapshotWorker();
+				}
+				catch (Exception ex)
+				{
+					workerException = ex;
+				}
+				finally
+				{
+					Interlocked.Exchange(ref workerDone, 1);
+				}
+			});
+
+			while (workerDone == 0)
+				yield return null;
+
+			if (generation != _cacheBuildGeneration)
+				yield break;
+
+			if (workerException != null)
+			{
+				threadHadException = true;
+				threadException = workerException.Message;
+				if (statusField != null)
+					statusField.text = threadException;
+				yield break;
+			}
+
+			int num = 0;
+			if (cachedFiles != null)
+			{
+				num = cachedFiles.Count;
+				for (int i = 0; i < cachedFiles.Count; i++)
+				{
+					FileAndDirInfo cachedFile = cachedFiles[i];
+					if (cachedFile != null && cachedFile.button != null)
+						PoolManager.ReleaseObject(cachedFile.button.gameObject);
+				}
+			}
+			displayedFileButtons.Clear();
+			threadHadException = false;
+
+			ApplyFileListCacheSnapshot(snapshot);
+			if (_useVirtualizedScrolling)
+				InvalidateVirtualizedCache();
+			if (threadHadException && statusField != null)
+				statusField.text = threadException;
+			ClearImageQueue();
+
+			if (!s_OptimzeFileButton && cachedFiles != null)
+			{
+				for (int i = 0; i < cachedFiles.Count; i++)
+				{
+					FileAndDirInfo cachedFile2 = cachedFiles[i];
+					if (cachedFile2 == null)
+						continue;
+					cachedFile2.button = CreateFileButton(cachedFile2.Name,
+						cachedFile2.FullName, cachedFile2.isDirectory,
+						cachedFile2.isWriteable, cachedFile2.isHidden,
+						cachedFile2.isHiddenModifiable,
+						cachedFile2.isAutoInstall, cachedFile2.isTemplate,
+						cachedFile2.isTemplateModifiable);
+					cachedFile2.button.gameObject.SetActive(false);
+					if (manageContentTransform)
+						cachedFile2.button.transform.SetParent(fileContent, false);
+				}
+			}
+
+			SyncSort();
+			sw.Stop();
+			try
+			{
+				LogUtil.Log("[VPB.FileBrowser.DeepTiming] cache build "
+					+ sw.ElapsedMilliseconds + "ms path='" + (currentPath ?? "") + "' count=" + (cachedFiles != null ? cachedFiles.Count : 0));
+			}
+			catch { }
+
+			_cacheBuildCo = null;
+		}
+
+		private void RequestFileListCacheRebuild()
+		{
+			_cacheBuildGeneration++;
+			int generation = _cacheBuildGeneration;
+			if (_cacheBuildCo != null)
+			{
+				StopCoroutine(_cacheBuildCo);
+				_cacheBuildCo = null;
+			}
+			_cacheBuildCo = StartCoroutine(FileListCacheBuildRoutine(generation));
+		}
+
+		private void EvaluateFileListDirtyConditions()
+		{
+			if (fileListDirty)
+				return;
+
+			if (currentPath != lastCacheDir
+				|| useFlatten != lastCacheUseFlatten
+				|| fileFormat != lastCacheFileFormat
+				|| fileRemovePrefix != lastCacheFileRemovePrefix
+				|| lastCachePackageFilter != currentPackageFilter
+				|| (useFlatten && includeRegularDirsInFlatten != lastCacheIncludeRegularDirsInFlatten)
+				|| forceOnlyShowTemplates != lastCacheForceOnlyShowTemplates
+				|| lastCacheInGame != inGame)
+			{
+				fileListDirty = true;
+				return;
+			}
+
+			if (useFlatten && FileManager.CheckIfDirectoryChanged(currentPath, lastCacheTime))
+			{
+				fileListDirty = true;
+				return;
+			}
+
+			if (!useFlatten && FileManager.CheckIfDirectoryChanged(currentPath, lastCacheTime, false))
+			{
+				fileListDirty = true;
+			}
+		}
+
+		private void ProcessInstallStatusDirty()
+		{
+			if (!installStatusDirty)
+				return;
+
+			installStatusDirty = false;
+			if (cachedFiles != null)
+			{
+				for (int i = 0; i < cachedFiles.Count; i++)
+				{
+					FileAndDirInfo info = cachedFiles[i];
+					if (info != null)
+						info.RefreshPathsFromEntry();
+				}
+			}
+			if (_useVirtualizedScrolling)
+			{
+				_virtualizedMatchHash = 0;
+				_virtualizedMatchSourceCount = -1;
+			}
+			RefreshDisplayedInstallStatus();
+			SyncDisplayed();
+		}
+
+		protected void UpdateFileListCacheThreadSafe()
+		{
+			EvaluateFileListDirtyConditions();
+			if (!fileListDirty)
+				return;
+			RequestFileListCacheRebuild();
 		}
 
 		private void UpdateFileList()
 		{
-			if (!cacheDirty)
-            {
-                if (currentPath != lastCacheDir)
-                {
-                    cacheDirty = true;
-                }
-                else if (useFlatten != lastCacheUseFlatten)
-                {
-                    cacheDirty = true;
-                }
-                else if (fileFormat != lastCacheFileFormat)
-                {
-                    cacheDirty = true;
-                }
-                else if (fileRemovePrefix != lastCacheFileRemovePrefix)
-                {
-                    cacheDirty = true;
-                }
-                else if (FileManager.lastPackageRefreshTime > lastCacheTime)
-                {
-                    cacheDirty = true;
-                }
-                else if (lastCachePackageFilter != currentPackageFilter)
-                {
-                    cacheDirty = true;
-                }
-                else if (useFlatten && FileManager.CheckIfDirectoryChanged(currentPath, lastCacheTime))
-                {
-                    cacheDirty = true;
-                }
-                else if (useFlatten && includeRegularDirsInFlatten != lastCacheIncludeRegularDirsInFlatten)
-                {
-                    cacheDirty = true;
-                }
-                else if (!useFlatten && FileManager.CheckIfDirectoryChanged(currentPath, lastCacheTime, false))
-                {
-                    cacheDirty = true;
-                }
-                else if (forceOnlyShowTemplates != lastCacheForceOnlyShowTemplates)
-                {
-                    cacheDirty = true;
-                }
-				else if (lastCacheInGame != inGame)
-                {
-					cacheDirty = true;
-                }
-			}
-			if (cacheDirty)
+			EvaluateFileListDirtyConditions();
+			ProcessInstallStatusDirty();
+
+			if (sortDirty && !fileListDirty && cachedFiles != null)
 			{
-				int num = 0;
-				ClearSearch();
-				if (cachedFiles != null)
-				{
-					num += cachedFiles.Count;
-					foreach (FileAndDirInfo cachedFile in cachedFiles)
-					{
-						if (cachedFile.button != null)
-						{
-							PoolManager.ReleaseObject(cachedFile.button.gameObject);
-						}
-					}
-				}
-				displayedFileButtons.Clear();
-				threadHadException = false;
+				sortDirty = false;
+				SyncSort();
+			}
 
-				UpdateFileListCacheThreadSafe();
-				if (_useVirtualizedScrolling)
-				{
-					InvalidateVirtualizedCache();
-				}
-				if (threadHadException && statusField != null)
-				{
-					statusField.text = threadException;
-				}
-				ClearImageQueue();
-				int num2 = 0;
-                foreach (FileAndDirInfo cachedFile2 in cachedFiles)
-                {
-					// Creating a button for every item is too slow
-					if (!s_OptimzeFileButton)
-                    {
-						cachedFile2.button = CreateFileButton(cachedFile2.Name,
-							cachedFile2.FullName, false,
-							cachedFile2.isWriteable, cachedFile2.isHidden,
-							cachedFile2.isHiddenModifiable,
-							cachedFile2.isAutoInstall, cachedFile2.isTemplate,
-							cachedFile2.isTemplateModifiable);
+			if (!fileListDirty)
+				return;
 
-						cachedFile2.button.gameObject.SetActive(false);
-						if (manageContentTransform)
-						{
-							cachedFile2.button.transform.SetParent(fileContent, false);
-						}
-					}
-                    
-					num2++;
-                }
-            }
-			SyncSort();
+			ClearSearch();
+			if (_searchDebounceCo != null)
+			{
+				StopCoroutine(_searchDebounceCo);
+				_searchDebounceCo = null;
+			}
+			RequestFileListCacheRebuild();
 		}
 		static bool s_OptimzeFileButton = true;
+		const int MaxDirectorySidebarPackages = 256;
+
+		private void ClearDirectoryListButtons()
+		{
+			if (dirButtons != null)
+			{
+				for (int i = 0; i < dirButtons.Count; i++)
+				{
+					DirectoryButton btn = dirButtons[i];
+					if (btn != null && btn.gameObject != null)
+						PoolManager.ReleaseObject(btn.gameObject);
+				}
+				dirButtons.Clear();
+			}
+			if (dirSpacers != null)
+			{
+				for (int i = 0; i < dirSpacers.Count; i++)
+				{
+					GameObject spacer = dirSpacers[i];
+					if (spacer != null)
+						PoolManager.ReleaseObject(spacer);
+				}
+				dirSpacers.Clear();
+			}
+		}
+
+		private void AddDirectoryListButton(string packageUid, string packageFilter, string label, string fullPath)
+		{
+			if (dirContent == null || directoryButtonPrefab == null)
+				return;
+			if (dirButtons == null)
+				dirButtons = new List<DirectoryButton>();
+
+			GameObject go = PoolManager.SpawnObject(directoryButtonPrefab);
+			if (go == null)
+				return;
+			go.transform.SetParent(dirContent, false);
+			DirectoryButton db = go.GetComponent<DirectoryButton>();
+			if (db == null)
+				return;
+			db.Set(this, packageUid ?? string.Empty, packageFilter ?? string.Empty, label ?? string.Empty, fullPath ?? string.Empty);
+			dirButtons.Add(db);
+		}
 
 		private void UpdateDirectoryList()
 		{
+			if (dirContent == null || directoryButtonPrefab == null)
+				return;
+			if (FileManager.IsScanning)
+				return;
+
+			ClearDirectoryListButtons();
+
+			if (inGame || !useFlatten)
+				return;
+
+			string browsePath = FileManager.CleanDirectoryPath(string.IsNullOrEmpty(currentPath) ? defaultPath : currentPath) ?? string.Empty;
+
+			if (fileFormat == "var")
+			{
+				if (showInstallFolderInDirectoryList)
+				{
+					AddDirectoryListButton(string.Empty, string.Empty, "AddonPackages", "AddonPackages");
+					AddDirectoryListButton(string.Empty, string.Empty, "AllPackages", "AllPackages");
+				}
+				return;
+			}
+
+			if (cachedFiles == null || cachedFiles.Count == 0)
+				return;
+
+			var packages = new List<VarPackage>(Math.Min(MaxDirectorySidebarPackages, 64));
+			var seenUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			for (int i = 0; i < cachedFiles.Count; i++)
+			{
+				if (seenUids.Count >= MaxDirectorySidebarPackages)
+					break;
+				FileAndDirInfo info = cachedFiles[i];
+				if (info == null || info.isDirectory)
+					continue;
+				VarFileEntry varEntry = info.FileEntry as VarFileEntry;
+				if (varEntry == null || varEntry.Package == null)
+					continue;
+				VarPackage pkg = varEntry.Package;
+				if (!pkg.Enabled || pkg.invalid)
+					continue;
+				if (_onlyShowLatest && !pkg.isNewestEnabledVersion)
+					continue;
+				if (!seenUids.Add(pkg.Uid))
+					continue;
+				packages.Add(pkg);
+			}
+
+			if (packages.Count == 0)
+				return;
+
+			packages.Sort((a, b) =>
+			{
+				string an = string.IsNullOrEmpty(a.Name) ? a.Uid : a.Name;
+				string bn = string.IsNullOrEmpty(b.Name) ? b.Uid : b.Name;
+				return string.Compare(an, bn, StringComparison.OrdinalIgnoreCase);
+			});
+
+			for (int i = 0; i < packages.Count && i < MaxDirectorySidebarPackages; i++)
+			{
+				VarPackage pkg = packages[i];
+				if (pkg == null)
+					continue;
+				string label = string.IsNullOrEmpty(pkg.Name) ? pkg.Uid : pkg.Name;
+				string filter = pkg.Uid;
+				AddDirectoryListButton(pkg.Uid, filter, label, browsePath);
+			}
 		}
 
 		private void Awake()
@@ -3214,6 +3679,31 @@ namespace VPB
 			drives = new List<string>(Directory.GetLogicalDrives());
 			displayedFileButtons = new HashSet<FileButton>();
 			queuedThumbnails = new HashSet<VPB.CustomImageLoaderThreaded.QueuedImage>();
+			dirButtons = new List<DirectoryButton>();
+			dirSpacers = new List<GameObject>();
+		}
+
+		private void OnEnable()
+		{
+			MessageKit.addObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+		}
+
+		private void OnDisable()
+		{
+			MessageKit.removeObserver(MessageDef.FileManagerRefresh, OnFileManagerRefresh);
+		}
+
+		private void OnFileManagerRefresh()
+		{
+			installStatusDirty = true;
+			if (window != null && window.activeSelf)
+			{
+				ProcessInstallStatusDirty();
+				if (!FileManager.IsScanning)
+				{
+					try { UpdateDirectoryList(); } catch { }
+				}
+			}
 		}
 		void Start()
 		{ 

@@ -13,7 +13,12 @@ namespace VPB
         private bool IsPointerInsideGalleryWindowRect()
         {
             if (backgroundBoxGO == null) return false;
-            RectTransform rt = backgroundBoxGO.GetComponent<RectTransform>();
+            RectTransform rt = _backgroundBoxRT;
+            if (rt == null)
+            {
+                rt = backgroundBoxGO.GetComponent<RectTransform>();
+                _backgroundBoxRT = rt;
+            }
             if (rt == null) return false;
 
             Camera cam = null;
@@ -29,55 +34,50 @@ namespace VPB
             catch { return false; }
         }
 
-        private void UpdateFooterPaddingForFloatingResizeHandles(bool isFloating)
+        private RectTransform GetCachedCollapseTriggerRT(GameObject triggerGO, ref RectTransform cache)
         {
-            if (footerHLG == null) return;
-            if (footerHLG.padding == null) footerHLG.padding = new RectOffset(0, 0, 0, 0);
+            if (triggerGO == null) { cache = null; return null; }
+            if (cache == null || cache.gameObject != triggerGO)
+                cache = triggerGO.GetComponent<RectTransform>();
+            return cache;
+        }
 
-            float s = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            int defaultRight = Mathf.RoundToInt(10f * s);
-            // Floating mode has bottom resize handles on both sides; mirror the existing left reservation
-            // so the bottom-right handle does not sit over the right-side footer buttons.
-            int desiredRight = defaultRight;
-            if (isFloating) desiredRight = footerHLG.padding.left;
-            else
-            {
-                // Fixed + Left dock uses a bottom-right resize handle; reserve footer right side like floating.
-                try
-                {
-                    if (VPBConfig.Instance != null)
-                    {
-                        string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
-                        if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
-                            desiredRight = footerHLG.padding.left;
-                    }
-                }
-                catch { }
-            }
+        private UIAnchorResizer GetCachedUIAnchorResizer(GameObject go, ref UIAnchorResizer cache)
+        {
+            if (go == null) { cache = null; return null; }
+            if (cache == null || cache.gameObject != go)
+                cache = go.GetComponent<UIAnchorResizer>();
+            return cache;
+        }
 
-            if (_footerHLGLastRightPadding == desiredRight && footerHLG.padding.right == desiredRight) return;
-
-            footerHLG.padding = new RectOffset(footerHLG.padding.left, desiredRight, footerHLG.padding.top, footerHLG.padding.bottom);
-            _footerHLGLastRightPadding = desiredRight;
+        private void MarkGalleryPaneChromeDirty()
+        {
+            try { GalleryPaneChromeEnforcer.MarkDirtyOn(backgroundBoxGO); } catch { }
         }
 
         private void Update()
         {
             if (canvas != null && !canvas.enabled)
             {
+                try { RemoveModeHidePopup(); RemoveModeClearHelp(); } catch { }
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 return;
             }
 
             try { GalleryVrThumbstickScroll.TickOncePerFrame(); } catch { }
+            try { DetailStripScrubTick(); } catch { }
+
+            try { PluginSettingsHotkeyCaptureUpdate(); } catch { }
+            try { FooterCompressCacheHoverTick(); FooterCompressCachePollHoverTooltip(); } catch { }
+            try { FooterPluginInfoPollHoverTooltip(); } catch { }
+            try { BenchModalRuntimeTick(); } catch { }
+            try { RemoveModeUpdate(); } catch { }
 
             if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GalUpdateFull++;
 
             if (canvas != null && VPBConfig.Instance != null)
             {
                 HandleKeyboardInput();
-
-                UpdateTargetMarker();
 
                 try
                 {
@@ -106,12 +106,14 @@ namespace VPB
 
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 try { ApplyVamMenuAnchoring(); } catch { }
+                try { UpdateLoadingOverlayPulse(); } catch { }
 
                 // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
                 // While active we pause all disk saves — background threads must not contend on
                 // the cache write-lock while the user is interacting; the cost is we defer
                 // persistence, but current-session display is unaffected (images stay in memory).
                 bool isScrollingRecently = (Time.unscaledTime - lastScrollTime) < 1.0f;
+                try { CustomImageLoaderThreaded.NotifyGalleryScrollUnscaledTime(lastScrollTime); } catch { }
                 bool isThumbnailLoading  = CustomImageLoaderThreaded.singleton != null &&
                                            CustomImageLoaderThreaded.singleton.PendingThumbnailCount > 0;
                 bool savingActive = !isScrollingRecently && !isThumbnailLoading;
@@ -141,7 +143,12 @@ namespace VPB
 
                 if (isFixedLocally && backgroundBoxGO != null)
                 {
-                    UpdateFooterPaddingForFloatingResizeHandles(false);
+                    // Self-correct the content subtree (e.g. first load completing while collapsed),
+                    // so a collapsed-and-loaded pane stops rendering/raycasting off-screen content.
+                    bool wantSubtree = ShouldContentSubtreeBeActive();
+                    if (backgroundBoxGO.activeSelf != wantSubtree)
+                        backgroundBoxGO.SetActive(wantSubtree);
+
                     bool autoCollapse = VPBConfig.Instance.DesktopFixedAutoCollapse;
                     string dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
 
@@ -164,9 +171,16 @@ namespace VPB
                         else activeTrigger = collapseTriggerGO;
                         if (activeTrigger != null)
                         {
-                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
-                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
-                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
+                            RectTransform ctRT = null;
+                            if (activeTrigger == collapseTriggerLeftGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerLeftRT);
+                            else if (activeTrigger == collapseTriggerTopGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerTopRT);
+                            else ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerRT);
+                            // Overlay MUST pass null — leftover worldCamera triggers ScreenPointToRay spam.
+                            Camera cam = null;
+                            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                                cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+                            if (ctRT != null)
+                                isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
                         if (isHoveringTrigger || isHoveringTriggerManual) SetCollapsed(false);
                     }
@@ -181,9 +195,15 @@ namespace VPB
                         else activeTrigger = collapseTriggerGO;
                         if (activeTrigger != null)
                         {
-                            RectTransform ctRT = activeTrigger.GetComponent<RectTransform>();
-                            Camera cam = (canvas != null && canvas.worldCamera != null) ? canvas.worldCamera : null; // Overlay mode uses null cam
-                            isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
+                            RectTransform ctRT = null;
+                            if (activeTrigger == collapseTriggerLeftGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerLeftRT);
+                            else if (activeTrigger == collapseTriggerTopGO) ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerTopRT);
+                            else ctRT = GetCachedCollapseTriggerRT(activeTrigger, ref _collapseTriggerRT);
+                            Camera cam = null;
+                            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                                cam = canvas.worldCamera != null ? canvas.worldCamera : Camera.main;
+                            if (ctRT != null)
+                                isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
                         bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
@@ -215,17 +235,24 @@ namespace VPB
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {
                         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                        canvas.worldCamera = null;
                         canvas.transform.localScale = Vector3.one;
                         
                         if (dragger != null) dragger.enabled = false;
-                        foreach (Transform child in backgroundBoxGO.transform)
-                        {
-                            if (child.name.StartsWith("ResizeHandle_")) child.gameObject.SetActive(false);
-                        }
+                        if (_resizeHandleBottomLeftGO != null) _resizeHandleBottomLeftGO.SetActive(false);
+                        if (_resizeHandleBottomRightGO != null) _resizeHandleBottomRightGO.SetActive(false);
+                        if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(false);
+                        if (_resizeHandleFixedBottomGO != null) _resizeHandleFixedBottomGO.SetActive(false);
+                        if (_resizeHandleFixedBottomRightGO != null) _resizeHandleFixedBottomRightGO.SetActive(false);
                     }
 
                     // Always update anchors in Fixed mode to support height toggles and screen resizing
-                    RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                    RectTransform bgRT = _backgroundBoxRT;
+                    if (bgRT == null)
+                    {
+                        bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        _backgroundBoxRT = bgRT;
+                    }
                     float leftRatio = VPBConfig.Instance.DesktopCustomWidth;
                     dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide);
                     
@@ -242,56 +269,52 @@ namespace VPB
                         }
                     }
 
-                    // Show/Hide bottom resize handle based on mode
-                    Transform customHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
-                    if (customHandle != null)
+                    // Show/Hide bottom resize handles based on dock mode (handles seated in footer slots).
+                    // Right dock → bottom-left grip; Left dock → bottom-right grip; Top dock → both grips (height only),
+                    // both using the straight-down chevron.
+                    bool isTopDock = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
+                    bool showFixedBottomLeft = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || isTopDock);
+                    bool showFixedBottomRight = isFixedLocally && (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase) || isTopDock);
+                    if (_resizeHandleFixedBottomGO != null)
                     {
-                        // Fixed-bottom-left handle: only for Right dock (avoid collisions in Left/Top)
-                        bool shouldShow = isFixedLocally && (string.Equals(dock, "Right", StringComparison.OrdinalIgnoreCase) || string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase));
-                        if (customHandle.gameObject.activeSelf != shouldShow)
-                            customHandle.gameObject.SetActive(shouldShow);
+                        if (_resizeHandleFixedBottomGO.activeSelf != showFixedBottomLeft)
+                            _resizeHandleFixedBottomGO.SetActive(showFixedBottomLeft);
 
-                        // Top dock uses this handle for height only (no width change).
-                        try
+                        UIAnchorResizer rz = GetCachedUIAnchorResizer(_resizeHandleFixedBottomGO, ref _fixedBottomResizer);
+                        if (rz != null)
                         {
-                            UIAnchorResizer rz = customHandle.GetComponent<UIAnchorResizer>();
-                            if (rz != null)
-                            {
-                                bool top = string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
-                                rz.resizeX = !top;
-                                rz.resizeY = true;
-                            }
+                            rz.resizeX = !isTopDock;
+                            rz.resizeY = true;
                         }
-                        catch { }
                     }
-                    Transform customHandleRight = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottomRight");
-                    if (customHandleRight != null)
+                    if (_resizeHandleFixedBottomRightGO != null)
                     {
-                        // Fixed-bottom-right handle: only for Left dock
-                        bool shouldShow = isFixedLocally && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase);
-                        if (customHandleRight.gameObject.activeSelf != shouldShow)
-                            customHandleRight.gameObject.SetActive(shouldShow);
+                        if (_resizeHandleFixedBottomRightGO.activeSelf != showFixedBottomRight)
+                            _resizeHandleFixedBottomRightGO.SetActive(showFixedBottomRight);
+
+                        UIAnchorResizer rz = GetCachedUIAnchorResizer(_resizeHandleFixedBottomRightGO, ref _fixedBottomRightResizer);
+                        if (rz != null)
+                        {
+                            rz.resizeX = !isTopDock;
+                            rz.resizeY = true;
+                        }
                     }
 
-                    // Show/Hide generic resize handles based on mode
-                    Transform handleBL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomLeft);
-                    if (handleBL != null)
+                    // Icons only when dock / visibility changes — ApplyBarIconFromPath every frame was hot-path waste.
+                    string iconKey = dock + "|" + (showFixedBottomLeft ? "1" : "0") + (showFixedBottomRight ? "1" : "0") + (isTopDock ? "T" : "S");
+                    if (iconKey != _fixedDockHandleIconKey)
                     {
-                        bool shouldShow = false;
-                        if (handleBL.gameObject.activeSelf != shouldShow) handleBL.gameObject.SetActive(shouldShow);
+                        _fixedDockHandleIconKey = iconKey;
+                        if (showFixedBottomLeft && _resizeHandleFixedBottomGO != null)
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_left.png"); } catch { }
+                        if (showFixedBottomRight && _resizeHandleFixedBottomRightGO != null)
+                            try { UI.ApplyBarIconFromPath(_resizeHandleFixedBottomRightGO, isTopDock ? "vpb_icons/chevrons_down.png" : "vpb_icons/chevrons_down_right.png"); } catch { }
                     }
-                    Transform handleBR = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.bottomRight);
-                    if (handleBR != null)
-                    {
-                        bool shouldShow = !isFixedLocally;
-                        if (handleBR.gameObject.activeSelf != shouldShow) handleBR.gameObject.SetActive(shouldShow);
-                    }
-                    Transform handleTL = backgroundBoxGO.transform.Find("ResizeHandle_" + AnchorPresets.topLeft);
-                    if (handleTL != null)
-                    {
-                        bool shouldShow = !isFixedLocally;
-                        if (handleTL.gameObject.activeSelf != shouldShow) handleTL.gameObject.SetActive(shouldShow);
-                    }
+
+                    // Floating corner handles are hidden in fixed mode.
+                    if (_resizeHandleBottomLeftGO != null && _resizeHandleBottomLeftGO.activeSelf) _resizeHandleBottomLeftGO.SetActive(false);
+                    if (_resizeHandleBottomRightGO != null && _resizeHandleBottomRightGO.activeSelf) _resizeHandleBottomRightGO.SetActive(false);
+                    if (_resizeHandleTopLeftGO != null && _resizeHandleTopLeftGO.activeSelf) _resizeHandleTopLeftGO.SetActive(false);
 
                     Vector2 desiredMin, desiredMax;
                     if (string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase))
@@ -341,7 +364,6 @@ namespace VPB
                 }
                 else if (backgroundBoxGO != null)
                 {
-                    UpdateFooterPaddingForFloatingResizeHandles(true);
                     if (collapseTriggerGO != null) collapseTriggerGO.SetActive(false);
                     if (collapseTriggerLeftGO != null) collapseTriggerLeftGO.SetActive(false);
                     if (collapseTriggerTopGO != null) collapseTriggerTopGO.SetActive(false);
@@ -354,7 +376,12 @@ namespace VPB
                         canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                         
                         if (backgroundBoxGO == null) return;
-                        RectTransform bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                        RectTransform bgRT = _backgroundBoxRT;
+                        if (bgRT == null)
+                        {
+                            bgRT = backgroundBoxGO.GetComponent<RectTransform>();
+                            _backgroundBoxRT = bgRT;
+                        }
                         bgRT.anchorMin = new Vector2(0.5f, 0.5f);
                         bgRT.anchorMax = new Vector2(0.5f, 0.5f);
                         bgRT.sizeDelta = new Vector2(1200, 800);
@@ -363,14 +390,13 @@ namespace VPB
                         UpdateSideButtonsVisibility();
 
                         if (dragger != null) dragger.enabled = true;
-                        foreach (Transform child in backgroundBoxGO.transform)
-                        {
-                            // Floating mode uses corner resize handles; do not enable the fixed-mode handle.
-                            if (child.name.StartsWith("ResizeHandle_") && child.name != "ResizeHandle_FixedBottom")
-                                child.gameObject.SetActive(true);
-                        }
-                        Transform fixedHandle = backgroundBoxGO.transform.Find("ResizeHandle_FixedBottom");
-                        if (fixedHandle != null && fixedHandle.gameObject.activeSelf) fixedHandle.gameObject.SetActive(false);
+                        // Floating mode uses the corner handles; the fixed-dock handles stay hidden.
+                        if (_resizeHandleBottomLeftGO != null) _resizeHandleBottomLeftGO.SetActive(true);
+                        if (_resizeHandleBottomRightGO != null) _resizeHandleBottomRightGO.SetActive(true);
+                        if (_resizeHandleTopLeftGO != null) _resizeHandleTopLeftGO.SetActive(true);
+                        if (_resizeHandleFixedBottomGO != null && _resizeHandleFixedBottomGO.activeSelf) _resizeHandleFixedBottomGO.SetActive(false);
+                        if (_resizeHandleFixedBottomRightGO != null && _resizeHandleFixedBottomRightGO.activeSelf) _resizeHandleFixedBottomRightGO.SetActive(false);
+                        _fixedDockHandleIconKey = null;
 
                         RepositionInFront();
                     }
@@ -434,22 +460,19 @@ namespace VPB
 
             // Info bar (hoverPathRT) is always active — no show/hide needed
 
-            // FPS (lightweight, ~2Hz)
+            // FPS readout, ~2Hz. Value comes from VpbFrameRate; the timer only throttles the text write.
             if (fpsText != null)
             {
                 fpsTimer += Time.unscaledDeltaTime;
-                fpsFrames++;
                 if (fpsTimer >= FpsInterval)
                 {
-                    float fps = fpsFrames / fpsTimer;
-                    string txt = string.Format("{0:0} FPS", fps);
+                    string txt = string.Format("{0:0} FPS", VpbFrameRate.Current);
                     if (_fpsLastAppliedText != txt)
                     {
                         _fpsLastAppliedText = txt;
                         fpsText.text = txt;
                     }
                     fpsTimer = 0f;
-                    fpsFrames = 0;
                 }
             }
 
@@ -565,16 +588,22 @@ namespace VPB
             {
                 try
                 {
-                    ApplyCategoryQuickChromeLayout(VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f);
+                    ApplyCategoryQuickChromeLayout(ChromeScale);
                 }
                 catch { }
             }
 
             if (IsVisible && titleSearchInput != null)
             {
-                float iscale = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
+                float iscale = ChromeScale;
                 try { ApplyTitleBarResponsiveLayout(iscale); } catch { }
-                try { TickTitleSearchPopupProximityDismiss(iscale); } catch { }
+                try { ApplyFooterOverflowLayout(iscale); } catch { }
+                try { TickTitleSearchPopupOutsideClickDismiss(); } catch { }
+                try { TickTitleSearchPopupOpenCue(); } catch { }
+            }
+            else if (IsVisible && paginationRT != null)
+            {
+                try { ApplyFooterOverflowLayout(ChromeScale); } catch { }
             }
 
             try { ValidateHoverPreviewActive(); } catch { }
@@ -617,8 +646,88 @@ namespace VPB
             }
         }
 
+        /// <summary>Frame stamp so multi-pane Update does not apply UI-scale hotkey more than once.</summary>
+        private static int _uiScaleHotkeyHandledFrame = -1;
+
+        /// <summary>
+        /// Ctrl+Alt+= / Ctrl+Alt+KeypadPlus → scale up; Ctrl+Alt+- / Ctrl+Alt+KeypadMinus → scale down.
+        /// Avoids Ctrl+/- / Ctrl+scroll (grid column / list thumb zoom). Step 0.1; persists desktop/VR value.
+        /// </summary>
+        private bool TryHandleGalleryUiScaleHotkey()
+        {
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+            if (!ctrl || !alt) return false;
+
+            float delta = 0f;
+            if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
+                delta = 0.1f;
+            else if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
+                delta = -0.1f;
+            else
+                return false;
+
+            int frame = Time.frameCount;
+            if (_uiScaleHotkeyHandledFrame == frame)
+                return true;
+            _uiScaleHotkeyHandledFrame = frame;
+
+            var cfg = VPBConfig.Instance;
+            if (cfg == null) return true;
+
+            float before = cfg.InnerPaneScale;
+            float after = Mathf.Clamp(Mathf.Round((before + delta) * 10f) / 10f, VPBConfig.MinUiScale, VPBConfig.MaxUiScale);
+            if (!Mathf.Approximately(before, after))
+            {
+                cfg.InnerPaneScale = after;
+                try { cfg.TriggerChange(); } catch { }
+                try { cfg.Save(false); } catch { }
+            }
+
+            try
+            {
+                ShowTemporaryStatus(string.Format(
+                    VPBTranslation.T("gallery.status.ui_scale", "UI scale: {0:0.0}"),
+                    cfg.InnerPaneScale), 1.25f);
+            }
+            catch { }
+
+            return true;
+        }
+
         private void HandleKeyboardInput()
         {
+            if (IsPluginHotkeyCaptureActive())
+                return;
+
+            // Ctrl+F — focus title search even when another InputField is selected.
+            bool ctrlEarly = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (ctrlEarly && Input.GetKeyDown(KeyCode.F))
+            {
+                try { FocusTitleSearchFromHotkey(); } catch { }
+                return;
+            }
+            if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
+            {
+                try
+                {
+                    if (TryUndoTitleSearchClear())
+                        return;
+                }
+                catch { }
+            }
+
+            if (DetailStripIsTagMenuOpen()
+                && (Input.GetKeyDown(KeyCode.UpArrow)
+                    || Input.GetKeyDown(KeyCode.DownArrow)
+                    || Input.GetKeyDown(KeyCode.Space)))
+            {
+                KeyCode k = Input.GetKeyDown(KeyCode.UpArrow) ? KeyCode.UpArrow
+                    : (Input.GetKeyDown(KeyCode.DownArrow) ? KeyCode.DownArrow : KeyCode.Space);
+                if (DetailStripTagMenuHandleListKey(k))
+                    return;
+            }
+
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
@@ -637,14 +746,28 @@ namespace VPB
                 return;
             }
 
+            if (Input.GetKeyDown(KeyCode.Escape)
+                && _detailStripTagMenuRoot != null
+                && _detailStripTagMenuRoot.activeSelf)
+            {
+                // Nested modal → clear filter → close (same ladder as search Esc).
+                DetailStripTagMenuOnSearchEscape();
+                return;
+            }
+
             if (IsVisible && TryConsumeCategoryQuickNumberKey())
+                return;
+
+            // Ctrl+Alt+= / Ctrl+Alt+- — UI chrome scale (not Ctrl+scroll grid zoom).
+            if (TryHandleGalleryUiScaleHotkey())
                 return;
 
             bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
             if (ctrl && Input.GetKeyDown(KeyCode.R))
             {
-                if (!IsHubMode && activeContentType == ContentType.History)
+                if (activeContentType == ContentType.History)
                 {
                     try { RefreshHistoryBrowsePreferLight(true); } catch { }
                     return;
@@ -652,7 +775,7 @@ namespace VPB
             }
             if (ctrl && Input.GetKeyDown(KeyCode.Z))
             {
-                if (!IsHubMode && activeContentType == ContentType.History)
+                if (activeContentType == ContentType.History)
                 {
                     if (TryUndoRecentHistoryRemoval())
                         return;
@@ -663,7 +786,6 @@ namespace VPB
 
             if (ctrl && a)
             {
-                if (IsHubMode) return;
                 TrySelectAllCurrentGalleryView("ctrl+a");
                 return;
             }
@@ -672,7 +794,7 @@ namespace VPB
             {
                 if (selectedFiles != null && selectedFiles.Count > 0)
                 {
-                    if (!IsHubMode && activeContentType == ContentType.History)
+                    if (activeContentType == ContentType.History)
                     {
                         try { TboxRemoveSelectedFromHistory(); } catch { }
                     }
@@ -722,11 +844,14 @@ namespace VPB
             
             if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
 
+            // Click/keyboard selection may resize detail strip again after thumb-scrub lock.
+            try { DetailStripUnlockAfterExternalSelectionChange(); } catch { }
+
             // Find current index in currentFilteredFiles (visible page)
             int currentIndex = -1;
             
             // Prefer anchor path if available for navigation continuity
-            bool historyBrowseForNav = !IsHubMode && activeContentType == ContentType.History;
+            bool historyBrowseForNav = activeContentType == ContentType.History;
             string navPath = GetCurrentSelectionAnchorIdentityKey(historyBrowseForNav);
             
             if (!string.IsNullOrEmpty(navPath))
@@ -765,7 +890,7 @@ namespace VPB
                 
                 if (shift)
                 {
-                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+                    bool historyBrowse = activeContentType == ContentType.History;
                     // Range Select
                     string anchor = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
                     int anchorIndex = -1;
@@ -800,7 +925,7 @@ namespace VPB
                 else
                 {
                     // Single Select (or Toggle with Ctrl)
-                    bool historyBrowse = !IsHubMode && activeContentType == ContentType.History;
+                    bool historyBrowse = activeContentType == ContentType.History;
                     if (!ctrl)
                     {
                         selectedFiles.Clear();
@@ -812,7 +937,6 @@ namespace VPB
                 }
 
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
-                selectedHubItem = null;
                 SetHoverPath(newFile);
                 if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
                 RefreshSelectionVisuals();

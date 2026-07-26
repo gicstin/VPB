@@ -13,7 +13,7 @@ namespace VPB
             if (titleBarGO == null || backgroundBoxGO == null) return;
 
             // Button (between filter presets and title search)
-            titleCreatorBtn = UI.CreateUIButton(titleBarGO, 40, 40, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
+            titleCreatorBtn = UI.CreateUIButton(titleBarGO, GalleryUiDesignTokens.TitleBarChipRef, GalleryUiDesignTokens.TitleBarChipRef, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
             titleCreatorBtnBackdrop = titleCreatorBtn != null ? titleCreatorBtn.GetComponent<Image>() : null;
             titleCreatorBtnText = titleCreatorBtn != null ? titleCreatorBtn.GetComponentInChildren<Text>(true) : null;
             if (titleCreatorBtnBackdrop != null) titleCreatorBtnBackdrop.color = new Color(0f, 0f, 0f, 0.5f);
@@ -67,23 +67,12 @@ namespace VPB
                 };
             }
 
-            AddTooltip(titleCreatorBtn, "gallery.tooltip.creator_filter", "Creator filter (multi-select). Left-click open. Right-click clear.");
+            AddTooltip(titleCreatorBtn, "gallery.tooltip.creator_filter", "Multi-select creators → filter grid. Right-click clear.");
 
             // Click-outside blocker (behind dropdown, above grid)
-            titleCreatorDropdownBlocker = new GameObject("TitleCreatorDropdownBlocker");
-            titleCreatorDropdownBlocker.transform.SetParent(backgroundBoxGO.transform, false);
+            titleCreatorDropdownBlocker = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdownBlocker", AnchorPresets.stretchAll);
             {
-                var rt = titleCreatorDropdownBlocker.AddComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.anchoredPosition = Vector2.zero;
-                rt.sizeDelta = Vector2.zero;
-            }
-            {
-                var img = titleCreatorDropdownBlocker.AddComponent<Image>();
-                img.color = new Color(0, 0, 0, 0);
-                img.raycastTarget = true;
+                var img = UI.AddImage(titleCreatorDropdownBlocker, new Color(0, 0, 0, 0));
             }
             {
                 var blockerBtn = titleCreatorDropdownBlocker.AddComponent<Button>();
@@ -93,19 +82,11 @@ namespace VPB
             titleCreatorDropdownBlocker.SetActive(false);
 
             // Dropdown root (hidden by default)
-            titleCreatorDropdown = new GameObject("TitleCreatorDropdown");
-            titleCreatorDropdown.transform.SetParent(backgroundBoxGO.transform, false);
-            titleCreatorDropdown.transform.SetAsLastSibling();
-            var ddRT = titleCreatorDropdown.AddComponent<RectTransform>();
-            ddRT.anchorMin = new Vector2(0.5f, 1f);
-            ddRT.anchorMax = new Vector2(0.5f, 1f);
-            ddRT.pivot = new Vector2(0.5f, 1f);
             // Below title bar (70px height) so it overlays grid items.
-            ddRT.anchoredPosition = new Vector2(-184, -70);
-            ddRT.sizeDelta = new Vector2(330, 500);
+            titleCreatorDropdown = UI.CreateChildRT(backgroundBoxGO, "TitleCreatorDropdown", AnchorPresets.topMiddle, new Vector2(330, 500), new Vector2(-184, -70));
+            titleCreatorDropdown.transform.SetAsLastSibling();
 
-            var ddImg = titleCreatorDropdown.AddComponent<Image>();
-            ddImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
+            var ddImg = UI.AddImage(titleCreatorDropdown, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             var ddCg = titleCreatorDropdown.AddComponent<CanvasGroup>();
             ddCg.blocksRaycasts = true;
@@ -152,42 +133,21 @@ namespace VPB
 
             // Scroll view area
             {
-                GameObject scrollGO = new GameObject("Scroll");
-                scrollGO.transform.SetParent(titleCreatorDropdown.transform, false);
-                var scrollRT = scrollGO.AddComponent<RectTransform>();
-                scrollRT.anchorMin = new Vector2(0, 0);
-                scrollRT.anchorMax = new Vector2(1, 1);
+                float scrollBarWidth = 18f;
+                GameObject scrollGO = UI.CreateChildRT(titleCreatorDropdown, "Scroll", AnchorPresets.stretchAll);
+                RectTransform scrollRT = scrollGO.GetComponent<RectTransform>();
                 scrollRT.offsetMin = new Vector2(10, 10);
                 scrollRT.offsetMax = new Vector2(-10, -54);
-                float scrollBarWidth = 18f;
 
-                var viewportGO = new GameObject("Viewport");
-                viewportGO.transform.SetParent(scrollGO.transform, false);
-                var vpRT = viewportGO.AddComponent<RectTransform>();
-                vpRT.anchorMin = Vector2.zero;
-                vpRT.anchorMax = Vector2.one;
-                vpRT.sizeDelta = new Vector2(-scrollBarWidth, 0);
-                vpRT.anchoredPosition = new Vector2(-scrollBarWidth / 2f, 0);
+                var viewportGO = UI.CreateChildRT(scrollGO, "Viewport", AnchorPresets.stretchAll, new Vector2(-scrollBarWidth, 0), new Vector2(-scrollBarWidth / 2f, 0));
+                var vpRT = viewportGO.GetComponent<RectTransform>();
                 viewportGO.AddComponent<RectMask2D>();
 
-                var contentGO = new GameObject("Content");
-                contentGO.transform.SetParent(viewportGO.transform, false);
-                var contentRT = contentGO.AddComponent<RectTransform>();
-                contentRT.anchorMin = new Vector2(0, 1);
-                contentRT.anchorMax = new Vector2(1, 1);
-                contentRT.pivot = new Vector2(0.5f, 1f);
-                contentRT.anchoredPosition = Vector2.zero;
-                contentRT.sizeDelta = new Vector2(0, 0);
+                var contentGO = UI.CreateChildRT(viewportGO, "Content", AnchorPresets.hStretchTop);
+                var contentRT = contentGO.GetComponent<RectTransform>();
                 _titleCreatorVirtContentRT = contentRT;
 
-                titleCreatorDropdownHolder = new GameObject("Holder");
-                titleCreatorDropdownHolder.transform.SetParent(contentGO.transform, false);
-                var holderRT = titleCreatorDropdownHolder.AddComponent<RectTransform>();
-                holderRT.anchorMin = new Vector2(0, 1);
-                holderRT.anchorMax = new Vector2(1, 1);
-                holderRT.pivot = new Vector2(0.5f, 1f);
-                holderRT.anchoredPosition = Vector2.zero;
-                holderRT.sizeDelta = new Vector2(0, 0);
+                titleCreatorDropdownHolder = UI.CreateChildRT(contentGO, "Holder", AnchorPresets.hStretchTop);
                 titleCreatorDropdownHolder.AddComponent<LayoutElement>();
 
                 _titleCreatorVirtScroll = scrollGO.AddComponent<ScrollRect>();
@@ -221,6 +181,71 @@ namespace VPB
 
             titleCreatorDropdown.SetActive(false);
             try { UpdateTitleCreatorButtonVisual(); } catch { }
+
+            innerPaneScaleActions.Add(s => ApplyTitleCreatorDropdownLayout(s));
+        }
+
+        internal void ApplyTitleCreatorDropdownLayout(float s)
+        {
+            if (titleCreatorDropdown == null) return;
+            if (s <= 0f) s = 1f;
+            RectTransform ddRT = titleCreatorDropdown.GetComponent<RectTransform>();
+            if (ddRT != null)
+            {
+                float bgW = backgroundBoxGO != null
+                    ? (backgroundBoxGO.GetComponent<RectTransform>()?.rect.width ?? 600f)
+                    : 600f;
+                float ddW = Mathf.Min(
+                    GalleryUiDesignTokens.TitleCreatorDropdownWidthRef * s,
+                    Mathf.Max(160f * s, bgW - 20f * s));
+                float ddH = GalleryUiDesignTokens.TitleCreatorDropdownHeightRef * s;
+                ddRT.sizeDelta = new Vector2(ddW, ddH);
+
+                if (titleCreatorBtn != null)
+                {
+                    RectTransform btnRT = titleCreatorBtn.GetComponent<RectTransform>();
+                    if (btnRT != null)
+                    {
+                        float halfDdW = ddW * 0.5f;
+                        float halfBgW = bgW * 0.5f;
+                        float clampedX = Mathf.Clamp(btnRT.anchoredPosition.x, -halfBgW + halfDdW + 4f * s, halfBgW - halfDdW - 4f * s);
+                        ddRT.anchoredPosition = new Vector2(clampedX, -GalleryUiDesignTokens.TitleBarHeightRef * s);
+                    }
+                }
+            }
+            if (titleCreatorDropdownSearchInput != null)
+            {
+                RectTransform srt = titleCreatorDropdownSearchInput.GetComponent<RectTransform>();
+                if (srt != null)
+                {
+                    // Keep search 20px narrower than dropdown, matching the reference proportions.
+                    float ddWNow = ddRT != null ? ddRT.sizeDelta.x : GalleryUiDesignTokens.TitleCreatorDropdownSearchWidthRef * s + 20f * s;
+                    float searchW = Mathf.Max(100f * s, ddWNow - 20f * s);
+                    srt.anchoredPosition = new Vector2(0f, -10f * s);
+                    srt.sizeDelta = new Vector2(searchW, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+                }
+                RescaleSearchInput(titleCreatorDropdownSearchInput, s);
+            }
+            Transform scrollGO = titleCreatorDropdown.transform.Find("Scroll");
+            if (scrollGO != null)
+            {
+                RectTransform scrollRT = scrollGO.GetComponent<RectTransform>();
+                if (scrollRT != null)
+                {
+                    float pad = GalleryUiDesignTokens.SideTabSideMarginRef * s;
+                    scrollRT.offsetMin = new Vector2(pad, pad);
+                    scrollRT.offsetMax = new Vector2(-pad, -(GalleryUiDesignTokens.SearchFieldHeightRef + 19f) * s);
+                }
+            }
+            for (int i = 0; i < _titleCreatorVirtButtons.Count; i++)
+            {
+                GameObject btn = _titleCreatorVirtButtons[i];
+                if (btn == null) continue;
+                RectTransform rt = btn.GetComponent<RectTransform>();
+                if (rt != null)
+                    rt.sizeDelta = new Vector2(-10f * s, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+            }
+            try { UpdateTitleCreatorVirtualVisible(); } catch { }
         }
 
         private void ToggleTitleCreatorDropdown()
@@ -254,7 +279,7 @@ namespace VPB
 
         private float TitleCreatorVirtRowHeight()
         {
-            float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float s = ChromeScale;
             return (35f * s) + (2f * s);
         }
 
@@ -279,7 +304,7 @@ namespace VPB
                 RectTransform rt = btnGO.GetComponent<RectTransform>();
                 if (rt != null)
                 {
-                    float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                    float s = ChromeScale;
                     rt.anchorMin = new Vector2(0, 1);
                     rt.anchorMax = new Vector2(1, 1);
                     rt.pivot = new Vector2(0.5f, 1f);
@@ -319,13 +344,8 @@ namespace VPB
             var txt = btnGO.GetComponentInChildren<Text>(true);
             if (txt != null)
             {
-                float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
-                const int baseFont = 18;
-                const int minFont = 10;
-                float fontScale = Mathf.Clamp(s, (float)minFont / (float)baseFont, 100f);
-                txt.fontSize = Mathf.RoundToInt(baseFont * fontScale);
-                float extra = (fontScale > 0f) ? (s / fontScale) : 1f;
-                txt.transform.localScale = new Vector3(extra, extra, 1f);
+                float s = ChromeScale;
+                GalleryUiMetrics.ApplyFont(txt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                 txt.text = label;
                 txt.color = UI.PopupText;
             }
@@ -334,7 +354,7 @@ namespace VPB
         private string ComputeTitleCreatorVirtViewSignature()
         {
             SortState st = GetSortState("Creator");
-            float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
+            float scale = ChromeScale;
             return "v1|" + creatorSideTabDataRevision
                 + CreatorConsolidationSignatureFragment()
                 + "|" + (titleCreatorDropdownFilter ?? "")
@@ -422,7 +442,7 @@ namespace VPB
                     var rt = btnGO.GetComponent<RectTransform>();
                     if (rt != null)
                     {
-                        float s = (VPBConfig.Instance != null) ? VPBConfig.Instance.InnerPaneScale : 1f;
+                        float s = ChromeScale;
                         rt.sizeDelta = new Vector2(-10f, 35f * s);
                         rt.anchoredPosition = new Vector2(0f, -idx * rowH);
                     }

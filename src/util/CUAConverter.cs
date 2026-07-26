@@ -1,12 +1,9 @@
-﻿using HarmonyLib;
-using Leap.Unity;
+﻿using Leap.Unity;
 using Leap.Unity.Infix;
-using MVR.FileManagement;
 using SimpleJSON;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -14,150 +11,6 @@ namespace VPB.src.util
 {
     public class CUAConverter
     {
-        /// <param name="fileEntry">When set, <see cref="VPB.UI.LoadJSONWithFallback"/> can read the JSON from the .var via VPB when native LoadJSON fails.</param>
-        public static JSONClass GetConvertedScene(string sceneJsonPath, bool onlyPersonAtoms = true, global::VPB.FileEntry fileEntry = null)
-        {
-            if (SuperController.singleton == null)
-                throw new InvalidOperationException("GetConvertedScene: SuperController.singleton is null.");
-
-            // Do not run FileManager.NormalizePath here: for virtual refs it can substitute paths in ways that break
-            // lookups for entries with '!', parentheses, or spaces; slashes are enough for LoadJSONWithFallback.
-            string loadPath = string.IsNullOrEmpty(sceneJsonPath) ? sceneJsonPath : sceneJsonPath.Replace('\\', '/');
-
-            JSONNode loaded = VPB.UI.LoadJSONWithFallback(loadPath ?? sceneJsonPath, fileEntry);
-            if (loaded == null)
-            {
-                LogUtil.LogError($"[VPB] GetConvertedScene: could not load JSON for '{sceneJsonPath}'. Use virtual path form packageUid:/pathInsideVar (note colon+slash); see VPB.UI.LoadJSONWithFallback.");
-                throw new InvalidOperationException("Scene JSON could not be loaded: " + sceneJsonPath);
-            }
-
-            var json = loaded.AsObject;
-            if (json == null)
-            {
-                LogUtil.LogError($"[VPB] GetConvertedScene: JSON is not an object for '{sceneJsonPath}'.");
-                throw new InvalidOperationException("Scene JSON root is not an object: " + sceneJsonPath);
-            }
-
-            var packageNameRegex = Regex.Match(sceneJsonPath, "^([^:]+)");
-            string packageName = packageNameRegex.Success ? packageNameRegex.Groups[1].Value : null;
-
-            // Replace any existing references to SELF: with the source package
-            // Must be done before clothing items are created since they may reference self
-            if (packageName != null)
-            {
-                LogUtil.Log($"Applying package name {packageName}");
-                // In-place tree walk — never json.ToString()+Parse on multi‑MB mocap/timeline scenes (Mono heap blow‑ups).
-                JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(json, packageName);
-            }
-
-            ConvertCUAToCUAClothingMutable(json, packageName);
-
-            if (onlyPersonAtoms) json.RemoveNonPersonAtomsMutable();
-
-            return json;
-        }
-
-        /// <summary>
-        /// Convert CUAs linked to Person atoms to CUAClothing items
-        /// </summary>
-        /// <param name="sceneJson"></param>
-        public static void ConvertCUAToCUAClothingMutable(JSONClass sceneJson, string sourcePackageId = null)
-        {
-            if (sceneJson == null) return;
-
-            JSONNode atomsRoot = sceneJson["atoms"];
-            JSONArray atoms = atomsRoot != null ? atomsRoot.AsArray : null;
-            if (atoms == null)
-            {
-                LogUtil.LogWarning("[VPB] ConvertCUAToCUAClothingMutable: scene has no atoms array — skipping CUA conversion.");
-                return;
-            }
-
-            var persons = new List<JSONClass>();
-            var cuas = new List<JSONClass>();
-
-            foreach (JSONClass atom in atoms)
-            {
-                string id = atom["id"];
-                string type = atom["type"];
-
-                if (type == "Person")
-                {
-                    persons.Add(atom);
-                }
-                else if (type == "CustomUnityAsset")
-                {
-                    cuas.Add(atom);
-                }
-            }
-
-            int i = 0;
-            foreach (var cua in cuas)
-            {
-                string linkTo = cua.GetStorable("control")?["linkTo"];
-                if (linkTo == null) continue;
-
-                var parts = linkTo.Split(':');
-
-                if (parts.Length < 2)
-                {
-                    LogUtil.LogWarning($"Invalid linkTo format for {cua["id"]}: {linkTo}");
-                    continue;
-                }
-
-                string linkedAtomId = parts[0];
-                string linkedAtomBone = parts[1];
-
-                var linkedPerson = persons.FirstOrDefault(p => p.GetId() == linkedAtomId);
-                if (linkedPerson == null) continue;
-
-                if (!TryGetBoneTransform(linkedPerson, linkedAtomBone, out SimpleTransform boneTransform))
-                {
-                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: could not resolve link bone '{linkedAtomBone}' — skipping clothing conversion for this CUA.");
-                    continue;
-                }
-
-                var personTransform = linkedPerson.GetTransform();
-                var cuaTransform = cua.GetTransform();
-
-                var finalOffset = boneTransform.InverseTransformPoint(cuaTransform);
-
-                JSONClass geom = linkedPerson.GetStorable("geometry");
-                if (geom == null)
-                {
-                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: Person has no geometry storable.");
-                    continue;
-                }
-
-                JSONNode charNode = geom["character"];
-                if (charNode == null || string.IsNullOrEmpty(charNode.Value))
-                {
-                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: geometry.character missing.");
-                    continue;
-                }
-
-                string gender = JSONExtensions.GetGenderForCharacter(charNode.Value);
-
-                var needRefresh = CUAClothing.CreateAndSaveCUAClothing(out JSONClass clothingItem, cua, i, sourcePackageId, gender);
-
-                if (geom["clothing"] == null)
-                    geom["clothing"] = new JSONArray();
-                JSONArray clothingArr = geom["clothing"].AsArray;
-                if (clothingArr == null)
-                {
-                    LogUtil.LogWarning($"[VPB] CUA {cua.GetId()}: geometry.clothing is not an array.");
-                    continue;
-                }
-                clothingArr.Add("dummy", clothingItem);
-
-                if (linkedPerson["storables"] == null)
-                    linkedPerson["storables"] = new JSONArray();
-                linkedPerson["storables"].AsArray.Add(CUAClothing.BuildCUAClothingStorable(cua, finalOffset, linkedAtomBone, clothingItem["internalId"]));
-
-                i++;
-            }
-        }
-
         public class BoneMeta
         {
             public string ParentName;
@@ -213,7 +66,6 @@ namespace VPB.src.util
                             { "Pectoral", new BoneMeta("chest", true) },
         };
 
-        /// <summary>Resolves <see cref="BoneMeta"/> for a person bone name; returns null if unknown (e.g. extra mocap/rig bones not in <see cref="SKELETON"/>).</summary>
         private static BoneMeta GetStartBoneMeta(string bone, out string side, out string name)
         {
             var regex = Regex.Match(bone, "^((?<side>[lr])(?<name>[A-Z].*))|(?<name>.*)");
@@ -240,18 +92,13 @@ namespace VPB.src.util
             return null;
         }
 
-
-        /// <summary>
-        /// Returns a list of bone names starting at the given bone and ending at the root bone
-        /// </summary>
-        /// <param name="startBoneName">The starting bone</param>
-        /// <returns></returns>
         public static List<string> BonePathToRoot(string startBoneName)
         {
             BoneMeta currentMeta = GetStartBoneMeta(startBoneName, out string side, out string currentName);
-            if (currentMeta == null) {
+            if (currentMeta == null)
+            {
                 return null;
-            };
+            }
             List<string> path = new List<string>();
             for (var i = 0; currentMeta != null && i < 50; i++)
             {
@@ -272,8 +119,19 @@ namespace VPB.src.util
             return path;
         }
 
+        public static bool TryGetSourceBoneWorld(JSONClass sourcePerson, string bone, out SimpleTransform boneWorld)
+        {
+            return TryGetSourceBoneWorld(sourcePerson, bone, 1f, out boneWorld);
+        }
 
-        private static bool TryGetBoneTransform(JSONClass person, string offsetBone, out SimpleTransform boneOffset)
+        public static bool TryGetSourceBoneWorld(JSONClass sourcePerson, string bone, float sourceScale, out SimpleTransform boneWorld)
+        {
+            boneWorld = new SimpleTransform();
+            if (sourcePerson == null || string.IsNullOrEmpty(bone)) return false;
+            return TryGetBoneTransform(sourcePerson, bone, sourceScale, out boneWorld);
+        }
+
+        private static bool TryGetBoneTransform(JSONClass person, string offsetBone, float sourceScale, out SimpleTransform boneOffset)
         {
             boneOffset = new SimpleTransform();
             var path = BonePathToRoot(offsetBone);
@@ -289,6 +147,8 @@ namespace VPB.src.util
                     continue;
                 }
                 var localTransform = storable.GetTransform();
+                if (sourceScale != 1f && !storable.HasKey("rootPosition"))
+                    localTransform.Position *= sourceScale;
                 boneOffset = boneOffset.TransformPoint(localTransform);
             }
             return true;
@@ -312,10 +172,6 @@ namespace VPB.src.util
             this.Rotation = rotation;
         }
 
-        /// <summary>
-        /// Convert a transform from local space to world space
-        /// </summary>
-        /// <param name="transform"></param>
         public SimpleTransform TransformPoint(SimpleTransform transform)
         {
             return new SimpleTransform(Position + transform.Position.RotatedBy(Rotation), Rotation * transform.Rotation);
@@ -335,10 +191,6 @@ namespace VPB.src.util
             return $"{Position.ToString("F5")}{Rotation.eulerAngles.ToString("F5").Replace("(", "[").Replace(")", "]")}";
         }
 
-        /// <summary>
-        /// Create a Transform from the "position" and "rotation" fields of a JSONClass
-        /// </summary>
-        /// <param name="json">The JSON holding the transform data</param>
         public static SimpleTransform FromJson(JSONClass json, string positionKey = "position", string rotationKey = "rotation")
         {
             if (!json.HasKey(positionKey) || !json.HasKey(rotationKey))
@@ -350,7 +202,6 @@ namespace VPB.src.util
             JSONClass positionJson = json[positionKey].AsObject;
             JSONClass rotationJson = json[rotationKey].AsObject;
 
-            // Will return 0.0f if the keys are missing
             Vector3 position = new Vector3(positionJson["x"].AsFloat, positionJson["y"].AsFloat, positionJson["z"].AsFloat);
             Quaternion rotation = Quaternion.Euler(rotationJson["x"].AsFloat, rotationJson["y"].AsFloat, rotationJson["z"].AsFloat);
 

@@ -140,6 +140,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_help",
+        "IsDirectory":  true
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_help/en.md",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons",
         "IsDirectory":  true
     },
@@ -200,6 +208,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/backspace.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/book.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/button_placeholder.png",
         "IsDirectory":  false
     },
@@ -236,6 +252,34 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevron_down.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevron_up.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevrons_down.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevrons_down_left.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevrons_down_right.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevrons_up_left.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/chevrons_up_right.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/cleanup.png",
         "IsDirectory":  false
     },
@@ -256,7 +300,19 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/compress.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/delete.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/device_watch.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/device_watch_off.png",
         "IsDirectory":  false
     },
     {
@@ -376,6 +432,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/gallery_source.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/gallery_target.png",
         "IsDirectory":  false
     },
@@ -452,6 +512,46 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_0.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_1.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_2.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_3.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_4.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_5.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_6.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_7.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_8.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/level_9.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/list_add.png",
         "IsDirectory":  false
     },
@@ -473,6 +573,14 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/minimize.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/nav_next.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/nav_prev.png",
         "IsDirectory":  false
     },
     {
@@ -516,6 +624,14 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/photo_down.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/photo_up.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/pin_off.png",
         "IsDirectory":  false
     },
@@ -533,6 +649,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/refresh.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/remove_clothing.png",
         "IsDirectory":  false
     },
     {
@@ -616,6 +736,10 @@
         "IsDirectory":  false
     },
     {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/switch_horizontal.png",
+        "IsDirectory":  false
+    },
+    {
         "RelativePath":  "BepInEx/plugins/vpb_icons/TABLER_ICONS_LICENSE.txt",
         "IsDirectory":  false
     },
@@ -649,6 +773,10 @@
     },
     {
         "RelativePath":  "BepInEx/plugins/vpb_icons/visibility_linked.png",
+        "IsDirectory":  false
+    },
+    {
+        "RelativePath":  "BepInEx/plugins/vpb_icons/x.png",
         "IsDirectory":  false
     },
     {

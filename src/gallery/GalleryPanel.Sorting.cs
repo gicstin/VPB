@@ -75,7 +75,7 @@ namespace VPB
                 {
                     backdrop.color = isRatingSortToggleEnabled
                         ? ColorHistoryAccent
-                        : new Color(0.15f, 0.15f, 0.15f, 1f);
+                        : UI.ChromeDark;
                 }
             }
         }
@@ -119,7 +119,7 @@ namespace VPB
             var state = GetSortState(context);
             SortType prevType = state.Type;
             state.Type = newType;
-            if (state.Type == SortType.Name || state.Type == SortType.HiddenOnly || state.Type == SortType.AutoInstallOnly || state.Type == SortType.LoadedOnly || state.Type == SortType.UnloadedOnly || state.Type == SortType.UnusedOnly)
+            if (state.Type == SortType.Name)
                 state.Direction = SortDirection.Ascending;
             else
                 state.Direction = SortDirection.Descending;
@@ -160,18 +160,9 @@ namespace VPB
                 }
                 else
                 {
-                    bool prevExclusive =
-                        prevType == SortType.HiddenOnly ||
-                        prevType == SortType.AutoInstallOnly ||
-                        prevType == SortType.LoadedOnly ||
-                        prevType == SortType.UnloadedOnly ||
-                        prevType == SortType.UnusedOnly;
-                    bool nextExclusive =
-                        newType == SortType.HiddenOnly ||
-                        newType == SortType.AutoInstallOnly ||
-                        newType == SortType.LoadedOnly ||
-                        newType == SortType.UnloadedOnly ||
-                        newType == SortType.UnusedOnly;
+                    // Exclusive prune modes now live on Filter; UnusedOnly kept for legacy migrate only.
+                    bool prevExclusive = false;
+                    bool nextExclusive = false;
 
                     // Exclusive "only" modes prune the list in-place. Switching to/from them must rebuild the base list,
                     // otherwise the user can't "clear" the mode without changing categories.
@@ -195,7 +186,6 @@ namespace VPB
         /// </summary>
         private bool TryReapplyFilesSortWithoutFullRefresh()
         {
-            if (IsHubMode) return false;
             if (!hasLoadedContent || currentFilteredFiles == null || recyclingGrid == null) return false;
             if (refreshCoroutine != null) return false;
 
@@ -236,9 +226,8 @@ namespace VPB
             SortType.DateAdded, SortType.DateUpdated,
             SortType.Size, SortType.Rating,
             SortType.UsageCount,
-            SortType.UnusedOnly,
-            SortType.Deps, SortType.Dependents, SortType.Missing,
-            SortType.Hidden, SortType.HiddenOnly, SortType.AutoInstall, SortType.AutoInstallOnly, SortType.LoadedOnly, SortType.UnloadedOnly
+            SortType.Random,
+            SortType.Deps, SortType.Dependents, SortType.Missing
         };
 
         private static string FileSortTypeFullLabel(SortType type)
@@ -253,14 +242,13 @@ namespace VPB
                 case SortType.Size: return VPBTranslation.T("gallery.sort.full.size", "File size");
                 case SortType.Rating: return VPBTranslation.T("gallery.sort.full.rating", "Rating");
                 case SortType.UsageCount: return VPBTranslation.T("gallery.sort.full.usage_count", "Usage count");
+                case SortType.Random: return VPBTranslation.T("gallery.sort.full.random", "Random");
                 case SortType.UnusedOnly: return VPBTranslation.T("gallery.sort.full.unused_only", "Unused (only)");
                 case SortType.Deps: return VPBTranslation.T("gallery.sort.full.deps", "Dependencies");
                 case SortType.Dependents: return VPBTranslation.T("gallery.sort.full.dependents", "Dependents");
                 case SortType.Missing: return VPBTranslation.T("gallery.sort.full.missing", "Missing dependencies");
                 case SortType.Hidden: return VPBTranslation.T("gallery.sort.full.hidden", "Hidden");
-                case SortType.HiddenOnly: return VPBTranslation.T("gallery.sort.full.hidden_only", "Hidden (only)");
-                case SortType.AutoInstall: return VPBTranslation.T("gallery.sort.full.autoinstall", "Auto Install");
-                case SortType.AutoInstallOnly: return VPBTranslation.T("gallery.sort.full.autoinstall_only", "Auto Install (only)");
+                case SortType.AutoInstall: return VPBTranslation.T("gallery.sort.full.autoinstall", "Always loaded");
                 case SortType.LoadedOnly: return VPBTranslation.T("gallery.sort.full.loaded_only", "All Loaded");
                 case SortType.UnloadedOnly: return VPBTranslation.T("gallery.sort.full.unloaded_only", "All Unloaded");
                 default: return type.ToString();
@@ -271,51 +259,10 @@ namespace VPB
         {
             if (fileSortTypeMenuRoot != null || backgroundBoxGO == null) return;
 
-            fileSortTypeMenuRoot = new GameObject("FileSortTypeMenu");
-            fileSortTypeMenuRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRT = fileSortTypeMenuRoot.AddComponent<RectTransform>();
-            rootRT.anchorMin = Vector2.zero;
-            rootRT.anchorMax = Vector2.one;
-            rootRT.offsetMin = Vector2.zero;
-            rootRT.offsetMax = Vector2.zero;
-
-            GameObject backdropGO = new GameObject("Backdrop");
-            backdropGO.transform.SetParent(fileSortTypeMenuRoot.transform, false);
-            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
-            backdropRT.anchorMin = Vector2.zero;
-            backdropRT.anchorMax = Vector2.one;
-            backdropRT.offsetMin = Vector2.zero;
-            backdropRT.offsetMax = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
-            backdropImg.raycastTarget = true;
-            Button backdropBtn = backdropGO.AddComponent<Button>();
-            backdropBtn.transition = Selectable.Transition.None;
-            backdropBtn.onClick.AddListener(CloseFileSortTypeMenu);
-
-            fileSortTypeMenuPanelGO = new GameObject("FileSortTypeMenuPanel");
-            fileSortTypeMenuPanelGO.transform.SetParent(fileSortTypeMenuRoot.transform, false);
-            RectTransform panelRT = fileSortTypeMenuPanelGO.AddComponent<RectTransform>();
-            panelRT.anchorMin = new Vector2(0.5f, 1f);
-            panelRT.anchorMax = new Vector2(0.5f, 1f);
-            panelRT.pivot = new Vector2(0.5f, 1f);
-            panelRT.anchoredPosition = new Vector2(108f, -72f);
-            panelRT.sizeDelta = new Vector2(260f, 50f);
-
-            Image panelImg = fileSortTypeMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
-
-            VerticalLayoutGroup vlg = fileSortTypeMenuPanelGO.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.UpperCenter;
-
-            ContentSizeFitter csf = fileSortTypeMenuPanelGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fileSortTypeMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "FileSortTypeMenu", CloseFileSortTypeMenu);
+            fileSortTypeMenuPanelGO = UI.CreatePopupMenuPanel(
+                fileSortTypeMenuRoot, "FileSortTypeMenuPanel",
+                AnchorPresets.topMiddle, new Vector2(260f, 50f), new Vector2(108f, -72f));
 
             fileSortTypeMenuRoot.SetActive(false);
             RebuildFileSortTypeMenuOptions();
@@ -343,52 +290,12 @@ namespace VPB
         {
             if (sidePaneSortMenuRoot != null || backgroundBoxGO == null) return;
 
-            sidePaneSortMenuRoot = new GameObject("SidePaneSortMenu");
-            sidePaneSortMenuRoot.transform.SetParent(backgroundBoxGO.transform, false);
-            RectTransform rootRT = sidePaneSortMenuRoot.AddComponent<RectTransform>();
-            rootRT.anchorMin = Vector2.zero;
-            rootRT.anchorMax = Vector2.one;
-            rootRT.offsetMin = Vector2.zero;
-            rootRT.offsetMax = Vector2.zero;
-
-            GameObject backdropGO = new GameObject("Backdrop");
-            backdropGO.transform.SetParent(sidePaneSortMenuRoot.transform, false);
-            RectTransform backdropRT = backdropGO.AddComponent<RectTransform>();
-            backdropRT.anchorMin = Vector2.zero;
-            backdropRT.anchorMax = Vector2.one;
-            backdropRT.offsetMin = Vector2.zero;
-            backdropRT.offsetMax = Vector2.zero;
-            Image backdropImg = backdropGO.AddComponent<Image>();
-            backdropImg.color = new Color(0f, 0f, 0f, 0.001f);
-            backdropImg.raycastTarget = true;
-            Button backdropBtn = backdropGO.AddComponent<Button>();
-            backdropBtn.transition = Selectable.Transition.None;
-            backdropBtn.onClick.AddListener(CloseSidePaneSortMenu);
-
-            sidePaneSortMenuPanelGO = new GameObject("SidePaneSortMenuPanel");
-            sidePaneSortMenuPanelGO.transform.SetParent(sidePaneSortMenuRoot.transform, false);
-            sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.AddComponent<RectTransform>();
+            sidePaneSortMenuRoot = UI.CreatePopupMenuRoot(backgroundBoxGO, "SidePaneSortMenu", CloseSidePaneSortMenu);
             // Anchors / position are set at open-time based on which button was clicked.
-            sidePaneSortMenuPanelRT.anchorMin = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.anchorMax = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.pivot = new Vector2(0f, 1f);
-            sidePaneSortMenuPanelRT.anchoredPosition = new Vector2(10f, -95f);
-            sidePaneSortMenuPanelRT.sizeDelta = new Vector2(240f, 50f);
-
-            Image panelImg = sidePaneSortMenuPanelGO.AddComponent<Image>();
-            panelImg.color = new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f);
-
-            VerticalLayoutGroup vlg = sidePaneSortMenuPanelGO.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(6, 6, 6, 6);
-            vlg.spacing = 4;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandHeight = false;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.childAlignment = TextAnchor.UpperCenter;
-
-            ContentSizeFitter csf = sidePaneSortMenuPanelGO.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            sidePaneSortMenuPanelGO = UI.CreatePopupMenuPanel(
+                sidePaneSortMenuRoot, "SidePaneSortMenuPanel",
+                AnchorPresets.topLeft, new Vector2(240f, 50f), new Vector2(10f, -95f));
+            sidePaneSortMenuPanelRT = sidePaneSortMenuPanelGO.GetComponent<RectTransform>();
 
             sidePaneSortMenuRoot.SetActive(false);
         }
@@ -406,8 +313,7 @@ namespace VPB
             if (string.IsNullOrEmpty(context)) return;
 
             Transform panel = sidePaneSortMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             SortState current = GetSortState(context);
             if (current == null) current = new SortState(SortType.Name, SortDirection.Ascending);
@@ -426,9 +332,8 @@ namespace VPB
                 SortType capturedType = optType;
                 SortDirection capturedDir = optDir;
 
-                GameObject row = UI.CreateUIButton(
-                    sidePaneSortMenuPanelGO, 228, 34, label, 14, 0, 0,
-                    AnchorPresets.middleCenter,
+                GameObject row = UI.AddPopupMenuRow(
+                    sidePaneSortMenuPanelGO, 228, 34, label, 14, isCurrent,
                     () =>
                     {
                         if (SupportsSidePaneFourModeSort(context))
@@ -442,24 +347,21 @@ namespace VPB
                             UpdateTabs();
                         }
                         CloseSidePaneSortMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 36f;
-                le.flexibleWidth = 1f;
+                    },
+                    GalleryUiDesignTokens.PopupMenuRowHeightCompactRef);
             }
+
+            SyncSidePaneSortMenuLayout(ChromeScale);
+        }
+
+        private void SyncSidePaneSortMenuLayout(float s)
+        {
+            if (sidePaneSortMenuPanelGO == null) return;
+            if (s <= 0f) s = 1f;
+            ScaleVerticalPopupMenuRows(sidePaneSortMenuPanelGO, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightCompactRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.SidePaneSortMenuPanelWidthRef);
         }
 
         private void ToggleSidePaneSortMenu(string context, RectTransform anchorButtonRT)
@@ -479,10 +381,10 @@ namespace VPB
             // Position directly under the clicked sort button.
             bool isRight = false;
             try { isRight = anchorButtonRT != null && anchorButtonRT.anchorMin.x > 0.5f; } catch { isRight = false; }
-            float gapY = 6f;
-            float sc = VPBConfig.Instance != null ? VPBConfig.Instance.CurrentInnerPaneScale : 1f;
-            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f, -65f * sc);
-            Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f, 35f);
+            float sc = ChromeScale;
+            float gapY = 6f * sc;
+            Vector2 btnPos = anchorButtonRT != null ? anchorButtonRT.anchoredPosition : new Vector2(10f * sc, -65f * sc);
+            Vector2 btnSize = anchorButtonRT != null ? anchorButtonRT.sizeDelta : new Vector2(35f * sc, 35f * sc);
 
             sidePaneSortMenuPanelRT.anchorMin = sidePaneSortMenuPanelRT.anchorMax = (anchorButtonRT != null ? anchorButtonRT.anchorMin : new Vector2(0f, 1f));
             sidePaneSortMenuPanelRT.pivot = isRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
@@ -504,6 +406,7 @@ namespace VPB
             }
 
             RebuildFileSortTypeMenuOptions();
+            SyncFileSortTypeMenuLayout(ChromeScale);
             fileSortTypeMenuRoot.SetActive(true);
             fileSortTypeMenuRoot.transform.SetAsLastSibling();
         }
@@ -519,8 +422,7 @@ namespace VPB
             if (fileSortTypeMenuPanelGO == null) return;
 
             Transform panel = fileSortTypeMenuPanelGO.transform;
-            for (int i = panel.childCount - 1; i >= 0; i--)
-                UnityEngine.Object.Destroy(panel.GetChild(i).gameObject);
+            UI.DestroyAllChildren(panel);
 
             SortState current = GetSortState("Files");
 
@@ -532,72 +434,40 @@ namespace VPB
                 string label = (isCurrent ? "\u2713  " : "    ") + FileSortTypeFullLabel(sortType);
                 SortType captured = sortType;
 
-                GameObject row = UI.CreateUIButton(
-                    fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
-                    AnchorPresets.middleCenter,
+                UI.AddPopupMenuRow(
+                    fileSortTypeMenuPanelGO, 248, 36, label, 14, isCurrent,
                     () =>
                     {
                         CommitSortTypeChange("Files", captured, fileSortTypeText, fileSortDirText);
                         CloseFileSortTypeMenu();
-                    });
-
-                Image rowImg = row.GetComponent<Image>();
-                rowImg.color = isCurrent ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-                Text rowT = row.GetComponentInChildren<Text>();
-                if (rowT != null)
-                {
-                    rowT.color = UI.PopupText;
-                    rowT.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
-                    rowT.alignment = TextAnchor.MiddleLeft;
-                    VPBUiFont.ApplyTo(rowT);
-                }
-
-                LayoutElement le = row.AddComponent<LayoutElement>();
-                le.preferredHeight = 38f;
-                le.flexibleWidth = 1f;
+                    },
+                    38f);
             }
 
-            AppendHideOldVersionsMenuRow();
+            SyncFileSortTypeMenuLayout(ChromeScale);
         }
 
-        // Bottom-of-menu toggle: applies globally to the Files gallery view (not a sort mode itself).
-        private void AppendHideOldVersionsMenuRow()
+        private void SyncFileSortTypeMenuLayout(float s)
         {
-            bool on = false;
-            try { on = Settings.Instance != null && Settings.Instance.HideOldVersions != null && Settings.Instance.HideOldVersions.Value; } catch { }
-            string label = (on ? "\u2713  " : "    ") + VPBTranslation.T("gallery.sort.full.hide_old_versions", "Hide old versions (keep newest only)");
-
-            GameObject row = UI.CreateUIButton(
-                fileSortTypeMenuPanelGO, 248, 36, label, 14, 0, 0,
-                AnchorPresets.middleCenter,
-                () =>
-                {
-                    try
-                    {
-                        if (Settings.Instance != null && Settings.Instance.HideOldVersions != null)
-                            Settings.Instance.HideOldVersions.Value = !Settings.Instance.HideOldVersions.Value;
-                    }
-                    catch { }
-                    CloseFileSortTypeMenu();
-                    try { RefreshFiles(); } catch { }
-                });
-
-            Image rowImg = row.GetComponent<Image>();
-            rowImg.color = on ? UI.PopupRowActiveBackdrop : UI.PopupRowBackdrop;
-
-            Text rowT = row.GetComponentInChildren<Text>();
-            if (rowT != null)
+            if (fileSortTypeMenuPanelGO == null) return;
+            if (s <= 0f) s = 1f;
+            RectTransform panelRT = fileSortTypeMenuPanelGO.GetComponent<RectTransform>();
+            if (panelRT == null) return;
+            float gap = GalleryUiDesignTokens.PopupMenuAnchorGapRef * s;
+            if (_titleBarFileSortTypeBtnRT != null)
             {
-                rowT.color = UI.PopupText;
-                rowT.fontStyle = on ? FontStyle.Bold : FontStyle.Normal;
-                rowT.alignment = TextAnchor.MiddleLeft;
-                VPBUiFont.ApplyTo(rowT);
+                panelRT.anchoredPosition = _titleBarFileSortTypeBtnRT.anchoredPosition
+                    + new Vector2(0f, -(_titleBarFileSortTypeBtnRT.sizeDelta.y + gap));
             }
-
-            LayoutElement le = row.AddComponent<LayoutElement>();
-            le.preferredHeight = 38f;
-            le.flexibleWidth = 1f;
+            else
+            {
+                panelRT.anchoredPosition = new Vector2(108f * s, -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
+            }
+            panelRT.sizeDelta = new Vector2(GalleryUiDesignTokens.FileSortMenuPanelWidthRef * s, panelRT.sizeDelta.y);
+            ScaleVerticalPopupMenuRows(fileSortTypeMenuPanelGO, s,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                GalleryUiDesignTokens.FileSortMenuPanelWidthRef);
         }
 
         private void ToggleFileSortDirection()
@@ -649,14 +519,16 @@ namespace VPB
         {
             if (context == "Files")
             {
+                // Hidden / Always loaded / Loaded / Unloaded live on Filter button.
                 return type == SortType.Name || type == SortType.Date || type == SortType.DateCreated
                     || type == SortType.DateAdded || type == SortType.DateUpdated
                     || type == SortType.Size || type == SortType.Rating || type == SortType.Deps || type == SortType.Dependents || type == SortType.Missing
                     || type == SortType.UsageCount
-                    || type == SortType.UnusedOnly
-                    || type == SortType.Hidden || type == SortType.HiddenOnly || type == SortType.AutoInstall || type == SortType.AutoInstallOnly || type == SortType.LoadedOnly || type == SortType.UnloadedOnly;
+                    || type == SortType.Random
+                    // Prefer-sort still used by Always-loaded / Unused Filter cycles (not shown in sort menu).
+                    || type == SortType.AutoInstall;
             }
-            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub" || context == "SceneSource")
+            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
             {
                 return type == SortType.Name || type == SortType.Count;
             }
@@ -665,7 +537,7 @@ namespace VPB
 
         private static bool SupportsSidePaneFourModeSort(string context)
         {
-            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "Hub";
+            return context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags";
         }
 
         /// <summary>Upper side pane: name A→Z, name Z→A, count low→high, count high→low (same icons as scene file sort).</summary>
@@ -732,12 +604,12 @@ namespace VPB
         /// <summary>Upper side sort + tag sub-row: one place for vpb_icons vs legacy text.</summary>
         private void SyncSidePaneTopSortButtonVisuals()
         {
-            if (leftSortBtn != null && leftActiveContent.HasValue)
+            if (leftSortBtn != null && leftActiveContent.HasValue && !ContentTypeSuppressesSideSort(leftActiveContent.Value))
             {
                 string ctx = leftActiveContent.Value.ToString();
                 SyncSidePaneFourModeSortButtonVisual(leftSortBtnBackdrop, leftSortBtnIconImage, leftSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
             }
-            if (rightSortBtn != null && rightActiveContent.HasValue)
+            if (rightSortBtn != null && rightActiveContent.HasValue && !ContentTypeSuppressesSideSort(rightActiveContent.Value))
             {
                 string ctx = rightActiveContent.Value.ToString();
                 SyncSidePaneFourModeSortButtonVisual(rightSortBtnBackdrop, rightSortBtnIconImage, rightSortBtnText, GetSortState(ctx), SupportsSidePaneFourModeSort(ctx));
@@ -813,6 +685,7 @@ namespace VPB
                 case SortType.Score: symbol = "Sc"; break;
                 case SortType.Rating: symbol = "Rt"; break;
                 case SortType.UsageCount: symbol = "Us"; break;
+                case SortType.Random: symbol = "Rnd"; break;
                 case SortType.UnusedOnly: symbol = "U0"; break;
                 case SortType.Deps: symbol = "Dp"; break;
                 case SortType.Dependents: symbol = "Dn"; break;
@@ -846,6 +719,7 @@ namespace VPB
                     case SortType.Score: symbol = "Sc"; break;
                     case SortType.Rating: symbol = "Rt"; break;
                     case SortType.UsageCount: symbol = "Us"; break;
+                    case SortType.Random: symbol = "Rnd"; break;
                     case SortType.UnusedOnly: symbol = "U0"; break;
                     case SortType.Deps: symbol = "Dp"; break;
                     case SortType.Dependents: symbol = "Dn"; break;
@@ -900,7 +774,7 @@ namespace VPB
             UpdateTabs();
         }
 
-        private static readonly Color SceneSourceSortBtnIdle = new Color(0.15f, 0.15f, 0.15f, 1f);
+        private static readonly Color SceneSourceSortBtnIdle = UI.ChromeDark;
         private static readonly Color SceneSourceSortBtnActive = new Color(0.15f, 0.30f, 0.52f, 1f);
 
         private void SyncSceneSourceSortButtonHighlights()

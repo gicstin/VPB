@@ -236,6 +236,35 @@ namespace VPB
 				return false;
 		}
 
+		/// <summary>
+		/// Re-read the on-disk last-write time and size for this loose file. Used after an
+		/// overwrite-save so Date Updated/modified sorts reflect the new timestamp without a
+		/// full gallery rescan (issue #45).
+		/// </summary>
+		public void RefreshLastWriteTimeFromDisk()
+		{
+			try
+			{
+				Exists = File.Exists(Path);
+				if (!Exists) return;
+				DateTime creationTime;
+				DateTime lastWriteTime;
+				long size;
+				if (FileStat.TryGetFileStat(Path, out creationTime, out lastWriteTime, out size))
+				{
+					LastWriteTime = lastWriteTime;
+					Size = size;
+				}
+				else
+				{
+					FileInfo fileInfo = new FileInfo(Path);
+					LastWriteTime = fileInfo.LastWriteTime;
+					Size = fileInfo.Length;
+				}
+			}
+			catch { }
+		}
+
 		/// <summary>Sync Path after <see cref="VarPackage"/> moved the .var (e.g. InstallSelf / UninstallSelf).</summary>
 		public void RefreshVarDisplayPathFromPackage()
 		{

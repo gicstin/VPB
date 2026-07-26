@@ -34,7 +34,7 @@ namespace VPB
                 harmony.Patch(method, prefix);
                 LogUtil.Log($"[VPB] Silenced {typeName}.{methodName}");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // We don't log error here to avoid spam if it fails to patch a specific method
                 // as JIT might fail even during patching if the class is severely broken.
