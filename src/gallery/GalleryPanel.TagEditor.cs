@@ -679,6 +679,7 @@ namespace VPB
             DetailStripEnsureTagMenu();
             DetailStripEnsureTagMenuModeTabs();
             DetailStripEnsureTagMenuDatabasePane();
+            try { DetailStripEnsureTagMenuColumnDropZones(); } catch { }
             if (_detailStripTagMenuRoot == null) return;
 
             if (_detailStripTagMenuRoot.activeSelf

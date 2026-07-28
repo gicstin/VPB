@@ -3085,6 +3085,12 @@ namespace VPB
             InvalidateFooterOverflowLayout();
             MarkGalleryPaneChromeDirty();
             UpdateLayout();
+            // Expand after scene-launch collapse: subtree was inactive (viewport≈0). Recover
+            // User Tags virt bind without resetting Tag/Filter mode (#74).
+            if (!collapsed)
+            {
+                try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
+            }
         }
 
         /// <summary>Select every item in <see cref="currentFilteredFiles"/> when within <see cref="SelectAllSafetyMaxItemCount"/>.</summary>

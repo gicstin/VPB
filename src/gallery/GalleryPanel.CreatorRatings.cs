@@ -394,12 +394,19 @@ namespace VPB
         }
 
         /// <summary>
-        /// Display sort only. Rated-only overrides to Rating desc without mutating saved Creator sort.
+        /// Display sort only. Rated-only forces Rating type without mutating saved Creator sort;
+        /// keeps Rating direction if user already chose Rating asc/desc.
         /// </summary>
         private SortState GetCreatorListSortState()
         {
             if (creatorRatedOnlyFilter)
-                return new SortState(SortType.Rating, SortDirection.Descending);
+            {
+                SortState st = GetSortState("Creator");
+                SortDirection dir = SortDirection.Descending;
+                if (st != null && st.Type == SortType.Rating)
+                    dir = st.Direction;
+                return new SortState(SortType.Rating, dir);
+            }
             return GetSortState("Creator");
         }
 
@@ -409,21 +416,12 @@ namespace VPB
 
             if (!creatorRatedOnlyFilter)
             {
-                // Turning ON — snapshot current sort; do not persist Rating override.
+                // Turning ON — snapshot current sort; do not persist display override.
                 SortState st = GetSortState("Creator");
                 if (st != null)
                 {
-                    // Heal prior bug that wrote Rating into saved sort while filter was used.
-                    if (st.Type == SortType.Rating)
-                    {
-                        _creatorSortSnapshotType = SortType.Name;
-                        _creatorSortSnapshotDir = SortDirection.Ascending;
-                    }
-                    else
-                    {
-                        _creatorSortSnapshotType = st.Type;
-                        _creatorSortSnapshotDir = st.Direction;
-                    }
+                    _creatorSortSnapshotType = st.Type;
+                    _creatorSortSnapshotDir = st.Direction;
                     _creatorSortSnapshotValid = true;
                 }
                 creatorRatedOnlyFilter = true;
@@ -790,17 +788,5 @@ namespace VPB
             starRc.OnRightClick = () => handler.ClearRating();
         }
 
-        /// <summary>
-        /// One-shot heal: if rated-only is off but Creator sort stuck on Rating from older builds, restore Name A→Z.
-        /// </summary>
-        private void HealCreatorSortIfStuckOnRatingFromFilter()
-        {
-            if (creatorRatedOnlyFilter) return;
-            SortState st = GetSortState("Creator");
-            if (st == null || st.Type != SortType.Rating) return;
-            st.Type = SortType.Name;
-            st.Direction = SortDirection.Ascending;
-            SaveSortState("Creator", st);
-        }
     }
 }

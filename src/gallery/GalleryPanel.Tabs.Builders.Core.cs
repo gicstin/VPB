@@ -173,8 +173,7 @@ namespace VPB
             }
 
             // Sort once (in-place) then virtualize visible rows only.
-            // Rated-only uses display-only Rating desc; saved Creator sort is untouched.
-            HealCreatorSortIfStuckOnRatingFromFilter();
+            // Rated-only may override display to Rating; saved Creator sort stays unless user picks Rating.
             var sortState = GetCreatorListSortState();
             GallerySortManager.Instance.SortCreators(displayCreators, sortState);
 

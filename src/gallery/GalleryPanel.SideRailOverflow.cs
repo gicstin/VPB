@@ -124,10 +124,20 @@ namespace VPB
         private void SetSideRailButtonIndexActive(int idx, bool active)
         {
             if (!TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right)) return;
-            if (left != null && left.gameObject.activeSelf != active)
-                left.gameObject.SetActive(active);
-            if (right != null && right.gameObject.activeSelf != active)
-                right.gameObject.SetActive(active);
+            // Hide-creator setting must win over overflow restore (SetActive true).
+            bool hideCreator = HideCreatorSideRailButtonsRequested();
+            if (left != null)
+            {
+                bool want = active;
+                if (want && hideCreator && IsCreatorSideRailButtonGO(left.gameObject)) want = false;
+                if (left.gameObject.activeSelf != want) left.gameObject.SetActive(want);
+            }
+            if (right != null)
+            {
+                bool want = active;
+                if (want && hideCreator && IsCreatorSideRailButtonGO(right.gameObject)) want = false;
+                if (right.gameObject.activeSelf != want) right.gameObject.SetActive(want);
+            }
         }
 
         private bool IsSideRailFloatingIndex(int idx)

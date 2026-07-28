@@ -1760,19 +1760,21 @@ namespace VPB
 
         private void CacheUserTagsSideTab()
         {
-            cachedUserTagSideTab.Clear();
-            _userTagSideTabCountsReady = false;
-            _userTagAnyAssignmentExists = false;
             string cat = currentCategoryTitle ?? "";
             if (titleText != null && string.IsNullOrEmpty(cat)) cat = titleText.text ?? "";
 
             var allNames = new List<string>(128);
+            // SQLite can be briefly busy during scene load / package refresh. Do not clear a good
+            // cache or mark empty-as-cached — that empties the Tags panel until F↔T (issue #74).
             if (!VpbLocalDatabase.TryReadAllGalleryUserTagNames(allNames))
             {
-                userTagsCached = true;
-                unchecked { userTagSideTabDataRevision++; }
+                _userTagSideTabCountsReady = false;
                 return;
             }
+
+            cachedUserTagSideTab.Clear();
+            _userTagSideTabCountsReady = false;
+            _userTagAnyAssignmentExists = false;
 
             bool anyAssignOk = VpbLocalDatabase.TryHasAnyGalleryUserTagAssignment(out bool anyExists);
             if (anyAssignOk) _userTagAnyAssignmentExists = anyExists;
@@ -3932,6 +3934,8 @@ namespace VPB
                     UpdateTabs();
             }
             catch { }
+            // Scene load can leave Tags rail sticky Mask collapsed while Tag Mode stays armed (#74).
+            try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
         }
 
         public void CycleTarget(bool forward)

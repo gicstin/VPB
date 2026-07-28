@@ -362,7 +362,7 @@ namespace VPB
         {
             if (btnGO == null) return;
             string cName = creator.Name ?? "";
-            bool isActive = CreatorFilterContains(cName);
+            bool isActive = ActiveFilterContainsCreatorSelection(cName);
             string label = cName + " (" + creator.Count + ")";
 
             var img = btnGO.GetComponent<Image>();
@@ -426,7 +426,6 @@ namespace VPB
             _titleCreatorVirtViewSig = sig;
             _titleCreatorVirtView.Clear();
 
-            HealCreatorSortIfStuckOnRatingFromFilter();
             var sortState = GetCreatorListSortState();
             try { GallerySortManager.Instance.SortCreators(displayCreators, sortState); } catch { }
 

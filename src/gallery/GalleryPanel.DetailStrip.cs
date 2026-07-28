@@ -624,6 +624,15 @@ namespace VPB
                 && !_detailStripTagMenuCloseGO.transform.IsChildOf(_detailStripTagMenuHeaderGO.transform);
             bool tagMenuMissingAvailRemove = _detailStripTagMenuAvailableScrollGO != null
                 && _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>() == null;
+            bool tagMenuMissingAppliedApply = _detailStripTagMenuAppliedScrollGO != null
+                && _detailStripTagMenuAppliedScrollGO.GetComponent<UserTagApplyDropZone>() == null;
+            // Soft-attach column drop zones without hard rebuild.
+            if (tagMenuMissingAvailRemove || tagMenuMissingAppliedApply)
+            {
+                try { DetailStripEnsureTagMenuColumnDropZones(); } catch { }
+                tagMenuMissingAvailRemove = _detailStripTagMenuAvailableScrollGO != null
+                    && _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>() == null;
+            }
             bool tagMenuMissingAvailSort = _detailStripTagMenuAvailableLabel != null
                 && _detailStripTagMenuAvailSortBtnGO == null;
             bool tagMenuMissingResize = _detailStripTagMenuResizeGO == null
@@ -5672,6 +5681,8 @@ namespace VPB
             {
                 try { UpdatePaginationText(); } catch { }
                 try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
+                // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
+                try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
                 DetailStripEndScrubHeightLock();
                 return;
             }
@@ -5694,6 +5705,20 @@ namespace VPB
             catch { }
             try { UpdatePaginationText(); } catch { }
             try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
+            // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
+            try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
+        }
+
+        /// <summary>
+        /// Scrub uses runHeavySideEffects:false for scroll perf. On commit, sync UserTags
+        /// side-rail applied list (and avail selection chrome) without full DetailStripRefresh.
+        /// </summary>
+        private void RefreshUserTagsSideRailAfterScrubSelection()
+        {
+            userTagAppliedRemoveSelection.Clear();
+            userTagAppliedRemoveAnchor = null;
+            updatePanelForSelection();
+            try { DetailStripSyncOpenTagMenuIfSelectionChanged(); } catch { }
         }
 
         /// <summary>
@@ -6849,7 +6874,7 @@ namespace VPB
                 out _detailStripTagMenuAvailableScrollGO,
                 out _detailStripTagMenuAvailableListGO,
                 withAvailSort: true);
-            DetailStripEnsureTagMenuAvailableRemoveZone();
+            DetailStripEnsureTagMenuColumnDropZones();
             DetailStripSyncTagMenuAvailSortIcon();
 
             DetailStripEnsureTagMenuModeTabs();
@@ -7085,12 +7110,20 @@ namespace VPB
             if (img != null) img.color = DetailStripTagMenuColBg;
         }
 
-        private void DetailStripEnsureTagMenuAvailableRemoveZone()
+        private void DetailStripEnsureTagMenuColumnDropZones()
         {
-            if (_detailStripTagMenuAvailableScrollGO == null) return;
-            UserTagRemoveDropZone dz = _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>();
-            if (dz == null) dz = _detailStripTagMenuAvailableScrollGO.AddComponent<UserTagRemoveDropZone>();
-            dz.Panel = this;
+            if (_detailStripTagMenuAppliedScrollGO != null)
+            {
+                UserTagApplyDropZone applyDz = _detailStripTagMenuAppliedScrollGO.GetComponent<UserTagApplyDropZone>();
+                if (applyDz == null) applyDz = _detailStripTagMenuAppliedScrollGO.AddComponent<UserTagApplyDropZone>();
+                applyDz.Panel = this;
+            }
+            if (_detailStripTagMenuAvailableScrollGO != null)
+            {
+                UserTagRemoveDropZone removeDz = _detailStripTagMenuAvailableScrollGO.GetComponent<UserTagRemoveDropZone>();
+                if (removeDz == null) removeDz = _detailStripTagMenuAvailableScrollGO.AddComponent<UserTagRemoveDropZone>();
+                removeDz.Panel = this;
+            }
         }
 
         /// <summary>Esc while search focused: clear filter, then close. Enter: create when Create row shown.</summary>

@@ -1404,9 +1404,8 @@ namespace VPB
                     AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator — skip create when hide-creator setting on (destroyed until setting off).
-                if (!HideCreatorSideRailButtonsRequested())
-                    CreateRightCreatorSideRailButton();
+                // Creator — always create once; hide setting uses SetActive (see ApplyCreatorSideRailButtonVisibility).
+                CreateRightCreatorSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1878,9 +1877,8 @@ namespace VPB
                     AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator — skip create when hide-creator setting on (destroyed until setting off).
-                if (!HideCreatorSideRailButtonsRequested())
-                    CreateLeftCreatorSideRailButton();
+                // Creator — always create once; hide setting uses SetActive (see ApplyCreatorSideRailButtonVisibility).
+                CreateLeftCreatorSideRailButton();
 
                 // Path (Blue)
                 {

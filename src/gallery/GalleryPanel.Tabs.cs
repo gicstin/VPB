@@ -378,7 +378,8 @@ namespace VPB
         {
             if (btnGO == null) return;
             string cName = creator.Name ?? "";
-            bool isActive = CreatorFilterContains(cName);
+            // Selection highlight — not CreatorFilterContains (that is true for everyone when filter empty).
+            bool isActive = ActiveFilterContainsCreatorSelection(cName);
             Color btnColor = isActive ? ColorCreator : ColorInactiveRow;
             string label = cName + " (" + creator.Count + ")";
 
@@ -1335,8 +1336,15 @@ namespace VPB
                 _rightUserTagVirtScroll = null;
                 _rightUserTagVirtHooked = false;
             }
-            _userTagVirtView.Clear();
-            _userTagVirtViewSig = null;
+            // Shared virt view — only wipe when neither rail still owns User Tags pick list.
+            bool otherStillOpen = isLeft
+                ? (rightActiveContent == ContentType.UserTags && rightTabContainerGO != null)
+                : (leftActiveContent == ContentType.UserTags && leftTabContainerGO != null);
+            if (!otherStillOpen)
+            {
+                _userTagVirtView.Clear();
+                _userTagVirtViewSig = null;
+            }
         }
 
         private static void DestroyChildIfPresent(Transform container, string childName)

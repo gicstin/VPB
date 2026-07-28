@@ -1358,31 +1358,118 @@ namespace VPB
             _userTagVirtLayoutCo = StartCoroutine(CoUserTagVirtLayoutRefresh(isLeft, tabContainer, resetTop, offsetPx));
         }
 
-        private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool resetScrollToTop, float preserveOffsetPx)
+        /// <summary>
+        /// After collapse/expand, scene load, or cold layout: sticky Mask can stay height≈0 for a few frames
+        /// (invent disabled while sticky on → empty tag list). Mode F↔T workaround only forced this path.
+        /// Preserve Tag/Filter work mode — refresh layout + virt bind only.
+        /// </summary>
+        private void RequestUserTagAvailVirtRecoverAfterLayout()
         {
-            yield return null;
-            if (!IsUserTagsSideTabOpen(isLeft))
+            if (!isActiveAndEnabled || !gameObject.activeInHierarchy) return;
+            bool leftOpen = IsUserTagsSideTabOpen(true) && leftTabContainerGO != null;
+            bool rightOpen = IsUserTagsSideTabOpen(false) && rightTabContainerGO != null;
+            if (!leftOpen && !rightOpen) return;
+            StopCo(ref _userTagVirtLayoutCo);
+            _userTagVirtLayoutCo = StartCoroutine(CoUserTagAvailVirtRecoverAfterLayout(leftOpen, rightOpen));
+        }
+
+        private IEnumerator CoUserTagAvailVirtRecoverAfterLayout(bool leftOpen, bool rightOpen)
+        {
+            // Scene-load collapse / first open: subtree or viewport may be inactive for several frames.
+            const int maxAttempts = 4;
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
             {
-                _userTagVirtLayoutCo = null;
-                yield break;
+                yield return null;
+                if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
+                {
+                    _userTagVirtLayoutCo = null;
+                    yield break;
+                }
+                leftOpen = IsUserTagsSideTabOpen(true) && leftTabContainerGO != null;
+                rightOpen = IsUserTagsSideTabOpen(false) && rightTabContainerGO != null;
+                if (!leftOpen && !rightOpen)
+                {
+                    _userTagVirtLayoutCo = null;
+                    yield break;
+                }
+
+                bool anyCollapsedMask = false;
+                try
+                {
+                    ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
+                    Canvas.ForceUpdateCanvases();
+                    if (leftOpen)
+                    {
+                        SnapshotUserTagAvailScrollForPreserve(true);
+                        InvalidateUserTagVirtWindowGate(true);
+                        UpdateUserTagVirtualVisible(true, UserTagStateOnColor, leftTabContainerGO.transform);
+                        RestorePreservedUserTagAvailScroll();
+                        if (IsUserTagAvailViewportCollapsed(true)) anyCollapsedMask = true;
+                    }
+                    if (rightOpen)
+                    {
+                        SnapshotUserTagAvailScrollForPreserve(false);
+                        InvalidateUserTagVirtWindowGate(false);
+                        UpdateUserTagVirtualVisible(false, UserTagStateOnColor, rightTabContainerGO.transform);
+                        RestorePreservedUserTagAvailScroll();
+                        if (IsUserTagAvailViewportCollapsed(false)) anyCollapsedMask = true;
+                    }
+                }
+                catch { }
+
+                if (!anyCollapsedMask) break;
             }
+            _userTagVirtLayoutCo = null;
+        }
+
+        private bool IsUserTagAvailViewportCollapsed(bool isLeft)
+        {
             try
             {
-                // Sticky first so Mask height is final before virt window measure/bind.
-                ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
-                Canvas.ForceUpdateCanvases();
-                InvalidateUserTagVirtWindowGate(isLeft);
-                if (resetScrollToTop)
-                {
-                    ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
-                    if (sr != null) sr.verticalNormalizedPosition = 1f;
-                }
-                else
-                    ApplyUserTagAvailScrollOffsetPx(isLeft, preserveOffsetPx);
-                if (tabContainer != null)
-                    UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
+                ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
+                if (sr == null) return true;
+                RectTransform viewport = sr.viewport != null ? sr.viewport : (sr.transform as RectTransform);
+                float rowH = SideTabVirtRowStridePx();
+                if (rowH <= 1f) rowH = 37f;
+                return MeasureUserTagVirtViewportHeight(viewport, rowH) <= 0.5f;
             }
-            catch { }
+            catch { return true; }
+        }
+
+        private IEnumerator CoUserTagVirtLayoutRefresh(bool isLeft, Transform tabContainer, bool resetScrollToTop, float preserveOffsetPx)
+        {
+            const int maxAttempts = 4;
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                yield return null;
+                if (!IsUserTagsSideTabOpen(isLeft))
+                {
+                    _userTagVirtLayoutCo = null;
+                    yield break;
+                }
+                try
+                {
+                    // Sticky first so Mask height is final before virt window measure/bind.
+                    ApplyUserTagsStickyScrollChrome(TabScrollTopOffset());
+                    Canvas.ForceUpdateCanvases();
+                    InvalidateUserTagVirtWindowGate(isLeft);
+                    if (attempt == 0)
+                    {
+                        if (resetScrollToTop)
+                        {
+                            ScrollRect sr = GetUserTagAvailScrollRect(isLeft);
+                            if (sr != null) sr.verticalNormalizedPosition = 1f;
+                        }
+                        else
+                            ApplyUserTagAvailScrollOffsetPx(isLeft, preserveOffsetPx);
+                    }
+                    if (tabContainer != null)
+                        UpdateUserTagVirtualVisible(isLeft, UserTagStateOnColor, tabContainer);
+                }
+                catch { }
+
+                if (!IsUserTagAvailViewportCollapsed(isLeft)) break;
+            }
             _userTagVirtLayoutCo = null;
         }
 
@@ -1842,15 +1929,36 @@ namespace VPB
             return "\"" + tags[0] + "\" +" + (tags.Count - 1);
         }
 
+        /// <summary>
+        /// Floating quick-tagger / apply-remove zones sit above the grid.
+        /// RaycastAll still returns gallery rows behind — treat these as occluders.
+        /// </summary>
+        internal bool IsUserTagDropOccluder(GameObject go)
+        {
+            if (go == null) return false;
+            if (_detailStripTagMenuPanelGO != null
+                && _detailStripTagMenuRoot != null
+                && _detailStripTagMenuRoot.activeSelf
+                && (go == _detailStripTagMenuPanelGO
+                    || go.transform.IsChildOf(_detailStripTagMenuPanelGO.transform)))
+                return true;
+            if (go.GetComponentInParent<UserTagApplyDropZone>() != null) return true;
+            if (go.GetComponentInParent<UserTagRemoveDropZone>() != null) return true;
+            return false;
+        }
+
         /// <summary>Shared by tag-drag hover hint and drop: first gallery file row hit (this panel).</summary>
         internal static bool TryResolveGalleryRowFromRaycastHits(GalleryPanel panel, IList<RaycastResult> hits, out FileEntry file)
         {
             file = null;
             if (panel == null || hits == null) return false;
+            // Hits are front→back. Occluder in front of gallery = no pierce-through.
             for (int i = 0; i < hits.Count; i++)
             {
                 GameObject go = hits[i].gameObject;
                 if (go == null) continue;
+                if (panel.IsUserTagDropOccluder(go))
+                    return false;
                 UIFileEntryLeftReleaseSelect lr = go.GetComponentInParent<UIFileEntryLeftReleaseSelect>();
                 if (lr == null || lr.Panel != panel || lr.File == null) continue;
                 if (lr.File is InternalSettingRowEntry) continue;
@@ -4471,13 +4579,14 @@ namespace VPB
             _raycastHits.Clear();
             es.RaycastAll(ped, _raycastHits);
 
-            // Title-search Incl/Excl rows win over gallery apply (search filter, not item tag).
-            if (!UserTagDragSession.PendingIsAppliedRowRemove)
+            // Front→back: title-search / apply zones / floating tag menu beat gallery behind them.
+            for (int i = 0; i < _raycastHits.Count; i++)
             {
-                for (int i = 0; i < _raycastHits.Count; i++)
+                GameObject go = _raycastHits[i].gameObject;
+                if (go == null) continue;
+
+                if (!UserTagDragSession.PendingIsAppliedRowRemove)
                 {
-                    GameObject go = _raycastHits[i].gameObject;
-                    if (go == null) continue;
                     TitleSearchChipDropZone tdz = go.GetComponentInParent<TitleSearchChipDropZone>();
                     if (tdz != null && tdz.Panel == Panel)
                     {
@@ -4485,25 +4594,27 @@ namespace VPB
                         return;
                     }
                 }
-            }
 
-            // Gallery row before Applied/selection zones — drop on item tags that item.
-            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
-            {
-                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
-                return;
-            }
-
-            for (int i = 0; i < _raycastHits.Count; i++)
-            {
-                GameObject go = _raycastHits[i].gameObject;
-                if (go == null) continue;
                 UserTagApplyDropZone dz = go.GetComponentInParent<UserTagApplyDropZone>();
                 if (dz != null && dz.Panel == Panel)
                 {
                     Panel.UserTagApplyDroppedTags(tags);
                     return;
                 }
+
+                // Tag manager / drop chrome in front of grid — apply to selection, never pierce.
+                if (Panel.IsUserTagDropOccluder(go))
+                {
+                    Panel.UserTagApplyDroppedTags(tags);
+                    return;
+                }
+            }
+
+            // Gallery row only when nothing above occludes it.
+            if (GalleryPanel.TryResolveGalleryRowFromRaycastHits(Panel, _raycastHits, out FileEntry galleryRow))
+            {
+                Panel.UserTagApplyDroppedTagsRespectingGalleryRow(tags, galleryRow);
+                return;
             }
 
             // Fallback: drop anywhere inside this panel's canvas applies (selection-targeted).

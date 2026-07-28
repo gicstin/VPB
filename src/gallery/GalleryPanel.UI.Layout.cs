@@ -243,7 +243,15 @@ namespace VPB
             try
             {
                 if (leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags)
+                {
                     ApplyUserTagsStickyScrollChrome(tabTopOffset);
+                    // Sticky over-inset / inactive subtree → Mask height≈0, Tags(N) with empty rows (#74).
+                    bool needVirtRecover =
+                        (IsUserTagsSideTabOpen(true) && IsUserTagAvailViewportCollapsed(true))
+                        || (IsUserTagsSideTabOpen(false) && IsUserTagAvailViewportCollapsed(false));
+                    if (needVirtRecover)
+                        RequestUserTagAvailVirtRecoverAfterLayout();
+                }
             }
             catch { }
 

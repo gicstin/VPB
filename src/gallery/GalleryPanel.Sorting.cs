@@ -370,6 +370,7 @@ namespace VPB
                             st.Type = capturedType;
                             st.Direction = capturedDir;
                             SaveSortState(context, st);
+                            try { SyncSidePaneTopSortButtonVisuals(); } catch { }
                             UpdateTabs();
                         }
                         CloseSidePaneSortMenu();
@@ -681,13 +682,13 @@ namespace VPB
         private void SyncSidePaneFourModeSortButtonVisual(Image backdrop, Image iconImg, Text legacyText, SortState st, bool iconMode)
         {
             if (backdrop == null) return;
-            if (iconMode && sceneSourceSortModeSprites != null && iconImg != null)
+            int idx = TryGetSidePaneFourModeIndex(st);
+            // Rating (and any non-4-mode sort) uses text — do not fake Name A→Z icon.
+            if (iconMode && idx >= 0 && sceneSourceSortModeSprites != null && iconImg != null)
             {
                 if (legacyText != null) legacyText.gameObject.SetActive(false);
                 iconImg.gameObject.SetActive(true);
-                int idx = TryGetSidePaneFourModeIndex(st);
-                int spIdx = idx >= 0 ? idx : 0;
-                Sprite sp = spIdx >= 0 && spIdx < sceneSourceSortModeSprites.Length ? sceneSourceSortModeSprites[spIdx] : null;
+                Sprite sp = idx < sceneSourceSortModeSprites.Length ? sceneSourceSortModeSprites[idx] : null;
                 if (sp != null)
                 {
                     iconImg.sprite = sp;
@@ -695,7 +696,7 @@ namespace VPB
                 }
                 else
                     iconImg.enabled = false;
-                backdrop.color = idx >= 0 ? SceneSourceSortBtnActive : SceneSourceSortBtnIdle;
+                backdrop.color = SceneSourceSortBtnActive;
             }
             else
             {
@@ -709,7 +710,9 @@ namespace VPB
                     legacyText.gameObject.SetActive(true);
                     if (st != null) UpdateSortButtonText(legacyText, st);
                 }
-                backdrop.color = SceneSourceSortBtnIdle;
+                backdrop.color = (st != null && st.Type == SortType.Rating)
+                    ? SceneSourceSortBtnActive
+                    : SceneSourceSortBtnIdle;
             }
         }
 
