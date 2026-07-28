@@ -786,7 +786,8 @@ namespace VPB
                                 && panel != null && panel.layoutMode == GalleryLayoutMode.Grid;
             if (!labelsActive && card && panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 card.SetActive(true);
-            if (panel != null && file != null) panel.SetHoverPath(file);
+            // Claim before sibling deferred-exit runs — otherwise exit restores count over this path (#75).
+            if (panel != null && file != null) panel.ClaimHoverPath(this, file);
             if (panel != null && file != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 panel.ShowGridHoverBadges(gameObject, file);
         }
@@ -802,7 +803,7 @@ namespace VPB
             }
 
             if (card) card.SetActive(false);
-            if (panel != null) panel.RestoreSelectedHoverPath();
+            if (panel != null) panel.ReleaseHoverPath(this);
         }
 
         private System.Collections.IEnumerator DeferredGridBadgeExit()
@@ -828,7 +829,8 @@ namespace VPB
 
             if (card) card.SetActive(false);
             if (panel != null) panel.HideGridHoverBadges(gameObject, force: false);
-            if (panel != null) panel.RestoreSelectedHoverPath();
+            // Ownership gate: sibling enter already claimed — do not wipe path to count (#75).
+            if (panel != null) panel.ReleaseHoverPath(this);
         }
 
         void OnDisable()
@@ -842,6 +844,8 @@ namespace VPB
             if (panel != null && panel.layoutMode == GalleryLayoutMode.Grid)
                 panel.HideGridHoverBadges(gameObject, force: true);
             if (card != null) card.SetActive(false);
+            // Drop path claim if this cell owned it (pool recycle / deactivate mid-hover).
+            if (panel != null) panel.ReleaseHoverPath(this);
         }
 
         Camera ResolveUiCamera()

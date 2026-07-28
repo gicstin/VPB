@@ -1081,6 +1081,32 @@ namespace VPB
             SetHoverPath(file.Path);
         }
 
+        /// <summary>
+        /// Pointer entered a gallery item — claim info-bar path ownership and show full path.
+        /// Sibling cell exit (deferred) must not wipe this after claim.
+        /// </summary>
+        internal void ClaimHoverPath(UIHoverReveal owner, FileEntry file)
+        {
+            if (owner == null || file == null)
+            {
+                SetHoverPath(file);
+                return;
+            }
+            // Set path first (empty path clears ownership), then claim so deferred sibling exit cannot wipe.
+            SetHoverPath(file);
+            _hoverPathRevealOwner = owner;
+        }
+
+        /// <summary>
+        /// Pointer left a gallery item — restore count fallback only if this reveal still owns the path.
+        /// </summary>
+        internal void ReleaseHoverPath(UIHoverReveal owner)
+        {
+            if (owner == null || _hoverPathRevealOwner != owner) return;
+            _hoverPathRevealOwner = null;
+            RestoreSelectedHoverPath();
+        }
+
         private string GetFilteredVisibleItemsCountText()
         {
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
@@ -1106,6 +1132,8 @@ namespace VPB
 
         public void SetHoverPath(string path)
         {
+            // Direct callers drop reveal ownership; ClaimHoverPath re-assigns after SetHoverPath(file).
+            _hoverPathRevealOwner = null;
             bool hasPath = !string.IsNullOrEmpty(path);
             hoverPathIsCountMode = !hasPath;
             float targetAlpha = 1f; // pure on/off: always visible (path or count fallback)

@@ -1096,6 +1096,11 @@ namespace VPB
         private RectTransform hoverPathRT;
         private CanvasGroup hoverPathCanvasGroup;
         private Coroutine hoverFadeCoroutine;
+        /// <summary>
+        /// UIHoverReveal that currently owns the hover-path row. Deferred grid exit must not
+        /// clear path when pointer already moved onto another cell (sibling enter claims first).
+        /// </summary>
+        private UIHoverReveal _hoverPathRevealOwner;
         // Hover preview overlay (stationary user position on canvas; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;
