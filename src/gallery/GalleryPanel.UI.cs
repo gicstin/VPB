@@ -1661,14 +1661,18 @@ namespace VPB
                 : GalleryUiDesignTokens.SpringScrollBtnWidthFloatRef;
             float springW = baseW * paneS;
             float springH = springW * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
+            float offsetX = isFixedLocally
+                ? 0f
+                : GalleryUiDesignTokens.SpringScrollBtnOffsetXFloatRef * paneS;
             SpringScrollButton ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
             if (ssb != null)
                 ssb.SetSize(springW, springH);
-            else
+            RectTransform springRt = springScrollButtonGO.GetComponent<RectTransform>();
+            if (springRt != null)
             {
-                RectTransform springRt = springScrollButtonGO.GetComponent<RectTransform>();
-                if (springRt != null)
+                if (ssb == null)
                     springRt.sizeDelta = new Vector2(springW, springH);
+                springRt.anchoredPosition = new Vector2(offsetX, 0f);
             }
             Transform iconT = springScrollButtonGO.transform.Find("Icon");
             if (iconT != null)
@@ -1732,6 +1736,7 @@ namespace VPB
             catch { }
 
             springScrollButtonGO = springBtn;
+            ApplySpringScrollButtonScale(ChromeScale);
 
             try
             {
@@ -1802,16 +1807,11 @@ namespace VPB
                 try { EnsureSpringScrollButtonExists(); } catch { }
             }
 
-            // Resize to match fixed vs floating mode
+            // Resize + offset to match fixed vs floating mode
             try
             {
                 if (springScrollButtonGO != null)
-                {
-                    float w = isFixedLocally ? 50f : 100f;
-                    float h = w * GalleryUiDesignTokens.SpringScrollBtnAspectRef;
-                    var ssb = springScrollButtonGO.GetComponent<SpringScrollButton>();
-                    if (ssb != null) ssb.SetSize(w, h);
-                }
+                    ApplySpringScrollButtonScale(ChromeScale);
                 LayoutScrollbarJumpButtons();
             }
             catch { }
@@ -1918,7 +1918,11 @@ namespace VPB
             if (hoverPreviewGO == null) return;
             if (file != null && hoverPreviewFile != null && !ReferenceEquals(file, hoverPreviewFile)) return;
             hoverPreviewFile = null;
+            UIHoverPreviewTrigger src = hoverPreviewSource;
             hoverPreviewSource = null;
+            // Panel cleared preview while EventSystem may still be over the thumb — drop local
+            // hover flag so a later enter can show again (VR false-stale recovery).
+            try { if (src != null) src.SyncHoverFlagAfterPanelHide(); } catch { }
             if (!hoverPreviewDummyActive)
             {
                 hoverPreviewGO.SetActive(false);
@@ -1938,15 +1942,71 @@ namespace VPB
             bool stale = isCollapsed
                 || hoverPreviewSource == null
                 || !hoverPreviewSource.isActiveAndEnabled
-                || !hoverPreviewSource.IsHovering
-                || !hoverPreviewSource.ContainsScreenPoint(Input.mousePosition);
+                || !hoverPreviewSource.IsHovering;
 
             if (!stale)
             {
-                try { stale = !IsPointerInsideGalleryWindowRect(); } catch { }
+                // VR: RectangleContainsScreenPoint + worldCamera disagree with VaM laser screen
+                // coords — false stale killed every cell except one lucky rect (#76). Trust
+                // EventSystem enter/exit; if raycast is valid, only dismiss when hit left the cell.
+                bool vr = false;
+                try { vr = XrUtils.IsVrActive(); } catch { }
+
+                if (vr)
+                {
+                    try
+                    {
+                        if (currentPointerData != null && currentPointerData.pointerCurrentRaycast.isValid)
+                        {
+                            GameObject hit = currentPointerData.pointerCurrentRaycast.gameObject;
+                            if (hit != null && !IsPointerOverHoverPreviewCell(hoverPreviewSource, hit))
+                                stale = true;
+                        }
+                    }
+                    catch { }
+                }
+                else
+                {
+                    Vector2 ptr;
+                    if (TryGetUiPointerScreenPosition(out ptr))
+                    {
+                        if (!hoverPreviewSource.ContainsScreenPoint(ptr))
+                            stale = true;
+                        else
+                        {
+                            try { stale = !IsPointerInsideGalleryWindowRect(); } catch { }
+                        }
+                    }
+                }
             }
 
             if (stale) HideHoverPreview(null);
+        }
+
+        /// <summary>
+        /// True when EventSystem hit is the hover-preview thumb or another graphic on the same
+        /// file cell (rating badge, root Image, etc.). Avoids screen-rect tests in VR.
+        /// </summary>
+        private static bool IsPointerOverHoverPreviewCell(UIHoverPreviewTrigger source, GameObject hit)
+        {
+            if (source == null || hit == null) return false;
+            Transform src = source.transform;
+            Transform ht = hit.transform;
+            if (ht == src || ht.IsChildOf(src) || src.IsChildOf(ht)) return true;
+
+            Transform cell = src.parent;
+            while (cell != null)
+            {
+                if (cell.GetComponent<RecyclingGridItem>() != null
+                    || cell.GetComponent<FileButtonBinder>() != null)
+                    break;
+                // List/grid file button root usually has UIHoverReveal + Button together.
+                if (cell.GetComponent<UIHoverReveal>() != null && cell.GetComponent<Button>() != null)
+                    break;
+                cell = cell.parent;
+            }
+            if (cell == null) return false;
+            return ht == cell || ht.IsChildOf(cell);
         }
 
         public void SetHoverPreviewDummyActive(bool active)
@@ -2010,18 +2070,18 @@ namespace VPB
             float oy = 0f;
             if (VPBConfig.Instance != null)
             {
-                size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, 200f, 600f);
+                size = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewSize, VPBConfig.GalleryHoverPreviewSizeMin, VPBConfig.GalleryHoverPreviewSizeMax);
                 ox = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetX, -4000f, 4000f);
                 oy = Mathf.Clamp(VPBConfig.Instance.GalleryListHoverPreviewOffsetY, -4000f, 4000f);
             }
 
-            // Stationary canvas-local position. Default corner (20,12) + user offsets. No parent clamp —
-            // clamp was blocking slider/drag travel inside the canvas work area.
+            // Stationary canvas-local position. Default corner (20,12) + user offsets.
             float x = (20f + ox) * s;
             float y = (12f + oy) * s;
-
             hoverPreviewRT.sizeDelta = new Vector2(size, size);
             hoverPreviewRT.anchoredPosition = new Vector2(x, y);
+            hoverPreviewRT.localRotation = Quaternion.identity;
+            hoverPreviewRT.localScale = Vector3.one;
 
             if (hoverPreviewGO != null)
             {
@@ -2050,9 +2110,15 @@ namespace VPB
 
             if (hoverPreviewHintText != null && hoverPreviewDummyActive)
             {
-                hoverPreviewHintText.text = VPBTranslation.T(
-                    "settings.hover_preview_drag_label",
-                    "Drag to position\nScroll to change size");
+                bool vrHint = false;
+                try { vrHint = XrUtils.IsVrActive(); } catch { }
+                hoverPreviewHintText.text = vrHint
+                    ? VPBTranslation.T(
+                        "settings.hover_preview_drag_label_vr",
+                        "Drag to position\nThumbstick to change size")
+                    : VPBTranslation.T(
+                        "settings.hover_preview_drag_label",
+                        "Drag to position\nScroll to change size");
                 try
                 {
                     GalleryUiMetrics.ApplyFont(
@@ -2063,6 +2129,39 @@ namespace VPB
                 }
                 catch { }
             }
+        }
+
+        /// <summary>
+        /// VR settings placeholder: thumbstick changes preview size when laser is on the dummy.
+        /// Returns true when consumed (caller should not scroll lists).
+        /// </summary>
+        internal bool TryApplyVrThumbstickHoverPreviewSize(float stickForward)
+        {
+            if (!hoverPreviewDummyActive || hoverPreviewGO == null || VPBConfig.Instance == null) return false;
+            if (!hoverPreviewGO.activeInHierarchy) return false;
+
+            if (currentPointerData == null || !currentPointerData.pointerCurrentRaycast.isValid)
+                return false;
+            GameObject hit = currentPointerData.pointerCurrentRaycast.gameObject;
+            if (hit == null) return false;
+            Transform ht = hit.transform;
+            if (ht != hoverPreviewGO.transform && !ht.IsChildOf(hoverPreviewGO.transform))
+                return false;
+
+            const float deadzone = 0.12f;
+            if (Mathf.Abs(stickForward) <= deadzone) return false;
+
+            float mag = Mathf.Clamp01((Mathf.Abs(stickForward) - deadzone) / Mathf.Max(0.0001f, 1f - deadzone));
+            float step = 10f * mag * (60f * Time.unscaledDeltaTime);
+            if (step < 0.5f) step = 0.5f;
+            float size = VPBConfig.Instance.GalleryListHoverPreviewSize;
+            float next = Mathf.Clamp(size + (stickForward > 0f ? step : -step), VPBConfig.GalleryHoverPreviewSizeMin, VPBConfig.GalleryHoverPreviewSizeMax);
+            if (Mathf.Abs(next - size) < 0.01f) return true;
+            VPBConfig.Instance.GalleryListHoverPreviewSize = next;
+            if (hoverPreviewRT != null)
+                hoverPreviewRT.sizeDelta = new Vector2(next, next);
+            hoverPreviewSuppressSettingsClick = true;
+            return true;
         }
 
         private void CommitHoverPreviewPosFromAnchored(Vector2 anchored)
@@ -2124,7 +2223,7 @@ namespace VPB
 
             const float step = 10f;
             float size = VPBConfig.Instance.GalleryListHoverPreviewSize;
-            size = Mathf.Clamp(size + (dy > 0f ? step : -step), 200f, 600f);
+            size = Mathf.Clamp(size + (dy > 0f ? step : -step), VPBConfig.GalleryHoverPreviewSizeMin, VPBConfig.GalleryHoverPreviewSizeMax);
             if (Mathf.Abs(size - VPBConfig.Instance.GalleryListHoverPreviewSize) < 0.01f) return;
             VPBConfig.Instance.GalleryListHoverPreviewSize = size;
             if (hoverPreviewRT != null)

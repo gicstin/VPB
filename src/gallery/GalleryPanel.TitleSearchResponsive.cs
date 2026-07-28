@@ -130,6 +130,17 @@ namespace VPB
                 float catH = GalleryUiDesignTokens.TitleBarChipRef * s;
                 _categoryQuickChromeRootRT.sizeDelta = new Vector2(catW, catH);
                 _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, 0f);
+                // Keep dropdown width aligned with chrome (Preferred when compact) — not ClampMax.
+                if (_categoryQuickMenuOuterRT != null)
+                {
+                    float menuW = categoryCompact
+                        ? Mathf.Clamp(TitleBarCategoryPreferredRef * s, TitleBarCategoryClampMinRef * s, TitleBarCategoryClampMaxRef * s)
+                        : catW;
+                    Vector2 sd = _categoryQuickMenuOuterRT.sizeDelta;
+                    _categoryQuickMenuOuterRT.sizeDelta = new Vector2(menuW, sd.y);
+                    Vector2 ap = _categoryQuickMenuOuterRT.anchoredPosition;
+                    _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(leftInset, ap.y);
+                }
             }
 
             RectTransform langRT = null;

@@ -180,7 +180,7 @@ namespace VPB
 
         public static GameObject Create(GameObject parent, ScrollRect targetScrollRect, float widthPx = 22f, float heightPx = 22f)
         {
-            // Center on the scrollbar (parent).
+            // Center on scrollbar; floating callers nudge left via SpringScrollBtnOffsetXFloatRef.
             var go = UI.CreateChildRT(parent, "SpringScrollButton", AnchorPresets.middleCenter, new Vector2(widthPx, heightPx));
 
             var rr = go.AddComponent<RoundedRect>();

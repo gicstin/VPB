@@ -1101,7 +1101,7 @@ namespace VPB
         /// clear path when pointer already moved onto another cell (sibling enter claims first).
         /// </summary>
         private UIHoverReveal _hoverPathRevealOwner;
-        // Hover preview overlay (stationary user position on canvas; drag placeholder in settings)
+        // Hover preview overlay (canvas-local X/Y offset + size; drag placeholder in settings)
         private GameObject hoverPreviewGO;
         private RectTransform hoverPreviewRT;
         private RawImage hoverPreviewImage;

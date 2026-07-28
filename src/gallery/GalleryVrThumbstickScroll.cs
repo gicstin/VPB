@@ -53,6 +53,17 @@ namespace VPB
             float stickForward = ReadNavigateForwardAxis();
             if (Mathf.Abs(stickForward) <= StickDeadzone) return;
 
+            // Settings hover-preview placeholder: stick resizes instead of scrolling lists.
+            try
+            {
+                if (panel.TryApplyVrThumbstickHoverPreviewSize(stickForward))
+                {
+                    ShouldSuppressFreeNavigate = true;
+                    return;
+                }
+            }
+            catch { }
+
             ScrollRect scroll = panel.ResolveScrollRectForVrThumbstick();
             if (scroll == null || !scroll.vertical) return;
 

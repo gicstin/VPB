@@ -244,9 +244,12 @@ namespace VPB
 
         // Spring scroll drag button (on main grid scrollbar)
         public const float SpringScrollBtnWidthFixedRef = 50f;
-        public const float SpringScrollBtnWidthFloatRef = 100f;
+        /// <summary>Floating/VR: half prior width — dense Fitts hit beside track, not oversized chrome.</summary>
+        public const float SpringScrollBtnWidthFloatRef = 50f;
         public const float SpringScrollBtnAspectRef = GoldenRatio;
         public const float SpringScrollBtnIconInsetRef = 24f;
+        /// <summary>Floating/VR only: nudge left of scrollbar center so control sits beside track (px at ref scale).</summary>
+        public const float SpringScrollBtnOffsetXFloatRef = -16f;
 
         // Toolbox action buttons — sized to match the side-rail / title-chip family
         // (uniform with TboxPinBtnSizeRef) and scaled proportionally inside the info row.

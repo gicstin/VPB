@@ -2238,6 +2238,7 @@ namespace VPB
 
                         // Track + apply default ON/OFF state (footer toggle updates this too).
                         springScrollButtonGO = springBtn;
+                        ApplySpringScrollButtonScale(ChromeScale);
                         springScrollButtonGO.SetActive(springScrollButtonEnabled);
 
                         try

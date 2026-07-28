@@ -893,6 +893,12 @@ namespace VPB
 
         public bool IsHovering => hovering;
 
+        /// <summary>Panel hid preview without a matching Exit — reset so next Enter can fire.</summary>
+        internal void SyncHoverFlagAfterPanelHide()
+        {
+            hovering = false;
+        }
+
         void OnDisable()
         {
             if (!hovering) return;
@@ -933,7 +939,16 @@ namespace VPB
         public void OnPointerEnter(PointerEventData eventData)
         {
             hovering = true;
-            try { if (panel != null && file != null) panel.NotifyHoverPreviewTriggerEntered(this, file); } catch { }
+            try
+            {
+                if (panel != null)
+                {
+                    // Feed laser/mouse sample so ValidateHoverPreviewActive does not use stale Input.mousePosition (#76).
+                    if (eventData != null) panel.currentPointerData = eventData;
+                    if (file != null) panel.NotifyHoverPreviewTriggerEntered(this, file);
+                }
+            }
+            catch { }
         }
 
         public void OnPointerExit(PointerEventData eventData)

@@ -355,6 +355,8 @@ namespace VPB
         public string GalleryHoverPreviewMode = "List";
         /// <summary>Square preview size (pixels) for hover preview.</summary>
         public float GalleryListHoverPreviewSize = 300f;
+        public const float GalleryHoverPreviewSizeMin = 200f;
+        public const float GalleryHoverPreviewSizeMax = 1200f;
         /// <summary>X offset (unscaled px) from canvas bottom-left default (20). Independent of gallery dock/pane size.</summary>
         public float GalleryListHoverPreviewOffsetX = 0f;
         /// <summary>Y offset (unscaled px) from canvas bottom-left default (12). Independent of gallery dock/pane size. Drag placeholder in Settings to set.</summary>
@@ -1283,7 +1285,7 @@ namespace VPB
                             GalleryHoverPreviewMode = NormalizeHoverPreviewMode(node["GalleryHoverPreviewMode"].Value);
                         else if (node["GalleryListHoverPreviewEnabled"] != null)
                             GalleryHoverPreviewMode = node["GalleryListHoverPreviewEnabled"].AsBool ? "List" : "Off";
-                        if (node["GalleryListHoverPreviewSize"] != null) GalleryListHoverPreviewSize = Mathf.Clamp(node["GalleryListHoverPreviewSize"].AsFloat, 200f, 600f);
+                        if (node["GalleryListHoverPreviewSize"] != null) GalleryListHoverPreviewSize = Mathf.Clamp(node["GalleryListHoverPreviewSize"].AsFloat, GalleryHoverPreviewSizeMin, GalleryHoverPreviewSizeMax);
                         if (node["GalleryListHoverPreviewOffsetX"] != null) GalleryListHoverPreviewOffsetX = Mathf.Clamp(node["GalleryListHoverPreviewOffsetX"].AsFloat, -4000f, 4000f);
                         if (node["GalleryListHoverPreviewOffsetY"] != null) GalleryListHoverPreviewOffsetY = Mathf.Clamp(node["GalleryListHoverPreviewOffsetY"].AsFloat, -4000f, 4000f);
                         if (node["GalleryGridLabelsEnabled"] != null) GalleryGridLabelsEnabled = node["GalleryGridLabelsEnabled"].AsBool;

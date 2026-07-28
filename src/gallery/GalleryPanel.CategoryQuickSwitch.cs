@@ -250,7 +250,7 @@ namespace VPB
             _categoryQuickBlockerGO.SetActive(false);
 
             // Keep menu out of titlebar masks/clips.
-            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(TitleBarCategoryClampMaxRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
+            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(TitleBarCategoryPreferredRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
             var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
             _categoryQuickMenuOuterRT = outerRT;
@@ -349,9 +349,13 @@ namespace VPB
             float leftInset = flushLeft ? 0f : GalleryUiDesignTokens.TitleBarTitleLeftInsetRef * paneScale;
             // Same height as Source/settings chips so label cannot peek above neighbours.
             float catH = GalleryUiDesignTokens.TitleBarChipRef * paneScale;
+            // Prefer labeled width (same as title-bar responsive), not ClampMax — Max made VR
+            // dropdown span resize→filter under smaller panes.
+            float catLabeledW = Mathf.Clamp(TitleBarCategoryPreferredRef * paneScale,
+                TitleBarCategoryClampMinRef * paneScale, TitleBarCategoryClampMaxRef * paneScale);
             float catW = _categoryQuickCompact
                 ? GalleryUiDesignTokens.TitleBarChipRef * paneScale
-                : TitleBarCategoryClampMaxRef * paneScale;
+                : catLabeledW;
             _categoryQuickChromeRootRT.localScale = Vector3.one;
             _categoryQuickChromeRootRT.anchoredPosition = new Vector2(leftInset, 0f);
             _categoryQuickChromeRootRT.sizeDelta = new Vector2(catW, catH);
@@ -362,8 +366,9 @@ namespace VPB
                 _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(
                     leftInset,
                     CategoryQuickMenuTopOffsetY(paneScale));
-                // Menu stays full width even when header is icon-only.
-                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(TitleBarCategoryClampMaxRef * paneScale, 340f * paneScale);
+                // Match labeled chrome width; when header is icon-only still use preferred (not Max).
+                float menuW = _categoryQuickCompact ? catLabeledW : catW;
+                _categoryQuickMenuOuterRT.sizeDelta = new Vector2(menuW, 340f * paneScale);
                 SyncCategoryQuickRoundedBg(_categoryQuickMenuOuterGO != null ? _categoryQuickMenuOuterGO.GetComponent<RoundedRect>() : null);
             }
             ApplyCategoryQuickArrowChromeLayout(paneScale);
@@ -765,6 +770,15 @@ namespace VPB
             btn.transition = Selectable.Transition.None;
             var cap = cat;
             btn.onClick.AddListener(() => ApplyCategoryQuickPick(cap));
+
+            // Match side tabs / tag-category modal rows (CreateUIButton path not used here).
+            try
+            {
+                var hb = row.AddComponent<UIHoverBorder>();
+                hb.inward = true;
+                hb.ApplyBorderSettings();
+            }
+            catch { }
 
             string numPrefix = keyboardDigitLabel >= 0 ? (keyboardDigitLabel == 0 ? "0." : keyboardDigitLabel + ".") : rowLabelNumber + ".";
 

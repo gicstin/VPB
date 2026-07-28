@@ -5,11 +5,33 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
+using VPB.src.util;
 
 namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
+        /// <summary>
+        /// UI pointer screen position for hit tests. Prefers EventSystem laser/mouse sample
+        /// (<see cref="currentPointerData"/>). Desktop may fall back to <see cref="Input.mousePosition"/>;
+        /// VR without a sample returns false — mouse is not the laser.
+        /// </summary>
+        internal bool TryGetUiPointerScreenPosition(out Vector2 screenPos)
+        {
+            try
+            {
+                if (currentPointerData != null)
+                {
+                    screenPos = currentPointerData.position;
+                    return true;
+                }
+            }
+            catch { }
+
+            screenPos = Input.mousePosition;
+            return !XrUtils.IsVrActive();
+        }
+
         private bool IsPointerInsideGalleryWindowRect()
         {
             if (backgroundBoxGO == null) return false;
@@ -21,6 +43,10 @@ namespace VPB
             }
             if (rt == null) return false;
 
+            Vector2 screenPos;
+            if (!TryGetUiPointerScreenPosition(out screenPos))
+                return false;
+
             Camera cam = null;
             try
             {
@@ -30,7 +56,7 @@ namespace VPB
             }
             catch { cam = null; }
 
-            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, Input.mousePosition, cam); }
+            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
             catch { return false; }
         }
 

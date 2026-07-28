@@ -1164,7 +1164,7 @@ namespace VPB
                 Tooltip = VPBTranslation.T("settings.tip.hover_preview_size", "Size in pixels of square hover preview."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryListHoverPreviewSize,
                 SetFloat = v => { VPBConfig.Instance.GalleryListHoverPreviewSize = v; VPBConfig.Instance.TriggerChange(); },
-                Min = 200f, Max = 600f, Step = 10f, Decimals = 0,
+                Min = VPBConfig.GalleryHoverPreviewSizeMin, Max = VPBConfig.GalleryHoverPreviewSizeMax, Step = 10f, Decimals = 0,
                 RowVisible = () => VPBConfig.Instance != null && !string.Equals(VPBConfig.NormalizeHoverPreviewMode(VPBConfig.Instance.GalleryHoverPreviewMode), "Off", StringComparison.OrdinalIgnoreCase)
             });
             defs.Add(new InternalSettingDefinition {
