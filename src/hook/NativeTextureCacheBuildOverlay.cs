@@ -11,6 +11,8 @@ namespace VPB
         private Canvas m_Canvas;
         private GameObject m_BannerGO;
         private RectTransform m_BannerRT;
+        private Text m_VersionText;
+        private RectTransform m_VersionRT;
         private Text m_TitleText;
         private Text m_SubText;
         private RectTransform m_BarBgRT;
@@ -26,13 +28,18 @@ namespace VPB
         private const float IndeterminateStripWidth01 = 0.28f;
         private const float IndeterminateCycleSec = 1.35f;
 
-        private const float BannerWidth = 680f;
+        // Wider so version chrome + title + subtitle stay scannable (screenshot triage).
+        private const float BannerWidth = 780f;
         private const float BannerHeightProgress = 44f;
         private const float BannerHeightSummary = 320f;
         private const float BannerTopInset = 8f;
         private const float BarHeightPx = 3f;
         private const float BarBottomInset = 5f;
         private const float TextRowSideInset = 14f;
+        /// <summary>Fixed left slot for "VPB {base} · b{build}" — never truncates.</summary>
+        private const float VersionSlotWidth = 130f;
+        private const float VersionTitleGap = 10f;
+        private const float CancelSlotWidth = 92f;
 
         public static void EnsureCreated()
         {
@@ -152,6 +159,25 @@ namespace VPB
             bg.color = new Color(0.04f, 0.05f, 0.07f, 0.88f);
             bg.raycastTarget = false;
 
+            // Quiet left chrome: plugin version + build always visible while work runs
+            // (bug screenshots / hang triage). Contrast above subtitle grey; below title.
+            var versionGO = new GameObject("Version");
+            versionGO.transform.SetParent(m_BannerGO.transform, false);
+            m_VersionText = versionGO.AddComponent<Text>();
+            m_VersionText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            m_VersionText.fontSize = 13;
+            m_VersionText.fontStyle = FontStyle.Bold;
+            m_VersionText.color = new Color(0.78f, 0.86f, 0.94f, 1f);
+            m_VersionText.alignment = TextAnchor.MiddleLeft;
+            m_VersionText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            m_VersionText.verticalOverflow = VerticalWrapMode.Truncate;
+            m_VersionText.raycastTarget = false;
+            m_VersionText.text = FormatBannerVersionLabel();
+            m_VersionRT = versionGO.GetComponent<RectTransform>();
+            m_VersionRT.anchorMin = Vector2.zero;
+            m_VersionRT.anchorMax = Vector2.one;
+            m_VersionRT.pivot = new Vector2(0f, 0.5f);
+
             var titleGO = new GameObject("Title");
             titleGO.transform.SetParent(m_BannerGO.transform, false);
             m_TitleText = titleGO.AddComponent<Text>();
@@ -166,7 +192,7 @@ namespace VPB
             var titleRT = titleGO.GetComponent<RectTransform>();
             titleRT.anchorMin = new Vector2(0f, 0f);
             titleRT.anchorMax = new Vector2(0.58f, 1f);
-            titleRT.offsetMin = new Vector2(TextRowSideInset + 92f, BarHeightPx + BarBottomInset + 2f);
+            titleRT.offsetMin = new Vector2(TextRowSideInset + VersionSlotWidth + VersionTitleGap, BarHeightPx + BarBottomInset + 2f);
             titleRT.offsetMax = new Vector2(-6f, -2f);
 
             var subGO = new GameObject("Sub");
@@ -279,17 +305,41 @@ namespace VPB
             }
             m_OkButtonGO.SetActive(false);
 
+            ApplyTextRowInsets(false);
             m_BannerGO.SetActive(false);
+        }
+
+        /// <summary>
+        /// Canonical version string already embeds build as last segment (e.g. 0.31.340).
+        /// Spell build out too so hang screenshots never leave build ambiguous.
+        /// </summary>
+        private static string FormatBannerVersionLabel()
+        {
+            return "VPB " + PluginVersionInfo.BaseVersion
+                + " · " + PluginVersionInfo.BuildVersion;
         }
 
         private void ApplyTextRowInsets(bool reserveCancelSlot)
         {
+            float cancelReserve = reserveCancelSlot ? CancelSlotWidth : 0f;
+            float chromeLeft = TextRowSideInset + cancelReserve;
+            float bottom = BarHeightPx + BarBottomInset + 2f;
+
+            if (m_VersionRT != null)
+            {
+                float rightInset = BannerWidth - chromeLeft - VersionSlotWidth;
+                if (rightInset < 0f) rightInset = 0f;
+                m_VersionRT.offsetMin = new Vector2(chromeLeft, bottom);
+                m_VersionRT.offsetMax = new Vector2(-rightInset, -2f);
+                if (m_VersionText != null && !m_VersionText.gameObject.activeSelf)
+                    m_VersionText.gameObject.SetActive(true);
+            }
+
             if (m_TitleText == null) return;
             var titleRT = m_TitleText.GetComponent<RectTransform>();
             if (titleRT == null) return;
-            float left = TextRowSideInset + (reserveCancelSlot ? 92f : 0f);
-            float bottom = BarHeightPx + BarBottomInset + 2f;
-            titleRT.offsetMin = new Vector2(left, bottom);
+            float titleLeft = chromeLeft + VersionSlotWidth + VersionTitleGap;
+            titleRT.offsetMin = new Vector2(titleLeft, bottom);
         }
 
         private void ClearProgressBarFill()
@@ -357,6 +407,7 @@ namespace VPB
 
             if (m_OkButtonGO != null && !m_OkButtonGO.activeSelf) m_OkButtonGO.SetActive(true);
             if (m_CancelButtonGO != null && m_CancelButtonGO.activeSelf) m_CancelButtonGO.SetActive(false);
+            ApplyTextRowInsets(false);
 
             if (m_BannerRT != null)
             {
