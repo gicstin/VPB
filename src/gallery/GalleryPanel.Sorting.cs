@@ -283,6 +283,12 @@ namespace VPB
                     ? VPBTranslation.T("gallery.sort.full.count_low_high", "Count (low→high)")
                     : VPBTranslation.T("gallery.sort.full.count_high_low", "Count (high→low)");
             }
+            if (type == SortType.Rating)
+            {
+                return dir == SortDirection.Ascending
+                    ? VPBTranslation.T("gallery.sort.full.creator_rating_low_high", "Rating (low→high)")
+                    : VPBTranslation.T("gallery.sort.full.creator_rating_high_low", "Rating (high→low)");
+            }
             return type.ToString() + " " + (dir == SortDirection.Ascending ? "↑" : "↓");
         }
 
@@ -318,9 +324,29 @@ namespace VPB
             SortState current = GetSortState(context);
             if (current == null) current = new SortState(SortType.Name, SortDirection.Ascending);
 
-            // Side panes: offer explicit 4 choices (Name asc/desc, Count asc/desc) when valid.
-            SortType[] optTypes = new SortType[] { SortType.Name, SortType.Name, SortType.Count, SortType.Count };
-            SortDirection[] optDirs = new SortDirection[] { SortDirection.Ascending, SortDirection.Descending, SortDirection.Ascending, SortDirection.Descending };
+            // Side panes: Name/Count asc/desc. Creator also gets Rating + rated-only filter toggle.
+            bool isCreator = string.Equals(context, "Creator", StringComparison.Ordinal);
+            SortType[] optTypes;
+            SortDirection[] optDirs;
+            if (isCreator)
+            {
+                optTypes = new SortType[]
+                {
+                    SortType.Name, SortType.Name, SortType.Count, SortType.Count,
+                    SortType.Rating, SortType.Rating
+                };
+                optDirs = new SortDirection[]
+                {
+                    SortDirection.Ascending, SortDirection.Descending,
+                    SortDirection.Ascending, SortDirection.Descending,
+                    SortDirection.Ascending, SortDirection.Descending
+                };
+            }
+            else
+            {
+                optTypes = new SortType[] { SortType.Name, SortType.Name, SortType.Count, SortType.Count };
+                optDirs = new SortDirection[] { SortDirection.Ascending, SortDirection.Descending, SortDirection.Ascending, SortDirection.Descending };
+            }
             for (int oi = 0; oi < optTypes.Length && oi < optDirs.Length; oi++)
             {
                 SortType optType = optTypes[oi];
@@ -336,7 +362,7 @@ namespace VPB
                     sidePaneSortMenuPanelGO, 228, 34, label, 14, isCurrent,
                     () =>
                     {
-                        if (SupportsSidePaneFourModeSort(context))
+                        if (SupportsSidePaneFourModeSort(context) && capturedType != SortType.Rating)
                             ApplySidePaneFourModeSort(context, capturedType, capturedDir);
                         else
                         {
@@ -346,6 +372,21 @@ namespace VPB
                             SaveSortState(context, st);
                             UpdateTabs();
                         }
+                        CloseSidePaneSortMenu();
+                    },
+                    GalleryUiDesignTokens.PopupMenuRowHeightCompactRef);
+            }
+
+            if (isCreator)
+            {
+                bool ratedOn = creatorRatedOnlyFilter;
+                string ratedLabel = (ratedOn ? "\u2713  " : "    ")
+                    + VPBTranslation.T("gallery.sort.full.creator_rated_only", "Rated only (filter)");
+                UI.AddPopupMenuRow(
+                    sidePaneSortMenuPanelGO, 228, 34, ratedLabel, 14, ratedOn,
+                    () =>
+                    {
+                        ToggleCreatorRatedOnlyFilter();
                         CloseSidePaneSortMenu();
                     },
                     GalleryUiDesignTokens.PopupMenuRowHeightCompactRef);
@@ -528,7 +569,11 @@ namespace VPB
                     // Prefer-sort still used by Always-loaded / Unused Filter cycles (not shown in sort menu).
                     || type == SortType.AutoInstall;
             }
-            else if (context == "Category" || context == "Creator" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
+            else if (context == "Creator")
+            {
+                return type == SortType.Name || type == SortType.Count || type == SortType.Rating;
+            }
+            else if (context == "Category" || context == "Path" || context == "UserTags" || context == "UserTagsApplied" || context == "Status" || context == "Tags" || context == "SceneSource" || context == "DetailStripTagMenu")
             {
                 return type == SortType.Name || type == SortType.Count;
             }

@@ -92,9 +92,36 @@ namespace VPB
             ddCg.blocksRaycasts = true;
             ddCg.interactable = true;
 
+            // Rated-only filter chip (right of search) — same job as side-pane sort menu toggle.
+            {
+                titleCreatorRatedOnlyBtn = UI.CreateUIButton(titleCreatorDropdown, 32f, 32f, "★", 16, 0, 0, AnchorPresets.topRight, null);
+                if (titleCreatorRatedOnlyBtn != null)
+                {
+                    RectTransform rrt = titleCreatorRatedOnlyBtn.GetComponent<RectTransform>();
+                    if (rrt != null)
+                    {
+                        rrt.anchorMin = new Vector2(1f, 1f);
+                        rrt.anchorMax = new Vector2(1f, 1f);
+                        rrt.pivot = new Vector2(1f, 1f);
+                        rrt.anchoredPosition = new Vector2(-8f, -10f);
+                        rrt.sizeDelta = new Vector2(32f, 32f);
+                    }
+                    titleCreatorRatedOnlyBtnBackdrop = titleCreatorRatedOnlyBtn.GetComponent<Image>();
+                    titleCreatorRatedOnlyBtnText = titleCreatorRatedOnlyBtn.GetComponentInChildren<Text>(true);
+                    Button rb = titleCreatorRatedOnlyBtn.GetComponent<Button>();
+                    if (rb != null)
+                    {
+                        rb.onClick.RemoveAllListeners();
+                        rb.onClick.AddListener(ToggleCreatorRatedOnlyFilter);
+                    }
+                    AddTooltip(titleCreatorRatedOnlyBtn, "gallery.tooltip.creator_rated_only", "Rated creators only, sorted high→low.");
+                    SyncTitleCreatorRatedOnlyButton();
+                }
+            }
+
             // Search input (top of dropdown)
             {
-                var searchGO = CreateSearchInput(titleCreatorDropdown, 310f, (val) =>
+                var searchGO = CreateSearchInput(titleCreatorDropdown, 270f, (val) =>
                 {
                     titleCreatorDropdownFilter = val ?? "";
                     RebuildTitleCreatorVirtView(force: true);
@@ -126,8 +153,8 @@ namespace VPB
                     srt.anchorMin = new Vector2(0.5f, 1f);
                     srt.anchorMax = new Vector2(0.5f, 1f);
                     srt.pivot = new Vector2(0.5f, 1f);
-                    srt.anchoredPosition = new Vector2(0, -10);
-                    srt.sizeDelta = new Vector2(310, 36);
+                    srt.anchoredPosition = new Vector2(-18f, -10);
+                    srt.sizeDelta = new Vector2(270, 36);
                 }
             }
 
@@ -213,15 +240,28 @@ namespace VPB
                     }
                 }
             }
+            if (titleCreatorRatedOnlyBtn != null)
+            {
+                RectTransform rrt = titleCreatorRatedOnlyBtn.GetComponent<RectTransform>();
+                if (rrt != null)
+                {
+                    float chip = 32f * s;
+                    rrt.anchoredPosition = new Vector2(-8f * s, -10f * s);
+                    rrt.sizeDelta = new Vector2(chip, chip);
+                }
+                if (titleCreatorRatedOnlyBtnText != null)
+                    GalleryUiMetrics.ApplyFont(titleCreatorRatedOnlyBtnText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            }
             if (titleCreatorDropdownSearchInput != null)
             {
                 RectTransform srt = titleCreatorDropdownSearchInput.GetComponent<RectTransform>();
                 if (srt != null)
                 {
-                    // Keep search 20px narrower than dropdown, matching the reference proportions.
+                    // Keep search narrower than dropdown; leave room for rated-only chip on the right.
                     float ddWNow = ddRT != null ? ddRT.sizeDelta.x : GalleryUiDesignTokens.TitleCreatorDropdownSearchWidthRef * s + 20f * s;
-                    float searchW = Mathf.Max(100f * s, ddWNow - 20f * s);
-                    srt.anchoredPosition = new Vector2(0f, -10f * s);
+                    float chipGap = 40f * s;
+                    float searchW = Mathf.Max(100f * s, ddWNow - 20f * s - chipGap);
+                    srt.anchoredPosition = new Vector2(-chipGap * 0.45f, -10f * s);
                     srt.sizeDelta = new Vector2(searchW, GalleryUiDesignTokens.SearchFieldHeightRef * s);
                 }
                 RescaleSearchInput(titleCreatorDropdownSearchInput, s);
@@ -272,6 +312,7 @@ namespace VPB
 
         private void HideTitleCreatorDropdown()
         {
+            CreatorRatingRowHandler.CloseAnyOpen();
             if (titleCreatorDropdown == null) return;
             titleCreatorDropdown.SetActive(false);
             try { if (titleCreatorDropdownBlocker != null) titleCreatorDropdownBlocker.SetActive(false); } catch { }
@@ -333,6 +374,7 @@ namespace VPB
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() =>
                 {
+                    CreatorRatingRowHandler.CloseAnyOpen();
                     ToggleCreatorFilter(cName);
                     OnCreatorFilterChanged(refreshFilesAndTabs: true);
                     // Keep dropdown open for multi-select.
@@ -341,7 +383,9 @@ namespace VPB
                 });
             }
 
-            var txt = btnGO.GetComponentInChildren<Text>(true);
+            var txt = null as Text;
+            Transform textTr = btnGO.transform.Find("Text");
+            if (textTr != null) txt = textTr.GetComponent<Text>();
             if (txt != null)
             {
                 float s = ChromeScale;
@@ -349,6 +393,8 @@ namespace VPB
                 txt.text = label;
                 txt.color = UI.PopupText;
             }
+
+            BindCreatorRatingChrome(btnGO, cName);
         }
 
         private string ComputeTitleCreatorVirtViewSignature()
@@ -364,7 +410,9 @@ namespace VPB
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
                 + "|" + (int)(st != null ? st.Direction : 0)
-                + "|" + scale.ToString("R");
+                + "|" + scale.ToString("R")
+                + "|crR" + CreatorRatingRevisionFragment()
+                + "|crF" + (creatorRatedOnlyFilter ? "1" : "0");
         }
 
         private void RebuildTitleCreatorVirtView(bool force)
@@ -378,7 +426,8 @@ namespace VPB
             _titleCreatorVirtViewSig = sig;
             _titleCreatorVirtView.Clear();
 
-            var sortState = GetSortState("Creator");
+            HealCreatorSortIfStuckOnRatingFromFilter();
+            var sortState = GetCreatorListSortState();
             try { GallerySortManager.Instance.SortCreators(displayCreators, sortState); } catch { }
 
             string filterNow = titleCreatorDropdownFilter ?? "";
@@ -390,6 +439,7 @@ namespace VPB
                 var c = displayCreators[i];
                 if (string.IsNullOrEmpty(c.Name)) continue;
                 if (hasFilter && (c.Name == null || !c.Name.ToLowerInvariant().Contains(filterLower))) continue;
+                if (!CreatorPassesRatedOnlyFilter(c.Name)) continue;
                 _titleCreatorVirtView.Add(c);
             }
         }

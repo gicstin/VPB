@@ -209,7 +209,9 @@ namespace VPB
                 + "|" + CurrentPathsSignatureFragment()
                 + "|" + (int)(st != null ? st.Type : 0)
                 + "|" + (int)(st != null ? st.Direction : 0)
-                + "|" + scale.ToString("R");
+                + "|" + scale.ToString("R")
+                + "|crR" + CreatorRatingRevisionFragment()
+                + "|crF" + (creatorRatedOnlyFilter ? "1" : "0");
         }
 
         private void EnsureCreatorVirtScrollHook(bool isLeft, GameObject holder)
@@ -386,6 +388,7 @@ namespace VPB
                 btnComp.onClick.RemoveAllListeners();
                 btnComp.onClick.AddListener(() =>
                 {
+                    CreatorRatingRowHandler.CloseAnyOpen();
                     ToggleCreatorFilter(cName);
                     OnCreatorFilterChanged(refreshFilesAndTabs: true);
                 });
@@ -394,6 +397,7 @@ namespace VPB
             if (rightClickDelegate == null) rightClickDelegate = btnGO.AddComponent<UIRightClickDelegate>();
             rightClickDelegate.OnRightClick = () =>
             {
+                CreatorRatingRowHandler.CloseAnyOpen();
                 SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
                 ClearCreatorFilters();
                 OnCreatorFilterChanged(refreshFilesAndTabs: true);
@@ -403,7 +407,9 @@ namespace VPB
             if (img != null) img.color = btnColor;
 
             float s = ChromeScale;
-            Text txt = btnGO.GetComponentInChildren<Text>();
+            Text txt = null;
+            Transform textTr = btnGO.transform.Find("Text");
+            if (textTr != null) txt = textTr.GetComponent<Text>();
             if (txt != null)
             {
                 txt.text = label;
@@ -417,6 +423,8 @@ namespace VPB
             le.minHeight = SideTabRowHeightPx(s);
             le.preferredHeight = SideTabRowHeightPx(s);
             le.flexibleWidth = 1;
+
+            BindCreatorRatingChrome(btnGO, cName);
         }
 
         /// <summary>
@@ -1116,7 +1124,7 @@ namespace VPB
         {
             SortState st = GetSortState("Creator");
             float scale = ChromeScale;
-            return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R");
+            return creatorSideTabDataRevision + CreatorConsolidationSignatureFragment() + "|" + (creatorFilter ?? "") + "|" + CurrentPathsSignatureFragment() + "|" + (currentExtension ?? "") + "|" + (currentCreator ?? "") + "|" + (int)st.Type + "|" + (int)st.Direction + "|" + scale.ToString("R") + "|crR" + CreatorRatingRevisionFragment() + "|crF" + (creatorRatedOnlyFilter ? "1" : "0");
         }
 
 

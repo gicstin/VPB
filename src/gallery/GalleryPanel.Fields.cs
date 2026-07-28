@@ -501,6 +501,9 @@ namespace VPB
         private GameObject titleCreatorDropdown;
         private GameObject titleCreatorDropdownBlocker;
         private InputField titleCreatorDropdownSearchInput;
+        private GameObject titleCreatorRatedOnlyBtn;
+        private Image titleCreatorRatedOnlyBtnBackdrop;
+        private Text titleCreatorRatedOnlyBtnText;
         private string titleCreatorDropdownFilter = "";
         private ScrollRect _titleCreatorVirtScroll;
         private RectTransform _titleCreatorVirtContentRT;

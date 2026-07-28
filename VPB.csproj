@@ -541,6 +541,8 @@
     <Compile Include="src\gallery\UIColorPicker.cs" />
     <Compile Include="src\gallery\VPBUiPickers.cs" />
     <Compile Include="src\RatingsManager.cs" />
+    <Compile Include="src\CreatorRatingsManager.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorRatings.cs" />
     <Compile Include="src\LocalSceneGallerySupport.cs" />
     <Compile Include="src\PackageHidePrefs.cs" />
     <Compile Include="src\LockedPackagesManager.cs" />

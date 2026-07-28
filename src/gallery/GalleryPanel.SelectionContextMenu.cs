@@ -2426,6 +2426,14 @@ namespace VPB
             tboxGridRateHandler.SetDisplayOnly(ratingValue);
             tboxGridRateHandler.CloseSelector();
             TboxAfterGridRateChanged();
+            // Paint strip stars only — rating must not remount/remeasure detail strip height.
+            try
+            {
+                _detailStripStarRating = ratingValue;
+                _detailStripStarHover = 0;
+                DetailStripPaintStars();
+            }
+            catch { }
         }
 
         private static int TboxConsensusRatingDisplay(List<FileEntry> eligible)

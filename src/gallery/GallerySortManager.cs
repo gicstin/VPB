@@ -1164,6 +1164,36 @@ namespace VPB
                     else
                         creators.Sort((a, b) => b.Count.CompareTo(a.Count));
                     break;
+                case SortType.Rating:
+                    // Precompute ratings once — avoid GetRating per comparison (O(n log n) lookups).
+                    int n = creators.Count;
+                    var ratingKeys = new int[n];
+                    for (int i = 0; i < n; i++)
+                    {
+                        string name = creators[i].Name;
+                        int r = 0;
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            try { r = CreatorRatingsManager.Instance.GetRating(name); }
+                            catch { r = 0; }
+                        }
+                        ratingKeys[i] = r;
+                    }
+                    // Stable-ish: rating primary, name secondary. Sort indices then reorder.
+                    var order = new int[n];
+                    for (int i = 0; i < n; i++) order[i] = i;
+                    bool asc = state.Direction == SortDirection.Ascending;
+                    Array.Sort(order, (ia, ib) =>
+                    {
+                        int cmp = ratingKeys[ia].CompareTo(ratingKeys[ib]);
+                        if (!asc) cmp = -cmp;
+                        if (cmp != 0) return cmp;
+                        return string.Compare(creators[ia].Name, creators[ib].Name, StringComparison.OrdinalIgnoreCase);
+                    });
+                    var tmp = new CreatorCacheEntry[n];
+                    for (int i = 0; i < n; i++) tmp[i] = creators[order[i]];
+                    for (int i = 0; i < n; i++) creators[i] = tmp[i];
+                    break;
             }
         }
 
