@@ -312,7 +312,6 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged += RefreshCategoryQuickSwitchOnConfigChanged;
             VPBConfig.Instance.ConfigChanged += OnGalleryTransparencyConfigChanged;
             VPBConfig.Instance.ConfigChanged += ApplySpringScrollButtonFromConfig;
-            VPBConfig.Instance.ConfigChanged += SyncTboxPinnedFromConfig;
         }
 
         private void UnsubscribeGalleryPanelFromVpBConfigChanged()
@@ -328,7 +327,6 @@ namespace VPB
             VPBConfig.Instance.ConfigChanged -= RefreshCategoryQuickSwitchOnConfigChanged;
             VPBConfig.Instance.ConfigChanged -= OnGalleryTransparencyConfigChanged;
             VPBConfig.Instance.ConfigChanged -= ApplySpringScrollButtonFromConfig;
-            VPBConfig.Instance.ConfigChanged -= SyncTboxPinnedFromConfig;
         }
 
         private void OnGalleryTransparencyConfigChanged()

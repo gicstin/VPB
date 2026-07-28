@@ -174,14 +174,6 @@ namespace VPB
             RefreshGoText(tboxUnloadBtn, "gallery.tbox.unload", "Unload");
             RefreshGoText(tboxLoadDepsBtn, "gallery.tbox.load_deps", "Load Deps");
             RefreshGoText(tboxCacheTexturesBtn, "gallery.tbox.cache_textures", "Cache Textures");
-            if (tboxHintLabel != null)
-            {
-                int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
-                if (sel == 0 && tboxPinned)
-                    tboxHintLabel.text = VPBTranslation.T("gallery.tbox.pinned_select", "Pinned — select items for actions");
-                else
-                    tboxHintLabel.text = VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand");
-            }
 
             // Undo / Redo labels include the stack count – delegate to the dedicated updater
             try { UpdateUndoRedoButtonLabels(); } catch { }

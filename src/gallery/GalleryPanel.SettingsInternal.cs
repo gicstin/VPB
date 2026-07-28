@@ -341,7 +341,6 @@ namespace VPB
             public float MovementThreshold;
             public float BringToFrontDistance;
             public bool EnableDragDrop;
-            public bool GalleryTboxToolbarPinned;
             public bool GalleryAutoGenderFilter;
             public bool GalleryCollapseOnSceneLaunch;
             public bool VerticalMoveKeysEnabled;
@@ -748,20 +747,6 @@ namespace VPB
                 {
                     VPBConfig.Instance.EnableDragDrop = v;
                     VPBConfig.Instance.NormalizeDragDropHoldSettings();
-                }
-            });
-            defs.Add(new InternalSettingDefinition {
-                Key = "interaction.pinToolboxToolbar", GroupKey = "interaction",
-                Label = VPBTranslation.T("settings.pin_toolbox_toolbar", "Pin toolbox toolbar"),
-                Tooltip = VPBTranslation.T("settings.tip.pin_toolbox_toolbar", "Keep the selection toolbox expanded even when nothing is selected."),
-                ControlType = InternalSettingControlType.Toggle,
-                GetBool = () => VPBConfig.Instance.GalleryTboxToolbarPinned,
-                SetBool = v =>
-                {
-                    VPBConfig.Instance.GalleryTboxToolbarPinned = v;
-                    try { VPBConfig.Instance.Save(false); } catch { }
-                    try { SyncTboxPinnedFromConfig(); } catch { }
-                    VPBConfig.Instance.TriggerChange();
                 }
             });
             defs.Add(new InternalSettingDefinition {
@@ -1715,7 +1700,6 @@ namespace VPB
                 MovementThreshold = VPBConfig.Instance.MovementThreshold,
                 BringToFrontDistance = VPBConfig.Instance.BringToFrontDistance,
                 EnableDragDrop = VPBConfig.Instance.EnableDragDrop,
-                GalleryTboxToolbarPinned = VPBConfig.Instance.GalleryTboxToolbarPinned,
                 GalleryAutoGenderFilter = VPBConfig.Instance.GalleryAutoGenderFilter,
                 GalleryCollapseOnSceneLaunch = VPBConfig.Instance.GalleryCollapseOnSceneLaunch,
                 VerticalMoveKeysEnabled = VPBConfig.Instance.VerticalMoveKeysEnabled,
@@ -2532,7 +2516,6 @@ namespace VPB
             VPBConfig.Instance.MovementThreshold = b.MovementThreshold;
             VPBConfig.Instance.BringToFrontDistance = b.BringToFrontDistance;
             VPBConfig.Instance.EnableDragDrop = b.EnableDragDrop;
-            VPBConfig.Instance.GalleryTboxToolbarPinned = b.GalleryTboxToolbarPinned;
             VPBConfig.Instance.GalleryAutoGenderFilter = b.GalleryAutoGenderFilter;
             VPBConfig.Instance.GalleryCollapseOnSceneLaunch = b.GalleryCollapseOnSceneLaunch;
             VPBConfig.Instance.VerticalMoveKeysEnabled = b.VerticalMoveKeysEnabled;

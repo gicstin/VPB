@@ -123,8 +123,6 @@ namespace VPB
                 GalleryUiMetrics.ApplyFont(statusBarText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxLabel != null)
                 GalleryUiMetrics.ApplyFont(tboxLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
-            if (tboxHintLabel != null)
-                GalleryUiMetrics.ApplyFont(tboxHintLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             try { SyncTboxFooterRowChrome(s); } catch { }
             try { DetailStripRescaleForUiScale(s); } catch { }
             // Recompute InfoBar offsetMax now — wait for Update tick leaves stale height / black band.

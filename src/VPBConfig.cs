@@ -477,7 +477,7 @@ namespace VPB
             try { TriggerChange(); } catch { }
         }
 
-        /// <summary>When true, the gallery selection toolbar (tbox) pin stays on across sessions until turned off manually.</summary>
+        /// <summary>Legacy (unused): old pin-toolbox pref. Kept for VPB.cfg read/write compat only.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true (default), selection detail strip is shown above the toolbox; when false, collapses to Details button in toolbox.</summary>
         public bool GalleryDetailStripExpanded = true;

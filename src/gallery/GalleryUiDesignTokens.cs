@@ -131,6 +131,11 @@ namespace VPB
         /// main-column rows over the wide side column.
         /// </summary>
         public const float FooterDetailStripStackSideMinHeightRef = 220f;
+        /// <summary>
+        /// Height hysteresis for stack-side vs SideCol. Must cover typical height delta when
+        /// desc/package-tags move left (extra wrap rows + gaps) or height hunts forever.
+        /// </summary>
+        public const float FooterDetailStripStackSideHysteresisRef = 96f;
         /// <summary>Max wrapped description lines in the main column when stacking by height.</summary>
         public const int FooterDetailStripLeftDescMaxLines = 5;
         /// <summary>Min strip width before right info column (desc + native tags) opens.</summary>
@@ -247,7 +252,7 @@ namespace VPB
         // (uniform with TboxPinBtnSizeRef) and scaled proportionally inside the info row.
         public const float TboxActionButtonSizeRef = ButtonSizeRef;
 
-        // Toolbox pin + in-app help close
+        // In-app help close (legacy name kept; sized with action buttons)
         public const float TboxPinBtnSizeRef = ButtonSizeRef;
         public const float InAppHelpCloseBtnSizeRef = ButtonSizeRef;
         public const float InAppHelpCloseBtnRightInsetRef = 6f;

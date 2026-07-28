@@ -220,6 +220,12 @@ namespace VPB
         private bool _detailStripWantTags;
         private bool _detailStripWantNativeTags;
         private bool _detailStripSideVisible;
+        /// <summary>
+        /// Sticky tall-strip stack mode (desc/package tags as main rows). Paired with height
+        /// hysteresis so side↔stack cannot 1 Hz hunt when auto-measure straddles the threshold.
+        /// </summary>
+        private bool _detailStripStackSideAsRows;
+        private bool _detailStripStackSideDecided;
         /// <summary>Identity key for last <see cref="DetailStripRefreshSideContent"/> fill (scrub/sameKey skip otherwise).</summary>
         private string _detailStripSideContentKey = "";
         // Thumb-wheel selection scrub: coalesce steps, lite UI while spinning, soft commit on idle.
@@ -955,6 +961,7 @@ namespace VPB
 
             sideCol.SetActive(false);
             _detailStripSideVisible = false;
+            DetailStripResetStackSideDecision();
 
             DetailStripEnsureResizeGrip();
             DetailStripSyncThumbSide();
@@ -1179,6 +1186,7 @@ namespace VPB
             _detailStripWantNativeTags = false;
             _detailStripSideVisible = false;
             _detailStripSideContentKey = "";
+            DetailStripResetStackSideDecision();
         }
 
         private static Text DetailStripCreateFlexLine(GameObject parent, string name, Color color, float s, bool clickable, float height)
@@ -1670,7 +1678,7 @@ namespace VPB
                     return;
                 }
                 VPBConfig.Instance.GalleryDetailStripExpanded = expanded;
-                // Persist across restart (same pattern as toolbox pin).
+                // Persist across restart.
                 try { VPBConfig.Instance.Save(false); } catch { }
             }
 
@@ -2151,7 +2159,10 @@ namespace VPB
             bool scaleChanged = Mathf.Abs(_detailStripLayoutScale - s) > 0.001f;
             // Stale absolute px from prior scale → black gutters / clip after UI-scale change.
             if (scaleChanged && !_detailStripScrubHeightLocked)
+            {
                 _detailStripMeasuredHeight = -1f;
+                DetailStripResetStackSideDecision();
+            }
 
             float rowH = DetailStripRowHeight(s);
 
@@ -2547,7 +2558,10 @@ namespace VPB
             if (_detailStripGO == null) return;
             _detailStripLayoutScale = -1f;
             if (!_detailStripScrubHeightLocked)
+            {
                 _detailStripMeasuredHeight = -1f;
+                DetailStripResetStackSideDecision();
+            }
             DetailStripLayout();
         }
 
@@ -2914,6 +2928,7 @@ namespace VPB
             else
             {
                 _detailStripMeasuredHeight = -1f;
+                DetailStripResetStackSideDecision();
                 try { DetailStripRefreshGeometry(); } catch { }
             }
         }
@@ -2929,7 +2944,7 @@ namespace VPB
                 if (s <= 0f) s = 1f;
                 try { DetailStripNormalizeTextColRows(); } catch { }
                 // Side column first — packs + meta avail width subtract its column.
-                try { DetailStripSyncSideColumn(s); } catch { }
+                try { DetailStripSyncSideColumn(s, allowPlacementChange: true); } catch { }
                 try { DetailStripPackActionRows(s); } catch { }
                 try { DetailStripSyncMetaHostHeight(s); } catch { }
                 try { DetailStripSyncActionsHostHeight(s); } catch { }
@@ -2948,11 +2963,22 @@ namespace VPB
                 // Scrub session: keep outer strip height stable (no tbox jump / layout thrash).
                 if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
                     h = _detailStripScrubLockedHeight;
+                else if (!DetailStripHasUserHeight()
+                    && _detailStripMeasuredHeight > 8f
+                    && !_detailStripScrubHeightLocked)
+                {
+                    // Deadband: ignore sub-line hunting that retargets thumb width → pack → height.
+                    float dead = DetailStripLineHeight(s) * 0.75f;
+                    if (dead < 6f) dead = 6f;
+                    if (Mathf.Abs(h - _detailStripMeasuredHeight) < dead)
+                        h = _detailStripMeasuredHeight;
+                }
                 _detailStripMeasuredHeight = h;
                 try { DetailStripSyncThumbSide(); } catch { }
                 DetailStripLayout();
                 // Side desc viewport was sized with pre-measure height — refill to final strip edge.
-                try { DetailStripSyncSideColumn(s); } catch { }
+                // Do not flip stack/side here (that reopens the height↔width feedback loop).
+                try { DetailStripSyncSideColumn(s, allowPlacementChange: false); } catch { }
                 // Pack/side sync can reintroduce horizontal drift — re-align once, then restack.
                 try { DetailStripNormalizeTextColRows(); } catch { }
                 try { DetailStripRebuildTextColLayout(); } catch { }
@@ -3465,6 +3491,7 @@ namespace VPB
             _detailStripBoundFile = null;
             _detailStripBoundCreator = "";
             _detailStripMeasuredHeight = -1f;
+            DetailStripResetStackSideDecision();
             _detailStripScrubActive = false;
             _detailStripScrubPendingSteps = 0;
             _detailStripScrubIndex = -1;
@@ -3545,9 +3572,14 @@ namespace VPB
                     else
                     {
                         float avail = DetailStripEstimateMetaAvailWidth();
-                        if (_detailStripMetaAvailWidth < 0f || Mathf.Abs(avail - _detailStripMetaAvailWidth) > 8f)
+                        // Match width-side hysteresis scale: tiny avail drift must not reflow every
+                        // SelectionContext tick (0.25s) or height↔thumb↔pack hunts forever.
+                        float drift = Mathf.Abs(avail - _detailStripMetaAvailWidth);
+                        float reflowEps = 8f;
+                        float geomEps = 6f;
+                        if (_detailStripMetaAvailWidth < 0f || drift > reflowEps)
                             DetailStripReflowMetaForCurrentSelection();
-                        else if (Mathf.Abs(avail - _detailStripMetaAvailWidth) > 2f)
+                        else if (drift > geomEps)
                             DetailStripRefreshGeometry();
                     }
                 }
@@ -3556,6 +3588,7 @@ namespace VPB
             }
             _detailStripCacheKey = key;
 
+            DetailStripResetStackSideDecision();
             DetailStripShowChrome();
             if (sel == 1)
                 DetailStripPopulateSingle(selectedFiles[0], reloadThumb: true);
@@ -4384,14 +4417,42 @@ namespace VPB
 
         /// <summary>
         /// Tall strip: prefer description + package tags as main-column rows instead of SideCol.
+        /// Sticky band (same idea as width side hysteresis) — open at minStack, stay until
+        /// clearly shorter so auto-height ↔ pack ↔ side cannot oscillate.
         /// </summary>
         private bool DetailStripShouldStackSideAsRows(float s)
         {
-            if (!DetailStripWantSideContent()) return false;
+            if (!DetailStripWantSideContent())
+            {
+                _detailStripStackSideAsRows = false;
+                _detailStripStackSideDecided = false;
+                return false;
+            }
             if (s <= 0f) s = 1f;
             float stripH = DetailStripRowHeight(s);
-            float minStack = GalleryUiDesignTokens.FooterDetailStripStackSideMinHeightRef * s;
-            return stripH + 0.5f >= minStack;
+            float openAt = GalleryUiDesignTokens.FooterDetailStripStackSideMinHeightRef * s;
+            float hyst = GalleryUiDesignTokens.FooterDetailStripStackSideHysteresisRef * s;
+            if (hyst < 24f) hyst = 24f;
+            float stayAt = Mathf.Max(DetailStripHardMinHeight(s), openAt - hyst);
+
+            bool stack;
+            if (_detailStripStackSideDecided)
+                stack = _detailStripStackSideAsRows
+                    ? (stripH + 0.5f >= stayAt)
+                    : (stripH + 0.5f >= openAt);
+            else
+                stack = stripH + 0.5f >= openAt;
+
+            _detailStripStackSideAsRows = stack;
+            _detailStripStackSideDecided = true;
+            return stack;
+        }
+
+        /// <summary>Forget sticky stack decision (selection/scale/hide) so next layout re-picks.</summary>
+        private void DetailStripResetStackSideDecision()
+        {
+            _detailStripStackSideDecided = false;
+            _detailStripStackSideAsRows = false;
         }
 
         private static float DetailStripFlexLineCurrentHeight(Text line, float fallbackLineH)
@@ -4508,11 +4569,30 @@ namespace VPB
 
         private void DetailStripSyncSideColumn(float s)
         {
+            DetailStripSyncSideColumn(s, allowPlacementChange: true);
+        }
+
+        /// <param name="allowPlacementChange">
+        /// False = only resize SideCol to current strip edge (post-measure). Flipping stack/side
+        /// after height apply causes avail-width drift and 0.25s SelectionContext reflow hunt.
+        /// </param>
+        private void DetailStripSyncSideColumn(float s, bool allowPlacementChange)
+        {
             if (_detailStripSideColGO == null) return;
             if (s <= 0f) s = 1f;
 
             // Wide opens SideCol; tall strip stacks desc+package tags as main rows instead.
-            bool show = DetailStripCanShowSide(s) && !DetailStripShouldStackSideAsRows(s);
+            bool show;
+            if (allowPlacementChange)
+            {
+                bool stack = DetailStripShouldStackSideAsRows(s);
+                show = DetailStripCanShowSide(s) && !stack;
+            }
+            else
+            {
+                // Keep committed placement — do not re-evaluate sticky stack (that mutates state).
+                show = _detailStripSideVisible;
+            }
             float sideW = show ? DetailStripComputeSideWidth(s) : 0f;
             float stripH = DetailStripRowHeight(s);
             try
@@ -4534,7 +4614,7 @@ namespace VPB
             if (sideRT != null && show)
                 sideRT.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, stripH);
 
-            if (_detailStripSideVisible != show)
+            if (allowPlacementChange && _detailStripSideVisible != show)
             {
                 _detailStripSideVisible = show;
                 _detailStripSideColGO.SetActive(show);
@@ -4548,9 +4628,16 @@ namespace VPB
             {
                 _detailStripSideColGO.SetActive(false);
             }
+            else if (allowPlacementChange)
+            {
+                _detailStripSideVisible = show;
+            }
 
-            DetailStripApplyDescPlacement();
-            DetailStripApplyPackageTagsPlacement();
+            if (allowPlacementChange)
+            {
+                DetailStripApplyDescPlacement();
+                DetailStripApplyPackageTagsPlacement();
+            }
             DetailStripApplySideFieldVisibility(show, s, sideW, stripH);
 
             if (show)

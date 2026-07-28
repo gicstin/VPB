@@ -16,7 +16,6 @@ namespace VPB
         // Selection toolbox ("tbox")
         private GameObject tbox;
         private Text tboxLabel;
-        private Text tboxHintLabel;
         private GameObject tboxCopyPkgNamesBtn;
         private GameObject tboxDeleteBtn;
         private GameObject tboxRemoveHistoryBtn;
@@ -576,9 +575,8 @@ namespace VPB
             tboxLastFlexAvailW = tboxButtonsFlexRootRT.rect.width;
         }
 
-        // Expand/collapse state
-        private bool tboxIsHovered = false;
-        private bool tboxPinned = false;
+        // Expand/collapse state — expanded whenever there is actionable content (selection / cleanup /
+        // settings / person targets). No hover-auto-hide and no pin gate (those caused collapse/expand churn).
         private float tboxExpandT = 0f;        // 0 = collapsed, 1 = expanded
 
         private RectTransform tboxRT;
@@ -633,22 +631,19 @@ namespace VPB
             var img = tbox.GetComponent<Image>();
             if (img != null) { img.color = UI.ChromeDark; img.raycastTarget = true; }
 
-            var hoverDel = tbox.AddComponent<UIHoverDelegate>();
-            hoverDel.OnHoverChange = h => tboxIsHovered = h;
-
-            // ── "X Selected" + hover hint, one row (collapsed view) ─────────────
+            // ── "X Selected" label row (collapsed view) ─────────────────────────
             var labelGO = new GameObject("TboxLabelLayer");
             labelGO.transform.SetParent(tbox.transform, false);
             tboxLabelCG = labelGO.AddComponent<CanvasGroup>();
 
-            // Label layer occupies the BOTTOM row (always visible), leaving 48 px on right for pin
+            // Label layer occupies the BOTTOM row (always visible).
             var labelLayerRT = labelGO.GetComponent<RectTransform>();
             if (labelLayerRT == null) labelLayerRT = labelGO.AddComponent<RectTransform>();
             labelLayerRT.anchorMin = new Vector2(0f, 0f);
             labelLayerRT.anchorMax = new Vector2(1f, 0f);
             labelLayerRT.pivot = new Vector2(0.5f, 0f);
             labelLayerRT.anchoredPosition = Vector2.zero;
-            labelLayerRT.sizeDelta = new Vector2(-48f, tboxInfoRowHeight);
+            labelLayerRT.sizeDelta = new Vector2(0f, tboxInfoRowHeight);
             tboxLabelLayerRT = labelLayerRT;
 
             var rowGO = new GameObject("TboxLabelRow");
@@ -672,16 +667,6 @@ namespace VPB
             labelCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
             labelCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            tboxHintLabel = UI.CreateLabel(rowGO, VPBTranslation.T("gallery.tbox.hover_expand", "Hover to expand"), tboxCollapsedFont, new Color(0.50f, 0.50f, 0.50f, 1f), TextAnchor.MiddleCenter, raycastTarget: false, name: "HoverHint");
-            var hintTextGO = tboxHintLabel.gameObject;
-            hintTextGO.SetActive(false);
-            var hintShadow = hintTextGO.AddComponent<Shadow>();
-            hintShadow.effectColor = new Color(0f, 0f, 0f, 0.5f);
-            hintShadow.effectDistance = new Vector2(1f, -1f);
-            var hintCSF = hintTextGO.AddComponent<ContentSizeFitter>();
-            hintCSF.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            hintCSF.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
             // ── Buttons panel (expanded view) ─────────────────────────────────────
             var bpGO = new GameObject("TboxButtonsLayer");
             bpGO.transform.SetParent(tbox.transform, false);
@@ -698,7 +683,7 @@ namespace VPB
             bpRT.anchorMax = new Vector2(1f, 0f);
             bpRT.pivot = new Vector2(0.5f, 0f);
             bpRT.anchoredPosition = new Vector2(0f, tboxInfoRowHeight); // sits one row above bottom
-            bpRT.sizeDelta = new Vector2(-48f, tboxInfoRowHeight);
+            bpRT.sizeDelta = new Vector2(0f, tboxInfoRowHeight);
             tboxButtonsLayerRT = bpRT;
 
             // Flex root + two HLG rows (second row toggled when wrapping)
@@ -1480,18 +1465,9 @@ namespace VPB
                 catch { }
             });
 
-            SyncTboxPinnedFromConfig();
-
             // Populate person atom buttons with whatever data is already loaded
             try { RefreshTboxPersonAtomButtons(); } catch { }
             try { SyncTboxFooterRowChrome(UiMetrics.ChromeScale); } catch { }
-        }
-
-        /// <summary>Sync pin state from config (settings toggle; no toolbar pin chrome).</summary>
-        private void SyncTboxPinnedFromConfig()
-        {
-            if (VPBConfig.Instance != null)
-                tboxPinned = VPBConfig.Instance.GalleryTboxToolbarPinned;
         }
 
         /// <summary>Footer info row geometry; must run on scale changes and UpdateLayout.</summary>
@@ -1500,12 +1476,11 @@ namespace VPB
             if (tbox == null) return;
             if (s <= 0f) s = 1f;
             float rowH = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
-            float pinGutter = 48f * s;
             float gap = TboxBtnRowGapScaled();
             tboxInfoRowHeight = rowH;
             if (tboxLabelLayerRT != null)
             {
-                tboxLabelLayerRT.sizeDelta = new Vector2(-pinGutter, rowH);
+                tboxLabelLayerRT.sizeDelta = new Vector2(0f, rowH);
                 Transform labelRow = tboxLabelLayerRT.Find("TboxLabelRow");
                 if (labelRow != null)
                 {
@@ -1520,7 +1495,7 @@ namespace VPB
             if (tboxButtonsLayerRT != null)
             {
                 tboxButtonsLayerRT.anchoredPosition = new Vector2(0f, rowH);
-                tboxButtonsLayerRT.sizeDelta = new Vector2(-pinGutter, tboxButtonsLayerRT.sizeDelta.y);
+                tboxButtonsLayerRT.sizeDelta = new Vector2(0f, tboxButtonsLayerRT.sizeDelta.y);
             }
             if (tboxButtonsFlexRootRT != null)
             {
@@ -1947,8 +1922,6 @@ namespace VPB
             EnsureTboxUI();
             if (tbox == null) return;
 
-            SyncTboxPinnedFromConfig();
-
             int sel = (selectedFiles != null) ? selectedFiles.Count : 0;
             int total = (currentFilteredFiles != null) ? currentFilteredFiles.Count : 0;
 
@@ -1977,31 +1950,21 @@ namespace VPB
                 catch { _activeSubfilterChipText = null; }
             }
 
-            // Action buttons when there is a selection, cleanup mode active, or person atoms present; pin persists until user toggles (saved in VPB.cfg).
+            // Action buttons when there is a selection, cleanup mode active, or person atoms present.
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
             bool isSettingsMode = IsSettingsPanelOpen();
             bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive || hasPersonAtoms;
-            // Only force collapse if not pinned and not currently expanded (preserve expansion state during category switches)
-            if (!canExpand && !tboxPinned && tboxExpandT < 0.01f)
+            if (!canExpand && tboxExpandT < 0.01f)
             {
                 tboxExpandT = 0f;
-                tboxIsHovered = false;
                 tboxButtonLayoutRows = 1;
                 float collapsedHeight = tboxInfoRowHeight;
                 if (tboxButtonsLayerRT != null)
                     tboxButtonsLayerRT.sizeDelta = new Vector2(tboxButtonsLayerRT.sizeDelta.x, collapsedHeight);
             }
 
-            if (tboxHintLabel != null && tboxHintLabel.gameObject != null)
-            {
-                bool showPinnedHint = sel == 0 && tboxPinned && !cleanupModeActive;
-                tboxHintLabel.gameObject.SetActive(showPinnedHint);
-                if (showPinnedHint)
-                    tboxHintLabel.text = VPBTranslation.T("gallery.tbox.pinned_select", "Pinned — select items for actions");
-            }
-
-            // Auto-expand toolbox if person atoms present, otherwise require hover or pin
-            bool wantExpanded = isSettingsMode || (canExpand && (tboxIsHovered || tboxPinned || hasPersonAtoms));
+            // Stay expanded while actionable; no hover/pin auto-hide (hover gate caused expand/collapse churn).
+            bool wantExpanded = canExpand;
 
             // No animation: snap expanded/collapsed state immediately
             float targetT = wantExpanded ? 1f : 0f;
