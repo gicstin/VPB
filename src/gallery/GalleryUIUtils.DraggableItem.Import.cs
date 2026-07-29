@@ -201,6 +201,7 @@ namespace VPB
                 ContextMenuPanel.Instance.Hide();
                 if (Panel != null)
                 {
+                    // Picker pushes its own undo on confirm; do not snapshot here (cancel must not undo).
                     Panel.ShowMergeOutfitPicker(sourceEntry, targetAtom, preset);
                     return;
                 }
@@ -225,6 +226,10 @@ namespace VPB
                 LogUtil.LogError($"[VPB] ApplyImport UI suppression error: {ex.Message}");
                 Gallery.SuppressAutoRefresh(false);
             }
+
+            // Context-menu "import with options" previously never pushed undo — footer Undo was a no-op.
+            if (Panel != null)
+                Panel.PushUndoAtomSnapshot(targetAtom);
 
             VpbImport.LoadPreset(sourceEntry, targetAtom, resourceType, applyMode, presetJC: preset);
 

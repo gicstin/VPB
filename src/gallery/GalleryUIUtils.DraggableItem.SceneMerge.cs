@@ -319,7 +319,16 @@ namespace VPB
                     }
                     catch { }
 
-                    if (true)
+                    // Appearance / Skin / Morphs: light appearance undo (geometry+skin+clothing/hair).
+                    // Clothing/Hair keep the clothing-hair-only snapshot (faster).
+                    bool needsAppearanceUndo = itemType == ItemType.Appearance
+                        || itemType == ItemType.Skin
+                        || itemType == ItemType.Morphs;
+                    if (needsAppearanceUndo)
+                    {
+                        Panel.PushUndoAtomSnapshot(atom);
+                    }
+                    else
                     {
                         ClothingLoadingUtils.ClothingHairUndoState clothingHairSnapshot =
                             ClothingLoadingUtils.CaptureClothingHairUndoState(atom);

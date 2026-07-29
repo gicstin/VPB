@@ -3589,6 +3589,23 @@ namespace VPB
             return a;
         }
 
+        /// <summary>
+        /// Push appearance-capable undo for a person atom (morphs/skin/clothing/hair).
+        /// Cold path — selective storable GetJSON, not full Atom.Store (Store stalls large persons).
+        /// </summary>
+        public void PushUndoAtomSnapshot(Atom atom)
+        {
+            try
+            {
+                Action undoAction = CaptureAtomSnapshotAction(atom);
+                if (undoAction != null) PushUndo(undoAction);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] PushUndoAtomSnapshot: " + ex.Message);
+            }
+        }
+
         private Action CaptureAtomSnapshotAction(Atom atom)
         {
             if (atom == null) return null;
@@ -3600,16 +3617,28 @@ namespace VPB
                 ClothingLoadingUtils.CaptureClothingHairUndoState(atom);
             List<JSONClass> additionalStorableSnapshots = new List<JSONClass>();
 
+            // Full Atom.Store was correct but multi-second on clothed persons (and Serialize of the
+            // dump). Selective GetJSON is enough for Undo of appearance/skin/morphs: morph banks live
+            // on geometry (must include — old code skipped it and Undo left morphs stuck).
             bool ShouldSnapshotAdditionalStorableId(string sid)
             {
                 if (string.IsNullOrEmpty(sid)) return false;
-                if (ClothingLoadingUtils.ClothingHairUndoStateContainsStorable(clothingHairSnapshot, sid)) return false;
-                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return false;
+                if (ClothingLoadingUtils.ClothingHairUndoStateContainsStorable(clothingHairSnapshot, sid))
+                    return false;
+                // Pose/plugins/physics undo is out of scope for this light snapshot.
+                if (string.Equals(sid, "PosePresets", StringComparison.OrdinalIgnoreCase)) return false;
+                if (string.Equals(sid, "PluginPresets", StringComparison.OrdinalIgnoreCase)) return false;
+                if (string.Equals(sid, "PluginManager", StringComparison.OrdinalIgnoreCase)) return false;
+                if (string.Equals(sid, "control", StringComparison.OrdinalIgnoreCase)) return false;
+                if (sid.IndexOf("Physics", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                if (sid.IndexOf("AutoCollider", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+                if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
                 if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) return true;
-                if (sid.EndsWith("Presets", StringComparison.OrdinalIgnoreCase)) return true;
-                if (sid.EndsWith("Preset", StringComparison.OrdinalIgnoreCase)) return true;
+                if (sid.IndexOf("skin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (sid.IndexOf("texture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 if (sid.IndexOf("appearance", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 if (sid.IndexOf("morph", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                // Preset-manager shells alone do not hold morph/skin values; skip *Presets noise.
                 return false;
             }
 
@@ -3629,7 +3658,20 @@ namespace VPB
                         if (s == null) continue;
                         JSONClass snap = null;
                         try { snap = s.GetJSON(); } catch { snap = null; }
-                        if (snap != null) additionalStorableSnapshots.Add(snap);
+                        if (snap == null) continue;
+                        // Freeze copy — GetJSON can share nodes that mutate after import.
+                        try
+                        {
+                            string frozen = VPB.src.util.JsonSerializationUtil.Serialize(snap, 1 << 18);
+                            if (!string.IsNullOrEmpty(frozen))
+                            {
+                                JSONNode parsed = JSON.Parse(frozen);
+                                if (parsed != null && parsed.AsObject != null)
+                                    snap = parsed.AsObject;
+                            }
+                        }
+                        catch { }
+                        additionalStorableSnapshots.Add(snap);
                     }
                 }
             }
@@ -3638,11 +3680,16 @@ namespace VPB
             return () =>
             {
                 Atom targetAtom = null;
-                try { targetAtom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { targetAtom = null; }
+                try
+                {
+                    targetAtom = SuperController.singleton != null
+                        ? SuperController.singleton.GetAtomByUid(atomUid)
+                        : null;
+                }
+                catch { targetAtom = null; }
                 if (targetAtom == null) return;
 
-                try { ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot); } catch { }
-
+                // Geometry/skin/morphs first, then clothing/hair (toggles + item materials win last).
                 try
                 {
                     for (int i = 0; i < additionalStorableSnapshots.Count; i++)
@@ -3659,6 +3706,9 @@ namespace VPB
                         try { s.RestoreFromJSON(snap); } catch { }
                     }
                 }
+                catch { }
+
+                try { ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot); }
                 catch { }
             };
         }

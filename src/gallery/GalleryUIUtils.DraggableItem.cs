@@ -912,6 +912,18 @@ namespace VPB
             ClothingLoadingUtils.RemoveAllClothing(target);
         }
 
+        // VaM SetActiveClothingItem / SetActiveHairItem is (id|item, bool active, bool fromRestore).
+        // Pad fromRestore=false when the resolved MethodInfo has 3+ parameters.
+        private static void InvokeSetActiveItem(MethodInfo mi, object dcs, object itemOrUid, bool active)
+        {
+            if (mi == null || dcs == null) return;
+            ParameterInfo[] ps = mi.GetParameters();
+            if (ps != null && ps.Length >= 3)
+                mi.Invoke(dcs, new object[] { itemOrUid, active, false });
+            else
+                mi.Invoke(dcs, new object[] { itemOrUid, active });
+        }
+
         public void RemoveClothingBySlot(Atom target, string slot)
         {
             if (target == null)
@@ -1063,11 +1075,11 @@ namespace VPB
                         {
                             if (miSetActiveItem != null)
                             {
-                                miSetActiveItem.Invoke(dcs, new object[] { item, false });
+                                InvokeSetActiveItem(miSetActiveItem, dcs, item, false);
                             }
                             else if (miSetActiveItemByUid != null)
                             {
-                                miSetActiveItemByUid.Invoke(dcs, new object[] { item.uid, false });
+                                InvokeSetActiveItem(miSetActiveItemByUid, dcs, item.uid, false);
                             }
                             else
                             {
@@ -1127,7 +1139,8 @@ namespace VPB
                 {
                     if (m.Name != "SetActiveClothingItem") continue;
                     var ps = m.GetParameters();
-                    if (ps.Length == 2 && ps[1].ParameterType == typeof(bool))
+                    // VaM: SetActiveClothingItem(item|uid, bool active, bool fromRestore = optional)
+                    if (ps.Length >= 2 && ps[1].ParameterType == typeof(bool))
                     {
                         if (ps[0].ParameterType == typeof(DAZClothingItem)) miSetActiveItem = m;
                         else if (ps[0].ParameterType == typeof(string)) miSetActiveItemByUid = m;
@@ -1274,11 +1287,11 @@ namespace VPB
             {
                 if (miSetActiveItem != null)
                 {
-                    miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                    InvokeSetActiveItem(miSetActiveItem, dcs, matched, false);
                 }
                 else if (miSetActiveItemByUid != null)
                 {
-                    miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, false });
+                    InvokeSetActiveItem(miSetActiveItemByUid, dcs, matched.uid, false);
                 }
                 else
                 {
@@ -1361,14 +1374,14 @@ namespace VPB
                     if (miSetActiveItem != null)
                     {
                         LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(true->false)");
-                        miSetActiveItem.Invoke(dcs, new object[] { matched, true });
-                        miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                        InvokeSetActiveItem(miSetActiveItem, dcs, matched, true);
+                        InvokeSetActiveItem(miSetActiveItem, dcs, matched, false);
                     }
                     else if (miSetActiveItemByUid != null)
                     {
                         LogUtil.Log("[VPB] RemoveClothingItemByUid: item already inactive; attempting force refresh via SetActiveClothingItem(uid, true->false)");
-                        miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, true });
-                        miSetActiveItemByUid.Invoke(dcs, new object[] { matched.uid, false });
+                        InvokeSetActiveItem(miSetActiveItemByUid, dcs, matched.uid, true);
+                        InvokeSetActiveItem(miSetActiveItemByUid, dcs, matched.uid, false);
                     }
                 }
                 catch (Exception ex)
@@ -1653,11 +1666,11 @@ namespace VPB
             {
                 if (miSetActiveItem != null)
                 {
-                    miSetActiveItem.Invoke(dcs, new object[] { matched, false });
+                    InvokeSetActiveItem(miSetActiveItem, dcs, matched, false);
                 }
                 else if (miSetActiveItemByUid != null)
                 {
-                    miSetActiveItemByUid.Invoke(dcs, new object[] { itemUid, false });
+                    InvokeSetActiveItem(miSetActiveItemByUid, dcs, itemUid, false);
                 }
                 else
                 {

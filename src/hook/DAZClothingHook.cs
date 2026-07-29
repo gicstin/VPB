@@ -66,11 +66,11 @@ namespace VPB
             return null;
         }
 
-        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active)
+        public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore)
         {
         }
 
-        public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active)
+        public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active, bool fromRestore)
         {
         }
 

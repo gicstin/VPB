@@ -254,7 +254,8 @@ namespace VPB
             var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
             _categoryQuickMenuOuterRT = outerRT;
-            var outerImg = AddCategoryQuickRoundedBg(_categoryQuickMenuOuterGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
+            // Flat panel (match CreatePopupMenuPanel). Rounding belongs on chrome chip + row buttons only.
+            UI.AddImage(_categoryQuickMenuOuterGO, new Color(UI.PopupBackdrop.r, UI.PopupBackdrop.g, UI.PopupBackdrop.b, 0.92f));
 
             // No child Canvas / overrideSorting / SuperController.AddCanvas. Earlier attempts at all three
             // either left the popup behind gallery rows in VR (overrideSorting unreliable for nested WorldSpace
@@ -369,7 +370,6 @@ namespace VPB
                 // Match labeled chrome width; when header is icon-only still use preferred (not Max).
                 float menuW = _categoryQuickCompact ? catLabeledW : catW;
                 _categoryQuickMenuOuterRT.sizeDelta = new Vector2(menuW, 340f * paneScale);
-                SyncCategoryQuickRoundedBg(_categoryQuickMenuOuterGO != null ? _categoryQuickMenuOuterGO.GetComponent<RoundedRect>() : null);
             }
             ApplyCategoryQuickArrowChromeLayout(paneScale);
             ApplyCategoryQuickMenuRowsLayout(paneScale);

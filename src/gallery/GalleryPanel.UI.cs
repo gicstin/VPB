@@ -1237,9 +1237,9 @@ namespace VPB
             AddHoverDelegate(footerClearFilterBtn);
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear all filters");
             AddHoverDelegate(footerUndoBtnGO);
-            AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change");
+            AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change (Ctrl+Z)");
             AddHoverDelegate(footerRedoBtnGO);
-            AddTooltip(footerRedoBtnGO, "gallery.tooltip.redo", "Redo");
+            AddTooltip(footerRedoBtnGO, "gallery.tooltip.redo", "Redo (Ctrl+Y / Ctrl+Shift+Z)");
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);

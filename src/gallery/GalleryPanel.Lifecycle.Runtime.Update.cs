@@ -806,6 +806,19 @@ namespace VPB
                     if (TryUndoRecentHistoryRemoval())
                         return;
                 }
+                // Ctrl+Shift+Z — Redo; Ctrl+Z — same as footer Undo.
+                if (shift)
+                {
+                    try { Redo(); } catch { }
+                    return;
+                }
+                try { Undo(); } catch { }
+                return;
+            }
+            if (ctrl && Input.GetKeyDown(KeyCode.Y))
+            {
+                try { Redo(); } catch { }
+                return;
             }
             bool a = Input.GetKeyDown(KeyCode.A);
             bool del = Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace);

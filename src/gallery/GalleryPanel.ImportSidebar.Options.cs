@@ -1841,6 +1841,22 @@ namespace VPB
             }
         }
 
+        // Maps toolbox AppearanceClothingApplyMode → ClothingApplyMode for Appearance-type imports.
+        // Outfit Only (clothingonly) is not an Appearance import — mapping it to ClothingOnly skipped
+        // skin/hair/morphs. Keep / Merge Outfit / Full Look (replace) only.
+        private ClothingApplyMode ResolveAppearanceClothingApplyModeFromConfig()
+        {
+            string cfg = AppearanceClothingApplyMode;
+            if (string.IsNullOrEmpty(cfg)) cfg = "replace";
+            if (string.Equals(cfg, "keep", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.Keep;
+            if (string.Equals(cfg, "mergeoutfit", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.MergeOutfit;
+            if (string.Equals(cfg, "merge", StringComparison.OrdinalIgnoreCase))
+                return ClothingApplyMode.Merge;
+            return ClothingApplyMode.Replace;
+        }
+
         // Deletes target-linked CUAs when only the standalone CUA type is selected (Appearance path deletes during
         // its own apply). Then spawns the chosen source CUAs as native atoms.
         private void RunCUAImportWithOptionalDelete(bool standaloneCuaType)
@@ -1883,11 +1899,16 @@ namespace VPB
 
             string storableOverride = ResolveStorableOverrideForType(type);
 
-            // Appearance: suppress-clothing maps to Keep (locks ClothingPresets so source clothing is skipped),
-            // else Replace. Clothing/Hair use the merge toggle. Other types ignore the mode.
+            // Appearance: sidebar "Disable clothing load" forces Keep. Otherwise honor the toolbox
+            // Appearance clothing mode (Keep My Outfit / Full Look / Outfit Only / Merge Outfit) — same
+            // contract as drag-drop. Clothing/Hair use the merge toggle. Other types ignore the mode.
             ClothingApplyMode mode;
             if (type == VpbResourceType.Appearance)
-                mode = importSidebarSuppressClothingLoad ? ClothingApplyMode.Keep : ClothingApplyMode.Replace;
+            {
+                mode = importSidebarSuppressClothingLoad
+                    ? ClothingApplyMode.Keep
+                    : ResolveAppearanceClothingApplyModeFromConfig();
+            }
             else
                 mode = importSidebarMergeClothingOrHair ? ClothingApplyMode.Merge : ClothingApplyMode.Replace;
 
@@ -1989,6 +2010,7 @@ namespace VPB
 
             // Only suppress real clothing: keep the target's real garments, bring the source's non-real (cosmetic)
             // clothing. Drop target old non-real -> merge source non-real -> appearance with the Keep clothing lock.
+            // Nested toggle only applies when sidebar "Disable clothing load" is on (not toolbox Keep alone).
             if (dispatchType == VpbResourceType.Appearance
                 && importSidebarSuppressClothingLoad
                 && importSidebarOnlySuppressRealClothing)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -203,6 +204,7 @@ namespace VPB
 
         // Tracks whether we currently own the on-screen help text, so we only clear what we set.
         private bool _removeHelpShown;
+        private string _removeHelpCached;
 
         // Floating "Remove <type>: <name>" popup that follows the desktop pointer while hovering.
         private GameObject _removePopupGO;
@@ -379,6 +381,7 @@ namespace VPB
 
         private void RemoveModeClearHelp()
         {
+            _removeHelpCached = null;
             if (!_removeHelpShown) return;
             try { SuperController.singleton.helpText = string.Empty; } catch { }
             _removeHelpShown = false;
@@ -486,7 +489,7 @@ namespace VPB
             try { target = RemoveModeResolve(desktop, out clickThisFrame); }
             catch (Exception ex) { LogUtil.LogError("[VPB] RemoveModeResolve error: " + ex); target = null; clickThisFrame = false; }
 
-            // Update the half-transparency highlight + help hint only when the target identity changes.
+            // Update the half-transparency highlight only when the target identity changes.
             UnityEngine.Object newIdentity = target != null ? target.identity : null;
             bool identityChanged = !ReferenceEquals(newIdentity, _removeHighlightedIdentity);
             if (identityChanged)
@@ -502,10 +505,13 @@ namespace VPB
                     try { _removeHighlight.Apply(target.highlightRoot, RemoveModeAlphaAdjust, fadeMat); } catch { }
                 }
                 _removeHighlightedIdentity = newIdentity;
-
-                if (target != null) RemoveModeSetHelp("Click to remove " + target.DisplayName());
-                else RemoveModeClearHelp();
+                _removeHelpCached = target != null ? ("Click to remove " + target.DisplayName()) : null;
             }
+
+            // Re-assert help every frame: VaM SyncHelpText overwrites with its own point target
+            // (e.g. "wall") while remove mode is active. Reuse cached string — no per-frame concat.
+            if (_removeHelpCached != null) RemoveModeSetHelp(_removeHelpCached);
+            else RemoveModeClearHelp();
 
             // Floating popup follows the desktop pointer every frame while a target is held.
             if (desktop && target != null) RemoveModeShowPopup(target.PopupLabel());
@@ -567,10 +573,66 @@ namespace VPB
 
             if (best != null)
             {
+                // GetRight/LeftSelect returns false while *GUIInteract is set (gallery laser on UI).
+                // Desktop already falls back to raw mouse; mirror that for VR selectAction.
                 try { clickThisFrame = bestIsRight ? sc.GetRightSelect() : sc.GetLeftSelect(); }
                 catch { clickThisFrame = false; }
+                if (!clickThisFrame) clickThisFrame = RemoveModePollVrSelectBypassGui(bestIsRight);
             }
             return best;
+        }
+
+        // Cached OpenVR selectAction.GetStateDown — warm path (click poll), not per-triangle hot path.
+        // All SteamVR types accessed via reflection so VPB does not need a SteamVR assembly reference.
+        private static MethodInfo _vrSelectGetStateDown;
+        private static object _vrSelectSrcRight;
+        private static object _vrSelectSrcLeft;
+        private static FieldInfo _vrSelectActionField;
+        private static FieldInfo _vrIsOpenVrField;
+        private static bool _vrSelectReflectionReady;
+
+        private static bool RemoveModePollVrSelectBypassGui(bool right)
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return false;
+            try
+            {
+                if (!_vrSelectReflectionReady)
+                {
+                    _vrSelectReflectionReady = true;
+                    Type scType = typeof(SuperController);
+                    _vrIsOpenVrField = scType.GetField("isOpenVR", BindingFlags.Public | BindingFlags.Instance);
+                    _vrSelectActionField = scType.GetField("selectAction", BindingFlags.Public | BindingFlags.Instance);
+                }
+
+                if (_vrIsOpenVrField == null || _vrSelectActionField == null) return false;
+                if (!(bool)_vrIsOpenVrField.GetValue(sc)) return false;
+                object action = _vrSelectActionField.GetValue(sc);
+                if (action == null) return false;
+
+                if (_vrSelectGetStateDown == null)
+                {
+                    Type actionType = action.GetType();
+                    MethodInfo[] methods = actionType.GetMethods(BindingFlags.Public | BindingFlags.Instance);
+                    for (int i = 0; i < methods.Length; i++)
+                    {
+                        if (methods[i].Name != "GetStateDown") continue;
+                        ParameterInfo[] ps = methods[i].GetParameters();
+                        if (ps != null && ps.Length == 1) { _vrSelectGetStateDown = methods[i]; break; }
+                    }
+                    if (_vrSelectGetStateDown != null)
+                    {
+                        Type srcType = _vrSelectGetStateDown.GetParameters()[0].ParameterType;
+                        // IL: GetRightSelect uses InputSources=2, GetLeftSelect uses 1
+                        _vrSelectSrcRight = Enum.ToObject(srcType, 2);
+                        _vrSelectSrcLeft = Enum.ToObject(srcType, 1);
+                    }
+                }
+                if (_vrSelectGetStateDown == null) return false;
+                object src = right ? _vrSelectSrcRight : _vrSelectSrcLeft;
+                return (bool)_vrSelectGetStateDown.Invoke(action, new object[] { src });
+            }
+            catch { return false; }
         }
 
         private RemoveTarget ResolveTargetForRay(Ray ray)
@@ -844,23 +906,30 @@ namespace VPB
             // next hover re-bakes the new set exactly once.
             _wrapGeomCache.Clear();
 
-            if (target.kind == RemoveTargetKind.ClothingItem && target.selector != null)
+            if ((target.kind == RemoveTargetKind.ClothingItem || target.kind == RemoveTargetKind.HairItem)
+                && target.item != null && target.selector != null)
             {
-                DAZClothingItem ci = target.item as DAZClothingItem;
+                DAZDynamicItem dyn = target.item;
                 DAZCharacterSelector sel = target.selector;
-                if (ci == null || sel == null) return;
-                sel.SetActiveClothingItem(ci, false);
-                PushUndo(() => { try { if (sel != null && ci != null) sel.SetActiveClothingItem(ci, true); } catch { } });
-                return;
-            }
+                bool isClothing = target.kind == RemoveTargetKind.ClothingItem;
 
-            if (target.kind == RemoveTargetKind.HairItem && target.selector != null)
-            {
-                DAZHairGroup hi = target.item as DAZHairGroup;
-                DAZCharacterSelector sel = target.selector;
-                if (hi == null || sel == null) return;
-                sel.SetActiveHairItem(hi, false);
-                PushUndo(() => { try { if (sel != null && hi != null) sel.SetActiveHairItem(hi, true); } catch { } });
+                Atom atom = null;
+                try { atom = sel.containingAtom; } catch { }
+                if (atom == null)
+                {
+                    try
+                    {
+                        JSONStorableDynamic jsd = dyn as JSONStorableDynamic;
+                        if (jsd != null) atom = jsd.containingAtom;
+                    }
+                    catch { }
+                }
+
+                // Same undo snapshot the remove-siderail path uses (geometry toggles + storables).
+                if (atom != null) RemoveModePushClothingHairUndo(atom);
+
+                if (!RemoveModeDeactivateWornItem(atom, sel, dyn, isClothing))
+                    LogUtil.LogError("[VPB] RemoveMode: failed to deactivate " + (dyn != null ? dyn.uid : "item"));
                 return;
             }
 
@@ -870,6 +939,117 @@ namespace VPB
                 try { PushUndoSnapshotForAtomRemoval(atom); } catch { }
                 try { SuperController.singleton.RemoveAtom(atom); }
                 catch (Exception ex) { LogUtil.LogError("[VPB] RemoveAtom failed: " + ex); }
+            }
+        }
+
+        private void RemoveModePushClothingHairUndo(Atom atom)
+        {
+            if (atom == null) return;
+            try
+            {
+                string atomUid = atom.uid;
+                ClothingLoadingUtils.ClothingHairUndoState snapshot =
+                    ClothingLoadingUtils.CaptureClothingHairUndoState(atom);
+                PushUndo(() =>
+                {
+                    Atom undoAtom = SuperController.singleton.GetAtomByUid(atomUid);
+                    if (undoAtom == null) return;
+                    ClothingLoadingUtils.RestoreClothingHairUndoState(undoAtom, snapshot);
+                });
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RemoveModePushClothingHairUndo: " + ex);
+            }
+        }
+
+        // Canonical wear/remove is geometry clothing:/hair: bool (same as remove siderail).
+        // SetActive* on DAZCharacterSelector is (item, active, fromRestore) — never call 2-arg
+        // overload; older IL that did throws MissingMethodException on current VaM.
+        private static bool RemoveModeDeactivateWornItem(
+            Atom atom, DAZCharacterSelector sel, DAZDynamicItem dyn, bool isClothing)
+        {
+            if (dyn == null) return false;
+            string uid = null;
+            try { uid = dyn.uid; } catch { }
+            if (!string.IsNullOrEmpty(uid) && atom != null)
+            {
+                try
+                {
+                    JSONStorable geometry = atom.GetStorableByID("geometry");
+                    if (geometry != null)
+                    {
+                        string key = (isClothing ? "clothing:" : "hair:") + uid;
+                        JSONStorableBool jsb = null;
+                        try { jsb = geometry.GetBoolJSONParam(key); } catch { }
+                        if (jsb != null)
+                        {
+                            jsb.val = false;
+                            return true;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Explicit fromRestore=false — matches VaM signature; avoids optional-arg IL mismatch.
+            try
+            {
+                sel.SetActiveDynamicItem(dyn, false, false);
+                return true;
+            }
+            catch (MissingMethodException) { }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] RemoveMode SetActiveDynamicItem: " + ex.Message);
+            }
+
+            return RemoveModeInvokeSetActiveFallback(sel, dyn, isClothing, false);
+        }
+
+        private static MethodInfo _miSetActiveClothingItem;
+        private static MethodInfo _miSetActiveHairItem;
+        private static bool _setActiveMethodsResolved;
+
+        private static bool RemoveModeInvokeSetActiveFallback(
+            DAZCharacterSelector sel, DAZDynamicItem dyn, bool isClothing, bool active)
+        {
+            if (sel == null || dyn == null) return false;
+            try
+            {
+                if (!_setActiveMethodsResolved)
+                {
+                    _setActiveMethodsResolved = true;
+                    MethodInfo[] methods = typeof(DAZCharacterSelector).GetMethods(
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    for (int i = 0; i < methods.Length; i++)
+                    {
+                        MethodInfo m = methods[i];
+                        if (m.Name != "SetActiveClothingItem" && m.Name != "SetActiveHairItem") continue;
+                        ParameterInfo[] ps = m.GetParameters();
+                        if (ps == null || ps.Length < 2 || ps[1].ParameterType != typeof(bool)) continue;
+                        if (m.Name == "SetActiveClothingItem" && ps[0].ParameterType == typeof(DAZClothingItem))
+                            _miSetActiveClothingItem = m;
+                        else if (m.Name == "SetActiveHairItem" && ps[0].ParameterType == typeof(DAZHairGroup))
+                            _miSetActiveHairItem = m;
+                    }
+                }
+
+                MethodInfo mi = isClothing ? _miSetActiveClothingItem : _miSetActiveHairItem;
+                if (mi == null) return false;
+                ParameterInfo[] pars = mi.GetParameters();
+                object[] args;
+                if (pars.Length >= 3)
+                    args = new object[] { dyn, active, false };
+                else
+                    args = new object[] { dyn, active };
+                mi.Invoke(sel, args);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] RemoveMode SetActive fallback: " + ex.Message);
+                return false;
             }
         }
     }

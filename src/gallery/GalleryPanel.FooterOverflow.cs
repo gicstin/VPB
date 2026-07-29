@@ -391,13 +391,13 @@ namespace VPB
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_undo", "Undo"),
                     () => { CloseFooterOverflowMenu(); Undo(); }, icon: icon,
-                    tipKey: "gallery.tooltip.undo", tipDefault: "Undo last change");
+                    tipKey: "gallery.tooltip.undo", tipDefault: "Undo last change (Ctrl+Z)");
             }
             else if (go == footerRedoBtnGO)
             {
                 AddFooterOverflowMenuRow(panel, VPBTranslation.T("gallery.footer.overflow_redo", "Redo"),
                     () => { CloseFooterOverflowMenu(); Redo(); }, icon: icon,
-                    tipKey: "gallery.tooltip.redo", tipDefault: "Redo");
+                    tipKey: "gallery.tooltip.redo", tipDefault: "Redo (Ctrl+Y / Ctrl+Shift+Z)");
             }
         }
 
