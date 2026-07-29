@@ -391,7 +391,10 @@ namespace VPB
         [ThreadStatic]
         public static bool s_AllowRegistration;
 
-        // Set of UIDs we've already registered on-demand this session (avoid re-registering)
+        // Set of UIDs we've already registered on-demand this session (avoid re-registering).
+        // MUST be invalidated when native FileManager.Refresh completes under scan whitelist —
+        // VaM drops non-whitelisted packages, and stale entries here permanently skip re-register
+        // (Missing addon package spam until full VPB ClearCache). See issue #77.
         private static readonly HashSet<string> s_RegisteredOnDemand =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RegisteredLock = new object();
@@ -595,6 +598,36 @@ namespace VPB
         }
 
         /// <summary>
+        /// Native Refresh rebuilds VaM's package set. Under scan whitelist, non-allowed packages are
+        /// dropped even if VPB previously registered them on-demand. Clear session skip/failure
+        /// caches so the next FileExists/GetVarFileEntry miss can re-register.
+        /// </summary>
+        private static void InvalidateOnDemandSessionCachesAfterNativeRefresh()
+        {
+            lock (s_RegisteredLock)
+                s_RegisteredOnDemand.Clear();
+            lock (s_FailedLock)
+                s_LastFailedAttemptTicksByUid.Clear();
+        }
+
+        /// <summary>
+        /// True when this UID was on-demand registered this session AND VaM still has it.
+        /// Clears stale tracking when native Refresh dropped the package (#77).
+        /// </summary>
+        private static bool ShouldSkipAlreadyRegisteredOnDemand(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return false;
+            bool tracked;
+            lock (s_RegisteredLock)
+                tracked = s_RegisteredOnDemand.Contains(uid);
+            if (!tracked) return false;
+            if (IsUidAlreadyRegisteredInVam(uid)) return true;
+            lock (s_RegisteredLock)
+                s_RegisteredOnDemand.Remove(uid);
+            return false;
+        }
+
+        /// <summary>
         /// Whether a coalesced native refresh is needed after on-demand registration for these UIDs.
         /// Skips refresh when every UID was already registered and no catalog is stale.
         /// </summary>
@@ -708,11 +741,9 @@ namespace VPB
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
             if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
 
-            // Already registered this session?
-            lock (s_RegisteredLock)
-            {
-                if (s_RegisteredOnDemand.Contains(uid)) return null;
-            }
+            // Already registered this session — but only skip if VaM still has the package.
+            // Native Refresh under scan whitelist can drop it while this set still contains the UID.
+            if (ShouldSkipAlreadyRegisteredOnDemand(uid)) return null;
 
             // Cooldown repeated failures per UID to prevent startup stalls from repeated reflection/invoke exceptions.
             if (WasRecentFailure(uid))
@@ -724,9 +755,14 @@ namespace VPB
 
             if (!TryResolveVarPathForUid(uid, out string resolvedUid, out string varPath))
             {
-                // Genuinely unresolvable: arm the failure cooldown so repeated probes for the same uid
-                // short-circuit instead of re-running the recursive AddonPackages walk on every hook call.
-                MarkFailure(uid);
+                // Do not poison during native Refresh / pre-ready windows — resolve can fail transiently
+                // while VaM dictionaries rebuild or VPB inventory is mid-scan.
+                if (!VamScanFilter.IsVamRefreshInProgress && VamScanFilter.HasVamRefreshedAtLeastOnce)
+                {
+                    // Genuinely unresolvable: arm the failure cooldown so repeated probes for the same uid
+                    // short-circuit instead of re-running the recursive AddonPackages walk on every hook call.
+                    MarkFailure(uid);
+                }
                 return null;
             }
             if (string.IsNullOrEmpty(varPath)) return null;
@@ -743,10 +779,7 @@ namespace VPB
                 return null;
             }
 
-            lock (s_RegisteredLock)
-            {
-                if (!string.IsNullOrEmpty(resolvedUid) && s_RegisteredOnDemand.Contains(resolvedUid)) return null;
-            }
+            if (!string.IsNullOrEmpty(resolvedUid) && ShouldSkipAlreadyRegisteredOnDemand(resolvedUid)) return null;
             if (!string.IsNullOrEmpty(resolvedUid) && WasRecentFailure(resolvedUid)) return null;
 
             // Check file exists
@@ -1110,6 +1143,9 @@ namespace VPB
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM refresh completed - promoted " + promoted + " deferred registrations");
 
+            // Drop session skip caches before catalog-stale clear so the next miss can re-register
+            // packages that native Refresh just excluded under the scan whitelist (#77).
+            InvalidateOnDemandSessionCachesAfterNativeRefresh();
             NotifyNativeCatalogRefreshed();
         }
 

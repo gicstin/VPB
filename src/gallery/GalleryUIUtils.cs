@@ -221,6 +221,27 @@ namespace VPB
             }
             catch { }
 
+            // Expand transitive meta.json deps from the SQLite index so scan-whitelist temp allow
+            // covers packages the scene JSON never names (same closure PrewarmOnDemand uses).
+            if (needed.Count > 0)
+            {
+                try
+                {
+                    var hosts = new List<string>(needed);
+                    var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < hosts.Count; i++)
+                    {
+                        sqlDeps.Clear();
+                        if (!VpbLocalDatabase.TryReadRecursiveDependencyUids(hosts[i], sqlDeps)) continue;
+                        foreach (string dep in sqlDeps)
+                        {
+                            if (!string.IsNullOrEmpty(dep)) needed.Add(dep);
+                        }
+                    }
+                }
+                catch { }
+            }
+
             return needed.ToList();
         }
 
@@ -308,6 +329,15 @@ namespace VPB
             string msg = $"[VPB] DisableSuppressionAfterSceneLoad: {reason} after {waited:0.00}s, disabling suppression";
             if (asWarning) LogUtil.LogWarning(msg);
             else LogUtil.Log(msg);
+
+            // Drain pending catalog refresh while scene temp allow-list is still active so native
+            // Refresh does not drop just-loaded packages in the same window we remove overrides.
+            try
+            {
+                if (VamOnDemandLoader.HasPendingCoalescedVamRefresh())
+                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("scene_load_cleanup_drain");
+            }
+            catch { }
 
             RemoveTemporarySceneLoadWhitelist(state.TemporaryUidOverrides);
             Gallery.SuppressAutoRefresh(false);
@@ -486,6 +516,24 @@ namespace VPB
                 outcome.CleanupState.TemporaryUidOverrides = temporaryUidOverrides;
             bool hasTemporaryAllowList = temporaryUidOverrides != null && temporaryUidOverrides.Count > 0;
             bool packageStateChanged = outcome.DepsChanged || hasTemporaryAllowList;
+
+            // Gallery scene load previously skipped Prewarm (drag/VDS/import call it). With scan
+            // whitelist on, register host+transitive deps into VaM before the native catalog refresh
+            // so FileExists/GetVarFileEntry miss hooks are not the only path for meta-only deps.
+            // Queue coalesced catalog refresh only when this coroutine will not run an explicit
+            // bridge refresh; FinalizeSceneLoadCleanup drains any pending coalesced refresh.
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try
+                {
+                    SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(
+                        entry, path, queueCoalescedRefresh: !packageStateChanged);
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] Scene-load prewarm failed: " + ex.Message);
+                }
+            }
 
             LogUtil.Log("[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:" + outcome.DepsChanged
                 + " missing:" + outcome.EnsureResult.MissingCount + "/" + outcome.EnsureResult.ReferencedCount
