@@ -1093,6 +1093,8 @@ namespace VPB
             LogUtil.BeginSceneLoad(saveName);
             LogUtil.MarkScenePhasePreLoadInternal();
             try { ThirdPartyFixHook.TryClearInGameLogsOnSceneLaunch(__instance, loadMerge); } catch { }
+            // Scene Loader / VAM Browser / triggers all funnel here — record History outside VPB gallery UI.
+            try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "scene"); } catch { }
             try
             {
                 // Clear sim texture registry for new scene

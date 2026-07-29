@@ -389,8 +389,7 @@ namespace VPB
                 return;
             }
 
-            // History: record only this scene entry (not EnsureInstalled / dependency work below).
-            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "scene"); } catch { }
+            // History: SuperController.LoadInternal records scene use (covers VPB + VAM Browser + Scene Loader).
 
             if (Messager.singleton == null)
             {

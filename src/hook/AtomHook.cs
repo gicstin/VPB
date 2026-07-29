@@ -54,6 +54,8 @@ namespace VPB
         public static void PreLoadAppearancePreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadAppearancePreset " + saveName);
+            // VAM Browser / Person Load Appearance dialog — not VPB gallery apply path.
+            try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (FileManager.FileExists(saveName))
             {
@@ -73,6 +75,8 @@ namespace VPB
         public static void PreLoadPreset(Atom __instance, string saveName = "savefile")
         {
             LogUtil.Log("[VPB hook]PreLoadPreset " + saveName);
+            // Full atom presets via browser / PresetLoader plugins.
+            try { VpbLocalDatabase.TryRecordItemUseFromPath(saveName, "appearance"); } catch { }
             SuperControllerHook.ParsePresetForSimTextures(saveName);
             if (FileManager.FileExists(saveName))
             {
@@ -147,6 +151,57 @@ namespace VPB
                     string text = File.ReadAllText(path);
                     FileButton.EnsureInstalledInternal(text);
                 }
+            }
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(MeshVR.PresetManager), "LoadPresetPre", new Type[] { typeof(bool) })]
+        protected static void PreLoadPresetPre(MeshVR.PresetManager __instance, bool isMerge = false)
+        {
+            // Preset panel / loadPresetOnSelect via VAM Browser. Skip scene-load cascades
+            // (person restore fires many LoadPresetPreFromJSON paths; this file-path load is interactive).
+            try
+            {
+                bool sceneLoad = false;
+                try { sceneLoad = VPBConfig.Instance != null && VPBConfig.Instance.IsLoadingScene; } catch { }
+                if (sceneLoad) return;
+                if (__instance == null) return;
+
+                string storableId = "unknown";
+                try
+                {
+                    var storable = __instance.GetComponentInParent<JSONStorable>();
+                    if (storable != null) storableId = storable.storeId;
+                }
+                catch { }
+
+                string path = TryBuildPresetManagerLoadPath(__instance);
+                if (string.IsNullOrEmpty(path)) return;
+                string kind = VpbLocalDatabase.KindFromPresetStorableId(storableId);
+                VpbLocalDatabase.TryRecordItemUseFromPath(path, kind);
+            }
+            catch { }
+        }
+
+        static string TryBuildPresetManagerLoadPath(MeshVR.PresetManager pm)
+        {
+            if (pm == null) return null;
+            try
+            {
+                string storeFolderPath = pm.GetStoreFolderPath(false);
+                if (string.IsNullOrEmpty(storeFolderPath) || string.IsNullOrEmpty(pm.storeName)) return null;
+                if (string.IsNullOrEmpty(pm.presetName)) return null;
+
+                var tr = Traverse.Create(pm);
+                string packagePath = tr.Field("presetPackagePath").GetValue<string>() ?? "";
+                string subPath = tr.Field("presetSubPath").GetValue<string>() ?? "";
+                string subName = tr.Field("presetSubName").GetValue<string>() ?? "";
+                if (string.IsNullOrEmpty(subName)) return null;
+                return packagePath + storeFolderPath + subPath + pm.storeName + "_" + subName + ".vap";
+            }
+            catch
+            {
+                return null;
             }
         }
 

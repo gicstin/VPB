@@ -932,6 +932,9 @@ namespace VPB
         {
             if (!VpbSqlite3.IsAvailable) return;
             if (string.IsNullOrEmpty(itemKey)) return;
+            string kindNorm = kind ?? "";
+            // Gallery UI + VaM LoadInternal/LoadAppearance hooks may both see one user action.
+            if (IsRecentHistoryDuplicate(itemKey, kindNorm)) return;
             try
             {
                 using (var conn = new VpbSqlite3.Connection(DbPath))
@@ -942,18 +945,19 @@ namespace VPB
                         "ON CONFLICT(item_key) DO UPDATE SET use_count = use_count + 1, last_used = excluded.last_used, kind = excluded.kind"))
                     {
                         st.BindText(1, itemKey);
-                        st.BindText(2, kind ?? "");
+                        st.BindText(2, kindNorm);
                         st.BindInt64(3, DateTime.UtcNow.ToBinary());
                         st.Step();
                     }
                 }
+                RememberHistoryRecord(itemKey, kindNorm);
                 try { MessageKit.post(MessageDef.GalleryItemUsageRecorded); } catch { }
                 InvalidateGalleryHistoryModeCountsCache();
                 if (LogHistoryRecordWrites)
                 {
                     try
                     {
-                        LogUtil.Log("[VPB.History] TryRecordItemUse kind=" + (kind ?? "") + " key=" + HistoryDebugTruncate(itemKey));
+                        LogUtil.Log("[VPB.History] TryRecordItemUse kind=" + kindNorm + " key=" + HistoryDebugTruncate(itemKey));
                     }
                     catch { }
                 }
