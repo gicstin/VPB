@@ -105,7 +105,9 @@ namespace VPB
             try { RescalePopupMenusInternal(chromeS); } catch { }
             try { RescaleFooterInfoBarInternal(chromeS); } catch { }
             try { ApplyTitleBarResponsiveLayoutInternal(chromeS); } catch { }
+            try { InvalidateFooterOverflowLayout(); } catch { }
             try { ApplyFooterOverflowLayout(chromeS); } catch { }
+            try { if (IsFixedTopDockMode()) ApplyTopDockSideButtonsLayout(chromeS); } catch { }
         }
 
         /// <summary>Scales hover-path tooltip text, collapsed tbox labels, and detail strip chrome.</summary>

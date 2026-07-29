@@ -143,7 +143,7 @@ namespace VPB
             return count * chip + (count - 1) * gap;
         }
 
-        private float EstimateFooterCenterMinWidth(float chip, float gap, float s)
+        private float EstimateFooterCenterChromeWidthWithoutSideButtons(float chip, float gap, float s)
         {
             int perfN = 0;
             if (footerPerfToggleBtn != null && footerPerfToggleBtn.activeSelf) perfN++;
@@ -156,12 +156,19 @@ namespace VPB
                 w += gap + 180f * s;
             if (footerFilterModeSpacerGO != null && footerFilterModeSpacerGO.activeSelf)
                 w += 12f * s;
+            return w;
+        }
+
+        private float EstimateFooterCenterMinWidth(float chip, float gap, float s)
+        {
+            float w = EstimateFooterCenterChromeWidthWithoutSideButtons(chip, gap, s);
+            // Top dock: side strip + quality share CenterSection — reserve both (not Max).
             if (IsFixedTopDockMode() && !isCollapsed && _footerSideButtonsGroupRT != null && _footerSideButtonsGroupGO != null
                 && _footerSideButtonsGroupGO.activeSelf)
             {
                 float sideW = _footerSideButtonsGroupRT.rect.width;
                 if (sideW < 1f) sideW = _footerSideButtonsGroupRT.sizeDelta.x;
-                if (sideW > 1f) w = Mathf.Max(w, sideW);
+                if (sideW > 1f) w += (w > 0f ? gap : 0f) + sideW;
             }
             return w;
         }
@@ -189,6 +196,9 @@ namespace VPB
                     n++;
                     continue;
                 }
+                // Top-dock side strip: counted via EstimateFooterCenterMinWidth — skip if under CenterSection.
+                if (ch.name == "SideButtonsGroup")
+                    continue;
                 float cw = ch.sizeDelta.x;
                 if (cw < 1f) cw = ch.rect.width;
                 if (cw < 1f) cw = chipFallback;

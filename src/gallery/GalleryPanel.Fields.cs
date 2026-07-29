@@ -1002,6 +1002,10 @@ namespace VPB
         // Fixed desktop dock "Top": side rail buttons live on footer bar.
         private GameObject _footerSideButtonsGroupGO;
         private RectTransform _footerSideButtonsGroupRT;
+        private LayoutElement _footerSideButtonsGroupLE;
+        private RectTransform _footerCenterSectionRT;
+        private HorizontalLayoutGroup _footerCenterHLG;
+        private RectTransform _footerPerfGroupRT;
         private RectTransform _footerLeftSectionRT;
         private RectTransform _footerRightSectionRT;
         private bool _titleBarSideButtonsReparented;

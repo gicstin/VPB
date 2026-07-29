@@ -998,12 +998,12 @@ namespace VPB
             footerHLG.childForceExpandHeight = true;
             footerHLG.childAlignment = TextAnchor.MiddleLeft;
 
-            // Fixed dock "Top": side rail buttons group (overlays footer, centered in free space).
+            // Fixed dock "Top": side rail overlay strip (ignoreLayout; parked right of left-aligned quality).
             _footerSideButtonsGroupGO = UI.CreateChildRT(pageContainer, "SideButtonsGroup", AnchorPresets.middleCenter, new Vector2(0f, GalleryUiDesignTokens.ButtonSizeRef));
             _footerSideButtonsGroupRT = _footerSideButtonsGroupGO.GetComponent<RectTransform>();
             {
-                var le = _footerSideButtonsGroupGO.AddComponent<LayoutElement>();
-                le.ignoreLayout = true;
+                _footerSideButtonsGroupLE = _footerSideButtonsGroupGO.AddComponent<LayoutElement>();
+                _footerSideButtonsGroupLE.ignoreLayout = true;
             }
             _footerSideButtonsGroupGO.SetActive(false);
 
@@ -1059,23 +1059,24 @@ namespace VPB
             // --- Center Section (fills gap between left/right packs; quality ± + filter chrome) ---
             GameObject centerSection = new GameObject("CenterSection");
             centerSection.transform.SetParent(pageContainer.transform, false);
-            centerSection.AddComponent<RectTransform>();
+            _footerCenterSectionRT = centerSection.AddComponent<RectTransform>();
             UI.AddLE(centerSection, flexibleWidth: 1f);
             
-            HorizontalLayoutGroup centerHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
+            _footerCenterHLG = UI.AddHLG(centerSection, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
             {
-                var hlg = centerHLG;
+                var hlg = _footerCenterHLG;
                 innerPaneScaleActions.Add(s => { if (hlg) hlg.spacing = 10f * s; });
             }
 
             // Quality selector + step buttons as one centered group.
             // ContentSizeFitter shrink-wraps — without it Unity's default 100×100 RT drops the pack low.
+            // Top dock: pack left-aligns (see ApplyFooterCenterAlignForDock) so side-strip overlay clears it.
             {
                 GameObject perfGroup = new GameObject("FooterPerfGroup");
                 perfGroup.transform.SetParent(centerSection.transform, false);
-                RectTransform perfRT = perfGroup.AddComponent<RectTransform>();
-                perfRT.anchorMin = perfRT.anchorMax = new Vector2(0.5f, 0.5f);
-                perfRT.pivot = new Vector2(0.5f, 0.5f);
+                _footerPerfGroupRT = perfGroup.AddComponent<RectTransform>();
+                _footerPerfGroupRT.anchorMin = _footerPerfGroupRT.anchorMax = new Vector2(0.5f, 0.5f);
+                _footerPerfGroupRT.pivot = new Vector2(0.5f, 0.5f);
                 HorizontalLayoutGroup perfHLG = UI.AddHLG(perfGroup, spacing: 10, childAlignment: TextAnchor.MiddleCenter, childControlWidth: false, childControlHeight: false, childForceExpandWidth: false, childForceExpandHeight: true);
                 ContentSizeFitter perfFit = perfGroup.AddComponent<ContentSizeFitter>();
                 perfFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;

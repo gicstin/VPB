@@ -12,7 +12,12 @@ namespace VPB
         public string GetCurrentPath() => currentPath;
         public string GetCurrentExtension() => currentExtension;
         public string GetCurrentCreator() => currentCreator;
-        public string GetTitle() => titleText != null ? titleText.text : "";
+        // Prefer browse category over chrome titleText — Settings/History overlays paint
+        // titleText without changing currentCategoryTitle; hide/restore must not treat those as category.
+        public string GetTitle() =>
+            !string.IsNullOrEmpty(currentCategoryTitle)
+                ? currentCategoryTitle
+                : (titleText != null ? titleText.text : "");
         public RectTransform GetBackgroundRT() => backgroundBoxGO != null ? backgroundBoxGO.GetComponent<RectTransform>() : null;
 
         public ContentType? GetLeftActiveContent() => leftActiveContent;
