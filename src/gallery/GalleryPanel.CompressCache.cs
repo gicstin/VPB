@@ -86,9 +86,7 @@ namespace VPB
         private void FooterCompressCacheUpdateHoverTooltip()
         {
             if (!_footerCompressCacheHovering || footerCompressCacheBtn == null) return;
-            StopCo(ref temporaryStatusCoroutine);
-            temporaryStatusMsg = FooterCompressCacheTooltipText();
-            temporaryStatusOwner = footerCompressCacheBtn;
+            SetHoverTooltip(FooterCompressCacheTooltipText(), footerCompressCacheBtn);
         }
 
         private void RegisterFooterCompressCacheHover(GameObject go)
@@ -111,11 +109,7 @@ namespace VPB
                 else
                 {
                     _footerCompressCacheTooltipKey = int.MinValue;
-                    if (temporaryStatusOwner == go)
-                    {
-                        temporaryStatusMsg = null;
-                        temporaryStatusOwner = null;
-                    }
+                    ClearHoverTooltip(go);
                 }
             };
             del.OnPointerEnterEvent += (d) => { currentPointerData = d; };

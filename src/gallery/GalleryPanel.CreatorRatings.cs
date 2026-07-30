@@ -6,8 +6,8 @@ using UnityEngine.UI;
 namespace VPB
 {
     /// <summary>
-    /// Creator-row rating badge + 0–5 picker (package <see cref="RatingHandler"/> pattern).
-    /// Digit always shown (not color-only). Warm path: bind / toggle only.
+    /// Creator-row rating badge + 0–5 picker.
+    /// Unrated = plain ★; rated = colored digit. Closed picker deactivated (no hit-steal).
     /// </summary>
     public class CreatorRatingRowHandler : MonoBehaviour
     {
@@ -42,6 +42,7 @@ namespace VPB
             get
             {
                 if (selectorGO == null || !selectorGO) return false;
+                if (!selectorGO.activeSelf) return false;
                 if (selectorCG == null) selectorCG = selectorGO.GetComponent<CanvasGroup>();
                 return selectorCG != null && selectorCG.alpha > 0.01f;
             }
@@ -179,6 +180,11 @@ namespace VPB
             selectorCG.blocksRaycasts = visible;
             if (visible)
                 selectorGO.transform.SetAsLastSibling();
+            else
+            {
+                // Inactive closed picker cannot steal hits from rows below (was alpha-0 but still active).
+                try { selectorGO.SetActive(false); } catch { }
+            }
         }
 
         private void TryReparentSelectorOutsideScroll()
@@ -255,14 +261,27 @@ namespace VPB
         private void RefreshDisplay()
         {
             int r = Mathf.Clamp(currentRating, 0, 5);
+            bool rated = r > 0;
             Color c = RatingHandler.RatingColors[r];
+
+            // Unrated → plain star. Rated → colored digit only (no color-only star).
             if (digitText != null)
             {
-                digitText.text = r.ToString();
-                digitText.color = c;
+                digitText.gameObject.SetActive(rated);
+                if (rated)
+                {
+                    digitText.text = r.ToString();
+                    digitText.color = c;
+                    digitText.fontStyle = FontStyle.Bold;
+                    digitText.transform.SetAsLastSibling();
+                }
             }
             if (starImage != null)
-                starImage.color = r > 0 ? c : new Color(1f, 1f, 1f, 0.25f);
+            {
+                starImage.gameObject.SetActive(!rated);
+                if (!rated)
+                    starImage.color = new Color(1f, 1f, 1f, 0.72f);
+            }
 
             if (optionImages == null) return;
             for (int i = 0; i < optionImages.Length && i < 6; i++)
@@ -552,6 +571,7 @@ namespace VPB
             }
 
             ApplyCreatorRatingChromeLayout(btnGO, starGO, selectorGO, edge, cell, gap, pad, optFont, s);
+            BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
         }
 
         private GameObject CreateCreatorRatingBadge(GameObject btnGO)
@@ -578,7 +598,9 @@ namespace VPB
             Text digit = labelGO.AddComponent<Text>();
             digit.alignment = TextAnchor.MiddleCenter;
             digit.raycastTarget = false;
+            digit.fontStyle = FontStyle.Bold;
             digit.text = "0";
+            digit.gameObject.SetActive(false);
             VPBUiFont.ApplyTo(digit);
             RectTransform digitRT = labelGO.GetComponent<RectTransform>();
             digitRT.anchorMin = Vector2.zero;
@@ -586,32 +608,82 @@ namespace VPB
             digitRT.offsetMin = Vector2.zero;
             digitRT.offsetMax = Vector2.zero;
 
-            Sprite onSpr = ratingStarNormalSprite;
-            if (onSpr == null)
-            {
-                try { onSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white); } catch { }
-            }
-            if (onSpr != null)
-            {
-                GameObject iconGO = new GameObject("StarIcon");
-                iconGO.transform.SetParent(starGO.transform, false);
-                Image iconImg = iconGO.AddComponent<Image>();
-                iconImg.sprite = onSpr;
-                iconImg.preserveAspect = true;
-                iconImg.raycastTarget = false;
-                iconImg.color = new Color(1f, 1f, 1f, 0.12f);
-                RectTransform irt = iconGO.GetComponent<RectTransform>();
-                irt.anchorMin = new Vector2(0.12f, 0.12f);
-                irt.anchorMax = new Vector2(0.88f, 0.88f);
-                irt.offsetMin = Vector2.zero;
-                irt.offsetMax = Vector2.zero;
-                iconGO.transform.SetAsFirstSibling();
-            }
+            EnsureCreatorRatingStarIcon(starGO);
+            // Digit above star when both exist; unrated starts star-only.
+            labelGO.transform.SetAsLastSibling();
 
             starGO.AddComponent<CreatorRatingRowHandler>();
             AddTooltip(starGO, "gallery.tooltip.creator_rate",
-                "Rate creator: click → pick 0–5. Digit shows value. Same digit again clears. Click outside to close.");
+                "Rate creator: click → pick 0–5. Unrated shows ★; rated shows colored digit. Same digit again clears. Click outside to close.");
             return starGO;
+        }
+
+        /// <summary>Plain star glyph for unrated rows (hidden when rated digit shows).</summary>
+        private void EnsureCreatorRatingStarIcon(GameObject starGO)
+        {
+            if (starGO == null) return;
+            Transform iconTr = starGO.transform.Find("StarIcon");
+            Image iconImg = iconTr != null ? iconTr.GetComponent<Image>() : null;
+            if (iconImg == null)
+            {
+                Sprite onSpr = ratingStarNormalSprite;
+                if (onSpr == null)
+                {
+                    try { onSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white); } catch { }
+                }
+                if (onSpr == null) return;
+                GameObject iconGO = new GameObject("StarIcon");
+                iconGO.transform.SetParent(starGO.transform, false);
+                iconImg = iconGO.AddComponent<Image>();
+                iconImg.sprite = onSpr;
+                iconImg.preserveAspect = true;
+                iconImg.raycastTarget = false;
+                iconGO.transform.SetAsFirstSibling();
+            }
+            RectTransform irt = iconImg.rectTransform;
+            if (irt != null)
+            {
+                // Fill most of badge — readable plain ★ when unrated.
+                irt.anchorMin = new Vector2(0.18f, 0.18f);
+                irt.anchorMax = new Vector2(0.82f, 0.82f);
+                irt.offsetMin = Vector2.zero;
+                irt.offsetMax = Vector2.zero;
+            }
+            iconImg.color = new Color(1f, 1f, 1f, 0.72f);
+        }
+
+        /// <summary>Pooled/old badges may lack Digit — retrofit so display is never star-only.</summary>
+        private Text EnsureCreatorRatingDigit(GameObject starGO)
+        {
+            if (starGO == null) return null;
+            Transform digitTr = starGO.transform.Find("Digit");
+            Text digit = digitTr != null ? digitTr.GetComponent<Text>() : null;
+            if (digit != null)
+            {
+                digit.raycastTarget = false;
+                digit.alignment = TextAnchor.MiddleCenter;
+                digit.fontStyle = FontStyle.Bold;
+                // Visibility owned by RefreshDisplay (star vs digit).
+                digit.transform.SetAsLastSibling();
+                return digit;
+            }
+
+            GameObject labelGO = new GameObject("Digit");
+            labelGO.transform.SetParent(starGO.transform, false);
+            digit = labelGO.AddComponent<Text>();
+            digit.alignment = TextAnchor.MiddleCenter;
+            digit.raycastTarget = false;
+            digit.fontStyle = FontStyle.Bold;
+            digit.text = "0";
+            digit.gameObject.SetActive(false);
+            VPBUiFont.ApplyTo(digit);
+            RectTransform digitRT = labelGO.GetComponent<RectTransform>();
+            digitRT.anchorMin = Vector2.zero;
+            digitRT.anchorMax = Vector2.one;
+            digitRT.offsetMin = Vector2.zero;
+            digitRT.offsetMax = Vector2.zero;
+            labelGO.transform.SetAsLastSibling();
+            return digit;
         }
 
         private GameObject CreateCreatorRatingSelector(GameObject btnGO, CreatorRatingRowHandler handler, float cell, int optFont, float s)
@@ -672,8 +744,43 @@ namespace VPB
             }
 
             handler.AttachSelector(selectorGO, optImages, optTexts, optBorders);
-            selectorGO.SetActive(true);
+            // Start inactive so closed picker never covers rows below (alpha-0 was still raycast-active).
+            selectorGO.SetActive(false);
             return selectorGO;
+        }
+
+        /// <summary>
+        /// Rating badge above row label / hover rim so clicks hit rate control, not filter toggle.
+        /// </summary>
+        private void BringCreatorRatingChromeToFront(GameObject btnGO, GameObject starGO, GameObject selectorGO)
+        {
+            if (btnGO == null) return;
+            // Row label must not steal hits over the badge (full-stretch Text was on top historically).
+            Transform textTr = btnGO.transform.Find("Text");
+            if (textTr != null)
+            {
+                Text rowTxt = textTr.GetComponent<Text>();
+                if (rowTxt != null) rowTxt.raycastTarget = false;
+            }
+
+            CreatorRatingRowHandler handler = starGO != null
+                ? starGO.GetComponent<CreatorRatingRowHandler>()
+                : null;
+            bool pickerOpen = handler != null && handler.IsSelectorOpen;
+
+            if (selectorGO != null && selectorGO.transform.parent == btnGO.transform)
+            {
+                if (pickerOpen)
+                    selectorGO.transform.SetAsLastSibling();
+                else if (selectorGO.activeSelf)
+                {
+                    // Closed-but-active legacy: park behind badge and deactivate.
+                    selectorGO.transform.SetSiblingIndex(0);
+                    try { selectorGO.SetActive(false); } catch { }
+                }
+            }
+            if (starGO != null)
+                starGO.transform.SetAsLastSibling();
         }
 
         private void ApplyCreatorRatingChromeLayout(
@@ -687,14 +794,16 @@ namespace VPB
                 starRT.anchoredPosition = new Vector2(-2f * s, 0f);
             }
 
-            Text digitLabel = null;
-            if (starGO != null)
-            {
-                Transform digitTr = starGO.transform.Find("Digit");
-                if (digitTr != null) digitLabel = digitTr.GetComponent<Text>();
-            }
+            EnsureCreatorRatingStarIcon(starGO);
+            Text digitLabel = EnsureCreatorRatingDigit(starGO);
             if (digitLabel != null)
-                GalleryUiMetrics.ApplyFont(digitLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            {
+                // Slightly larger than body so digit scans like package grid ratings.
+                int digitFont = Mathf.Max(
+                    GalleryUiDesignTokens.FontBodyRef + 2,
+                    Mathf.RoundToInt(GalleryUiDesignTokens.FontBodyRef * 1.15f));
+                GalleryUiMetrics.ApplyFont(digitLabel, digitFont, s, GalleryUiDesignTokens.FontMinRef);
+            }
 
             if (selectorGO != null)
             {
@@ -746,10 +855,13 @@ namespace VPB
             Text rowTxt = textTr != null ? textTr.GetComponent<Text>() : null;
             if (rowTxt != null && rowTxt.transform.parent == btnGO.transform)
             {
+                rowTxt.raycastTarget = false;
                 RectTransform txtRT = rowTxt.rectTransform;
                 if (txtRT != null)
                     txtRT.offsetMax = new Vector2(-(edge + 6f * s), txtRT.offsetMax.y);
             }
+
+            BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
         }
 
         private void BindCreatorRatingChrome(GameObject btnGO, string creatorName)
@@ -761,12 +873,11 @@ namespace VPB
             if (starTr == null) return;
             GameObject starGO = starTr.gameObject;
 
-            Text digit = null;
-            Transform digitTr = starTr.Find("Digit");
-            if (digitTr != null) digit = digitTr.GetComponent<Text>();
+            EnsureCreatorRatingStarIcon(starGO);
+            Text digit = EnsureCreatorRatingDigit(starGO);
 
             Image starImg = null;
-            Transform iconTr = starTr.Find("StarIcon");
+            Transform iconTr = starGO.transform.Find("StarIcon");
             if (iconTr != null) starImg = iconTr.GetComponent<Image>();
 
             CreatorRatingRowHandler handler = starGO.GetComponent<CreatorRatingRowHandler>();
@@ -786,6 +897,8 @@ namespace VPB
             UIRightClickDelegate starRc = starGO.GetComponent<UIRightClickDelegate>();
             if (starRc == null) starRc = starGO.AddComponent<UIRightClickDelegate>();
             starRc.OnRightClick = () => handler.ClearRating();
+
+            BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
         }
 
     }

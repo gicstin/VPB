@@ -299,7 +299,7 @@ namespace VPB
             float crW = galleryCreatorSprite != null ? sideIconBtn : btnWidth;
             float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
 
-            GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleLeft(ContentType.Creator));
+            GameObject leftCreatorBtn = UI.CreateUIButton(leftSideContainer, crW, crH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.Creator, true, false));
             leftCreatorBtn.name = CreatorSideRailBtnNameLeft;
             leftCreatorSideBtnGO = leftCreatorBtn;
             leftCreatorBtnImage = leftCreatorBtn.GetComponent<Image>();
@@ -323,7 +323,7 @@ namespace VPB
             }
             InsertCreatorSideButtonIntoList(leftSideButtons, leftCreatorBtn.GetComponent<RectTransform>(), leftUserTagsSideBtn, leftPathBtnText);
             AdoptCreatorSideButtonParent(leftCreatorBtn, isLeft: true);
-            AddRightClickDelegate(leftCreatorBtn, () => ToggleRight(ContentType.Creator));
+            AddRightClickDelegate(leftCreatorBtn, () => ToggleSideFromRailButton(ContentType.Creator, true, true));
             AddTooltip(leftCreatorBtn, "gallery.tooltip.creator_list", "Browse creators (side list). Title bar filters the grid.");
         }
 
@@ -341,7 +341,7 @@ namespace VPB
             float crH = galleryCreatorSprite != null ? sideIconBtn : btnHeight;
 
             GameObject rightCreatorBtn = UI.CreateUIButton(rightSideContainer, crW, crH, " ", 8, 0, 0, AnchorPresets.centre, () => {
-                if (isFixedLocally) ToggleLeft(ContentType.Creator); else ToggleRight(ContentType.Creator);
+                ToggleSideFromRailButton(ContentType.Creator, false, false);
             });
             rightCreatorBtn.name = CreatorSideRailBtnNameRight;
             rightCreatorSideBtnGO = rightCreatorBtn;
@@ -366,7 +366,7 @@ namespace VPB
             }
             InsertCreatorSideButtonIntoList(rightSideButtons, rightCreatorBtn.GetComponent<RectTransform>(), rightUserTagsSideBtn, rightPathBtnText);
             AdoptCreatorSideButtonParent(rightCreatorBtn, isLeft: false);
-            AddRightClickDelegate(rightCreatorBtn, () => ToggleRight(ContentType.Creator));
+            AddRightClickDelegate(rightCreatorBtn, () => ToggleSideFromRailButton(ContentType.Creator, false, true));
             AddTooltip(rightCreatorBtn, "gallery.tooltip.creator_list", "Browse creators (side list). Title bar filters the grid.");
         }
 

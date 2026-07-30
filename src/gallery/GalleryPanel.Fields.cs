@@ -1333,6 +1333,11 @@ namespace VPB
         private string temporaryStatusMsg = null;
         private Coroutine temporaryStatusCoroutine = null;
         private GameObject temporaryStatusOwner = null;
+        // Sticky hover tip: instant show; hide grace only (no show dwell / fade).
+        private string _stickyTipDesired;
+        private GameObject _stickyTipDesiredOwner;
+        private bool _stickyTipHidePending;
+        private float _stickyTipHideAt;
 
         public bool isFixedLocally = false;
         private bool isCollapsed = false;

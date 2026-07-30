@@ -541,6 +541,7 @@ namespace VPB
 
         public void OnPointerEnter(PointerEventData eventData)
         {
+            if (!HoverAllowed()) return;
             hovering = true;
             SyncIndicatorVisibility();
         }
@@ -551,9 +552,19 @@ namespace VPB
             SyncIndicatorVisibility();
         }
 
+        /// <summary>No hover chrome on non-interactable Selectables — avoids fake affordance.</summary>
+        private bool HoverAllowed()
+        {
+            Selectable sel = GetComponent<Selectable>();
+            return sel == null || sel.interactable;
+        }
+
         /// <summary>Show/hide rim or <see cref="hoverBorderGO"/> from hover + selection; tint indicator to <see cref="hoverColor"/>.</summary>
         public void SyncIndicatorVisibility()
         {
+            if (!HoverAllowed())
+                hovering = false;
+
             if (hoverBorderGO != null)
             {
                 bool show = hovering || (isSelected && !hoverIndicatorUsesSeparateSelectionVisual);

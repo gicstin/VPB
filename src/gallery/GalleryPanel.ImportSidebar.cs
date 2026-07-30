@@ -16,9 +16,9 @@ namespace VPB
         private bool importSidebarOpenIntent;
         private bool importSidebarOpenIntentLoaded;
         private bool importSidebarBuilt;
-        // Which physical side of the gallery the sidebar occupies. Set on toggle ON
-        // from leftActiveContent / rightActiveContent so the sidebar replaces whichever
-        // Category / Creator / etc. column is currently open. Default right.
+        // Which physical side of the gallery the sidebar occupies. Locked on toggle ON
+        // (force / rail / config, else heuristic). Persisted as ImportSidebarPrefs.onLeft with open.
+        // Default right when neither force nor persisted side is available.
         private bool importSidebarOnLeft;
         /// <summary>One-shot side lock when applying GalleryDefault*SidePanel = Import from config.</summary>
         private bool? importSidebarForceOnLeft;
@@ -164,6 +164,9 @@ namespace VPB
                     StartCoroutine(DeferredTargetRefreshAfterSceneLoad());
             }
 
+            // Header category chip stays visible; sync before layout so title-bar pin order is correct.
+            try { SyncCategoryQuickSwitchChrome(); } catch { }
+
             // UpdateLayout reads importSidebarActive + importSidebarOnLeft to hide the
             // matching side's tab column and force the gallery offset, so the sidebar
             // replaces (not overlaps) the Category / Creator slot.
@@ -211,7 +214,7 @@ namespace VPB
             try { UpdateImportToggleBtnVisual(); } catch { }
         }
 
-        /// <summary>Primary pane only: restore persisted open flag once at init (not per Show, not clones/extra panes).</summary>
+        /// <summary>Primary pane only: restore persisted open flag + dock side once at init (not per Show, not clones/extra panes).</summary>
         private void TryRestoreImportSidebarOpenFromGlobalPref(bool allowRestore)
         {
             if (!allowRestore || importSidebarOpenIntent || importSidebarOpenIntentLoaded) return;
@@ -229,7 +232,13 @@ namespace VPB
             importSidebarOpenIntentLoaded = true;
             if (importSidebarOpenIntent)
             {
+                // Side was never persisted historically; missing key keeps prior default-right heuristic
+                // inside SetImportSidebarActive. When present, force the last docked side (left/right).
+                if (pp != null && pp.HasKey("onLeft"))
+                    importSidebarForceOnLeft = pp["onLeft"].AsBool;
                 try { RefreshImportSidebarCategoryGate(); } catch { }
+                // Backfill onLeft after side lock (migration + keep prefs aligned with live dock).
+                try { PersistImportSidebarOpenIntent(); } catch { }
             }
         }
 
@@ -338,6 +347,7 @@ namespace VPB
             p["clearExistingPlugins"].AsBool = importSidebarClearExistingPlugins;
             p["multiSelectTypes"].AsBool = importSidebarMultiSelectTypes;
             p["open"].AsBool = importSidebarOpenIntent;
+            p["onLeft"].AsBool = importSidebarOnLeft;
             p["incAppearanceMorphs"].AsBool = importSidebarSubToggles.IncludeAppearanceMorphs;
             p["incPhysicalPoseMorphs"].AsBool = importSidebarSubToggles.IncludePhysicalPoseMorphs;
             p["suppressMorphLoad"].AsBool = importSidebarSubToggles.SuppressMorphLoad;
@@ -355,14 +365,16 @@ namespace VPB
             return (p != null && p.HasKey(key)) ? p[key].AsBool : dflt;
         }
 
-        // Write just the open flag (the four intent-mutating sites can fire before the sidebar is built, so
+        // Write open + dock side only (intent-mutating sites can fire before the sidebar is built, so
         // they must not go through SaveImportSidebarPrefs, which would persist not-yet-loaded toggle defaults).
+        // Call after RefreshImportSidebarCategoryGate so importSidebarOnLeft already reflects the locked side.
         private void PersistImportSidebarOpenIntent()
         {
             VPBConfig cfg = VPBConfig.Instance;
             if (cfg == null) return;
             if (cfg.ImportSidebarPrefs == null) cfg.ImportSidebarPrefs = new JSONClass();
             cfg.ImportSidebarPrefs["open"].AsBool = importSidebarOpenIntent;
+            cfg.ImportSidebarPrefs["onLeft"].AsBool = importSidebarOnLeft;
             try { cfg.Save(false); } catch { }
         }
 

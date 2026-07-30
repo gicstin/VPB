@@ -257,12 +257,13 @@ namespace VPB
         private Image[] optionImages;
         private Text[] optionTexts;
         private GameObject[] borderGOs;
-        /// <summary>Grid hover: show 0–5 digit instead of colored ★ glyph.</summary>
-        private bool showDigitInsteadOfStar;
         /// <summary>Host panel — grid picker reparents under background to escape ScrollRect mask.</summary>
         public GalleryPanel panel;
         private Transform _selectorHomeParent;
         private int _selectorHomeSibling;
+
+        /// <summary>Star Image watermark when digit is primary (toolbox / optional icon).</summary>
+        private static readonly Color StarIconWatermark = new Color(1f, 1f, 1f, 0.18f);
 
         public static readonly Color[] RatingColors = new Color[]
         {
@@ -436,11 +437,12 @@ namespace VPB
             UpdateDisplay();
         }
 
-        /// <summary>Grid hover badges: digit label. List mode keeps colored ★.</summary>
+        /// <summary>
+        /// Legacy no-op — ratings always show colored 0–5 digit (never color-only ★).
+        /// Kept so call sites compile; digit mode is the only display.
+        /// </summary>
         public void SetShowDigitMode(bool digit)
         {
-            if (showDigitInsteadOfStar == digit) return;
-            showDigitInsteadOfStar = digit;
             UpdateDisplay();
         }
 
@@ -451,15 +453,20 @@ namespace VPB
             Color c = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
             if (starIconText != null)
             {
-                if (showDigitInsteadOfStar)
-                    starIconText.text = currentRating.ToString();
-                else
-                    starIconText.text = "★";
-                // Digit and ★ both use rating color scale.
+                // Digit + rainbow color = meaning; never ★ alone.
+                if (!starIconText.gameObject.activeSelf)
+                    starIconText.gameObject.SetActive(true);
+                starIconText.text = currentRating.ToString();
                 starIconText.color = c;
+                starIconText.raycastTarget = false;
+                starIconText.transform.SetAsLastSibling();
             }
             if (starIconImage != null)
-                starIconImage.color = c;
+            {
+                // Optional star art stays as faint watermark under the digit.
+                starIconImage.color = StarIconWatermark;
+                starIconImage.raycastTarget = false;
+            }
 
             if (optionImages == null) return;
             for (int i = 0; i < optionImages.Length && i < 6; i++)
@@ -645,55 +652,19 @@ namespace VPB
     }
 
     /// <summary>
-    /// Thumb preview input: left double-click + right-hold tracking for wheel rating.
+    /// Thumb preview: left double-click → apply/launch.
     /// Does not implement <see cref="IScrollHandler"/> (unlike EventTrigger), so wheel reaches
-    /// <see cref="UIScrollWheelHandler"/> on the same hierarchy.
+    /// <see cref="UIScrollWheelHandler"/> on the same hierarchy. Rating stays on star clicks.
     /// </summary>
-    public sealed class DetailStripThumbClickRelay : MonoBehaviour,
-        IPointerClickHandler, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
+    public sealed class DetailStripThumbClickRelay : MonoBehaviour, IPointerClickHandler
     {
         public Action OnDoubleClick;
-        public Action<bool> OnRightHoldChanged;
-
-        public bool RightHeld { get; private set; }
 
         public void OnPointerClick(PointerEventData eventData)
         {
             if (eventData == null || eventData.button != PointerEventData.InputButton.Left) return;
             if (eventData.clickCount < 2) return;
             try { OnDoubleClick?.Invoke(); } catch { }
-        }
-
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
-            SetRightHeld(true);
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            if (eventData == null || eventData.button != PointerEventData.InputButton.Right) return;
-            SetRightHeld(false);
-        }
-
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            // Keep hold if RMB still down (wheel can jitter exit); clear when released.
-            if (!RightHeld) return;
-            if (!Input.GetMouseButton(1))
-                SetRightHeld(false);
-        }
-
-        private void OnDisable()
-        {
-            SetRightHeld(false);
-        }
-
-        private void SetRightHeld(bool held)
-        {
-            if (RightHeld == held) return;
-            RightHeld = held;
-            try { OnRightHoldChanged?.Invoke(held); } catch { }
         }
     }
 

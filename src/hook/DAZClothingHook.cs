@@ -1,11 +1,22 @@
 using HarmonyLib;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace VPB
 {
+    /// <summary>
+    /// Clothing activate hooks + custom-texture rebind after dynamic item load (issue #80).
+    /// VPB's ImageLoadingMgr often finishes MaterialOptions custom textures before skin-wrap /
+    /// cloth materials finish connecting. OnTexture*Loaded then paints a live MaterialOptions whose
+    /// material slots are not ready yet (or get replaced). URL JSON stays correct; GPU tex/scale wrong.
+    /// After load + scene settle, Reload customTexture*Url and re-fire Tile/Offset Sync.
+    /// </summary>
     public static class DAZClothingHook
     {
+        static readonly HashSet<int> s_PendingCustomTexResync =
+            new HashSet<int>();
+
         public static void PatchAll(Harmony harmony)
         {
             try
@@ -30,6 +41,28 @@ namespace VPB
                 if (mRemoveAllClothing != null)
                 {
                     harmony.Patch(mRemoveAllClothing, prefix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PreRemoveAllClothing)));
+                }
+
+                var mOnLoadComplete = AccessTools.Method(typeof(JSONStorableDynamic), "OnLoadComplete", new[] { typeof(bool) });
+                if (mOnLoadComplete != null)
+                {
+                    harmony.Patch(
+                        mOnLoadComplete,
+                        postfix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PostOnLoadComplete)));
+                }
+                else
+                {
+                    LogUtil.LogWarning("DAZClothingHook: JSONStorableDynamic.OnLoadComplete not found; custom texture resync disabled.");
+                }
+
+                // VaM AppearancePresets / ClothingPresets UI (and any LoadPresetPost path) — items already
+                // loaded skip OnLoadComplete; still need a settle-pass Reload of customTexture URLs.
+                var mLoadPresetPost = AccessTools.Method(typeof(MeshVR.PresetManager), "LoadPresetPost");
+                if (mLoadPresetPost != null)
+                {
+                    harmony.Patch(
+                        mLoadPresetPost,
+                        postfix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PostLoadPresetPost)));
                 }
             }
             catch (Exception ex)
@@ -76,6 +109,153 @@ namespace VPB
 
         public static void PreRemoveAllClothing(DAZCharacterSelector __instance)
         {
+        }
+
+        /// <summary>
+        /// After PostLoadJSONRestore has applied preset material URLs onto freshly spawned
+        /// MaterialOptions, schedule a delayed custom-texture Reload so GPU binds after materials settle.
+        /// </summary>
+        public static void PostOnLoadComplete(JSONStorableDynamic __instance)
+        {
+            var clothing = __instance as DAZClothingItem;
+            if (clothing == null) return;
+            if (!clothing.active) return;
+
+            ScheduleItemCustomTextureResync(clothing);
+        }
+
+        public static void PostLoadPresetPost(MeshVR.PresetManager __instance, bool __result)
+        {
+            if (!__result || __instance == null) return;
+
+            string storableId = null;
+            Atom atom = null;
+            try
+            {
+                var storable = __instance.GetComponentInParent<JSONStorable>();
+                if (storable != null)
+                {
+                    storableId = storable.storeId;
+                    atom = storable.GetComponentInParent<Atom>();
+                }
+            }
+            catch { }
+
+            if (atom == null) return;
+            if (!string.Equals(atom.type, "Person", StringComparison.OrdinalIgnoreCase)) return;
+            if (string.IsNullOrEmpty(storableId)) return;
+
+            // Appearance + clothing presets: only ClothingPresets needs atom-wide rebind here.
+            // AppearancePresets with Keep clothing was reloading every custom tex on each look
+            // change (slow). New/replaced garments get OnLoadComplete item resync instead.
+            if (!string.Equals(storableId, "ClothingPresets", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            ScheduleAtomCustomTextureResync(atom);
+        }
+
+        internal static void ScheduleItemCustomTextureResync(DAZClothingItem item)
+        {
+            if (item == null) return;
+            int id = item.GetInstanceID();
+            if (!s_PendingCustomTexResync.Add(id)) return;
+
+            MonoBehaviour host = Messager.singleton != null
+                ? (MonoBehaviour)Messager.singleton
+                : (MonoBehaviour)SuperController.singleton;
+            if (host == null)
+            {
+                s_PendingCustomTexResync.Remove(id);
+                return;
+            }
+
+            try
+            {
+                host.StartCoroutine(ClothingLoadingUtils.DeferredClothingItemCustomTextureResyncCoroutine(
+                    item,
+                    () => s_PendingCustomTexResync.Remove(id)));
+            }
+            catch
+            {
+                s_PendingCustomTexResync.Remove(id);
+            }
+        }
+
+        /// <summary>
+        /// Appearance / clothing preset apply path: items already loaded skip OnLoadComplete.
+        /// Resync all active clothing MaterialOptions on the person after a short settle.
+        /// </summary>
+        internal static void ScheduleAtomCustomTextureResync(Atom atom)
+        {
+            if (atom == null) return;
+            if (!string.Equals(atom.type, "Person", StringComparison.OrdinalIgnoreCase)) return;
+
+            int id = atom.GetInstanceID();
+            // Reuse pending set with negative atom ids to avoid colliding with clothing item ids.
+            int key = -id;
+            if (!s_PendingCustomTexResync.Add(key)) return;
+
+            MonoBehaviour host = Messager.singleton != null
+                ? (MonoBehaviour)Messager.singleton
+                : (MonoBehaviour)SuperController.singleton;
+            if (host == null)
+            {
+                s_PendingCustomTexResync.Remove(key);
+                return;
+            }
+
+            try
+            {
+                host.StartCoroutine(ClothingLoadingUtils.DeferredAtomClothingCustomTextureResyncCoroutine(
+                    atom,
+                    () => s_PendingCustomTexResync.Remove(key)));
+            }
+            catch
+            {
+                s_PendingCustomTexResync.Remove(key);
+            }
+        }
+
+        /// <summary>
+        /// After SCENE_LOAD_TOTAL: final clothing material reconnect often drops UV tile to 1
+        /// while custom tex path stays (overstretched look). Rebind URL + tile/offset then.
+        /// </summary>
+        internal static void SchedulePostSceneLoadCustomTextureResync()
+        {
+            const int key = int.MinValue;
+            if (!s_PendingCustomTexResync.Add(key)) return;
+
+            MonoBehaviour host = Messager.singleton != null
+                ? (MonoBehaviour)Messager.singleton
+                : (MonoBehaviour)SuperController.singleton;
+            if (host == null)
+            {
+                s_PendingCustomTexResync.Remove(key);
+                return;
+            }
+
+            try
+            {
+                host.StartCoroutine(PostSceneLoadCustomTextureResyncWrapper(key));
+            }
+            catch
+            {
+                s_PendingCustomTexResync.Remove(key);
+            }
+        }
+
+        static System.Collections.IEnumerator PostSceneLoadCustomTextureResyncWrapper(int key)
+        {
+            try
+            {
+                yield return ClothingLoadingUtils.DeferredPostSceneLoadClothingCustomTextureResyncCoroutine();
+            }
+            finally
+            {
+                s_PendingCustomTexResync.Remove(key);
+            }
         }
     }
 }

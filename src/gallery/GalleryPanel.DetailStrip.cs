@@ -103,8 +103,28 @@ namespace VPB
         private Image[] _detailStripStarImages;
         private int _detailStripStarRating;
         private int _detailStripStarHover;
-        /// <summary>Right mouse held on preview thumb — wheel adjusts rating instead of selection scrub.</summary>
-        private bool _detailStripThumbRightHeld;
+        /// <summary>Overlay prev on thumb (absolute; does not shrink preview).</summary>
+        private GameObject _detailStripThumbPrevBtnGO;
+        private Button _detailStripThumbPrevBtn;
+        private Image _detailStripThumbPrevBtnImage;
+        /// <summary>Overlay next on thumb (absolute; does not shrink preview).</summary>
+        private GameObject _detailStripThumbNextBtnGO;
+        private Button _detailStripThumbNextBtn;
+        private Image _detailStripThumbNextBtnImage;
+        /// <summary>Transient n/N chip on thumb during scrub.</summary>
+        private GameObject _detailStripThumbScrubIndexGO;
+        private Text _detailStripThumbScrubIndexText;
+        private int _detailStripThumbScrubIndexShown = int.MinValue;
+        private int _detailStripThumbScrubCountShown = int.MinValue;
+        private bool _detailStripThumbScrubIndexVisible;
+        private Sprite _detailStripThumbNavPrevSprite;
+        private Sprite _detailStripThumbNavNextSprite;
+        // Quiet overlay chrome — preview stays primary; ◀▶ secondary (hierarchy / de-emphasize).
+        private static readonly Color DetailStripThumbNavBackdrop = new Color(0.04f, 0.04f, 0.06f, 0.40f);
+        private static readonly Color DetailStripThumbNavGlyph = new Color(0.78f, 0.80f, 0.86f, 0.70f);
+        /// <summary>Inactive ◀▶ CanvasGroup — keep edge recognizable, not competing with live peer.</summary>
+        private const float DetailStripThumbNavDisabledAlpha = 0.20f;
+        private static readonly Color DetailStripThumbScrubIndexBg = new Color(0.04f, 0.04f, 0.06f, 0.72f);
         private GameObject _detailStripMetaHost;
         private LayoutElement _detailStripMetaHostLE;
         private GameObject[] _detailStripMetaRows;
@@ -263,6 +283,15 @@ namespace VPB
         {
             if (s <= 0f) s = 1f;
             return GalleryUiDesignTokens.FooterDetailStripHeightRef * s;
+        }
+
+        /// <summary>
+        /// True when auto-fit height is locked for this open strip session.
+        /// Sticky across selection flips so thumb/nav do not jump per item.
+        /// </summary>
+        private bool DetailStripHasAutoHeightLock()
+        {
+            return _detailStripAutoHeightLock > 8f;
         }
 
         private static bool DetailStripHasUserHeight()
@@ -532,6 +561,7 @@ namespace VPB
                 || (_detailStripActionRows != null && _detailStripActionRows.Length < DetailStripActionMaxRows)
                 || (_detailStripMetaRows != null && _detailStripMetaRows.Length < DetailStripMetaMaxRows)
                 || (_detailStripThumbColGO != null && _detailStripThumbColGO.GetComponent<UIScrollWheelHandler>() == null)
+                || (_detailStripThumbColGO != null && _detailStripThumbPrevBtnGO == null)
                 || DetailStripActionsHostHasLegacyDirectChild("Link_Tag")
                 || DetailStripActionsHostHasLegacyDirectChild("Chip_Deps")
                 || DetailStripActionsHostHasLegacyDirectChild("Link_Deps")
@@ -761,6 +791,7 @@ namespace VPB
             UIScrollWheelHandler thumbScroll = thumbCol.AddComponent<UIScrollWheelHandler>();
             thumbScroll.Sensitivity = 1f;
             thumbScroll.OnScrollValue = DetailStripOnThumbScroll;
+            DetailStripEnsureThumbNavOverlay(thumbCol);
             DetailStripSyncThumbInteractions();
 
             GameObject textCol = UI.CreateChildRT(strip, "TextCol", AnchorPresets.stretchAll);
@@ -1158,7 +1189,17 @@ namespace VPB
             _detailStripStarImages = null;
             _detailStripStarRating = 0;
             _detailStripStarHover = 0;
-            _detailStripThumbRightHeld = false;
+            _detailStripThumbPrevBtnGO = null;
+            _detailStripThumbPrevBtn = null;
+            _detailStripThumbPrevBtnImage = null;
+            _detailStripThumbNextBtnGO = null;
+            _detailStripThumbNextBtn = null;
+            _detailStripThumbNextBtnImage = null;
+            _detailStripThumbScrubIndexGO = null;
+            _detailStripThumbScrubIndexText = null;
+            _detailStripThumbScrubIndexShown = int.MinValue;
+            _detailStripThumbScrubCountShown = int.MinValue;
+            _detailStripThumbScrubIndexVisible = false;
             _detailStripMetaHost = null;
             _detailStripMetaHostLE = null;
             _detailStripMetaRows = null;
@@ -2032,7 +2073,7 @@ namespace VPB
             et.triggers.Add(entry);
         }
 
-        /// <summary>Tooltip + double-click launch on preview thumb (safe to call on existing strip).</summary>
+        /// <summary>Tooltip + double-click launch + overlay prev/next on preview thumb.</summary>
         private void DetailStripSyncThumbInteractions()
         {
             GameObject thumbCol = _detailStripThumbColGO;
@@ -2047,7 +2088,7 @@ namespace VPB
             AddTooltip(
                 thumbCol,
                 "gallery.detail.tip.thumb",
-                "Scroll: prev/next · Hold right + scroll: rate · Double-click: launch / apply");
+                "◀ ▶ / Scroll: prev/next · Double-click: launch / apply");
 
             // EventTrigger implements IScrollHandler and swallows wheel if placed on the hit
             // target above UIScrollWheelHandler — never put EventTrigger on Thumb/Image children.
@@ -2060,7 +2101,10 @@ namespace VPB
             if (_detailStripThumb != null)
                 DetailStripEnsureThumbScroll(_detailStripThumb.gameObject);
 
+            DetailStripEnsureThumbNavOverlay(thumbCol);
             DetailStripBindThumbInput(thumbCol);
+            DetailStripSyncThumbNavChrome();
+            DetailStripSyncScrubIndexOverlay();
         }
 
         private static void DetailStripStripEventTrigger(GameObject go)
@@ -2082,15 +2126,13 @@ namespace VPB
             wheel.OnScrollValue = DetailStripOnThumbScroll;
         }
 
-        /// <summary>Double-click + right-hold tracking on thumb column (no EventTrigger / IScrollHandler).</summary>
+        /// <summary>Double-click apply on thumb column (no EventTrigger / IScrollHandler).</summary>
         private void DetailStripBindThumbInput(GameObject go)
         {
             if (go == null) return;
             DetailStripThumbClickRelay relay = go.GetComponent<DetailStripThumbClickRelay>();
             if (relay == null) relay = go.AddComponent<DetailStripThumbClickRelay>();
             relay.OnDoubleClick = DetailStripOnThumbDoubleClick;
-            relay.OnRightHoldChanged = held => _detailStripThumbRightHeld = held;
-            _detailStripThumbRightHeld = relay.RightHeld;
             DetailStripStripEventTrigger(go);
         }
 
@@ -2116,26 +2158,297 @@ namespace VPB
             ApplyFileEntryNow(file);
         }
 
-        private bool DetailStripThumbRateScrollActive()
+        private void DetailStripOnThumbPrevClick()
         {
-            if (!_detailStripThumbRightHeld) return false;
-            // RMB released outside thumb without PointerUp on relay.
-            if (!Input.GetMouseButton(1))
-            {
-                _detailStripThumbRightHeld = false;
-                return false;
-            }
-            return true;
+            DetailStripThumbScrubBy(-1);
         }
 
-        /// <summary>Scroll up → +1 star, down → −1 (0–5). Applies to whole selection.</summary>
-        private void DetailStripNudgeRatingFromScroll(float scrollDelta)
+        private void DetailStripOnThumbNextClick()
         {
-            if (selectedFiles == null || selectedFiles.Count == 0) return;
-            int step = scrollDelta > 0f ? 1 : -1;
-            int next = Mathf.Clamp(_detailStripStarRating + step, 0, 5);
-            if (next == _detailStripStarRating) return;
-            DetailStripApplyStarRating(next);
+            DetailStripThumbScrubBy(1);
+        }
+
+        /// <summary>
+        /// Overlay ◀▶ on thumb image (absolute anchors). Does not pad/inset RawImage —
+        /// preview stays full square; buttons draw on top.
+        /// </summary>
+        private void DetailStripEnsureThumbNavOverlay(GameObject thumbCol)
+        {
+            if (thumbCol == null) return;
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+
+            if (_detailStripThumbNavPrevSprite == null)
+            {
+                try { _detailStripThumbNavPrevSprite = UI.LoadIconSprite("vpb_icons/chevron_left.png", UI.BarIconGlyphTint); }
+                catch { _detailStripThumbNavPrevSprite = null; }
+            }
+            if (_detailStripThumbNavNextSprite == null)
+            {
+                try { _detailStripThumbNavNextSprite = UI.LoadIconSprite("vpb_icons/chevron_right.png", UI.BarIconGlyphTint); }
+                catch { _detailStripThumbNavNextSprite = null; }
+            }
+
+            if (_detailStripThumbPrevBtnGO == null)
+            {
+                Transform existing = thumbCol.transform.Find("NavPrev");
+                if (existing != null) _detailStripThumbPrevBtnGO = existing.gameObject;
+            }
+            if (_detailStripThumbNextBtnGO == null)
+            {
+                Transform existing = thumbCol.transform.Find("NavNext");
+                if (existing != null) _detailStripThumbNextBtnGO = existing.gameObject;
+            }
+            if (_detailStripThumbScrubIndexGO == null)
+            {
+                Transform existing = thumbCol.transform.Find("ScrubIndex");
+                if (existing != null) _detailStripThumbScrubIndexGO = existing.gameObject;
+            }
+
+            if (_detailStripThumbPrevBtnGO == null)
+            {
+                _detailStripThumbPrevBtnGO = DetailStripCreateThumbNavButton(
+                    thumbCol, "NavPrev", AnchorPresets.middleLeft,
+                    _detailStripThumbNavPrevSprite, DetailStripOnThumbPrevClick);
+                AddTooltip(_detailStripThumbPrevBtnGO, "gallery.detail.tip.thumb_prev", "Previous item");
+            }
+            if (_detailStripThumbNextBtnGO == null)
+            {
+                _detailStripThumbNextBtnGO = DetailStripCreateThumbNavButton(
+                    thumbCol, "NavNext", AnchorPresets.middleRight,
+                    _detailStripThumbNavNextSprite, DetailStripOnThumbNextClick);
+                AddTooltip(_detailStripThumbNextBtnGO, "gallery.detail.tip.thumb_next", "Next item");
+            }
+
+            if (_detailStripThumbPrevBtn == null && _detailStripThumbPrevBtnGO != null)
+                _detailStripThumbPrevBtn = _detailStripThumbPrevBtnGO.GetComponent<Button>();
+            if (_detailStripThumbPrevBtnImage == null && _detailStripThumbPrevBtnGO != null)
+                _detailStripThumbPrevBtnImage = _detailStripThumbPrevBtnGO.GetComponent<Image>();
+            if (_detailStripThumbNextBtn == null && _detailStripThumbNextBtnGO != null)
+                _detailStripThumbNextBtn = _detailStripThumbNextBtnGO.GetComponent<Button>();
+            if (_detailStripThumbNextBtnImage == null && _detailStripThumbNextBtnGO != null)
+                _detailStripThumbNextBtnImage = _detailStripThumbNextBtnGO.GetComponent<Image>();
+
+            DetailStripEnsureThumbScroll(_detailStripThumbPrevBtnGO);
+            DetailStripEnsureThumbScroll(_detailStripThumbNextBtnGO);
+
+            if (_detailStripThumbScrubIndexGO == null)
+            {
+                float indexH = GalleryUiDesignTokens.ButtonSizeRef * s;
+                float indexW = Mathf.Max(72f * s, GalleryUiDesignTokens.ButtonSizeRef * s * 2.4f);
+                float insetY = GalleryUiDesignTokens.FooterDetailStripThumbNavInsetRef * s;
+                _detailStripThumbScrubIndexGO = UI.AddChildGOImage(
+                    thumbCol, DetailStripThumbScrubIndexBg, AnchorPresets.bottomMiddle,
+                    indexW, indexH, new Vector2(0f, insetY), rounded: true);
+                _detailStripThumbScrubIndexGO.name = "ScrubIndex";
+                Image bg = _detailStripThumbScrubIndexGO.GetComponent<Image>();
+                if (bg != null) bg.raycastTarget = false;
+                _detailStripThumbScrubIndexText = UI.CreateLabel(
+                    _detailStripThumbScrubIndexGO, "",
+                    GalleryUiDesignTokens.FontBodyRef,
+                    new Color(0.92f, 0.94f, 0.98f, 0.95f),
+                    TextAnchor.MiddleCenter,
+                    raycastTarget: false,
+                    name: "Index");
+                DetailStripApplyFont(_detailStripThumbScrubIndexText, s, GalleryUiDesignTokens.FontBodyRef);
+                _detailStripThumbScrubIndexGO.SetActive(false);
+                _detailStripThumbScrubIndexVisible = false;
+            }
+            else if (_detailStripThumbScrubIndexText == null)
+            {
+                Transform t = _detailStripThumbScrubIndexGO.transform.Find("Index");
+                if (t != null) _detailStripThumbScrubIndexText = t.GetComponent<Text>();
+            }
+
+            // Keep overlays above preview image for raycasts / draw order.
+            if (_detailStripThumbPrevBtnGO != null) _detailStripThumbPrevBtnGO.transform.SetAsLastSibling();
+            if (_detailStripThumbNextBtnGO != null) _detailStripThumbNextBtnGO.transform.SetAsLastSibling();
+            if (_detailStripThumbScrubIndexGO != null) _detailStripThumbScrubIndexGO.transform.SetAsLastSibling();
+
+            DetailStripLayoutThumbNavOverlay(s);
+        }
+
+        private GameObject DetailStripCreateThumbNavButton(
+            GameObject thumbCol, string name, int anchorPreset, Sprite icon, UnityEngine.Events.UnityAction onClick)
+        {
+            float s = ChromeScale;
+            if (s <= 0f) s = 1f;
+            float btnSz = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float inset = GalleryUiDesignTokens.FooterDetailStripThumbNavInsetRef * s;
+            float x = anchorPreset == AnchorPresets.middleLeft ? inset : -inset;
+
+            GameObject go = UI.AddChildGOImage(
+                thumbCol, DetailStripThumbNavBackdrop, anchorPreset, btnSz, btnSz, new Vector2(x, 0f), rounded: true);
+            go.name = name;
+            Button btn = go.AddComponent<Button>();
+            UI.ConfigButtonFlat(btn, applyColors: true);
+            if (onClick != null) btn.onClick.AddListener(onClick);
+            go.AddComponent<UIHoverBorder>();
+            if (icon != null)
+                UI.AddIconToButton(go, icon, padding: Mathf.Max(3f, 4f * s), backdropOverride: DetailStripThumbNavBackdrop);
+            else
+            {
+                Text label = go.GetComponentInChildren<Text>(true);
+                if (label == null)
+                    label = UI.CreateLabel(go, name == "NavPrev" ? "◀" : "▶", GalleryUiDesignTokens.FontBodyRef,
+                        DetailStripThumbNavGlyph, TextAnchor.MiddleCenter, name: "Text");
+                else
+                {
+                    label.gameObject.SetActive(true);
+                    label.text = name == "NavPrev" ? "◀" : "▶";
+                    label.color = DetailStripThumbNavGlyph;
+                }
+                DetailStripApplyFont(label, s, GalleryUiDesignTokens.FontBodyRef);
+            }
+            DetailStripApplyThumbNavGlyphTint(go);
+            return go;
+        }
+
+        private static void DetailStripApplyThumbNavGlyphTint(GameObject go)
+        {
+            if (go == null) return;
+            Transform iconTr = go.transform.Find("Icon");
+            if (iconTr != null)
+            {
+                Image iconImg = iconTr.GetComponent<Image>();
+                if (iconImg != null) iconImg.color = DetailStripThumbNavGlyph;
+            }
+            Text label = go.GetComponentInChildren<Text>(true);
+            if (label != null && label.gameObject.activeSelf)
+                label.color = DetailStripThumbNavGlyph;
+        }
+
+        private void DetailStripLayoutThumbNavOverlay(float s)
+        {
+            if (s <= 0f) s = 1f;
+            // Match gallery chrome button size — never shrink with thumb fraction.
+            float btnSz = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float inset = GalleryUiDesignTokens.FooterDetailStripThumbNavInsetRef * s;
+
+            DetailStripLayoutThumbNavButton(_detailStripThumbPrevBtnGO, AnchorPresets.middleLeft, btnSz, inset);
+            DetailStripLayoutThumbNavButton(_detailStripThumbNextBtnGO, AnchorPresets.middleRight, btnSz, -inset);
+
+            if (_detailStripThumbScrubIndexGO != null)
+            {
+                RectTransform rt = _detailStripThumbScrubIndexGO.GetComponent<RectTransform>();
+                if (rt != null)
+                {
+                    float indexH = GalleryUiDesignTokens.ButtonSizeRef * s;
+                    // Wide enough for compact "999K/999K" at body font.
+                    float indexW = Mathf.Max(72f * s, btnSz * 2.4f);
+                    rt.sizeDelta = new Vector2(indexW, indexH);
+                    rt.anchoredPosition = new Vector2(0f, inset);
+                }
+                if (_detailStripThumbScrubIndexText != null)
+                    DetailStripApplyFont(_detailStripThumbScrubIndexText, s, GalleryUiDesignTokens.FontBodyRef);
+            }
+        }
+
+        private static void DetailStripLayoutThumbNavButton(GameObject go, int anchorPreset, float btnSz, float x)
+        {
+            if (go == null) return;
+            RectTransform rt = go.GetComponent<RectTransform>();
+            if (rt == null) return;
+            rt.anchorMin = AnchorPresets.GetAnchorMin(anchorPreset);
+            rt.anchorMax = AnchorPresets.GetAnchorMax(anchorPreset);
+            rt.pivot = AnchorPresets.GetPivot(anchorPreset);
+            rt.sizeDelta = new Vector2(btnSz, btnSz);
+            rt.anchoredPosition = new Vector2(x, 0f);
+        }
+
+        /// <summary>Enable/disable ◀▶ at list ends. No alloc.</summary>
+        private void DetailStripSyncThumbNavChrome()
+        {
+            int count = currentFilteredFiles != null ? currentFilteredFiles.Count : 0;
+            int idx = _detailStripScrubIndex;
+            if (idx < 0 || (count > 0 && idx >= count))
+            {
+                bool historyBrowse = activeContentType == ContentType.History;
+                string navKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse);
+                if (string.IsNullOrEmpty(navKey) && selectedFiles != null && selectedFiles.Count > 0)
+                    navKey = GetSelectionIdentityKey(selectedFiles[0], historyBrowse);
+                if (!string.IsNullOrEmpty(navKey) && currentFilteredFiles != null)
+                    idx = FindIndexBySelectionIdentity(currentFilteredFiles, navKey, historyBrowse);
+            }
+
+            bool canPrev = count > 1 && idx > 0;
+            bool canNext = count > 1 && idx >= 0 && idx < count - 1;
+            // Unknown index: allow both so first click resolves via scrub path.
+            if (count > 1 && idx < 0)
+            {
+                canPrev = true;
+                canNext = true;
+            }
+
+            DetailStripSetThumbNavEnabled(_detailStripThumbPrevBtn, _detailStripThumbPrevBtnImage, canPrev);
+            DetailStripSetThumbNavEnabled(_detailStripThumbNextBtn, _detailStripThumbNextBtnImage, canNext);
+        }
+
+        private static void DetailStripSetThumbNavEnabled(Button btn, Image img, bool enabled)
+        {
+            if (btn == null) return;
+            if (btn.interactable != enabled)
+                btn.interactable = enabled;
+
+            // ColorTint is Transition.None — disabledColor never reaches Icon child.
+            // CanvasGroup dims backdrop + glyph + hover rim as one unit.
+            CanvasGroup cg = btn.GetComponent<CanvasGroup>();
+            if (cg == null) cg = btn.gameObject.AddComponent<CanvasGroup>();
+            float a = enabled ? 1f : DetailStripThumbNavDisabledAlpha;
+            if (Mathf.Abs(cg.alpha - a) > 0.001f)
+                cg.alpha = a;
+
+            if (img != null && img.color != DetailStripThumbNavBackdrop)
+                img.color = DetailStripThumbNavBackdrop;
+            DetailStripApplyThumbNavGlyphTint(btn.gameObject);
+
+            UIHoverBorder hb = btn.GetComponent<UIHoverBorder>();
+            if (hb != null) hb.SyncIndicatorVisibility();
+        }
+
+        /// <summary>
+        /// Show n/N on thumb while scrubbing. Text rebuild only when index/count changes
+        /// (warm path — not per-frame).
+        /// </summary>
+        private void DetailStripSyncScrubIndexOverlay()
+        {
+            if (_detailStripThumbScrubIndexGO == null) return;
+
+            bool want = (_detailStripScrubActive || _detailStripScrubHeightLocked)
+                && currentFilteredFiles != null
+                && currentFilteredFiles.Count > 0
+                && DetailStripIsExpanded();
+
+            if (!want)
+            {
+                if (_detailStripThumbScrubIndexVisible)
+                {
+                    _detailStripThumbScrubIndexGO.SetActive(false);
+                    _detailStripThumbScrubIndexVisible = false;
+                }
+                _detailStripThumbScrubIndexShown = int.MinValue;
+                _detailStripThumbScrubCountShown = int.MinValue;
+                return;
+            }
+
+            int count = currentFilteredFiles.Count;
+            int idx = _detailStripScrubIndex;
+            if (idx < 0 || idx >= count) idx = 0;
+            int display = idx + 1;
+
+            if (!_detailStripThumbScrubIndexVisible)
+            {
+                _detailStripThumbScrubIndexGO.SetActive(true);
+                _detailStripThumbScrubIndexVisible = true;
+            }
+
+            if (display == _detailStripThumbScrubIndexShown && count == _detailStripThumbScrubCountShown)
+                return;
+            _detailStripThumbScrubIndexShown = display;
+            _detailStripThumbScrubCountShown = count;
+            if (_detailStripThumbScrubIndexText != null)
+                _detailStripThumbScrubIndexText.text =
+                    FormatCompactCount(display) + "/" + FormatCompactCount(count);
         }
 
         private void DetailStripApplyStarRating(int next)
@@ -2682,6 +2995,8 @@ namespace VPB
             RectTransform rt = thumbCol.GetComponent<RectTransform>();
             if (rt != null)
                 rt.sizeDelta = new Vector2(thumbSize, thumbSize);
+            DetailStripEnsureThumbNavOverlay(thumbCol);
+            DetailStripSyncThumbNavChrome();
         }
 
         private void DetailStripApplyTextColPadForThumbSide(float s)
@@ -2997,20 +3312,12 @@ namespace VPB
                     h = DetailStripUserHeightScaled(s);
                 else if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
                     h = _detailStripScrubLockedHeight;
+                else if (DetailStripHasAutoHeightLock())
+                    h = _detailStripAutoHeightLock;
                 else
                 {
-                    string lockKey = DetailStripSelectionLayoutKey();
-                    bool lockOk = _detailStripAutoHeightLock > 8f
-                        && !string.IsNullOrEmpty(_detailStripAutoHeightLockKey)
-                        && string.Equals(lockKey, _detailStripAutoHeightLockKey, StringComparison.Ordinal);
-                    if (lockOk)
-                        h = _detailStripAutoHeightLock;
-                    else
-                    {
-                        h = DetailStripComputeContentHeight(s);
-                        _detailStripAutoHeightLock = h;
-                        _detailStripAutoHeightLockKey = lockKey ?? "";
-                    }
+                    h = DetailStripComputeContentHeight(s);
+                    _detailStripAutoHeightLock = h;
                 }
                 // Scrub session: keep outer strip height stable (no tbox jump / layout thrash).
                 if (_detailStripScrubHeightLocked && _detailStripScrubLockedHeight > 8f)
@@ -3038,10 +3345,7 @@ namespace VPB
                 return _detailStripScrubLockedHeight;
             if (DetailStripHasUserHeight())
                 return DetailStripUserHeightScaled(s);
-            string lockKey = DetailStripSelectionLayoutKey();
-            if (_detailStripAutoHeightLock > 8f
-                && !string.IsNullOrEmpty(_detailStripAutoHeightLockKey)
-                && string.Equals(lockKey, _detailStripAutoHeightLockKey, StringComparison.Ordinal))
+            if (DetailStripHasAutoHeightLock())
                 return _detailStripAutoHeightLock;
             return DetailStripMaxHeight(s);
         }
@@ -3227,8 +3531,16 @@ namespace VPB
 
         private void DetailStripEndScrubHeightLock()
         {
+            // Promote scrub height into session auto-lock so release does not remasure/jump.
+            if (_detailStripScrubLockedHeight > 8f && !DetailStripHasUserHeight())
+            {
+                _detailStripAutoHeightLock = _detailStripScrubLockedHeight;
+                _detailStripMeasuredHeight = _detailStripScrubLockedHeight;
+            }
             _detailStripScrubHeightLocked = false;
             _detailStripScrubLockedHeight = -1f;
+            DetailStripSyncScrubIndexOverlay();
+            DetailStripSyncThumbNavChrome();
         }
 
         private float DetailStripComputeContentHeight(float s)
@@ -3661,8 +3973,8 @@ namespace VPB
                         float geomEps = 6f;
                         if (_detailStripMetaAvailWidth < 0f || drift > reflowEps)
                         {
-                            // Real width-class change — allow auto-height remasure.
-                            DetailStripInvalidateAutoHeightLock();
+                            // Width-class change: reflow meta only — do not remasure strip height
+                            // (height stickiness keeps thumb/nav stable across items).
                             DetailStripReflowMetaForCurrentSelection();
                         }
                         else if (drift > geomEps)
@@ -4708,15 +5020,14 @@ namespace VPB
             return DetailStripSideContentKeyForSelection();
         }
 
-        /// <summary>On selection identity change: clear height lock + stack sticky.</summary>
+        /// <summary>
+        /// Selection identity changed. Keep auto-height + stack sticky so strip/thumb/nav
+        /// do not jump per item — content adapts via HideOverflow to locked budget.
+        /// Remasure only on scale / hide / user resize / explicit invalidate.
+        /// </summary>
         private void DetailStripOnSelectionLayoutKeyChanged()
         {
-            string key = DetailStripSelectionLayoutKey();
-            if (string.Equals(key, _detailStripAutoHeightLockKey, StringComparison.Ordinal))
-                return;
-            DetailStripInvalidateAutoHeightLock();
-            DetailStripResetStackSideDecision();
-            _detailStripAutoHeightLockKey = key ?? "";
+            // Intentionally no InvalidateAutoHeightLock / ResetStackSideDecision.
         }
 
         private static float DetailStripFlexLineCurrentHeight(Text line, float fallbackLineH)
@@ -5476,19 +5787,21 @@ namespace VPB
 
         /// <summary>
         /// Full-res decode tier (same as hover preview). Optional keepCurrentUntilReady avoids
-        /// blank flash — show grid copy while async hi-res lands.
+        /// blank flash while upgrading the <em>same</em> file's grid copy to hi-res.
+        /// Never keep another item's texture — that mislabels the current selection.
         /// </summary>
         private void DetailStripLoadThumb(FileEntry file, bool keepCurrentUntilReady = false)
         {
-            _detailStripThumbFile = file;
             if (_detailStripThumb == null || file == null) return;
             Texture keepTex = null;
             Rect keepUv = new Rect(0f, 0f, 1f, 1f);
-            if (keepCurrentUntilReady && _detailStripThumb.texture != null)
+            bool sameFile = ReferenceEquals(_detailStripThumbFile, file);
+            if (keepCurrentUntilReady && sameFile && _detailStripThumb.texture != null)
             {
                 keepTex = _detailStripThumb.texture;
                 keepUv = _detailStripThumb.uvRect;
             }
+            _detailStripThumbFile = file;
             _detailStripThumb.color = Color.white;
             try
             {
@@ -5499,7 +5812,7 @@ namespace VPB
                     gridThumbnailContext: false,
                     turboJpegThumbnailDenom: 1,
                     thumbnailUnityDecodeOnly: true);
-                // LoadThumbnail blanks while queued — restore placeholder until callback.
+                // LoadThumbnail blanks while queued — restore same-file placeholder until callback.
                 if (keepTex != null && _detailStripThumb.texture == null)
                 {
                     _detailStripThumb.texture = keepTex;
@@ -5516,10 +5829,20 @@ namespace VPB
                     _detailStripThumb.color = Color.white;
                 }
                 else
-                {
-                    _detailStripThumb.texture = null;
-                    _detailStripThumb.color = new Color(1f, 1f, 1f, 0.15f);
-                }
+                    DetailStripClearThumbPreview();
+            }
+        }
+
+        /// <summary>Empty preview chrome for current item (no leftover prior texture).</summary>
+        private void DetailStripClearThumbPreview()
+        {
+            if (_detailStripThumb == null) return;
+            try { ClearThumbnailTarget(_detailStripThumb); }
+            catch
+            {
+                _detailStripThumb.texture = null;
+                _detailStripThumb.uvRect = new Rect(0f, 0f, 1f, 1f);
+                _detailStripThumb.color = new Color(1f, 1f, 1f, 0.15f);
             }
         }
 
@@ -5527,22 +5850,24 @@ namespace VPB
         private void DetailStripOnThumbScroll(float scrollDelta)
         {
             if (Mathf.Abs(scrollDelta) < 0.01f) return;
-            if (IsSettingsPanelOpen()) return;
-            // Hold right on preview + wheel → nudge star rating (does not scrub selection).
-            if (DetailStripThumbRateScrollActive())
-            {
-                DetailStripNudgeRatingFromScroll(scrollDelta);
-                return;
-            }
-            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
             // Unity scroll up is positive → previous item (matches typical list feel).
             int step = scrollDelta > 0f ? -1 : 1;
+            DetailStripThumbScrubBy(step);
+        }
+
+        /// <summary>Shared scrub step for wheel + overlay ◀▶. Warm path; no per-frame alloc.</summary>
+        private void DetailStripThumbScrubBy(int step)
+        {
+            if (step == 0) return;
+            if (IsSettingsPanelOpen()) return;
+            if (currentFilteredFiles == null || currentFilteredFiles.Count == 0) return;
             DetailStripBeginScrubHeightLock();
             _detailStripScrubPendingSteps += step;
             _detailStripScrubLastInputTime = Time.unscaledTime;
             _detailStripScrubActive = true;
-            // Apply immediately for snappy preview; soft commit waits for idle.
             DetailStripProcessScrubPending();
+            DetailStripSyncScrubIndexOverlay();
+            DetailStripSyncThumbNavChrome();
         }
 
         /// <summary>Called from Update: soft-fill meta after scrub wheel stops (height stays locked).</summary>
@@ -5556,6 +5881,7 @@ namespace VPB
                 if (Time.unscaledTime - _detailStripScrubLastInputTime < DetailStripScrubCommitDelaySec)
                     return;
                 DetailStripCommitScrub();
+                DetailStripSyncScrubIndexOverlay();
                 return;
             }
             // Idle after scrub: drop height lock so normal refresh can run again (no click needed).
@@ -5593,7 +5919,11 @@ namespace VPB
             int newIndex = Mathf.Clamp(currentIndex + step, 0, count - 1);
             _detailStripScrubIndex = newIndex;
             if (newIndex == currentIndex && selectedFiles != null && selectedFiles.Count == 1)
+            {
+                DetailStripSyncScrubIndexOverlay();
+                DetailStripSyncThumbNavChrome();
                 return;
+            }
 
             FileEntry newFile = currentFilteredFiles[newIndex];
             if (newFile == null) return;
@@ -5608,6 +5938,8 @@ namespace VPB
             if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
             DetailStripApplyScrubPreview(newFile, newIndex);
             RefreshSelectionVisualsCore(runHeavySideEffects: false);
+            DetailStripSyncScrubIndexOverlay();
+            DetailStripSyncThumbNavChrome();
         }
 
         private void DetailStripApplyScrubPreview(FileEntry file, int listIndex)
@@ -5632,7 +5964,12 @@ namespace VPB
                 if (!string.Equals(_detailStripTitle.text, name, StringComparison.Ordinal))
                     _detailStripTitle.text = name;
             }
-            DetailStripTryCopyThumbFromVisibleGrid(file, listIndex);
+            // No grid thumb / empty cell → clear prior item preview (do not mislead).
+            if (!DetailStripTryCopyThumbFromVisibleGrid(file, listIndex))
+            {
+                DetailStripClearThumbPreview();
+                _detailStripThumbFile = file;
+            }
         }
 
         private bool DetailStripTryCopyThumbFromVisibleGrid(FileEntry file, int listIndex)
@@ -5655,7 +5992,9 @@ namespace VPB
                         if (diag == null || !ReferenceEquals(diag.FileEntry, file)) continue;
                     }
                     RawImage ri = binder != null ? binder.thumbRaw : null;
-                    if (ri == null || ri.texture == null || ri == _detailStripThumb) continue;
+                    // Cell found but empty → treat as no preview for this item (caller clears).
+                    if (ri == null || ri == _detailStripThumb) continue;
+                    if (ri.texture == null) return false;
                     _detailStripThumb.texture = ri.texture;
                     _detailStripThumb.uvRect = ri.uvRect;
                     _detailStripThumb.color = Color.white;

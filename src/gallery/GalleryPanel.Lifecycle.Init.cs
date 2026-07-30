@@ -1317,7 +1317,7 @@ namespace VPB
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
                     GameObject rightCatBtn = UI.CreateUIButton(rightSideContainer, cW, cH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => {
-                        if (isFixedLocally) ToggleLeft(ContentType.Category); else ToggleRight(ContentType.Category);
+                        ToggleSideFromRailButton(ContentType.Category, false, false);
                     });
                     rightCategoryBtnImage = rightCatBtn.GetComponent<Image>();
                     rightCategoryBtnText = rightCatBtn.GetComponentInChildren<Text>(true);
@@ -1339,7 +1339,7 @@ namespace VPB
                         rightCategoryBtnIconImage = null;
                     }
                     rightSideButtons.Add(rightCatBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightCatBtn, () => ToggleRight(ContentType.Category));
+                    AddRightClickDelegate(rightCatBtn, () => ToggleSideFromRailButton(ContentType.Category, false, true));
                     AddTooltip(rightCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
@@ -1381,8 +1381,7 @@ namespace VPB
                     try { utSpr = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
                     GameObject rightUserTagsBtn = UI.CreateUIButton(rightSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () =>
                     {
-                        if (isFixedLocally) ToggleLeft(ContentType.UserTags);
-                        else ToggleRight(ContentType.UserTags);
+                        ToggleSideFromRailButton(ContentType.UserTags, false, false);
                     });
                     rightUserTagsSideBtn = rightUserTagsBtn;
                     Image utImg = rightUserTagsBtn.GetComponent<Image>();
@@ -1400,7 +1399,7 @@ namespace VPB
                         }
                     }
                     rightSideButtons.Add(rightUserTagsBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightUserTagsBtn, () => ToggleRight(ContentType.UserTags));
+                    AddRightClickDelegate(rightUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, false, true));
                     AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
@@ -1412,7 +1411,7 @@ namespace VPB
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
                     GameObject rightPathBtn = UI.CreateUIButton(rightSideContainer, pW, pH, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => {
-                        if (isFixedLocally) ToggleLeft(ContentType.Path); else ToggleRight(ContentType.Path);
+                        ToggleSideFromRailButton(ContentType.Path, false, false);
                     });
                     rightPathBtnImage = rightPathBtn.GetComponent<Image>();
                     rightPathBtnText = rightPathBtn.GetComponentInChildren<Text>(true);
@@ -1434,13 +1433,13 @@ namespace VPB
                         rightPathBtnIconImage = null;
                     }
                     rightSideButtons.Add(rightPathBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightPathBtn, () => ToggleRight(ContentType.Path));
+                    AddRightClickDelegate(rightPathBtn, () => ToggleSideFromRailButton(ContentType.Path, false, true));
                     AddTooltip(rightPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
                 {
                     GameObject rightHistoryBtn = UI.CreateUIButton(rightSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 9 - groupGap * 3, AnchorPresets.centre, () => {
-                        if (isFixedLocally) ToggleLeft(ContentType.History); else ToggleRight(ContentType.History);
+                        ToggleSideFromRailButton(ContentType.History, false, false);
                     });
                     rightHistoryBtnImage = rightHistoryBtn.GetComponent<Image>();
                     if (galleryHistorySprite != null)
@@ -1452,7 +1451,7 @@ namespace VPB
                     else if (rightHistoryBtnImage != null)
                         rightHistoryBtnImage.color = ColorHistory;
                     rightSideButtons.Add(rightHistoryBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(rightHistoryBtn, () => ToggleRight(ContentType.History));
+                    AddRightClickDelegate(rightHistoryBtn, () => ToggleSideFromRailButton(ContentType.History, false, true));
                     AddTooltip(rightHistoryBtn, "gallery.tooltip.history_list", "Launch history and usage filters.");
                 }
 
@@ -1499,7 +1498,7 @@ namespace VPB
                     float rmH = sideIconBtn;
                     Sprite rmSpr = null;
                     try { rmSpr = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleRemoveMode);
+                    GameObject rightRemoveModeBtn = UI.CreateUIButton(rightSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(false, false));
                     rightRemoveModeSideBtn = rightRemoveModeBtn;
                     Image rmImg = rightRemoveModeBtn.GetComponent<Image>();
                     Text rmTxt = rightRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1521,6 +1520,7 @@ namespace VPB
                     }
                     rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
                     rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveMode(false, true));
                     AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
                 }
 
@@ -1535,7 +1535,7 @@ namespace VPB
                     rightSaveBtnGO = UI.CreateUIButton(rightSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 14 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
-                            ToggleSaveSubmenuFromSideButtons(false);
+                            ToggleSaveSubmenuFromSideButtons(PreferLeftSidePanelFromRail(false, false));
                         }
                         catch (Exception ex)
                         {
@@ -1563,6 +1563,10 @@ namespace VPB
                     }
                     rightSideButtons.Add(rightSaveBtnGO.GetComponent<RectTransform>());
                     rightSaveBtnGO.SetActive(false);
+                    AddRightClickDelegate(rightSaveBtnGO, () => {
+                        try { ToggleSaveSubmenuFromSideButtons(PreferLeftSidePanelFromRail(false, true)); }
+                        catch (Exception ex) { LogUtil.LogError("[VPB] Save (Right RMB) exception: " + ex); }
+                    });
                     AddTooltip(rightSaveBtnGO, "gallery.tooltip.save_pane", "Save presets and related actions.");
                 }
 
@@ -1576,7 +1580,7 @@ namespace VPB
                         try
                         {
                             if (SuperController.singleton == null) return;
-                            ToggleAtomSubmenuFromSideButtons(false);
+                            ToggleAtomSubmenuFromSideButtons(PreferLeftSidePanelFromRail(false, false));
                         }
                         catch (Exception ex)
                         {
@@ -1605,6 +1609,17 @@ namespace VPB
                     }
                     rightSideButtons.Add(rightRemoveAtomBtn.GetComponent<RectTransform>());
                     rightRemoveAtomBtn.SetActive(false);
+                    AddRightClickDelegate(rightRemoveAtomBtn, () => {
+                        try
+                        {
+                            if (SuperController.singleton == null) return;
+                            ToggleAtomSubmenuFromSideButtons(PreferLeftSidePanelFromRail(false, true));
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Remove (scene) (Right RMB) exception: " + ex);
+                        }
+                    });
                     AddTooltip(rightRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
                 }
 
@@ -1616,7 +1631,7 @@ namespace VPB
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) return;
-                        ToggleClothingSubmenuFromSideButtons(target, false);
+                        ToggleClothingSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(false, false));
                     }
                     catch (Exception ex)
                     {
@@ -1645,6 +1660,18 @@ namespace VPB
                 }
                 rightSideButtons.Add(rightRemoveAllClothingBtn.GetComponent<RectTransform>());
                 rightRemoveAllClothingBtn.SetActive(false);
+                AddRightClickDelegate(rightRemoveAllClothingBtn, () => {
+                    try
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) return;
+                        ToggleClothingSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(false, true));
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing (Right RMB) exception: " + ex);
+                    }
+                });
                 AddTooltip(rightRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
 
@@ -1654,7 +1681,7 @@ namespace VPB
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) return;
-                        ToggleHairSubmenuFromSideButtons(target, false);
+                        ToggleHairSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(false, false));
                     }
                     catch (Exception ex)
                     {
@@ -1679,6 +1706,18 @@ namespace VPB
                 }
                 rightSideButtons.Add(rightRemoveAllHairBtn.GetComponent<RectTransform>());
                 rightRemoveAllHairBtn.SetActive(false);
+                AddRightClickDelegate(rightRemoveAllHairBtn, () => {
+                    try
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) return;
+                        ToggleHairSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(false, true));
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair (Right RMB) exception: " + ex);
+                    }
+                });
                 AddTooltip(rightRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
 
@@ -1795,7 +1834,7 @@ namespace VPB
                 {
                     float cW = galleryCategorySprite != null ? sideIconBtn : btnWidth;
                     float cH = galleryCategorySprite != null ? sideIconBtn : btnHeight;
-                    GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, cW, cH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Category));
+                    GameObject leftCatBtn = UI.CreateUIButton(leftSideContainer, cW, cH, " ", 8, 0, startY - spacing * 5 - groupGap * 3, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.Category, true, false));
                     leftCategoryBtnImage = leftCatBtn.GetComponent<Image>();
                     leftCategoryBtnText = leftCatBtn.GetComponentInChildren<Text>(true);
                     if (galleryCategorySprite != null)
@@ -1816,7 +1855,7 @@ namespace VPB
                         leftCategoryBtnIconImage = null;
                     }
                     leftSideButtons.Add(leftCatBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftCatBtn, () => ToggleRight(ContentType.Category));
+                    AddRightClickDelegate(leftCatBtn, () => ToggleSideFromRailButton(ContentType.Category, true, true));
                     AddTooltip(leftCatBtn, "gallery.tooltip.category_list", "Browse all categories. Title = quick switch.");
                 }
 
@@ -1856,7 +1895,7 @@ namespace VPB
                     float utH = sideIconBtn;
                     Sprite utSprL = null;
                     try { utSprL = UI.LoadIconSprite("vpb_icons/tags.png", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.UserTags));
+                    GameObject leftUserTagsBtn = UI.CreateUIButton(leftSideContainer, utW, utH, " ", 8, 0, startY - spacing * 4 - groupGap * 3, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.UserTags, true, false));
                     leftUserTagsSideBtn = leftUserTagsBtn;
                     Image utImgL = leftUserTagsBtn.GetComponent<Image>();
                     Text utTxtL = leftUserTagsBtn.GetComponentInChildren<Text>(true);
@@ -1873,7 +1912,7 @@ namespace VPB
                         }
                     }
                     leftSideButtons.Add(leftUserTagsBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftUserTagsBtn, () => ToggleRight(ContentType.UserTags));
+                    AddRightClickDelegate(leftUserTagsBtn, () => ToggleSideFromRailButton(ContentType.UserTags, true, true));
                     AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
@@ -1884,7 +1923,7 @@ namespace VPB
                 {
                     float pW = galleryPathSprite != null ? sideIconBtn : btnWidth;
                     float pH = galleryPathSprite != null ? sideIconBtn : btnHeight;
-                    GameObject leftPathBtn = UI.CreateUIButton(leftSideContainer, pW, pH, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.Path));
+                    GameObject leftPathBtn = UI.CreateUIButton(leftSideContainer, pW, pH, " ", 8, 0, startY - spacing * 8 - groupGap * 3, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.Path, true, false));
                     leftPathBtnImage = leftPathBtn.GetComponent<Image>();
                     leftPathBtnText = leftPathBtn.GetComponentInChildren<Text>(true);
                     if (galleryPathSprite != null)
@@ -1905,12 +1944,12 @@ namespace VPB
                         leftPathBtnIconImage = null;
                     }
                     leftSideButtons.Add(leftPathBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftPathBtn, () => ToggleRight(ContentType.Path));
+                    AddRightClickDelegate(leftPathBtn, () => ToggleSideFromRailButton(ContentType.Path, true, true));
                     AddTooltip(leftPathBtn, "gallery.tooltip.path_list", "Open package and file path list.");
                 }
 
                 {
-                    GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 9 - groupGap * 3, AnchorPresets.centre, () => ToggleLeft(ContentType.History));
+                    GameObject leftHistoryBtn = UI.CreateUIButton(leftSideContainer, sideIconBtn, sideIconBtn, " ", 8, 0, startY - spacing * 9 - groupGap * 3, AnchorPresets.centre, () => ToggleSideFromRailButton(ContentType.History, true, false));
                     leftHistoryBtnImage = leftHistoryBtn.GetComponent<Image>();
                     if (galleryHistorySprite != null)
                     {
@@ -1921,7 +1960,7 @@ namespace VPB
                     else if (leftHistoryBtnImage != null)
                         leftHistoryBtnImage.color = ColorHistory;
                     leftSideButtons.Add(leftHistoryBtn.GetComponent<RectTransform>());
-                    AddRightClickDelegate(leftHistoryBtn, () => ToggleRight(ContentType.History));
+                    AddRightClickDelegate(leftHistoryBtn, () => ToggleSideFromRailButton(ContentType.History, true, true));
                     AddTooltip(leftHistoryBtn, "gallery.tooltip.history_list", "Launch history and usage filters.");
                 }
 
@@ -1967,7 +2006,7 @@ namespace VPB
                     float rmH = sideIconBtn;
                     Sprite rmSprL = null;
                     try { rmSprL = UI.LoadIconSprite("vpb_icons/delete.png", UI.SideRailIconGlyphTint); } catch { }
-                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, ToggleRemoveMode);
+                    GameObject leftRemoveModeBtn = UI.CreateUIButton(leftSideContainer, rmW, rmH, " ", 8, 0, startY - spacing * 10 - groupGap * 4, AnchorPresets.centre, () => ToggleRemoveMode(true, false));
                     leftRemoveModeSideBtn = leftRemoveModeBtn;
                     Image rmImgL = leftRemoveModeBtn.GetComponent<Image>();
                     Text rmTxtL = leftRemoveModeBtn.GetComponentInChildren<Text>(true);
@@ -1989,6 +2028,7 @@ namespace VPB
                     }
                     leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveMode(true, true));
                     AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
                 }
 
@@ -2003,7 +2043,7 @@ namespace VPB
                     leftSaveBtnGO = UI.CreateUIButton(leftSideContainer, saveW, saveH, " ", 8, 0, startY - spacing * 14 - groupGap * 4, AnchorPresets.centre, () => {
                         try
                         {
-                            ToggleSaveSubmenuFromSideButtons(true);
+                            ToggleSaveSubmenuFromSideButtons(PreferLeftSidePanelFromRail(true, false));
                         }
                         catch (Exception ex)
                         {
@@ -2026,6 +2066,10 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftSaveBtnGO.GetComponent<RectTransform>());
                     leftSaveBtnGO.SetActive(false);
+                    AddRightClickDelegate(leftSaveBtnGO, () => {
+                        try { ToggleSaveSubmenuFromSideButtons(PreferLeftSidePanelFromRail(true, true)); }
+                        catch (Exception ex) { LogUtil.LogError("[VPB] Save (Left RMB) exception: " + ex); }
+                    });
                     AddTooltip(leftSaveBtnGO, "gallery.tooltip.save_pane", "Save presets and related actions.");
                 }
 
@@ -2039,7 +2083,7 @@ namespace VPB
                         try
                         {
                             if (SuperController.singleton == null) return;
-                            ToggleAtomSubmenuFromSideButtons(true);
+                            ToggleAtomSubmenuFromSideButtons(PreferLeftSidePanelFromRail(true, false));
                         }
                         catch (Exception ex)
                         {
@@ -2068,6 +2112,17 @@ namespace VPB
                     }
                     leftSideButtons.Add(leftRemoveAtomBtn.GetComponent<RectTransform>());
                     leftRemoveAtomBtn.SetActive(false);
+                    AddRightClickDelegate(leftRemoveAtomBtn, () => {
+                        try
+                        {
+                            if (SuperController.singleton == null) return;
+                            ToggleAtomSubmenuFromSideButtons(PreferLeftSidePanelFromRail(true, true));
+                        }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogError("[VPB] Remove (scene) (Left RMB) exception: " + ex);
+                        }
+                    });
                     AddTooltip(leftRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
                 }
 
@@ -2079,7 +2134,7 @@ namespace VPB
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) return;
-                        ToggleClothingSubmenuFromSideButtons(target, true);
+                        ToggleClothingSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(true, false));
                     }
                     catch (Exception ex)
                     {
@@ -2108,6 +2163,18 @@ namespace VPB
                 }
                 leftSideButtons.Add(leftRemoveAllClothingBtn.GetComponent<RectTransform>());
                 leftRemoveAllClothingBtn.SetActive(false);
+                AddRightClickDelegate(leftRemoveAllClothingBtn, () => {
+                    try
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) return;
+                        ToggleClothingSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(true, true));
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Clothing (Left RMB) exception: " + ex);
+                    }
+                });
                 AddTooltip(leftRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
                 leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
@@ -2116,7 +2183,7 @@ namespace VPB
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) return;
-                        ToggleHairSubmenuFromSideButtons(target, true);
+                        ToggleHairSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(true, false));
                     }
                     catch (Exception ex)
                     {
@@ -2141,6 +2208,18 @@ namespace VPB
                 }
                 leftSideButtons.Add(leftRemoveAllHairBtn.GetComponent<RectTransform>());
                 leftRemoveAllHairBtn.SetActive(false);
+                AddRightClickDelegate(leftRemoveAllHairBtn, () => {
+                    try
+                    {
+                        Atom target = GetBestTargetAtom();
+                        if (target == null) return;
+                        ToggleHairSubmenuFromSideButtons(target, PreferLeftSidePanelFromRail(true, true));
+                    }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogError("[VPB] Remove Hair (Left RMB) exception: " + ex);
+                    }
+                });
                 AddTooltip(leftRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
 
 

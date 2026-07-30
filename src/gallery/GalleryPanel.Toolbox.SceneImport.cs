@@ -82,14 +82,7 @@ namespace VPB
                 ToggleImportSidebar();
                 return;
             }
-            bool preferLeftRail;
-            if (isFixedLocally)
-                preferLeftRail = !rightClick;
-            else if (rightClick)
-                preferLeftRail = !fromLeftRailButton;
-            else
-                preferLeftRail = fromLeftRailButton;
-            importSidebarForceOnLeft = preferLeftRail;
+            importSidebarForceOnLeft = PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick);
             if (selectedFiles != null && selectedFiles.Count == 1)
                 OpenImportSidebarWith(selectedFiles[0], SelectedTargetAtom);
             else

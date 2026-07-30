@@ -2663,22 +2663,10 @@ namespace VPB
             // Replace any older tooltip handler with dynamic one (state-aware).
             del.OnHoverChange = (enter) =>
             {
-                string tip = BuildUserTagInheritVarToChildrenTip();
                 if (enter)
-                {
-                    if (temporaryStatusCoroutine != null)
-                    {
-                        StopCoroutine(temporaryStatusCoroutine);
-                        temporaryStatusCoroutine = null;
-                    }
-                    temporaryStatusMsg = tip;
-                    temporaryStatusOwner = btnGo;
-                }
-                else if (temporaryStatusOwner == btnGo)
-                {
-                    temporaryStatusMsg = null;
-                    temporaryStatusOwner = null;
-                }
+                    SetHoverTooltip(BuildUserTagInheritVarToChildrenTip(), btnGo);
+                else
+                    ClearHoverTooltip(btnGo);
             };
         }
 

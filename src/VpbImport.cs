@@ -264,6 +264,9 @@ namespace VPB
 
                             TryApplyPluginsFromSource(presetManager, preset);
 
+                            try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
+                            catch (Exception ex) { LogUtil.LogWarning($"VpbImport: clothing custom texture resync schedule failed: {ex.Message}"); }
+
                             if (targetAtom.type == "Person")
                             {
                                 try { SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom); }
@@ -319,6 +322,15 @@ namespace VPB
                         {
                             try { ClothingLoadingUtils.RestoreClothingStorableSnapshots(targetAtom, keepClothingMaterialSnapshots); }
                             catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Keep clothing material restore failed: {ex.Message}"); }
+                        }
+
+                        // Issue #80: rebind custom clothing tex after settle — skip Keep (clothing
+                        // untouched; snapshot restore already reapplied materials). Avoids re-queue
+                        // of every garment texture on each look change.
+                        if (clothingMode != ClothingApplyMode.Keep)
+                        {
+                            try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
+                            catch (Exception ex) { LogUtil.LogWarning($"VpbImport: clothing custom texture resync schedule failed: {ex.Message}"); }
                         }
 
                         if (targetAtom.type == "Person")
@@ -419,6 +431,9 @@ namespace VPB
                         }
 
                         RestorePresetParamsSnapshot(targetAtom, snap);
+
+                        try { DAZClothingHook.ScheduleAtomCustomTextureResync(targetAtom); }
+                        catch (Exception ex) { LogUtil.LogWarning($"VpbImport: clothing custom texture resync schedule failed: {ex.Message}"); }
                     }
                     catch (Exception ex)
                     {

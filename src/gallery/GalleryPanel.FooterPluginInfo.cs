@@ -185,9 +185,7 @@ namespace VPB
         private void FooterPluginInfoUpdateHoverTooltip()
         {
             if (!_footerPluginInfoHovering || footerPluginInfoBtn == null) return;
-            StopCo(ref temporaryStatusCoroutine);
-            temporaryStatusMsg = BuildFooterPluginInfoHoverText();
-            temporaryStatusOwner = footerPluginInfoBtn;
+            SetHoverTooltip(BuildFooterPluginInfoHoverText(), footerPluginInfoBtn);
         }
 
         private void FooterPluginInfoPollHoverTooltip()
@@ -227,11 +225,7 @@ namespace VPB
                 {
                     _footerPluginInfoTooltipKey = int.MinValue;
                     FooterPluginInfoRefreshChrome();
-                    if (temporaryStatusOwner == go)
-                    {
-                        temporaryStatusMsg = null;
-                        temporaryStatusOwner = null;
-                    }
+                    ClearHoverTooltip(go);
                 }
             };
         }

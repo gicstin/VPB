@@ -440,9 +440,12 @@ namespace VPB
             if (temporaryStatusOwner != null && !temporaryStatusOwner.activeInHierarchy)
             {
                 // Hover owner went away without delivering an exit event; drop stale tooltip.
+                CancelStickyHoverTooltip();
                 temporaryStatusOwner = null;
                 temporaryStatusMsg = null;
             }
+
+            AdvanceStickyHoverTooltip();
 
             string finalStatus = null;
             if (dragStatusMsg != null)

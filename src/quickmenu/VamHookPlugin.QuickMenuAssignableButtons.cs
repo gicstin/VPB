@@ -173,6 +173,9 @@ namespace VPB
         private Image m_QmTooltipBackdrop;
         private string m_QmTooltipCurrent;
         private int m_QmTooltipHoverSlotIdx = -1;
+        // Same principle as gallery sticky tips: instant show, hide grace only (no fade).
+        private bool m_QmTooltipHidePending;
+        private float m_QmTooltipHideAt;
 
         private float m_QmFpsLastLabelUpdateTime = -999f;
         private string m_QmFpsCachedLabel = "";
@@ -386,6 +389,7 @@ namespace VPB
             m_QmTooltipText = t;
 
             // Start fully hidden (no backdrop shown until we have a message).
+            m_QmTooltipHidePending = false;
             QuickMenuUpdateTooltipVisual(forceHide: true);
         }
 
@@ -432,7 +436,11 @@ namespace VPB
         private void QuickMenuSetTooltip(string msg)
         {
             if (m_QmTooltipText == null) return;
-            m_QmTooltipCurrent = msg ?? "";
+            m_QmTooltipHidePending = false;
+            string next = msg ?? "";
+            // Skip layout rebuild when text unchanged (hide-grace cancel / same tip).
+            if (m_QmTooltipCurrent == next) return;
+            m_QmTooltipCurrent = next;
             m_QmTooltipText.text = m_QmTooltipCurrent;
             QuickMenuUpdateTooltipVisual();
         }
@@ -446,9 +454,25 @@ namespace VPB
                 QuickMenuSetTooltip(VPBTranslation.T("hook.qmtooltip.drag_assign", "Edit mode: drag an action from the list and drop it on a slot to assign."));
                 return;
             }
+            if (string.IsNullOrEmpty(m_QmTooltipCurrent))
+            {
+                m_QmTooltipHidePending = false;
+                return;
+            }
+            // Instant show stays; only clear is deferred (adjacent slot scrub).
+            m_QmTooltipHidePending = true;
+            m_QmTooltipHideAt = Time.unscaledTime + GalleryUiDesignTokens.TooltipHideGraceSec;
+        }
+
+        private void QuickMenuAdvanceTooltipHide()
+        {
+            if (!m_QmTooltipHidePending) return;
+            if (Time.unscaledTime < m_QmTooltipHideAt) return;
+            m_QmTooltipHidePending = false;
+            if (m_QmTooltipText == null) return;
             m_QmTooltipCurrent = "";
             m_QmTooltipText.text = "";
-            QuickMenuUpdateTooltipVisual();
+            QuickMenuUpdateTooltipVisual(forceHide: true);
         }
 
         private string QuickMenuGetTooltipForSlot(int idx)

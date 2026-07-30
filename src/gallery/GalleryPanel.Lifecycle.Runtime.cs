@@ -18,6 +18,8 @@ namespace VPB
 
         public void ShowTemporaryStatus(string msg, float duration = 2.0f)
         {
+            // Action feedback bypasses sticky dwell — Doherty immediate ack.
+            CancelStickyHoverTooltip();
             temporaryStatusMsg = msg;
             temporaryStatusOwner = null;
             if (temporaryStatusCoroutine != null) StopCoroutine(temporaryStatusCoroutine);

@@ -185,6 +185,47 @@ namespace VPB
             return d.ToString("0.0") + " " + suffix[i];
         }
 
+        /// <summary>
+        /// Compact integer for dense chrome (scrub index, badges). Warm/cold only.
+        /// 999 → "999"; 1000 → "1K"; 1200 → "1.2K"; 12_000 → "12K"; 1_000_000 → "1M".
+        /// </summary>
+        private static string FormatCompactCount(int value)
+        {
+            if (value < 0) value = 0;
+            if (value < 1000) return value.ToString();
+
+            if (value < 10000)
+            {
+                // Round to 0.1K for 1.0K..9.9K
+                int tenths = (value + 50) / 100;
+                int whole = tenths / 10;
+                int frac = tenths % 10;
+                if (whole >= 10) return "10K";
+                if (frac == 0) return whole.ToString() + "K";
+                return whole.ToString() + "." + frac.ToString() + "K";
+            }
+
+            if (value < 1000000)
+            {
+                int k = (value + 500) / 1000;
+                if (k >= 1000) return "1M";
+                return k.ToString() + "K";
+            }
+
+            if (value < 10000000)
+            {
+                int tenths = (value + 50000) / 100000;
+                int whole = tenths / 10;
+                int frac = tenths % 10;
+                if (whole >= 10) return "10M";
+                if (frac == 0) return whole.ToString() + "M";
+                return whole.ToString() + "." + frac.ToString() + "M";
+            }
+
+            int m = (value + 500000) / 1000000;
+            return m.ToString() + "M";
+        }
+
         private static void AddBorderEdge(GameObject parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
         {
             AddBorderEdge(parent, anchorMin, anchorMax, pivot, sizeDelta, Color.white);
@@ -333,8 +374,20 @@ namespace VPB
 
         private void CloseSidePane(bool isLeft)
         {
+            ContentType? closing = isLeft ? leftActiveContent : rightActiveContent;
             if (isLeft) leftActiveContent = leftPrevActiveContent;
             else rightActiveContent = rightPrevActiveContent;
+
+            // Remove Mode's layout sync would reopen the remove list unless we mark dismiss.
+            if (_removeModeActive
+                && closing.HasValue
+                && (closing.Value == ContentType.RemoveClothing
+                    || closing.Value == ContentType.RemoveHair
+                    || closing.Value == ContentType.RemoveAtom))
+                _removeModeSiderailDismissed = true;
+
+            // SyncSideRailChrome (inside UpdateLayout) is what hides the tab scroll column.
+            UpdateLayout();
             UpdateTabs();
         }
 

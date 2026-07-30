@@ -1885,5 +1885,308 @@ namespace VPB
 
             return false;
         }
+
+        /// <summary>
+        /// Issue #80: re-bind MaterialOptions customTexture* after clothing materials settle.
+        /// During scene launch, early passes can look correct then get wiped when settle reconnects
+        /// materials (GPU scale falls back to 1 → overstretched custom). Wait out scene-load, then
+        /// re-apply URL Reload + tile/offset Sync.
+        /// </summary>
+        internal static IEnumerator DeferredClothingItemCustomTextureResyncCoroutine(
+            DAZClothingItem item,
+            Action onComplete)
+        {
+            try
+            {
+                while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
+                    yield return null;
+
+                for (int i = 0; i < 5; i++)
+                    yield return new WaitForEndOfFrame();
+                yield return new WaitForSeconds(0.2f);
+
+                if (item != null && item.active)
+                    ResyncCustomTexturesUnder(item.transform);
+
+                // Cloth plugins / skin-wrap often reconnect shortly after load idle.
+                yield return new WaitForSeconds(0.5f);
+
+                if (item != null && item.active)
+                {
+                    // Second pass: tiles/offsets only unless URL bind still needed — avoid
+                    // double-queue of every custom tex when first pass already rebound from cache.
+                    ResyncCustomTextureTilesUnder(item.transform);
+                }
+            }
+            finally
+            {
+                if (onComplete != null)
+                {
+                    try { onComplete(); } catch { }
+                }
+            }
+        }
+
+        internal static IEnumerator DeferredAtomClothingCustomTextureResyncCoroutine(
+            Atom atom,
+            Action onComplete)
+        {
+            try
+            {
+                while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
+                    yield return null;
+
+                for (int i = 0; i < 5; i++)
+                    yield return new WaitForEndOfFrame();
+                yield return new WaitForSeconds(0.25f);
+
+                if (atom != null)
+                    ResyncActiveClothingCustomTextures(atom);
+
+                yield return new WaitForSeconds(0.5f);
+
+                if (atom != null)
+                    ResyncActiveClothingCustomTextureTiles(atom);
+            }
+            finally
+            {
+                if (onComplete != null)
+                {
+                    try { onComplete(); } catch { }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Scene-load total end: materials/cloth settle after our early OnLoadComplete passes.
+        /// One cache-friendly rebind so tiles stick on final GPU materials (no forceReload decode).
+        /// </summary>
+        internal static IEnumerator DeferredPostSceneLoadClothingCustomTextureResyncCoroutine()
+        {
+            for (int i = 0; i < 3; i++)
+                yield return new WaitForEndOfFrame();
+            yield return new WaitForSeconds(0.35f);
+
+            ResyncAllPersonClothingCustomTextures();
+
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForSeconds(0.15f);
+            ResyncAllPersonClothingCustomTextureTiles();
+        }
+
+        internal static void ResyncAllPersonClothingCustomTextures()
+        {
+            if (SuperController.singleton == null) return;
+            List<Atom> atoms = null;
+            try { atoms = SuperController.singleton.GetAtoms(); } catch { }
+            if (atoms == null) return;
+
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                Atom atom = atoms[i];
+                if (atom == null) continue;
+                if (!string.Equals(atom.type, "Person", StringComparison.OrdinalIgnoreCase)) continue;
+                ResyncActiveClothingCustomTextures(atom);
+            }
+        }
+
+        internal static void ResyncAllPersonClothingCustomTextureTiles()
+        {
+            if (SuperController.singleton == null) return;
+            List<Atom> atoms = null;
+            try { atoms = SuperController.singleton.GetAtoms(); } catch { }
+            if (atoms == null) return;
+
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                Atom atom = atoms[i];
+                if (atom == null) continue;
+                if (!string.Equals(atom.type, "Person", StringComparison.OrdinalIgnoreCase)) continue;
+                ResyncActiveClothingCustomTextureTiles(atom);
+            }
+        }
+
+        internal static void ResyncActiveClothingCustomTextures(Atom atom)
+        {
+            if (atom == null) return;
+
+            DAZCharacterSelector sel = null;
+            try { sel = atom.GetComponentInChildren<DAZCharacterSelector>(true); } catch { }
+            if (sel == null) return;
+
+            DAZClothingItem[] items = null;
+            try { items = sel.clothingItems; } catch { }
+            if (items == null) return;
+
+            for (int i = 0; i < items.Length; i++)
+            {
+                DAZClothingItem item = items[i];
+                if (item == null || !item.active) continue;
+                ResyncCustomTexturesUnder(item.transform);
+            }
+        }
+
+        internal static void ResyncActiveClothingCustomTextureTiles(Atom atom)
+        {
+            if (atom == null) return;
+
+            DAZCharacterSelector sel = null;
+            try { sel = atom.GetComponentInChildren<DAZCharacterSelector>(true); } catch { }
+            if (sel == null) return;
+
+            DAZClothingItem[] items = null;
+            try { items = sel.clothingItems; } catch { }
+            if (items == null) return;
+
+            for (int i = 0; i < items.Length; i++)
+            {
+                DAZClothingItem item = items[i];
+                if (item == null || !item.active) continue;
+                ResyncCustomTextureTilesUnder(item.transform);
+            }
+        }
+
+        internal static void ResyncCustomTexturesUnder(Transform root)
+        {
+            if (root == null) return;
+
+            MaterialOptions[] mos = null;
+            try { mos = root.GetComponentsInChildren<MaterialOptions>(true); } catch { }
+            if (mos == null || mos.Length == 0) return;
+
+            for (int i = 0; i < mos.Length; i++)
+            {
+                MaterialOptions mo = mos[i];
+                if (mo == null) continue;
+                ReloadMaterialOptionsCustomTextures(mo);
+                ResyncMaterialOptionsCustomTextureTiles(mo);
+            }
+        }
+
+        internal static void ResyncCustomTextureTilesUnder(Transform root)
+        {
+            if (root == null) return;
+
+            MaterialOptions[] mos = null;
+            try { mos = root.GetComponentsInChildren<MaterialOptions>(true); } catch { }
+            if (mos == null || mos.Length == 0) return;
+
+            for (int i = 0; i < mos.Length; i++)
+            {
+                MaterialOptions mo = mos[i];
+                if (mo == null) continue;
+                ResyncMaterialOptionsCustomTextureTiles(mo);
+            }
+        }
+
+        /// <summary>
+        /// Re-invoke SyncCustomTexture* without JSONStorableUrl.Reload.
+        /// Reload sets valueSetFromBrowse → forceReload → VPB evicts cache and VaM redecodes
+        /// (slow on every appearance Keep). Plain callback rebinds GPU from RAM/disk cache.
+        /// </summary>
+        internal static void ReloadMaterialOptionsCustomTextures(MaterialOptions mo)
+        {
+            if (mo == null) return;
+
+            List<string> names = null;
+            try { names = mo.GetUrlParamNames(); } catch { }
+            if (names == null || names.Count == 0) return;
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string name = names[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                if (name.IndexOf("customTexture", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                JSONStorableUrl url = null;
+                try { url = mo.GetUrlJSONParam(name); } catch { }
+                if (url == null) continue;
+
+                string val = null;
+                try { val = url.val; } catch { }
+                if (string.IsNullOrEmpty(val)) continue;
+                if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
+
+                try { ForceUrlCallback(url); }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB] custom texture rebind failed for " + name + ": " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Re-fire Tile/Offset Sync without changing stored values. After material reconnect,
+        /// GPU scale often falls back to 1 while JSON still shows 20 — looks overstretched.
+        /// </summary>
+        internal static void ResyncMaterialOptionsCustomTextureTiles(MaterialOptions mo)
+        {
+            if (mo == null) return;
+
+            List<string> names = null;
+            try { names = mo.GetFloatParamNames(); } catch { }
+            if (names == null || names.Count == 0) return;
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string name = names[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                if (name.IndexOf("customTexture", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                bool isTile = name.IndexOf("Tile", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isOffset = name.IndexOf("Offset", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isTile && !isOffset) continue;
+
+                JSONStorableFloat f = null;
+                try { f = mo.GetFloatJSONParam(name); } catch { }
+                if (f == null) continue;
+
+                try { ForceFloatCallback(f); }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB] custom texture tile/offset resync failed for " + name + ": " + ex.Message);
+                }
+            }
+        }
+
+        static void ForceUrlCallback(JSONStorableUrl url)
+        {
+            if (url == null) return;
+            // Intentionally leave valueSetFromBrowse false so QueueCustomTexture gets forceReload=false.
+            try
+            {
+                if (url.setJSONCallbackFunction != null)
+                {
+                    url.setJSONCallbackFunction(url);
+                    return;
+                }
+            }
+            catch { }
+
+            try
+            {
+                if (url.setCallbackFunction != null)
+                    url.setCallbackFunction(url.val);
+            }
+            catch { }
+        }
+
+        static void ForceFloatCallback(JSONStorableFloat f)
+        {
+            if (f == null) return;
+            float v = f.val;
+            try
+            {
+                if (f.setCallbackFunction != null)
+                    f.setCallbackFunction(v);
+            }
+            catch { }
+
+            try
+            {
+                if (f.setJSONCallbackFunction != null)
+                    f.setJSONCallbackFunction(f);
+            }
+            catch { }
+        }
     }
 }

@@ -41,6 +41,11 @@ namespace VPB
         public const int TitleFontRef = FontRef;
         public const int FpsFontRef = FontRef;
         public const int StatusBarFontRef = FontRef;
+        /// <summary>
+        /// Shared hide grace for gallery info-bar + quick-menu assignable tips.
+        /// Instant show / tip→tip; delay clear only so exit→enter on adjacent targets does not blink.
+        /// </summary>
+        public const float TooltipHideGraceSec = 0.12f;
         public const int CollapseArrowFontRef = FontRef;
         public const int TitleBarChipFontRef = FontRef;
         public const int TitleBarRatingFontRef = FontRef;
@@ -121,6 +126,12 @@ namespace VPB
         public const float FooterDetailStripBandGapRef = 1f;
         /// <summary>Detail-strip thumb edge cap (square); must stay ≥ strip max so preview stays flush.</summary>
         public const float FooterDetailStripThumbMaxRef = FooterDetailStripHeightRef;
+        /// <summary>Prev/next overlay on thumb — same size as gallery chrome buttons.</summary>
+        public const float FooterDetailStripThumbNavBtnRef = ButtonSizeRef;
+        /// <summary>Edge inset for thumb nav overlay buttons (design px at scale 1).</summary>
+        public const float FooterDetailStripThumbNavInsetRef = 4f;
+        /// <summary>Scrub index chip height on thumb (n/N) — match button chrome.</summary>
+        public const float FooterDetailStripThumbScrubIndexHRef = ButtonSizeRef;
         /// <summary>Top drag grip hit height (sits above strip content, not over it).</summary>
         public const float FooterDetailStripResizeGripRef = 14f;
         /// <summary>Center grab-handle size inside the resize grip.</summary>

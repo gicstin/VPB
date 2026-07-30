@@ -206,21 +206,32 @@ namespace VPB
         private bool _removeHelpShown;
         private string _removeHelpCached;
 
+        // Which rail opened remove mode — keep siderail on that side in VR/floating (not isFixedLocally).
+        private bool _removeModeSiderailUseLeft;
+        // User closed remove list while mode still on — stop layout from forcing it back open.
+        private bool _removeModeSiderailDismissed;
+        private ContentType? _removeModeSiderailLastWant;
+
         // Floating "Remove <type>: <name>" popup that follows the desktop pointer while hovering.
         private GameObject _removePopupGO;
         private RectTransform _removePopupRT;
         private Text _removePopupText;
 
-        internal void ToggleRemoveMode()
+        /// <param name="fromLeftRailButton">Which rail button was pressed.</param>
+        /// <param name="rightClick">True for RMB; only affects side when docked.</param>
+        internal void ToggleRemoveMode(bool fromLeftRailButton, bool rightClick = false)
         {
             if (_removeModeActive) RemoveModeExit();
-            else RemoveModeEnter();
+            else RemoveModeEnter(PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick));
         }
 
-        private void RemoveModeEnter()
+        private void RemoveModeEnter(bool useLeftSide)
         {
             _removeModeActive = true;
             _removeModeOwner = this;
+            _removeModeSiderailUseLeft = useLeftSide;
+            _removeModeSiderailDismissed = false;
+            _removeModeSiderailLastWant = null;
             if (_removeHighlight == null) _removeHighlight = new RemoveModeHighlight();
             _removeHighlightedIdentity = null;
             _wrapGeomCache.Clear();
@@ -233,6 +244,8 @@ namespace VPB
         {
             _removeModeActive = false;
             if (ReferenceEquals(_removeModeOwner, this)) _removeModeOwner = null;
+            _removeModeSiderailDismissed = false;
+            _removeModeSiderailLastWant = null;
             _wrapGeomCache.Clear();
             RemoveModeClearHighlight();
             RemoveModeClearHelp();
@@ -260,7 +273,15 @@ namespace VPB
             ContentType want = isClothing ? ContentType.RemoveClothing
                 : (isHair ? ContentType.RemoveHair : ContentType.RemoveAtom);
 
-            bool useLeft = isFixedLocally;
+            // Category change while mode on: allow reopen. Same list after user Close: stay closed.
+            if (!_removeModeSiderailLastWant.HasValue || _removeModeSiderailLastWant.Value != want)
+            {
+                _removeModeSiderailLastWant = want;
+                _removeModeSiderailDismissed = false;
+            }
+            if (_removeModeSiderailDismissed) return;
+
+            bool useLeft = _removeModeSiderailUseLeft;
             if (useLeft)
             {
                 if (leftActiveContent == want) return;

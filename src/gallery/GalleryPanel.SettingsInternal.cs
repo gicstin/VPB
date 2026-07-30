@@ -1191,8 +1191,8 @@ namespace VPB
                 SetBool = v => { VPBConfig.Instance.GalleryGridLabelsEnabled = v; RebuildGridLayout(); }
             });
             defs.Add(new InternalSettingDefinition {
-                Key = "grid.hoverBadges", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_badges", "Hover rating star"),
-                Tooltip = VPBTranslation.T("settings.tip.grid_hover_badges", "Show rating star on grid hover for quick rate. Off keeps dense grids faster."),
+                Key = "grid.hoverBadges", GroupKey = "grid", Label = VPBTranslation.T("settings.grid_hover_badges", "Hover rating digit"),
+                Tooltip = VPBTranslation.T("settings.tip.grid_hover_badges", "Show colored rating digit on grid hover for quick rate. Off keeps dense grids faster."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.GalleryGridHoverBadgesEnabled,
                 SetBool = v => { VPBConfig.Instance.GalleryGridHoverBadgesEnabled = v; VPBConfig.Instance.TriggerChange(); }
             });

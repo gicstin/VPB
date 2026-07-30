@@ -200,7 +200,7 @@ namespace VPB
         }
         /// <summary>True keeps target atom's current scale when an Appearance preset is applied (both toolbox and drag-drop). Default false.</summary>
         public bool SuppressAppearanceScaleChange { get; set; } = false;
-        /// <summary>Persisted import-sidebar toggle state (suppress-clothing, only-suppress-real, sub-toggles, last type). See GalleryPanel.ImportSidebar.cs Load/SaveImportSidebarPrefs.</summary>
+        /// <summary>Persisted import-sidebar state (open, onLeft, suppress-clothing, only-suppress-real, sub-toggles, last type). See GalleryPanel.ImportSidebar.cs Load/SaveImportSidebarPrefs.</summary>
         public JSONClass ImportSidebarPrefs = new JSONClass();
         /// <summary>When true, suppresses CheesyFX NullReferenceException spam in Unity/BepInEx logs (broken Update loops).</summary>
         public bool SuppressCheesyFxNullReferenceLogs = true;

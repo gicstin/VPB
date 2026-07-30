@@ -1459,11 +1459,13 @@ namespace VPB
                 if (leftActiveContent == ContentType.RemoveAtom)
                 {
                     leftActiveContent = leftPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     leftPrevActiveContent = leftActiveContent;
                     leftActiveContent = ContentType.RemoveAtom;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             else
@@ -1471,11 +1473,13 @@ namespace VPB
                 if (rightActiveContent == ContentType.RemoveAtom)
                 {
                     rightActiveContent = rightPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     rightPrevActiveContent = rightActiveContent;
                     rightActiveContent = ContentType.RemoveAtom;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             UpdateLayout();
@@ -1608,11 +1612,13 @@ namespace VPB
                 if (leftActiveContent == ContentType.RemoveHair)
                 {
                     leftActiveContent = leftPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     leftPrevActiveContent = leftActiveContent;
                     leftActiveContent = ContentType.RemoveHair;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             else
@@ -1620,11 +1626,13 @@ namespace VPB
                 if (rightActiveContent == ContentType.RemoveHair)
                 {
                     rightActiveContent = rightPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     rightPrevActiveContent = rightActiveContent;
                     rightActiveContent = ContentType.RemoveHair;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             UpdateLayout();

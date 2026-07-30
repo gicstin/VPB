@@ -2098,7 +2098,7 @@ namespace VPB
             ratingRT.sizeDelta = new Vector2(40, 40);
             ratingRT.anchoredPosition = new Vector2(-2, -2);
 
-            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 32, 32, "★", 20, 0, 0, AnchorPresets.middleCenter, null);
+            GameObject starBtnGO = UI.CreateUIButton(ratingGO, 32, 32, "0", 20, 0, 0, AnchorPresets.middleCenter, null);
             starBtnGO.name = "Star";
             starBtnGO.GetComponent<Button>().navigation = new Navigation { mode = Navigation.Mode.None };
             Text starIconText = starBtnGO.GetComponentInChildren<Text>();
@@ -2753,7 +2753,7 @@ namespace VPB
         {
             int badgeFont = UiMetrics.FontBody();
             digitFont = Mathf.Max(badgeFont + 2, Mathf.RoundToInt(badgeFont * 1.15f));
-            // Square chrome hugs digit/★ — old letterBadge*1.3 left empty band above/below glyph.
+            // Square chrome hugs colored digit — old letterBadge*1.3 left empty band above/below glyph.
             ratingBadge = Mathf.Max(24f, digitFont + 6f);
             edge = Mathf.Max(4f, Mathf.Round(ratingBadge * 0.15f));
         }
@@ -2766,7 +2766,7 @@ namespace VPB
             AddTooltipPlain(badgeGO, tip);
         }
 
-        /// <summary>Grid hover: show top-right rating star for quick rate. Other badges stay on detail strip.</summary>
+        /// <summary>Grid hover: show top-right colored rating digit for quick rate. Other badges stay on detail strip.</summary>
         internal void ShowGridHoverBadges(GameObject btnGO, FileEntry file)
         {
             if (btnGO == null || file == null) return;
@@ -2858,6 +2858,7 @@ namespace VPB
                 if (rh != null)
                 {
                     rh.panel = this;
+                    // Digit+color always — same pattern as list / creator ratings.
                     rh.SetShowDigitMode(true);
                     // Don't close if picker already open (re-enter / tooltip child hops).
                     if (!rh.IsSelectorOpen)
@@ -2876,7 +2877,7 @@ namespace VPB
             _gridHoverBadgeBtnGO = btnGO;
         }
 
-        /// <summary>Grid hover exit / recycle: deactivate rating star on this cell. No-op outside grid.</summary>
+        /// <summary>Grid hover exit / recycle: deactivate rating badge on this cell. No-op outside grid.</summary>
         /// <param name="force">Recycle/disable must force-close even if rating picker is open.</param>
         internal void HideGridHoverBadges(GameObject btnGO, bool force = false)
         {
@@ -2891,10 +2892,7 @@ namespace VPB
             try
             {
                 if (rh != null)
-                {
                     rh.CloseSelector();
-                    rh.SetShowDigitMode(false);
-                }
             }
             catch { }
 
@@ -3800,8 +3798,8 @@ namespace VPB
                 if (rh != null && selector2Tr != null && starText != null)
                 {
                     rh.Init(file, starText, selector2Tr.gameObject);
-                    // Recycled grid-hover cells may leave digit mode on — list/bind always use ★.
-                    rh.SetShowDigitMode(false);
+                    // Colored digit always (list + grid) — never color-only ★.
+                    rh.SetShowDigitMode(true);
                 }
             }
 

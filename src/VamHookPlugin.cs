@@ -1148,6 +1148,9 @@ namespace VPB
             // Live preview: reposition the quick-menu grid when the anchor setting changes.
             // (Do this every frame; the helper is internally throttled.)
             try { QuickMenuUpdateGridLayoutLive(); } catch { }
+
+            // Assignable-button tip hide grace (instant show; deferred clear only).
+            try { QuickMenuAdvanceTooltipHide(); } catch { }
         }
 
 

@@ -16,6 +16,7 @@ namespace VPB
         private RectTransform _rightSideRailOverflowBtnRT;
         private GameObject _sideRailOverflowMenuGO;
         private bool _sideRailOverflowOpen;
+        private bool _sideRailOverflowOpenedFromLeft;
         private readonly List<int> _sideRailOverflowCollapsedIdx = new List<int>(16);
         private float _sideRailFitSpacing = GalleryUiDesignTokens.SideButtonSpacingRef;
         private float _sideRailFitGroupGap;
@@ -35,7 +36,7 @@ namespace VPB
                     GalleryUiDesignTokens.TitleBarOverflowFontRef,
                     0, 0,
                     AnchorPresets.middleCenter,
-                    ToggleSideRailOverflowMenu);
+                    () => ToggleSideRailOverflowMenu(true));
                 _leftSideRailOverflowBtnGO.name = "LeftSideRailOverflowBtn";
                 _leftSideRailOverflowBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
                 _leftSideRailOverflowBtnRT = _leftSideRailOverflowBtnGO.GetComponent<RectTransform>();
@@ -54,7 +55,7 @@ namespace VPB
                     GalleryUiDesignTokens.TitleBarOverflowFontRef,
                     0, 0,
                     AnchorPresets.middleCenter,
-                    ToggleSideRailOverflowMenu);
+                    () => ToggleSideRailOverflowMenu(false));
                 _rightSideRailOverflowBtnGO.name = "RightSideRailOverflowBtn";
                 _rightSideRailOverflowBtnGO.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
                 _rightSideRailOverflowBtnRT = _rightSideRailOverflowBtnGO.GetComponent<RectTransform>();
@@ -297,23 +298,25 @@ namespace VPB
             {
                 int idx = _sideRailOverflowCollapsedIdx[i];
                 if (!TryGetSideRailButtonPair(idx, out RectTransform left, out RectTransform right)) continue;
-                GameObject go = left != null ? left.gameObject : (right != null ? right.gameObject : null);
-                if (go == null) continue;
+                GameObject invokeGo = _sideRailOverflowOpenedFromLeft
+                    ? (left != null ? left.gameObject : (right != null ? right.gameObject : null))
+                    : (right != null ? right.gameObject : (left != null ? left.gameObject : null));
+                if (invokeGo == null) continue;
 
-                string label = ResolveSideRailOverflowLabel(go);
-                Sprite icon = UI.GetButtonIconSprite(go);
-                GameObject invokeGo = go;
+                string label = ResolveSideRailOverflowLabel(invokeGo);
+                Sprite icon = UI.GetButtonIconSprite(invokeGo);
+                GameObject capturedInvoke = invokeGo;
                 GameObject row = UI.AddStretchPopupMenuRow(panel, label, () =>
                 {
                     CloseSideRailOverflowMenu();
                     try
                     {
-                        Button b = invokeGo.GetComponent<Button>();
+                        Button b = capturedInvoke.GetComponent<Button>();
                         if (b != null) b.onClick.Invoke();
                     }
                     catch { }
                 }, icon: icon);
-                if (row != null && TryResolveSideRailOverflowTooltip(go, out string tipKey, out string tipDefault))
+                if (row != null && TryResolveSideRailOverflowTooltip(invokeGo, out string tipKey, out string tipDefault))
                     AddTooltip(row, tipKey, tipDefault);
             }
         }
@@ -499,12 +502,13 @@ namespace VPB
                 || SideRailGoIs(go, textA, textB);
         }
 
-        private void ToggleSideRailOverflowMenu()
+        private void ToggleSideRailOverflowMenu(bool fromLeftRail)
         {
             if (_sideRailOverflowMenuGO == null) return;
             _sideRailOverflowOpen = !_sideRailOverflowOpen;
             if (_sideRailOverflowOpen)
             {
+                _sideRailOverflowOpenedFromLeft = fromLeftRail;
                 Transform panel = _sideRailOverflowMenuGO.transform.Find("OverflowMenuPanel");
                 if (panel != null) RebuildSideRailOverflowMenuRows(panel);
                 try { RescaleSideRailOverflowMenuInternal(ChromeScale); } catch { }
@@ -525,11 +529,16 @@ namespace VPB
             RectTransform overlayRT = _sideRailOverflowMenuGO.GetComponent<RectTransform>();
             if (overlayRT == null) return;
 
-            RectTransform anchor = null;
-            if (_rightSideRailOverflowBtnRT != null && _rightSideRailOverflowBtnGO != null && _rightSideRailOverflowBtnGO.activeSelf)
-                anchor = _rightSideRailOverflowBtnRT;
-            else if (_leftSideRailOverflowBtnRT != null && _leftSideRailOverflowBtnGO != null && _leftSideRailOverflowBtnGO.activeSelf)
-                anchor = _leftSideRailOverflowBtnRT;
+            RectTransform anchor = _sideRailOverflowOpenedFromLeft
+                ? _leftSideRailOverflowBtnRT
+                : _rightSideRailOverflowBtnRT;
+            if (anchor == null || anchor.gameObject == null || !anchor.gameObject.activeSelf)
+            {
+                if (_rightSideRailOverflowBtnRT != null && _rightSideRailOverflowBtnGO != null && _rightSideRailOverflowBtnGO.activeSelf)
+                    anchor = _rightSideRailOverflowBtnRT;
+                else if (_leftSideRailOverflowBtnRT != null && _leftSideRailOverflowBtnGO != null && _leftSideRailOverflowBtnGO.activeSelf)
+                    anchor = _leftSideRailOverflowBtnRT;
+            }
             if (anchor == null) return;
 
             float s = ChromeScale <= 0f ? 1f : ChromeScale;

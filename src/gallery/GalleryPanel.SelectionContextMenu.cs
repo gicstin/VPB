@@ -876,18 +876,18 @@ namespace VPB
             }
             catch { }
 
-            // Grid layout: rate selected package(s) in one action (list view keeps per-row ★ control).
+            // Grid layout: rate selected package(s) in one action (list view keeps per-row digit control).
             {
                 Color gridRateBackdrop = new Color(0.34f, 0.27f, 0.14f, 0.96f);
                 tboxGridRateBtn = UI.CreateUIButton(
                     tboxBtnRow0GO, 0, 0,
-                    "", tboxActionBtnFont,
+                    "0", tboxActionBtnFont,
                     0, 0, AnchorPresets.stretchAll,
                     null
                 );
                 tboxGridRateBtn.name = "Tbox_GridRate";
                 TboxConfigureActionButtonFlex(tboxGridRateBtn, innerRowH, innerRowH, innerRowH);
-                AddTooltip(tboxGridRateBtn, "gallery.tooltip.tbox_grid_rate", "Rate selected packages (0–5 applies to all selected items).");
+                AddTooltip(tboxGridRateBtn, "gallery.tooltip.tbox_grid_rate", "Rate selected packages (0–5 applies to all selected items). Colored digit shows value.");
                 try
                 {
                     var starSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white);
@@ -895,6 +895,17 @@ namespace VPB
                     {
                         UI.AddIconToButton(tboxGridRateBtn, starSpr, padding: 6f, backdropOverride: gridRateBackdrop);
                         tboxGridRateIconImage = tboxGridRateBtn.transform.Find("Icon")?.GetComponent<Image>();
+                        // Digit is primary — re-show Text that AddIconToButton hid; star stays watermark.
+                        Text digitLabel = tboxGridRateBtn.GetComponentInChildren<Text>(true);
+                        if (digitLabel != null)
+                        {
+                            digitLabel.gameObject.SetActive(true);
+                            digitLabel.fontStyle = FontStyle.Bold;
+                            digitLabel.raycastTarget = false;
+                            digitLabel.transform.SetAsLastSibling();
+                        }
+                        if (tboxGridRateIconImage != null)
+                            tboxGridRateIconImage.color = new Color(1f, 1f, 1f, 0.18f);
                     }
                 }
                 catch { }
@@ -2500,6 +2511,7 @@ namespace VPB
             }
             tboxGridRateHandler.panel = this;
             tboxGridRateHandler.Init(stableId ?? "", txt, tboxGridRateSelectorGO);
+            tboxGridRateHandler.SetShowDigitMode(true);
             tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
             if (tboxGridRateIconImage != null)
                 tboxGridRateHandler.BindStarIcon(tboxGridRateIconImage);
@@ -2899,22 +2911,15 @@ namespace VPB
                 {
                     tboxCopyNamesTooltipHovered = true;
 
-                    if (temporaryStatusCoroutine != null)
-                    {
-                        StopCoroutine(temporaryStatusCoroutine);
-                        temporaryStatusCoroutine = null;
-                    }
-
                     if (tboxCopyNamesTooltipCo != null)
                     {
                         StopCoroutine(tboxCopyNamesTooltipCo);
                         tboxCopyNamesTooltipCo = null;
                     }
 
-                    // Set immediately, then keep it responsive to Ctrl/Shift state while hovered.
+                    // Instant show; hide grace bridges adjacent targets. Modifier updates stay live while hovered.
                     tboxCopyNamesTooltipLast = GetCopyNamesTooltipText(IsCtrlHeld(), IsShiftHeld());
-                    temporaryStatusMsg = tboxCopyNamesTooltipLast;
-                    temporaryStatusOwner = tboxCopyPkgNamesBtn;
+                    SetHoverTooltip(tboxCopyNamesTooltipLast, tboxCopyPkgNamesBtn);
                     tboxCopyNamesTooltipCo = StartCoroutine(CopyNamesTooltipCoroutine());
                 }
                 else
@@ -2926,10 +2931,7 @@ namespace VPB
                         tboxCopyNamesTooltipCo = null;
                     }
 
-                    // Only clear if we still own the tooltip text.
-                    if (!string.IsNullOrEmpty(tboxCopyNamesTooltipLast) && temporaryStatusMsg == tboxCopyNamesTooltipLast)
-                        temporaryStatusMsg = null;
-                    if (temporaryStatusOwner == tboxCopyPkgNamesBtn) temporaryStatusOwner = null;
+                    ClearHoverTooltip(tboxCopyPkgNamesBtn);
                     tboxCopyNamesTooltipLast = null;
                 }
             }
@@ -2948,10 +2950,11 @@ namespace VPB
                 if (!string.IsNullOrEmpty(msg) && msg != tboxCopyNamesTooltipLast)
                 {
                     // Only replace if we still own the tooltip slot.
-                    if (temporaryStatusMsg == tboxCopyNamesTooltipLast || string.IsNullOrEmpty(temporaryStatusMsg))
+                    if (temporaryStatusOwner == tboxCopyPkgNamesBtn
+                        || _stickyTipDesiredOwner == tboxCopyPkgNamesBtn
+                        || string.IsNullOrEmpty(temporaryStatusMsg))
                     {
-                        temporaryStatusMsg = msg;
-                        temporaryStatusOwner = tboxCopyPkgNamesBtn;
+                        SetHoverTooltip(msg, tboxCopyPkgNamesBtn);
                         tboxCopyNamesTooltipLast = msg;
                     }
                     else

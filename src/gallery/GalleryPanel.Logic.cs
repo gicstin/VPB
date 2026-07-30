@@ -3590,7 +3590,7 @@ namespace VPB
         }
 
         /// <summary>
-        /// Push appearance-capable undo for a person atom (morphs/skin/clothing/hair).
+        /// Push appearance-capable undo for a person atom (morphs/skin/clothing/hair/scale).
         /// Cold path — selective storable GetJSON, not full Atom.Store (Store stalls large persons).
         /// </summary>
         public void PushUndoAtomSnapshot(Atom atom)
@@ -3620,6 +3620,7 @@ namespace VPB
             // Full Atom.Store was correct but multi-second on clothed persons (and Serialize of the
             // dump). Selective GetJSON is enough for Undo of appearance/skin/morphs: morph banks live
             // on geometry (must include — old code skipped it and Undo left morphs stuck).
+            // rescaleObject holds person height/scale — without it Undo keeps post-import scale.
             bool ShouldSnapshotAdditionalStorableId(string sid)
             {
                 if (string.IsNullOrEmpty(sid)) return false;
@@ -3633,6 +3634,7 @@ namespace VPB
                 if (sid.IndexOf("Physics", StringComparison.OrdinalIgnoreCase) >= 0) return false;
                 if (sid.IndexOf("AutoCollider", StringComparison.OrdinalIgnoreCase) >= 0) return false;
                 if (string.Equals(sid, "geometry", StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(sid, "rescaleObject", StringComparison.OrdinalIgnoreCase)) return true;
                 if (string.Equals(sid, "Skin", StringComparison.OrdinalIgnoreCase)) return true;
                 if (sid.IndexOf("skin", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 if (sid.IndexOf("texture", StringComparison.OrdinalIgnoreCase) >= 0) return true;
@@ -3690,6 +3692,8 @@ namespace VPB
                 if (targetAtom == null) return;
 
                 // Geometry/skin/morphs first, then clothing/hair (toggles + item materials win last).
+                // rescaleObject restored after those so Undo returns pre-import height/scale.
+                JSONClass rescaleSnap = null;
                 try
                 {
                     for (int i = 0; i < additionalStorableSnapshots.Count; i++)
@@ -3700,6 +3704,11 @@ namespace VPB
                         try { sid = snap["id"].Value; } catch { sid = null; }
                         if (string.IsNullOrEmpty(sid)) continue;
                         if (!ShouldSnapshotAdditionalStorableId(sid)) continue;
+                        if (string.Equals(sid, "rescaleObject", StringComparison.OrdinalIgnoreCase))
+                        {
+                            rescaleSnap = snap;
+                            continue;
+                        }
                         JSONStorable s = null;
                         try { s = targetAtom.GetStorableByID(sid); } catch { s = null; }
                         if (s == null) continue;
@@ -3710,6 +3719,16 @@ namespace VPB
 
                 try { ClothingLoadingUtils.RestoreClothingHairUndoState(targetAtom, clothingHairSnapshot); }
                 catch { }
+
+                if (rescaleSnap != null)
+                {
+                    try
+                    {
+                        JSONStorable rs = targetAtom.GetStorableByID("rescaleObject");
+                        if (rs != null) rs.RestoreFromJSON(rescaleSnap);
+                    }
+                    catch { }
+                }
             };
         }
 

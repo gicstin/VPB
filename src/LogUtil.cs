@@ -1255,6 +1255,9 @@ namespace VPB
 
             try { VpbPerfController.OnSceneLoadComplete(); } catch { }
 
+            // Issue #80: clothing custom tex can look correct mid-load then lose UV tile after settle.
+            try { DAZClothingHook.SchedulePostSceneLoadCustomTextureResync(); } catch { }
+
             CacheCleanupManager.FlushHitsBatch();
         }
 

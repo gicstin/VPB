@@ -1209,18 +1209,47 @@ namespace VPB
 
 
         WaitForEndOfFrame waitForEndOfFrame = new WaitForEndOfFrame();
+
+        /// <summary>
+        /// MaterialOptions custom slots need OnTexture*Loaded ASAP after URL sync so GPU bind
+        /// races less with skin-wrap/cloth material reconnect (issue #80). Still wait out real scene loads.
+        /// </summary>
+        static bool IsMaterialOptionsCustomCallback(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null || qi.callback == null) return false;
+            try
+            {
+                var m = qi.callback.Method;
+                if (m == null) return false;
+                string mName = m.Name ?? "";
+                if (!mName.StartsWith("OnTexture", StringComparison.Ordinal)) return false;
+                Type t = m.DeclaringType;
+                if (t == null) return false;
+                return typeof(MaterialOptions).IsAssignableFrom(t);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         IEnumerator DelayDoCallback(ImageLoaderThreaded.QueuedImage qi)
         {
             while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
                 yield return null;
             yield return waitForEndOfFrame;
-            yield return waitForEndOfFrame;
+            // MaterialOptions: one EOF is enough outside scene load; second EOF widens the
+            // window where late material reconnect can overwrite the custom slot with defaults.
+            if (!IsMaterialOptionsCustomCallback(qi))
+                yield return waitForEndOfFrame;
             DoCallback(qi);
         }
 
         public bool RequestImmediate(ImageLoaderThreaded.QueuedImage qi)
         {
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
+            // Match VaM ImageLoaderThreaded: forceReload must reprocess, not serve VPB RAM/disk hit.
+            if (qi.forceReload) return false;
             if (Settings.Instance == null || Settings.Instance.ThumbnailThreshold == null) return false;
 
             int threshold = Settings.Instance.ThumbnailThreshold.Value;
@@ -1285,6 +1314,26 @@ namespace VPB
             if (qi == null || string.IsNullOrEmpty(qi.imgPath) || qi.imgPath == "NULL") return false;
             
             LogUtil.MarkImageActivity();
+
+            // VaM JSONStorableUrl.Reload / browse sets forceReload. Native UseCachedTex still
+            // reprocesses; VPB must not short-circuit to a silent RAM/disk hit (issue #80).
+            if (qi.forceReload)
+            {
+                try
+                {
+                    string evictKey = GetTextureCacheKey(qi);
+                    if (!string.IsNullOrEmpty(evictKey))
+                    {
+                        TextureUtil.UnmarkDownscaledActive(GetDownscaledKey(evictKey));
+                        lock (textureCacheLock)
+                        {
+                            textureCache.Remove(evictKey);
+                        }
+                    }
+                }
+                catch { }
+                return false;
+            }
 
             if (Settings.Instance == null || Settings.Instance.ThumbnailThreshold == null) return false;
 

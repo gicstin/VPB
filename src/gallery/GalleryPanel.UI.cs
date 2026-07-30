@@ -2567,22 +2567,10 @@ namespace VPB
             if (del.TooltipHandler != null) del.OnHoverChange -= del.TooltipHandler;
             Action<bool> handler = (enter) =>
             {
-                string msg = VPBTranslation.T(tooltipKey, englishDefault);
                 if (enter)
-                {
-                    if (temporaryStatusCoroutine != null)
-                    {
-                        StopCoroutine(temporaryStatusCoroutine);
-                        temporaryStatusCoroutine = null;
-                    }
-                    temporaryStatusMsg = msg;
-                    temporaryStatusOwner = go;
-                }
-                else if (temporaryStatusMsg == msg)
-                {
-                    temporaryStatusMsg = null;
-                    if (temporaryStatusOwner == go) temporaryStatusOwner = null;
-                }
+                    SetHoverTooltip(VPBTranslation.T(tooltipKey, englishDefault), go);
+                else
+                    ClearHoverTooltip(go);
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
@@ -2603,21 +2591,12 @@ namespace VPB
             {
                 if (enter)
                 {
-                    if (temporaryStatusCoroutine != null)
-                    {
-                        StopCoroutine(temporaryStatusCoroutine);
-                        temporaryStatusCoroutine = null;
-                    }
                     string msg;
                     try { msg = provider(); } catch { msg = null; }
-                    temporaryStatusMsg = msg;
-                    temporaryStatusOwner = go;
+                    if (!string.IsNullOrEmpty(msg)) SetHoverTooltip(msg, go);
                 }
-                else if (temporaryStatusOwner == go)
-                {
-                    temporaryStatusMsg = null;
-                    temporaryStatusOwner = null;
-                }
+                else
+                    ClearHoverTooltip(go);
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
@@ -2635,20 +2614,9 @@ namespace VPB
             Action<bool> handler = (enter) =>
             {
                 if (enter)
-                {
-                    if (temporaryStatusCoroutine != null)
-                    {
-                        StopCoroutine(temporaryStatusCoroutine);
-                        temporaryStatusCoroutine = null;
-                    }
-                    temporaryStatusMsg = tooltip;
-                    temporaryStatusOwner = go;
-                }
-                else if (temporaryStatusMsg == tooltip)
-                {
-                    temporaryStatusMsg = null;
-                    if (temporaryStatusOwner == go) temporaryStatusOwner = null;
-                }
+                    SetHoverTooltip(tooltip, go);
+                else
+                    ClearHoverTooltip(go);
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
@@ -2768,11 +2736,13 @@ namespace VPB
                 if (leftActiveContent == ContentType.RemoveClothing)
                 {
                     leftActiveContent = leftPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     leftPrevActiveContent = leftActiveContent;
                     leftActiveContent = ContentType.RemoveClothing;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             else
@@ -2780,11 +2750,13 @@ namespace VPB
                 if (rightActiveContent == ContentType.RemoveClothing)
                 {
                     rightActiveContent = rightPrevActiveContent;
+                    if (_removeModeActive) _removeModeSiderailDismissed = true;
                 }
                 else
                 {
                     rightPrevActiveContent = rightActiveContent;
                     rightActiveContent = ContentType.RemoveClothing;
+                    if (_removeModeActive) _removeModeSiderailDismissed = false;
                 }
             }
             UpdateLayout();
@@ -3430,6 +3402,24 @@ namespace VPB
         private void ToggleRight(ContentType type) => ToggleSide(isLeft: false, type);
 
         private void ToggleLeft(ContentType type) => ToggleSide(isLeft: true, type);
+
+        /// <summary>
+        /// Docked: LMB → left panel, RMB → right panel.
+        /// Floating/VR: panel follows which rail button was pressed (ignore mouse button).
+        /// </summary>
+        private bool PreferLeftSidePanelFromRail(bool fromLeftRailButton, bool rightClick)
+        {
+            if (isFixedLocally) return !rightClick;
+            return fromLeftRailButton;
+        }
+
+        private void ToggleSideFromRailButton(ContentType type, bool fromLeftRailButton, bool rightClick)
+        {
+            if (PreferLeftSidePanelFromRail(fromLeftRailButton, rightClick))
+                ToggleLeft(type);
+            else
+                ToggleRight(type);
+        }
 
         /// <summary>Single side-panel toggle path — left/right differ only in which rail is primary.</summary>
         private void ToggleSide(bool isLeft, ContentType type)

@@ -249,8 +249,8 @@ namespace VPB
             blkBtn.onClick.AddListener(() => SetCategoryQuickMenuVisible(false));
             _categoryQuickBlockerGO.SetActive(false);
 
-            // Keep menu out of titlebar masks/clips.
-            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(TitleBarCategoryPreferredRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
+            // Keep menu out of titlebar masks/clips. Width matches QuickFilters popup (not title-bar chrome clamp).
+            _categoryQuickMenuOuterGO = UI.CreateChildRT(galleryBackgroundGO, "CategoryQuickMenu", AnchorPresets.topLeft, new Vector2(GalleryUiDesignTokens.PopupMenuPanelWidthRef, 340f), new Vector2(60, CategoryQuickMenuTopOffsetY(1f)));
             var outerRT = _categoryQuickMenuOuterGO.GetComponent<RectTransform>();
 
             _categoryQuickMenuOuterRT = outerRT;
@@ -367,8 +367,10 @@ namespace VPB
                 _categoryQuickMenuOuterRT.anchoredPosition = new Vector2(
                     leftInset,
                     CategoryQuickMenuTopOffsetY(paneScale));
-                // Match labeled chrome width; when header is icon-only still use preferred (not Max).
-                float menuW = _categoryQuickCompact ? catLabeledW : catW;
+                // Relaxed list width like QuickFilters; never narrower than labeled chrome.
+                float menuW = Mathf.Max(
+                    GalleryUiDesignTokens.PopupMenuPanelWidthRef * paneScale,
+                    catLabeledW);
                 _categoryQuickMenuOuterRT.sizeDelta = new Vector2(menuW, 340f * paneScale);
             }
             ApplyCategoryQuickArrowChromeLayout(paneScale);
@@ -431,7 +433,9 @@ namespace VPB
         private void SyncCategoryQuickSwitchChrome()
         {
             if (_categoryQuickChromeRootGO == null) return;
-            bool show = !IsFilterActive && !importSidebarActive;
+            // Keep header category chip while Import sidebar is open: Import replaces the side
+            // Category column, so this dropdown is the remaining primary category nav (and exit path).
+            bool show = !IsFilterActive;
             if (_categoryQuickChromeRootGO.activeSelf != show)
                 _categoryQuickChromeRootGO.SetActive(show);
             if (!show && _categoryQuickMenuOpen)
