@@ -3117,6 +3117,15 @@ namespace VPB
         public void SetCollapsed(bool collapsed)
         {
             if (isCollapsed == collapsed) return;
+            // Keep grid subtree alive for the active item-drag handler (EventSystem + OnDisable cancel).
+            if (collapsed)
+            {
+                try
+                {
+                    if (UIDraggableItem.IsDragging) return;
+                }
+                catch { }
+            }
             isCollapsed = collapsed;
             collapseTimer = 0f;
             if (collapsed)

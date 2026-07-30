@@ -167,16 +167,27 @@ namespace VPB
                         return true;
                     }
 
+                    bool isPluginScript =
+                        (pathLower.Contains("/custom/scripts/") || pathLower.Contains("\\custom\\scripts\\"))
+                        && (pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"));
                     bool isPluginPreset =
                         pathLower.Contains("/custom/atom/person/plugins/") ||
                         pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
-                        (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset")));
-                    if (isPluginPreset)
+                        pathLower.Contains("/custom/pluginpresets/") ||
+                        pathLower.Contains("\\custom\\pluginpresets\\") ||
+                        (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
+                    if (isPluginScript || isPluginPreset || categoryLower.Contains("plugins"))
                     {
-                        Atom target = GetBestTargetAtom();
-                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                        dragger.LoadPlugins(target);
-                        return true;
+                        // Category "Plugins" also covers script rows; avoid false-positives on non-script/non-vap.
+                        if (isPluginScript || isPluginPreset
+                            || pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll")
+                            || pathLower.EndsWith(".vap"))
+                        {
+                            Atom target = GetBestTargetAtom();
+                            if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                            dragger.LoadPlugins(target);
+                            return true;
+                        }
                     }
 
                     if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose"))

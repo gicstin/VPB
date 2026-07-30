@@ -194,11 +194,15 @@ namespace VPB
             }
         }
 
-        /// <summary>Hold delay in seconds; 0 when drag-and-drop is off at runtime (<see cref="VPBConfig.EffectiveEnableDragDrop"/>).</summary>
+        /// <summary>
+        /// Hold delay before item drag. Desktop: 0 (movement threshold alone — click-drag must not be stolen by ScrollRect).
+        /// VR: config hold (laser micro-moves otherwise start accidental item drags). 0 when DnD off.
+        /// </summary>
         private static float EffectiveDragHoldSeconds()
         {
             var c = VPBConfig.Instance;
             if (c == null || !c.EffectiveEnableDragDrop) return 0f;
+            if (!IsXrPresentationActive()) return 0f;
             return c.DragHoldThreshold;
         }
 
@@ -223,15 +227,15 @@ namespace VPB
                 return;
             }
             float threshold = EffectiveDragHoldSeconds();
-            float held = Time.unscaledTime - _pointerDownTime;
+            float held = (_pointerDownTime >= 0f) ? (Time.unscaledTime - _pointerDownTime) : 0f;
 
-            if (held < threshold)
+            if (threshold > 0f && held < threshold)
             {
                 ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
                 _galleryPassthroughScrollUntilItemDrag = true;
                 return;
             }
-            // Hold time satisfied but movement still small — do not arm item drag yet (slow click / jitter).
+            // Hold time satisfied (or desktop: no hold) but movement still small — keep scroll until intentional drag distance.
             if (!PressDeltaQualifiesForGalleryItemDrag(eventData))
             {
                 ForwardPointerEventToScrollRect(ResolveGalleryScrollRectForPassthrough(), eventData, ExecuteEvents.beginDragHandler);
@@ -244,6 +248,10 @@ namespace VPB
 
         private void StartGalleryItemDragFromPointer(PointerEventData eventData)
         {
+            // If ScrollRect already owns this gesture, end it so grid does not keep scrolling under the ghost.
+            if (_galleryPassthroughScrollUntilItemDrag)
+                StopGalleryScrollPassthrough(eventData);
+
             _isDualPose = null;
             _dualPoseNode = null;
             dragCam = eventData.pressEventCamera;
@@ -262,6 +270,22 @@ namespace VPB
             if (Panel != null) Panel.SetStatus(msg);
             
             UpdateGhost(eventData, atom, dist);
+            _galleryPassthroughScrollUntilItemDrag = false;
+        }
+
+        /// <summary>Warm path: end ScrollRect drag + kill inertia when promoting gesture to item drag.</summary>
+        private void StopGalleryScrollPassthrough(PointerEventData eventData)
+        {
+            ScrollRect sr = ResolveGalleryScrollRectForPassthrough();
+            if (sr == null) return;
+            try
+            {
+                if (eventData != null)
+                    ForwardPointerEventToScrollRect(sr, eventData, ExecuteEvents.endDragHandler);
+                sr.StopMovement();
+                sr.velocity = Vector2.zero;
+            }
+            catch { }
             _galleryPassthroughScrollUntilItemDrag = false;
         }
 
@@ -460,6 +484,8 @@ namespace VPB
         {
             _galleryScrollRectPassthrough = null;
             _galleryPassthroughScrollUntilItemDrag = false;
+            // Only cancel if this component still owns the active item drag. Pane auto-hide
+            // used to SetActive(false) mid-drag; that path is suppressed while IsDragging.
             if (isDraggingItem)
             {
                 DestroyGhost();
@@ -767,7 +793,188 @@ namespace VPB
             }
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
             LogUtil.Log($"[VPB] LoadPlugins: Applying {FileEntry.Name} to {target.uid}");
+
+            // Session scripts (.cs/.cslist/.dll) need CreatePlugin + URL — not PluginPresets clothing path.
+            if (IsPluginScriptEntry(FileEntry))
+            {
+                ApplyPluginScriptToAtom(target, FileEntry);
+                return;
+            }
+
+            // Plugin preset (.vap): register package under scan whitelist before PluginPresets apply.
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try
+                {
+                    SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(FileEntry, FileEntry != null ? FileEntry.Uid : null);
+                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("plugin_preset_prewarm_flush");
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB] LoadPlugins: preset prewarm failed: " + ex.Message);
+                }
+            }
             ApplyClothingToAtom(target, FileEntry.Uid);
+        }
+
+        /// <summary>True for Custom/Scripts session plugins (.cs / .cslist / .dll), including VAR-internal paths.</summary>
+        private static bool IsPluginScriptEntry(FileEntry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.Path)) return false;
+            string p = entry.Path.Replace('\\', '/');
+            int varSep = p.IndexOf(":/", StringComparison.Ordinal);
+            string internalPath = p;
+            if (varSep >= 0 && varSep + 2 < p.Length)
+            {
+                // Skip Windows drive "C:/..." — real VAR sep is further along.
+                if (!(varSep == 1 && char.IsLetter(p[0])))
+                    internalPath = p.Substring(varSep + 2);
+                else
+                {
+                    int varSep2 = p.IndexOf(":/", varSep + 1, StringComparison.Ordinal);
+                    if (varSep2 >= 0 && varSep2 + 2 < p.Length)
+                        internalPath = p.Substring(varSep2 + 2);
+                }
+            }
+            if (internalPath.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0
+                && p.IndexOf("Custom/Scripts/", StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+            string lower = internalPath.ToLowerInvariant();
+            return lower.EndsWith(".cs") || lower.EndsWith(".cslist") || lower.EndsWith(".dll");
+        }
+
+        /// <summary>
+        /// Install / on-demand whitelist-register package, then CreatePlugin + set script URL on person's PluginManager.
+        /// Matches VaM UI "Add Plugin" after package is visible to native FileManager.
+        /// </summary>
+        private void ApplyPluginScriptToAtom(Atom atom, FileEntry entry)
+        {
+            if (atom == null || entry == null) return;
+
+            var movedUids = new List<string>();
+            bool installed = false;
+            try { installed = UI.EnsureInstalled(entry, movedUids); }
+            catch (Exception ex) { LogUtil.LogWarning("[VPB] LoadPlugins: EnsureInstalled failed: " + ex.Message); }
+            if (installed)
+            {
+                try
+                {
+                    FileManagerBridge.Refresh("plugin_script_install", RefreshScope.InstallOnly, movedUids, flushNativeImmediately: true);
+                }
+                catch { }
+            }
+
+            string pluginUrl = ResolvePluginScriptUrl(entry);
+            if (string.IsNullOrEmpty(pluginUrl))
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: could not resolve plugin URL for " + entry.Name);
+                return;
+            }
+
+            if (ScanWhitelistManager.Instance.IsEnabled)
+            {
+                try
+                {
+                    // Persist UID override for script packages (same policy as FileExists on-demand hook).
+                    SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, pluginUrl, queueCoalescedRefresh: true);
+                    VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(pluginUrl);
+                    pluginUrl = VamOnDemandLoader.RewriteEntryPathToBestAvailable(pluginUrl, attemptRegister: true);
+                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("plugin_script_prewarm_flush");
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB] LoadPlugins: on-demand register failed: " + ex.Message);
+                }
+            }
+
+            MVRPluginManager mgr = null;
+            try { mgr = atom.GetStorableByID("PluginManager") as MVRPluginManager; }
+            catch { mgr = null; }
+            if (mgr == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: PluginManager not found on atom " + atom.uid);
+                return;
+            }
+
+            MVRPlugin plugin = null;
+            try { plugin = mgr.CreatePlugin(); }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] LoadPlugins: CreatePlugin failed: " + ex.Message);
+                return;
+            }
+            if (plugin == null || plugin.pluginURLJSON == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: CreatePlugin returned empty plugin slot.");
+                return;
+            }
+
+            string pluginSlotUid = null;
+            try { pluginSlotUid = plugin.uid; } catch { pluginSlotUid = null; }
+
+            try
+            {
+                plugin.pluginURLJSON.val = pluginUrl;
+                LogUtil.Log("[VPB] LoadPlugins: loaded script slot=" + (pluginSlotUid ?? "?") + " url=" + pluginUrl);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] LoadPlugins: setting plugin URL failed: " + ex.Message);
+                try
+                {
+                    if (!string.IsNullOrEmpty(pluginSlotUid))
+                        mgr.RemovePluginWithUID(pluginSlotUid);
+                }
+                catch { }
+                return;
+            }
+
+            if (Panel != null && !string.IsNullOrEmpty(pluginSlotUid))
+            {
+                string atomUid = atom.uid;
+                string removeUid = pluginSlotUid;
+                try
+                {
+                    Panel.PushUndo(() =>
+                    {
+                        Atom targetAtom = SuperController.singleton != null
+                            ? SuperController.singleton.GetAtomByUid(atomUid)
+                            : null;
+                        if (targetAtom == null) return;
+                        MVRPluginManager undoMgr = targetAtom.GetStorableByID("PluginManager") as MVRPluginManager;
+                        if (undoMgr == null) return;
+                        try { undoMgr.RemovePluginWithUID(removeUid); }
+                        catch (Exception ex)
+                        {
+                            LogUtil.LogWarning("[VPB] LoadPlugins undo failed: " + ex.Message);
+                        }
+                    });
+                }
+                catch { }
+            }
+        }
+
+        private static string ResolvePluginScriptUrl(FileEntry entry)
+        {
+            if (entry == null) return null;
+            string url = null;
+            try { url = entry.Uid; } catch { url = null; }
+            if (string.IsNullOrEmpty(url))
+            {
+                try { url = entry.Path; } catch { url = null; }
+            }
+            if (string.IsNullOrEmpty(url)) return null;
+            url = UI.NormalizePath(url);
+            // Prefer concrete package-internal form when Path is a loose .var display path.
+            if (url.IndexOf(":/", StringComparison.Ordinal) < 0
+                && entry is VarFileEntry vfe
+                && vfe.Package != null
+                && !string.IsNullOrEmpty(vfe.Package.Uid)
+                && !string.IsNullOrEmpty(vfe.InternalPath))
+            {
+                url = vfe.Package.Uid + ":/" + vfe.InternalPath.Replace('\\', '/');
+            }
+            return url;
         }
 
         public void LoadAppearance(Atom target, string mode = null)

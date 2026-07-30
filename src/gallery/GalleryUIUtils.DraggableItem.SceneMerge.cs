@@ -192,6 +192,14 @@ namespace VPB
 
             ItemType itemType = GetItemType(FileEntry);
             string ext = Path.GetExtension(normalizedPath).ToLowerInvariant();
+
+            // Script plugins must not fall through to clothing/preset toggle (silent no-op).
+            if (itemType == ItemType.Plugins && IsPluginScriptEntry(FileEntry))
+            {
+                ApplyPluginScriptToAtom(atom, FileEntry);
+                return;
+            }
+
             string appearanceMode = appearanceClothingMode;
             if (itemType == ItemType.Appearance && !string.IsNullOrEmpty(appearanceMode))
             {
@@ -267,7 +275,8 @@ namespace VPB
                 itemType == ItemType.HairPreset ||
                 itemType == ItemType.Skin ||
                 itemType == ItemType.Pose ||
-                itemType == ItemType.Morphs;
+                itemType == ItemType.Morphs ||
+                itemType == ItemType.Plugins;
             if (shouldPrewarmOnDemand)
             {
                 try
@@ -1003,7 +1012,8 @@ namespace VPB
                 || itemType == ItemType.ClothingPreset
                 || itemType == ItemType.HairPreset
                 || itemType == ItemType.ClothingItem
-                || itemType == ItemType.HairItem;
+                || itemType == ItemType.HairItem
+                || itemType == ItemType.Plugins;
         }
 
         private void CreateGhost(PointerEventData eventData)

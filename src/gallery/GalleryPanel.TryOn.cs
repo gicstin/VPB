@@ -65,11 +65,16 @@ namespace VPB
             if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morphs")) return TryOnKind.Morphs;
             if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance")) return TryOnKind.Appearance;
 
+            bool isPluginScript =
+                (pathLower.Contains("/custom/scripts/") || pathLower.Contains("\\custom\\scripts\\"))
+                && (pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"));
             bool isPluginPreset =
                 pathLower.Contains("/custom/atom/person/plugins/") ||
                 pathLower.Contains("\\custom\\atom\\person\\plugins\\") ||
-                (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset")));
-            if (isPluginPreset) return TryOnKind.Plugins;
+                pathLower.Contains("/custom/pluginpresets/") ||
+                pathLower.Contains("\\custom\\pluginpresets\\") ||
+                (pathLower.EndsWith(".vap") && (categoryLower.Contains("person plugins") || categoryLower.Contains("plugin preset") || categoryLower.Contains("plugins")));
+            if (isPluginScript || isPluginPreset) return TryOnKind.Plugins;
 
             if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose")) return TryOnKind.Pose;
 

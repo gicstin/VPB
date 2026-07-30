@@ -234,8 +234,13 @@ namespace VPB
 
                         bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
 
+                        // Item drag uses a full-canvas blocker — pointer leaves the pane and AH would
+                        // collapse (SetActive false → UIDraggableItem.OnDisable cancels the drop).
+                        bool galleryItemDragActive = false;
+                        try { galleryItemDragActive = UIDraggableItem.IsDragging; } catch { galleryItemDragActive = false; }
+
                         // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
-                        bool isHoveringAny = hoverCount > 0 || isPointerInsideGalleryWindow || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen();
+                        bool isHoveringAny = hoverCount > 0 || isPointerInsideGalleryWindow || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen() || galleryItemDragActive;
                         if (!isHoveringAny)
                         {
                             collapseTimer += Time.deltaTime;

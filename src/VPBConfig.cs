@@ -216,14 +216,14 @@ namespace VPB
         public bool GalleryAutoGenderFilter = true;
         /// <summary>When true (default), visible gallery panes collapse (fixed dock) or hide (floating) when a scene is launched.</summary>
         public bool GalleryCollapseOnSceneLaunch = true;
-        /// <summary>Effective drag-and-drop state at runtime; off while <see cref="HoldToLaunchEnabled"/> (same pointer hold as drag start).</summary>
+        /// <summary>Effective drag-and-drop at runtime; off while <see cref="HoldToLaunchEnabled"/> (hold-to-launch owns the same press).</summary>
         public bool EffectiveEnableDragDrop
         {
             get { return EnableDragDrop && !HoldToLaunchEnabled; }
         }
-        /// <summary>Legacy persisted flag; ignored for behavior when <see cref="EnableDragDrop"/> is on — hold is always required then. Serialized for forward compatibility.</summary>
+        /// <summary>Legacy persisted flag. Desktop DnD uses movement threshold only; VR still uses <see cref="DragHoldThreshold"/>. Serialized for forward compatibility.</summary>
         public bool RequireDragHoldBeforeMove = false;
-        /// <summary>Minimum seconds before gallery item drag can start when drag-and-drop is on; loaded/saved values are clamped to this floor.</summary>
+        /// <summary>VR only: minimum seconds held before gallery item drag can start. Desktop ignores this (click-drag after pixel slack).</summary>
         public const float DragHoldThresholdMin = 0.4f;
         public float DragHoldThreshold = 0.5f;
 
@@ -231,7 +231,7 @@ namespace VPB
         public static float ClampDragHoldThreshold(float seconds) =>
             Mathf.Clamp(seconds, DragHoldThresholdMin, 1f);
 
-        /// <summary>Ensures hold-before-drag when drag-and-drop is enabled and threshold meets minimum.</summary>
+        /// <summary>Clamp hold threshold; keep legacy RequireDragHoldBeforeMove in sync when DnD enabled.</summary>
         public void NormalizeDragDropHoldSettings()
         {
             DragHoldThreshold = ClampDragHoldThreshold(DragHoldThreshold);
