@@ -338,6 +338,65 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// <see cref="DAZCharacterTextureControl"/> queues nested <c>CharacterQueuedImage</c>.
+        /// Auto genital blend (<c>BlendGenitalTexture</c>) needs CPU <c>GetPixels</c> on torso/genital maps.
+        /// Native <c>ImageLoaderThreaded.Finish</c> uses <c>Apply()</c> (keeps readable); VPB zstd serve must match.
+        /// </summary>
+        internal static bool IsCharacterTextureQueuedImage(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return false;
+            try
+            {
+                Type t = qi.GetType();
+                return t != null && t.DeclaringType == typeof(DAZCharacterTextureControl);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Textures that must stay CPU-readable after VPB cache serve (sim maps + character skin).</summary>
+        internal static bool NeedsCpuReadableTexture(ImageLoaderThreaded.QueuedImage qi)
+        {
+            if (qi == null) return false;
+            if (IsCharacterTextureQueuedImage(qi)) return true;
+            return IsSimulationTexturePath(qi.imgPath);
+        }
+
+        /// <summary>GPU blit → readable RGBA32 copy. Caller owns destroy of returned texture when different from <paramref name="src"/>.</summary>
+        internal static Texture2D EnsureCpuReadableTexture(Texture2D src, bool linear, string logTag)
+        {
+            if (src == null) return null;
+            if (IsTextureReadableCompat(src)) return src;
+
+            RenderTexture rt = null;
+            RenderTexture prev = RenderTexture.active;
+            try
+            {
+                rt = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
+                Graphics.Blit(src, rt);
+                RenderTexture.active = rt;
+                Texture2D readableTex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false, linear);
+                readableTex.ReadPixels(new Rect(0, 0, src.width, src.height), 0, 0);
+                readableTex.Apply(false, false);
+                if (!string.IsNullOrEmpty(logTag))
+                    LogUtil.Log("[VPB] " + logTag + ": made texture CPU-readable " + src.width + "x" + src.height);
+                return readableTex;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] EnsureCpuReadableTexture failed: " + ex.Message);
+                return src;
+            }
+            finally
+            {
+                RenderTexture.active = prev;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+            }
+        }
+
         private static bool IsPluginsAlwaysEnabledSettingOn()
         {
             return true;
@@ -1532,8 +1591,8 @@ namespace VPB
             // Ignore hub browse
             if (__instance.tex != null)
             {
-                // Fix up simulation textures that were loaded as non-readable by VaM's native loader
-                if (IsSimulationTexturePath(__instance.imgPath))
+                // Sim maps + DAZCharacterTextureControl maps: VaM needs CPU read (sim plugins / auto genital blend).
+                if (NeedsCpuReadableTexture(__instance))
                 {
                     try
                     {
@@ -1550,30 +1609,22 @@ namespace VPB
                             var tex = __instance.tex as Texture2D;
                             if (tex != null && !IsTextureReadableCompat(tex))
                             {
-                                LogUtil.Log($"[VPB SIM] PostFinish: Fixing up non-readable sim texture: {__instance.imgPath}");
+                                string tag = IsCharacterTextureQueuedImage(__instance) ? "CHAR" : "SIM";
+                                LogUtil.Log("[VPB " + tag + "] PostFinish: Fixing up non-readable texture: " + __instance.imgPath);
 
-                                // Recreate as readable using GPU copy -> ReadPixels.
-                                RenderTexture rt = RenderTexture.GetTemporary(tex.width, tex.height, 0, RenderTextureFormat.ARGB32);
-                                Graphics.Blit(tex, rt);
-
-                                RenderTexture prev = RenderTexture.active;
-                                RenderTexture.active = rt;
-                                Texture2D readableTex = new Texture2D(tex.width, tex.height, TextureFormat.RGBA32, false, __instance.linear);
-                                readableTex.ReadPixels(new Rect(0, 0, tex.width, tex.height), 0, 0);
-                                readableTex.Apply(false, false); // keep readable
-                                RenderTexture.active = prev;
-                                RenderTexture.ReleaseTemporary(rt);
-
-                                UnityEngine.Object.Destroy(tex);
-                                __instance.tex = readableTex;
-
-                                LogUtil.Log($"[VPB SIM] PostFinish: Fixed sim texture to be readable: {__instance.imgPath}");
+                                Texture2D readableTex = EnsureCpuReadableTexture(tex, __instance.linear, null);
+                                if (readableTex != null && readableTex != tex)
+                                {
+                                    UnityEngine.Object.Destroy(tex);
+                                    __instance.tex = readableTex;
+                                    LogUtil.Log("[VPB " + tag + "] PostFinish: Fixed texture to be readable: " + __instance.imgPath);
+                                }
                             }
                         }
                     }
                     catch (Exception ex)
                     {
-                        LogUtil.LogError($"[VPB SIM] PostFinish: Failed to fix up sim texture {__instance.imgPath}: {ex.Message}");
+                        LogUtil.LogError("[VPB] PostFinish: Failed to fix up readable texture " + __instance.imgPath + ": " + ex.Message);
                     }
                 }
 

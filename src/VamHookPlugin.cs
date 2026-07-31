@@ -452,6 +452,7 @@ namespace VPB
             }
 
             GenericTextureHook.PatchAll(m_Harmony);
+            DazCharacterTextureBlendHook.PatchAll(m_Harmony);
             DAZClothingHook.PatchAll(m_Harmony);
             DAZHairSwapHook.PatchAll(m_Harmony);
             VpbPerfHairHook.PatchAll(m_Harmony);
