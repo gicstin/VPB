@@ -78,7 +78,7 @@ namespace VPB
                 SuperController.singleton.AddCanvas(canvas);
             
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
-            canvasRT.localScale = new Vector3(0.001f, 0.001f, 0.001f); // VR friendly scale
+            VpbWorldSpaceUiScale.ApplyConstantWorldScale(canvasRT); // Independent of VaM worldScale (native HUD pattern)
             
             // Create Panel
             GameObject panelGO = new GameObject("Panel");
@@ -235,7 +235,11 @@ namespace VPB
             }
 
             transform.position = position;
-            if (canvasGO != null) canvasGO.SetActive(true);
+            if (canvasGO != null)
+            {
+                VpbWorldSpaceUiScale.ApplyConstantWorldScale(canvasGO.transform);
+                canvasGO.SetActive(true);
+            }
             
             // Face camera directly
             if (camTrans != null)

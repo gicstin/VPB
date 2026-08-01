@@ -91,7 +91,14 @@ namespace VPB
                 canvas.worldCamera = isFixedLocally ? null : Camera.main;
                 canvas.sortingOrder = -10000;
                 // Position will be set in Show()
-                canvas.transform.localScale = isFixedLocally ? Vector3.one : new Vector3(0.001f, 0.001f, 0.001f);
+                if (isFixedLocally)
+                    canvas.transform.localScale = Vector3.one;
+                else
+                {
+                    // Native mainHUD ignores worldScale; lock WorldSpace lossyScale to meters-per-pixel.
+                    ResetWorldSpaceCanvasScaleSync();
+                    ApplyWorldSpaceCanvasScale();
+                }
                 canvasGO.layer = 5; // UI layer
             }
             else

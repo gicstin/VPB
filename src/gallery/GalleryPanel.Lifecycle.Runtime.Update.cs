@@ -265,6 +265,7 @@ namespace VPB
 
                     if (canvas.renderMode != RenderMode.ScreenSpaceOverlay)
                     {
+                        DetachWorldSpaceCanvasFromPlayerUi();
                         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
                         canvas.worldCamera = null;
                         canvas.transform.localScale = Vector3.one;
@@ -404,7 +405,8 @@ namespace VPB
                     {
                         canvas.renderMode = RenderMode.WorldSpace;
                         canvas.worldCamera = Camera.main;
-                        canvas.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                        ResetWorldSpaceCanvasScaleSync();
+                        ApplyWorldSpaceCanvasScale();
                         
                         if (backgroundBoxGO == null) return;
                         RectTransform bgRT = _backgroundBoxRT;
@@ -433,6 +435,10 @@ namespace VPB
                     }
                 }
             }
+
+            // WorldSpace: keep pane size independent of VaM worldScale (native mainHUD behavior).
+            if (!isFixedLocally)
+                SyncWorldSpaceCanvasScaleIfWorldScaleChanged();
 
             try
             {

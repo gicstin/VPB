@@ -491,6 +491,8 @@
     <Compile Include="src\gallery\GalleryPanel.UiScale.cs" />
     <Compile Include="src\gallery\GalleryUiDesignTokens.cs" />
     <Compile Include="src\gallery\GalleryUiMetrics.cs" />
+    <Compile Include="src\gallery\VpbWorldSpaceUiScale.cs" />
+    <Compile Include="src\gallery\GalleryPanel.WorldSpaceScale.cs" />
     <Compile Include="src\gallery\GalleryModalTypography.cs" />
     <Compile Include="src\gallery\GalleryPanel.BrowseFilters.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
