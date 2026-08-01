@@ -161,10 +161,8 @@ namespace VPB
 
                     if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance"))
                     {
-                        Atom target = GetBestTargetAtom();
-                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                        dragger.LoadAppearance(target);
-                        return true;
+                        // Blank scene: auto-spawn Person then apply (no "select Person" splash).
+                        return TryLoadAppearanceAutoSpawningIfNeeded(file, dragger);
                     }
 
                     bool isPluginScript =

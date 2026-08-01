@@ -424,6 +424,7 @@
     <Compile Include="src\gallery\AppearanceGenderClassifier.cs" />
     <Compile Include="src\gallery\GalleryPanel.AppearanceGenderFacetCounts.cs" />
     <Compile Include="src\gallery\GalleryPanel.AppearanceGenderCache.cs" />
+    <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
@@ -513,6 +514,7 @@
     <Compile Include="src\util\CUAConverter.cs" />
     <Compile Include="src\util\CUAAtomImporter.cs" />
     <Compile Include="src\util\SceneAtomImporter.cs" />
+    <Compile Include="src\util\VpbThreePointLightSetup.cs" />
     <Compile Include="src\util\PoseImportDiagnostics.cs" />
     <Compile Include="src\util\GalleryAtomListingDiagnostics.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />
