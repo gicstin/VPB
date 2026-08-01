@@ -863,7 +863,11 @@ namespace VPB
                         try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
 
                         bool deferGridRefresh = keepInternalSettingsMode;
-                        if (layoutMode == GalleryLayoutMode.List)
+                        if (IsSettingsPanelOpen() || settingsListViewActive)
+                        {
+                            ApplyInternalSettingsListGridConfig(rgv, deferGridRefresh);
+                        }
+                        else if (layoutMode == GalleryLayoutMode.List)
                         {
                             rgv.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferGridRefresh);
                             rgv.SetAdaptiveConfig(true, 0f, 1, true, deferGridRefresh);
@@ -897,10 +901,16 @@ namespace VPB
         {
             try
             {
-                if (layoutMode != GalleryLayoutMode.Grid) return;
                 if (contentGO == null) return;
                 var rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv == null) return;
+                // Settings owns 1-col list config; never stomp with multi-column while open.
+                if (IsSettingsPanelOpen() || settingsListViewActive)
+                {
+                    ApplyInternalSettingsListGridConfig(rgv, deferRefresh: false);
+                    return;
+                }
+                if (layoutMode != GalleryLayoutMode.Grid) return;
                 int cols = GridColumnCount;
                 rgv.SetGridConfig(100f, GetGridCellConfigHeight(), EffectiveGridSpacingX(), EffectiveGridSpacingY(), cols);
                 rgv.SetAdaptiveConfig(true, 200f, cols, false);

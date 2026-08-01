@@ -3165,11 +3165,25 @@ namespace VPB
             Button btn = rb0;
             if (btn != null) btn.onClick.RemoveAllListeners();
 
-            bool isListMode = (layoutMode == GalleryLayoutMode.List);
+            bool isListMode = layoutMode == GalleryLayoutMode.List || settingsListViewActive;
             bool isSettingsRow = file is InternalSettingRowEntry;
 
             if (isSettingsRow)
             {
+                // Stale settings row after exit handoff — do not paint settings chrome into grid tiles.
+                if (!settingsListViewActive && !IsSettingsPanelOpen())
+                {
+                    FileButtonBinder.SetActive(b != null ? b.listRowTr : null, false);
+                    FileButtonBinder.SetActive(b != null ? b.gridLabelTr : null, false);
+                    FileButtonBinder.SetActive(b != null ? b.thumbTr : null, false);
+                    if (btn != null)
+                    {
+                        btn.onClick.RemoveAllListeners();
+                        btn.interactable = false;
+                    }
+                    return;
+                }
+
                 // Special settings list-row mode: no package affordances (thumb/rating/badges/meta columns).
                 Transform listRowTrSpecial = b != null ? b.listRowTr : btnGO.transform.Find("ListRow");
                 if (listRowTrSpecial != null)

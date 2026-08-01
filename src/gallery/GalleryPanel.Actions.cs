@@ -429,7 +429,8 @@ namespace VPB
 
             // Switching middle content (category/page) must leave internal settings mode.
             // Default behavior: auto-save on exit; only explicit Discard uses cancel path.
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            bool exitedSettingsMode = IsSettingsPanelOpen() || settingsListViewActive;
+            if (exitedSettingsMode)
                 ExitInternalSettingsMode(true);
 
             bool registeredBefore = _registeredWithSuperController;
@@ -547,7 +548,9 @@ namespace VPB
 
             // Decide refresh before UpdateLayout so we can avoid synchronous full-library cache scans
             // (CacheCreators / CacheCategoryCounts) when RefreshFilesRoutine will rebuild them on a worker thread.
-            bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged;
+            // Exiting Settings must always refresh browse rows — same-category Show early-return otherwise
+            // leaves only Sync's async Refresh, which can lose the race to Grid restore (VR tile stick).
+            bool shouldRefresh = paramsChanged || !hasLoadedContent || packagesChanged || exitedSettingsMode;
             bool startupDeferredInitialRefresh = false;
             if (shouldRefresh && !hasLoadedContent && !LogUtil.IsStartupReadyLogged())
             {

@@ -260,6 +260,19 @@ namespace VPB
 
             RestorePreservedUserTagAvailScroll();
             try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+
+            // VR/world-space chrome resize can reflow RecyclingGridView while Settings is open —
+            // re-assert 1-col list config so settings rows never become multi-column tiles.
+            if (IsSettingsPanelOpen() || settingsListViewActive)
+            {
+                try
+                {
+                    RecyclingGridView rgv = recyclingGrid;
+                    if (rgv == null && contentGO != null) rgv = contentGO.GetComponent<RecyclingGridView>();
+                    if (rgv != null) ApplyInternalSettingsListGridConfig(rgv, deferRefresh: true);
+                }
+                catch { }
+            }
         }
 
         /// <summary>Places side-pane sort/refresh/search row below optional collapse header strip.</summary>

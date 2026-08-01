@@ -2719,7 +2719,7 @@ namespace VPB
                     }
                 };
 
-                if (layoutMode == GalleryLayoutMode.List)
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
                 {
                     recyclingGrid.fixedColumns = 1;
                     recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
@@ -2916,8 +2916,9 @@ namespace VPB
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid != null)
                 {
-                    if (layoutMode == GalleryLayoutMode.List)
+                    if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
                     {
+                        recyclingGrid.fixedColumns = 1;
                         recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
                         recyclingGrid.SetAdaptiveConfig(true, 0f, 1, true, deferRefresh: true);
                     }
@@ -4271,7 +4272,7 @@ namespace VPB
                 int cols = GridColumnCount;
                 
                 // Initialize spacing and adaptive config
-                if (layoutMode == GalleryLayoutMode.List)
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;

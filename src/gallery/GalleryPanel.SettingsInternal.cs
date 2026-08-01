@@ -1871,6 +1871,38 @@ namespace VPB
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
+        /// <summary>
+        /// Drop settings rows from the middle pane before any Grid restore / browse Refresh.
+        /// Prevents InternalSettingRowEntry cells painting as gallery tiles during the async handoff
+        /// (esp. VR, where browse Refresh can lag chrome/layout churn).
+        /// </summary>
+        private void ClearMiddlePaneOfSettingsRows()
+        {
+            try
+            {
+                if (currentFilteredFiles != null)
+                    currentFilteredFiles.Clear();
+                if (selectedFiles != null)
+                    selectedFiles.Clear();
+                if (selectedFilePaths != null)
+                    selectedFilePaths.Clear();
+                selectedPath = null;
+
+                RecyclingGridView rgv = recyclingGrid;
+                if (rgv == null && contentGO != null)
+                {
+                    try { rgv = contentGO.GetComponent<RecyclingGridView>(); } catch { }
+                }
+                if (rgv != null)
+                {
+                    // Keep 1-col list config until browse Refresh commits real layout — empty grid is OK.
+                    try { ApplyInternalSettingsListGridConfig(rgv, deferRefresh: true); } catch { }
+                    rgv.SetItemCount(0, deferRefresh: false);
+                }
+            }
+            catch { }
+        }
+
         private void SyncInternalSettingsListView()
         {
             bool open = IsSettingsPanelOpen();
@@ -1886,14 +1918,23 @@ namespace VPB
             if (!settingsListViewActive && !internalSettingsHadPreSessionViewState) return;
             settingsListViewActive = false;
             if (internalSettingsSessionActive) CancelInternalSettingsSession();
-            if (internalSettingsHadPreSessionViewState)
+
+            // Atomic handoff: never SetLayoutMode(Grid)+Refresh while settings rows still bound.
+            ClearMiddlePaneOfSettingsRows();
+
+            GalleryLayoutMode restoreMode = internalSettingsPreSessionLayoutMode;
+            float restoreScroll = internalSettingsPreSessionScrollNormalized;
+            bool needLayoutRestore = internalSettingsHadPreSessionViewState;
+            internalSettingsHadPreSessionViewState = false;
+
+            if (needLayoutRestore)
             {
-                SetLayoutMode(internalSettingsPreSessionLayoutMode);
+                // keepInternalSettingsMode: session already torn down; avoid re-entering Exit.
+                SetLayoutMode(restoreMode, persistConfig: false, keepInternalSettingsMode: true);
                 if (scrollRect != null)
-                    scrollRect.verticalNormalizedPosition = Mathf.Clamp01(internalSettingsPreSessionScrollNormalized);
+                    scrollRect.verticalNormalizedPosition = Mathf.Clamp01(restoreScroll);
             }
             RefreshFiles(true);
-            internalSettingsHadPreSessionViewState = false;
         }
 
         private void RefreshGalleryScanWlBorderVisuals()
@@ -2477,7 +2518,12 @@ namespace VPB
 
             try { ApplySidePanelDefaultsFromConfig(); } catch { }
 
-            if (!changed) return;
+            // Orphan settingsListViewActive (panel already cleared) must still Sync — otherwise
+            // RefreshFiles diverts to a dead settings refresh and middle pane stays tile-stuck.
+            bool needsSync = changed || settingsListViewActive || internalSettingsHadPreSessionViewState;
+            if (!needsSync) return;
+
+            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
             UpdateLayout();
             UpdateTabs();
             SyncInternalSettingsListView();
@@ -2599,8 +2645,8 @@ namespace VPB
             {
                 ApplyInnerPaneScale();
                 categoriesCached = false;
-                RebuildGridLayout();
-                RefreshFiles(true);
+                // Layout restore + browse RefreshFiles owned by SyncInternalSettingsListView /
+                // ExitInternalSettingsMode — avoid Grid refresh while settings rows still bound.
                 try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
             }
             ApplyGalleryTransparencyToAllPanels();
