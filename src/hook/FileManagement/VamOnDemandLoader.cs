@@ -1243,9 +1243,15 @@ namespace VPB
                 VarPackage vpbPkg = FileManager.GetPackage(requestUid, ensureInstalled: false);
                 if (vpbPkg != null && !string.IsNullOrEmpty(vpbPkg.Path))
                 {
-                    resolvedUid = !string.IsNullOrEmpty(vpbPkg.Uid) ? vpbPkg.Uid : UidFromVarPath(vpbPkg.Path);
-                    varPath = NormalizePath(vpbPkg.Path);
-                    if (!string.IsNullOrEmpty(resolvedUid) && !string.IsNullOrEmpty(varPath)) return true;
+                    string livePath = NormalizePath(vpbPkg.Path);
+                    // Registry can lag after package moves; require file on disk before trusting path.
+                    if ((File.Exists(livePath) || File.Exists(vpbPkg.Path))
+                        && !string.IsNullOrEmpty(livePath))
+                    {
+                        resolvedUid = !string.IsNullOrEmpty(vpbPkg.Uid) ? vpbPkg.Uid : UidFromVarPath(vpbPkg.Path);
+                        varPath = livePath;
+                        if (!string.IsNullOrEmpty(resolvedUid)) return true;
+                    }
                 }
             }
             catch { }
@@ -1350,11 +1356,17 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(uid)) return null;
 
-            // Prefer indexed UID->path lookup when available.
+            // Prefer indexed UID->path lookup when available — but never trust a stale path after
+            // AddonPackages moves (e.g. deps relocated under Dep/). Missing file must fall through
+            // to recursive find; otherwise on-demand register never sees the live .var (#77 follow-up).
             try
             {
                 if (VpbLocalDatabase.TryResolveIndexedVarPathForUid(uid, out string sqlPath) && !string.IsNullOrEmpty(sqlPath))
-                    return NormalizePath(sqlPath);
+                {
+                    string normSql = NormalizePath(sqlPath);
+                    if (File.Exists(normSql) || (!string.Equals(normSql, sqlPath, StringComparison.Ordinal) && File.Exists(sqlPath)))
+                        return normSql;
+                }
             }
             catch { }
 

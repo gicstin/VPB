@@ -582,11 +582,9 @@ namespace VPB
         // not-yet-registered package (e.g. MacGruber PostMagic's UserLUT enumerating its LUT folder
         // inside a deferred image callback) crash the throw straight through their own callback.
         //
-        // PREFIX: for a package-prefixed directory path, trigger on-demand registration so the
-        //         enumeration resolves to the real files.
-        // FINALIZER: swallow the "non-existent path" throw and return an empty array, matching the
-        //            standard semantics plugins assume, so an unregistered directory degrades to
-        //            "no files" instead of aborting the caller.
+        // PREFIX: register package for uid:/ paths; for bare Custom/ dirs pre-register owners via VPB index.
+        // FINALIZER: on non-existent path, enumerate from VPB package index (PoseMe ExpressionSets live in
+        //            BodyLanguage_Resources) instead of returning empty — empty kills HUD pose thumbs.
         static void PatchGetFiles(Harmony harmony)
         {
             var fm = typeof(MVR.FileManagement.FileManager);
@@ -599,6 +597,7 @@ namespace VPB
                 new[] { typeof(string), typeof(string) },
                 new[] { typeof(string) }
             };
+            int patched = 0;
             foreach (var sig in candidates)
             {
                 var m = AccessTools.Method(fm, "GetFiles", sig);
@@ -606,19 +605,42 @@ namespace VPB
                 harmony.Patch(m,
                     prefix: prefix != null ? new HarmonyMethod(prefix) : null,
                     finalizer: finalizer != null ? new HarmonyMethod(finalizer) : null);
-                return;
+                patched++;
             }
+            if (patched == 0)
+                LogUtil.LogWarning("[VPB] FileManager.GetFiles patch: no overloads found");
         }
 
-        public static void PreGetFiles(string __0)
+        public static void PreGetFiles(ref string __0)
         {
             try
             {
                 if (VamOnDemandLoader.s_InOnDemand) return;
+                if (string.IsNullOrEmpty(__0)) return;
+
+                // Fast reject — most GetFiles calls are uid:/ or Saves/ (not bare Custom/).
+                if (!PathLooksLikeBareOrBrokenCustom(__0))
+                {
+                    if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
+                    string uidQuick = VamOnDemandLoader.UidFromEntryPath(__0);
+                    if (string.IsNullOrEmpty(uidQuick)) return;
+                    VamOnDemandLoader.s_InOnDemand = true;
+                    try { VamOnDemandLoader.TryRegisterPackageOnDemand(uidQuick); }
+                    finally { VamOnDemandLoader.s_InOnDemand = false; }
+                    return;
+                }
+
+                // Rewrite bare Custom/ → uid:/Custom/... so native GetFiles sees a package dir.
+                TryRewriteBareCustomPath(ref __0);
+
                 if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
 
                 string uid = VamOnDemandLoader.UidFromEntryPath(__0);
-                if (string.IsNullOrEmpty(uid)) return;
+                if (string.IsNullOrEmpty(uid))
+                {
+                    TryRegisterOwnersForBareCustomDir(__0);
+                    return;
+                }
 
                 VamOnDemandLoader.s_InOnDemand = true;
                 try { VamOnDemandLoader.TryRegisterPackageOnDemand(uid); }
@@ -636,9 +658,220 @@ namespace VPB
             if (msg.IndexOf("non-existent path", StringComparison.OrdinalIgnoreCase) < 0)
                 return __exception;
 
-            __result = new string[0];
-            LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
+            // Always "*" — GetFiles(string) overloads have no pattern arg; injecting __1 breaks that patch.
+            string[] fromPkgs;
+            if (TryGetFilesFromPackageIndex(__0, "*", out fromPkgs) && fromPkgs != null && fromPkgs.Length > 0)
+            {
+                __result = fromPkgs;
+                return null;
+            }
+
+            __result = s_EmptyStringArray;
+            // Rate-limit: BodyLanguage can hammer missing morph dirs; avoid log spam alloc.
+            if (ShouldLogGetFilesEmpty(__0))
+                LogUtil.LogWarning("[VPB] FileManager.GetFiles non-existent path suppressed (returned empty): " + __0);
             return null;
+        }
+
+        static readonly string[] s_EmptyStringArray = new string[0];
+
+        static float s_GetFilesEmptyLogRealtime;
+        static string s_GetFilesEmptyLogLastPath;
+        static bool ShouldLogGetFilesEmpty(string path)
+        {
+            try
+            {
+                float now = Time.realtimeSinceStartup;
+                if (now - s_GetFilesEmptyLogRealtime < 2f
+                    && string.Equals(s_GetFilesEmptyLogLastPath, path, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                s_GetFilesEmptyLogRealtime = now;
+                s_GetFilesEmptyLogLastPath = path;
+                return true;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>True for bare Custom/... or broken ":/Custom/..." (null packageUid concat).</summary>
+        static bool PathLooksLikeBareOrBrokenCustom(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            // Cheap reject before slash normalize.
+            if (path.IndexOf("Custom", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            int colon = path.IndexOf(":/", StringComparison.Ordinal);
+            if (colon > 0) return false; // package-qualified
+            return true; // bare Custom or ":/Custom"
+        }
+
+        /// <summary>
+        /// Bare Custom/... → first VPB-indexed uid:/Custom/... (registers owner). Used by load/exists/open.
+        /// </summary>
+        static bool TryRewriteBareCustomPath(ref string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (!PathLooksLikeBareOrBrokenCustom(path)) return false;
+
+            string p = path;
+            if (p.IndexOf('\\') >= 0) p = p.Replace('\\', '/');
+            if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
+
+            // Heal BodyLanguage null+":/" → ":/Custom/..."
+            int colon = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colon == 0)
+                p = p.Substring(2);
+            else if (colon > 0)
+                return false;
+
+            if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return false;
+
+            string uidPath;
+            if (!FileManager.TryResolveCustomInternalPathToUidPath(p, out uidPath) || string.IsNullOrEmpty(uidPath))
+                return false;
+
+            try
+            {
+                string uid = VamOnDemandLoader.UidFromEntryPath(uidPath);
+                if (!string.IsNullOrEmpty(uid))
+                {
+                    bool script = uidPath.IndexOf(":/Custom/Scripts/", StringComparison.OrdinalIgnoreCase) >= 0;
+                    VamOnDemandLoader.TryRegisterPackageOnDemand(uid, persistUidOverride: script);
+                }
+            }
+            catch { }
+
+            path = uidPath;
+            return true;
+        }
+
+        // Main-thread scratch — reentrancy falls back to local lists.
+        static List<FileEntry> s_VarFilesScratch;
+        static List<string> s_UidListScratch;
+        static int s_VarFilesScratchDepth;
+
+        static void TryRegisterOwnersForBareCustomDir(string dirPath)
+        {
+            if (string.IsNullOrEmpty(dirPath)) return;
+            string p = dirPath;
+            if (p.IndexOf('\\') >= 0) p = p.Replace('\\', '/');
+            p = p.Trim().TrimEnd('/');
+            if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
+            if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return;
+
+            List<FileEntry> entries;
+            bool pooled = s_VarFilesScratchDepth == 0;
+            if (pooled)
+            {
+                if (s_VarFilesScratch == null) s_VarFilesScratch = new List<FileEntry>(64);
+                else s_VarFilesScratch.Clear();
+                entries = s_VarFilesScratch;
+                s_VarFilesScratchDepth++;
+            }
+            else
+            {
+                entries = new List<FileEntry>(32);
+            }
+
+            try
+            {
+                try { FileManager.FindVarFiles(p, "*", entries); }
+                catch { return; }
+
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    VarFileEntry vfe = entries[i] as VarFileEntry;
+                    if (vfe == null || vfe.Package == null || string.IsNullOrEmpty(vfe.Package.Uid)) continue;
+                    try
+                    {
+                        bool script = p.StartsWith("Custom/Scripts/", StringComparison.OrdinalIgnoreCase);
+                        VamOnDemandLoader.TryRegisterPackageOnDemand(vfe.Package.Uid, persistUidOverride: script);
+                    }
+                    catch { }
+                }
+            }
+            finally
+            {
+                if (pooled)
+                {
+                    s_VarFilesScratch.Clear();
+                    s_VarFilesScratchDepth--;
+                }
+            }
+        }
+
+        static bool TryGetFilesFromPackageIndex(string dirPath, string pattern, out string[] files)
+        {
+            files = null;
+            if (string.IsNullOrEmpty(dirPath)) return false;
+            string p = dirPath;
+            if (p.IndexOf('\\') >= 0) p = p.Replace('\\', '/');
+            p = p.Trim().TrimEnd('/');
+            if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
+
+            // Accept uid:/Custom/..., bare Custom/..., and broken ":/Custom/..." (null+":/" packageUid).
+            string internalDir = p;
+            int colon = p.IndexOf(":/", StringComparison.Ordinal);
+            if (colon >= 0)
+                internalDir = p.Substring(colon + 2);
+            if (internalDir.Length > 0 && internalDir[0] == '/')
+                internalDir = internalDir.Substring(1);
+
+            if (!internalDir.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string pat = string.IsNullOrEmpty(pattern) ? "*" : pattern;
+
+            List<FileEntry> entries;
+            List<string> list;
+            bool pooled = s_VarFilesScratchDepth == 0;
+            if (pooled)
+            {
+                if (s_VarFilesScratch == null) s_VarFilesScratch = new List<FileEntry>(64);
+                else s_VarFilesScratch.Clear();
+                if (s_UidListScratch == null) s_UidListScratch = new List<string>(64);
+                else s_UidListScratch.Clear();
+                entries = s_VarFilesScratch;
+                list = s_UidListScratch;
+                s_VarFilesScratchDepth++;
+            }
+            else
+            {
+                entries = new List<FileEntry>(64);
+                list = new List<string>(64);
+            }
+
+            try
+            {
+                try { FileManager.FindVarFiles(internalDir, pat, entries); }
+                catch { return false; }
+
+                if (entries.Count == 0) return false;
+
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    FileEntry e = entries[i];
+                    if (e == null || string.IsNullOrEmpty(e.Uid)) continue;
+                    VarFileEntry vfe = e as VarFileEntry;
+                    if (vfe != null && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                    {
+                        try { VamOnDemandLoader.TryRegisterPackageOnDemand(vfe.Package.Uid); }
+                        catch { }
+                    }
+                    list.Add(e.Uid);
+                }
+
+                if (list.Count == 0) return false;
+                files = list.ToArray();
+                return true;
+            }
+            finally
+            {
+                if (pooled)
+                {
+                    s_VarFilesScratch.Clear();
+                    s_UidListScratch.Clear();
+                    s_VarFilesScratchDepth--;
+                }
+            }
         }
 
         static void PatchFileExists(Harmony harmony)
@@ -754,6 +987,9 @@ namespace VPB
                     path = rewritten;
                 }
 
+                // Bare Custom/ (PoseMe ExpressionSets, BodyLanguage audiobundles) → owning package UID.
+                TryRewriteBareCustomPath(ref path);
+
                 string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(path, attemptRegister: true);
                 if (!string.Equals(best, path, StringComparison.OrdinalIgnoreCase))
                 {
@@ -766,7 +1002,7 @@ namespace VPB
             }
         }
 
-        public static bool PreFileExists(string __0, ref bool __result)
+        public static bool PreFileExists(ref string __0, ref bool __result)
         {
             if (VamStartupOptimizations.ShouldSkipVamXFileExistsWork(__0))
             {
@@ -776,6 +1012,7 @@ namespace VPB
 
             // Same defensive wrap as PreNormalizeLoadPath: FileExists is on the trigger restore
             // path too, and an unguarded throw breaks MacGruber-style per-state JSON loops.
+            // Must use ref __0 — non-ref rewrites were no-ops (Harmony only rebinds ref args).
             try
             {
                 string rewritten = RewriteVdsPathIfNeeded(__0);
@@ -783,6 +1020,8 @@ namespace VPB
                 {
                     __0 = rewritten;
                 }
+
+                TryRewriteBareCustomPath(ref __0);
 
                 string best = VamOnDemandLoader.RewriteEntryPathToBestAvailable(__0, attemptRegister: true);
                 if (!string.Equals(best, __0, StringComparison.OrdinalIgnoreCase))
@@ -884,6 +1123,7 @@ namespace VPB
             {
                 path = rewritten;
             }
+            TryRewriteBareCustomPath(ref path);
         }
 
         [HarmonyPostfix]
@@ -902,6 +1142,7 @@ namespace VPB
             {
                 path = rewritten;
             }
+            TryRewriteBareCustomPath(ref path);
         }
 
         [HarmonyPostfix]

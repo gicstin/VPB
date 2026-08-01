@@ -535,6 +535,9 @@ namespace VPB
                 }
             }
 
+            // Tell LoadInternal funnel gallery already prepped this path — skip duplicate native prep.
+            try { SceneLoadingUtils.NoteGallerySceneLoadPrep(path); } catch { }
+
             LogUtil.Log("[VPB] UI.EnsureInstalled (with dependency scan) depsChanged:" + outcome.DepsChanged
                 + " missing:" + outcome.EnsureResult.MissingCount + "/" + outcome.EnsureResult.ReferencedCount
                 + " whitelistChanged:" + hasTemporaryAllowList

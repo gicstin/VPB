@@ -73,7 +73,7 @@ namespace VPB
             }
 
             string stateJson;
-            if (VpbLocalDatabase.TryLoadCategoryFilterState(PanelId, key, out stateJson))
+            if (TryLoadPersistedCategoryFilterState(key, out stateJson))
             {
                 state = CategoryFilterState.FromJson(stateJson);
                 if (state != null)
@@ -85,6 +85,20 @@ namespace VPB
             }
 
             ClearFiltersForNewCategory();
+        }
+
+        /// <summary>Load filter JSON for this pane; fall back to primary slot so Close/recreate and old single-pane rows still restore.</summary>
+        private bool TryLoadPersistedCategoryFilterState(string catKey, out string stateJson)
+        {
+            stateJson = null;
+            string id = PanelId;
+            if (VpbLocalDatabase.TryLoadCategoryFilterState(id, catKey, out stateJson) && !string.IsNullOrEmpty(stateJson))
+                return true;
+            if (!string.Equals(id, PrimaryPanelId, StringComparison.Ordinal)
+                && VpbLocalDatabase.TryLoadCategoryFilterState(PrimaryPanelId, catKey, out stateJson)
+                && !string.IsNullOrEmpty(stateJson))
+                return true;
+            return false;
         }
 
         /// <param name="restoreUserTagFilter">

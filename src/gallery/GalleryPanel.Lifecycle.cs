@@ -13,6 +13,7 @@ namespace VPB
         public void Close()
         {
             VpbPerfDiag.LogTransition("GalleryPanel.Close", null);
+            try { PersistCurrentBrowsePlace(); } catch { }
             if (Gallery.singleton != null)
             {
                 Gallery.singleton.RemovePanel(this);

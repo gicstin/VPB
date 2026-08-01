@@ -165,6 +165,46 @@ namespace VPB
         public List<GalleryPanel> Panels => panels;
         public bool AnyPanelHasLoadedContent => panels.Any(p => p != null && p.HasLoadedContent);
 
+        /// <summary>
+        /// True after the first gallery open this VaM process.
+        /// Cold start (process launch): use <see cref="VPBConfig.InitialGalleryCategory"/> + default side rails.
+        /// In-session Close/reopen: use Last* browse memory (category, rails, scroll, filters).
+        /// </summary>
+        public static bool SessionInitialCategoryApplied { get; private set; }
+
+        /// <summary>Alias — in-session browse memory is active (not a fresh VaM process).</summary>
+        public static bool SessionBrowseMemoryActive => SessionInitialCategoryApplied;
+
+        public static void MarkSessionInitialCategoryApplied()
+        {
+            SessionInitialCategoryApplied = true;
+        }
+
+        /// <summary>
+        /// Unhide existing panes and keep browse place. True when at least one pane had loaded content.
+        /// </summary>
+        public bool TryRestoreExistingPanelsKeepingState()
+        {
+            if (panels == null || panels.Count == 0) return false;
+            bool any = false;
+            for (int i = 0; i < panels.Count; i++)
+            {
+                GalleryPanel p = panels[i];
+                if (p == null) continue;
+                if (!p.HasLoadedContent || string.IsNullOrEmpty(p.GetCurrentPath()))
+                    continue;
+                try
+                {
+                    p.Show(p.GetTitle(), p.GetCurrentExtension(), p.GetCurrentPath());
+                    any = true;
+                }
+                catch { }
+            }
+            if (any)
+                MarkSessionInitialCategoryApplied();
+            return any;
+        }
+
         private Coroutine autoRefreshCoroutine;
         private bool autoRefreshPending;
         private Coroutine startupDeferredAutoRefreshCoroutine;
@@ -478,14 +518,26 @@ namespace VPB
             panels.Clear();
         }
 
+        /// <summary>Next slot for extra panes after <see cref="GalleryPanel.PrimaryPanelId"/>. First pane always gets primary so SQL filter memory survives Close.</summary>
+        private int _nextExtraPanelSlot = 1;
+
         public void AddPanel(GalleryPanel p)
         {
-            if (!panels.Contains(p)) panels.Add(p);
+            if (p == null || panels.Contains(p)) return;
+            // Empty list → primary slot (durable). Extra panes get monotonic ids (not recycled) so concurrent panes keep distinct filter rows.
+            string id = panels.Count == 0
+                ? GalleryPanel.PrimaryPanelId
+                : ("panel_" + (_nextExtraPanelSlot++));
+            try { p.AssignStablePanelId(id); } catch { }
+            panels.Add(p);
         }
 
         public void RemovePanel(GalleryPanel p)
         {
             if (panels.Contains(p)) panels.Remove(p);
+            // All panes gone → next create is primary again (browse memory restores).
+            if (panels.Count == 0)
+                _nextExtraPanelSlot = 1;
         }
 
         public void Init()
@@ -707,6 +759,8 @@ namespace VPB
                     }
                 }
             }
+            // Any intentional Show (toggle, hotkey, CreatePane) consumes Initial for this process.
+            MarkSessionInitialCategoryApplied();
         }
 
         public void CreatePane(string forcedInitialCategory = null, bool showAfterCreate = true)
@@ -738,7 +792,8 @@ namespace VPB
                 Gallery.Category initial = categories[0];
 
                 string categoryToOpen = forcedInitialCategory;
-                if (string.IsNullOrEmpty(categoryToOpen) && VPBConfig.Instance != null)
+                // Cold start: InitialGalleryCategory (Scenes / …). In-session recreate: leave null → Last* below.
+                if (string.IsNullOrEmpty(categoryToOpen) && VPBConfig.Instance != null && !SessionBrowseMemoryActive)
                     categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
 
                 if (!string.IsNullOrEmpty(categoryToOpen))
@@ -754,12 +809,14 @@ namespace VPB
                 }
                 else
                 {
-                    // LastUsed: restore last-viewed category from saved state.
+                    // LastUsed setting on cold start, or any in-session CreatePane after Close.
                     try
                     {
-                        string last = VPBConfig.ReadLastGalleryCategoryFromDisk();
-                        if (string.IsNullOrEmpty(last) && VPBConfig.Instance != null)
+                        string last = null;
+                        if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
                             last = VPBConfig.Instance.LastGalleryCategory;
+                        if (string.IsNullOrEmpty(last))
+                            last = VPBConfig.ReadLastGalleryCategoryFromDisk();
 
                         if (!string.IsNullOrEmpty(last))
                         {
@@ -797,6 +854,8 @@ namespace VPB
                     if (createTiming != null)
                         p.BeginPaneLoadTiming(createTiming, "create");
                     p.Show(initial.name, initial.extension, initial.path);
+                    // Startup auto-pane / Create Pane consumed Initial for this process.
+                    MarkSessionInitialCategoryApplied();
                 }
             }
             else if (createTiming != null)

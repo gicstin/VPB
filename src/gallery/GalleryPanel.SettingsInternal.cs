@@ -843,7 +843,7 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "desktop.initialCategory", GroupKey = "categories", SubGroupKey = "options", Label = VPBTranslation.T("settings.initial_gallery_category", "Gallery opens on"),
-                Tooltip = VPBTranslation.T("settings.tip.initial_gallery_category", "Which category is shown when gallery opens."),
+                Tooltip = VPBTranslation.T("settings.tip.initial_gallery_category", "Category when VaM starts (cold launch). Close/reopen gallery during the same session restores the last category you used. Choose LastUsed to restore last category even on cold launch."),
                 ControlType = InternalSettingControlType.Cycle, Options = new[] { "Scenes", "Clothing", "Hair", "Pose", "Appearance", "Plugins", "LastUsed" },
                 GetString = () => VPBConfig.NormalizeInitialGalleryCategory(VPBConfig.Instance.InitialGalleryCategory),
                 SetString = v => { VPBConfig.Instance.InitialGalleryCategory = v; VPBConfig.Instance.TriggerChange(); }
@@ -851,7 +851,7 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultLeft", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_left_panel", "Left side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Which filter list or Import sidebar opens on the left for new panes."),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_left_panel", "Left list / Import on cold VaM launch. During the same session, Close/reopen restores the rails you last had open."),
                 ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel),
                 SetString = v => {
@@ -863,7 +863,7 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.defaultRight", GroupKey = "lists", Label = VPBTranslation.T("settings.gallery_default_right_panel", "Right side list (default)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Which filter list or Import sidebar opens on the right for new panes."),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_default_right_panel", "Right list / Import on cold VaM launch. During the same session, Close/reopen restores the rails you last had open."),
                 ControlType = InternalSettingControlType.Cycle, Options = VPBConfig.GallerySidePanelOptions,
                 GetString = () => VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel),
                 SetString = v => {

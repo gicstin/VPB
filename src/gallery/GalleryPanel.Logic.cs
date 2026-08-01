@@ -3439,15 +3439,29 @@ namespace VPB
             categories = cats;
             categoriesCached = false;
 
-            // Try to restore last tab if currentPath is not yet set (e.g. freshly created panels
-            // that were not yet shown via Show()). Panels that already have a category displayed
-            // are left unchanged.
+            // Cold start: settings Initial (or LastUsed → disk). In-session recreate: LastGalleryCategory.
+            // Do not prime Last* on cold start when Initial is Scenes — that overwrote launch settings.
             string lastPageName = null;
-            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
-                lastPageName = VPBConfig.Instance.LastGalleryCategory;
-            else if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
-                lastPageName = Settings.Instance.LastGalleryPage.Value;
-            LogUtil.Log("[Gallery] SetCategories: currentPath='" + currentPath + "' memoryLastCat='" + (VPBConfig.Instance != null ? VPBConfig.Instance.LastGalleryCategory : "null") + "' resolvedLastPage='" + (lastPageName ?? "null") + "'");
+            if (Gallery.SessionBrowseMemoryActive)
+            {
+                if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                    lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                else if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
+                    lastPageName = Settings.Instance.LastGalleryPage.Value;
+            }
+            else if (VPBConfig.Instance != null)
+            {
+                string initial = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                if (!string.IsNullOrEmpty(initial))
+                    lastPageName = initial;
+                else if (!string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                    lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                else
+                {
+                    try { lastPageName = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { lastPageName = null; }
+                }
+            }
+            LogUtil.Log("[Gallery] SetCategories: currentPath='" + currentPath + "' memoryLastCat='" + (VPBConfig.Instance != null ? VPBConfig.Instance.LastGalleryCategory : "null") + "' resolvedLastPage='" + (lastPageName ?? "null") + "' sessionMem=" + (Gallery.SessionBrowseMemoryActive ? "1" : "0"));
 
             if (string.IsNullOrEmpty(currentPath) && !string.IsNullOrEmpty(lastPageName))
             {

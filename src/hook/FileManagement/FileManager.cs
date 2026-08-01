@@ -3425,6 +3425,12 @@ namespace VPB
 			return new List<VarPackage>();
 		}
 
+		/// <summary>Registered package count without allocating <see cref="GetPackages"/> list (UI tips / diag).</summary>
+		public static int GetPackageCount()
+		{
+			return packagesByUid != null ? packagesByUid.Count : 0;
+		}
+
 		public static List<string> GetPackageUids()
 		{
 			List<string> list;

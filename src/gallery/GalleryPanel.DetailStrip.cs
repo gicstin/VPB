@@ -980,7 +980,8 @@ namespace VPB
             DetailStripBindClick(_detailStripDesc.gameObject, DetailStripOnDescriptionClick);
             AddDynamicTooltip(_detailStripDesc.gameObject, () =>
             {
-                string full = DetailStripResolveDescription(_detailStripBoundFile);
+                // Cached only — strip hydrate already ran TryEnsure; hover must not open .var ZIP.
+                string full = DetailStripResolveDescription(_detailStripBoundFile, ensureMeta: false);
                 if (string.IsNullOrEmpty(full))
                     return VPBTranslation.T("gallery.detail.tip.desc_empty", "No short description in meta.json");
                 string tip = full + "\n" + VPBTranslation.T("gallery.detail.tip.desc_click", "Click: copy description");
@@ -1095,7 +1096,7 @@ namespace VPB
             DetailStripBindClick(t.gameObject, DetailStripOnDescriptionClick);
             AddDynamicTooltip(t.gameObject, () =>
             {
-                string full = DetailStripResolveDescription(_detailStripBoundFile);
+                string full = DetailStripResolveDescription(_detailStripBoundFile, ensureMeta: false);
                 if (string.IsNullOrEmpty(full))
                     return VPBTranslation.T("gallery.detail.tip.desc_empty", "No short description in meta.json");
                 string tip = full + "\n" + VPBTranslation.T("gallery.detail.tip.desc_click", "Click: copy description");
@@ -9936,14 +9937,21 @@ namespace VPB
             DetailStripApplyDescPlacement();
         }
 
-        private static string DetailStripResolveDescription(FileEntry file)
+        /// <param name="ensureMeta">
+        /// True (default): may open .var ZIP once via <see cref="VarPackage.TryEnsureMetaJsonLiteFields"/>.
+        /// False: hover tips — read cached Description only; never block EventSystem on disk I/O.
+        /// </param>
+        private static string DetailStripResolveDescription(FileEntry file, bool ensureMeta = true)
         {
             if (file == null) return "";
             try
             {
                 VarPackage pkg = TryResolvePackageForThumbPlaceholder(file);
                 if (pkg == null) return "";
-                try { pkg.TryEnsureMetaJsonLiteFields(); } catch { }
+                if (ensureMeta)
+                {
+                    try { pkg.TryEnsureMetaJsonLiteFields(); } catch { }
+                }
                 if (!string.IsNullOrEmpty(pkg.Description))
                     return pkg.Description.Trim();
             }

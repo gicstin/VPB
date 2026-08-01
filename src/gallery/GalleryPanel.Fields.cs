@@ -1357,16 +1357,26 @@ namespace VPB
 
         // Per-category filter state memory (BA-style: each category remembers its own filters)
         private readonly Dictionary<string, CategoryFilterState> _categoryFilterStates = new Dictionary<string, CategoryFilterState>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Stable browse-memory key. Assigned by <see cref="Gallery.AddPanel"/> — never GetHashCode (that broke SQL restore after Close/restart).</summary>
         private string _panelId = null;
+        internal const string PrimaryPanelId = "panel_0";
+        private Coroutine _deferredCollapseLayoutCo;
 
         private string PanelId
         {
             get
             {
-                if (_panelId == null)
-                    _panelId = "panel_" + GetHashCode().ToString("x8");
+                if (string.IsNullOrEmpty(_panelId))
+                    _panelId = PrimaryPanelId;
                 return _panelId;
             }
+        }
+
+        /// <summary>Gallery assigns slot ids (<c>panel_0</c>, <c>panel_1</c>, …) so filter SQL survives Close + recreate.</summary>
+        internal void AssignStablePanelId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            _panelId = id;
         }
 
         // Sorting

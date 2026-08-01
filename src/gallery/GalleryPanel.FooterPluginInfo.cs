@@ -119,7 +119,7 @@ namespace VPB
 
             try
             {
-                int pkgs = FileManager.GetPackages().Count;
+                int pkgs = FileManager.GetPackageCount();
                 sb.Append(" | ");
                 sb.Append(VPBTranslation.T("gallery.plugininfo.packages", "Packages"));
                 sb.Append(": ");

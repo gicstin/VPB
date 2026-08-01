@@ -513,28 +513,14 @@ namespace VPB
                 SaveCategoryScrollCache();
             }
             string nextCategoryKey = MakeCategoryScrollKey(title, path);
-            if (!hasLoadedContent)
+            // Restore scroll from in-memory or disk cache (gallery_scroll.json). Normalized Y stays usable when list length shifts.
+            if (categoryScrollPositions.TryGetValue(nextCategoryKey, out float cachedScroll))
             {
-                // Cold launch should always start at top.
-                _pendingScrollRestore = 1f;
-            }
-            else if (paramsChanged)
-            {
-                // Category switch: only restore positions that were captured in this runtime session.
-                // Persisted cache values from previous runs are intentionally ignored here to prevent stale/random starts.
-                if (sessionCategoryScrollKeys.Contains(nextCategoryKey) &&
-                    categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp))
-                    _pendingScrollRestore = Mathf.Clamp01(_sp);
-                else
-                    _pendingScrollRestore = 1f;
+                _pendingScrollRestore = Mathf.Clamp01(cachedScroll);
+                sessionCategoryScrollKeys.Add(nextCategoryKey);
             }
             else
-            {
-                // Same-view reopen/refresh can restore remembered position.
-                _pendingScrollRestore = categoryScrollPositions.TryGetValue(nextCategoryKey, out float _sp)
-                    ? Mathf.Clamp01(_sp)
-                    : 1f;
-            }
+                _pendingScrollRestore = 1f;
 
             currentExtension = extension;
             currentPath = path;
@@ -587,7 +573,7 @@ namespace VPB
             }
 
             // Fast reopen path: same already-loaded view should just become visible again.
-            // Do not run layout/tabs/refresh logic here; it causes the redraw/flicker you reported.
+            // Do not run layout/tabs/refresh or sync CacheCategoryCounts/CacheCreators here — that was the open/minimize hitch.
             if (sameViewReopen && hasLoadedContent && !shouldRefresh)
             {
                 SetCanvasVisible(true);
@@ -597,9 +583,9 @@ namespace VPB
                     lastAppliedPackageRefreshTime = pkgRefreshTime;
                     try { RefreshVisibleGridVisualsOnly(); } catch { }
                 }
-                // Restore split sub-pane chrome (tags / scene source) after hide — no list rebuild.
+                // Light chrome only — defer package-scan side-tab rebuild off the Show spike.
                 try { UpdateTabsImpl(rebuildSideTabLists: false); } catch { }
-                try { EnsureSideTabsFreshForPackageScan(); } catch { }
+                try { ScheduleDeferredSideTabsFreshAfterReopen(); } catch { }
                 try { TryApplyPendingPackageDeltaOnShow(); } catch { }
                 CancelGalleryCategoryTypeNavigationTiming("same_view_reopen");
                 LogUtil.Log("[Gallery] GalleryPanel.Show done: " + sw.ElapsedMilliseconds + "ms title='" + currentCategoryTitle + "' path='" + currentPath + "'");
@@ -727,10 +713,72 @@ namespace VPB
             _userHidden = true;
             _hiddenByMenuGate = false;
             VpbPerfDiag.LogTransition("GalleryPanel.Hide", "userHidden=true");
+            try { PersistCurrentBrowsePlace(); } catch { }
             SetCanvasVisible(false);
 
             hoverCount = 0;
             try { HideHoverPreview(null); } catch { }
+        }
+
+        /// <summary>Write scroll + category filters before hide/close so reopen and next VaM session can restore place.</summary>
+        private void PersistCurrentBrowsePlace()
+        {
+            if (!hasLoadedContent) return;
+            if (!_scrollCacheLoaded) LoadCategoryScrollCache();
+            if (scrollRect != null && !string.IsNullOrEmpty(currentPath))
+            {
+                string key = MakeCategoryScrollKey(currentCategoryTitle, currentPath);
+                categoryScrollPositions[key] = Mathf.Clamp01(scrollRect.verticalNormalizedPosition);
+                sessionCategoryScrollKeys.Add(key);
+                SaveCategoryScrollCache();
+            }
+            if (!string.IsNullOrEmpty(currentPath))
+                SaveCurrentCategoryFilterState(currentCategoryTitle, currentPath);
+
+            // Keep LastGalleryCategory in sync even when user opened via Initial then never clicked a tab.
+            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(currentCategoryTitle))
+                VPBConfig.Instance.LastGalleryCategory = currentCategoryTitle;
+            if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null
+                && !string.IsNullOrEmpty(currentCategoryTitle))
+            {
+                try { Settings.Instance.LastGalleryPage.Value = currentCategoryTitle; } catch { }
+            }
+
+            // Side rails + Import side: remember which lists were open for Close/recreate.
+            if (VPBConfig.Instance != null)
+            {
+                string leftTok = ContentTypeToSidePanelString(NormalizePersistableSideTabContent(leftActiveContent));
+                string rightTok = ContentTypeToSidePanelString(NormalizePersistableSideTabContent(rightActiveContent));
+                if (importSidebarOpenIntent)
+                {
+                    if (importSidebarOnLeft)
+                        leftTok = "Import";
+                    else
+                        rightTok = "Import";
+                }
+                VPBConfig.Instance.LastGalleryLeftSidePanel = VPBConfig.NormalizeGallerySidePanel(leftTok);
+                VPBConfig.Instance.LastGalleryRightSidePanel = VPBConfig.NormalizeGallerySidePanel(rightTok);
+                VPBConfig.Instance.LastGallerySideRailsSaved = true;
+                try { VPBConfig.Instance.Save(false); } catch { }
+            }
+        }
+
+        private Coroutine _deferredSideTabsFreshCo;
+
+        /// <summary>After same-view Show: run side-tab count refresh next frame so SetActive + Canvas rebuild are not stacked with CacheCreators.</summary>
+        private void ScheduleDeferredSideTabsFreshAfterReopen()
+        {
+            if (!Application.isPlaying) return;
+            if (_deferredSideTabsFreshCo != null) return;
+            _deferredSideTabsFreshCo = StartCoroutine(DeferredSideTabsFreshAfterReopen());
+        }
+
+        private IEnumerator DeferredSideTabsFreshAfterReopen()
+        {
+            yield return null;
+            _deferredSideTabsFreshCo = null;
+            if (canvas == null || !IsVisible) yield break;
+            try { EnsureSideTabsFreshForPackageScan(); } catch { }
         }
 
         private void SetCanvasVisible(bool visible)
@@ -777,14 +825,18 @@ namespace VPB
             if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null)
             {
                 // If no category ever selected (should not happen, but can if created without Show()),
-                // force a first Show() using configured initial category.
+                // force a first Show() using last-used after startup, else InitialGalleryCategory once.
                 if (string.IsNullOrEmpty(currentPath) && categories != null && categories.Count > 0)
                 {
                     try
                     {
                         var initial = categories[0];
                         string categoryToOpen = null;
-                        if (VPBConfig.Instance != null) categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                        if (VPBConfig.Instance != null && !Gallery.SessionBrowseMemoryActive)
+                            categoryToOpen = VPBConfig.Instance.ResolveInitialGalleryCategoryName();
+                        if (string.IsNullOrEmpty(categoryToOpen) && VPBConfig.Instance != null
+                            && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                            categoryToOpen = VPBConfig.Instance.LastGalleryCategory;
                         if (!string.IsNullOrEmpty(categoryToOpen))
                         {
                             for (int i = 0; i < categories.Count; i++)

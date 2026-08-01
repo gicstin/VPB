@@ -12,6 +12,8 @@ namespace VPB
         public Action<PointerEventData> OnPointerEnterEvent;
         // Detach slot for the latest tooltip closure; re-binds use it to avoid stacking on the multicast delegate.
         public Action<bool> TooltipHandler;
+        // Same for PointerEnter sample capture — AddTooltip* rebinds must not stack lambdas.
+        public Action<PointerEventData> TooltipPointerEnterHandler;
         private bool isHovered = false;
         public bool IsHovered { get { return isHovered; } }
 

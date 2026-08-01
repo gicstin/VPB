@@ -2433,9 +2433,11 @@ namespace VPB
 
             ApplyInnerPaneScale();
             ApplySidePanelDefaultsFromConfig();
+            // Import last-session open only in-session; cold start uses settings defaults / Import via Apply above.
             bool restoreGlobalImportOpen = !importSidebarInitAsClone
                 && Gallery.singleton != null
-                && Gallery.singleton.PanelCount == 1;
+                && Gallery.singleton.PanelCount == 1
+                && Gallery.SessionBrowseMemoryActive;
             TryRestoreImportSidebarOpenFromGlobalPref(restoreGlobalImportOpen);
             importSidebarInitAsClone = false;
             UpdateSideButtonsVisibility();

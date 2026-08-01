@@ -1259,6 +1259,9 @@ namespace VPB
             try { DAZClothingHook.SchedulePostSceneLoadCustomTextureResync(); } catch { }
 
             CacheCleanupManager.FlushHitsBatch();
+
+            // Loose rewrite/filter temps: wake coordinator once load total ends (stable delete).
+            try { SceneLoadingUtils.NotifySceneLoadTotalEndedForTempScenes(); } catch { }
         }
 
         static void LogSceneLoadLifecycleBreakdown(string context, string sceneName, double durSeconds)

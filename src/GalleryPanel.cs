@@ -41,12 +41,24 @@ namespace VPB
             UpdateTabs();
         }
 
-        /// <summary>Applies <see cref="VPBConfig.GalleryDefaultLeftSidePanel"/> and <see cref="VPBConfig.GalleryDefaultRightSidePanel"/> (and floating fallback: Category on right when both None).</summary>
+        /// <summary>
+        /// Applies side-rail / Import layout for a new pane.
+        /// Cold VaM launch: <see cref="VPBConfig.GalleryDefaultLeftSidePanel"/> / Right (settings).
+        /// In-session Close/reopen: <see cref="VPBConfig.LastGalleryLeftSidePanel"/> / Right (browse memory).
+        /// </summary>
         public void ApplySidePanelDefaultsFromConfig()
         {
             if (VPBConfig.Instance == null) return;
-            string ls = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
-            string rs = VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
+
+            // Disk Last* alone must not win on cold start — only in-session memory (Jakob: settings = launch contract).
+            bool restoreRemembered = Gallery.SessionBrowseMemoryActive;
+
+            string ls = restoreRemembered
+                ? VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.LastGalleryLeftSidePanel)
+                : VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultLeftSidePanel);
+            string rs = restoreRemembered
+                ? VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.LastGalleryRightSidePanel)
+                : VPBConfig.NormalizeGallerySidePanel(VPBConfig.Instance.GalleryDefaultRightSidePanel);
 
             bool leftImport = string.Equals(ls, "Import", StringComparison.OrdinalIgnoreCase);
             bool rightImport = string.Equals(rs, "Import", StringComparison.OrdinalIgnoreCase);
@@ -65,13 +77,12 @@ namespace VPB
 
             ContentType? targetL = l;
             ContentType? targetR = r;
-            // Floating fallback: only for desktop (non-VR) floating mode.
-            // In VR with GalleryAnchorToVamMenu, the panel auto-appears with the VAM menu;
-            // opening a filter panel by default is surprising for VR users.
+            // Floating fallback: only for desktop (non-VR) floating mode on first-open defaults —
+            // not when restoring remembered None/None (user closed both rails).
             bool isVR = XrUtils.IsVrActive();
             bool vrAnchorMode = isVR && VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu;
             bool wantImport = !importSidebarInitAsClone && (leftImport || rightImport);
-            if (!isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue && !wantImport)
+            if (!restoreRemembered && !isFixedLocally && !vrAnchorMode && !targetL.HasValue && !targetR.HasValue && !wantImport)
                 targetR = ContentType.Category;
 
             bool contentSame = NullableContentTypeEqual(leftActiveContent, targetL)
@@ -91,6 +102,13 @@ namespace VPB
                 importSidebarForceOnLeft = leftImport;
                 try { RefreshImportSidebarCategoryGate(); } catch { }
                 try { PersistImportSidebarOpenIntent(); } catch { }
+            }
+            else if (restoreRemembered)
+            {
+                // Remembered layout had no Import — do not let TryRestoreImportSidebarOpenFromGlobalPref reopen it.
+                importSidebarOpenIntent = false;
+                importSidebarOpenIntentLoaded = true;
+                try { RefreshImportSidebarCategoryGate(); } catch { }
             }
             else if (!importSidebarInitAsClone && importSidebarOpenIntent)
             {
@@ -129,6 +147,21 @@ namespace VPB
             if (string.Equals(normalized, "History", StringComparison.OrdinalIgnoreCase))
                 return ContentType.History;
             return null;
+        }
+
+        /// <summary>Maps open side content to config token (None / Category / Creator / Tags / Path / History).</summary>
+        private static string ContentTypeToSidePanelString(ContentType? type)
+        {
+            if (!type.HasValue) return "None";
+            switch (type.Value)
+            {
+                case ContentType.Category: return "Category";
+                case ContentType.Creator: return "Creator";
+                case ContentType.UserTags: return "Tags";
+                case ContentType.Path: return "Path";
+                case ContentType.History: return "History";
+                default: return "None";
+            }
         }
 
         public void SetFilters(string path, string extension, string creator)

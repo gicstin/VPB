@@ -55,18 +55,19 @@ namespace VPB
         private void TryFillLastGalleryPageFromPersisted(ref string lastPageName)
         {
             if (!string.IsNullOrEmpty(lastPageName)) return;
+            // Prefer in-memory (just updated on Close/Hide) over disk — disk can lag a write or stay on Initial Scenes.
+            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+            {
+                lastPageName = VPBConfig.Instance.LastGalleryCategory;
+                LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
+                return;
+            }
             string diskLast = "";
             try { diskLast = VPBConfig.ReadLastGalleryCategoryFromDisk(); } catch { }
             if (!string.IsNullOrEmpty(diskLast))
             {
                 lastPageName = diskLast;
                 LogUtil.Log("[Gallery] OpenGallery using disk LastGalleryCategory='" + lastPageName + "'");
-                return;
-            }
-            if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
-            {
-                lastPageName = VPBConfig.Instance.LastGalleryCategory;
-                LogUtil.Log("[Gallery] OpenGallery using memory LastGalleryCategory='" + lastPageName + "'");
                 return;
             }
             if (Settings.Instance != null && Settings.Instance.LastGalleryPage != null)
@@ -84,11 +85,18 @@ namespace VPB
             {
                 if (!m_GalleryCatsInited) InitGalleryCategories();
 
+                // Minimize/Hide left panes alive — unhide in place. Do not re-resolve InitialGalleryCategory.
+                if (Gallery.singleton.TryRestoreExistingPanelsKeepingState())
+                {
+                    LogUtil.Log("[Gallery] OpenGallery restored existing pane state (skip InitialGalleryCategory)");
+                    return;
+                }
+
                 string lastPageName = "";
 
-                // First open this session: use InitialGalleryCategory unless set to LastUsed (then restore saved tab).
-                // Reopen within session: always restore last used category.
-                bool isFirstOpen = !Gallery.singleton.AnyPanelHasLoadedContent;
+                // InitialGalleryCategory applies once per VaM process. Close() destroys panes so
+                // AnyPanelHasLoadedContent goes false — that must NOT re-trigger Initial.
+                bool isFirstOpen = !Gallery.SessionInitialCategoryApplied;
                 if (!isFirstOpen)
                     TryFillLastGalleryPageFromPersisted(ref lastPageName);
                 else if (VPBConfig.Instance != null)
@@ -103,7 +111,7 @@ namespace VPB
                 if (string.IsNullOrEmpty(lastPageName))
                 {
                     lastPageName = "Scenes";
-                    LogUtil.Log("[Gallery] OpenGallery defaulting to Scenes" + (isFirstOpen ? " (startup)" : ""));
+                    LogUtil.Log("[Gallery] OpenGallery defaulting to Scenes" + (isFirstOpen ? " (startup)" : " (session reopen)"));
                 }
 
                 if (!string.IsNullOrEmpty(lastPageName) && m_GalleryCategories != null)
@@ -130,7 +138,8 @@ namespace VPB
                     if (string.Equals(lastPageName, "Scene", StringComparison.OrdinalIgnoreCase))
                         lastPageName = "Scenes";
 
-                    LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName + "'");
+                    LogUtil.Log("[Gallery] OpenGallery restore raw='" + rawLastPageName + "' normalized='" + lastPageName
+                        + "' firstOpen=" + (isFirstOpen ? "1" : "0"));
 
                     foreach (var cat in m_GalleryCategories)
                     {
@@ -138,6 +147,7 @@ namespace VPB
                         {
                             LogUtil.Log("[Gallery] OpenGallery matched category='" + cat.name + "' path='" + cat.path + "'");
                             Gallery.singleton.Show(cat.name, cat.extension, cat.path);
+                            Gallery.MarkSessionInitialCategoryApplied();
                             return;
                         }
                     }

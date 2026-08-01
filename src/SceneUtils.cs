@@ -16,6 +16,19 @@ namespace VPB
         static int sceneLoadSerial;
         static int lastScheduledSceneLoadSerial;
 
+        // Gallery PrepareSceneEntry already applied temp WL + prewarm; LoadInternal must not redo.
+        // Armed-flag (not path match): gallery may rewrite SELF→temp JSON so LoadInternal path ≠ note path.
+        static bool s_GalleryScenePrepArmed;
+        static float s_GalleryScenePrepRealtime;
+        const float GalleryScenePrepSkipSeconds = 45f;
+        const string PluginScriptPathMarker = ":/Custom/Scripts/";
+
+        // Temp UID overrides owned by native (non-gallery) scene loads — removed after scene total.
+        static readonly object s_NativeScenePrepLock = new object();
+        static List<string> s_NativeSceneTempUids;
+        static int s_NativeSceneCleanupSerial = -1;
+        static bool s_NativeSceneCleanupRunning;
+
         public struct EnsureInstalledResult
         {
             public bool DepsChanged;
@@ -108,25 +121,171 @@ namespace VPB
             return "Saves/scene/VPB_TempScenes";
         }
 
-        private static void ScheduleTempFileDelete(string path, int frames = 10)
+        private static readonly WaitForEndOfFrame s_WaitEndOfFrame = new WaitForEndOfFrame();
+
+        // Pending rewrite/filter temps: one coordinator, watches VaM isLoading + VPB scene-load flag.
+        // Avoids per-file coroutines + per-frame yield for up to 180s (old DeleteTempSceneAfterLoadSettles).
+        static readonly object s_PendingTempSceneLock = new object();
+        static readonly List<string> s_PendingTempSceneDeletes = new List<string>(8);
+        static bool s_TempSceneDeleteCoordinatorRunning;
+        const float TempSceneDeleteMinAliveSeconds = 5f;
+        const float TempSceneDeleteFallbackSeconds = 180f;
+        const int TempSceneDeleteSettleFrames = 30;
+        const int TempSceneDeletePollFrames = 15; // ~0.25–0.5s at 30–60fps; reuse WaitForEndOfFrame
+        const int TempScenePendingCap = 64;
+
+        /// <summary>
+        /// Called from <see cref="LogUtil.EndSceneLoadTotal"/> — restart coordinator if pending and idle.
+        /// </summary>
+        public static void NotifySceneLoadTotalEndedForTempScenes()
         {
             try
             {
-                if (string.IsNullOrEmpty(path)) return;
                 if (SuperController.singleton == null) return;
-                SuperController.singleton.StartCoroutine(DeleteFileAfterFrames(path, frames));
+                lock (s_PendingTempSceneLock)
+                {
+                    if (s_PendingTempSceneDeletes.Count == 0) return;
+                    if (s_TempSceneDeleteCoordinatorRunning) return;
+                    s_TempSceneDeleteCoordinatorRunning = true;
+                }
+                SuperController.singleton.StartCoroutine(TempSceneDeleteCoordinator());
             }
-            catch { }
+            catch
+            {
+                lock (s_PendingTempSceneLock) { s_TempSceneDeleteCoordinatorRunning = false; }
+            }
         }
 
-        private static IEnumerator DeleteFileAfterFrames(string path, int frames)
+        private static void ScheduleTempSceneFileDelete(string path)
         {
-            if (string.IsNullOrEmpty(path)) yield break;
-            if (frames < 1) frames = 1;
+            if (string.IsNullOrEmpty(path)) return;
+            try
+            {
+                bool start = false;
+                lock (s_PendingTempSceneLock)
+                {
+                    if (s_PendingTempSceneDeletes.Count >= TempScenePendingCap)
+                        s_PendingTempSceneDeletes.RemoveAt(0);
+                    for (int i = 0; i < s_PendingTempSceneDeletes.Count; i++)
+                    {
+                        if (string.Equals(s_PendingTempSceneDeletes[i], path, StringComparison.OrdinalIgnoreCase))
+                            return;
+                    }
+                    s_PendingTempSceneDeletes.Add(path);
+                    if (!s_TempSceneDeleteCoordinatorRunning)
+                    {
+                        s_TempSceneDeleteCoordinatorRunning = true;
+                        start = true;
+                    }
+                }
 
-            for (int i = 0; i < frames; i++) yield return new WaitForEndOfFrame();
+                if (!start) return;
+                if (SuperController.singleton == null)
+                {
+                    lock (s_PendingTempSceneLock) { s_TempSceneDeleteCoordinatorRunning = false; }
+                    return;
+                }
+                SuperController.singleton.StartCoroutine(TempSceneDeleteCoordinator());
+            }
+            catch
+            {
+                lock (s_PendingTempSceneLock) { s_TempSceneDeleteCoordinatorRunning = false; }
+            }
+        }
 
-            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        private static IEnumerator TempSceneDeleteCoordinator()
+        {
+            float start = 0f;
+            try { start = Time.realtimeSinceStartup; } catch { }
+
+            try
+            {
+                for (; ; )
+                {
+                    bool loading = false;
+                    try
+                    {
+                        if (SuperController.singleton != null)
+                            loading = SuperController.singleton.isLoading;
+                    }
+                    catch { loading = false; }
+
+                    // VPB total still active ⇒ plugins may LateRestore after VaM isLoading clears.
+                    bool vpbLoadActive = false;
+                    try { vpbLoadActive = LogUtil.IsSceneLoadActive(); } catch { }
+
+                    float elapsed = 0f;
+                    try { elapsed = Time.realtimeSinceStartup - start; } catch { elapsed = TempSceneDeleteFallbackSeconds; }
+
+                    if (!loading && !vpbLoadActive && elapsed >= TempSceneDeleteMinAliveSeconds)
+                        break;
+                    if (elapsed >= TempSceneDeleteFallbackSeconds)
+                        break;
+
+                    for (int i = 0; i < TempSceneDeletePollFrames; i++)
+                        yield return s_WaitEndOfFrame;
+                }
+
+                for (int i = 0; i < TempSceneDeleteSettleFrames; i++)
+                    yield return s_WaitEndOfFrame;
+
+                List<string> toDelete = null;
+                lock (s_PendingTempSceneLock)
+                {
+                    if (s_PendingTempSceneDeletes.Count > 0)
+                    {
+                        toDelete = new List<string>(s_PendingTempSceneDeletes);
+                        s_PendingTempSceneDeletes.Clear();
+                    }
+                }
+
+                if (toDelete != null)
+                {
+                    for (int i = 0; i < toDelete.Count; i++)
+                    {
+                        string p = toDelete[i];
+                        if (string.IsNullOrEmpty(p)) continue;
+                        try { if (File.Exists(p)) File.Delete(p); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                bool restart = false;
+                lock (s_PendingTempSceneLock)
+                {
+                    s_TempSceneDeleteCoordinatorRunning = false;
+                    if (s_PendingTempSceneDeletes.Count > 0)
+                    {
+                        s_TempSceneDeleteCoordinatorRunning = true;
+                        restart = true;
+                    }
+                }
+                if (restart && SuperController.singleton != null)
+                {
+                    try { SuperController.singleton.StartCoroutine(TempSceneDeleteCoordinator()); }
+                    catch { lock (s_PendingTempSceneLock) { s_TempSceneDeleteCoordinatorRunning = false; } }
+                }
+            }
+        }
+
+        /// <summary>Cold startup: wipe leftover rewrite temps from prior crashed loads.</summary>
+        public static void CleanupOrphanTempSceneFiles()
+        {
+            string dir = GetTempScenesDir();
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+            int deleted = 0;
+            deleted += DeleteMatchingFiles(dir, "vpb_rewrite_*.json");
+            deleted += DeleteMatchingFiles(dir, "vpb_rewrite_*.json.hide");
+            deleted += DeleteMatchingFiles(dir, "vpb_filtered_*.json");
+            deleted += DeleteMatchingFiles(dir, "vpb_filtered_*.json.hide");
+            deleted += DeleteMatchingFiles(dir, "vpb_scene_*.json");
+            deleted += DeleteMatchingFiles(dir, "vpb_scene_*.json.hide");
+            if (deleted > 0)
+            {
+                try { LogUtil.Log("[VPB] Cleared " + deleted + " orphan temp scene file(s) from " + dir); }
+                catch { }
+            }
         }
 
         /// <summary>
@@ -191,8 +350,9 @@ namespace VPB
                 File.WriteAllText(tempPath, VPB.src.util.JsonSerializationUtil.Serialize(root, 100_000));
                 LocalSceneGallerySupport.TryEnsureVpbGeneratedSceneHideMarker(tempPath);
 
-                ScheduleTempFileDelete(tempPath, 20);
-                ScheduleTempFileDelete(tempPath + ".hide", 20);
+                // Must outlive scene load — not DeleteFileAfterFrames(20).
+                ScheduleTempSceneFileDelete(tempPath);
+                ScheduleTempSceneFileDelete(tempPath + ".hide");
                 return tempPath.Replace('\\', '/');
             }
             catch
@@ -463,6 +623,19 @@ namespace VPB
                     hostUid = up.Substring(0, ci);
             }
             catch { hostUid = null; }
+
+            // Package-backed scenes: load uid:/path directly. Writing a loose temp JSON clears
+            // FileManager.CurrentPackageUid (SetLoadDirFromFilePath on Saves/scene/VPB_TempScenes/...),
+            // which breaks PoseMe/BodyLanguage GetFiles("Custom/...") and audiobundle opens that
+            // rely on package context / merged var FS. Bare Custom/ at access time is healed by
+            // SuperControllerHook path rewrite + GetFiles package enumeration instead.
+            // Any package-qualified UID path skips rewrite — not only VarFileEntry (gallery may
+            // pass SystemFileEntry.isVar with the same uid:/ scene path).
+            if (!string.IsNullOrEmpty(hostUid))
+            {
+                LogUtil.Log("[VPB] Scene rewrite skipped for package scene (keep load context): " + hostUid);
+                return false;
+            }
 
             // Package-qualified directory of the original scene, used to re-qualify bare sibling scene paths (SceneLoader triggers) that VaM would otherwise resolve into the temp dir.
             string hostSceneDir = null;
@@ -756,10 +929,17 @@ namespace VPB
 
         /// <summary>
         /// Collects package UIDs needed by this entry's load path:
-        /// host package UID (when entry is from a var) plus dependency references in JSON-like content
-        /// that can be resolved to an installed package UID.
+        /// host package UID (when entry is from a var) plus dependency references in JSON-like content.
+        /// Always keeps raw VarNameParser UIDs even when VPB FM cannot resolve them yet — scan-whitelist
+        /// temp allow + on-demand register need those strings (e.g. CheesyFX.BodyLanguage for PoseMe HUD).
         /// </summary>
         public static HashSet<string> CollectReferencedPackageUids(FileEntry entry)
+        {
+            return CollectReferencedPackageUids(entry, null);
+        }
+
+        /// <param name="pluginHostUids">Optional sink for packages referenced via :/Custom/Scripts/.</param>
+        public static HashSet<string> CollectReferencedPackageUids(FileEntry entry, HashSet<string> pluginHostUids)
         {
             var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (entry == null) return result;
@@ -786,33 +966,92 @@ namespace VPB
                 {
                     string content = reader.ReadToEnd();
                     if (string.IsNullOrEmpty(content)) return result;
-
-                    HashSet<string> deps = null;
-                    try { deps = VarNameParser.Parse(content); } catch { deps = null; }
-                    if (deps == null || deps.Count == 0) return result;
-
-                    foreach (string dep in deps)
-                    {
-                        if (string.IsNullOrEmpty(dep)) continue;
-                        VarPackage pkg = null;
-                        try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
-                        if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
-                        result.Add(pkg.Uid);
-                        // A scene stores an item's full path but references its package group by
-                        // .latest/version. When a newer version renamed or replaced that file (e.g.
-                        // group ships "Side Bob" in v1, "Side Bob 2" in v2), VaM's appearance restore
-                        // falls back to the item's internalId (DAZCharacterSelector.LoadFromJSON ->
-                        // GetHairItem/GetClothingItem), which only resolves if the version that owns
-                        // the referenced item is registered. Resolving to .latest alone starves that
-                        // fallback under the scan whitelist. Register every installed version of the
-                        // referenced group, matching stock VaM (which registers all versions on disk).
-                        AddAllGroupVersionUids(pkg, result);
-                    }
+                    CollectPackageUidsFromContent(content, result, pluginHostUids);
                 }
             }
             catch { }
 
             return result;
+        }
+
+        /// <summary>
+        /// One-pass scan of scene/preset text: raw package UIDs + optional plugin-host UIDs.
+        /// Avoids a second full ReadToEnd on large scenes (Enjoying Joy ~6MB).
+        /// </summary>
+        static void CollectPackageUidsFromContent(string content, HashSet<string> result, HashSet<string> pluginHostUids)
+        {
+            if (string.IsNullOrEmpty(content) || result == null) return;
+
+            try { VarNameParser.Parse(content, result); }
+            catch { }
+
+            if (pluginHostUids != null)
+            {
+                try { CollectPluginHostUidsFromContent(content, pluginHostUids); }
+                catch { }
+            }
+
+            if (result.Count == 0) return;
+
+            // Snapshot — may mutate result while expanding resolved groups.
+            var snapshot = new List<string>(result.Count);
+            foreach (string dep in result)
+            {
+                if (!string.IsNullOrEmpty(dep)) snapshot.Add(dep);
+            }
+
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                string dep = snapshot[i];
+                VarPackage pkg = null;
+                try { pkg = FileManager.GetPackageForDependency(dep, false); } catch { pkg = null; }
+                if (pkg == null || string.IsNullOrEmpty(pkg.Uid)) continue;
+                result.Add(pkg.Uid);
+                // Register every installed version of the referenced group, matching stock VaM
+                // (which registers all versions on disk). Needed when .latest resolves to a build
+                // that renamed/replaced an item still referenced by internalId in scene JSON.
+                AddAllGroupVersionUids(pkg, result);
+            }
+        }
+
+        /// <summary>
+        /// Packages that own plugin scripts in this JSON (BodyLanguage/PoseMe, Embody, …).
+        /// Linear scan — no regex alloc.
+        /// </summary>
+        static void CollectPluginHostUidsFromContent(string content, HashSet<string> pluginHostUids)
+        {
+            if (string.IsNullOrEmpty(content) || pluginHostUids == null) return;
+
+            int i = 0;
+            while (i < content.Length)
+            {
+                int hit = content.IndexOf(PluginScriptPathMarker, i, StringComparison.OrdinalIgnoreCase);
+                if (hit < 0) break;
+
+                int start = hit - 1;
+                while (start >= 0)
+                {
+                    char c = content[start];
+                    if (c == '"' || c == '\'' || c == ' ' || c == '\t' || c == '\n' || c == '\r'
+                        || c == ',' || c == '[' || c == '{' || c == ':' || c == '\\')
+                    {
+                        start++;
+                        break;
+                    }
+                    start--;
+                }
+                if (start < 0) start = 0;
+
+                int len = hit - start;
+                if (len > 0 && len < 200)
+                {
+                    string uid = content.Substring(start, len);
+                    if (uid.IndexOf('.') > 0)
+                        pluginHostUids.Add(uid);
+                }
+
+                i = hit + PluginScriptPathMarker.Length;
+            }
         }
 
         private static void AddAllGroupVersionUids(VarPackage pkg, HashSet<string> result)
@@ -838,8 +1077,31 @@ namespace VPB
         /// </summary>
         public static int PrewarmOnDemandPackagesForEntry(FileEntry entry, string pathHint = null, bool queueCoalescedRefresh = true)
         {
+            return PrewarmOnDemandPackagesForEntry(entry, pathHint, queueCoalescedRefresh, null);
+        }
+
+        public static int PrewarmOnDemandPackagesForEntry(
+            FileEntry entry,
+            string pathHint,
+            bool queueCoalescedRefresh,
+            HashSet<string> pluginHostUids)
+        {
+            return PrewarmOnDemandPackagesForEntry(entry, pathHint, queueCoalescedRefresh, pluginHostUids, null);
+        }
+
+        /// <param name="precollectedUids">
+        /// When non-null, skip re-reading scene JSON (caller already ran CollectReferencedPackageUids).
+        /// </param>
+        public static int PrewarmOnDemandPackagesForEntry(
+            FileEntry entry,
+            string pathHint,
+            bool queueCoalescedRefresh,
+            HashSet<string> pluginHostUids,
+            HashSet<string> precollectedUids)
+        {
             if (!ScanWhitelistManager.Instance.IsEnabled) return 0;
-            if (entry == null && string.IsNullOrEmpty(pathHint)) return 0;
+            if (entry == null && string.IsNullOrEmpty(pathHint) && (precollectedUids == null || precollectedUids.Count == 0))
+                return 0;
 
             try
             {
@@ -858,6 +1120,12 @@ namespace VPB
             catch { }
 
             var uidCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Own plugin-host set when caller did not collect (single scene ReadToEnd).
+            HashSet<string> localPluginHosts = pluginHostUids;
+            bool skipContentCollect = precollectedUids != null && precollectedUids.Count > 0;
+            if (localPluginHosts == null && entry != null && !skipContentCollect)
+                localPluginHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             void addUid(string uid)
             {
                 if (string.IsNullOrEmpty(uid)) return;
@@ -866,15 +1134,23 @@ namespace VPB
                 uidCandidates.Add(uid);
             }
 
-            try
+            if (skipContentCollect)
             {
-                if (entry != null)
-                {
-                    foreach (var uid in CollectReferencedPackageUids(entry))
-                        addUid(uid);
-                }
+                foreach (string uid in precollectedUids)
+                    addUid(uid);
             }
-            catch { }
+            else
+            {
+                try
+                {
+                    if (entry != null)
+                    {
+                        foreach (var uid in CollectReferencedPackageUids(entry, localPluginHosts))
+                            addUid(uid);
+                    }
+                }
+                catch { }
+            }
 
             string candidatePath = pathHint;
             if (string.IsNullOrEmpty(candidatePath) && entry != null)
@@ -913,41 +1189,10 @@ namespace VPB
                 }
             }
 
-            if (entry != null && !string.IsNullOrEmpty(entry.Path))
+            if (localPluginHosts != null)
             {
-                string ext = Path.GetExtension(entry.Path).ToLowerInvariant();
-                if (ext == ".json" || ext == ".vap" || ext == ".cslist")
-                {
-                    try
-                    {
-                        using (var reader = entry.OpenStreamReader())
-                        {
-                            string content = reader.ReadToEnd();
-                            if (!string.IsNullOrEmpty(content))
-                            {
-                                HashSet<string> deps = VarNameParser.Parse(content);
-                                if (deps != null)
-                                {
-                                    foreach (string dep in deps)
-                                    {
-                                        addUid(dep);
-                                        try
-                                        {
-                                            VarPackage pkg = FileManager.GetPackageForDependency(dep, false);
-                                            if (pkg != null && !string.IsNullOrEmpty(pkg.Uid))
-                                                addUid(pkg.Uid);
-                                        }
-                                        catch { }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogUtil.LogWarning($"[VPB OnDemand] Prewarm dependency parse failed for {entry.Name}: {ex.Message}");
-                    }
-                }
+                foreach (string ph in localPluginHosts)
+                    addUid(ph);
             }
 
             if (uidCandidates.Count == 0) return 0;
@@ -957,10 +1202,23 @@ namespace VPB
             {
                 try
                 {
-                    string result = VamOnDemandLoader.TryRegisterPackageOnDemand(uid);
+                    // Plugin hosts: persist UID override so LateRestore/script compile still finds the package
+                    // after temp allow-list cleanup (PoseMe HUD lives under BodyLanguage).
+                    bool isPluginHost = localPluginHosts != null && localPluginHosts.Contains(uid);
+                    string result = VamOnDemandLoader.TryRegisterPackageOnDemand(uid, persistUidOverride: isPluginHost);
                     if (result != null) newlyRegistered++;
                 }
                 catch { }
+            }
+
+            // Nested plugin morph/script deps resolve by display name — reactive file hooks never fire.
+            if (localPluginHosts != null && localPluginHosts.Count > 0)
+            {
+                foreach (string ph in localPluginHosts)
+                {
+                    try { VamOnDemandLoader.EnsureDeclaredDependenciesActivatedForParent(ph); }
+                    catch { }
+                }
             }
 
             try
@@ -1102,6 +1360,41 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Gallery scene prep already ran temp whitelist + prewarm.
+        /// Arms one-shot skip for next LoadInternal (path may differ after SELF→temp rewrite).
+        /// </summary>
+        public static void NoteGallerySceneLoadPrep(string saveName)
+        {
+            s_GalleryScenePrepArmed = true;
+            try { s_GalleryScenePrepRealtime = Time.realtimeSinceStartup; }
+            catch { s_GalleryScenePrepRealtime = 0f; }
+        }
+
+        /// <summary>
+        /// Consumes gallery prep arm if still fresh. Path-agnostic — rewrite/temp loads must skip.
+        /// </summary>
+        static bool TryConsumeGallerySceneLoadPrep()
+        {
+            if (!s_GalleryScenePrepArmed) return false;
+            try
+            {
+                if (Time.realtimeSinceStartup - s_GalleryScenePrepRealtime > GalleryScenePrepSkipSeconds)
+                {
+                    s_GalleryScenePrepArmed = false;
+                    return false;
+                }
+            }
+            catch
+            {
+                s_GalleryScenePrepArmed = false;
+                return false;
+            }
+
+            s_GalleryScenePrepArmed = false;
+            return true;
+        }
+
         public static void NotifySceneLoadStarting(string saveName, bool loadMerge)
         {
             try
@@ -1112,6 +1405,239 @@ namespace VPB
                 }
             }
             catch { }
+
+            // VaM Browser / Scene Loader / triggers hit LoadInternal without GalleryUIUtils prep.
+            // Under scan whitelist those packages never enter VaM unless we temp-allow + prewarm here.
+            try
+            {
+                EnsureNativeSceneLoadWhitelistAndPrewarm(saveName, loadMerge);
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB OnDemand] Native scene-load prep failed: " + ex.Message); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Scan-whitelist: temp-allow host + SQL transitive deps and prewarm on-demand registration
+        /// for scene loads that did not go through the VPB gallery prepare path.
+        /// </summary>
+        static void EnsureNativeSceneLoadWhitelistAndPrewarm(string saveName, bool loadMerge)
+        {
+            if (string.IsNullOrEmpty(saveName)) return;
+            if (!ScanWhitelistManager.Instance.IsEnabled) return;
+            if (TryConsumeGallerySceneLoadPrep()) return;
+
+            var needed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pluginHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            string hostUid = null;
+            try { hostUid = PackageReferenceVersionResolver.TryExtractPackageUid(saveName); } catch { }
+            if (!string.IsNullOrEmpty(hostUid))
+                needed.Add(hostUid);
+
+            // Host may be scan-excluded: register it first so GetFileEntry / scene parse can run.
+            if (!string.IsNullOrEmpty(hostUid))
+            {
+                try
+                {
+                    var hostOnly = new string[] { hostUid };
+                    ScanWhitelistManager.Instance.AddTemporaryUidOverrides(hostOnly);
+                }
+                catch { }
+                try { VamOnDemandLoader.TryRegisterPackageOnDemand(hostUid); } catch { }
+            }
+
+            FileEntry entry = null;
+            try { entry = FileManager.GetFileEntry(saveName); } catch { entry = null; }
+
+            if (entry != null)
+            {
+                try
+                {
+                    foreach (string uid in CollectReferencedPackageUids(entry, pluginHosts))
+                    {
+                        if (!string.IsNullOrEmpty(uid)) needed.Add(uid);
+                    }
+                }
+                catch { }
+            }
+
+            if (needed.Count > 0)
+            {
+                try
+                {
+                    var hosts = new List<string>(needed);
+                    var sqlDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < hosts.Count; i++)
+                    {
+                        sqlDeps.Clear();
+                        if (!VpbLocalDatabase.TryReadRecursiveDependencyUids(hosts[i], sqlDeps)) continue;
+                        foreach (string dep in sqlDeps)
+                        {
+                            if (!string.IsNullOrEmpty(dep)) needed.Add(dep);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Plugin hosts (BodyLanguage → PoseMe HUD) must be allow-listed even if SQL index lags.
+            foreach (string ph in pluginHosts)
+            {
+                if (!string.IsNullOrEmpty(ph)) needed.Add(ph);
+            }
+
+            List<string> added = null;
+            if (needed.Count > 0)
+            {
+                try
+                {
+                    added = ScanWhitelistManager.Instance.AddTemporaryUidOverrides(needed);
+                    if (added != null && added.Count > 0)
+                    {
+                        LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list: +"
+                            + string.Join(", ", added.ToArray()));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB ScanWhitelist] Native temp allow-list failed: " + ex.Message);
+                }
+            }
+
+            try
+            {
+                // Always queue coalesced refresh when needed — cleanup drains before removing temp UIDs.
+                // Pass needed + pluginHosts so Prewarm does not re-ReadToEnd the scene JSON.
+                PrewarmOnDemandPackagesForEntry(entry, saveName, queueCoalescedRefresh: true, pluginHosts, needed);
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] Native scene-load prewarm failed: " + ex.Message);
+            }
+
+            if (added != null && added.Count > 0)
+                ScheduleNativeSceneLoadWhitelistCleanup(added);
+        }
+
+        static void ScheduleNativeSceneLoadWhitelistCleanup(List<string> temporaryUids)
+        {
+            if (temporaryUids == null || temporaryUids.Count == 0) return;
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return;
+
+            int totalSerialAtStart = 0;
+            try { totalSerialAtStart = LogUtil.GetSceneLoadTotalSerial(); } catch { }
+
+            lock (s_NativeScenePrepLock)
+            {
+                if (s_NativeSceneTempUids == null)
+                    s_NativeSceneTempUids = new List<string>(temporaryUids.Count);
+                for (int i = 0; i < temporaryUids.Count; i++)
+                {
+                    string uid = temporaryUids[i];
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    bool found = false;
+                    for (int j = 0; j < s_NativeSceneTempUids.Count; j++)
+                    {
+                        if (string.Equals(s_NativeSceneTempUids[j], uid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) s_NativeSceneTempUids.Add(uid);
+                }
+                s_NativeSceneCleanupSerial = totalSerialAtStart;
+            }
+
+            if (s_NativeSceneCleanupRunning) return;
+            try
+            {
+                sc.StartCoroutine(NativeSceneLoadWhitelistCleanupCoroutine());
+            }
+            catch { }
+        }
+
+        static IEnumerator NativeSceneLoadWhitelistCleanupCoroutine()
+        {
+            s_NativeSceneCleanupRunning = true;
+            int startTotalSerial;
+            lock (s_NativeScenePrepLock)
+                startTotalSerial = s_NativeSceneCleanupSerial;
+
+            float timeout = 60f;
+            float elapsed = 0f;
+            bool completedBySceneTotal = false;
+
+            try
+            {
+                while (elapsed < timeout)
+                {
+                    int now = startTotalSerial;
+                    try { now = LogUtil.GetSceneLoadTotalSerial(); } catch { }
+                    if (now != startTotalSerial)
+                    {
+                        completedBySceneTotal = true;
+                        break;
+                    }
+                    yield return new WaitForSeconds(0.1f);
+                    elapsed += 0.1f;
+                }
+
+                if (completedBySceneTotal)
+                    yield return null;
+
+                FinalizeNativeSceneLoadWhitelistCleanup(
+                    completedBySceneTotal
+                        ? "scene total ended"
+                        : "scene-load-total signal timeout (native cleanup fallback)",
+                    !completedBySceneTotal);
+            }
+            finally
+            {
+                s_NativeSceneCleanupRunning = false;
+            }
+        }
+
+        static void FinalizeNativeSceneLoadWhitelistCleanup(string reason, bool asWarning)
+        {
+            List<string> toRemove = null;
+            lock (s_NativeScenePrepLock)
+            {
+                if (s_NativeSceneTempUids != null && s_NativeSceneTempUids.Count > 0)
+                {
+                    toRemove = s_NativeSceneTempUids;
+                    s_NativeSceneTempUids = null;
+                }
+            }
+
+            if (toRemove == null || toRemove.Count == 0) return;
+
+            string msg = "[VPB ScanWhitelist] Native scene-load allow-list cleanup: " + reason
+                + " removing " + toRemove.Count + " temp UID(s)";
+            if (asWarning) LogUtil.LogWarning(msg);
+            else LogUtil.Log(msg);
+
+            // Drain pending catalog refresh while temp allow-list still active (#77).
+            try
+            {
+                if (VamOnDemandLoader.HasPendingCoalescedVamRefresh())
+                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("native_scene_load_cleanup_drain");
+            }
+            catch { }
+
+            try
+            {
+                ScanWhitelistManager.Instance.RemoveTemporaryUidOverrides(toRemove);
+                LogUtil.Log("[VPB ScanWhitelist] Temporary native scene-load allow-list removed: -"
+                    + string.Join(", ", toRemove.ToArray()));
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB ScanWhitelist] Native temp allow-list removal failed: " + ex.Message);
+            }
         }
 
         public static void SchedulePostSceneLoadFixup()

@@ -330,7 +330,7 @@ namespace VPB
             if (string.Equals(mode, "None", StringComparison.OrdinalIgnoreCase)) return false;
             return true;
         }
-        /// <summary>Category when opening a new gallery pane or at session first open: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed".</summary>
+        /// <summary>Category on cold VaM launch only: "Scenes" (default), "Clothing", "Hair", "Pose", "Appearance", "Plugins", or "LastUsed". In-session Close/reopen uses <see cref="LastGalleryCategory"/>.</summary>
         public string InitialGalleryCategory = "Scenes";
         /// <summary>Global source filter for gallery: All (default), Local (loose files only), or Var (.var packages only).</summary>
         public GlobalSourceFilterValue GlobalSourceFilter = GlobalSourceFilterValue.All;
@@ -592,7 +592,7 @@ namespace VPB
             return "Scenes";
         }
 
-        /// <summary>Resolved tab for a new pane or first gallery open this session: a category name, or null when <see cref="InitialGalleryCategory"/> is LastUsed (restore saved tab).</summary>
+        /// <summary>Resolved tab for a new pane or the first gallery open this VaM process: a category name, or null when <see cref="InitialGalleryCategory"/> is LastUsed (restore saved tab). Reopen after Close uses LastGalleryCategory via <see cref="Gallery.SessionInitialCategoryApplied"/>.</summary>
         public string ResolveInitialGalleryCategoryName()
         {
             string n = NormalizeInitialGalleryCategory(InitialGalleryCategory);
@@ -605,6 +605,12 @@ namespace VPB
         public string GalleryDefaultLeftSidePanel = "None";
         /// <summary>Which list opens on the right when a gallery pane is created (see <see cref="GallerySidePanelOptions"/>).</summary>
         public string GalleryDefaultRightSidePanel = "None";
+        /// <summary>Last left side-rail / Import from Hide/Close (see <see cref="GallerySidePanelOptions"/>). Used after first open instead of defaults.</summary>
+        public string LastGalleryLeftSidePanel = "None";
+        /// <summary>Last right side-rail / Import from Hide/Close.</summary>
+        public string LastGalleryRightSidePanel = "None";
+        /// <summary>True after browse memory has written side-rail place at least once this install.</summary>
+        public bool LastGallerySideRailsSaved = false;
         /// <summary>Default User Tags side panel mode when opening tags: FilterByTags (default), Tag, or FilterUntagged.</summary>
         public string GalleryDefaultUserTagAvailMode = "FilterByTags";
         /// <summary>When true (default), User Tags available list in Filter work mode hides zero-count tags behind an Unused bucket (side search still matches full vocab).</summary>
@@ -1017,6 +1023,9 @@ namespace VPB
             GallerySearchScope = "PathAndName";
             GalleryDefaultLeftSidePanel = "None";
             GalleryDefaultRightSidePanel = "None";
+            LastGalleryLeftSidePanel = "None";
+            LastGalleryRightSidePanel = "None";
+            LastGallerySideRailsSaved = false;
             GalleryDefaultUserTagAvailMode = "FilterByTags";
             GalleryHideUnusedUserTagsInFilterMode = true;
             GalleryUserTagFilterCombineMode = "Compound";
@@ -1241,6 +1250,12 @@ namespace VPB
                             GalleryDefaultLeftSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultLeftSidePanel"].Value);
                         if (node["GalleryDefaultRightSidePanel"] != null)
                             GalleryDefaultRightSidePanel = NormalizeGallerySidePanel(node["GalleryDefaultRightSidePanel"].Value);
+                        if (node["LastGalleryLeftSidePanel"] != null)
+                            LastGalleryLeftSidePanel = NormalizeGallerySidePanel(node["LastGalleryLeftSidePanel"].Value);
+                        if (node["LastGalleryRightSidePanel"] != null)
+                            LastGalleryRightSidePanel = NormalizeGallerySidePanel(node["LastGalleryRightSidePanel"].Value);
+                        if (node["LastGallerySideRailsSaved"] != null)
+                            LastGallerySideRailsSaved = node["LastGallerySideRailsSaved"].AsBool;
                         if (node["GalleryDefaultUserTagAvailMode"] != null)
                             GalleryDefaultUserTagAvailMode = NormalizeGalleryDefaultUserTagAvailMode(node["GalleryDefaultUserTagAvailMode"].Value);
                         if (node["GalleryHideUnusedUserTagsInFilterMode"] != null)
@@ -1639,6 +1654,9 @@ namespace VPB
                 node["global_source_filter"] = GlobalSourceFilter.ToString();
                 node["GalleryDefaultLeftSidePanel"] = GalleryDefaultLeftSidePanel;
                 node["GalleryDefaultRightSidePanel"] = GalleryDefaultRightSidePanel;
+                node["LastGalleryLeftSidePanel"] = NormalizeGallerySidePanel(LastGalleryLeftSidePanel);
+                node["LastGalleryRightSidePanel"] = NormalizeGallerySidePanel(LastGalleryRightSidePanel);
+                node["LastGallerySideRailsSaved"].AsBool = LastGallerySideRailsSaved;
                 node["GalleryDefaultUserTagAvailMode"] = NormalizeGalleryDefaultUserTagAvailMode(GalleryDefaultUserTagAvailMode);
                 node["GalleryHideUnusedUserTagsInFilterMode"].AsBool = GalleryHideUnusedUserTagsInFilterMode;
                 node["GalleryUserTagFilterCombineMode"] = NormalizeGalleryUserTagFilterCombineMode(GalleryUserTagFilterCombineMode);

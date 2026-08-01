@@ -571,6 +571,7 @@ namespace VPB
 
             // Undo snapshots land in Saves/ and only delete when undo runs; wipe leftovers from prior sessions.
             try { SceneLoadingUtils.CleanupOrphanUndoTempFiles(); } catch { }
+            try { SceneLoadingUtils.CleanupOrphanTempSceneFiles(); } catch { }
 
             try
             {

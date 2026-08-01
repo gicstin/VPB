@@ -2574,11 +2574,17 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
-            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
+
+            if (del.TooltipPointerEnterHandler != null)
+                del.OnPointerEnterEvent -= del.TooltipPointerEnterHandler;
+            Action<PointerEventData> pe = (d) => { currentPointerData = d; };
+            del.TooltipPointerEnterHandler = pe;
+            del.OnPointerEnterEvent += pe;
         }
 
         // Like AddTooltipPlain but the text is computed at hover time via the provider, so it can show
         // live details (version, loaded package count, memory, etc.). Snapshot is taken on hover-enter.
+        // Provider must stay cheap: no sync ZIP/SQL/full package list materialization on enter.
         private void AddDynamicTooltip(GameObject go, Func<string> provider)
         {
             if (go == null || provider == null) return;
@@ -2600,7 +2606,12 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
-            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
+
+            if (del.TooltipPointerEnterHandler != null)
+                del.OnPointerEnterEvent -= del.TooltipPointerEnterHandler;
+            Action<PointerEventData> pe = (d) => { currentPointerData = d; };
+            del.TooltipPointerEnterHandler = pe;
+            del.OnPointerEnterEvent += pe;
         }
 
         private void AddTooltipPlain(GameObject go, string tooltip)
@@ -2620,7 +2631,12 @@ namespace VPB
             };
             del.TooltipHandler = handler;
             del.OnHoverChange += handler;
-            del.OnPointerEnterEvent += (d) => { currentPointerData = d; };
+
+            if (del.TooltipPointerEnterHandler != null)
+                del.OnPointerEnterEvent -= del.TooltipPointerEnterHandler;
+            Action<PointerEventData> pe = (d) => { currentPointerData = d; };
+            del.TooltipPointerEnterHandler = pe;
+            del.OnPointerEnterEvent += pe;
         }
 
         private void UpdateDesktopModeButton()
@@ -3131,6 +3147,7 @@ namespace VPB
             if (collapsed)
             {
                 try { HideHoverPreview(null); } catch { }
+                try { PersistCurrentBrowsePlace(); } catch { }
             }
 
             if (backgroundBoxGO != null)
@@ -3165,13 +3182,38 @@ namespace VPB
             UpdateSideButtonsVisibility();
             InvalidateFooterOverflowLayout();
             MarkGalleryPaneChromeDirty();
-            UpdateLayout();
-            // Expand after scene-launch collapse: subtree was inactive (viewport≈0). Recover
-            // User Tags virt bind without resetting Tag/Filter mode (#74).
-            if (!collapsed)
+            // Collapse: skip UpdateLayout — ForceRebuildLayoutImmediate + Canvas.ForceUpdateCanvases on a deactivating tree was the dock minimize hitch.
+            // Expand: defer one frame so SetActive(true) viewport is non-zero before layout (also avoids stacking with activate spike).
+            if (collapsed)
             {
-                try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
+                StopCo(ref _deferredCollapseLayoutCo);
             }
+            else
+            {
+                ScheduleDeferredExpandLayout();
+            }
+        }
+
+        private void ScheduleDeferredExpandLayout()
+        {
+            if (!Application.isPlaying)
+            {
+                try { UpdateLayout(false, false); } catch { }
+                try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
+                return;
+            }
+            StopCo(ref _deferredCollapseLayoutCo);
+            _deferredCollapseLayoutCo = StartCoroutine(DeferredExpandLayoutRoutine());
+        }
+
+        private IEnumerator DeferredExpandLayoutRoutine()
+        {
+            yield return null;
+            _deferredCollapseLayoutCo = null;
+            if (isCollapsed || canvas == null) yield break;
+            // No sync CacheCreators/CacheCategoryCounts — expand is warm path.
+            try { UpdateLayout(false, false); } catch { }
+            try { RequestUserTagAvailVirtRecoverAfterLayout(); } catch { }
         }
 
         /// <summary>Select every item in <see cref="currentFilteredFiles"/> when within <see cref="SelectAllSafetyMaxItemCount"/>.</summary>
