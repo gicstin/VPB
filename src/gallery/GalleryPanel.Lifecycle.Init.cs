@@ -1531,6 +1531,39 @@ namespace VPB
                     AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
                 }
 
+                // Creator Mode (Right) — sticky scene-tools mode (Strip Scene, …). Not Creators author list.
+                {
+                    float cmW = sideIconBtn;
+                    float cmH = sideIconBtn;
+                    Sprite cmSpr = null;
+                    try { cmSpr = UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject rightCreatorModeBtn = UI.CreateUIButton(rightSideContainer, cmW, cmH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleCreatorMode(false, false));
+                    rightCreatorModeSideBtn = rightCreatorModeBtn;
+                    Image cmImg = rightCreatorModeBtn.GetComponent<Image>();
+                    Text cmTxt = rightCreatorModeBtn.GetComponentInChildren<Text>(true);
+                    if (cmSpr != null)
+                    {
+                        UI.AddIconToButton(rightCreatorModeBtn, cmSpr, sideIconPad, CreatorModeRailBackdrop);
+                        rightCreatorModeBtnIconImage = rightCreatorModeBtn.transform.Find("Icon") != null
+                            ? rightCreatorModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (cmImg != null)
+                    {
+                        cmImg.color = CreatorModeRailBackdrop;
+                        if (cmTxt != null)
+                        {
+                            cmTxt.text = VPBTranslation.T("gallery.side.creator_mode_short", "Make");
+                            cmTxt.fontSize = btnFontSize;
+                            cmTxt.gameObject.SetActive(true);
+                        }
+                    }
+                    rightCreatorModeBtnOutline = CreatorModeAddRailOutline(rightCreatorModeBtn);
+                    rightSideButtons.Add(rightCreatorModeBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(rightCreatorModeBtn, () => ToggleCreatorMode(false, true));
+                    AddTooltip(rightCreatorModeBtn, "gallery.tooltip.creator_mode",
+                        "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.");
+                }
+
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
                 // toolbox (see EnsureTboxUI / tboxClothingModeRow), not a side tab.
 
@@ -2037,6 +2070,39 @@ namespace VPB
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveMode(true, true));
                     AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
+                }
+
+                // Creator Mode (Left) — sticky scene-tools mode. Not Creators author list.
+                {
+                    float cmW = sideIconBtn;
+                    float cmH = sideIconBtn;
+                    Sprite cmSprL = null;
+                    try { cmSprL = UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.SideRailIconGlyphTint); } catch { }
+                    GameObject leftCreatorModeBtn = UI.CreateUIButton(leftSideContainer, cmW, cmH, " ", 8, 0, 0, AnchorPresets.centre, () => ToggleCreatorMode(true, false));
+                    leftCreatorModeSideBtn = leftCreatorModeBtn;
+                    Image cmImgL = leftCreatorModeBtn.GetComponent<Image>();
+                    Text cmTxtL = leftCreatorModeBtn.GetComponentInChildren<Text>(true);
+                    if (cmSprL != null)
+                    {
+                        UI.AddIconToButton(leftCreatorModeBtn, cmSprL, sideIconPad, CreatorModeRailBackdrop);
+                        leftCreatorModeBtnIconImage = leftCreatorModeBtn.transform.Find("Icon") != null
+                            ? leftCreatorModeBtn.transform.Find("Icon").GetComponent<Image>() : null;
+                    }
+                    else if (cmImgL != null)
+                    {
+                        cmImgL.color = CreatorModeRailBackdrop;
+                        if (cmTxtL != null)
+                        {
+                            cmTxtL.text = VPBTranslation.T("gallery.side.creator_mode_short", "Make");
+                            cmTxtL.fontSize = btnFontSize;
+                            cmTxtL.gameObject.SetActive(true);
+                        }
+                    }
+                    leftCreatorModeBtnOutline = CreatorModeAddRailOutline(leftCreatorModeBtn);
+                    leftSideButtons.Add(leftCreatorModeBtn.GetComponent<RectTransform>());
+                    AddRightClickDelegate(leftCreatorModeBtn, () => ToggleCreatorMode(true, true));
+                    AddTooltip(leftCreatorModeBtn, "gallery.tooltip.creator_mode",
+                        "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.");
                 }
 
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the

@@ -227,6 +227,10 @@ namespace VPB
 
         private void RemoveModeEnter(bool useLeftSide)
         {
+            if (creatorModeActive || creatorModeStripBusy)
+            {
+                try { ExitCreatorMode(force: true); } catch { }
+            }
             _removeModeActive = true;
             _removeModeOwner = this;
             _removeModeSiderailUseLeft = useLeftSide;

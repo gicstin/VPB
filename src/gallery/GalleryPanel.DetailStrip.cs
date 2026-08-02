@@ -2152,6 +2152,7 @@ namespace VPB
         {
             if (IsSettingsPanelOpen()) return;
             if (_benchPickModeActive) return;
+            if (_stripKeepSubScenePickActive) return;
             FileEntry file = _detailStripBoundFile;
             if (file == null && selectedFiles != null && selectedFiles.Count > 0)
                 file = selectedFiles[0];

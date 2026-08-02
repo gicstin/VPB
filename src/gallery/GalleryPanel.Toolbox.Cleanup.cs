@@ -1383,10 +1383,14 @@ namespace VPB
 
                 if (_benchPickModeActive)
                     BenchAbortPickMode(reopenModal: false);
+                if (_stripKeepSubScenePickActive)
+                    StripKeepAbortSubScenePickMode(reopenStrip: false);
 
                 cleanupModeActive = true;
                 cleanupFilterMode = 0;
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: starting scan...");
+
+                try { if (creatorModeActive || creatorModeStripBusy) ExitCreatorMode(force: true); } catch { }
 
                 try { EnsureTemporaryTaskListLayoutSession(); } catch { }
 

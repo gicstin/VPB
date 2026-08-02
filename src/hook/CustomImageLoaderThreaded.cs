@@ -1858,6 +1858,45 @@ namespace VPB
 
 		protected AsyncFlag loadFlag;
 
+		/// <summary>
+		/// Clear stuck progress HUD / counters after bulk scene teardown.
+		/// Warm/cold only — not for Update.
+		/// </summary>
+		public void ForceResetLoadingProgress(string reason = null)
+		{
+			try
+			{
+				numRealQueuedImages = 0;
+				progress = 0;
+				progressMax = 0;
+				if (progressHUD != null)
+					progressHUD.SetActive(false);
+				if (loadFlag != null)
+				{
+					try { loadFlag.Raise(); } catch { }
+					loadFlag = null;
+				}
+				if (queuedImages != null)
+				{
+					while (queuedImages.Count > 0)
+					{
+						QueuedImage qi = null;
+						try { qi = queuedImages.Dequeue(); } catch { break; }
+						if (qi != null)
+						{
+							try { qi.cancel = true; } catch { }
+						}
+					}
+				}
+				LogUtil.LogWarning("[VPB] CustomImageLoader ForceResetLoadingProgress"
+					+ (string.IsNullOrEmpty(reason) ? "" : " (" + reason + ")"));
+			}
+			catch (Exception ex)
+			{
+				LogUtil.LogWarning("[VPB] ForceResetLoadingProgress failed: " + ex.Message);
+			}
+		}
+
 		public bool RegisterTextureUse(Texture2D tex)
 		{
 			if (textureTrackedCache.ContainsKey(tex))

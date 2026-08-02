@@ -1469,6 +1469,8 @@ namespace VPB
         [HarmonyPatch(typeof(SuperController), "RemoveAtom", new Type[] { typeof(Atom) })]
         public static void PostRemoveAtom(SuperController __instance, Atom atom)
         {
+            // Bulk strip suppresses per-atom gallery sync (one notify at end).
+            if (GalleryPanel.SuppressAtomRemovedGalleryNotify) return;
             try { GalleryPanel.NotifyAllPanelsSceneTargetsChanged(); } catch { }
         }
 

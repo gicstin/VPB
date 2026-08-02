@@ -542,6 +542,13 @@ namespace VPB
                         "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
                     yield break;
                 }
+                if (_stripKeepSubScenePickActive && !StripKeepSubScenePickAllowsShowRequest(name))
+                {
+                    ShowTemporaryStatus(VPBTranslation.T(
+                        "gallery.creator.strip_subscene_pick_block_nav",
+                        "End SubScene pick first (Confirm Pick or Cancel Pick)."), 2.5f);
+                    yield break;
+                }
                 if (LogGalleryCategoryTypeSwitchTiming)
                     BeginGalleryCategoryTypeNavigationTiming(name);
                 Show(name, extension, path);

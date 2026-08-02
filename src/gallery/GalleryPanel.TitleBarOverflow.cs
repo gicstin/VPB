@@ -103,6 +103,14 @@ namespace VPB
                 fpsActive,
                 tipKey: "gallery.tooltip.fps_counter",
                 tipDefault: "Show or hide the FPS counter");
+            AddOverflowMenuRow(
+                panel,
+                VPBTranslation.T("gallery.title.creator_mode", "Creator Mode"),
+                () => { CloseTitleBarOverflowMenu(); ToggleCreatorMode(); },
+                creatorModeActive,
+                icon: UI.LoadIconSprite("vpb_icons/creator_mode.png", UI.BarIconGlyphTint),
+                tipKey: "gallery.tooltip.creator_mode",
+                tipDefault: "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.");
         }
 
         private void AddOverflowMenuRow(

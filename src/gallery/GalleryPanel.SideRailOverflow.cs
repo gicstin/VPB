@@ -371,6 +371,13 @@ namespace VPB
                 tipDefault = "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.";
                 return true;
             }
+            if (SideRailGoIs(go, leftCreatorModeSideBtn, rightCreatorModeSideBtn)
+                || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
+            {
+                tipKey = "gallery.tooltip.creator_mode";
+                tipDefault = "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.";
+                return true;
+            }
             if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
                 || SideRailGoMatchesIcon(go, leftRemoveAtomBtnIconImage, rightRemoveAtomBtnIconImage)
                 || SideRailGoIs(go, leftRemoveAllClothingBtn, rightRemoveAllClothingBtn)
@@ -438,6 +445,9 @@ namespace VPB
                 return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_remove_mode", "Remove mode");
+            if (SideRailGoIs(go, leftCreatorModeSideBtn, rightCreatorModeSideBtn)
+                || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
+                return VPBTranslation.T("gallery.side.overflow_creator_mode", "Creator Mode");
             if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
                 || SideRailGoMatchesIcon(go, leftRemoveAtomBtnIconImage, rightRemoveAtomBtnIconImage))
                 return VPBTranslation.T("gallery.side.overflow_remove", "Remove");

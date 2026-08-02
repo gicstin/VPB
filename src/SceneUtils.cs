@@ -309,6 +309,7 @@ namespace VPB
             int deleted = 0;
             deleted += DeleteMatchingFiles(savesDir, "vpb_temp_undo_atom_*.json");
             deleted += DeleteMatchingFiles(savesDir, "vpb_temp_undo_redo_scene_*.json");
+            deleted += DeleteMatchingFiles(savesDir, "vpb_temp_creator_strip_*.json");
             if (deleted > 0)
             {
                 try { LogUtil.Log("[VPB] Cleared " + deleted + " orphan undo temp file(s) from " + savesDir); }

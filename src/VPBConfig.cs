@@ -479,6 +479,53 @@ namespace VPB
             try { TriggerChange(); } catch { }
         }
 
+        /// <summary>
+        /// Creator Mode Strip Scene keep bitmask (<see cref="CreatorStripKeepKind"/>).
+        /// 0 = use default (Persons | Lights). Persisted across sessions.
+        /// </summary>
+        public int CreatorStripKeepMask = (int)SceneUtils.CreatorStripKeepDefault;
+
+        /// <summary>
+        /// Named Strip Scene recipes JSON array:
+        /// [{name,mask,expand,renames:{uid:newName}}]. Max 8. Empty = none.
+        /// </summary>
+        public string CreatorStripRecipesJson = "[]";
+
+        /// <summary>
+        /// Last successful Strip keep set JSON:
+        /// {mask,expand,uids:[...],renames:{uid:newName}}. Empty = none.
+        /// </summary>
+        public string CreatorStripLastRecipeJson = "";
+
+        /// <summary>Strip keep floating panel position (canvas-local), when saved.</summary>
+        public bool CreatorStripPanelPosSaved = false;
+        public float CreatorStripPanelPosX = 0f;
+        public float CreatorStripPanelPosY = 0f;
+        /// <summary>Strip keep floating panel size at scale 1, when saved.</summary>
+        public bool CreatorStripPanelSizeSaved = false;
+        public float CreatorStripPanelWidthRef = 560f;
+        public float CreatorStripPanelHeightRef = 640f;
+
+        /// <summary>
+        /// Strip Scene possessable policy (Session Plugins parity).
+        /// Defaults match common VR strip: clear all, add head/hands for male.
+        /// </summary>
+        public bool CreatorStripRemovePossessable = true;
+        public bool CreatorStripAddPossessableMale = true;
+        public bool CreatorStripAddPossessableFemale = false;
+        /// <summary>0=Off, 1=Actor#, 2=Prefix M_/F_, 3=Rename Male/Female. See StripKeepPersonRenameMode.</summary>
+        public int CreatorStripPersonRenameMode = 0;
+
+        /// <summary>
+        /// Strip create-fill when lights removed: default SubScene JSON path (empty = none).
+        /// </summary>
+        public string CreatorStripDefaultSubScenePath = "";
+
+        /// <summary>
+        /// Last create-fill choice when lights stripped: 0=None, 1=Default 3P, 2=Import SubScene.
+        /// </summary>
+        public int CreatorStripCreateFillMode = 1;
+
         /// <summary>Legacy (unused): old pin-toolbox pref. Kept for VPB.cfg read/write compat only.</summary>
         public bool GalleryTboxToolbarPinned = false;
         /// <summary>When true (default), selection detail strip is shown above the toolbox; when false, collapses to Details button in toolbox.</summary>
@@ -1072,6 +1119,21 @@ namespace VPB
             GalleryScanWlTempBorderColorG = 0.15f;
             GalleryScanWlTempBorderColorB = 1f;
             GalleryScanWlTempBorderColorA = 1f;
+            CreatorStripKeepMask = (int)SceneUtils.CreatorStripKeepDefault;
+            CreatorStripRecipesJson = "[]";
+            CreatorStripLastRecipeJson = "";
+            CreatorStripPanelPosSaved = false;
+            CreatorStripPanelPosX = 0f;
+            CreatorStripPanelPosY = 0f;
+            CreatorStripPanelSizeSaved = false;
+            CreatorStripPanelWidthRef = 560f;
+            CreatorStripPanelHeightRef = 640f;
+            CreatorStripRemovePossessable = true;
+            CreatorStripAddPossessableMale = true;
+            CreatorStripAddPossessableFemale = false;
+            CreatorStripPersonRenameMode = 0;
+            CreatorStripDefaultSubScenePath = "";
+            CreatorStripCreateFillMode = 1;
             GalleryTboxToolbarPinned = false;
             GalleryDetailStripExpanded = true;
             GalleryDetailStripSideInfoEnabled = true;
@@ -1347,6 +1409,60 @@ namespace VPB
                             GalleryScanWlBorderEnabled = false;
                             GalleryScanWlTempBorderEnabled = false;
                             GalleryScanWlBadgePrimaryV1 = true;
+                        }
+                        if (node["CreatorStripKeepMask"] != null)
+                        {
+                            int rawMask = node["CreatorStripKeepMask"].AsInt;
+                            CreatorStripKeepMask = rawMask == 0
+                                ? (int)SceneUtils.CreatorStripKeepDefault
+                                : (rawMask & (int)SceneUtils.CreatorStripKeepAllUser);
+                        }
+                        if (node["CreatorStripRecipesJson"] != null)
+                        {
+                            string recipes = node["CreatorStripRecipesJson"].Value;
+                            CreatorStripRecipesJson = string.IsNullOrEmpty(recipes) ? "[]" : recipes;
+                        }
+                        if (node["CreatorStripLastRecipeJson"] != null)
+                        {
+                            string last = node["CreatorStripLastRecipeJson"].Value;
+                            CreatorStripLastRecipeJson = last ?? "";
+                        }
+                        if (node["CreatorStripPanelPosSaved"] != null)
+                            CreatorStripPanelPosSaved = node["CreatorStripPanelPosSaved"].AsBool;
+                        if (node["CreatorStripPanelPosX"] != null)
+                            CreatorStripPanelPosX = node["CreatorStripPanelPosX"].AsFloat;
+                        if (node["CreatorStripPanelPosY"] != null)
+                            CreatorStripPanelPosY = node["CreatorStripPanelPosY"].AsFloat;
+                        if (node["CreatorStripPanelSizeSaved"] != null)
+                            CreatorStripPanelSizeSaved = node["CreatorStripPanelSizeSaved"].AsBool;
+                        if (node["CreatorStripPanelWidthRef"] != null)
+                            CreatorStripPanelWidthRef = Mathf.Max(0f, node["CreatorStripPanelWidthRef"].AsFloat);
+                        if (node["CreatorStripPanelHeightRef"] != null)
+                            CreatorStripPanelHeightRef = Mathf.Max(0f, node["CreatorStripPanelHeightRef"].AsFloat);
+                        if (node["CreatorStripRemovePossessable"] != null)
+                            CreatorStripRemovePossessable = node["CreatorStripRemovePossessable"].AsBool;
+                        if (node["CreatorStripAddPossessableMale"] != null)
+                            CreatorStripAddPossessableMale = node["CreatorStripAddPossessableMale"].AsBool;
+                        if (node["CreatorStripAddPossessableFemale"] != null)
+                            CreatorStripAddPossessableFemale = node["CreatorStripAddPossessableFemale"].AsBool;
+                        if (node["CreatorStripPersonRenameMode"] != null)
+                        {
+                            int rm = node["CreatorStripPersonRenameMode"].AsInt;
+                            if (rm < 0) rm = 0;
+                            if (rm > 3) rm = 3;
+                            CreatorStripPersonRenameMode = rm;
+                        }
+                        if (node["CreatorStripDefaultSubScenePath"] != null)
+                        {
+                            string ssp = node["CreatorStripDefaultSubScenePath"].Value;
+                            CreatorStripDefaultSubScenePath = ssp != null ? ssp : "";
+                        }
+                        if (node["CreatorStripCreateFillMode"] != null)
+                        {
+                            int cfm = node["CreatorStripCreateFillMode"].AsInt;
+                            if (cfm < 0) cfm = 0;
+                            if (cfm > 2) cfm = 2;
+                            CreatorStripCreateFillMode = cfm;
                         }
                         if (node["GalleryTboxToolbarPinned"] != null) GalleryTboxToolbarPinned = node["GalleryTboxToolbarPinned"].AsBool;
                         if (node["GalleryDetailStripExpanded"] != null) GalleryDetailStripExpanded = node["GalleryDetailStripExpanded"].AsBool;
@@ -1729,6 +1845,29 @@ namespace VPB
                 node["GalleryScanWlTempBorderColorB"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorB);
                 node["GalleryScanWlTempBorderColorA"].AsFloat = Mathf.Clamp01(GalleryScanWlTempBorderColorA);
                 node["GalleryScanWlBadgePrimaryV1"].AsBool = GalleryScanWlBadgePrimaryV1;
+                node["CreatorStripKeepMask"].AsInt = CreatorStripKeepMask == 0
+                    ? (int)SceneUtils.CreatorStripKeepDefault
+                    : (CreatorStripKeepMask & (int)SceneUtils.CreatorStripKeepAllUser);
+                node["CreatorStripRecipesJson"] = string.IsNullOrEmpty(CreatorStripRecipesJson)
+                    ? "[]"
+                    : CreatorStripRecipesJson;
+                node["CreatorStripLastRecipeJson"] = CreatorStripLastRecipeJson ?? "";
+                node["CreatorStripPanelPosSaved"].AsBool = CreatorStripPanelPosSaved;
+                node["CreatorStripPanelPosX"].AsFloat = CreatorStripPanelPosX;
+                node["CreatorStripPanelPosY"].AsFloat = CreatorStripPanelPosY;
+                node["CreatorStripPanelSizeSaved"].AsBool = CreatorStripPanelSizeSaved;
+                node["CreatorStripPanelWidthRef"].AsFloat = Mathf.Max(0f, CreatorStripPanelWidthRef);
+                node["CreatorStripPanelHeightRef"].AsFloat = Mathf.Max(0f, CreatorStripPanelHeightRef);
+                node["CreatorStripRemovePossessable"].AsBool = CreatorStripRemovePossessable;
+                node["CreatorStripAddPossessableMale"].AsBool = CreatorStripAddPossessableMale;
+                node["CreatorStripAddPossessableFemale"].AsBool = CreatorStripAddPossessableFemale;
+                node["CreatorStripPersonRenameMode"].AsInt = CreatorStripPersonRenameMode < 0
+                    ? 0
+                    : (CreatorStripPersonRenameMode > 3 ? 3 : CreatorStripPersonRenameMode);
+                node["CreatorStripDefaultSubScenePath"] = CreatorStripDefaultSubScenePath ?? "";
+                node["CreatorStripCreateFillMode"].AsInt = CreatorStripCreateFillMode < 0
+                    ? 0
+                    : (CreatorStripCreateFillMode > 2 ? 2 : CreatorStripCreateFillMode);
                 node["GalleryTboxToolbarPinned"].AsBool = GalleryTboxToolbarPinned;
                 node["GalleryDetailStripExpanded"].AsBool = GalleryDetailStripExpanded;
                 node["GalleryDetailStripSideInfoEnabled"].AsBool = GalleryDetailStripSideInfoEnabled;

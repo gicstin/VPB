@@ -768,6 +768,44 @@ namespace VPB
                     return;
             }
 
+            // Strip keep: Esc ladder + / focus before InputField gate.
+            if (StripKeepHandleSubScenePickKeys())
+                return;
+            if (Input.GetKeyDown(KeyCode.Escape) && _stripKeepShortcutHelpVisible)
+            {
+                HideStripKeepShortcutHelp();
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.Escape) && _stripKeepAwaitingSoftConfirm)
+            {
+                _stripKeepAwaitingSoftConfirm = false;
+                try { RefreshStripKeepSummaryAndConfirm(); } catch { }
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.Escape) && IsStripKeepRecipeSaveInlineOpen())
+            {
+                HideStripKeepRecipeSaveInline();
+                return;
+            }
+            if (IsStripKeepRecipeSaveInlineOpen()
+                && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)))
+            {
+                CommitStripKeepRecipeSaveInline();
+                return;
+            }
+            if (Input.GetKeyDown(KeyCode.Escape) && _stripKeepRenameOverlayRoot != null)
+            {
+                HideStripKeepRenameOverlay();
+                return;
+            }
+            if (IsStripKeepSelectorOpen() && StripKeepHandleKeyboard())
+                return;
+            if (Input.GetKeyDown(KeyCode.Escape) && IsStripKeepSelectorOpen())
+            {
+                HideStripKeepSelector();
+                return;
+            }
+
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
@@ -783,6 +821,12 @@ namespace VPB
             if (Input.GetKeyDown(KeyCode.Escape) && _categoryQuickMenuOpen)
             {
                 SetCategoryQuickMenuVisible(false);
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape) && creatorModeActive && !creatorModeStripBusy)
+            {
+                ExitCreatorMode();
                 return;
             }
 
@@ -834,6 +878,21 @@ namespace VPB
                 try { Redo(); } catch { }
                 return;
             }
+
+            // Ctrl+Shift+K — toggle Creator Mode (side-rail parity).
+            if (ctrl && shift && Input.GetKeyDown(KeyCode.K))
+            {
+                try { ToggleCreatorMode(); } catch { }
+                return;
+            }
+
+            // Ctrl+Shift+S — direct open/close Strip Scene window.
+            if (ctrl && shift && Input.GetKeyDown(KeyCode.S))
+            {
+                try { HotkeyOpenStripSceneDirect(); } catch { }
+                return;
+            }
+
             bool a = Input.GetKeyDown(KeyCode.A);
             bool del = Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace);
 

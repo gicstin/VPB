@@ -102,6 +102,7 @@ namespace VPB
             Redo,
             Hub,
             Cleanup,
+            CreatorMode,
             ReplaceAddToggle,
             CompressCache,
             AutoHideGallery,
@@ -505,6 +506,7 @@ namespace VPB
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
+                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmtooltip.creator_mode", "Creator Mode — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
@@ -650,6 +652,7 @@ namespace VPB
                 case QuickMenuAssignableAction.Redo: return "redo";
                 case QuickMenuAssignableAction.Hub: return "hub";
                 case QuickMenuAssignableAction.Cleanup: return "cleanup";
+                case QuickMenuAssignableAction.CreatorMode: return "creator_mode";
                 case QuickMenuAssignableAction.ReplaceAddToggle: return "replace_add_toggle";
                 case QuickMenuAssignableAction.CompressCache: return "compress_cache";
                 case QuickMenuAssignableAction.AutoHideGallery: return "autohide_gallery";
@@ -706,6 +709,9 @@ namespace VPB
                 case "redo": return QuickMenuAssignableAction.Redo;
                 case "hub": return QuickMenuAssignableAction.Hub;
                 case "cleanup": return QuickMenuAssignableAction.Cleanup;
+                case "creator_mode":
+                case "strip_scene": // legacy id from one-click Strip assignment
+                    return QuickMenuAssignableAction.CreatorMode;
                 case "replace_add_toggle": return QuickMenuAssignableAction.ReplaceAddToggle;
                 case "compress_cache": return QuickMenuAssignableAction.CompressCache;
                 case "autohide_gallery": return QuickMenuAssignableAction.AutoHideGallery;
@@ -1333,6 +1339,9 @@ namespace VPB
                 case QuickMenuAssignableAction.Cleanup:
                     icon = m_QmIconCleanup;
                     break;
+                case QuickMenuAssignableAction.CreatorMode:
+                    icon = m_QmIconHexClothing ?? m_QmIconHexScene ?? m_QmIconCleanup;
+                    break;
                 case QuickMenuAssignableAction.ReplaceAddToggle:
                 {
                     bool replace = false;
@@ -1602,6 +1611,16 @@ namespace VPB
                         p = QuickMenuGetTargetPanel();
                         if (p != null) p.QuickMenu_ToggleCleanupMode();
                     }
+                    break;
+                }
+                case QuickMenuAssignableAction.CreatorMode:
+                {
+                    var p = QuickMenuGetTargetPanel();
+                    if (p == null) { OpenGallery(); p = QuickMenuGetTargetPanel(); }
+                    if (p != null) p.QuickMenu_ToggleCreatorMode();
+                    for (int i = 0; i < QuickMenuGridSlotCount; i++)
+                        if (QuickMenuGetSlotAction(i) == QuickMenuAssignableAction.CreatorMode)
+                            QuickMenuRefreshSlotVisual(i);
                     break;
                 }
                 case QuickMenuAssignableAction.ReplaceAddToggle:
@@ -1948,6 +1967,7 @@ namespace VPB
                 QuickMenuAssignableAction.Redo,
                 QuickMenuAssignableAction.Hub,
                 QuickMenuAssignableAction.Cleanup,
+                QuickMenuAssignableAction.CreatorMode,
                 QuickMenuAssignableAction.TargetAtom,
                 QuickMenuAssignableAction.ReplaceAddToggle,
                 QuickMenuAssignableAction.CompressCache,
@@ -1980,6 +2000,7 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.redo", "Redo"),
                 VPBTranslation.T("hook.qmbutton.hub", "Hub"),
                 VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup"),
+                VPBTranslation.T("hook.qmbutton.creator_mode", "Creator Mode"),
                 VPBTranslation.T("hook.qmbutton.target_atom", "Target Atom"),
                 VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add"),
                 VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache"),
@@ -2398,6 +2419,7 @@ namespace VPB
                 case QuickMenuAssignableAction.Redo: return m_QmIconRedo;
                 case QuickMenuAssignableAction.Hub: return m_QmIconHub;
                 case QuickMenuAssignableAction.Cleanup: return m_QmIconCleanup;
+                case QuickMenuAssignableAction.CreatorMode: return m_QmIconHexClothing ?? m_QmIconHexScene ?? m_QmIconCleanup;
                 case QuickMenuAssignableAction.ReplaceAddToggle: return m_QmIconReplace ?? m_QmIconAdd;
                 case QuickMenuAssignableAction.CompressCache: return m_QmIconCompressCache;
                 case QuickMenuAssignableAction.AutoHideGallery: return m_QmIconAutoHideOff ?? m_QmIconAutoHideOn;

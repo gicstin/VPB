@@ -36,6 +36,11 @@ namespace VPB
             if (_benchPickModeActive) return;
             if (backgroundBoxGO == null) return;
 
+            if (_stripKeepSubScenePickActive)
+            {
+                try { StripKeepAbortSubScenePickMode(reopenStrip: false); } catch { }
+            }
+
             _benchPickRestoreSettingsLeft = leftActiveContent == ContentType.Settings;
             _benchPickRestoreSettingsRight = rightActiveContent == ContentType.Settings;
 

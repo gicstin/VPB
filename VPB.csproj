@@ -497,6 +497,13 @@
     <Compile Include="src\gallery\GalleryModalTypography.cs" />
     <Compile Include="src\gallery\GalleryPanel.BrowseFilters.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.Cleanup.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.PowerUi.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.Chrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.Possess.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.CreateOptions.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CreatorMode.StripKeep.SubScenePick.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeletePackages.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalScenes.cs" />
     <Compile Include="src\gallery\GalleryPanel.Toolbox.DeleteLocalPresets.cs" />
@@ -515,6 +522,8 @@
     <Compile Include="src\util\CUAAtomImporter.cs" />
     <Compile Include="src\util\SceneAtomImporter.cs" />
     <Compile Include="src\util\VpbThreePointLightSetup.cs" />
+    <Compile Include="src\util\VpbLoadingIconUtil.cs" />
+    <Compile Include="src\util\VpbCreatorStripPossessable.cs" />
     <Compile Include="src\util\PoseImportDiagnostics.cs" />
     <Compile Include="src\util\GalleryAtomListingDiagnostics.cs" />
     <Compile Include="src\gallery\GallerySortManager.cs" />

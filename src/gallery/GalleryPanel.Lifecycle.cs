@@ -436,6 +436,25 @@ namespace VPB
         {
             StopCo(ref _categoryQuickApplyCoroutine);
 
+            // Creator Strip: clear static suppress + stop routine before canvas teardown.
+            try
+            {
+                if (creatorModeStripRoutine != null)
+                {
+                    try { StopCoroutine(creatorModeStripRoutine); } catch { }
+                    creatorModeStripRoutine = null;
+                }
+                creatorModeStripBusy = false;
+                SuppressAtomRemovedGalleryNotify = false;
+                if (_stripKeepSubScenePickActive)
+                {
+                    try { StripKeepAbortSubScenePickMode(reopenStrip: false); } catch { }
+                }
+                try { HideStripKeepSelectorInternal(resetSession: true); } catch { }
+                creatorModeActive = false;
+            }
+            catch { }
+
             RemoveModeDestroyPopup();
 
             _gridHoverBadgeBtnGO = null;

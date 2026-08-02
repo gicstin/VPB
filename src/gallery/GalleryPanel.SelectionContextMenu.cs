@@ -178,6 +178,8 @@ namespace VPB
             one(tboxCleanupClearBtn);
             one(tboxCleanupAddExcludeBtn);
             one(tboxCleanupRemoveExcludeBtn);
+            one(tboxCreatorModeBtn);
+            one(tboxCreatorStripSceneBtn);
             one(tboxLoadBtn);
             one(tboxLoadRandomBtn);
             one(tboxUnloadBtn);
@@ -227,6 +229,8 @@ namespace VPB
             d(tboxCleanupBtn);
             d(tboxCleanupApplyBtn);
             d(tboxCleanupClearBtn);
+            d(tboxCreatorModeBtn);
+            d(tboxCreatorStripSceneBtn);
             d(tboxCleanupAddExcludeBtn);
             d(tboxCleanupRemoveExcludeBtn);
             d(tboxLoadBtn);
@@ -358,6 +362,9 @@ namespace VPB
                 if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
                 if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
                 if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
+                // Scene Strip near cleanup cluster (scene tools, not mid package ops).
+                if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
+                if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
                 if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
                 if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
                 if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
@@ -1328,6 +1335,59 @@ namespace VPB
             tboxCleanupAddExcludeBtn.SetActive(false);
             tboxCleanupRemoveExcludeBtn.SetActive(false);
 
+            tboxCreatorModeBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                "", tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                TboxToggleCreatorMode
+            );
+            tboxCreatorModeBtn.name = "Tbox_CreatorMode";
+            TboxConfigureActionButtonFlex(tboxCreatorModeBtn, innerRowH, innerRowH, innerRowH);
+            AddTooltip(tboxCreatorModeBtn, "gallery.tooltip.tbox_creator_mode",
+                "Creator Mode — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
+            try
+            {
+                var creatorIcon = UI.LoadIconSprite("vpb_icons/creator_mode.png", Color.white);
+                if (creatorIcon != null) UI.AddIconToButton(tboxCreatorModeBtn, creatorIcon, padding: 6f);
+                else
+                {
+                    Text t = tboxCreatorModeBtn.GetComponentInChildren<Text>(true);
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.creator_mode", "CM");
+                }
+            }
+            catch { }
+            try { tboxCreatorModeBtnImage = tboxCreatorModeBtn.GetComponent<Image>(); } catch { tboxCreatorModeBtnImage = null; }
+            tboxCreatorModeBtn.SetActive(false);
+
+            tboxCreatorStripSceneBtn = UI.CreateUIButton(
+                tboxBtnRow0GO, 0, 0,
+                VPBTranslation.T("gallery.tbox.creator_strip", "Strip Scene"), tboxActionBtnFont,
+                0, 0, AnchorPresets.stretchAll,
+                OpenSceneStripKeepSelector
+            );
+            tboxCreatorStripSceneBtn.name = "Tbox_CreatorStripScene";
+            float tboxCmTextScale = ChromeScale > 0f ? ChromeScale : 1f;
+            TboxConfigureActionButtonFlex(
+                tboxCreatorStripSceneBtn, 96f * tboxCmTextScale, 128f * tboxCmTextScale, innerRowH);
+            AddTooltip(tboxCreatorStripSceneBtn, "gallery.tooltip.tbox_creator_strip",
+                "Strip Scene — pick atoms to keep; rest removed. No Undo. Ctrl+Shift+S.");
+            try
+            {
+                Image stripImg = tboxCreatorStripSceneBtn.GetComponent<Image>();
+                if (stripImg != null) stripImg.color = ColorDangerAllRow;
+                tboxCreatorStripSceneBtnImage = stripImg;
+            }
+            catch { tboxCreatorStripSceneBtnImage = null; }
+            try
+            {
+                Text stripTxt = tboxCreatorStripSceneBtn.GetComponentInChildren<Text>(true);
+                if (stripTxt != null)
+                    GalleryUiMetrics.ApplyFont(
+                        stripTxt, GalleryUiDesignTokens.FontBodyRef, tboxCmTextScale, GalleryUiDesignTokens.FontMinRef);
+            }
+            catch { }
+            tboxCreatorStripSceneBtn.SetActive(false);
+
             tboxAutoInstallBtn = UI.CreateUIButton(
                 tboxBtnRow0GO, 0, 0,
                 "", tboxActionBtnFont,
@@ -1472,6 +1532,15 @@ namespace VPB
                         GalleryUiMetrics.ApplyFont(tboxClothesOnlyText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
                     if (tboxClothesMergeText != null)
                         GalleryUiMetrics.ApplyFont(tboxClothesMergeText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                    if (tboxCreatorStripSceneBtn != null)
+                    {
+                        Text stripTxt = tboxCreatorStripSceneBtn.GetComponentInChildren<Text>(true);
+                        if (stripTxt != null)
+                            GalleryUiMetrics.ApplyFont(
+                                stripTxt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                        TboxConfigureActionButtonFlex(
+                            tboxCreatorStripSceneBtn, 96f * s, 128f * s, TboxActionButtonInnerHeight());
+                    }
                 }
                 catch { }
             });
@@ -1961,10 +2030,11 @@ namespace VPB
                 catch { _activeSubfilterChipText = null; }
             }
 
-            // Action buttons when there is a selection, cleanup mode active, or person atoms present.
+            // Action buttons when there is a selection, cleanup/strip session, or person atoms present.
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
             bool isSettingsMode = IsSettingsPanelOpen();
-            bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive || hasPersonAtoms;
+            bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive || creatorModeActive
+                || IsStripKeepSelectorOpen() || hasPersonAtoms;
             if (!canExpand && tboxExpandT < 0.01f)
             {
                 tboxExpandT = 0f;
@@ -1984,7 +2054,7 @@ namespace VPB
             // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
-                if ((sel > 0 || cleanupModeActive || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
+                if ((sel > 0 || cleanupModeActive || creatorModeActive || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
                 {
                     float w = tboxButtonsFlexRootRT.rect.width;
                     if (w > 8f && Mathf.Abs(w - tboxLastFlexAvailW) > 2f)
@@ -2027,7 +2097,7 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            bool needsTboxActions = sel > 0 || cleanupModeActive || activeContentType == ContentType.History || IsSettingsPanelOpen();
+            bool needsTboxActions = sel > 0 || cleanupModeActive || creatorModeActive || activeContentType == ContentType.History || IsSettingsPanelOpen();
             if (needsTboxActions)
             {
                 string tboxKey = BuildTboxConditionalRefreshCacheKey();
@@ -2077,6 +2147,7 @@ namespace VPB
         {
             var sb = new StringBuilder(256);
             sb.Append(cleanupModeActive ? 'C' : 'c');
+            sb.Append(creatorModeActive ? 'M' : 'm');
             sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
             sb.Append(activeContentType == ContentType.History ? 'H' : 'h');
             sb.Append(DetailStripIsExpanded() ? 'D' : 'd');
@@ -2126,6 +2197,7 @@ namespace VPB
                 }
             }
             bool isCleanup = cleanupModeActive;
+            bool isCreator = creatorModeActive;
             bool historyBrowse = activeContentType == ContentType.History;
             bool isSettings = IsSettingsPanelOpen();
             void show(GameObject go, bool on)
@@ -2146,6 +2218,8 @@ namespace VPB
                 show(tboxCleanupClearBtn, false);
                 show(tboxCleanupAddExcludeBtn, false);
                 show(tboxCleanupRemoveExcludeBtn, false);
+                show(tboxCreatorModeBtn, false);
+                show(tboxCreatorStripSceneBtn, false);
 
                 show(tboxAutoInstallBtn, false);
                 show(tboxDisableAutoInstallBtn, false);
@@ -2191,6 +2265,11 @@ namespace VPB
             bool cleanupHasNonExcludedSelection = isCleanup && CleanupSelectionHasNonExcludedEntries();
             show(tboxCleanupAddExcludeBtn, cleanupHasNonExcludedSelection);
             show(tboxCleanupRemoveExcludeBtn, cleanupHasExcludedSelection);
+
+            // Creator Mode: tools only while mode ON (rail toggle). Toolbox CM button stays hidden.
+            show(tboxCreatorModeBtn, false);
+            show(tboxCreatorStripSceneBtn, isCreator && !isCleanup);
+            if (isCreator) RefreshCreatorModeChrome();
 
             show(tboxAutoInstallBtn, !isCleanup);
             show(tboxDisableAutoInstallBtn, !isCleanup);

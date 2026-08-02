@@ -60,6 +60,59 @@ namespace VPB
             catch { root = null; }
             if (root == null) yield break;
 
+            yield return SpawnRig(sc, root, outUids);
+        }
+
+        /// <summary>
+        /// Appearance-import 3P rig for Strip Scene: first Person if any, else world origin.
+        /// Skips when scene already has lights. Cold/warm path only.
+        /// </summary>
+        public static IEnumerator SpawnForCreatorStrip(List<string> outUids)
+        {
+            if (outUids != null) outUids.Clear();
+
+            SuperController sc = SuperController.singleton;
+            if (sc == null) yield break;
+            if (SceneAlreadyHasLights(sc)) yield break;
+
+            Atom person = FindFirstPerson(sc);
+            Transform root = null;
+            GameObject tempRoot = null;
+            if (person != null)
+            {
+                try
+                {
+                    root = person.mainController != null ? person.mainController.transform : person.transform;
+                }
+                catch { root = null; }
+            }
+            if (root == null)
+            {
+                // No Person — place rig at origin (same local offsets as MeshedVR default).
+                tempRoot = new GameObject("VPB_Strip3P_Anchor");
+                tempRoot.hideFlags = HideFlags.HideAndDontSave;
+                root = tempRoot.transform;
+                root.position = Vector3.zero;
+                root.rotation = Quaternion.identity;
+            }
+
+            try
+            {
+                yield return SpawnRig(sc, root, outUids);
+            }
+            finally
+            {
+                if (tempRoot != null)
+                {
+                    try { UnityEngine.Object.Destroy(tempRoot); } catch { }
+                }
+            }
+        }
+
+        private static IEnumerator SpawnRig(SuperController sc, Transform root, List<string> outUids)
+        {
+            if (sc == null || root == null) yield break;
+
             // Sequential AddAtomByType — avoid parallel atom-load races on Unity 2018 main thread.
             yield return SpawnOne(
                 sc, root, KeyUid, KeyLocal,
@@ -75,6 +128,25 @@ namespace VPB
                 sc, root, RimUid, RimLocal,
                 intensity: 2.650301f, range: -1f, spotAngle: -1f, lightType: "Point",
                 hue: 0.086f, sat: 0.22f, val: 1f, forcePixel: true, outUids);
+        }
+
+        private static Atom FindFirstPerson(SuperController sc)
+        {
+            if (sc == null) return null;
+            List<Atom> atoms = null;
+            try { atoms = sc.GetAtoms(); } catch { return null; }
+            if (atoms == null) return null;
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                Atom a = atoms[i];
+                if (a == null) continue;
+                try
+                {
+                    if (SceneUtils.IsPersonLikeAtom(a)) return a;
+                }
+                catch { }
+            }
+            return null;
         }
 
         private static IEnumerator SpawnOne(

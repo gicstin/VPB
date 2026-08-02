@@ -467,6 +467,18 @@ namespace VPB
             catch { }
         }
 
+        /// <summary>Toggle Creator Mode (same as side-rail / Ctrl+Shift+K).</summary>
+        internal void QuickMenu_ToggleCreatorMode()
+        {
+            try { ToggleCreatorMode(); } catch { }
+        }
+
+        /// <summary>Open Strip Scene keep selector (enters Creator Mode if needed).</summary>
+        internal void QuickMenu_OpenStripScene()
+        {
+            try { OpenSceneStripKeepSelector(); } catch { }
+        }
+
         /// <summary>Open Cleanup mode using the same entry point as the toolbox Cleanup action.</summary>
         internal void QuickMenu_OpenCleanupMode()
         {

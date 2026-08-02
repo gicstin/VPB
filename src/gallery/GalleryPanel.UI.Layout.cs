@@ -1331,6 +1331,7 @@ namespace VPB
             int idxTarget = -1;
             int idxApplyMode = -1;
             int idxRemoveMode = -1;
+            int idxCreatorMode = -1;
             int idxRemoveHair = 15;
             int idxRemoveClothing = 14;
             int idxRemoveAtom = -1;
@@ -1402,6 +1403,13 @@ namespace VPB
                         if (i >= 0) idxRemoveMode = i;
                     }
 
+                    GameObject creatorModeGo = rightCreatorModeSideBtn != null ? rightCreatorModeSideBtn : leftCreatorModeSideBtn;
+                    if (creatorModeGo != null)
+                    {
+                        int i = refList.FindIndex(rt => rt != null && rt.gameObject == creatorModeGo);
+                        if (i >= 0) idxCreatorMode = i;
+                    }
+
                     GameObject saveGo = rightSaveBtnGO != null ? rightSaveBtnGO : leftSaveBtnGO;
                     if (saveGo != null)
                     {
@@ -1440,6 +1448,7 @@ namespace VPB
 
                 // ── Tools ────────────────────────────────────────────────────
                 new SideButtonLayoutEntry(idxRemoveMode, 0, zone), // Remove Item Mode
+                new SideButtonLayoutEntry(idxCreatorMode, 0, 0), // Creator Mode (scene tools)
                 new SideButtonLayoutEntry(idxApplyMode, 0, 0),
                 new SideButtonLayoutEntry(idxSave, 0, 0),
                 new SideButtonLayoutEntry(idxTarget, 0, 0), // legacy index (usually -1)
@@ -2103,6 +2112,7 @@ namespace VPB
             {
                 if (rightSceneImportSideBtn != null && go == rightSceneImportSideBtn) return true;
                 if (rightRemoveModeSideBtn != null && go == rightRemoveModeSideBtn) return true;
+                if (rightCreatorModeSideBtn != null && go == rightCreatorModeSideBtn) return true;
                 if (rightUserTagsSideBtn != null && go == rightUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && rightCategoryBtnIconImage != null && rightCategoryBtnImage != null && go == rightCategoryBtnImage.gameObject)
                     return true;
@@ -2125,6 +2135,7 @@ namespace VPB
             {
                 if (leftSceneImportSideBtn != null && go == leftSceneImportSideBtn) return true;
                 if (leftRemoveModeSideBtn != null && go == leftRemoveModeSideBtn) return true;
+                if (leftCreatorModeSideBtn != null && go == leftCreatorModeSideBtn) return true;
                 if (leftUserTagsSideBtn != null && go == leftUserTagsSideBtn) return true;
                 if (galleryCategorySprite != null && leftCategoryBtnIconImage != null && leftCategoryBtnImage != null && go == leftCategoryBtnImage.gameObject)
                     return true;

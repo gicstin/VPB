@@ -402,6 +402,13 @@ namespace VPB
                     "End Scene Load Test selection first (Done or Cancel)."), 2.5f);
                 return;
             }
+            if (_stripKeepSubScenePickActive && !StripKeepSubScenePickAllowsShowRequest(title))
+            {
+                ShowTemporaryStatus(VPBTranslation.T(
+                    "gallery.creator.strip_subscene_pick_block_nav",
+                    "End SubScene pick first (Confirm Pick or Cancel Pick)."), 2.5f);
+                return;
+            }
 
             // Otherwise the next-frame yield path immediately hides us again.
             if (VPBConfig.Instance != null && VPBConfig.Instance.GalleryAnchorToVamMenu
@@ -1726,6 +1733,11 @@ namespace VPB
                 BenchOnGallerySelectionChangedInPickMode();
                 return;
             }
+            if (_stripKeepSubScenePickActive)
+            {
+                StripKeepOnGallerySelectionChangedInSubScenePick();
+                return;
+            }
 
             // Apply Logic
             // Hold-to-launch overrides 1-click apply: clicks should still select, but only 2-click applies while hold mode is on.
@@ -1743,6 +1755,7 @@ namespace VPB
         {
             if (file == null) return;
             if (_benchPickModeActive) return;
+            if (_stripKeepSubScenePickActive) return;
             ApplyFileEntryNow(file);
         }
 
@@ -1750,6 +1763,7 @@ namespace VPB
         {
             if (file == null) return;
             if (_benchPickModeActive) return;
+            if (_stripKeepSubScenePickActive) return;
 
             FileEntry applyFile = file;
             FileEntry resolvedScene = TryResolveSceneCategoryPackageRowToSceneJson(file);
