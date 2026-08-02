@@ -89,6 +89,14 @@ namespace VPB
                     LogUtil.LogWarning("DAZHairSwapHook: SetActiveHairItem(DAZHairGroup,...) not found.");
                 }
 
+                var mSetActiveHairByUid = FindSetActiveHairItemByUid();
+                if (mSetActiveHairByUid != null)
+                {
+                    harmony.Patch(
+                        mSetActiveHairByUid,
+                        prefix: new HarmonyMethod(typeof(DAZHairSwapHook), nameof(PreSetActiveHairItemByUid)));
+                }
+
                 var mRefreshDynamicHair = AccessTools.Method(typeof(DAZCharacterSelector), "RefreshDynamicHair");
                 if (mRefreshDynamicHair != null)
                 {
@@ -170,6 +178,18 @@ namespace VPB
                 {
                     return method;
                 }
+            }
+            return null;
+        }
+
+        static MethodInfo FindSetActiveHairItemByUid()
+        {
+            foreach (var method in AccessTools.GetDeclaredMethods(typeof(DAZCharacterSelector)))
+            {
+                if (method.Name != "SetActiveHairItem") continue;
+                var parameters = method.GetParameters();
+                if (parameters.Length >= 1 && parameters[0].ParameterType == typeof(string))
+                    return method;
             }
             return null;
         }
@@ -466,6 +486,20 @@ namespace VPB
             bool active,
             bool fromRestore)
         {
+            // Issue #12: UI Assist / SetActive on scan-excluded hair packages (always, not only swap mode).
+            // Object path: register files only. Skip during restore (batched elsewhere).
+            if (active && item != null && !fromRestore)
+            {
+                try
+                {
+                    string uid = VamOnDemandLoader.ResolvePackageUidForDynamicItem(
+                        item.packageUid, item.uid, item.backupId);
+                    VamOnDemandLoader.EnsurePackageReadyForDynamicItemActivation(
+                        uid, "set_active_hair_item", allowCatalogForceRefresh: false);
+                }
+                catch { }
+            }
+
             if (!Enabled || __instance == null || item == null) return true;
 
             var session = GetSession(__instance, create: false);
@@ -491,6 +525,27 @@ namespace VPB
             }
 
             return true;
+        }
+
+        public static void PreSetActiveHairItemByUid(
+            DAZCharacterSelector __instance,
+            string itemId,
+            bool active,
+            bool fromRestore)
+        {
+            // Issue #12: string-id hair path under scan whitelist.
+            if (!active || string.IsNullOrEmpty(itemId)) return;
+            try
+            {
+                string uid = VamOnDemandLoader.UidFromEntryPath(itemId);
+                if (string.IsNullOrEmpty(uid)) return;
+
+                bool catalogMiss = __instance == null || !__instance.IsHairUIDAvailable(itemId);
+                bool allowForce = catalogMiss && !fromRestore;
+                VamOnDemandLoader.EnsurePackageReadyForDynamicItemActivation(
+                    uid, "set_active_hair_uid", allowForce);
+            }
+            catch { }
         }
 
         public static bool PreBlockHairUnloadDuringSwap(DAZCharacterSelector __instance)

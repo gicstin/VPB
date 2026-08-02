@@ -133,11 +133,105 @@ namespace VPB
                         null, new[] { typeof(string) }, null);
                 }
                 if (s_VamGetPackageMethod == null) return false;
-                object r = s_VamGetPackageMethod.Invoke(null, new object[] { uid });
-                return r != null;
+                // Skip Harmony GetPackage on-demand postfix — otherwise register probes recurse.
+                bool prev = s_InOnDemand;
+                s_InOnDemand = true;
+                try
+                {
+                    object r = s_VamGetPackageMethod.Invoke(null, new object[] { uid });
+                    return r != null;
+                }
+                finally { s_InOnDemand = prev; }
             }
             catch { }
             return false;
+        }
+
+        /// <summary>
+        /// Before clothing/hair UI Assist <c>SetActive*</c>: register scan-excluded package in native
+        /// FileManager. Optionally flush coalesced Refresh so <c>RefreshDynamicItems</c>
+        /// (onRefreshHandlers) rebuilds catalogs. Main thread only. No-op when scan whitelist off.
+        /// </summary>
+        /// <param name="allowCatalogForceRefresh">
+        /// True only when the item is missing from the person catalog (string-id miss).
+        /// Object-path SetActive already has the item — register files only, never Force Refresh.
+        /// False during <c>fromRestore</c> (preset path batches refresh via AtomHook).
+        /// </param>
+        public static void EnsurePackageReadyForDynamicItemActivation(
+            string packageUid,
+            string reason,
+            bool allowCatalogForceRefresh)
+        {
+            if (string.IsNullOrEmpty(packageUid)) return;
+            if (!ScanWhitelistManager.Instance.IsEnabled) return;
+            if (!IsMainThread()) return;
+
+            // Fast path: native already has package and clothing/hair catalog is fresh.
+            try
+            {
+                if (IsUidAlreadyRegisteredInVam(packageUid)
+                    && !IsPromotedPackageCatalogStale(packageUid))
+                    return;
+            }
+            catch { }
+
+            string od = null;
+            try { od = TryRegisterPackageOnDemand(packageUid); }
+            catch { }
+
+            if (!allowCatalogForceRefresh) return;
+            // Never nest Force Refresh inside an in-flight native Refresh (dictionary enum).
+            if (VamScanFilter.IsVamRefreshInProgress) return;
+
+            bool needCatalog = false;
+            try
+            {
+                if (!string.IsNullOrEmpty(od)
+                    && PackageRegistrationNeedsNativeCatalogRefresh(packageUid, null))
+                    needCatalog = true;
+                else if (IsPromotedPackageCatalogStale(packageUid))
+                    needCatalog = true;
+            }
+            catch { }
+
+            if (!needCatalog) return;
+
+            string r = string.IsNullOrEmpty(reason) ? "dynamic_item_activation" : reason;
+            try
+            {
+                if (!HasPendingCoalescedVamRefresh())
+                    RequestCoalescedVamRefresh(r);
+                ForceRunPendingCoalescedVamRefresh(r);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Resolve package UID from a dynamic-item id / backup path / packageUid field.
+        /// </summary>
+        public static string ResolvePackageUidForDynamicItem(string packageUid, string itemUid, string backupId)
+        {
+            if (!string.IsNullOrEmpty(packageUid)) return packageUid;
+            string fromUid = UidFromEntryPath(itemUid);
+            if (!string.IsNullOrEmpty(fromUid)) return fromUid;
+            return UidFromEntryPath(backupId);
+        }
+
+        /// <summary>
+        /// Nest-safe enter for Harmony on-demand postfixes. Returns false when already inside
+        /// an on-demand section (caller must not run heavy work / must not Exit).
+        /// </summary>
+        public static bool TryEnterOnDemandGuard(out bool previous)
+        {
+            previous = s_InOnDemand;
+            if (previous) return false;
+            s_InOnDemand = true;
+            return true;
+        }
+
+        public static void ExitOnDemandGuard(bool previous)
+        {
+            s_InOnDemand = previous;
         }
 
         private static readonly HashSet<string> s_RewriteLogOnceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

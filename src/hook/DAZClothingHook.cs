@@ -101,10 +101,35 @@ namespace VPB
 
         public static void PreSetActiveClothingItem(DAZCharacterSelector __instance, DAZClothingItem item, bool active, bool fromRestore)
         {
+            // Issue #12: UI Assist / SetActive on scan-excluded clothing packages.
+            // Object path: item already in catalog — register package files only (no Force Refresh).
+            if (!active || item == null || fromRestore) return;
+            try
+            {
+                string uid = VamOnDemandLoader.ResolvePackageUidForDynamicItem(
+                    item.packageUid, item.uid, item.backupId);
+                VamOnDemandLoader.EnsurePackageReadyForDynamicItemActivation(
+                    uid, "set_active_clothing_item", allowCatalogForceRefresh: false);
+            }
+            catch { }
         }
 
         public static void PreSetActiveClothingItemByUid(DAZCharacterSelector __instance, string itemId, bool active, bool fromRestore)
         {
+            // Issue #12: string-id path — Force Refresh only when catalog miss (UI Assist).
+            // fromRestore: AtomHook batches native refresh; never Force mid-restore.
+            if (!active || string.IsNullOrEmpty(itemId)) return;
+            try
+            {
+                string uid = VamOnDemandLoader.UidFromEntryPath(itemId);
+                if (string.IsNullOrEmpty(uid)) return;
+
+                bool catalogMiss = __instance == null || !__instance.IsClothingUIDAvailable(itemId);
+                bool allowForce = catalogMiss && !fromRestore;
+                VamOnDemandLoader.EnsurePackageReadyForDynamicItemActivation(
+                    uid, "set_active_clothing_uid", allowForce);
+            }
+            catch { }
         }
 
         public static void PreRemoveAllClothing(DAZCharacterSelector __instance)

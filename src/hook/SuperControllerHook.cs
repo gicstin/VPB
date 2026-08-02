@@ -630,7 +630,9 @@ namespace VPB
                     return;
                 }
 
-                // Rewrite bare Custom/ → uid:/Custom/... so native GetFiles sees a package dir.
+                // Rewrite bare Custom/ → uid:/Custom/... only when not present on disk
+                // (session/loose Custom/Scripts must stay bare — see TryRewriteBareCustomPath).
+                string bareBefore = __0;
                 TryRewriteBareCustomPath(ref __0);
 
                 if (ScanWhitelistManager.Instance == null || !ScanWhitelistManager.Instance.IsEnabled) return;
@@ -638,7 +640,10 @@ namespace VPB
                 string uid = VamOnDemandLoader.UidFromEntryPath(__0);
                 if (string.IsNullOrEmpty(uid))
                 {
-                    TryRegisterOwnersForBareCustomDir(__0);
+                    // Local disk already satisfies this path — skip package-owner scan (warm path).
+                    string localCheck = NormalizeBareCustomInternalPath(bareBefore);
+                    if (string.IsNullOrEmpty(localCheck) || !LocalCustomPathExistsOnDisk(localCheck))
+                        TryRegisterOwnersForBareCustomDir(__0);
                     return;
                 }
 
@@ -704,13 +709,12 @@ namespace VPB
         }
 
         /// <summary>
-        /// Bare Custom/... → first VPB-indexed uid:/Custom/... (registers owner). Used by load/exists/open.
+        /// Normalize bare / broken-null Custom path to internal form (forward slashes, no leading /).
+        /// Returns null when not a Custom/ path.
         /// </summary>
-        static bool TryRewriteBareCustomPath(ref string path)
+        static string NormalizeBareCustomInternalPath(string path)
         {
-            if (string.IsNullOrEmpty(path)) return false;
-            if (!PathLooksLikeBareOrBrokenCustom(path)) return false;
-
+            if (string.IsNullOrEmpty(path)) return null;
             string p = path;
             if (p.IndexOf('\\') >= 0) p = p.Replace('\\', '/');
             if (p.Length > 0 && p[0] == '/') p = p.Substring(1);
@@ -720,9 +724,45 @@ namespace VPB
             if (colon == 0)
                 p = p.Substring(2);
             else if (colon > 0)
-                return false;
+                return null;
 
-            if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!p.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase)) return null;
+            return p;
+        }
+
+        /// <summary>
+        /// True when <paramref name="normalizedCustomPath"/> exists as a real file or directory
+        /// under the VaM game root (process CWD). Does not call FileManager (avoids hook recursion).
+        /// </summary>
+        static bool LocalCustomPathExistsOnDisk(string normalizedCustomPath)
+        {
+            if (string.IsNullOrEmpty(normalizedCustomPath)) return false;
+            try
+            {
+                // System.IO accepts '/' on Windows; VaM CWD is the game root.
+                if (File.Exists(normalizedCustomPath)) return true;
+                if (Directory.Exists(normalizedCustomPath)) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Bare Custom/... → first VPB-indexed uid:/Custom/... (registers owner). Used by load/exists/open.
+        /// Prefers on-disk Custom/ (session plugins, loose Scripts) over package remap so FileExists
+        /// does not steer away from local files into an unregistered/wrong VAR (ac9b50f9 / #77).
+        /// Package-only bare paths (PoseMe ExpressionSets, BodyLanguage) still remap.
+        /// </summary>
+        static bool TryRewriteBareCustomPath(ref string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            if (!PathLooksLikeBareOrBrokenCustom(path)) return false;
+
+            string p = NormalizeBareCustomInternalPath(path);
+            if (string.IsNullOrEmpty(p)) return false;
+
+            // Session / loose Custom/Scripts (and any other on-disk Custom/) win over VAR index.
+            if (LocalCustomPathExistsOnDisk(p)) return false;
 
             string uidPath;
             if (!FileManager.TryResolveCustomInternalPathToUidPath(p, out uidPath) || string.IsNullOrEmpty(uidPath))
@@ -1062,21 +1102,25 @@ namespace VPB
                 if (result) return;
                 if (onlySystemFiles) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
-                if (VamOnDemandLoader.s_InOnDemand) return;
 
-                string uid = VamOnDemandLoader.UidFromEntryPath(path);
-                if (string.IsNullOrEmpty(uid)) return;
-                LogUtil.RecordVarEntryMiss();
+                bool entered;
+                bool prev;
+                entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
+                if (!entered) return;
 
-                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
-                    return;
-
-                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHookHeavy++;
-                LogUtil.RecordOnDemandRetry();
-                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
-                VamOnDemandLoader.s_InOnDemand = true;
                 try
                 {
+                    string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                    if (string.IsNullOrEmpty(uid)) return;
+                    LogUtil.RecordVarEntryMiss();
+
+                    if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                        return;
+
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.FileExistsHookHeavy++;
+                    LogUtil.RecordOnDemandRetry();
+                    VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
+
                     if (MVR.FileManagement.FileManager.GetVarFileEntry(path) != null)
                     {
                         result = true;
@@ -1095,6 +1139,7 @@ namespace VPB
 
                     // VaM may also request a specific version that isn't installed anymore
                     // (e.g. Author.Pkg.11), while a newer version exists (e.g. .14).
+                    if (result) return;
                     string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
                     if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
                     {
@@ -1105,7 +1150,7 @@ namespace VPB
                 }
                 finally
                 {
-                    VamOnDemandLoader.s_InOnDemand = false;
+                    VamOnDemandLoader.ExitOnDemandGuard(prev);
                 }
             }
             catch (Exception ex)
@@ -2039,21 +2084,25 @@ namespace VPB
                 if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHook++;
                 if (__result != null) return;
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
-                if (VamOnDemandLoader.s_InOnDemand) return;
 
-                string uid = VamOnDemandLoader.UidFromEntryPath(path);
-                if (string.IsNullOrEmpty(uid)) return;
-                LogUtil.RecordVarEntryMiss();
+                bool entered;
+                bool prev;
+                entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
+                if (!entered) return;
 
-                if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
-                    return;
-
-                if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHookHeavy++;
-                LogUtil.RecordOnDemandRetry();
-                VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
-                VamOnDemandLoader.s_InOnDemand = true;
                 try
                 {
+                    string uid = VamOnDemandLoader.UidFromEntryPath(path);
+                    if (string.IsNullOrEmpty(uid)) return;
+                    LogUtil.RecordVarEntryMiss();
+
+                    if (VamOnDemandLoader.ShouldDeferStartupOnDemandForPath(path, uid))
+                        return;
+
+                    if (VpbPerfDiag.CachedEnabled) VpbPerfDiag.GetVarEntryHookHeavy++;
+                    LogUtil.RecordOnDemandRetry();
+                    VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(path);
+
                     __result = MVR.FileManagement.FileManager.GetVarFileEntry(path);
                     if (__result != null) return;
 
@@ -2067,8 +2116,9 @@ namespace VPB
                     }
 
                     // Also handle versioned UIDs where the requested version doesn't exist.
+                    if (__result != null) return;
                     string rewrittenBest = VamOnDemandLoader.TryRewriteBestAvailableEntryPath(path, attemptRegister: true);
-                    if (__result == null && !string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(rewrittenBest) && !string.Equals(rewrittenBest, path, StringComparison.OrdinalIgnoreCase))
                     {
                         LogUtil.RecordOnDemandRetry();
                         __result = MVR.FileManagement.FileManager.GetVarFileEntry(rewrittenBest);
@@ -2076,12 +2126,145 @@ namespace VPB
                 }
                 finally
                 {
-                    VamOnDemandLoader.s_InOnDemand = false;
+                    VamOnDemandLoader.ExitOnDemandGuard(prev);
                 }
             }
             catch (Exception ex)
             {
                 LogUtil.LogWarning("[VPB OnDemand] PostGetVarFileEntryOnDemand error: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Issue #12: plugins calling native <c>FileManager.GetPackage</c> must see scan-excluded
+        /// packages once requested. Register on demand and retry (no full catalog Refresh here).
+        /// Preserves native semantics: exact UID miss stays null (no silent version swap).
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackage", new Type[] { typeof(string) })]
+        public static void PostGetPackageOnDemand(string packageUidOrPath, ref MVR.FileManagement.VarPackage __result)
+        {
+            try
+            {
+                if (__result != null) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                bool entered;
+                bool prev;
+                entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
+                if (!entered) return;
+                try
+                {
+                    VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
+                    __result = MVR.FileManagement.FileManager.GetPackage(packageUidOrPath);
+                    if (__result != null) return;
+
+                    // Native .latest resolves via package group — ensure a concrete version is registered.
+                    if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string best = VamOnDemandLoader.TryGetNewestInstalledUid(packageUidOrPath);
+                        if (!string.IsNullOrEmpty(best)
+                            && !string.Equals(best, packageUidOrPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            VamOnDemandLoader.TryRegisterPackageOnDemand(best);
+                            __result = MVR.FileManagement.FileManager.GetPackage(packageUidOrPath);
+                            if (__result == null)
+                                __result = MVR.FileManagement.FileManager.GetPackage(best);
+                        }
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.ExitOnDemandGuard(prev);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostGetPackageOnDemand error: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Issue #12: <c>IsPackage</c> probes must match GetPackage on-demand registration.
+        /// Never returns true for a different UID than requested.
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "IsPackage", new Type[] { typeof(string) })]
+        public static void PostIsPackageOnDemand(string packageUidOrPath, ref bool __result)
+        {
+            try
+            {
+                if (__result) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (string.IsNullOrEmpty(packageUidOrPath)) return;
+                if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
+
+                bool entered;
+                bool prev;
+                entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
+                if (!entered) return;
+                try
+                {
+                    VamOnDemandLoader.TryRegisterPackageOnDemand(packageUidOrPath);
+                    __result = MVR.FileManagement.FileManager.IsPackage(packageUidOrPath);
+                    if (__result) return;
+
+                    if (packageUidOrPath.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string best = VamOnDemandLoader.TryGetNewestInstalledUid(packageUidOrPath);
+                        if (!string.IsNullOrEmpty(best)
+                            && !string.Equals(best, packageUidOrPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            VamOnDemandLoader.TryRegisterPackageOnDemand(best);
+                            // .latest is not itself a packagesByUid key — true if concrete version registered.
+                            __result = MVR.FileManagement.FileManager.IsPackage(best);
+                        }
+                    }
+                }
+                finally
+                {
+                    VamOnDemandLoader.ExitOnDemandGuard(prev);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostIsPackageOnDemand error: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Issue #12: <c>GetPackageGroup</c> after on-demand register so <c>.latest</c>/<c>.minN</c> resolve.
+        /// </summary>
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MVR.FileManagement.FileManager), "GetPackageGroup", new Type[] { typeof(string) })]
+        public static void PostGetPackageGroupOnDemand(string packageGroupUid, ref MVR.FileManagement.VarPackageGroup __result)
+        {
+            try
+            {
+                if (__result != null) return;
+                if (!ScanWhitelistManager.Instance.IsEnabled) return;
+                if (string.IsNullOrEmpty(packageGroupUid)) return;
+                if (packageGroupUid.IndexOf('.') < 0) return;
+
+                bool entered;
+                bool prev;
+                entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
+                if (!entered) return;
+                try
+                {
+                    VamOnDemandLoader.TryRegisterPackageOnDemand(packageGroupUid + ".latest");
+                    __result = MVR.FileManagement.FileManager.GetPackageGroup(packageGroupUid);
+                }
+                finally
+                {
+                    VamOnDemandLoader.ExitOnDemandGuard(prev);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] PostGetPackageGroupOnDemand error: " + ex.Message);
             }
         }
     }
