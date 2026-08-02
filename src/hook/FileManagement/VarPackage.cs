@@ -2032,21 +2032,37 @@ namespace VPB
 								}
 							}
 							catch { }
-							try
-							{
-								var promoNode = asObject["promotionalLink"];
-								if (promoNode != null)
-								{
-									string p = promoNode.Value;
-									if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
-								}
-							}
-							catch { }
+                            try
+                            {
+                                var promoNode = asObject["promotionalLink"];
+                                if (promoNode != null)
+                                {
+                                    string p = promoNode.Value;
+                                    if (!string.IsNullOrEmpty(p)) PromotionalLink = p.Trim();
+                                }
+                            }
+                            catch { }
 
-							try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
+                            try
+                            {
+                                JSONNode licenseNode = asObject["licenseType"];
+                                if (licenseNode != null)
+                                {
+                                    string lic = licenseNode.Value;
+                                    if (!string.IsNullOrEmpty(lic)
+                                        && !string.Equals(lic, "null", StringComparison.OrdinalIgnoreCase))
+                                        LicenseType = lic.Trim();
+                                }
+                            }
+                            catch { }
 
-							if (!FileManager.IsBulkDeepScanActive)
-								FindMissingDependenciesRecursive(asObject);
+                            try { PackageReferenceVersionResolver.ApplyFromMetaJson(this, asObject); } catch { }
+
+                            // Full scan already read lite meta fields — skip ZIP reopen on filter/hover.
+                            _metaJsonLiteLoaded = true;
+
+                            if (!FileManager.IsBulkDeepScanActive)
+                                FindMissingDependenciesRecursive(asObject);
 						}
 					}
 				}

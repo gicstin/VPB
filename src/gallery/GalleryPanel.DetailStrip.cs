@@ -4521,11 +4521,11 @@ namespace VPB
                     Enabled = licClick,
                     ValueColor = new Color(0.88f, 0.86f, 0.55f, 1f),
                     OnClick = licClick
-                        ? (UnityAction)(() => DetailStripCopyMetaValue(licSnap, VPBTranslation.T("gallery.detail.copied_license", "Copied license")))
+                        ? (UnityAction)(() => DetailStripOnLicenseClick(licSnap))
                         : null,
                     Tip = licenseMixed
                         ? VPBTranslation.T("gallery.detail.tip.license_mixed", "Selection has mixed licenses")
-                        : string.Format(VPBTranslation.T("gallery.detail.tip.license_fmt", "Copy license \"{0}\""), license)
+                        : string.Format(VPBTranslation.T("gallery.detail.tip.license_filter_fmt", "Filter by license \"{0}\""), license)
                 });
             }
 
@@ -6348,6 +6348,30 @@ namespace VPB
                     _detailStripBoundCreator), 1.8f);
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip creator: " + ex.Message); }
+        }
+
+        private void DetailStripOnLicenseClick(string license)
+        {
+            if (string.IsNullOrEmpty(license)) return;
+            try
+            {
+                bool clearing = HasLicenseFilter()
+                    && string.Equals(currentLicenseFilter, license, StringComparison.OrdinalIgnoreCase);
+                SetLicenseFilter(license, refresh: true);
+                if (clearing)
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.detail.license_filter_cleared", "License filter cleared"),
+                        1.5f);
+                }
+                else
+                {
+                    ShowTemporaryStatus(string.Format(
+                        VPBTranslation.T("gallery.detail.license_filtered", "License filter: {0}"),
+                        license), 1.8f);
+                }
+            }
+            catch (Exception ex) { LogUtil.LogError("[VPB] DetailStrip license: " + ex.Message); }
         }
 
         private void DetailStripOnCopyClick()

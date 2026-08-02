@@ -11,6 +11,7 @@ namespace VPB
             {
                 if (!string.IsNullOrEmpty(currentRatingFilter)) return true;
                 if (HasCreatorFilter()) return true;
+                if (HasLicenseFilter()) return true;
                 if (HasTitleBarBrowseFilterActive()) return true;
                 if (activeTags != null && activeTags.Count > 0) return true;
                 if (HasActiveSubPaneOrExtraBrowseFilters()) return true;
@@ -24,6 +25,7 @@ namespace VPB
         {
             try { if (IsFilterActive) ClearPackageFilter(); } catch { }
             currentRatingFilter = "";
+            try { ClearLicenseFilter(refresh: false); } catch { currentLicenseFilter = ""; }
             try { activeTags?.Clear(); } catch { }
             try { ClearTitleBarSearchAndSyncChrome(); } catch { }
             try { ClearCreatorFilters(); } catch { }

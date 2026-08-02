@@ -45,6 +45,12 @@ namespace VPB
         private GameObject tboxClearSelectionBtn;
         private GameObject tboxGridRateBtn;
         private Image tboxGridRateIconImage;
+        /// <summary>
+        /// Digit label on the toolbox rate button. Must be cached — selector option Texts are
+        /// children of the same button when closed, so GetComponentInChildren&lt;Text&gt; hits those
+        /// instead of the digit (display stays stale until selector is reparented open).
+        /// </summary>
+        private Text tboxGridRateDigitText;
         private RatingHandler tboxGridRateHandler;
         private GameObject tboxGridRateSelectorGO;
         private GameObject tboxSettingsSaveBtn;
@@ -328,6 +334,8 @@ namespace VPB
             {
                 // "Target selector" counts as 4 button slots for balanced wrap + width allocation.
                 if (go != null && tboxTargetDropdownRowGO != null && go == tboxTargetDropdownRowGO) return 4;
+                // Rate chip is ★ + digit side-by-side — two slots so layout keeps readable width.
+                if (go != null && tboxGridRateBtn != null && go == tboxGridRateBtn) return 2;
                 return 1;
             }
 
@@ -884,8 +892,8 @@ namespace VPB
             catch { }
 
             // Grid layout: rate selected package(s) in one action (list view keeps per-row digit control).
+            // Double-width chip: star (affordance) | colored digit (status) — no overlap.
             {
-                Color gridRateBackdrop = new Color(0.34f, 0.27f, 0.14f, 0.96f);
                 tboxGridRateBtn = UI.CreateUIButton(
                     tboxBtnRow0GO, 0, 0,
                     "0", tboxActionBtnFont,
@@ -893,34 +901,35 @@ namespace VPB
                     null
                 );
                 tboxGridRateBtn.name = "Tbox_GridRate";
-                TboxConfigureActionButtonFlex(tboxGridRateBtn, innerRowH, innerRowH, innerRowH);
+                float rateChipW = innerRowH * 2f;
+                TboxConfigureActionButtonFlex(tboxGridRateBtn, rateChipW, rateChipW, innerRowH);
                 AddTooltip(tboxGridRateBtn, "gallery.tooltip.tbox_grid_rate", "Rate selected packages (0–5 applies to all selected items). Colored digit shows value.");
                 try
                 {
                     var starSpr = UI.LoadIconSprite("vpb_icons/star.png", Color.white);
                     if (starSpr != null)
                     {
-                        UI.AddIconToButton(tboxGridRateBtn, starSpr, padding: 6f, backdropOverride: gridRateBackdrop);
+                        UI.AddIconToButton(tboxGridRateBtn, starSpr, padding: 4f, backdropOverride: UI.IconButtonBackdrop);
                         tboxGridRateIconImage = tboxGridRateBtn.transform.Find("Icon")?.GetComponent<Image>();
-                        // Digit is primary — re-show Text that AddIconToButton hid; star stays watermark.
-                        Text digitLabel = tboxGridRateBtn.GetComponentInChildren<Text>(true);
-                        if (digitLabel != null)
+                        tboxGridRateDigitText = tboxGridRateBtn.GetComponentInChildren<Text>(true);
+                        if (tboxGridRateDigitText != null)
                         {
-                            digitLabel.gameObject.SetActive(true);
-                            digitLabel.fontStyle = FontStyle.Bold;
-                            digitLabel.raycastTarget = false;
-                            digitLabel.transform.SetAsLastSibling();
+                            tboxGridRateDigitText.gameObject.SetActive(true);
+                            tboxGridRateDigitText.fontStyle = FontStyle.Bold;
+                            tboxGridRateDigitText.raycastTarget = false;
                         }
-                        if (tboxGridRateIconImage != null)
-                            tboxGridRateIconImage.color = new Color(1f, 1f, 1f, 0.18f);
                     }
                 }
                 catch { }
+                if (tboxGridRateDigitText == null)
+                {
+                    try { tboxGridRateDigitText = tboxGridRateBtn.GetComponentInChildren<Text>(true); } catch { }
+                }
 
                 tboxGridRateSelectorGO = new GameObject("TboxGridRatingSelector");
                 tboxGridRateSelectorGO.transform.SetParent(tboxGridRateBtn.transform, false);
                 RectTransform selectorRT = tboxGridRateSelectorGO.AddComponent<RectTransform>();
-                // Anchor top-right of star button, pivot bottom-right of panel so the grid opens **upward**
+                // Anchor top-right of chip, pivot bottom-right of panel so the grid opens **upward**
                 // into toolbox rows — not downward over gallery (was stealing clicks on bottom grid cells).
                 selectorRT.anchorMin = new Vector2(1f, 1f);
                 selectorRT.anchorMax = new Vector2(1f, 1f);
@@ -947,6 +956,9 @@ namespace VPB
                 // Reparent open selector to backgroundBoxGO (RatingHandler) so it stacks above
                 // VPB_DetailStrip — strip is a later sibling under InfoBar and covers upward overflow.
                 tboxGridRateHandler.panel = this;
+                Image tboxGridRateBtnImage = tboxGridRateBtn.GetComponent<Image>();
+                tboxGridRateHandler.SetStatusChrome(true, tboxGridRateBtnImage);
+                try { LayoutTboxGridRateChipContents(); } catch { }
                 Image[] grOptImages = new Image[6];
                 Text[] grOptTexts = new Text[6];
                 GameObject[] grOptBorders = new GameObject[6];
@@ -1541,6 +1553,7 @@ namespace VPB
                         TboxConfigureActionButtonFlex(
                             tboxCreatorStripSceneBtn, 96f * s, 128f * s, TboxActionButtonInnerHeight());
                     }
+                    try { LayoutTboxGridRateChipContents(); } catch { }
                 }
                 catch { }
             });
@@ -2541,6 +2554,59 @@ namespace VPB
             return Mathf.Clamp(r0 == int.MinValue ? 0 : r0, 0, 5);
         }
 
+        /// <summary>
+        /// ★ left | digit right on a 2× slot chip. Star = rating affordance; digit = status
+        /// (color + number). Avoids digit-on-star collision that fails scan.
+        /// </summary>
+        private void LayoutTboxGridRateChipContents()
+        {
+            if (tboxGridRateBtn == null) return;
+            float h = TboxActionButtonInnerHeight();
+            float w = h * 2f;
+            TboxConfigureActionButtonFlex(tboxGridRateBtn, w, w, h);
+            tboxBaseWidthSpec[tboxGridRateBtn] = new TboxBaseWidthSpec
+            {
+                minW = w,
+                prefW = w,
+                flexW = 1f
+            };
+
+            float pad = Mathf.Max(2f, 4f * ChromeScale);
+            if (tboxGridRateIconImage != null)
+            {
+                RectTransform irt = tboxGridRateIconImage.rectTransform;
+                irt.anchorMin = new Vector2(0f, 0f);
+                irt.anchorMax = new Vector2(0.5f, 1f);
+                irt.pivot = new Vector2(0.5f, 0.5f);
+                irt.offsetMin = new Vector2(pad, pad);
+                irt.offsetMax = new Vector2(-pad * 0.35f, -pad);
+                tboxGridRateIconImage.preserveAspect = true;
+                tboxGridRateIconImage.raycastTarget = false;
+            }
+
+            if (tboxGridRateDigitText != null)
+            {
+                RectTransform trt = tboxGridRateDigitText.rectTransform;
+                trt.anchorMin = new Vector2(0.5f, 0f);
+                trt.anchorMax = new Vector2(1f, 1f);
+                trt.pivot = new Vector2(0.5f, 0.5f);
+                trt.offsetMin = new Vector2(pad * 0.25f, pad * 0.5f);
+                trt.offsetMax = new Vector2(-pad, -pad * 0.5f);
+                tboxGridRateDigitText.alignment = TextAnchor.MiddleCenter;
+                tboxGridRateDigitText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                tboxGridRateDigitText.verticalOverflow = VerticalWrapMode.Overflow;
+                tboxGridRateDigitText.raycastTarget = false;
+                // Body+2 — column owns the glyph; color carries status (not giant overlay size).
+                int digitPt = GalleryUiDesignTokens.FontBodyRef + 2;
+                GalleryUiMetrics.ApplyFont(
+                    tboxGridRateDigitText, digitPt, ChromeScale, GalleryUiDesignTokens.FontMinRef);
+                tboxGridRateDigitText.fontStyle = FontStyle.Bold;
+            }
+
+            if (tboxGridRateSelectorGO != null)
+                tboxGridRateSelectorGO.transform.SetAsLastSibling();
+        }
+
         private void RefreshTboxGridRateControlState()
         {
             if (tboxGridRateBtn == null || tboxGridRateHandler == null) return;
@@ -2571,7 +2637,26 @@ namespace VPB
                 return;
             }
             if (!tboxGridRateBtn.activeSelf) tboxGridRateBtn.SetActive(true);
-            Text txt = tboxGridRateBtn.GetComponentInChildren<Text>(true);
+            // Prefer cached digit — never walk children (closed selector owns option Texts under this button).
+            Text txt = tboxGridRateDigitText;
+            if (txt == null)
+            {
+                try
+                {
+                    // Fallback: direct child Text only (exclude selector subtree).
+                    Transform btnT = tboxGridRateBtn.transform;
+                    for (int ci = 0; ci < btnT.childCount; ci++)
+                    {
+                        Transform ch = btnT.GetChild(ci);
+                        if (ch == null || (tboxGridRateSelectorGO != null && ch.gameObject == tboxGridRateSelectorGO))
+                            continue;
+                        Text direct = ch.GetComponent<Text>();
+                        if (direct != null) { txt = direct; break; }
+                    }
+                    tboxGridRateDigitText = txt;
+                }
+                catch { txt = null; }
+            }
             // Use stable synthetic id so selector stays open across recycled FileEntry instances (Custom Scenes in particular).
             string stableId = null;
             try { stableId = TryGetPackageUidForEntry(eligible[0]); } catch { stableId = null; }
@@ -2589,11 +2674,14 @@ namespace VPB
                 try { stableId = !string.IsNullOrEmpty(eligible[0].Uid) ? eligible[0].Uid : eligible[0].Path; } catch { stableId = null; }
             }
             tboxGridRateHandler.panel = this;
+            tboxGridRateHandler.SetStatusChrome(true, tboxGridRateBtn.GetComponent<Image>());
             tboxGridRateHandler.Init(stableId ?? "", txt, tboxGridRateSelectorGO);
             tboxGridRateHandler.SetShowDigitMode(true);
-            tboxGridRateHandler.SetDisplayOnly(TboxConsensusRatingDisplay(eligible));
+            int consensus = TboxConsensusRatingDisplay(eligible);
+            tboxGridRateHandler.SetDisplayOnly(consensus);
             if (tboxGridRateIconImage != null)
                 tboxGridRateHandler.BindStarIcon(tboxGridRateIconImage);
+            try { LayoutTboxGridRateChipContents(); } catch { }
         }
 
         private void TboxRemoveSelectedFromHistory()

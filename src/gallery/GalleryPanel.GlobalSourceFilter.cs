@@ -258,6 +258,15 @@ namespace VPB
                 CycleBrowseUnusedFilter,
                 CycleBrowseUnusedFilterOnly);
 
+            AddBrowseFilterMenuHeader(VPBTranslation.T("gallery.filter.section_license", "License"));
+            for (int i = 0; i < KnownPackageLicenseTypes.Length; i++)
+            {
+                string lic = KnownPackageLicenseTypes[i];
+                bool isActive = HasLicenseFilter()
+                    && string.Equals(currentLicenseFilter, lic, StringComparison.OrdinalIgnoreCase);
+                AddBrowseFilterLicenseRow(lic, isActive);
+            }
+
             try { RescaleGlobalSourceFilterMenuInternal(ChromeScale); } catch { }
             LayoutRebuilder.ForceRebuildLayoutImmediate(globalSourceFilterMenuPanelGO.GetComponent<RectTransform>());
         }
@@ -352,6 +361,25 @@ namespace VPB
                 () =>
                 {
                     try { onToggle?.Invoke(); } catch { }
+                },
+                GalleryUiDesignTokens.PopupMenuRowHeightRef);
+        }
+
+        private void AddBrowseFilterLicenseRow(string licenseType, bool isActive)
+        {
+            if (string.IsNullOrEmpty(licenseType)) return;
+            string mark = isActive ? "\u2713  " : "    ";
+            string snap = licenseType;
+            UI.AddPopupMenuRow(
+                globalSourceFilterMenuPanelGO,
+                BrowseFilterMenuPanelWidthRef - 12f,
+                GalleryUiDesignTokens.PopupMenuRowHeightRef,
+                mark + licenseType,
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                isActive,
+                () =>
+                {
+                    try { SetLicenseFilter(snap, refresh: true); } catch { }
                 },
                 GalleryUiDesignTokens.PopupMenuRowHeightRef);
         }
@@ -793,6 +821,12 @@ namespace VPB
                 try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
                 changed = true;
             }
+            if (HasLicenseFilter())
+            {
+                currentLicenseFilter = "";
+                CancelLicenseFilterHydrate();
+                changed = true;
+            }
 
             MigrateLegacyExclusiveFileSortIfNeeded();
             UpdateGlobalSourceFilterButtonLabel();
@@ -817,6 +851,7 @@ namespace VPB
             if (_browseLoadedMode != BrowseLoadedMode.Off) return true;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) return true;
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) return true;
+            if (HasLicenseFilter()) return true;
             return false;
         }
 
@@ -830,6 +865,7 @@ namespace VPB
             if (_browseLoadedMode != BrowseLoadedMode.Off) n++;
             if (_browseUnusedCycle != BrowseFilterCycle.Off) n++;
             if (_userTagAvailMode == UserTagAvailMode.FilterUntagged) n++;
+            if (HasLicenseFilter()) n++;
             return n;
         }
 
@@ -891,6 +927,8 @@ namespace VPB
                 return ResolveBrowseLoadedModeLabel();
             if (_browseUnusedCycle != BrowseFilterCycle.Off)
                 return ResolveBrowseUnusedCycleLabel();
+            if (HasLicenseFilter())
+                return ResolveBrowseLicenseFilterLabel();
             return VPBTranslation.T("gallery.filter.button_active", "Filter") + " \u00b7 1";
         }
 

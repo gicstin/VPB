@@ -35,6 +35,7 @@ Tap the **colored header bar** at the top of a side column to collapse that list
 - **Creator filter** (title bar) — multi-select authors to limit the **grid** (or **…** overflow when narrow). Rail {{icon:creator|Creator}} opens the **creator list**.
 - **Category** — title name/menu = **quick switch**; rail {{icon:category|Category}} opens the **full category list**.
 - **Source filter** — All, Local, or VAR packages.
+- **License** — under **Filter** menu; pick a VaM license type (CC BY, PC, FC, …). Click license in the info strip to filter by that type (click again clears).
 - {{icon:star|Rated only (★)}} — show only starred items.
 - **Sort** — **Az** opens sort type; arrow toggles ascending/descending.
 - {{icon:refresh|Refresh}} — reload the list.

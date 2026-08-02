@@ -79,10 +79,18 @@ namespace VPB
             if (entry.HasSideTabState)
                 ApplyQuickFilterSideTabState(entry);
 
-            // 4. Refresh
+            // 4. Refresh (license filter hydrates package meta first)
             UpdateLayout();
             UpdateTabs();
-            RefreshFiles();
+            if (HasLicenseFilter())
+            {
+                CancelLicenseFilterHydrate();
+                _licenseFilterHydrateCo = StartCoroutine(LicenseFilterHydrateThenRefreshCo());
+            }
+            else
+            {
+                RefreshFiles();
+            }
             try { SyncSidePaneTopSortButtonVisuals(); } catch { }
             try { SyncSceneSourceSortButtonHighlights(); } catch { }
             
@@ -235,6 +243,7 @@ namespace VPB
             entry.BrowseOldVersionsMode = state.BrowseOldVersionsMode;
             entry.BrowseLoadedMode = state.BrowseLoadedMode;
             entry.BrowseUnusedMode = state.BrowseUnusedMode;
+            entry.LicenseFilter = state.LicenseFilter ?? "";
         }
 
         private static CategoryFilterState CategoryFilterStateFromQuickFilterEntry(QuickFilterEntry entry)
@@ -262,6 +271,7 @@ namespace VPB
             state.BrowseOldVersionsMode = entry.BrowseOldVersionsMode;
             state.BrowseLoadedMode = entry.BrowseLoadedMode;
             state.BrowseUnusedMode = entry.BrowseUnusedMode;
+            state.LicenseFilter = entry.LicenseFilter ?? "";
             return state;
         }
 

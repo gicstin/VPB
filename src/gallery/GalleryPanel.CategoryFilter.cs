@@ -37,6 +37,7 @@ namespace VPB
             s.BrowseOldVersionsMode = (int)_browseOldVersionsCycle;
             s.BrowseLoadedMode = (int)_browseLoadedMode;
             s.BrowseUnusedMode = (int)_browseUnusedCycle;
+            s.LicenseFilter = currentLicenseFilter ?? "";
             return s;
         }
 
@@ -199,6 +200,7 @@ namespace VPB
             _browseOldVersionsCycle = ClampBrowseFilterCycle(state.BrowseOldVersionsMode);
             _browseLoadedMode = ClampBrowseLoadedMode(state.BrowseLoadedMode);
             _browseUnusedCycle = ClampBrowseFilterCycle(state.BrowseUnusedMode);
+            currentLicenseFilter = state.LicenseFilter ?? "";
             try { SyncShowHiddenPackagesFromCycle(); } catch { }
             try { SyncHideOldVersionsFromCycle(); } catch { }
             try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
@@ -262,6 +264,8 @@ namespace VPB
                 _browseUnusedCycle = BrowseFilterCycle.Off;
                 _browseUnusedSavedSort = null;
             }
+            currentLicenseFilter = "";
+            CancelLicenseFilterHydrate();
             try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
             SyncBrowseFilterChipChrome();
         }

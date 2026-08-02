@@ -1639,6 +1639,9 @@ namespace VPB
                 else if (currentRatingFilter == "No Ratings") { if (rating != 0) return false; }
             }
 
+            if (HasLicenseFilter() && !PassesLicenseFilter(entry))
+                return false;
+
             if (!string.IsNullOrEmpty(currentSizeFilter))
             {
                 // Size filter when status is NOT set
@@ -2290,6 +2293,7 @@ namespace VPB
                     sb.Append("0").Append('\u001E');
                 }
                 sb.Append(currentRatingFilter ?? "").Append('\u001E');
+                sb.Append(currentLicenseFilter ?? "").Append('\u001E');
                 sb.Append(currentSizeFilter ?? "").Append('\u001E');
                 sb.Append(categoryFilter ?? "").Append('\u001E');
                 sb.Append(creatorFilter ?? "").Append('\u001E');
@@ -2365,6 +2369,7 @@ namespace VPB
         {
             if (isRatingSortToggleEnabled) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
+            if (HasLicenseFilter()) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
             // bulk (cat_mem, VAR-only) is fast-appended without per-entry PassesFilters, where the source gate lives;
             // a bulk AddRange under Source:Local would leak every var row, so force the gated drain when it's active.

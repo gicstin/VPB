@@ -34,6 +34,8 @@ namespace VPB
         public int BrowseLoadedMode = 0;
         /// <summary>Title-bar Filter Unused cycle: 0=Off, 1=Unused first, 2=Unused only.</summary>
         public int BrowseUnusedMode = 0;
+        /// <summary>Title-bar Filter license type (meta.json licenseType). Empty = off.</summary>
+        public string LicenseFilter = "";
 
         // Maps legacy per-category source-filter strings. "" / non-local → ignored.
         // "local" migrates to title-bar global Source Local on ApplyCategoryFilterState.
@@ -94,6 +96,7 @@ namespace VPB
             node["bo"].AsInt = BrowseOldVersionsMode;
             node["bl"].AsInt = BrowseLoadedMode;
             node["bu"].AsInt = BrowseUnusedMode;
+            node["lf"] = LicenseFilter ?? "";
 
             return VPB.src.util.JsonSerializationUtil.Serialize(node, 4096);
         }
@@ -161,6 +164,8 @@ namespace VPB
                     if (bh != 0) s.BrowseHiddenMode = 2;
                     if (ba != 0) s.BrowseAlwaysLoadedMode = 2;
                 }
+
+                s.LicenseFilter = node["lf"] != null ? (node["lf"].Value ?? "") : "";
 
                 // Legacy: exclusive sort modes lived on FileSortState.
                 if (s.FileSortState != null)

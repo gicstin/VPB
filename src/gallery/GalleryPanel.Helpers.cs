@@ -266,6 +266,16 @@ namespace VPB
 
         /// <summary>Star Image watermark when digit is primary (toolbox / optional icon).</summary>
         private static readonly Color StarIconWatermark = new Color(1f, 1f, 1f, 0.18f);
+        /// <summary>Unrated digit on dark chrome (grid ghost α=0.2 is too faint on toolbox).</summary>
+        private static readonly Color ChromeUnratedDigit = new Color(0.88f, 0.88f, 0.90f, 0.95f);
+        /// <summary>How far button fill leans toward rating hue (digit stays primary signal).</summary>
+        private const float ChromeBackdropMix = 0.30f;
+        /// <summary>Toolbox ★ glyph — affordance only; digit carries status color.</summary>
+        private static readonly Color ChromeStarAffordance = new Color(1f, 1f, 1f, 0.92f);
+
+        /// <summary>Toolbox chrome: full-α digit + light backdrop tint. Grid badges keep ghost-0.</summary>
+        private bool statusChrome;
+        private Image chromeButtonImage;
 
         public static readonly Color[] RatingColors = new Color[]
         {
@@ -433,6 +443,17 @@ namespace VPB
             UpdateDisplay();
         }
 
+        /// <summary>
+        /// Toolbox status chip: full-α digit color + light backdrop tint; ★ stays white affordance
+        /// (side-by-side layout). Grid cell badges leave this off (ghost unrated stays intentional).
+        /// </summary>
+        public void SetStatusChrome(bool enabled, Image buttonImage = null)
+        {
+            statusChrome = enabled;
+            if (buttonImage != null) chromeButtonImage = buttonImage;
+            UpdateDisplay();
+        }
+
         public void SetDisplayOnly(int rating)
         {
             currentRating = Mathf.Clamp(rating, 0, 5);
@@ -450,9 +471,19 @@ namespace VPB
 
         public int CurrentRating => currentRating;
 
+        private Color ResolveDigitColor(int rating)
+        {
+            Color c = RatingColors[rating];
+            if (!statusChrome) return c;
+            if (rating == 0) return ChromeUnratedDigit;
+            c.a = 1f;
+            return c;
+        }
+
         private void UpdateDisplay()
         {
-            Color c = RatingColors[Mathf.Clamp(currentRating, 0, 5)];
+            int rating = Mathf.Clamp(currentRating, 0, 5);
+            Color c = ResolveDigitColor(rating);
             if (starIconText != null)
             {
                 // Digit + rainbow color = meaning; never ★ alone.
@@ -461,19 +492,27 @@ namespace VPB
                 starIconText.text = currentRating.ToString();
                 starIconText.color = c;
                 starIconText.raycastTarget = false;
-                starIconText.transform.SetAsLastSibling();
+                // Grid badge: digit on top of star. Toolbox chrome lays out ★|digit — skip sibling shuffle.
+                if (!statusChrome)
+                    starIconText.transform.SetAsLastSibling();
             }
             if (starIconImage != null)
             {
-                // Optional star art stays as faint watermark under the digit.
-                starIconImage.color = StarIconWatermark;
+                starIconImage.color = statusChrome ? ChromeStarAffordance : StarIconWatermark;
                 starIconImage.raycastTarget = false;
+            }
+            if (statusChrome && chromeButtonImage != null)
+            {
+                Color bg = UI.IconButtonBackdrop;
+                if (rating > 0)
+                    bg = Color.Lerp(bg, RatingColors[rating], ChromeBackdropMix);
+                chromeButtonImage.color = bg;
             }
 
             if (optionImages == null) return;
             for (int i = 0; i < optionImages.Length && i < 6; i++)
             {
-                bool selected = (i == currentRating);
+                bool selected = (i == rating);
                 if (optionImages[i] != null)
                     optionImages[i].color = RatingColors[i];
                 if (optionTexts != null && i < optionTexts.Length && optionTexts[i] != null)

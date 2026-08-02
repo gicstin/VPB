@@ -219,6 +219,7 @@ namespace VPB
             AlwaysLoaded,
             HideOldVersions,
             ShowHiddenItems,
+            License,
         }
 
         private static Color ResolveFilterChipAccent(FilterChipKind kind)
@@ -242,6 +243,7 @@ namespace VPB
                 case FilterChipKind.AlwaysLoaded: return new Color(0.35f, 0.55f, 0.75f, 1f);
                 case FilterChipKind.HideOldVersions: return new Color(0.45f, 0.50f, 0.40f, 1f);
                 case FilterChipKind.ShowHiddenItems: return new Color(0.55f, 0.40f, 0.35f, 1f);
+                case FilterChipKind.License: return ColorLicense;
                 default: return ColorTitleSearchFilterActive;
             }
         }
@@ -570,6 +572,16 @@ namespace VPB
                     {
                         try { OnGlobalSourceFilterRowClicked(VPBConfig.GlobalSourceFilterValue.All); } catch { }
                     }
+                });
+            }
+
+            if (HasLicenseFilter())
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = VPBTranslation.T("gallery.filter_chip.license", "License") + ": " + currentLicenseFilter,
+                    Kind = FilterChipKind.License,
+                    OnDismiss = () => ClearLicenseFilter(refresh: true)
                 });
             }
 

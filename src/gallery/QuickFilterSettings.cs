@@ -33,6 +33,8 @@ namespace VPB
         public int BrowseOldVersionsMode = 0;
         public int BrowseLoadedMode = 0;
         public int BrowseUnusedMode = 0;
+        /// <summary>Title-bar Filter license type. Empty = off.</summary>
+        public string LicenseFilter = "";
 
         /// <summary>True when side-tab layout was captured with this preset (distinguishes legacy presets).</summary>
         public bool HasSideTabState = false;
@@ -91,6 +93,7 @@ namespace VPB
             node["BrowseOldVersionsMode"].AsInt = BrowseOldVersionsMode;
             node["BrowseLoadedMode"].AsInt = BrowseLoadedMode;
             node["BrowseUnusedMode"].AsInt = BrowseUnusedMode;
+            node["LicenseFilter"] = LicenseFilter ?? "";
 
             if (SortState != null)
             {
@@ -187,6 +190,8 @@ namespace VPB
                 if (node["BrowseAlwaysLoadedOnly"] != null && node["BrowseAlwaysLoadedOnly"].AsInt != 0)
                     entry.BrowseAlwaysLoadedMode = 2;
             }
+
+            entry.LicenseFilter = node["LicenseFilter"] != null ? (node["LicenseFilter"].Value ?? "") : "";
 
             var sortNode = node["SortState"];
             if (sortNode != null)

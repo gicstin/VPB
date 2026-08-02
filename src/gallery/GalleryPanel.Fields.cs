@@ -515,6 +515,8 @@ namespace VPB
         private int _titleCreatorVirtLastFirstIdx = -1;
         private string _titleCreatorVirtViewSig = null;
         private string currentRatingFilter = "";
+        /// <summary>Title-bar Filter license type (VaM meta.json licenseType). Empty = off.</summary>
+        private string currentLicenseFilter = "";
         private string currentSizeFilter = "";
         private string categoryFilter = "";
         private string creatorFilter = "";
