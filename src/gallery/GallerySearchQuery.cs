@@ -50,6 +50,7 @@ namespace VPB
             Loaded = 1 << 0,
             Unloaded = 1 << 1,
             Starred = 1 << 2,
+            Unrated = 1 << 8,
             Tagged = 1 << 3,
             Untagged = 1 << 4,
             AutoInstall = 1 << 5,
@@ -341,6 +342,12 @@ namespace VPB
                 case "star":
                     branch.Status |= StatusFlags.Starred;
                     return true;
+                case "unrated":
+                case "not-rated":
+                case "notrated":
+                case "unstarred":
+                    branch.Status |= StatusFlags.Unrated;
+                    return true;
                 case "tagged":
                     branch.Status |= StatusFlags.Tagged;
                     return true;
@@ -401,6 +408,12 @@ namespace VPB
                 case "rated":
                 case "*":
                     branch.Status |= StatusFlags.Starred;
+                    break;
+                case "unrated":
+                case "not-rated":
+                case "notrated":
+                case "unstarred":
+                    branch.Status |= StatusFlags.Unrated;
                     break;
             }
         }

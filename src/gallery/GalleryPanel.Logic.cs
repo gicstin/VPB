@@ -533,12 +533,14 @@ namespace VPB
                     return false;
             }
 
-            if (br.HasFlag(GallerySearchQuery.StatusFlags.Starred))
+            if (br.HasFlag(GallerySearchQuery.StatusFlags.Starred)
+                || br.HasFlag(GallerySearchQuery.StatusFlags.Unrated))
             {
                 int r = 0;
                 try { r = RatingsManager.Instance != null ? RatingsManager.Instance.GetRating(file) : 0; }
                 catch { r = 0; }
-                if (r <= 0) return false;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Starred) && r <= 0) return false;
+                if (br.HasFlag(GallerySearchQuery.StatusFlags.Unrated) && r > 0) return false;
             }
             if (br.HasFlag(GallerySearchQuery.StatusFlags.AutoInstall))
             {

@@ -496,16 +496,16 @@ namespace VPB
             catch { }
         }
 
-        /// <summary>Toggle the ★ rated-only filter (same as clicking the star button in the gallery title bar).</summary>
+        /// <summary>Cycle the ★ presence filter (Rated only → Not rated → Off). Same as title-bar ★.</summary>
         internal void QuickMenu_ToggleStarFilter()
         {
             try { ToggleRatingSort(); } catch { }
         }
 
-        /// <summary>Returns true if the ★ rated-only filter is currently active.</summary>
+        /// <summary>True when ★ presence filter is armed (rated or not-rated).</summary>
         internal bool QuickMenu_IsStarFilterEnabled()
         {
-            try { return isRatingSortToggleEnabled; } catch { return false; }
+            try { return HasRatingPresenceFilter(); } catch { return false; }
         }
     }
 }

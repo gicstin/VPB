@@ -3811,6 +3811,7 @@ namespace VPB
                 RatingHandler rh = b != null ? b.ratingHandler : btnGO.GetComponent<RatingHandler>();
                 if (rh != null && selector2Tr != null && starText != null)
                 {
+                    rh.panel = this;
                     rh.Init(file, starText, selector2Tr.gameObject);
                     // Colored digit always (list + grid) — never color-only ★.
                     rh.SetShowDigitMode(true);

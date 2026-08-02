@@ -243,6 +243,7 @@ namespace VPB
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Loaded, "loaded", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Unloaded, "unloaded", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Starred, "starred", branchIndex);
+            TryStatus(dest, status, GallerySearchQuery.StatusFlags.Unrated, "unrated", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Tagged, "tagged", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.Untagged, "untagged", branchIndex);
             TryStatus(dest, status, GallerySearchQuery.StatusFlags.AutoInstall, "autoinstall", branchIndex);

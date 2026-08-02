@@ -427,6 +427,16 @@ namespace VPB
             else RatingsManager.Instance.SetRating(uid, rating);
             UpdateDisplay();
             SetSelectorVisible(false);
+            try
+            {
+                if (panel != null)
+                {
+                    if (entry != null) panel.AfterItemRatingsMutated(entry);
+                    else if (!string.IsNullOrEmpty(uid)) panel.AfterItemRatingsMutatedByUid(uid);
+                    else panel.AfterItemRatingsMutated();
+                }
+            }
+            catch { }
         }
 
         public void SetOptionRefs(Image[] images, Text[] texts, GameObject[] borders)

@@ -36,7 +36,7 @@ Tap the **colored header bar** at the top of a side column to collapse that list
 - **Category** — title name/menu = **quick switch**; rail {{icon:category|Category}} opens the **full category list**.
 - **Source filter** — All, Local, or VAR packages.
 - **License** — under **Filter** menu; pick a VaM license type (CC BY, PC, FC, …). Click license in the info strip to filter by that type (click again clears).
-- {{icon:star|Rated only (★)}} — show only starred items.
+- {{icon:star|Rated / Not rated (★)}} — cycle: rated only → not rated → off (VR laser OK). Right-click clears.
 - **Sort** — **Az** opens sort type; arrow toggles ascending/descending.
 - {{icon:refresh|Refresh}} — reload the list.
 
@@ -91,6 +91,7 @@ Grid letter badges: **A** auto-install, **H** hidden, **W** scan-whitelist exclu
 - `loaded` / `installed` — under AddonPackages (or local loose files)
 - `unloaded` — not loaded (e.g. AllPackages)
 - `starred` / `rated` / `badge:star` — has a star rating
+- `unrated` / `not-rated` — no star rating
 - `tagged` / `badge:t` — has user-tag badge **T**
 - `untagged` — no user tags
 - `autoinstall` / `badge:a` — auto-install badge **A**

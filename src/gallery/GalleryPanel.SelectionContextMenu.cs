@@ -2506,7 +2506,7 @@ namespace VPB
 
         private void TboxAfterGridRateChanged()
         {
-            try { RefreshVisibleGridVisualsOnly(); } catch { }
+            try { AfterItemRatingsMutated(selectedFiles); } catch { }
         }
 
         private void TboxApplyGridRatingToSelection(int ratingValue)

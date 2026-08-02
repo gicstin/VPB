@@ -549,6 +549,16 @@ namespace VPB
                 });
             }
 
+            if (HasRatingPresenceFilter())
+            {
+                specs.Add(new ActiveFilterChipSpec
+                {
+                    Label = ResolveRatingPresenceFilterLabel(),
+                    Kind = FilterChipKind.Rating,
+                    OnDismiss = () => SetRatingPresenceFilterMode(RatingPresenceFilterMode.Off, refresh: true, showStatus: true)
+                });
+            }
+
             if (currentGlobalSourceFilter != VPBConfig.GlobalSourceFilterValue.All)
             {
                 string sourceLabel;

@@ -680,10 +680,8 @@ namespace VPB
                 FileEntry e = source[i];
                 if (e == null) continue;
 
-                if (isRatingSortToggleEnabled)
-                {
-                    try { if (RatingsManager.Instance.GetRating(e) <= 0) continue; } catch { continue; }
-                }
+                if (!PassesLiveStarFilters(e))
+                    continue;
 
                 if (!needSearch)
                 {
@@ -1481,7 +1479,8 @@ namespace VPB
         {
             if (entry == null) return false;
 
-            // History: skip category-only filters (rating/size/source); keep path filter, search, tags.
+            // History: skip size/source category filters; keep path, search, tags, and live ★ filters
+            // (presence + star-count) so title-bar ★ matches visible History rows.
             if (activeContentType == ContentType.History)
             {
                 if (!string.IsNullOrEmpty(currentPackagePathFilter))
@@ -1490,6 +1489,8 @@ namespace VPB
                     if (!GalleryPathFilterMatchesFolder(folder, currentPackagePathFilter))
                         return false;
                 }
+                if (!PassesLiveStarFilters(entry))
+                    return false;
                 if (HasActiveNameFilter())
                 {
                     bool skipSqlOwned = nameFilterQuery.RequiresSqlRefresh && IsGallerySqlIndexedSearchEntry(entry);
@@ -1625,19 +1626,9 @@ namespace VPB
                 }
             }
 
-            // Rating/Size filters
-            if (!string.IsNullOrEmpty(currentRatingFilter))
-            {
-                // Rating filter when status is NOT set (or even if it is, as an additional filter)
-                int rating = RatingsManager.Instance.GetRating(entry);
-                if (currentRatingFilter == "All Ratings") { if (rating <= 0) return false; }
-                else if (currentRatingFilter == "5 Stars") { if (rating != 5) return false; }
-                else if (currentRatingFilter == "4 Stars") { if (rating != 4) return false; }
-                else if (currentRatingFilter == "3 Stars") { if (rating != 3) return false; }
-                else if (currentRatingFilter == "2 Stars") { if (rating != 2) return false; }
-                else if (currentRatingFilter == "1 Star") { if (rating != 1) return false; }
-                else if (currentRatingFilter == "No Ratings") { if (rating != 0) return false; }
-            }
+            // Rating: star-count tab + title-bar ★ presence (one GetRating).
+            if (!PassesLiveStarFilters(entry))
+                return false;
 
             if (HasLicenseFilter() && !PassesLicenseFilter(entry))
                 return false;
@@ -2298,7 +2289,7 @@ namespace VPB
                 sb.Append(categoryFilter ?? "").Append('\u001E');
                 sb.Append(creatorFilter ?? "").Append('\u001E');
                 sb.Append(tagFilter ?? "").Append('\u001E');
-                sb.Append(isRatingSortToggleEnabled ? '1' : '0').Append('\u001E');
+                sb.Append((char)('0' + (int)_ratingPresenceFilterMode)).Append('\u001E');
                 sb.Append((VPBConfig.Instance != null && VPBConfig.Instance.GalleryShowHiddenPackages) ? '1' : '0').Append('\u001E');
                 sb.Append(((int)_browseHiddenCycle).ToString()).Append('\u001E');
                 sb.Append(((int)_browseAlwaysLoadedCycle).ToString()).Append('\u001E');
@@ -2367,7 +2358,7 @@ namespace VPB
         /// </summary>
         private bool RefreshFilesRoutineCanFastAppendSqliteBulkList(bool wantsPoseCountsLocal)
         {
-            if (isRatingSortToggleEnabled) return false;
+            if (HasRatingPresenceFilter()) return false;
             if (!string.IsNullOrEmpty(currentRatingFilter)) return false;
             if (HasLicenseFilter()) return false;
             if (!string.IsNullOrEmpty(currentSizeFilter)) return false;
@@ -2435,11 +2426,6 @@ namespace VPB
                 }
                 if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) return false;
                 if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) return false;
-            }
-
-            if (isRatingSortToggleEnabled)
-            {
-                if (RatingsManager.Instance.GetRating(entry) <= 0) return false;
             }
 
             targetFiles.Add(entry);
@@ -3835,7 +3821,7 @@ namespace VPB
                                 {
                                     LogUtil.Log("[VPB.Gallery.DeepTiming] RefreshFilesRoutine bulk slow-path"
                                         + " | bulk=" + bulk.Count
-                                        + " | ratingToggle=" + (isRatingSortToggleEnabled ? "1" : "0")
+                                        + " | ratingToggle=" + ((int)_ratingPresenceFilterMode)
                                         + " | ratingFilter=" + (string.IsNullOrEmpty(currentRatingFilter) ? "0" : "1")
                                         + " | sizeFilter=" + (string.IsNullOrEmpty(currentSizeFilter) ? "0" : "1")
                                         + " | sceneSrcFilter=0"
@@ -4000,9 +3986,9 @@ namespace VPB
                             var sysEntryFast = new SystemFileEntry(FileManager.NormalizePath(r.Path), wt, sz, exists: true);
                             if (!PassesFilters(sysEntryFast, true)) continue;
 
-                            // Cache now stores the unfiltered candidate set, so pose/rating filters (which live
-                            // outside PassesFilters) must be re-applied here exactly as the live scan does — otherwise
-                            // they would not filter on a cache hit (#64).
+                            // Cache stores unfiltered candidates; pose people filter lives outside
+                            // PassesFilters and must be re-applied on cache hit (#64). Star presence /
+                            // star-count filters are inside PassesFilters above.
                             if (posePeopleFilter != PosePeopleFilter.All)
                             {
                                 int pcPoseRead = 1;
@@ -4016,10 +4002,6 @@ namespace VPB
                                 }
                                 if (posePeopleFilter == PosePeopleFilter.Single && pcPoseRead >= 2) continue;
                                 if (posePeopleFilter == PosePeopleFilter.Dual && pcPoseRead < 2) continue;
-                            }
-                            if (isRatingSortToggleEnabled)
-                            {
-                                if (RatingsManager.Instance.GetRating(sysEntryFast) <= 0) continue;
                             }
 
                             files.Add(sysEntryFast);
@@ -4136,11 +4118,6 @@ namespace VPB
                                     }
                                     if (posePeopleFilter == PosePeopleFilter.Single && pcPose >= 2) continue;
                                     if (posePeopleFilter == PosePeopleFilter.Dual && pcPose < 2) continue;
-                                }
-
-                                if (isRatingSortToggleEnabled)
-                                {
-                                    if (RatingsManager.Instance.GetRating(sysEntry) <= 0) continue;
                                 }
 
                                 if (gridOk)

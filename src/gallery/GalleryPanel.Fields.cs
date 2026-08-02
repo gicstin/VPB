@@ -568,6 +568,17 @@ namespace VPB
             UnloadedOnly = 2
         }
 
+        /// <summary>
+        /// Title-bar ★ presence filter. Primary click cycles Off → RatedOnly → UnratedOnly → Off
+        /// (VR laser = left only). RMB clears when armed.
+        /// </summary>
+        private enum RatingPresenceFilterMode : byte
+        {
+            Off = 0,
+            RatedOnly = 1,
+            UnratedOnly = 2
+        }
+
         // Title-bar Filter cycles (per-category via CategoryFilterState; settings mirrored when applied).
         private BrowseFilterCycle _browseHiddenCycle;
         private BrowseFilterCycle _browseAlwaysLoadedCycle;
@@ -1318,6 +1329,12 @@ namespace VPB
         public static readonly Color ColorCreator = new Color(0.60f, 0.45f, 0.15f, 1f);
         public static readonly Color ColorTagFilter = new Color(0.50f, 0.20f, 0.50f, 1f);
         public static readonly Color ColorRatingFilter = new Color(0.70f, 0.60f, 0.20f, 1f);
+        /// <summary>★ Not-rated filter armed (slate; distinct from rated purple accent).</summary>
+        public static readonly Color ColorUnratedFilterAccent = new Color(0.28f, 0.45f, 0.58f, 1f);
+        /// <summary>★ Not-rated label/text tint on title-bar chrome.</summary>
+        public static readonly Color ColorUnratedFilterLabel = new Color(0.55f, 0.78f, 1f, 1f);
+        /// <summary>★ Not-rated icon tint when presence filter armed.</summary>
+        public static readonly Color ColorUnratedFilterIcon = new Color(0.65f, 0.85f, 1f, 1f);
         public static readonly Color ColorSourceFilter = new Color(0.20f, 0.40f, 0.70f, 1f);
         public static readonly Color ColorSubfilterFilter = new Color(0.35f, 0.35f, 0.60f, 1f);
         public static readonly Color ColorUserTagFilter = new Color(0.55f, 0.28f, 0.55f, 1f);
@@ -1445,7 +1462,12 @@ namespace VPB
         private Image _langBtnImage;
         private GameObject languageMenuPopupGO;
         private bool languageMenuOpen;
-        private bool isRatingSortToggleEnabled;
+        private RatingPresenceFilterMode _ratingPresenceFilterMode;
+        /// <summary>Scratch for rating-mutate prune (reuse; warm path, no per-click HashSet churn).</summary>
+        private readonly List<FileEntry> _ratingMutatedScratch = new List<FileEntry>(8);
+        private readonly List<FileEntry> _ratingPruneSurvivingSelected = new List<FileEntry>(8);
+        private HashSet<FileEntry> _ratingPruneRemoveRefs;
+        private HashSet<string> _ratingPruneRemoveKeys;
 
         // Tracks panels hidden when a save flow starts, so they can be restored when it ends
         private List<Canvas> _canvasesHiddenForSave;

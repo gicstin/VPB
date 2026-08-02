@@ -51,7 +51,7 @@ namespace VPB
             if (panel == null) return;
             UI.DestroyAllChildren(panel);
 
-            bool ratingActive = !string.IsNullOrEmpty(currentRatingFilter);
+            bool ratingActive = HasRatingPresenceFilter();
             bool fpsActive = fpsText != null && fpsText.gameObject != null && fpsText.gameObject.activeSelf;
 
             AddOverflowMenuRow(
@@ -88,14 +88,14 @@ namespace VPB
                 tipDefault: "Filter: source, hidden, always loaded, old versions. Click rows to cycle Off → apply → only. Right-click clears.");
             AddOverflowMenuRow(
                 panel,
-                VPBTranslation.T("gallery.title.rated_only", "Rated only"),
+                ResolveRatingPresenceFilterLabel(),
                 () => { CloseTitleBarOverflowMenu(); ToggleRatingSort(); },
                 ratingActive,
                 icon: UI.GetButtonIconSprite(ratingSortToggleBtn)
-                    ?? (ratingActive ? ratingStarNormalSprite : ratingStarOffSprite)
+                    ?? (ratingActive ? ratingStarOffSprite : ratingStarNormalSprite)
                     ?? UI.LoadIconSprite("vpb_icons/star.png", UI.BarIconGlyphTint),
-                tipKey: "gallery.tooltip.rated_only",
-                tipDefault: "Show Only Rated Items (right-click to clear)");
+                tipKey: null,
+                tipDefault: BuildRatingPresenceFilterTooltip());
             AddOverflowMenuRow(
                 panel,
                 VPBTranslation.T("gallery.title.fps_counter", "FPS counter"),
