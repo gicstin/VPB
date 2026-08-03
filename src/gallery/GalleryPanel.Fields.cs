@@ -208,6 +208,8 @@ namespace VPB
         // VR cold boot: avoid enabling canvas/raycaster before World UI ready.
         private Coroutine _deferredSetVisibleCoroutine;
         private bool _pendingVisibleAfterStartupReady;
+        /// <summary>Show() re-entrancy guard — SetCanvasVisible must not recurse into Show.</summary>
+        private int _showReentrancyDepth;
         private Dictionary<string, float> categoryScrollPositions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         // Tracks category keys that were written during this app session (not just loaded from disk cache).
         private HashSet<string> sessionCategoryScrollKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

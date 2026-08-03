@@ -391,6 +391,25 @@ namespace VPB
 
         public void Show(string title, string extension, string path)
         {
+            if (_showReentrancyDepth > 0)
+            {
+                LogUtil.LogWarning("[Gallery] GalleryPanel.Show re-entrancy ignored: title='" + title
+                    + "' path='" + path + "' depth=" + _showReentrancyDepth);
+                return;
+            }
+            _showReentrancyDepth++;
+            try
+            {
+                ShowCore(title, extension, path);
+            }
+            finally
+            {
+                _showReentrancyDepth--;
+            }
+        }
+
+        private void ShowCore(string title, string extension, string path)
+        {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             bool needsInit = canvas == null;
             LogUtil.Log("[Gallery] GalleryPanel.Show entry: title='" + title + "' path='" + path + "' needsInit=" + needsInit + " currentPath='" + currentPath + "' hasLoadedContent=" + hasLoadedContent);
@@ -832,9 +851,11 @@ namespace VPB
             // ensure we run (or schedule) initial refresh on any transition to visible.
             if (visible && Application.isPlaying && !hasLoadedContent && refreshCoroutine == null)
             {
-                // If no category ever selected (should not happen, but can if created without Show()),
-                // force a first Show() using last-used after startup, else InitialGalleryCategory once.
-                if (string.IsNullOrEmpty(currentPath) && categories != null && categories.Count > 0)
+                // Only auto-Show when no category was selected yet.
+                // Empty path is VALID for ALL VAR / Everything / All — do not treat as unset
+                // (that caused Show→SetCanvasVisible→Show infinite recursion).
+                if (string.IsNullOrEmpty(currentCategoryTitle) && categories != null && categories.Count > 0
+                    && _showReentrancyDepth == 0)
                 {
                     try
                     {
@@ -855,6 +876,15 @@ namespace VPB
                                     break;
                                 }
                             }
+                        }
+                        // Prefer a category with a real browse path when LastGalleryCategory is
+                        // an empty-path virtual root and we still have no title (pane create path).
+                        if (IsVirtualEmptyPathCategory(initial.name, initial.extension)
+                            && string.IsNullOrEmpty(initial.path))
+                        {
+                            Gallery.Category withPath = FindFirstCategoryWithBrowsePath(categories);
+                            if (!string.IsNullOrEmpty(withPath.name))
+                                initial = withPath;
                         }
                         Show(initial.name, initial.extension, initial.path);
                         return;
@@ -949,6 +979,30 @@ namespace VPB
                 }
             }
 
+        }
+
+        private static bool IsVirtualEmptyPathCategory(string categoryName, string extension)
+        {
+            if (string.Equals(categoryName, "ALL VAR", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(categoryName, "All", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Gallery.IsEverythingCategoryName(categoryName)) return true;
+            if (string.Equals(extension, "varpkg", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Gallery.IsEverythingCategoryExtension(extension)) return true;
+            return false;
+        }
+
+        private static Gallery.Category FindFirstCategoryWithBrowsePath(List<Gallery.Category> cats)
+        {
+            if (cats == null) return new Gallery.Category();
+            for (int i = 0; i < cats.Count; i++)
+            {
+                Gallery.Category c = cats[i];
+                if (string.IsNullOrEmpty(c.name)) continue;
+                if (string.IsNullOrEmpty(c.path)) continue;
+                if (IsVirtualEmptyPathCategory(c.name, c.extension)) continue;
+                return c;
+            }
+            return new Gallery.Category();
         }
 
         private static bool IsVamMenuVisible()

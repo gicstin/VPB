@@ -3678,6 +3678,10 @@ namespace VPB
 		{
 			try
 			{
+				// Always yield once so VPB Init / Update are not blocked by native Refresh
+				// (Unity 2018 main thread — sync Refresh was a multi-minute hang under scan whitelist + #12).
+				yield return null;
+
 				bool startupNotReady = !LogUtil.IsStartupReadyLogged() && !LogUtil.IsReadyLogged();
 				if (startupNotReady)
 					VamStartupProfiler.Milestone("mvr_native_refresh_delay_skipped (startup)");

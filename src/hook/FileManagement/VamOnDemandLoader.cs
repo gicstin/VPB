@@ -234,6 +234,101 @@ namespace VPB
             s_InOnDemand = previous;
         }
 
+        /// <summary>
+        /// True while native Refresh is in flight, or before VaM's first Refresh has completed
+        /// (and World UI / READY not yet signaled). Heavy on-demand resolve/register must not run.
+        /// </summary>
+        public static bool ShouldDeferHeavyOnDemandProbe()
+        {
+            if (VamScanFilter.IsVamRefreshInProgress) return true;
+            if (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged()) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Queue a GetPackage/IsPackage/GetPackageGroup miss for later register — no disk walk.
+        /// Used by #12 Harmony postfixes when <see cref="ShouldDeferHeavyOnDemandProbe"/> is true.
+        /// </summary>
+        public static void EnqueueDeferredOnDemandFromProbe(string packageUidOrPath)
+        {
+            if (string.IsNullOrEmpty(packageUidOrPath)) return;
+            if (IsRawVarFilesystemPath(packageUidOrPath)) return;
+            if (!ScanWhitelistManager.Instance.IsEnabled) return;
+
+            if (VamScanFilter.IsVamRefreshInProgress)
+            {
+                EnqueueRefreshInProgressDefer(packageUidOrPath);
+                return;
+            }
+            EnqueueVamNotReadyDefer(packageUidOrPath, null);
+        }
+
+        private static string NormalizeOnDemandRequestUid(string uidOrPath)
+        {
+            if (string.IsNullOrEmpty(uidOrPath)) return null;
+            string s = uidOrPath.Trim();
+            if (s.Length == 0) return null;
+            if (s.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal))
+                s = s.Substring(UidOnlyPathPrefix.Length);
+            if (s.IndexOf(":/", StringComparison.Ordinal) >= 0)
+            {
+                string fromEntry = UidFromEntryPath(s);
+                if (!string.IsNullOrEmpty(fromEntry)) return fromEntry;
+            }
+            if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                || s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                string fromPath = UidFromVarPath(s);
+                if (!string.IsNullOrEmpty(fromPath)) return fromPath;
+            }
+            return s;
+        }
+
+        /// <summary>Returns true when this UID was newly queued.</summary>
+        private static bool EnqueueRefreshInProgressDefer(string uidOrPath)
+        {
+            string deferUid = NormalizeOnDemandRequestUid(uidOrPath);
+            if (string.IsNullOrEmpty(deferUid)) return false;
+            bool added;
+            lock (s_RefreshInProgressLock)
+            {
+                added = s_RefreshInProgressDeferredUids.Add(deferUid);
+                if (added)
+                    s_RefreshInProgressDeferredPaths.Enqueue(UidOnlyPathPrefix + deferUid);
+            }
+            if (added)
+                LogUtil.Log("[VPB OnDemand] Defer during VaM Refresh: " + deferUid);
+            return added;
+        }
+
+        /// <summary>
+        /// Queue until first native Refresh completes and/or STARTUP READY.
+        /// <paramref name="varPathOrNull"/> may be null — then UID-only sentinel is stored (resolve later).
+        /// Returns true when newly queued.
+        /// </summary>
+        private static bool EnqueueVamNotReadyDefer(string uidOrPath, string varPathOrNull)
+        {
+            string deferUid = NormalizeOnDemandRequestUid(uidOrPath);
+            if (string.IsNullOrEmpty(deferUid)) return false;
+            bool added;
+            lock (s_VamNotReadyLock)
+            {
+                added = s_VamNotReadyDeferredUids.Add(deferUid);
+                if (added)
+                {
+                    if (!string.IsNullOrEmpty(varPathOrNull)
+                        && !varPathOrNull.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal)
+                        && varPathOrNull.IndexOf(":/", StringComparison.Ordinal) < 0)
+                        s_VamNotReadyDeferredPaths.Enqueue(varPathOrNull);
+                    else
+                        s_VamNotReadyDeferredPaths.Enqueue(UidOnlyPathPrefix + deferUid);
+                }
+            }
+            if (added)
+                Interlocked.Increment(ref s_StartupVamNotReadyDeferredCount);
+            return added;
+        }
+
         private static readonly HashSet<string> s_RewriteLogOnceKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RewriteLogLock = new object();
         private const int PathRewriteProbeLogMax = 10;
@@ -529,7 +624,7 @@ namespace VPB
         private static readonly Queue<string> s_PendingPaths = new Queue<string>();
         private static readonly object s_QueueLock = new object();
         // Requests that arrive before VaM's first Refresh has completed.
-        // These are promoted once MarkVamRefreshed() fires.
+        // These are promoted once MarkVamRefreshed() fires (and again at STARTUP READY).
         private static readonly Queue<string> s_VamNotReadyDeferredPaths = new Queue<string>();
         private static readonly HashSet<string> s_VamNotReadyDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_VamNotReadyLock = new object();
@@ -538,6 +633,12 @@ namespace VPB
         private static readonly Queue<string> s_RefreshInProgressDeferredPaths = new Queue<string>();
         private static readonly HashSet<string> s_RefreshInProgressDeferredUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_RefreshInProgressLock = new object();
+        /// <summary>
+        /// Deferred queue entry when path is not resolved yet (avoid AddonPackages AllDirectories
+        /// walks during native Refresh / pre-ready). Drain/promote resolve to a real .var path.
+        /// </summary>
+        private const string UidOnlyPathPrefix = "uid:";
+        private static int s_UidOnlyResolveFailLogged;
         private static readonly object s_RefreshRequestLock = new object();
         private static bool s_PendingVamRefresh;
         private static float s_PendingVamRefreshRequestedAt;
@@ -672,6 +773,12 @@ namespace VPB
                 s_RefreshInProgressDeferredPaths.Clear();
                 s_RefreshInProgressDeferredUids.Clear();
             }
+            lock (s_VamNotReadyLock)
+            {
+                s_VamNotReadyDeferredPaths.Clear();
+                s_VamNotReadyDeferredUids.Clear();
+            }
+            Interlocked.Exchange(ref s_UidOnlyResolveFailLogged, 0);
             lock (s_CatalogStaleLock)
                 s_CatalogStaleUids.Clear();
         }
@@ -847,6 +954,36 @@ namespace VPB
                 return null;
             }
 
+            // --- Defer BEFORE expensive path resolve (AllDirectories / .latest FS walk) ---
+            // #12 GetPackage/IsPackage hooks + dep probes during native Refresh were paying
+            // recursive AddonPackages walks per miss, then only queueing — multi-minute Init hang.
+            if (VamScanFilter.IsVamRefreshInProgress)
+            {
+                EnqueueRefreshInProgressDefer(uid);
+                return null;
+            }
+            if (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged())
+            {
+                if (EnqueueVamNotReadyDefer(uid, null))
+                {
+                    string deferUidEarly = NormalizeOnDemandRequestUid(uid);
+                    if (!string.IsNullOrEmpty(deferUidEarly))
+                        LogUtil.Log("[VPB OnDemand] Defer before VaM FileManager ready: " + deferUidEarly);
+                }
+                return null;
+            }
+
+            // Non-script / heavy-script policy until READY — queue UID only (resolve on promote).
+            {
+                string deferUidPolicy = NormalizeOnDemandRequestUid(uid);
+                if (!string.IsNullOrEmpty(deferUidPolicy)
+                    && ShouldDeferStartupOnDemandForPath(deferUidPolicy + ":/", deferUidPolicy))
+                {
+                    EnqueueVamNotReadyDefer(deferUidPolicy, null);
+                    return null;
+                }
+            }
+
             if (!TryResolveVarPathForUid(uid, out string resolvedUid, out string varPath))
             {
                 // Do not poison during native Refresh / pre-ready windows — resolve can fail transiently
@@ -860,18 +997,6 @@ namespace VPB
                 return null;
             }
             if (string.IsNullOrEmpty(varPath)) return null;
-
-            string deferUidCheck = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
-            string deferPathCheck = deferUidCheck + ":/";
-            if (ShouldDeferStartupOnDemandForPath(deferPathCheck, deferUidCheck))
-            {
-                lock (s_VamNotReadyLock)
-                {
-                    if (s_VamNotReadyDeferredUids.Add(deferUidCheck))
-                        s_VamNotReadyDeferredPaths.Enqueue(varPath);
-                }
-                return null;
-            }
 
             if (!string.IsNullOrEmpty(resolvedUid) && ShouldSkipAlreadyRegisteredOnDemand(resolvedUid)) return null;
             if (!string.IsNullOrEmpty(resolvedUid) && WasRecentFailure(resolvedUid)) return null;
@@ -922,16 +1047,9 @@ namespace VPB
             // them once VamScanFilter.MarkVamRefreshed() signals readiness.
             if (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged())
             {
-                bool added;
-                string deferUid = !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid;
-                lock (s_VamNotReadyLock)
-                {
-                    added = s_VamNotReadyDeferredUids.Add(deferUid);
-                    if (added)
-                        s_VamNotReadyDeferredPaths.Enqueue(varPath);
-                }
-                if (added)
-                    Interlocked.Increment(ref s_StartupVamNotReadyDeferredCount);
+                EnqueueVamNotReadyDefer(
+                    !string.IsNullOrEmpty(resolvedUid) ? resolvedUid : uid,
+                    varPath);
                 return null;
             }
 
@@ -947,6 +1065,8 @@ namespace VPB
                     if (added)
                         s_RefreshInProgressDeferredPaths.Enqueue(varPath);
                 }
+                if (added)
+                    LogUtil.Log("[VPB OnDemand] Defer during VaM Refresh: " + deferUid);
                 return null;
             }
 
@@ -1195,23 +1315,7 @@ namespace VPB
         /// </summary>
         public static void NotifyVamFileManagerRefreshed()
         {
-            int promoted = 0;
-            lock (s_VamNotReadyLock)
-            {
-                while (s_VamNotReadyDeferredPaths.Count > 0)
-                {
-                    string path = s_VamNotReadyDeferredPaths.Dequeue();
-                    if (string.IsNullOrEmpty(path)) continue;
-                    lock (s_QueueLock)
-                        s_PendingPaths.Enqueue(path);
-                    promoted++;
-                }
-                s_VamNotReadyDeferredUids.Clear();
-            }
-
-            if (promoted > 0)
-                LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted + " deferred registrations");
-                try { VamStartupProfiler.Milestone("VamOnDemand.FileManager_ready promoted=" + promoted); } catch { }
+            PromoteVamNotReadyDeferred("FileManager_ready");
         }
 
         /// <summary>
@@ -1220,19 +1324,11 @@ namespace VPB
         /// </summary>
         public static void NotifyVamRefreshCompleted()
         {
-            int promoted = 0;
-            lock (s_RefreshInProgressLock)
-            {
-                while (s_RefreshInProgressDeferredPaths.Count > 0)
-                {
-                    string path = s_RefreshInProgressDeferredPaths.Dequeue();
-                    if (string.IsNullOrEmpty(path)) continue;
-                    lock (s_QueueLock)
-                        s_PendingPaths.Enqueue(path);
-                    promoted++;
-                }
-                s_RefreshInProgressDeferredUids.Clear();
-            }
+            int promoted = PromoteDeferredQueueToPending(
+                s_RefreshInProgressLock,
+                s_RefreshInProgressDeferredPaths,
+                s_RefreshInProgressDeferredUids,
+                "refresh_completed");
 
             if (promoted > 0)
                 LogUtil.Log("[VPB OnDemand] VaM refresh completed - promoted " + promoted + " deferred registrations");
@@ -1241,6 +1337,78 @@ namespace VPB
             // packages that native Refresh just excluded under the scan whitelist (#77).
             InvalidateOnDemandSessionCachesAfterNativeRefresh();
             NotifyNativeCatalogRefreshed();
+        }
+
+        private static void PromoteVamNotReadyDeferred(string reason)
+        {
+            int promoted = PromoteDeferredQueueToPending(
+                s_VamNotReadyLock,
+                s_VamNotReadyDeferredPaths,
+                s_VamNotReadyDeferredUids,
+                reason);
+            if (promoted > 0)
+            {
+                LogUtil.Log("[VPB OnDemand] VaM FileManager ready - promoted " + promoted
+                    + " deferred registrations (" + reason + ")");
+                try { VamStartupProfiler.Milestone("VamOnDemand.FileManager_ready promoted=" + promoted + " reason=" + reason); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Move deferred path/uid-sentinel entries onto <see cref="s_PendingPaths"/>.
+        /// UID-only sentinels stay as sentinels — <see cref="DrainMainThreadQueue"/> resolves them
+        /// when VPB inventory / SQL is warmer (avoids resolve spikes on Refresh postfix).
+        /// </summary>
+        private static int PromoteDeferredQueueToPending(
+            object lockObj,
+            Queue<string> paths,
+            HashSet<string> uids,
+            string reason)
+        {
+            int promoted = 0;
+            lock (lockObj)
+            {
+                while (paths.Count > 0)
+                {
+                    string entry = paths.Dequeue();
+                    if (string.IsNullOrEmpty(entry)) continue;
+                    lock (s_QueueLock)
+                        s_PendingPaths.Enqueue(entry);
+                    promoted++;
+                }
+                uids.Clear();
+            }
+            return promoted;
+        }
+
+        /// <summary>
+        /// Resolve a pending/deferred queue entry to uid + .var path.
+        /// Supports real paths and <see cref="UidOnlyPathPrefix"/> sentinels.
+        /// </summary>
+        private static bool TryResolveQueueEntry(string entry, out string uid, out string varPath)
+        {
+            uid = null;
+            varPath = null;
+            if (string.IsNullOrEmpty(entry)) return false;
+
+            if (entry.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal))
+            {
+                string req = entry.Substring(UidOnlyPathPrefix.Length);
+                if (string.IsNullOrEmpty(req)) return false;
+                if (!TryResolveVarPathForUid(req, out uid, out varPath))
+                {
+                    int n = Interlocked.Increment(ref s_UidOnlyResolveFailLogged);
+                    if (n <= 8)
+                        LogUtil.LogWarning("[VPB OnDemand] Deferred UID resolve failed: " + req);
+                    return false;
+                }
+                return !string.IsNullOrEmpty(varPath);
+            }
+
+            uid = UidFromVarPath(entry);
+            varPath = NormalizePath(entry);
+            if (string.IsNullOrEmpty(uid)) uid = NormalizeOnDemandRequestUid(entry);
+            return !string.IsNullOrEmpty(varPath);
         }
 
         private static void RegisterNow(string uid, string varPath)
@@ -1419,6 +1587,11 @@ namespace VPB
             string bestUid = null;
 
             // Final fallback: scan filesystem for the newest installed version.
+            // Skip during native Refresh / pre-ready — recursive *.var walks stall Init (#12).
+            if (VamScanFilter.IsVamRefreshInProgress
+                || (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged()))
+                return null;
+
             bestVersion = -1;
             bestUid = null;
             foreach (string root in new[] { "AddonPackages", "AllPackages" })
@@ -1470,6 +1643,11 @@ namespace VPB
             string all = NormalizePath(Path.Combine("AllPackages", filename));
             if (File.Exists(all)) return all;
 
+            // Recursive walk is expensive on large libraries — never during Refresh / pre-ready.
+            if (VamScanFilter.IsVamRefreshInProgress
+                || (!VamScanFilter.HasVamRefreshedAtLeastOnce && !SafeIsStartupReadyLogged()))
+                return null;
+
             foreach (string root in new[] { "AddonPackages", "AllPackages" })
             {
                 try
@@ -1512,22 +1690,43 @@ namespace VPB
             MaybeLogStartupSummary();
             if (VamScanFilter.IsVamRefreshInProgress) return;
 
+            // Non-script requests deferred after first Refresh but before READY were stuck in
+            // s_VamNotReady* (NotifyVamFileManagerRefreshed only runs once). Flush at READY.
+            if (SafeIsStartupReadyLogged())
+            {
+                bool hasLeftover;
+                lock (s_VamNotReadyLock)
+                    hasLeftover = s_VamNotReadyDeferredPaths.Count > 0;
+                if (hasLeftover)
+                    PromoteVamNotReadyDeferred("startup_ready");
+            }
+
             int drained = 0;
             while (drained < MaxDrainPerFrame)
             {
-                string path;
+                string entry;
                 lock (s_QueueLock)
                 {
                     if (s_PendingPaths.Count == 0) break;
-                    path = s_PendingPaths.Dequeue();
+                    entry = s_PendingPaths.Dequeue();
                 }
 
-                if (!string.IsNullOrEmpty(path))
+                if (!string.IsNullOrEmpty(entry))
                 {
-                    // Derive UID from path
-                    string uid = UidFromVarPath(path);
-                    if (!string.IsNullOrEmpty(uid))
-                        RegisterNow(uid, path);
+                    string uid;
+                    string path;
+                    if (TryResolveQueueEntry(entry, out uid, out path))
+                    {
+                        if (!string.IsNullOrEmpty(uid))
+                            RegisterNow(uid, path);
+                    }
+                    else if (entry.StartsWith(UidOnlyPathPrefix, StringComparison.Ordinal))
+                    {
+                        // Unresolvable now (missing .var / index lag). Arm cooldown; do not spin.
+                        string req = entry.Substring(UidOnlyPathPrefix.Length);
+                        if (!string.IsNullOrEmpty(req))
+                            MarkFailure(req);
+                    }
                 }
                 drained++;
             }

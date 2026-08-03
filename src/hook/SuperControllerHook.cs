@@ -2151,6 +2151,14 @@ namespace VPB
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
 
+                // Never resolve/register during native Refresh or before first Refresh — would
+                // recursive-walk AddonPackages per miss and corrupt VaM dictionary enumeration (#12 startup hang).
+                if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
+                {
+                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageUidOrPath);
+                    return;
+                }
+
                 bool entered;
                 bool prev;
                 entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
@@ -2201,6 +2209,12 @@ namespace VPB
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
 
+                if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
+                {
+                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageUidOrPath);
+                    return;
+                }
+
                 bool entered;
                 bool prev;
                 entered = VamOnDemandLoader.TryEnterOnDemandGuard(out prev);
@@ -2247,6 +2261,12 @@ namespace VPB
                 if (!ScanWhitelistManager.Instance.IsEnabled) return;
                 if (string.IsNullOrEmpty(packageGroupUid)) return;
                 if (packageGroupUid.IndexOf('.') < 0) return;
+
+                if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
+                {
+                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageGroupUid + ".latest");
+                    return;
+                }
 
                 bool entered;
                 bool prev;
