@@ -246,20 +246,17 @@ namespace VPB
         }
 
         /// <summary>
-        /// Queue a GetPackage/IsPackage/GetPackageGroup miss for later register — no disk walk.
-        /// Used by #12 Harmony postfixes when <see cref="ShouldDeferHeavyOnDemandProbe"/> is true.
+        /// Queue a deliberate on-demand miss for later register — no disk walk.
+        /// Never used for Refresh-time GetPackage probe noise (that path must no-op).
         /// </summary>
         public static void EnqueueDeferredOnDemandFromProbe(string packageUidOrPath)
         {
             if (string.IsNullOrEmpty(packageUidOrPath)) return;
             if (IsRawVarFilesystemPath(packageUidOrPath)) return;
             if (!ScanWhitelistManager.Instance.IsEnabled) return;
+            // Refresh-time probes must not queue — see #12 hooks (log 22 register storm / crash).
+            if (VamScanFilter.IsVamRefreshInProgress) return;
 
-            if (VamScanFilter.IsVamRefreshInProgress)
-            {
-                EnqueueRefreshInProgressDefer(packageUidOrPath);
-                return;
-            }
             EnqueueVamNotReadyDefer(packageUidOrPath, null);
         }
 
@@ -273,13 +270,20 @@ namespace VPB
             if (s.IndexOf(":/", StringComparison.Ordinal) >= 0)
             {
                 string fromEntry = UidFromEntryPath(s);
-                if (!string.IsNullOrEmpty(fromEntry)) return fromEntry;
+                if (!string.IsNullOrEmpty(fromEntry)) s = fromEntry;
             }
             if (s.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
                 || s.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 string fromPath = UidFromVarPath(s);
-                if (!string.IsNullOrEmpty(fromPath)) return fromPath;
+                if (!string.IsNullOrEmpty(fromPath)) s = fromPath;
+            }
+            // Collapse Author.Pkg.latest.latest → Author.Pkg.latest (GetPackageGroup bug / double append).
+            const string latestSuffix = ".latest";
+            while (s.Length > latestSuffix.Length * 2
+                && s.EndsWith(".latest.latest", StringComparison.OrdinalIgnoreCase))
+            {
+                s = s.Substring(0, s.Length - latestSuffix.Length);
             }
             return s;
         }
@@ -289,6 +293,8 @@ namespace VPB
         {
             string deferUid = NormalizeOnDemandRequestUid(uidOrPath);
             if (string.IsNullOrEmpty(deferUid)) return false;
+            // Nonsense UIDs from probe bugs — never queue.
+            if (deferUid.EndsWith(".latest.latest", StringComparison.OrdinalIgnoreCase)) return false;
             bool added;
             lock (s_RefreshInProgressLock)
             {
@@ -296,8 +302,8 @@ namespace VPB
                 if (added)
                     s_RefreshInProgressDeferredPaths.Enqueue(UidOnlyPathPrefix + deferUid);
             }
-            if (added)
-                LogUtil.Log("[VPB OnDemand] Defer during VaM Refresh: " + deferUid);
+            // No per-UID log — Refresh can touch hundreds of legitimate entry-path defers;
+            // summary is logged on promote.
             return added;
         }
 
@@ -941,6 +947,10 @@ namespace VPB
             if (!ScanWhitelistManager.Instance.IsEnabled) return null;
             if (!VamScanFilter.HasRegisterMethodAccess) return null;
             if (!persistUidOverride && IsRawVarFilesystemPath(uid)) return null;
+
+            string normalized = NormalizeOnDemandRequestUid(uid);
+            if (!string.IsNullOrEmpty(normalized))
+                uid = normalized;
 
             // Already registered this session — but only skip if VaM still has the package.
             // Native Refresh under scan whitelist can drop it while this set still contains the UID.

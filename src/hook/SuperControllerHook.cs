@@ -2151,13 +2151,11 @@ namespace VPB
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
 
-                // Never resolve/register during native Refresh or before first Refresh — would
-                // recursive-walk AddonPackages per miss and corrupt VaM dictionary enumeration (#12 startup hang).
+                // Native Refresh / pre-first-Refresh: leave miss as null. Do NOT enqueue —
+                // VaM walks every package and GetPackage/IsPackage miss thousands of times;
+                // enqueue+promote caused RegisterNow zip-scan storm + crash (log 22).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
-                {
-                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageUidOrPath);
                     return;
-                }
 
                 bool entered;
                 bool prev;
@@ -2209,11 +2207,9 @@ namespace VPB
                 if (string.IsNullOrEmpty(packageUidOrPath)) return;
                 if (VamOnDemandLoader.IsRawVarFilesystemPath(packageUidOrPath)) return;
 
+                // Same as GetPackage: no enqueue during Refresh (probe noise → register storm).
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
-                {
-                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageUidOrPath);
                     return;
-                }
 
                 bool entered;
                 bool prev;
@@ -2262,11 +2258,9 @@ namespace VPB
                 if (string.IsNullOrEmpty(packageGroupUid)) return;
                 if (packageGroupUid.IndexOf('.') < 0) return;
 
+                // Same as GetPackage: no enqueue during Refresh.
                 if (VamOnDemandLoader.ShouldDeferHeavyOnDemandProbe())
-                {
-                    VamOnDemandLoader.EnqueueDeferredOnDemandFromProbe(packageGroupUid + ".latest");
                     return;
-                }
 
                 bool entered;
                 bool prev;
@@ -2274,7 +2268,11 @@ namespace VPB
                 if (!entered) return;
                 try
                 {
-                    VamOnDemandLoader.TryRegisterPackageOnDemand(packageGroupUid + ".latest");
+                    // packageGroupUid is "Author.Pkg" — never append if caller already passed ".latest".
+                    string latestReq = packageGroupUid;
+                    if (!latestReq.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                        latestReq = packageGroupUid + ".latest";
+                    VamOnDemandLoader.TryRegisterPackageOnDemand(latestReq);
                     __result = MVR.FileManagement.FileManager.GetPackageGroup(packageGroupUid);
                 }
                 finally
