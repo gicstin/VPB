@@ -2234,6 +2234,8 @@ namespace VPB
             _packageDeltaSideTabsCoroutine = null;
             try { CacheCategoryCounts(); } catch { }
             try { CacheCreators(); } catch { }
+            // ApplyPackageDelta already cleared userTagsCached; fill amounts once cat_mem is current.
+            try { CacheUserTagsSideTab(); } catch { }
             if (!IsVisible && !hasLoadedContent) yield break;
             try { UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true); } catch { }
         }
@@ -4385,6 +4387,8 @@ namespace VPB
             {
                 categoriesCached = false;
                 creatorsCached = false;
+                // User-tag amounts need same post-index rebuild as category/creator (issue #84).
+                userTagsCached = false;
                 InvalidateSharedSideMetaIfPackageScanAdvanced();
                 _sideTabsNeedFullRebuildAfterFirstRefresh = false;
             }

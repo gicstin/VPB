@@ -323,7 +323,31 @@ namespace VPB
             if (!VpbSqlite3.IsAvailable || countsOut == null) return false;
             if (string.IsNullOrEmpty(categoryTitle)) return false;
 
-            // Do not gate on s_ReadyScanBinary / category rebuild: vocabulary query has no such gate; mismatch left every count at 0 while names still loaded.
+            // Counts INNER JOIN cat_mem. Running before index is ready returns empty rows and
+            // GalleryPanel used to stick that as cached zeros until a tag mutate (issue #84).
+            // Return false so CacheUserTagsSideTab keeps _userTagSideTabCountsReady=false and
+            // EnsureSideTabCountsFreshAfterGridReady retries after SQL index is ready.
+            long scanBin = 0;
+            try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+            string catSig = null;
+            long readyScan = long.MinValue;
+            lock (s_Sync)
+            {
+                readyScan = s_ReadyScanBinary;
+                catSig = s_ReadyCategoriesSig;
+            }
+            if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+            {
+                AutoScheduleRebuildIfStale(scanBin, readyScan, catSig);
+                lock (s_Sync)
+                {
+                    readyScan = s_ReadyScanBinary;
+                    catSig = s_ReadyCategoriesSig;
+                }
+                try { scanBin = FileManager.lastPackageRefreshTime.ToBinary(); } catch { }
+                if (readyScan != scanBin || string.IsNullOrEmpty(catSig) || s_RebuildRunning)
+                    return false;
+            }
 
             string normalizedPackagePathFilter = "";
             bool hasPackagePathFilter = false;

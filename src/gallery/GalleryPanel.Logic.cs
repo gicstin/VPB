@@ -1153,28 +1153,39 @@ namespace VPB
         }
 
         /// <summary>Rebuild side-tab counts once SQL/index + package scan are ready.</summary>
-        /// <returns>True when category/creator counts were rebuilt (caller should refresh side-tab UI).</returns>
+        /// <returns>True when category/creator/user-tag counts were rebuilt (caller should refresh side-tab UI).</returns>
         private bool EnsureSideTabCountsFreshAfterGridReady(bool force)
         {
             DateTime scanNow = DateTime.MinValue;
             try { scanNow = FileManager.lastPackageRefreshTime; } catch { }
-            bool stale = force
-                || !categoriesCached
-                || !creatorsCached
-                || (scanNow > DateTime.MinValue && scanNow > _lastCategoryCountsScanTime);
-            if (!stale) return false;
+            bool scanAdvanced = scanNow > DateTime.MinValue && scanNow > _lastCategoryCountsScanTime;
+            // Vocabulary may load before cat_mem; counts stay pending until index ready (issue #84).
+            bool userTagCountsPending = !userTagsCached || !_userTagSideTabCountsReady;
+            bool sideMetaStale = force || !categoriesCached || !creatorsCached || scanAdvanced;
+            bool userTagStale = force || userTagCountsPending || scanAdvanced;
+            if (!sideMetaStale && !userTagStale) return false;
 
-            categoriesCached = false;
-            creatorsCached = false;
-            try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
-            try { CacheCategoryCounts(); } catch { }
-            try { CacheCreators(); } catch { }
+            if (sideMetaStale)
+            {
+                categoriesCached = false;
+                creatorsCached = false;
+                try { InvalidateSharedSideMetaIfPackageScanAdvanced(); } catch { }
+                try { CacheCategoryCounts(); } catch { }
+                try { CacheCreators(); } catch { }
+            }
+            if (userTagStale)
+            {
+                // Force recount; CacheUserTagsSideTab keeps vocabulary on busy SQLite (#74).
+                userTagsCached = false;
+                try { CacheUserTagsSideTab(); } catch { }
+            }
             try
             {
                 int sc = 0;
                 if (categoryCounts != null) categoryCounts.TryGetValue("Scenes", out sc);
                 LogUtil.Log("[VPB.Gallery] EnsureSideTabCountsFreshAfterGridReady scenes=" + sc
-                    + " cached=" + (categoriesCached ? "1" : "0"));
+                    + " cached=" + (categoriesCached ? "1" : "0")
+                    + " userTagsReady=" + (_userTagSideTabCountsReady ? "1" : "0"));
             }
             catch { }
             return true;
@@ -1803,8 +1814,9 @@ namespace VPB
                 if (countsOk) dict.TryGetValue(name, out c);
                 cachedUserTagSideTab.Add(new UserTagSideTabEntry { Name = name, Count = c });
             }
-            // Stick cache after vocabulary load so empty category / failed counts do not re-query every refresh.
-            // Hide-unused waits on counts-ready separately.
+            // Stick vocabulary after name load so empty category / failed counts do not re-query every refresh.
+            // Amounts stay Count=0 until _userTagSideTabCountsReady; EnsureSideTabCountsFreshAfterGridReady
+            // retries when cat_mem index becomes ready (issue #84). Hide-unused waits on counts-ready.
             userTagsCached = true;
             _userTagSideTabCountsReady = countsOk;
             unchecked { userTagSideTabDataRevision++; }

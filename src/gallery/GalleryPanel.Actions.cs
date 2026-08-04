@@ -2129,6 +2129,16 @@ namespace VPB
                         + (currentCategoryTitle ?? "") + "'");
                 }
                 catch { }
+                // Delta path may have cached user-tag amounts before cat_mem was ready (issue #84).
+                if (!userTagsCached || !_userTagSideTabCountsReady)
+                {
+                    try
+                    {
+                        if (EnsureSideTabCountsFreshAfterGridReady(force: false))
+                            UpdateTabsImpl(rebuildSideTabLists: true, rebuildSubPaneSideTabLists: true);
+                    }
+                    catch { }
+                }
                 return;
             }
 
