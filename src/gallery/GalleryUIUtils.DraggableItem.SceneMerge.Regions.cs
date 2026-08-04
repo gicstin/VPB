@@ -337,51 +337,328 @@ namespace VPB
         {
             if (entry == null) return false;
             ItemType type = GetItemType(entry);
-            
+
             if (type == ItemType.Scene) return true;
             if (type == ItemType.Appearance) return true;
-            
+
             return false;
+        }
+
+        /// <summary>Alt/Ctrl on drop: replay sticky last action without opening menu.</summary>
+        private bool TrySkipContextMenu(Atom atom, FileEntry entry, Vector3 position)
+        {
+            if (!ContextMenuPanel.IsSkipModifierHeld()) return false;
+            if (entry == null) return false;
+
+            ItemType type = GetItemType(entry);
+            if (type == ItemType.Scene)
+                return TryRunLastSceneAction(entry, atom);
+            if (type == ItemType.Appearance)
+                return TryRunLastAppearanceAction(entry, atom, position);
+            return false;
+        }
+
+        private bool TryRunLastSceneAction(FileEntry entry, Atom atom)
+        {
+            string last = ContextMenuPanel.GetLastSceneAction();
+            if (string.IsNullOrEmpty(last)) return false;
+
+            string uid = entry != null ? entry.Uid : null;
+            Atom importTarget = ResolveImportTargetAtom(atom);
+
+            switch (last)
+            {
+                case ContextMenuPanel.SceneActionId.Load:
+                    LoadSceneFile(uid);
+                    return true;
+                case ContextMenuPanel.SceneActionId.Persons:
+                    MergeSceneFile(uid, UI.SceneAddMode.PersonsOnly, false);
+                    return true;
+                case ContextMenuPanel.SceneActionId.Props:
+                    MergeSceneFile(uid, UI.SceneAddMode.NonPersons, false);
+                    return true;
+                case ContextMenuPanel.SceneActionId.PersonsNear:
+                    MergeSceneFile(uid, UI.SceneAddMode.PersonsOnly, true);
+                    return true;
+                case ContextMenuPanel.SceneActionId.PropsNear:
+                    MergeSceneFile(uid, UI.SceneAddMode.NonPersons, true);
+                    return true;
+                case ContextMenuPanel.SceneActionId.ImportPerson:
+                    if (!SceneUtils.IsPersonLikeAtom(importTarget)) return false;
+                    OpenSceneImportSidebar(entry, importTarget);
+                    return true;
+                case ContextMenuPanel.SceneActionId.PickAtoms:
+                    OpenSceneImportSidebar(entry, importTarget, VpbResourceType.Atoms);
+                    return true;
+                case ContextMenuPanel.SceneActionId.ImportOpen:
+                    OpenSceneImportSidebar(entry, importTarget);
+                    return true;
+                case ContextMenuPanel.SceneActionId.MergeFilter:
+                    MergeSceneFile(uid, UI.SceneAddMode.NonPersonsMergeLoad, false);
+                    return true;
+                case ContextMenuPanel.SceneActionId.FullMerge:
+                    MergeSceneFile(uid, UI.SceneAddMode.FullMerge, false);
+                    return true;
+                case ContextMenuPanel.SceneActionId.FullMergeNear:
+                    MergeSceneFile(uid, UI.SceneAddMode.FullMerge, true);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private bool TryRunLastAppearanceAction(FileEntry entry, Atom atom, Vector3 position)
+        {
+            string last = ContextMenuPanel.GetLastAppearanceAction();
+            if (string.IsNullOrEmpty(last)) return false;
+
+            Atom selected = ResolveImportTargetAtom(atom);
+
+            switch (last)
+            {
+                case ContextMenuPanel.AppearanceActionId.Spawn:
+                    StartCoroutine(CreatePersonAndApplyAppearance(entry, position, "replace", false));
+                    return true;
+                case ContextMenuPanel.AppearanceActionId.SpawnNoCollide:
+                    StartCoroutine(CreatePersonAndApplyAppearance(entry, position, "replace", true));
+                    return true;
+                case ContextMenuPanel.AppearanceActionId.ApplySelected:
+                    if (!SceneUtils.IsPersonLikeAtom(selected)) return false;
+                    try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(entry), "appearance"); } catch { }
+                    ApplyClothingToAtom(selected, entry.Uid, null);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsBuriedSceneAction(string actionId)
+        {
+            return actionId == ContextMenuPanel.SceneActionId.PersonsNear
+                || actionId == ContextMenuPanel.SceneActionId.PropsNear
+                || actionId == ContextMenuPanel.SceneActionId.PickAtoms
+                || actionId == ContextMenuPanel.SceneActionId.ImportOpen
+                || actionId == ContextMenuPanel.SceneActionId.MergeFilter
+                || actionId == ContextMenuPanel.SceneActionId.FullMerge
+                || actionId == ContextMenuPanel.SceneActionId.FullMergeNear;
+        }
+
+        private static string SceneActionLabel(string actionId)
+        {
+            switch (actionId)
+            {
+                case ContextMenuPanel.SceneActionId.Load:
+                    return VPBTranslation.T("ctx.scene.load", "Load Scene");
+                case ContextMenuPanel.SceneActionId.Persons:
+                    return VPBTranslation.T("ctx.scene.add_persons", "Persons only");
+                case ContextMenuPanel.SceneActionId.Props:
+                    return VPBTranslation.T("ctx.scene.add_props", "Props & environment");
+                case ContextMenuPanel.SceneActionId.PersonsNear:
+                    return VPBTranslation.T("ctx.scene.persons_near", "Persons near me");
+                case ContextMenuPanel.SceneActionId.PropsNear:
+                    return VPBTranslation.T("ctx.scene.props_near", "Props near me");
+                case ContextMenuPanel.SceneActionId.ImportPerson:
+                    return VPBTranslation.T("ctx.scene.import_person", "Onto selected person");
+                case ContextMenuPanel.SceneActionId.PickAtoms:
+                    return VPBTranslation.T("ctx.scene.pick_atoms", "Pick atoms…");
+                case ContextMenuPanel.SceneActionId.ImportOpen:
+                    return VPBTranslation.T("ctx.scene.import_open", "Open Scene Import");
+                case ContextMenuPanel.SceneActionId.MergeFilter:
+                    return VPBTranslation.T("ctx.scene.merge_filter", "Merge load (no persons)");
+                case ContextMenuPanel.SceneActionId.FullMerge:
+                    return VPBTranslation.T("ctx.scene.merge_full", "Entire scene");
+                case ContextMenuPanel.SceneActionId.FullMergeNear:
+                    return VPBTranslation.T("ctx.scene.merge_full_near", "Entire scene near me");
+                default:
+                    return actionId;
+            }
+        }
+
+        private static ContextMenuPanel.OptionKind KindForSceneAction(string actionId, string last)
+        {
+            if (!string.IsNullOrEmpty(last) && string.Equals(actionId, last, StringComparison.Ordinal))
+                return ContextMenuPanel.OptionKind.Primary;
+            if (actionId == ContextMenuPanel.SceneActionId.Load)
+            {
+                // Soft friction: Load is Destructive when not the sticky primary.
+                if (string.IsNullOrEmpty(last) || last == ContextMenuPanel.SceneActionId.Load)
+                    return ContextMenuPanel.OptionKind.Primary;
+                return ContextMenuPanel.OptionKind.Destructive;
+            }
+            if (actionId == ContextMenuPanel.SceneActionId.FullMerge
+                || actionId == ContextMenuPanel.SceneActionId.FullMergeNear)
+                return ContextMenuPanel.OptionKind.Destructive;
+            if (actionId == ContextMenuPanel.SceneActionId.MergeFilter)
+                return ContextMenuPanel.OptionKind.Quiet;
+            return ContextMenuPanel.OptionKind.Normal;
         }
 
         private void HandleDropWithContext(Atom atom, FileEntry entry, Vector3 position)
         {
-            List<ContextMenuPanel.Option> options = new List<ContextMenuPanel.Option>();
+            if (TrySkipContextMenu(atom, entry, position))
+                return;
+
+            List<ContextMenuPanel.Option> options = new List<ContextMenuPanel.Option>(12);
             ItemType type = GetItemType(entry);
 
             if (type == ItemType.Scene)
             {
-                 options.Add(new ContextMenuPanel.Option("Load Scene", () => LoadSceneFile(entry.Uid)));
-                 options.Add(new ContextMenuPanel.Option("Merge Scene", () => MergeSceneFile(entry.Uid, false)));
+                FileEntry capturedEntry = entry;
+                string sceneUid = entry != null ? entry.Uid : null;
+                string last = ContextMenuPanel.GetLastSceneAction();
+                Atom importTarget = ResolveImportTargetAtom(atom);
 
-                 if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
-                 {
-                     options.Add(new ContextMenuPanel.Option("Import From Scene", () => {
-                         ShowImportCategories(entry, atom);
-                     }, false, true));
-                 } 
+                // Sticky buried action → Repeat row at top (Tesler: absorb recall).
+                if (IsBuriedSceneAction(last))
+                {
+                    string buried = last;
+                    options.Add(new ContextMenuPanel.Option(
+                        VPBTranslation.T("ctx.repeat_prefix", "Repeat: ") + SceneActionLabel(buried),
+                        VPBTranslation.T("ctx.repeat_sub", "Last used · Alt/Ctrl+drop skips menu"),
+                        () =>
+                        {
+                            ContextMenuPanel.RememberSceneAction(buried);
+                            TryRunLastSceneAction(capturedEntry, atom);
+                        },
+                        ContextMenuPanel.OptionKind.Primary));
+                }
+
+                // Load Scene — one click (subtitle warns). No confirm page.
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.scene.load", "Load Scene"),
+                    VPBTranslation.T("ctx.scene.load_sub", "Replaces the current scene"),
+                    () =>
+                    {
+                        ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.Load);
+                        LoadSceneFile(sceneUid);
+                    },
+                    KindForSceneAction(ContextMenuPanel.SceneActionId.Load, last)));
+
+                options.Add(ContextMenuPanel.Option.Section(
+                    VPBTranslation.T("ctx.scene.add_section", "Add to scene")));
+
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.scene.add_persons", "Persons only"),
+                    VPBTranslation.T("ctx.scene.add_persons_sub", "Merge Person atoms · skip props & lights"),
+                    () =>
+                    {
+                        ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.Persons);
+                        MergeSceneFile(sceneUid, UI.SceneAddMode.PersonsOnly, false);
+                    },
+                    KindForSceneAction(ContextMenuPanel.SceneActionId.Persons, last)));
+
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.scene.add_props", "Props & environment"),
+                    VPBTranslation.T("ctx.scene.add_props_sub", "Lights, props, CUAs · skip persons"),
+                    () =>
+                    {
+                        ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.Props);
+                        MergeSceneFile(sceneUid, UI.SceneAddMode.NonPersons, false);
+                    },
+                    KindForSceneAction(ContextMenuPanel.SceneActionId.Props, last)));
+
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.scene.more", "More options"),
+                    VPBTranslation.T("ctx.scene.more_sub", "Place near me · pick atoms · advanced merge"),
+                    () =>
+                    {
+                        Atom t = ResolveImportTargetAtom(atom);
+                        ContextMenuPanel.Instance.PushPage(
+                            VPBTranslation.T("ctx.scene.more_title", "More options"),
+                            BuildAddToSceneMoreOptions(capturedEntry, t));
+                    },
+                    ContextMenuPanel.OptionKind.Normal,
+                    isSubMenu: true));
+
+                if (SceneUtils.IsPersonLikeAtom(importTarget))
+                {
+                    Atom capturedTarget = importTarget;
+                    options.Add(ContextMenuPanel.Option.Section(
+                        VPBTranslation.T("ctx.scene.import_section", "Import")));
+
+                    options.Add(new ContextMenuPanel.Option(
+                        VPBTranslation.T("ctx.scene.import_person", "Onto selected person"),
+                        VPBTranslation.T("ctx.scene.import_person_sub", "Appearance, pose, plugins, clothing…"),
+                        () =>
+                        {
+                            ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.ImportPerson);
+                            OpenSceneImportSidebar(capturedEntry, capturedTarget);
+                        },
+                        KindForSceneAction(ContextMenuPanel.SceneActionId.ImportPerson, last)));
+                }
             }
             else if (type == ItemType.Appearance)
             {
-                options.Add(new ContextMenuPanel.Option("Spawn Person Appearance", () => {
-                    try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
-                    Vector3 pos = position;
-                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, "replace"));
-                }));
+                FileEntry capturedEntry = entry;
+                Vector3 pos = position;
+                string last = ContextMenuPanel.GetLastAppearanceAction();
+                Atom selected = ResolveImportTargetAtom(atom);
 
-                options.Add(new ContextMenuPanel.Option("Spawn With Collisions Disabled", () => {
-                    try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
-                    Vector3 pos = position;
-                    StartCoroutine(CreatePersonAndApplyAppearance(entry, pos, "replace", true));
-                }));
+                // Near-miss: drop missed person but selection is person-like.
+                if (SceneUtils.IsPersonLikeAtom(selected)
+                    && (atom == null || !SceneUtils.IsPersonLikeAtom(atom)))
+                {
+                    Atom applyTarget = selected;
+                    string name = applyTarget != null ? applyTarget.name : "person";
+                    bool applyPrimary = last == ContextMenuPanel.AppearanceActionId.ApplySelected
+                        || string.IsNullOrEmpty(last);
+
+                    options.Add(new ContextMenuPanel.Option(
+                        VPBTranslation.T("ctx.appearance.apply_selected", "Apply to selected"),
+                        string.Format(
+                            VPBTranslation.T("ctx.appearance.apply_selected_sub", "Target: {0}"),
+                            name),
+                        () =>
+                        {
+                            ContextMenuPanel.RememberAppearanceAction(ContextMenuPanel.AppearanceActionId.ApplySelected);
+                            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(capturedEntry), "appearance"); } catch { }
+                            ApplyClothingToAtom(applyTarget, capturedEntry.Uid, null);
+                        },
+                        applyPrimary ? ContextMenuPanel.OptionKind.Primary : ContextMenuPanel.OptionKind.Normal));
+                }
+
+                bool spawnPrimary = last == ContextMenuPanel.AppearanceActionId.Spawn
+                    || (string.IsNullOrEmpty(last) && options.Count == 0);
+                bool noCollidePrimary = last == ContextMenuPanel.AppearanceActionId.SpawnNoCollide;
+
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.appearance.spawn", "Spawn Person Appearance"),
+                    VPBTranslation.T("ctx.appearance.spawn_sub", "New person at drop point"),
+                    () =>
+                    {
+                        ContextMenuPanel.RememberAppearanceAction(ContextMenuPanel.AppearanceActionId.Spawn);
+                        try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
+                        StartCoroutine(CreatePersonAndApplyAppearance(capturedEntry, pos, "replace", false));
+                    },
+                    spawnPrimary ? ContextMenuPanel.OptionKind.Primary : ContextMenuPanel.OptionKind.Normal));
+
+                options.Add(new ContextMenuPanel.Option(
+                    VPBTranslation.T("ctx.appearance.spawn_nocollide", "Spawn · collisions off"),
+                    VPBTranslation.T("ctx.appearance.spawn_nocollide_sub", "Same spawn with collision disabled"),
+                    () =>
+                    {
+                        ContextMenuPanel.RememberAppearanceAction(ContextMenuPanel.AppearanceActionId.SpawnNoCollide);
+                        try { if (ContextMenuPanel.Instance != null) ContextMenuPanel.Instance.Hide(); } catch { }
+                        StartCoroutine(CreatePersonAndApplyAppearance(capturedEntry, pos, "replace", true));
+                    },
+                    noCollidePrimary ? ContextMenuPanel.OptionKind.Primary : ContextMenuPanel.OptionKind.Quiet));
             }
-            
+
             if (options.Count > 0)
             {
                 string title = entry != null ? entry.Name : "Menu";
                 if (entry is VarFileEntry vfe && vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Creator))
                 {
-                    title += "\n<color=#aaaaaa><size=18>by " + vfe.Package.Creator + "</size></color>";
+                    title += "\n<color=#9aa3ad><size=14>by " + vfe.Package.Creator + "</size></color>";
+                }
+                string stickyHint = type == ItemType.Scene
+                    ? ContextMenuPanel.GetLastSceneAction()
+                    : ContextMenuPanel.GetLastAppearanceAction();
+                if (!string.IsNullOrEmpty(stickyHint))
+                {
+                    title += "\n<color=#9aa3ad><size=14>"
+                        + VPBTranslation.T("ctx.skip_hint", "Alt/Ctrl+drop = repeat last")
+                        + "</size></color>";
                 }
                 ContextMenuPanel.Instance.Show(position, options, title);
             }
@@ -390,6 +667,110 @@ namespace VPB
                 if (type == ItemType.Scene) LoadSceneFile(entry.Uid);
                 else if (atom != null) ApplyClothingToAtom(atom, entry.Uid);
             }
+        }
+
+        private Atom ResolveImportTargetAtom(Atom dropAtom)
+        {
+            if (SceneUtils.IsPersonLikeAtom(dropAtom))
+                return dropAtom;
+            if (Panel == null) return null;
+            try
+            {
+                Atom sel = Panel.SelectedTargetAtom;
+                if (SceneUtils.IsPersonLikeAtom(sel))
+                    return sel;
+            }
+            catch { }
+            return null;
+        }
+
+        private List<ContextMenuPanel.Option> BuildAddToSceneMoreOptions(FileEntry entry, Atom importTarget)
+        {
+            List<ContextMenuPanel.Option> addOpts = new List<ContextMenuPanel.Option>(10);
+            FileEntry captured = entry;
+            string uid = entry != null ? entry.Uid : null;
+            string last = ContextMenuPanel.GetLastSceneAction();
+
+            addOpts.Add(ContextMenuPanel.Option.Section(
+                VPBTranslation.T("ctx.scene.place_section", "Place near me")));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.persons_near", "Persons near me"),
+                VPBTranslation.T("ctx.scene.persons_near_sub", "Persons only, then move in front of you"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.PersonsNear);
+                    MergeSceneFile(uid, UI.SceneAddMode.PersonsOnly, true);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.PersonsNear, last)));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.props_near", "Props near me"),
+                VPBTranslation.T("ctx.scene.props_near_sub", "Props & environment, then move in front of you"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.PropsNear);
+                    MergeSceneFile(uid, UI.SceneAddMode.NonPersons, true);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.PropsNear, last)));
+
+            addOpts.Add(ContextMenuPanel.Option.Section(
+                VPBTranslation.T("ctx.scene.tools_section", "Tools")));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.pick_atoms", "Pick atoms…"),
+                VPBTranslation.T("ctx.scene.pick_atoms_sub", "Scene Import → Atoms checklist"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.PickAtoms);
+                    OpenSceneImportSidebar(captured, importTarget, VpbResourceType.Atoms);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.PickAtoms, last)));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.import_open", "Open Scene Import"),
+                VPBTranslation.T("ctx.scene.import_open_sub", "Full import sidebar for this scene"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.ImportOpen);
+                    OpenSceneImportSidebar(captured, importTarget);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.ImportOpen, last)));
+
+            addOpts.Add(ContextMenuPanel.Option.Section(
+                VPBTranslation.T("ctx.scene.advanced", "Advanced")));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.merge_filter", "Merge load (no persons)"),
+                VPBTranslation.T("ctx.scene.merge_filter_sub", "VaM filtered merge — may blank view"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.MergeFilter);
+                    MergeSceneFile(uid, UI.SceneAddMode.NonPersonsMergeLoad, false);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.MergeFilter, last)));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.merge_full", "Entire scene"),
+                VPBTranslation.T("ctx.scene.merge_full_sub", "Full LoadMerge · persons + everything"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.FullMerge);
+                    MergeSceneFile(uid, UI.SceneAddMode.FullMerge, false);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.FullMerge, last)));
+
+            addOpts.Add(new ContextMenuPanel.Option(
+                VPBTranslation.T("ctx.scene.merge_full_near", "Entire scene near me"),
+                VPBTranslation.T("ctx.scene.merge_full_near_sub", "Full merge, then move new atoms to you"),
+                () =>
+                {
+                    ContextMenuPanel.RememberSceneAction(ContextMenuPanel.SceneActionId.FullMergeNear);
+                    MergeSceneFile(uid, UI.SceneAddMode.FullMerge, true);
+                },
+                KindForSceneAction(ContextMenuPanel.SceneActionId.FullMergeNear, last)));
+
+            return addOpts;
         }
 
         private IEnumerator CreatePersonAndApplyAppearance(FileEntry entry, Vector3 position, string clothingMode, bool disableCollisions = false)

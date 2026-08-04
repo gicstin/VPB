@@ -761,23 +761,97 @@ namespace VPB
             }
         }
 
+        /// <summary>
+        /// How scene atoms are added into the live scene from the floating context menu.
+        /// </summary>
+        public enum SceneAddMode
+        {
+            /// <summary>VaM LoadMerge of the whole scene (persons + everything). Heavy; may blank view.</summary>
+            FullMerge = 0,
+            /// <summary>Spawn non-Person atoms via SceneAtomImporter (preferred). Falls back to filtered LoadMerge.</summary>
+            NonPersons = 1,
+            /// <summary>Filtered LoadMerge excluding Person-like atoms (includes free-standing CUAs).</summary>
+            NonPersonsMergeLoad = 2,
+            /// <summary>Filtered LoadMerge of Person-like atoms only (unique ids).</summary>
+            PersonsOnly = 3
+        }
+
         public static void MergeSceneFile(FileEntry entry, string path, GalleryPanel panel, bool atPlayer, UIDraggableItem dragger = null)
+        {
+            MergeSceneFile(entry, path, panel, SceneAddMode.FullMerge, atPlayer, dragger);
+        }
+
+        public static void MergeSceneFile(
+            FileEntry entry,
+            string path,
+            GalleryPanel panel,
+            SceneAddMode mode,
+            bool atPlayer,
+            UIDraggableItem dragger = null)
         {
             if (entry == null && string.IsNullOrEmpty(path)) return;
             if (!TryBeginSceneLoadThrottle())
             {
                 LogUtil.LogWarning("[VPB] UI.MergeSceneFile ignored (throttled)");
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.throttled", "Merge ignored (too soon)."));
                 return;
             }
             if (Messager.singleton == null)
             {
                 LogUtil.LogWarning("[VPB] Messager.singleton is null, cannot start merge scene coroutine");
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.no_messager", "Cannot merge — messager unavailable."));
                 return;
             }
-            Messager.singleton.StartCoroutine(MergeSceneFileRoutine(entry, path, panel, atPlayer, dragger));
+            Messager.singleton.StartCoroutine(MergeSceneFileRoutine(entry, path, panel, mode, atPlayer, dragger));
         }
 
-        private static IEnumerator MergeSceneFileRoutine(FileEntry entry, string path, GalleryPanel panel, bool atPlayer, UIDraggableItem dragger)
+        private static void StatusBrief(GalleryPanel panel, string msg)
+        {
+            if (panel == null || string.IsNullOrEmpty(msg)) return;
+            try { panel.ShowTemporaryStatus(msg, 2.5f); } catch { }
+        }
+
+        private static string ResolveSceneHostUid(FileEntry entry)
+        {
+            if (entry == null) return null;
+            try
+            {
+                if (entry is VarFileEntry vfe)
+                {
+                    string uid = vfe.GetRowPackageUid();
+                    if (!string.IsNullOrEmpty(uid)) return uid;
+                    if (vfe.Package != null && !string.IsNullOrEmpty(vfe.Package.Uid))
+                        return vfe.Package.Uid;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static string FindFirstPersonAtomId(JSONClass scene)
+        {
+            if (scene == null) return null;
+            JSONArray atoms = scene["atoms"] != null ? scene["atoms"].AsArray : null;
+            if (atoms == null) return null;
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                JSONClass a = atoms[i] != null ? atoms[i].AsObject : null;
+                if (a == null) continue;
+                string type = a["type"] != null ? a["type"].Value : null;
+                if (!SceneUtils.IsPersonLikeAtomType(type)) continue;
+                if (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
+                    return a["id"].Value;
+            }
+            return null;
+        }
+
+        private static IEnumerator MergeSceneFileRoutine(
+            FileEntry entry,
+            string path,
+            GalleryPanel panel,
+            SceneAddMode mode,
+            bool atPlayer,
+            UIDraggableItem dragger)
         {
             if (entry == null && !string.IsNullOrEmpty(path))
             {
@@ -786,10 +860,12 @@ namespace VPB
             if (entry == null)
             {
                 LogUtil.LogError("[VPB] MergeSceneFile: no FileEntry for " + path);
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.no_entry", "Merge failed — file not found."));
                 yield break;
             }
 
-            LogUtil.Log("[VPB] MergeSceneFile started: " + path + " (atPlayer: " + atPlayer + ")");
+            LogUtil.Log("[VPB] MergeSceneFile started: " + path
+                + " mode=" + mode + " atPlayer=" + atPlayer);
             try
             {
                 if (!LogUtil.IsSceneClickActive())
@@ -797,7 +873,8 @@ namespace VPB
             }
             catch { }
 
-            try { VpbProgressService.BeginSceneLoadPrep(SceneLoadBannerName(entry), "Merging"); } catch { }
+            string bannerPhase = mode == SceneAddMode.FullMerge ? "Merging" : "Adding";
+            try { VpbProgressService.BeginSceneLoadPrep(SceneLoadBannerName(entry), bannerPhase); } catch { }
             yield return null;
 
             var prep = new SceneLoadPrepOutcome();
@@ -814,6 +891,7 @@ namespace VPB
             if (!prep.Success || string.IsNullOrEmpty(prep.NormalizedPath))
             {
                 EndSceneLoadBanner();
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.prep_failed", "Merge failed — prep unsuccessful."));
                 yield break;
             }
 
@@ -826,13 +904,66 @@ namespace VPB
                     atomsBefore = new HashSet<string>();
                     foreach (Atom a in sc.GetAtoms())
                     {
-                        if (a != null) atomsBefore.Add(a.uid);
+                        if (a != null && !string.IsNullOrEmpty(a.uid))
+                            atomsBefore.Add(a.uid);
                     }
                 }
             }
 
+            Atom placeTarget = null;
+            if (panel != null)
+            {
+                try
+                {
+                    Atom t = panel.SelectedTargetAtom;
+                    if (SceneUtils.IsPersonLikeAtom(t)) placeTarget = t;
+                }
+                catch { }
+            }
+
+            if (mode == SceneAddMode.NonPersons)
+            {
+                yield return AddNonPersonAtomsRoutine(
+                    entry, prep.NormalizedPath, panel, placeTarget, atPlayer, atomsBefore, dragger);
+                yield break;
+            }
+
+            string loadPath = prep.NormalizedPath;
+            if (mode == SceneAddMode.NonPersonsMergeLoad || mode == SceneAddMode.PersonsOnly)
+            {
+                bool personsOnly = mode == SceneAddMode.PersonsOnly;
+                try
+                {
+                    VpbProgressService.ReportSceneLoadPrepPhase(
+                        personsOnly ? "Filtering to persons" : "Filtering persons out");
+                }
+                catch { }
+                yield return null;
+
+                string filtered = SceneLoadingUtils.CreateFilteredSceneJSON(
+                    prep.NormalizedPath,
+                    entry,
+                    atom =>
+                    {
+                        if (atom == null || atom["type"] == null) return false;
+                        bool isPerson = SceneUtils.IsPersonLikeAtomType(atom["type"].Value);
+                        return personsOnly ? isPerson : !isPerson;
+                    },
+                    ensureUniqueIds: true);
+
+                if (string.IsNullOrEmpty(filtered))
+                {
+                    EndSceneLoadBanner();
+                    StatusBrief(panel, personsOnly
+                        ? VPBTranslation.T("ctx.merge.no_persons", "No person atoms to add.")
+                        : VPBTranslation.T("ctx.merge.no_nonpersons", "No non-person atoms to add."));
+                    yield break;
+                }
+                loadPath = NormalizePath(filtered);
+            }
+
             yield return InvokeSceneLoadCoroutine(
-                prep.NormalizedPath,
+                loadPath,
                 merge: true,
                 cleanupState: null,
                 collapseGalleryPanels: false,
@@ -844,6 +975,188 @@ namespace VPB
                     panel.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
                 else
                     dragger.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
+            }
+
+            if (mode == SceneAddMode.FullMerge)
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.full_done", "Scene merge started."));
+            else if (mode == SceneAddMode.PersonsOnly)
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.persons_done", "Person merge started."));
+            else
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.nonpersons_done", "Non-person merge started."));
+        }
+
+        /// <summary>
+        /// Preferred add path: spawn non-Person atoms without VaM LoadMerge overlay.
+        /// Falls back to filtered LoadMerge when importer finds nothing but JSON has atoms
+        /// (e.g. only free-standing CUAs with no person target).
+        /// </summary>
+        private static IEnumerator AddNonPersonAtomsRoutine(
+            FileEntry entry,
+            string normalizedPath,
+            GalleryPanel panel,
+            Atom placeTarget,
+            bool atPlayer,
+            HashSet<string> atomsBefore,
+            UIDraggableItem dragger)
+        {
+            try { VpbProgressService.ReportSceneLoadPrepPhase("Reading scene atoms"); } catch { }
+            yield return null;
+
+            JSONNode root = null;
+            try { root = LoadJSONWithFallback(normalizedPath, entry); }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] AddNonPersonAtoms: JSON load failed: " + ex.Message);
+            }
+            yield return null;
+
+            JSONClass scene = root != null ? root.AsObject : null;
+            if (scene == null)
+            {
+                EndSceneLoadBanner();
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.read_failed", "Could not read scene JSON."));
+                yield break;
+            }
+
+            JSONArray atoms = scene["atoms"] != null ? scene["atoms"].AsArray : null;
+            if (atoms == null || atoms.Count == 0)
+            {
+                EndSceneLoadBanner();
+                StatusBrief(panel, VPBTranslation.T("ctx.merge.empty_scene", "Scene has no atoms."));
+                yield break;
+            }
+
+            HashSet<string> selectedIds = new HashSet<string>(StringComparer.Ordinal);
+            int nonPersonCount = 0;
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                JSONClass a = atoms[i] != null ? atoms[i].AsObject : null;
+                if (a == null) continue;
+                string type = a["type"] != null ? a["type"].Value : string.Empty;
+                if (SceneUtils.IsPersonLikeAtomType(type)) continue;
+                nonPersonCount++;
+                string id = (a["id"] != null && !string.IsNullOrEmpty(a["id"].Value))
+                    ? a["id"].Value
+                    : (type + "_" + i);
+                selectedIds.Add(id);
+            }
+
+            if (selectedIds.Count == 0)
+            {
+                EndSceneLoadBanner();
+                StatusBrief(panel, VPBTranslation.T(
+                    "ctx.merge.no_nonpersons",
+                    "No non-person atoms to add."));
+                yield break;
+            }
+
+            string hostUid = ResolveSceneHostUid(entry);
+            string sourcePersonId = FindFirstPersonAtomId(scene);
+            bool relative = placeTarget != null;
+
+            if (atomsBefore == null && atPlayer)
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc != null)
+                {
+                    atomsBefore = new HashSet<string>();
+                    foreach (Atom a in sc.GetAtoms())
+                    {
+                        if (a != null && !string.IsNullOrEmpty(a.uid))
+                            atomsBefore.Add(a.uid);
+                    }
+                }
+            }
+
+            try { VpbProgressService.ReportSceneLoadPrepPhase("Spawning atoms"); } catch { }
+            yield return null;
+
+            int beforeCount = 0;
+            try
+            {
+                SuperController scBefore = SuperController.singleton;
+                if (scBefore != null)
+                {
+                    foreach (Atom _ in scBefore.GetAtoms())
+                        beforeCount++;
+                }
+            }
+            catch { }
+
+            yield return global::VPB.src.util.SceneAtomImporter.ImportSelectedAtoms(
+                scene,
+                sourcePersonId,
+                placeTarget,
+                hostUid,
+                selectedIds,
+                relative,
+                skipExistingInScene: true);
+
+            int afterCount = beforeCount;
+            try
+            {
+                SuperController scAfter = SuperController.singleton;
+                if (scAfter != null)
+                {
+                    afterCount = 0;
+                    foreach (Atom _ in scAfter.GetAtoms())
+                        afterCount++;
+                }
+            }
+            catch { }
+
+            int spawned = afterCount - beforeCount;
+            if (spawned <= 0 && nonPersonCount > 0)
+            {
+                // Importer skipped CUAs / nothing new — fall back to filtered LoadMerge.
+                LogUtil.Log("[VPB] AddNonPersonAtoms: importer spawned 0; falling back to filtered LoadMerge");
+                string filtered = SceneLoadingUtils.CreateFilteredSceneJSON(
+                    normalizedPath,
+                    entry,
+                    atom => atom != null
+                        && atom["type"] != null
+                        && !SceneUtils.IsPersonLikeAtomType(atom["type"].Value),
+                    ensureUniqueIds: true);
+                if (string.IsNullOrEmpty(filtered))
+                {
+                    EndSceneLoadBanner();
+                    StatusBrief(panel, VPBTranslation.T(
+                        "ctx.merge.nothing_new",
+                        "Nothing new to add (duplicates skipped)."));
+                    yield break;
+                }
+
+                yield return InvokeSceneLoadCoroutine(
+                    NormalizePath(filtered),
+                    merge: true,
+                    cleanupState: null,
+                    collapseGalleryPanels: false,
+                    deferOneFrameBeforeLoad: true);
+            }
+            else
+            {
+                EndSceneLoadBanner();
+            }
+
+            if (atPlayer && atomsBefore != null && dragger != null)
+            {
+                if (panel != null)
+                    panel.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
+                else
+                    dragger.StartCoroutine(dragger.RunTeleportMergedAtomsToPlayer(atomsBefore));
+            }
+
+            if (spawned > 0)
+            {
+                StatusBrief(panel, string.Format(
+                    VPBTranslation.T("ctx.merge.added_n", "Added {0} atom(s)."),
+                    spawned));
+            }
+            else
+            {
+                StatusBrief(panel, VPBTranslation.T(
+                    "ctx.merge.nonpersons_done",
+                    "Non-person merge started."));
             }
         }
 

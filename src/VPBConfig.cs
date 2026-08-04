@@ -239,6 +239,10 @@ namespace VPB
                 RequireDragHoldBeforeMove = true;
         }
         public string ApplyMode = "DoubleClick";
+        /// <summary>Last scene-drop context action id (ContextMenuPanel.SceneActionId). Sticky primary / Alt-skip.</summary>
+        public string LastContextSceneAction = "";
+        /// <summary>Last appearance-drop context action id (ContextMenuPanel.AppearanceActionId). Sticky primary / Alt-skip.</summary>
+        public string LastContextAppearanceAction = "";
         public string LastGalleryCategory = "";
         /// <summary>Gallery footer performance tuning (hair + mirrors) enabled.</summary>
         public bool PerfModeEnabled = false;
@@ -1032,6 +1036,8 @@ namespace VPB
             RequireDragHoldBeforeMove = false;
             DragHoldThreshold = 0.5f;
             ApplyMode = "DoubleClick";
+            LastContextSceneAction = "";
+            LastContextAppearanceAction = "";
             LastGalleryCategory = "";
             PerfModeEnabled = false;
             PerfStepIndex = 0;
@@ -1261,6 +1267,8 @@ namespace VPB
                         if (node["RequireDragHoldBeforeMove"] != null)
                             RequireDragHoldBeforeMove = node["RequireDragHoldBeforeMove"].AsBool;
                         if (node["ApplyMode"] != null) ApplyMode = node["ApplyMode"].Value;
+                        if (node["LastContextSceneAction"] != null) LastContextSceneAction = node["LastContextSceneAction"].Value ?? "";
+                        if (node["LastContextAppearanceAction"] != null) LastContextAppearanceAction = node["LastContextAppearanceAction"].Value ?? "";
                         if (node["LastGalleryCategory"] != null) LastGalleryCategory = node["LastGalleryCategory"].Value;
                         bool hadPerfModeKey = node["PerfModeEnabled"] != null;
                         bool hadPerfStepKey = node["PerfStepIndex"] != null;
@@ -1745,6 +1753,8 @@ namespace VPB
                 node["RequireDragHoldBeforeMove"].AsBool = RequireDragHoldBeforeMove;
                 node["DragHoldThreshold"].AsFloat = DragHoldThreshold;
                 node["ApplyMode"] = ApplyMode;
+                node["LastContextSceneAction"] = LastContextSceneAction ?? "";
+                node["LastContextAppearanceAction"] = LastContextAppearanceAction ?? "";
                 node["LastGalleryCategory"] = LastGalleryCategory;
                 PerfStepIndex = ClampPerfStepIndex(PerfStepIndex);
                 PerfStepScaleVersion = VpbPerfController.PerfStepScaleVersion;

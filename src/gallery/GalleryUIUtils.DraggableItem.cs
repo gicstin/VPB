@@ -93,7 +93,6 @@ namespace VPB
 
         private static Dictionary<string, HashSet<string>> _globalRegionCache = new Dictionary<string, HashSet<string>>();
         private const int GlobalRegionCacheMaxEntries = 1024;
-        private static string _lastAppearanceClothingMode = "keep";
 
         /// <summary>Drop clothing/hair region L1 cache (package refresh / soak-test bound).</summary>
         public static void ClearGlobalRegionCache()
@@ -425,26 +424,35 @@ namespace VPB
                     string msg;
                     float dist;
                     Atom atom = DetectAtom(eventData, out msg, out dist);
-                    if (atom != null && FileEntry != null)
-                    {
-                        // Calculate Drop Position
-                        Vector3 dropPos = transform.position;
-                        Camera cam = dragCam;
-                        if (cam == null) cam = Camera.main;
-                        if (cam != null)
-                        {
-                            Ray ray = cam.ScreenPointToRay(eventData.position);
-                            dropPos = ray.GetPoint(dist);
-                        }
 
-                        // Special case: dropping an Appearance preset onto an existing Person atom should
-                        // apply to that person (instead of spawning a new person).
-                        if (itemType == ItemType.Appearance && atom.type == "Person")
+                    Vector3 dropPos = transform.position;
+                    Camera cam = dragCam;
+                    if (cam == null) cam = Camera.main;
+                    if (cam != null)
+                    {
+                        Ray ray = cam.ScreenPointToRay(eventData.position);
+                        dropPos = ray.GetPoint(dist);
+                    }
+
+                    ItemType itemTypeForDrop = itemType;
+
+                    // Appearance on person-like → apply (fast path). Empty / non-person → context menu
+                    // (spawn / apply-to-selected). Fixes empty-space appearance drops never opening menu.
+                    if (itemTypeForDrop == ItemType.Appearance && FileEntry != null)
+                    {
+                        if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
                         {
                             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }
                             ApplyClothingToAtom(atom, FileEntry.Uid, null);
                         }
-                        else if (IsAmbiguousDrop(atom, FileEntry))
+                        else
+                        {
+                            HandleDropWithContext(atom, FileEntry, dropPos);
+                        }
+                    }
+                    else if (atom != null && FileEntry != null)
+                    {
+                        if (IsAmbiguousDrop(atom, FileEntry))
                         {
                             HandleDropWithContext(atom, FileEntry, dropPos);
                         }
@@ -453,7 +461,7 @@ namespace VPB
                             string kind = "item";
                             try
                             {
-                                switch (itemType)
+                                switch (itemTypeForDrop)
                                 {
                                     case ItemType.Clothing: kind = "clothing"; break;
                                     case ItemType.Hair: kind = "hair"; break;
@@ -1966,12 +1974,17 @@ namespace VPB
 
         public void MergeSceneFile(string path, bool atPlayer = false)
         {
+            MergeSceneFile(path, UI.SceneAddMode.FullMerge, atPlayer);
+        }
+
+        public void MergeSceneFile(string path, UI.SceneAddMode mode, bool atPlayer = false)
+        {
             try
             {
                 FileEntry entryForPath = null;
                 try { entryForPath = VPB.FileManager.GetFileEntry(path); } catch { }
                 if (entryForPath == null) entryForPath = FileEntry;
-                UI.MergeSceneFile(entryForPath, path, Panel, atPlayer, this);
+                UI.MergeSceneFile(entryForPath, path, Panel, mode, atPlayer, this);
             }
             catch (Exception ex)
             {

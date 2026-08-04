@@ -179,10 +179,34 @@ namespace VPB
 
         public void OpenImportSidebarWith(FileEntry sourceFile, Atom targetAtom)
         {
+            OpenImportSidebarWithCore(sourceFile, targetAtom, VpbResourceType.Appearance, false);
+        }
+
+        /// <summary>
+        /// Open Scene Import focused on a resource type (e.g. Atoms from floating menu).
+        /// </summary>
+        internal void OpenImportSidebarWith(FileEntry sourceFile, Atom targetAtom, VpbResourceType preferredType)
+        {
+            OpenImportSidebarWithCore(sourceFile, targetAtom, preferredType, true);
+        }
+
+        private void OpenImportSidebarWithCore(
+            FileEntry sourceFile,
+            Atom targetAtom,
+            VpbResourceType preferredType,
+            bool applyPreferredType)
+        {
             importSidebarOpenIntent = true;
             importSidebarOpenIntentLoaded = true;
             RefreshImportSidebarCategoryGate();
             PersistImportSidebarOpenIntent();
+
+            if (applyPreferredType)
+            {
+                importSidebarPresetType = preferredType;
+                importSidebarMultiSelectedTypes.Clear();
+                importSidebarMultiSelectedTypes.Add(preferredType);
+            }
 
             if (sourceFile != null)
             {
@@ -193,6 +217,15 @@ namespace VPB
                 importSidebarTargetAtom = targetAtom;
                 RefreshTargetSelectionVisual();
                 RefreshApplyButtonEnabled();
+            }
+
+            if (applyPreferredType && importSidebarBuilt && importSidebarActive)
+            {
+                try { OnImportSidebarTypeChosen(preferredType, false); }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("[VPB import] preferred type apply failed: " + ex.Message);
+                }
             }
         }
 
