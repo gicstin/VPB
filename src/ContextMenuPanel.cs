@@ -76,9 +76,11 @@ namespace VPB
             
             if (SuperController.singleton != null)
                 SuperController.singleton.AddCanvas(canvas);
-            
+
+            // Meters-per-pixel lives on the menu root (see EnsurePlayerUiSpace). Canvas stays
+            // a child at identity scale so Show() pose/rotation always drive the visible panel.
             RectTransform canvasRT = canvasGO.GetComponent<RectTransform>();
-            VpbWorldSpaceUiScale.ApplyConstantWorldScale(canvasRT); // Independent of VaM worldScale (native HUD pattern)
+            canvasRT.localScale = Vector3.one;
             
             // Create Panel
             GameObject panelGO = new GameObject("Panel");
@@ -107,6 +109,38 @@ namespace VPB
 
             // Start hidden — canvas must only become visible via Show()
             canvasGO.SetActive(false);
+        }
+
+        /// <summary>
+        /// Keep canvas under this root, then parent the root into unscaled player HUD space
+        /// (same as floating gallery). #81 attached the canvas alone while Show() rotated the
+        /// orphan root — menu inherited mainHUD facing (away from user) and ignored laser hits
+        /// via GraphicRaycaster.ignoreReversedGraphics (#85).
+        /// </summary>
+        private void EnsurePlayerUiSpace()
+        {
+            if (canvasGO != null)
+            {
+                Transform canvasTf = canvasGO.transform;
+                if (canvasTf.parent != transform)
+                {
+                    canvasTf.SetParent(transform, false);
+                    canvasTf.localPosition = Vector3.zero;
+                    canvasTf.localRotation = Quaternion.identity;
+                    canvasTf.localScale = Vector3.one;
+                }
+                else
+                {
+                    Vector3 ls = canvasTf.localScale;
+                    if (Mathf.Abs(ls.x - 1f) > 1e-6f || Mathf.Abs(ls.y - 1f) > 1e-6f || Mathf.Abs(ls.z - 1f) > 1e-6f)
+                        canvasTf.localScale = Vector3.one;
+                }
+            }
+
+            VpbWorldSpaceUiScale.ApplyConstantWorldScale(transform);
+
+            if (canvasGO != null)
+                canvasGO.layer = gameObject.layer;
         }
         
         void OnDestroy()
@@ -234,21 +268,22 @@ namespace VPB
                 position = camTrans.position + dir.normalized * dist;
             }
 
+            // Attach root (not canvas) into HUD space, then pose — canvas must remain a child
+            // so LookRotation on this transform faces the readable UI toward the eye.
+            EnsurePlayerUiSpace();
             transform.position = position;
-            if (canvasGO != null)
-            {
-                VpbWorldSpaceUiScale.ApplyConstantWorldScale(canvasGO.transform);
-                canvasGO.SetActive(true);
-            }
-            
-            // Face camera directly
+
+            // Face camera: canvas normal points away from eye (VaM WorldSpace UI convention).
             if (camTrans != null)
             {
                 Vector3 lookPos = transform.position - camTrans.position;
-                if (lookPos != Vector3.zero)
+                if (lookPos.sqrMagnitude > 0.0001f)
                     transform.rotation = Quaternion.LookRotation(lookPos, Vector3.up);
             }
-            
+
+            if (canvasGO != null)
+                canvasGO.SetActive(true);
+
             // Ensure main object is active
             gameObject.SetActive(true);
         }

@@ -98,7 +98,10 @@ namespace VPB
             tf.localScale = new Vector3(s, s, s);
         }
 
-        /// <summary>Legacy entry: attach + scale (WorldSpace floating gallery / context menu).</summary>
+        /// <summary>
+        /// Attach + meters-per-pixel scale. Pass the transform that owns world pose
+        /// (gallery canvas, or context-menu root — never a child while parent is rotated).
+        /// </summary>
         public static void ApplyConstantWorldScale(Transform tf)
         {
             AttachToPlayerUiSpace(tf);
