@@ -1828,19 +1828,24 @@ namespace VPB
             StopCo(ref _appearanceLooseMergeCo);
             StopCo(ref _historyModeCountsCo);
             StopCo(ref _earlyMetaApplyCoroutine);
-            // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
-            // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
-            // don't pollute the new session. The coroutine's yield-return-null would be too late.
-            if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
-                CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
-            currentLoadingGroupId = Guid.NewGuid().ToString();
+            // Quiet background refresh keeps visible thumbs; do not cancel the active image group.
+            if (!_quietGalleryRefresh)
+            {
+                // Rotate the group ID here (synchronously) so that any in-flight thumbnail callbacks
+                // from the old category fail the capturedGroupId == currentLoadingGroupId guard and
+                // don't pollute the new session. The coroutine's yield-return-null would be too late.
+                if (!string.IsNullOrEmpty(currentLoadingGroupId) && CustomImageLoaderThreaded.singleton != null)
+                    CustomImageLoaderThreaded.singleton.CancelGroup(currentLoadingGroupId);
+                currentLoadingGroupId = Guid.NewGuid().ToString();
+            }
             unchecked { _deferredSubPaneSessionId++; }
             System.Threading.Interlocked.Increment(ref galleryFileRefreshSequence);
             StopCo(ref refreshCoroutine);
             StopCo(ref _refreshHistoryLightCo);
             _boundCategoryNavSessionForCurrentRefresh = _categoryTypeNavStopwatch != null ? _categoryTypeNavTargetSession : 0;
             _refreshFilesDebugSource = refreshDebugSource;
-            ShowLoadingOverlay(null);
+            if (!_quietGalleryRefresh)
+                ShowLoadingOverlay(null);
             refreshCoroutine = StartCoroutine(RefreshFilesRoutine(keepScroll, scrollToBottom));
         }
 
@@ -2904,7 +2909,8 @@ namespace VPB
                 : _pendingScrollRestore;
 
             // Configure grid immediately so it has correct dimensions even while loading
-            if (contentGO != null)
+            // Quiet mode: keep frozen display cells — SetItemCount(0) would blank the viewport.
+            if (!_quietGalleryRefresh && contentGO != null)
             {
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid != null)
@@ -4215,8 +4221,8 @@ namespace VPB
 
             if (swDeep != null) deepGbListCopyMs = swDeep.ElapsedMilliseconds;
 
-            // Setup Recycling Grid
-            if (contentGO != null)
+            // Setup Recycling Grid (skipped in quiet mode — keep frozen display cells bound to _quietDisplayFiles)
+            if (!_quietGalleryRefresh && contentGO != null)
             {
                 // RecyclingGridView is already initialized in Init.cs, but ensure we have it
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
@@ -4287,7 +4293,10 @@ namespace VPB
                 if (swDeep != null) deepGbSetItemMs = swDeep.ElapsedMilliseconds;
             }
             if (swDeep != null) deepAfterGridBindMs = swDeep.ElapsedMilliseconds;
-            try { UpdateEmptyGridState(); } catch { }
+            if (!_quietGalleryRefresh)
+            {
+                try { UpdateEmptyGridState(); } catch { }
+            }
 
             // Legacy nav/file buttons (non-recycling): destroy in slices so main thread yields between batches (VaM stays responsive).
             int legacyBtnCount = activeButtons.Count;
@@ -4364,11 +4373,12 @@ namespace VPB
             }
             // Worker thread builds creator/category counts during refresh — skip redundant main-thread VAR scans here (still allow user-tag cache).
             bool suppressSyncCreatorCategoryCaches = earlyMetaNeeded && !skipEarlyMetaThread;
-            UpdateLayout(!suppressSyncCreatorCategoryCaches, true);
+            if (!_quietGalleryRefresh)
+                UpdateLayout(!suppressSyncCreatorCategoryCaches, true);
             if (swDeep != null) deepUpdateLayoutMs = swDeep.ElapsedMilliseconds;
             LogGalleryCategoryTypeNavPhase("RefreshFilesRoutine_after_UpdateLayout");
             // Layout rebuild can clamp ScrollRect and undo the position we just set.
-            if (scrollRect != null && !scrollToBottom)
+            if (!_quietGalleryRefresh && scrollRect != null && !scrollToBottom)
             {
                 if (savedCenterItemIndex >= 0 && recyclingGrid != null)
                     recyclingGrid.ScrollToCenterItem(savedCenterItemIndex);
@@ -4415,16 +4425,20 @@ namespace VPB
 
             // Show() used UpdateTabsImpl(false) while this coroutine ran, so category/creator/tag side lists stay stale until here.
             // Defer one frame (same as first-load / Pose) so we do not block overlay hide; covers every category switch.
-            if (leftTabContainerGO != null || rightTabContainerGO != null)
-                _deferredGallerySideTabsCoroutine = StartCoroutine(DeferredGallerySideTabsAfterGridReady(navSessionForThisRun, _deferredSubPaneSessionId, tagParallelWaiterForThisRun, tagScanRefreshSeq));
+            // Quiet background randomize: skip — side tabs + hide follow-up would thrash the frozen grid.
+            if (!_quietGalleryRefresh)
+            {
+                if (leftTabContainerGO != null || rightTabContainerGO != null)
+                    _deferredGallerySideTabsCoroutine = StartCoroutine(DeferredGallerySideTabsAfterGridReady(navSessionForThisRun, _deferredSubPaneSessionId, tagParallelWaiterForThisRun, tagScanRefreshSeq));
 
-            // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
-            // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
-            StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
+                // Defer hide filtering until after the grid is visible (prescan .hide markers then filter in a coroutine).
+                // Always run follow-up: hide strip (unless sort needs hidden rows), then Hidden-only / AutoInstall-only narrowing, then re-sort.
+                StartCoroutine(PostFilesListHideAndSortFollowupRoutine(currentLoadingGroupId, keepScroll, scrollToBottom, savedScrollNormalizedPos));
+            }
             // (FileManager scan still in progress), schedule a single retry — but only
             // if no retry is already pending/running. This prevents an infinite refresh
             // loop where each retry finds uncached packages and spawns yet another retry.
-            if (skippedForNoCache[0] > 0 && !Gallery.IsSuppressed() && !_cacheRetryPending)
+            if (!_quietGalleryRefresh && skippedForNoCache[0] > 0 && !Gallery.IsSuppressed() && !_cacheRetryPending)
             {
                 if (LogGalleryRefreshDeepTiming)
                 {

@@ -1191,7 +1191,7 @@ namespace VPB
             );
             tboxDeleteBtn.name = "Tbox_Delete";
             TboxConfigureActionButtonFlex(tboxDeleteBtn, innerRowH, innerRowH, innerRowH); // square icon button
-            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes");
+            AddTooltip(tboxDeleteBtn, "gallery.tooltip.tbox_delete", "Move selected packages to DeletedPackages; local Saves/scene JSON (+ preview) to DeletedScenes. Delete / Backspace.");
             try
             {
                 var delIcon = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
@@ -1214,7 +1214,7 @@ namespace VPB
             );
             tboxRemoveHistoryBtn.name = "Tbox_RemoveHistory";
             TboxConfigureActionButtonFlex(tboxRemoveHistoryBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files)");
+            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files). Delete / Backspace. Ctrl+Z undoes within 5s.");
             try
             {
                 var rhIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.82f, 0.55f, 1f));
@@ -1237,7 +1237,7 @@ namespace VPB
             );
             tboxSelectAllBtn.name = "Tbox_SelectAll";
             TboxConfigureActionButtonFlex(tboxSelectAllBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxSelectAllBtn, "gallery.tooltip.select_all", "Select All");
+            AddTooltip(tboxSelectAllBtn, "gallery.tooltip.select_all", "Select all (Ctrl+A)");
             try
             {
                 var selectAllIcon = UI.LoadIconSprite("vpb_icons/select_all.png", new Color(0.78f, 0.78f, 0.78f, 1f));

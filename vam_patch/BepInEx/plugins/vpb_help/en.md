@@ -1,6 +1,6 @@
 # VBP Gallery Help
 
-Tip: open this panel with **?** on the title bar. Use the search box to find topics. Colored icon links in the text show a preview when you hover them.
+Tip: press **?** or **F1** to open **Hotkeys** (Esc closes). Title-bar help button opens the full searchable panel. Colored icon links in the text show a preview when you hover them.
 
 ## Filtering
 
@@ -31,7 +31,7 @@ Tap the **colored header bar** at the top of a side column to collapse that list
 - Empty draft: **Backspace** removes last chip. **ESC** closes search without clearing chips.
 - Bare words, tags, badges, loaded/starred, **AND** / **OR** / **IF** — full syntax in **Advanced search** (help nav).
 - **Side-column search** — filters only the **open list** (categories / creators / tags / paths), not the grid.
-- {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset.
+- {{icon:filter|Filter presets}} — funnel icon; save the current filter setup or load a saved preset. **Alt+F** toggles the **floating** presets window (detaches if needed; hide keeps float position). Top of list: **Save Preset** | **Edit Presets** | **Merge to New** on one row, then **Float as Window** (movable/resizable; pos/size remembered). Search presets by name; **sort** cycles Manual / A→Z / Z→A / Pinned first. Float chrome: **chevron** collapses body up to the title bar (title stays put) / expands; **X** closes and reattaches under the title chip; footer has **Undo** / **Redo**, **Remove Item Mode** (same as side rail), and **resize** (right). Title-bar funnel still toggles visibility. **Merge to New** enters select mode (2–6 presets); **Create** names the result from selected preset names joined with `+` (no name dialog) and builds a multi-filter preset — dice loads a random item from each member in order (e.g. clothing then pose), then restores your view. Side **Replace/Add** applies once per clothing/hair family when dice runs a merged set (later members stack). Pinned presets sit at the top of the list (separator before the rest). **Edit Presets** shows row **pin** (overflow quick-random under **…**), **inline rename**, and **delete** — delete asks for **Confirm / Cancel on the row** (Esc cancels; no separate dialog). Pin/rename/delete stay hidden while browsing. Dice **randomizes** without closing the list — hidden while **Edit**.
 - **Creator filter** (title bar) — multi-select authors to limit the **grid** (or **…** overflow when narrow). Rail {{icon:creator|Creator}} opens the **creator list**.
 - **Category** — title name/menu = **quick switch**; rail {{icon:category|Category}} opens the **full category list**.
 - **Source filter** — All, Local, or VAR packages.
@@ -224,7 +224,7 @@ A **tip strip** under the title bar shows basics until you dismiss it (×).
 
 ### Footer utilities
 - **U / R** — Undo / Redo
-- **Rdm** — load random item
+- **Rdm** — load random item from the **current** filtered view (not a saved preset; use Filter presets dice for that)
 - {{icon:hub|Hub}} — Hub browse panel
 - **M** — VaM menu gate; hide gallery when VaM menu is closed
 - **H** — show hidden packages
@@ -253,17 +253,39 @@ Use {{icon:undo|Undo}} / **Redo** in the footer after supported edits.
 
 ## Hotkeys
 
-Change defaults in **Settings → Hotkeys**:
+Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** closes this panel. Change the show/hide gallery key in **Settings → Hotkeys**.
 
-- **Ctrl+V** — show / hide gallery
-- **Arrow keys** — move selection in the grid
-- **Ctrl+A** — select all visible items
-- **Delete / Backspace** — delete eligible selection
-- **Ctrl+Z / Ctrl+R** — undo / redo
+### Gallery chrome
+- **Ctrl+V** (default) — show / hide gallery (configurable)
+- **?** / **F1** — open / close this Hotkeys sheet
+- **Esc** — close help, menus, search popup, Creator Mode (ladder: innermost first)
+- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom)
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
-- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from Ctrl+scroll grid zoom)
-- **Escape** — close menus, search popup, help panel
-- **?** (title bar) — open this help
+
+### Browse and search
+- **Ctrl+F** — focus title search (opens compact popup if needed)
+- **Alt+F** — open / close floating filter presets window
+- **Enter** — commit draft search to an Include chip
+- **Shift+Enter** — commit draft to Exclude
+- **Esc** (in search) — close search field without clearing chips
+- **Ctrl+Z** — undo clear-all search chips (within 5s)
+
+### Selection
+- **Arrow keys** — move selection in the grid (Shift = range, Ctrl = add)
+- **Ctrl+A** — select all visible items
+- **Delete / Backspace** — delete eligible selection (History: remove from history)
+- Context menu **1–9** — run numbered actions while the menu is open
+- **0–9** — jump to numbered category (same order as the category quick-switch menu)
+
+### Undo / redo
+- **Ctrl+Z** — undo (footer Undo; also undoes recent History remove / search clear within 5s)
+- **Ctrl+Y** / **Ctrl+Shift+Z** — redo
+- **Ctrl+R** — refresh History browse (History category only)
+
+### Creator Mode
+- **Ctrl+Shift+K** — toggle Creator Mode
+- **Ctrl+Shift+S** — open / close Strip Scene keep picker
+- While Strip Scene is open: **?** help · **/** filter · **↑↓** nav · **Space** toggle · **←→** expand · **F2** rename · **Enter** strip · **Esc** back
 
 ### VR
 - **VR hover tooltips** (Settings) — short hover shows control labels.

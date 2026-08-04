@@ -537,7 +537,7 @@ namespace VPB
                     if (quickFiltersToggleBtnIconImage != null) quickFiltersToggleBtnIconImage.color = UI.BarIconGlyphTint;
                 }
             }
-            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets");
+            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets — Alt+F toggles floating window; Float as Window detaches; X reattaches");
 
             // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }

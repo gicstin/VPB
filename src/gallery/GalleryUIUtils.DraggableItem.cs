@@ -1694,72 +1694,7 @@ namespace VPB
 
             PushUndoSnapshotForClothingHair(target);
 
-            bool cleared = false;
-            try
-            {
-                JSONStorable hair = target.GetStorableByID("Hair");
-                LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
-                if (hair != null)
-                {
-                    var method = hair.GetType().GetMethod("Clear", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-                    LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(method != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
-                    if (method != null)
-                    {
-                        method.Invoke(hair, null);
-                        cleared = true;
-                        LogUtil.Log("[VPB] RemoveAllHair: Clear() invoked");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogUtil.LogError("[VPB] RemoveAllHair: Clear() exception: " + ex);
-            }
-
-            if (!cleared)
-            {
-                LogUtil.LogWarning("[VPB] RemoveAllHair: falling back to geometry bool disable");
-                try
-                {
-                    JSONStorable geometry = target.GetStorableByID("geometry");
-                    if (geometry == null)
-                    {
-                        LogUtil.LogWarning("[VPB] RemoveAllHair: geometry storable NOT found");
-                        return;
-                    }
-
-                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
-                    if (dcs == null)
-                    {
-                        LogUtil.LogWarning("[VPB] RemoveAllHair: DAZCharacterSelector not found on target");
-                        return;
-                    }
-
-                    int disabledCount = 0;
-                    if (dcs.hairItems != null)
-                    {
-                        foreach (var item in dcs.hairItems)
-                        {
-                            if (item == null) continue;
-                            JSONStorableBool active = geometry.GetBoolJSONParam("hair:" + item.uid);
-                            if (active != null)
-                            {
-                                if (active.val)
-                                {
-                                    active.val = false;
-                                    disabledCount++;
-                                }
-                            }
-                        }
-                    }
-
-                    LogUtil.Log($"[VPB] RemoveAllHair: geometry fallback disabled {disabledCount} hair items");
-                }
-                catch (Exception ex)
-                {
-                    LogUtil.LogError("[VPB] RemoveAllHair: geometry fallback exception: " + ex);
-                }
-            }
+            ClothingLoadingUtils.RemoveAllHair(target);
         }
 
         public void RemoveHairItemByUid(Atom target, string itemUid)

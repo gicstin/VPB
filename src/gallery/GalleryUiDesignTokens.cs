@@ -242,6 +242,23 @@ namespace VPB
         public const int PopupMenuOverflowFontRef = FontRef;
         public const float PopupMenuAnchorGapRef = 2f;
         public const float PopupMenuPanelWidthRef = 230f;
+        /// <summary>Filter-presets dropdown: search + sort chip need wider panel than plain popup rows.</summary>
+        public const float QuickFiltersPanelWidthRef = 280f;
+        /// <summary>Filter-presets list scrollbar — match dense secondary panels (import sidebar), not fat side-tab track.</summary>
+        public const float QuickFiltersScrollBarWidthRef = 10f;
+        /// <summary>Floating filter-presets window defaults / clamps (design px at scale 1).</summary>
+        public const float QuickFiltersFloatDefaultHeightRef = 420f;
+        public const float QuickFiltersFloatMinWidthRef = 220f;
+        /// <summary>Title + search header + footer + one row — room for float chrome.</summary>
+        public const float QuickFiltersFloatMinHeightRef = 260f;
+        public const float QuickFiltersFloatMaxWidthRef = 640f;
+        public const float QuickFiltersFloatMaxHeightRef = 900f;
+        /// <summary>Fits <see cref="ButtonSizeRef"/> collapse/close chips + pad (Jakob with gallery chrome).</summary>
+        public const float QuickFiltersTitleBarHeightRef = ButtonSizeRef + 8f;
+        /// <summary>Float footer: undo/redo + resize grip row (merge lives on actions row).</summary>
+        public const float QuickFiltersFooterHeightRef = ButtonSizeRef + 8f;
+        /// <summary>Max leaf presets selectable when merging into one multi-random preset.</summary>
+        public const int QuickFiltersMergeMaxMembers = 6;
         public const float OverflowMenuPanelWidthRef = 300f;
         public const float FileSortMenuPanelWidthRef = 248f;
         public const float SidePaneSortMenuPanelWidthRef = 228f;

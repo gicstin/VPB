@@ -24,6 +24,11 @@ namespace VPB
         private RectTransform loadingBarContainerRT;
         private RectTransform loadingBarFillRT;
         private float _loadingOverlayPulseStart = -1f;
+        /// <summary>
+        /// Filter-randomize / background refresh: rebuild lists without clearing or rebinding the visible grid.
+        /// </summary>
+        private bool _quietGalleryRefresh;
+        private readonly List<FileEntry> _quietDisplayFiles = new List<FileEntry>();
         private float lastScrollTime;
         private Queue<ThumbnailCacheJob> pendingThumbnailCacheJobs = new Queue<ThumbnailCacheJob>();
         private Coroutine thumbnailCacheCoroutine;
@@ -222,9 +227,34 @@ namespace VPB
         private DateTime _lastCategoryCountsScanTime = DateTime.MinValue;
         
         // Configuration
+        /// <summary>
+        /// Transient override for filter-preset multi-random (replace once then add members).
+        /// Null = use persisted config. Does not write disk.
+        /// Token-scoped so StopCoroutine dispose / superseded gen cannot clear a newer owner.
+        /// </summary>
+        private static bool? _dragDropReplaceModeOverride;
+        private static int _dragDropReplaceOverrideToken;
+
+        /// <summary>
+        /// Bumped when filter-preset randomize restarts so deferred clothing/hair toggles
+        /// from a superseded LoadRandom abort instead of stacking on top of Replace.
+        /// </summary>
+        private static int _clothingApplySerial;
+
+        /// <summary>
+        /// Count of deferred clothing/hair apply coroutines (preset wait / legacy toggle retry).
+        /// Filter-randomize waits for zero so merge steps and rapid re-dice do not race Clear/toggle.
+        /// </summary>
+        private static int _clothingApplyInFlight;
+
         public bool DragDropReplaceMode
         {
-            get { return VPBConfig.Instance != null ? VPBConfig.Instance.DragDropReplaceMode : false; }
+            get
+            {
+                if (_dragDropReplaceModeOverride.HasValue)
+                    return _dragDropReplaceModeOverride.Value;
+                return VPBConfig.Instance != null ? VPBConfig.Instance.DragDropReplaceMode : false;
+            }
             set { 
                 if (VPBConfig.Instance != null) {
                     VPBConfig.Instance.DragDropReplaceMode = value;
@@ -232,6 +262,76 @@ namespace VPB
                     try { VPBConfig.Instance.Save(false); } catch { }
                 }
             }
+        }
+
+        /// <summary>Effective replace/add for clothing apply (honors randomize override).</summary>
+        internal static bool EffectiveDragDropReplaceMode
+        {
+            get
+            {
+                if (_dragDropReplaceModeOverride.HasValue)
+                    return _dragDropReplaceModeOverride.Value;
+                return VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode;
+            }
+        }
+
+        /// <summary>Capture serial for deferred clothing/hair work; abort if <see cref="InvalidateClothingApplySerial"/> ran.</summary>
+        internal static int CaptureClothingApplySerial()
+        {
+            return _clothingApplySerial;
+        }
+
+        /// <summary>True when deferred apply still belongs to current randomize/load generation.</summary>
+        internal static bool IsClothingApplySerialCurrent(int serial)
+        {
+            return serial == _clothingApplySerial;
+        }
+
+        /// <summary>Invalidate in-flight deferred clothing/hair applies (rapid re-dice).</summary>
+        internal static void InvalidateClothingApplySerial()
+        {
+            _clothingApplySerial++;
+        }
+
+        /// <summary>Mark deferred clothing/hair apply started (pair with <see cref="EndClothingApplyWork"/>).</summary>
+        internal static void BeginClothingApplyWork()
+        {
+            _clothingApplyInFlight++;
+        }
+
+        /// <summary>Mark deferred clothing/hair apply finished or aborted.</summary>
+        internal static void EndClothingApplyWork()
+        {
+            if (_clothingApplyInFlight > 0)
+                _clothingApplyInFlight--;
+        }
+
+        /// <summary>True while deferred clothing/hair apply coroutines still run.</summary>
+        internal static bool HasPendingClothingApplyWork()
+        {
+            return _clothingApplyInFlight > 0;
+        }
+
+        /// <param name="token">Owner id (usually filter-randomize gen). End only clears matching token.</param>
+        internal static void BeginDragDropReplaceOverride(bool replace, int token)
+        {
+            _dragDropReplaceModeOverride = replace;
+            _dragDropReplaceOverrideToken = token;
+        }
+
+        /// <summary>Clear override only if still owned by <paramref name="token"/>.</summary>
+        internal static void EndDragDropReplaceOverride(int token)
+        {
+            if (_dragDropReplaceOverrideToken != token) return;
+            _dragDropReplaceModeOverride = null;
+            _dragDropReplaceOverrideToken = 0;
+        }
+
+        /// <summary>Force-clear override (lifecycle / randomize restart). Ignores token.</summary>
+        internal static void ClearDragDropReplaceOverride()
+        {
+            _dragDropReplaceModeOverride = null;
+            _dragDropReplaceOverrideToken = 0;
         }
 
         public string AppearanceClothingApplyMode

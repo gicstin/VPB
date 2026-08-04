@@ -343,7 +343,10 @@ namespace VPB
             try { if (leftRemoveModeBtnOutline != null) leftRemoveModeBtnOutline.enabled = false; } catch { }
             try { if (rightRemoveModeBtnIconImage != null) rightRemoveModeBtnIconImage.color = c; } catch { }
             try { if (leftRemoveModeBtnIconImage != null) leftRemoveModeBtnIconImage.color = c; } catch { }
+            try { if (quickFiltersUI != null) quickFiltersUI.SyncRemoveModeButton(_removeModeActive); } catch { }
         }
+
+        internal bool IsRemoveModeActive => _removeModeActive;
 
         private static void ApplyRemoveModeRailHoverSelected(GameObject btn, bool selected, Color rimColor)
         {

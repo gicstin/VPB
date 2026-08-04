@@ -554,6 +554,16 @@ namespace VPB
         public bool GalleryDetailStripTagMenuSizeSaved = false;
         public float GalleryDetailStripTagMenuWidthRef = 0f;
         public float GalleryDetailStripTagMenuHeightRef = 0f;
+        /// <summary>Filter presets list opens as floating window (title-bar button still toggles).</summary>
+        public bool GalleryQuickFiltersDetached = false;
+        /// <summary>When true, restore last filter-presets floating position (canvas-local, center).</summary>
+        public bool GalleryQuickFiltersPosSaved = false;
+        public float GalleryQuickFiltersPosX = 0f;
+        public float GalleryQuickFiltersPosY = 0f;
+        /// <summary>When true, restore last filter-presets floating size (design px at scale 1).</summary>
+        public bool GalleryQuickFiltersSizeSaved = false;
+        public float GalleryQuickFiltersWidthRef = 280f;
+        public float GalleryQuickFiltersHeightRef = 420f;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1151,6 +1161,13 @@ namespace VPB
             GalleryDetailStripTagMenuSizeSaved = false;
             GalleryDetailStripTagMenuWidthRef = 0f;
             GalleryDetailStripTagMenuHeightRef = 0f;
+            GalleryQuickFiltersDetached = false;
+            GalleryQuickFiltersPosSaved = false;
+            GalleryQuickFiltersPosX = 0f;
+            GalleryQuickFiltersPosY = 0f;
+            GalleryQuickFiltersSizeSaved = false;
+            GalleryQuickFiltersWidthRef = 280f;
+            GalleryQuickFiltersHeightRef = 420f;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1490,6 +1507,20 @@ namespace VPB
                             GalleryDetailStripTagMenuWidthRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuWidthRef"].AsFloat);
                         if (node["GalleryDetailStripTagMenuHeightRef"] != null)
                             GalleryDetailStripTagMenuHeightRef = Mathf.Max(0f, node["GalleryDetailStripTagMenuHeightRef"].AsFloat);
+                        if (node["GalleryQuickFiltersDetached"] != null)
+                            GalleryQuickFiltersDetached = node["GalleryQuickFiltersDetached"].AsBool;
+                        if (node["GalleryQuickFiltersPosSaved"] != null)
+                            GalleryQuickFiltersPosSaved = node["GalleryQuickFiltersPosSaved"].AsBool;
+                        if (node["GalleryQuickFiltersPosX"] != null)
+                            GalleryQuickFiltersPosX = node["GalleryQuickFiltersPosX"].AsFloat;
+                        if (node["GalleryQuickFiltersPosY"] != null)
+                            GalleryQuickFiltersPosY = node["GalleryQuickFiltersPosY"].AsFloat;
+                        if (node["GalleryQuickFiltersSizeSaved"] != null)
+                            GalleryQuickFiltersSizeSaved = node["GalleryQuickFiltersSizeSaved"].AsBool;
+                        if (node["GalleryQuickFiltersWidthRef"] != null)
+                            GalleryQuickFiltersWidthRef = Mathf.Max(0f, node["GalleryQuickFiltersWidthRef"].AsFloat);
+                        if (node["GalleryQuickFiltersHeightRef"] != null)
+                            GalleryQuickFiltersHeightRef = Mathf.Max(0f, node["GalleryQuickFiltersHeightRef"].AsFloat);
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1889,6 +1920,13 @@ namespace VPB
                 node["GalleryDetailStripTagMenuSizeSaved"].AsBool = GalleryDetailStripTagMenuSizeSaved;
                 node["GalleryDetailStripTagMenuWidthRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuWidthRef);
                 node["GalleryDetailStripTagMenuHeightRef"].AsFloat = Mathf.Max(0f, GalleryDetailStripTagMenuHeightRef);
+                node["GalleryQuickFiltersDetached"].AsBool = GalleryQuickFiltersDetached;
+                node["GalleryQuickFiltersPosSaved"].AsBool = GalleryQuickFiltersPosSaved;
+                node["GalleryQuickFiltersPosX"].AsFloat = GalleryQuickFiltersPosX;
+                node["GalleryQuickFiltersPosY"].AsFloat = GalleryQuickFiltersPosY;
+                node["GalleryQuickFiltersSizeSaved"].AsBool = GalleryQuickFiltersSizeSaved;
+                node["GalleryQuickFiltersWidthRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersWidthRef);
+                node["GalleryQuickFiltersHeightRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersHeightRef);
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

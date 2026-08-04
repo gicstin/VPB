@@ -67,6 +67,38 @@ namespace VPB
                 icon: UI.GetButtonIconSprite(_titleBarQfToggleBtnRT != null ? _titleBarQfToggleBtnRT.gameObject : null)
                     ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.filter_presets", tipDefault: "Filter Presets");
+
+            // Pinned filter presets → one-click background randomize (preserveUi).
+            try
+            {
+                var pinned = new System.Collections.Generic.List<QuickFilterEntry>(4);
+                QuickFilterSettings.Instance.CollectPinnedFilters(pinned);
+                Sprite rndIcon = UI.LoadIconSprite("vpb_icons/random.png", UI.BarIconGlyphTint);
+                for (int i = 0; i < pinned.Count; i++)
+                {
+                    QuickFilterEntry pe = pinned[i];
+                    if (pe == null) continue;
+                    string label = string.Format(
+                        VPBTranslation.T("gallery.title.randomize_preset", "Rnd: {0}"),
+                        pe.Name ?? "?");
+                    QuickFilterEntry captured = pe;
+                    AddOverflowMenuRow(
+                        panel,
+                        label,
+                        () =>
+                        {
+                            CloseTitleBarOverflowMenu();
+                            RandomizeFromFilterPreset(captured, true);
+                        },
+                        icon: rndIcon,
+                        tipKey: null,
+                        tipDefault: string.Format(
+                            VPBTranslation.T("quickfilters.tip.randomize", "Randomize from '{0}' (loads random item; restores current view)"),
+                            pe.Name ?? "?"));
+                }
+            }
+            catch { }
+
             AddOverflowMenuRow(
                 panel,
                 VPBTranslation.T("gallery.title.creator_filter", "Creator filter"),

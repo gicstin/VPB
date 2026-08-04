@@ -108,7 +108,11 @@ namespace VPB
         /// was from restoring FilterUntagged / FilterByTags without clear affordance).
         /// Pass false only when deliberately wiping user-tag filter while applying other state.
         /// </param>
-        private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true)
+        /// <param name="quietUi">
+        /// When true, apply filter fields for list rebuild but skip chip/button/search chrome updates
+        /// (background filter-randomize).
+        /// </param>
+        private void ApplyCategoryFilterState(CategoryFilterState state, bool restoreUserTagFilter = true, bool quietUi = false)
         {
             // Set search fields directly — RefreshFiles (called after Show returns) will build
             // currentFilteredFiles using these terms. topSearchBaseFiles must be null so that
@@ -116,15 +120,21 @@ namespace VPB
             topSearchBaseFiles = null;
             string restoredSearch = state.NameFilter ?? "";
             AssignNameFilterState(restoredSearch);
-            HydrateTitleSearchChipsFromCurrentFilter();
-            // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
-            // Chip mode: field stays empty (draft); live mode: show restored string.
-            string fieldText = HasTitleSearchChips() ? "" : restoredSearch;
-            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, fieldText, _titleBarSearchOnValueChanged); } catch { }
+            if (!quietUi)
+            {
+                HydrateTitleSearchChipsFromCurrentFilter();
+                // WithoutNotify: assigning .text fires SetNameFilter and can schedule a second SQL refresh.
+                // Chip mode: field stays empty (draft); live mode: show restored string.
+                string fieldText = HasTitleSearchChips() ? "" : restoredSearch;
+                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, fieldText, _titleBarSearchOnValueChanged); } catch { }
+            }
 
             currentCreator = state.Creator ?? "";
             _currentCreatorSetSrc = null;
-            try { UpdateTitleCreatorButtonVisual(); } catch { }
+            if (!quietUi)
+            {
+                try { UpdateTitleCreatorButtonVisual(); } catch { }
+            }
 
             activeTags.Clear();
             if (state.Tags != null)
@@ -191,8 +201,11 @@ namespace VPB
             if (state.FileSortState != null)
             {
                 SaveSortState("Files", state.FileSortState);
-                try { UpdateSortButtonText(fileSortTypeText, fileSortDirText, state.FileSortState); } catch { }
-                try { SyncRatingSortToggleState(); } catch { }
+                if (!quietUi)
+                {
+                    try { UpdateSortButtonText(fileSortTypeText, fileSortDirText, state.FileSortState); } catch { }
+                    try { SyncRatingSortToggleState(); } catch { }
+                }
             }
 
             _browseHiddenCycle = ClampBrowseFilterCycle(state.BrowseHiddenMode);
@@ -204,10 +217,12 @@ namespace VPB
             try { SyncShowHiddenPackagesFromCycle(); } catch { }
             try { SyncHideOldVersionsFromCycle(); } catch { }
             try { MigrateLegacyExclusiveFileSortIfNeeded(); } catch { }
-            try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
-
-            try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
-            SyncBrowseFilterChipChrome();
+            if (!quietUi)
+            {
+                try { UpdateGlobalSourceFilterButtonLabel(); } catch { }
+                try { SyncUserTagFilterModeToggleVisualsEverywhere(); } catch { }
+                SyncBrowseFilterChipChrome();
+            }
         }
 
         private void ClearFiltersForNewCategory()

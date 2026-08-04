@@ -13,6 +13,7 @@ namespace VPB
     public static class ClothingLoadingUtils
     {
         private static MethodInfo s_ClothingClearMethod;
+        private static MethodInfo s_HairClearMethod;
 
         private static bool Has(string source, string value)
         {
@@ -819,6 +820,17 @@ namespace VPB
             catch { }
         }
 
+        private static void EnsureHairClearCached(JSONStorable hair)
+        {
+            if (s_HairClearMethod != null) return;
+            if (hair == null) return;
+            try
+            {
+                s_HairClearMethod = hair.GetType().GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance);
+            }
+            catch { }
+        }
+
         private static void TryGetCreatorFromPresetPath(string presetPath, bool isClothing, out string creator)
         {
             creator = "";
@@ -1126,103 +1138,119 @@ namespace VPB
             return s;
         }
 
-        private static IEnumerator ActivateClothingHairItemPresetCoroutine(Atom atom, FileEntry entry, bool isClothing, string itemUid, string itemName)
+        private static IEnumerator ActivateClothingHairItemPresetCoroutine(Atom atom, FileEntry entry, bool isClothing, string itemUid, string itemName, int applySerial)
         {
-            if (atom == null || entry == null) yield break;
-
-            string normalizedPath = UI.NormalizePath(entry.Path);
-            string creator;
-            TryGetCreatorFromPresetPath(entry.Path, isClothing, out creator);
-
-            JSONClass presetJSON = LoadPresetJsonWithPathFixups(normalizedPath);
-            string inferredBaseId = InferClothingHairBaseIdFromPresetJson(presetJSON);
-
-            string lookupName = !string.IsNullOrEmpty(inferredBaseId) ? inferredBaseId : itemName;
-            LogUtil.Log($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
-
-            // Give the clothing item a few frames to initialize after being activated
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForEndOfFrame();
-
-            DateTime startDelayTime = DateTime.Now;
-            while ((DateTime.Now - startDelayTime).TotalSeconds < 20)
+            try
             {
-                string storableId;
-                JSONStorable presetStorable = FindItemPresetStorable(atom, itemUid, itemName, creator, out storableId);
-                MeshVR.PresetManager pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                if (atom == null || entry == null) yield break;
+                if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
 
-                if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
-                {
-                    presetStorable = FindItemPresetStorable(atom, itemUid, inferredBaseId, creator, out storableId);
-                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
-                }
+                string normalizedPath = UI.NormalizePath(entry.Path);
+                string creator;
+                TryGetCreatorFromPresetPath(entry.Path, isClothing, out creator);
 
-                if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
+                JSONClass presetJSON = LoadPresetJsonWithPathFixups(normalizedPath);
+                string inferredBaseId = InferClothingHairBaseIdFromPresetJson(presetJSON);
+
+                string lookupName = !string.IsNullOrEmpty(inferredBaseId) ? inferredBaseId : itemName;
+                LogUtil.Log($"[DragDropDebug] Waiting for item preset storable. isClothing={isClothing}, itemName={itemName}, inferredBaseId={inferredBaseId}, itemUid={itemUid}, creator={creator}, presetPath={normalizedPath}");
+
+                // Give the clothing item a few frames to initialize after being activated
+                yield return new WaitForEndOfFrame();
+                if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
+                yield return new WaitForEndOfFrame();
+                if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
+                yield return new WaitForEndOfFrame();
+                if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
+
+                DateTime startDelayTime = DateTime.Now;
+                while ((DateTime.Now - startDelayTime).TotalSeconds < 20)
                 {
-                    string directId = inferredBaseId + "Preset";
-                    presetStorable = atom.GetStorableByID(directId);
-                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                    if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
+
+                    string storableId;
+                    JSONStorable presetStorable = FindItemPresetStorable(atom, itemUid, itemName, creator, out storableId);
+                    MeshVR.PresetManager pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+
+                    if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
+                    {
+                        presetStorable = FindItemPresetStorable(atom, itemUid, inferredBaseId, creator, out storableId);
+                        pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                    }
+
+                    if (pm == null && !string.IsNullOrEmpty(inferredBaseId))
+                    {
+                        string directId = inferredBaseId + "Preset";
+                        presetStorable = atom.GetStorableByID(directId);
+                        pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                        if (pm != null)
+                        {
+                            storableId = directId;
+                        }
+                    }
+
+                    if (pm == null)
+                    {
+                        presetStorable = FindItemPresetStorableFuzzy(atom, itemUid, itemName, creator, inferredBaseId, isClothing, out storableId);
+                        pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
+                    }
+
                     if (pm != null)
                     {
-                        storableId = directId;
-                    }
-                }
+                        if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
 
-                if (pm == null)
-                {
-                    presetStorable = FindItemPresetStorableFuzzy(atom, itemUid, itemName, creator, inferredBaseId, isClothing, out storableId);
-                    pm = presetStorable != null ? presetStorable.GetComponentInChildren<MeshVR.PresetManager>() : null;
-                }
+                        if (presetJSON == null)
+                        {
+                            LogUtil.LogWarning($"[DragDropDebug] Failed to load preset JSON from path: {normalizedPath}");
+                            yield break;
+                        }
 
-                if (pm != null)
-                {
-                    if (presetJSON == null)
-                    {
-                        LogUtil.LogWarning($"[DragDropDebug] Failed to load preset JSON from path: {normalizedPath}");
+                        LogUtil.Log($"[DragDropDebug] Found item preset storable: {storableId}. Applying preset now.");
+
+                        JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
+                        if (presetNameJSS != null)
+                        {
+                            string fileNameNoExt = Path.GetFileNameWithoutExtension(normalizedPath);
+                            if (UI.IsLikelyVarPackageReference(normalizedPath))
+                            {
+                                string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
+                                presetNameJSS.val = presetPackageName + ":" + fileNameNoExt + ".vap";
+                            }
+                            else
+                            {
+                                presetNameJSS.val = fileNameNoExt + ".vap";
+                            }
+                        }
+
+                        LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
+
+                        VpbImport.LoadPreset(entry, atom, VpbResourceType.General,
+                            ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
+                            skipDependencyPrewarm: true, updateLastRestoredData: false);
+
+                        // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
+                        SchedulePostApplyFixup(atom, inferredBaseId, isClothing);
                         yield break;
                     }
 
-                    LogUtil.Log($"[DragDropDebug] Found item preset storable: {storableId}. Applying preset now.");
-
-                    JSONStorableString presetNameJSS = presetStorable.GetStringJSONParam("presetName");
-                    if (presetNameJSS != null)
-                    {
-                        string fileNameNoExt = Path.GetFileNameWithoutExtension(normalizedPath);
-                        if (UI.IsLikelyVarPackageReference(normalizedPath))
-                        {
-                            string presetPackageName = normalizedPath.Substring(0, normalizedPath.IndexOf(':'));
-                            presetNameJSS.val = presetPackageName + ":" + fileNameNoExt + ".vap";
-                        }
-                        else
-                        {
-                            presetNameJSS.val = fileNameNoExt + ".vap";
-                        }
-                    }
-
-                    LogUtil.Log($"[DragDropDebug] Loading preset into {storableId} via JSON (delayed)");
-
-                    VpbImport.LoadPreset(entry, atom, VpbResourceType.General,
-                        ClothingApplyMode.Replace, presetJC: presetJSON, storableNameOverride: storableId,
-                        skipDependencyPrewarm: true, updateLastRestoredData: false);
-
-                    // Conservative post-apply stabilization (best-effort, no-op if actions are missing).
-                    SchedulePostApplyFixup(atom, inferredBaseId, isClothing);
-                    yield break;
+                    yield return new WaitForEndOfFrame();
                 }
 
-                yield return new WaitForEndOfFrame();
+                LogUtil.LogWarning($"[DragDropDebug] Timed out waiting for item preset storable for {lookupName} ({itemUid}). Preset not applied: {entry.Path}");
             }
-
-            LogUtil.LogWarning($"[DragDropDebug] Timed out waiting for item preset storable for {lookupName} ({itemUid}). Preset not applied: {entry.Path}");
+            finally
+            {
+                GalleryPanel.EndClothingApplyWork();
+            }
         }
 
         public static void ActivateClothingHairItemPreset(Atom atom, FileEntry entry, bool isClothing)
         {
             if (atom == null || entry == null) return;
             string path = entry.Path;
+            int applySerial = GalleryPanel.CaptureClothingApplySerial();
 
-            if (isClothing && VPBConfig.Instance != null && VPBConfig.Instance.DragDropReplaceMode)
+            if (isClothing && GalleryPanel.EffectiveDragDropReplaceMode)
             {
                 RemoveRealGarmentClothing(atom);
             }
@@ -1284,7 +1312,7 @@ namespace VPB
                 LogUtil.Log($"[DragDropDebug] Identified Item UID (inferred): {itemUid}");
                 JSONStorableBool inferredActive = geometry.GetBoolJSONParam(prefix + itemUid);
                 if (inferredActive != null && !inferredActive.val) inferredActive.val = true;
-                SuperController.singleton.StartCoroutine(ActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName));
+                StartActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName, applySerial);
                 return;
             }
 
@@ -1428,7 +1456,23 @@ namespace VPB
                 activeJSB.val = true;
             }
 
-            SuperController.singleton.StartCoroutine(ActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName));
+            StartActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName, applySerial);
+        }
+
+        private static void StartActivateClothingHairItemPresetCoroutine(
+            Atom atom, FileEntry entry, bool isClothing, string itemUid, string itemName, int applySerial)
+        {
+            if (SuperController.singleton == null) return;
+            GalleryPanel.BeginClothingApplyWork();
+            try
+            {
+                SuperController.singleton.StartCoroutine(
+                    ActivateClothingHairItemPresetCoroutine(atom, entry, isClothing, itemUid, itemName, applySerial));
+            }
+            catch
+            {
+                GalleryPanel.EndClothingApplyWork();
+            }
         }
 
         public static void RemoveAllClothing(Atom target)
@@ -1497,6 +1541,86 @@ namespace VPB
                 catch (Exception ex)
                 {
                     LogUtil.LogError("[VPB] RemoveAllClothing: geometry fallback exception: " + ex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Clear all hair on person (Hair.Clear, else geometry hair: bools via DAZCharacterSelector).
+        /// Warm/cold path — not per-frame.
+        /// </summary>
+        public static void RemoveAllHair(Atom target)
+        {
+            if (target == null)
+            {
+                LogUtil.LogWarning("[VPB] RemoveAllHair: target is null");
+                return;
+            }
+
+            LogUtil.Log($"[VPB] RemoveAllHair: target={target.uid} ({target.type})");
+
+            bool cleared = false;
+            try
+            {
+                JSONStorable hair = target.GetStorableByID("Hair");
+                LogUtil.Log($"[VPB] RemoveAllHair: Hair storable {(hair != null ? "found" : "NOT found")}");
+                if (hair != null)
+                {
+                    EnsureHairClearCached(hair);
+                    LogUtil.Log($"[VPB] RemoveAllHair: Clear() method {(s_HairClearMethod != null ? "found" : "NOT found")} on {hair.GetType().FullName}");
+                    if (s_HairClearMethod != null)
+                    {
+                        s_HairClearMethod.Invoke(hair, null);
+                        cleared = true;
+                        LogUtil.Log("[VPB] RemoveAllHair: Clear() invoked");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogError("[VPB] RemoveAllHair: Clear() exception: " + ex);
+            }
+
+            if (!cleared)
+            {
+                LogUtil.LogWarning("[VPB] RemoveAllHair: falling back to geometry bool disable");
+                try
+                {
+                    JSONStorable geometry = target.GetStorableByID("geometry");
+                    if (geometry == null)
+                    {
+                        LogUtil.LogWarning("[VPB] RemoveAllHair: geometry storable NOT found");
+                        return;
+                    }
+
+                    DAZCharacterSelector dcs = target.GetComponentInChildren<DAZCharacterSelector>();
+                    if (dcs == null)
+                    {
+                        LogUtil.LogWarning("[VPB] RemoveAllHair: DAZCharacterSelector not found on target");
+                        return;
+                    }
+
+                    int disabledCount = 0;
+                    if (dcs.hairItems != null)
+                    {
+                        for (int i = 0; i < dcs.hairItems.Length; i++)
+                        {
+                            var item = dcs.hairItems[i];
+                            if (item == null) continue;
+                            JSONStorableBool active = geometry.GetBoolJSONParam("hair:" + item.uid);
+                            if (active != null && active.val)
+                            {
+                                active.val = false;
+                                disabledCount++;
+                            }
+                        }
+                    }
+
+                    LogUtil.Log($"[VPB] RemoveAllHair: geometry fallback disabled {disabledCount} hair items");
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogError("[VPB] RemoveAllHair: geometry fallback exception: " + ex);
                 }
             }
         }

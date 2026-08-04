@@ -9,7 +9,11 @@ namespace VPB
     [Serializable]
     public class QuickFilterEntry
     {
+        /// <summary>SQLite row id; 0 = not yet assigned.</summary>
+        public int Id;
         public string Name;
+        /// <summary>Pinned presets appear as one-click randomize actions in title-bar overflow.</summary>
+        public bool Pinned;
         public string CategoryPath;
         public string CategoryTitle;
         public string SearchText;
@@ -36,6 +40,18 @@ namespace VPB
         /// <summary>Title-bar Filter license type. Empty = off.</summary>
         public string LicenseFilter = "";
 
+        /// <summary>
+        /// Embedded leaf snapshots for a merged multi-random preset.
+        /// Dice applies each member in order (e.g. clothing then pose). Null/empty = normal single preset.
+        /// </summary>
+        public List<QuickFilterEntry> MergeMembers;
+
+        /// <summary>True when this preset randomizes multiple leaf filter sets in sequence.</summary>
+        public bool IsMerged
+        {
+            get { return MergeMembers != null && MergeMembers.Count >= 2; }
+        }
+
         /// <summary>True when side-tab layout was captured with this preset (distinguishes legacy presets).</summary>
         public bool HasSideTabState = false;
         /// <summary><see cref="ContentType"/> as int, or -1 when that side panel was closed.</summary>
@@ -59,7 +75,9 @@ namespace VPB
         public JSONNode ToJSON()
         {
             var node = new JSONClass();
+            node["Id"].AsInt = Id;
             node["Name"] = Name;
+            node["Pinned"].AsBool = Pinned;
             node["CategoryPath"] = CategoryPath;
             node["CategoryTitle"] = CategoryTitle ?? "";
             node["SearchText"] = SearchText;
@@ -133,13 +151,78 @@ namespace VPB
             node["ButtonColor"] = ColorToHex(ButtonColor);
             node["TextColor"] = ColorToHex(TextColor);
 
+            if (MergeMembers != null && MergeMembers.Count > 0)
+            {
+                var mergeArr = new JSONArray();
+                for (int i = 0; i < MergeMembers.Count; i++)
+                {
+                    QuickFilterEntry m = MergeMembers[i];
+                    if (m == null) continue;
+                    // Leaves only — never nest merges in serialized members.
+                    QuickFilterEntry leaf = CloneLeafSnapshot(m);
+                    if (leaf != null) mergeArr.Add(leaf.ToJSON());
+                }
+                if (mergeArr.Count > 0)
+                    node["MergeMembers"] = mergeArr;
+            }
+
             return node;
+        }
+
+        /// <summary>Deep-ish clone via JSON for merge snapshots (strips nested MergeMembers).</summary>
+        public static QuickFilterEntry CloneLeafSnapshot(QuickFilterEntry src)
+        {
+            if (src == null) return null;
+            try
+            {
+                // Avoid recursion through MergeMembers during leaf clone.
+                List<QuickFilterEntry> keep = src.MergeMembers;
+                src.MergeMembers = null;
+                JSONNode n = src.ToJSON();
+                src.MergeMembers = keep;
+                QuickFilterEntry clone = FromJSON(n);
+                if (clone != null)
+                {
+                    clone.Id = 0;
+                    clone.Pinned = false;
+                    clone.MergeMembers = null;
+                }
+                return clone;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Flatten merge sources into leaf snapshots (cap). Nested merges expand.
+        /// </summary>
+        public static void CollectMergeLeaves(QuickFilterEntry src, List<QuickFilterEntry> into, int maxLeaves)
+        {
+            if (src == null || into == null || maxLeaves <= 0) return;
+            if (into.Count >= maxLeaves) return;
+
+            if (src.IsMerged)
+            {
+                for (int i = 0; i < src.MergeMembers.Count; i++)
+                {
+                    if (into.Count >= maxLeaves) return;
+                    CollectMergeLeaves(src.MergeMembers[i], into, maxLeaves);
+                }
+                return;
+            }
+
+            QuickFilterEntry leaf = CloneLeafSnapshot(src);
+            if (leaf != null) into.Add(leaf);
         }
 
         public static QuickFilterEntry FromJSON(JSONNode node)
         {
             var entry = new QuickFilterEntry();
+            entry.Id = node["Id"] != null ? node["Id"].AsInt : 0;
             entry.Name = node["Name"] ?? "New Filter";
+            entry.Pinned = node["Pinned"] != null && node["Pinned"].AsBool;
             entry.CategoryPath = node["CategoryPath"] ?? "";
             entry.CategoryTitle = node["CategoryTitle"] ?? "";
             entry.SearchText = node["SearchText"] ?? "";
@@ -276,6 +359,28 @@ namespace VPB
             if (node["ButtonColor"] != null) entry.ButtonColor = HexToColor(node["ButtonColor"]);
             if (node["TextColor"] != null) entry.TextColor = HexToColor(node["TextColor"]);
 
+            var mergeArr = node["MergeMembers"] != null ? node["MergeMembers"].AsArray : null;
+            if (mergeArr != null && mergeArr.Count > 0)
+            {
+                entry.MergeMembers = new List<QuickFilterEntry>();
+                for (int i = 0; i < mergeArr.Count; i++)
+                {
+                    if (mergeArr[i] == null) continue;
+                    try
+                    {
+                        QuickFilterEntry m = FromJSON(mergeArr[i]);
+                        if (m == null) continue;
+                        m.Id = 0;
+                        m.Pinned = false;
+                        m.MergeMembers = null; // flatten: stored members are leaves
+                        entry.MergeMembers.Add(m);
+                    }
+                    catch { }
+                }
+                if (entry.MergeMembers.Count < 2)
+                    entry.MergeMembers = null;
+            }
+
             return entry;
         }
 
@@ -345,7 +450,20 @@ namespace VPB
                 Save();
             }
         }
-        
+
+        public void SetPinned(QuickFilterEntry entry, bool pinned)
+        {
+            if (entry == null) return;
+            entry.Pinned = pinned;
+            Save();
+        }
+
+        public void TogglePinned(QuickFilterEntry entry)
+        {
+            if (entry == null) return;
+            SetPinned(entry, !entry.Pinned);
+        }
+
         public void MoveFilter(QuickFilterEntry entry, int direction)
         {
             int index = Filters.IndexOf(entry);
@@ -360,8 +478,44 @@ namespace VPB
             }
         }
 
+        /// <summary>Pinned presets in list order (for overflow one-click randomize).</summary>
+        public void CollectPinnedFilters(List<QuickFilterEntry> into)
+        {
+            if (into == null) return;
+            into.Clear();
+            if (Filters == null) return;
+            for (int i = 0; i < Filters.Count; i++)
+            {
+                QuickFilterEntry f = Filters[i];
+                if (f != null && f.Pinned) into.Add(f);
+            }
+        }
+
         public void Load()
         {
+            Filters.Clear();
+
+            // Prefer SQLite; migrate legacy JSON once when table empty.
+            try
+            {
+                if (VpbSqlite3.IsAvailable)
+                {
+                    try { VpbLocalDatabase.TryMigrateFilterPresetsFromJsonFile(filePath); } catch { }
+
+                    var sqlList = new List<QuickFilterEntry>();
+                    if (VpbLocalDatabase.TryLoadFilterPresets(sqlList) && sqlList.Count > 0)
+                    {
+                        Filters = sqlList;
+                        return;
+                    }
+                    // SQL empty after migrate attempt — fall through to JSON if present.
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[VPB] Failed to load filter presets from SQLite: " + ex.Message);
+            }
+
             if (!File.Exists(filePath)) return;
 
             try
@@ -371,6 +525,7 @@ namespace VPB
                 var arr = root.AsArray;
                 
                 Filters.Clear();
+                if (arr == null) return;
                 foreach (JSONNode node in arr)
                 {
                     Filters.Add(QuickFilterEntry.FromJSON(node));
@@ -384,15 +539,37 @@ namespace VPB
 
         public void Save()
         {
+            // SQL is source of truth when available; JSON kept as portable mirror.
+            bool sqlOk = false;
+            try
+            {
+                if (VpbSqlite3.IsAvailable)
+                    sqlOk = VpbLocalDatabase.TrySaveFilterPresets(Filters);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("[VPB] Failed to save filter presets to SQLite: " + ex.Message);
+            }
+
             try
             {
                 var arr = new JSONArray();
-                foreach (var f in Filters) arr.Add(f.ToJSON());
+                if (Filters != null)
+                {
+                    for (int i = 0; i < Filters.Count; i++)
+                    {
+                        QuickFilterEntry f = Filters[i];
+                        if (f != null) arr.Add(f.ToJSON());
+                    }
+                }
                 File.WriteAllText(filePath, VPB.src.util.JsonSerializationUtil.Serialize(arr, 4096));
             }
             catch (Exception ex)
             {
-                Debug.LogError("[VPB] Failed to save quick filters: " + ex.Message);
+                if (!sqlOk)
+                    Debug.LogError("[VPB] Failed to save quick filters: " + ex.Message);
+                else
+                    Debug.LogWarning("[VPB] Filter presets saved to SQLite; JSON mirror failed: " + ex.Message);
             }
         }
     }

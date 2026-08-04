@@ -46,6 +46,7 @@ namespace VPB
 
         private void ShowLoadingOverlay(string message)
         {
+            if (_quietGalleryRefresh) return;
             if (loadingOverlayGO == null) return;
             _loadingOverlayPulseStart = Time.unscaledTime;
             loadingOverlayGO.SetActive(true);

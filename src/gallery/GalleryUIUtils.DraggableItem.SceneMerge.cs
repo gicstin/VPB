@@ -181,6 +181,8 @@ namespace VPB
 
         private void ApplyClothingToAtom(Atom atom, string path, string appearanceClothingMode = null)
         {
+            // Capture before any yield-deferred work so rapid filter re-dice can abort stale toggles.
+            int applySerial = GalleryPanel.CaptureClothingApplySerial();
             string normalizedPath = UI.NormalizePath(path);
 
             string legacyPath = normalizedPath;
@@ -891,7 +893,16 @@ namespace VPB
                 if (ShouldRetryLegacyToggle(itemType) && SuperController.singleton != null && atom != null)
                 {
                     string atomUid = atom.uid;
-                    SuperController.singleton.StartCoroutine(RetryLegacyToggleAfterRefreshCoroutine(atomUid, legacyPath, normalizedPath, ext));
+                    GalleryPanel.BeginClothingApplyWork();
+                    try
+                    {
+                        SuperController.singleton.StartCoroutine(
+                            RetryLegacyToggleAfterRefreshCoroutine(atomUid, legacyPath, normalizedPath, ext, applySerial));
+                    }
+                    catch
+                    {
+                        GalleryPanel.EndClothingApplyWork();
+                    }
                 }
             }
             else
@@ -900,48 +911,58 @@ namespace VPB
             }
         }
 
-        private IEnumerator RetryLegacyToggleAfterRefreshCoroutine(string atomUid, string legacyPath, string normalizedPath, string ext)
+        private IEnumerator RetryLegacyToggleAfterRefreshCoroutine(string atomUid, string legacyPath, string normalizedPath, string ext, int applySerial)
         {
-            if (string.IsNullOrEmpty(atomUid)) yield break;
-
-            DateTime start = DateTime.UtcNow;
-            bool loggedWait = false;
-            while ((DateTime.UtcNow - start).TotalSeconds < 5.0)
+            try
             {
-                Atom atom = null;
-                try { atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
-                if (atom == null) yield break;
+                if (string.IsNullOrEmpty(atomUid)) yield break;
+                if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
 
-                JSONStorable geometry = null;
-                try { geometry = atom.GetStorableByID("geometry"); } catch { }
-                if (geometry != null)
+                DateTime start = DateTime.UtcNow;
+                bool loggedWait = false;
+                while ((DateTime.UtcNow - start).TotalSeconds < 5.0)
                 {
-                    if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug] Deferred toggle")) yield break;
-                    if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal)
-                        && TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug] Deferred toggle")) yield break;
+                    if (!GalleryPanel.IsClothingApplySerialCurrent(applySerial)) yield break;
 
-                    if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase))
+                    Atom atom = null;
+                    try { atom = SuperController.singleton != null ? SuperController.singleton.GetAtomByUid(atomUid) : null; } catch { }
+                    if (atom == null) yield break;
+
+                    JSONStorable geometry = null;
+                    try { geometry = atom.GetStorableByID("geometry"); } catch { }
+                    if (geometry != null)
                     {
-                        string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
-                        if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug] Deferred toggle")) yield break;
-                        if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal))
+                        if (TryToggleLegacyClothingHairParam(geometry, legacyPath, "[DragDropDebug] Deferred toggle")) yield break;
+                        if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal)
+                            && TryToggleLegacyClothingHairParam(geometry, normalizedPath, "[DragDropDebug] Deferred toggle")) yield break;
+
+                        if (string.Equals(ext, ".vam", StringComparison.OrdinalIgnoreCase))
                         {
-                            string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
-                            if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug] Deferred toggle")) yield break;
+                            string vajPath = legacyPath.Substring(0, legacyPath.Length - 4) + ".vaj";
+                            if (TryToggleLegacyClothingHairParam(geometry, vajPath, "[DragDropDebug] Deferred toggle")) yield break;
+                            if (!string.Equals(normalizedPath, legacyPath, StringComparison.Ordinal))
+                            {
+                                string vajFullPath = normalizedPath.Substring(0, normalizedPath.Length - 4) + ".vaj";
+                                if (TryToggleLegacyClothingHairParam(geometry, vajFullPath, "[DragDropDebug] Deferred toggle")) yield break;
+                            }
                         }
                     }
+
+                    if (!loggedWait)
+                    {
+                        LogUtil.Log($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
+                        loggedWait = true;
+                    }
+
+                    yield return new WaitForSeconds(0.15f);
                 }
 
-                if (!loggedWait)
-                {
-                    LogUtil.Log($"[DragDropDebug] Deferred toggle waiting for catalog refresh to expose geometry bools: {legacyPath}");
-                    loggedWait = true;
-                }
-
-                yield return new WaitForSeconds(0.15f);
+                LogUtil.LogWarning($"[DragDropDebug] Deferred toggle timed out waiting for param: {legacyPath}");
             }
-
-            LogUtil.LogWarning($"[DragDropDebug] Deferred toggle timed out waiting for param: {legacyPath}");
+            finally
+            {
+                GalleryPanel.EndClothingApplyWork();
+            }
         }
 
         private static bool TryToggleLegacyClothingHairParam(JSONStorable geometry, string path, string logPrefix)

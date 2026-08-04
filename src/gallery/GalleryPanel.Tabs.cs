@@ -1618,7 +1618,7 @@ namespace VPB
             rt.offsetMax = new Vector2(-pad, -pad);
         }
 
-        private InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null, Action onEscape = null)
+        internal InputField CreateSearchInput(GameObject parent, float width, UnityAction<string> onValueChanged, Action onClear = null, Action onEscape = null)
         {
             GameObject inputGO = new GameObject("SearchInput");
             inputGO.transform.SetParent(parent.transform, false);

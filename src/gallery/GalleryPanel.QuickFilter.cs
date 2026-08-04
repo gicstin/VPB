@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,6 +7,8 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        private Coroutine _quickFiltersConfigSaveCo;
+
         private static readonly string[] QuickFilterSideTabSortContexts =
         {
             "Category", "Creator", "Tags", "SceneSource", "UserTags", "UserTagsApplied", "Path"
@@ -42,7 +45,39 @@ namespace VPB
 
         public void ApplyQuickFilterState(QuickFilterEntry entry)
         {
+            ApplyQuickFilterState(entry, true);
+        }
+
+        public void ApplyQuickFilterState(QuickFilterEntry entry, bool announce)
+        {
+            ApplyQuickFilterState(entry, announce, quietUi: false);
+        }
+
+        /// <param name="quietUi">
+        /// Background randomize: mutate category + filter fields and refresh lists without
+        /// title/side-tab/layout thrash. Caller must bookend with quiet gallery refresh.
+        /// </param>
+        public void ApplyQuickFilterState(QuickFilterEntry entry, bool announce, bool quietUi)
+        {
             if (entry == null) return;
+
+            // Merged multi-random: apply first leaf for browse; dice walks all members.
+            if (entry.IsMerged && entry.MergeMembers != null && entry.MergeMembers.Count > 0)
+            {
+                QuickFilterEntry first = entry.MergeMembers[0];
+                if (first != null)
+                {
+                    ApplyQuickFilterState(first, false, quietUi);
+                    if (announce)
+                    {
+                        ShowTemporaryStatus(string.Format(
+                            VPBTranslation.T("quickfilters.merge_apply_hint", "Merged '{0}' — showing first filter. Dice loads all {1}."),
+                            entry.Name ?? "",
+                            entry.MergeMembers.Count));
+                    }
+                    return;
+                }
+            }
 
             // 1. Restore Category
             if (!string.IsNullOrEmpty(entry.CategoryPath))
@@ -67,21 +102,24 @@ namespace VPB
                     currentPaths = v.paths;
                     currentExtension = v.extension;
                     currentCategoryTitle = v.name;
-                    if (titleText != null) titleText.text = v.name;
+                    if (!quietUi && titleText != null) titleText.text = v.name;
                 }
             }
 
             // 2. Restore full filter state (scene/appearance local-only, untagged, subfilters, etc.)
-            ApplyCategoryFilterState(CategoryFilterStateFromQuickFilterEntry(entry));
+            ApplyCategoryFilterState(CategoryFilterStateFromQuickFilterEntry(entry), restoreUserTagFilter: true, quietUi: quietUi);
             try { ReconcileAutoGenderForCurrentTarget(); } catch { }
 
-            // 3. Restore side-tab panels and their list configurations
-            if (entry.HasSideTabState)
+            // 3. Restore side-tab panels and their list configurations (skip when quiet — UI only)
+            if (!quietUi && entry.HasSideTabState)
                 ApplyQuickFilterSideTabState(entry);
 
             // 4. Refresh (license filter hydrates package meta first)
-            UpdateLayout();
-            UpdateTabs();
+            if (!quietUi)
+            {
+                UpdateLayout();
+                UpdateTabs();
+            }
             if (HasLicenseFilter())
             {
                 CancelLicenseFilterHydrate();
@@ -91,10 +129,14 @@ namespace VPB
             {
                 RefreshFiles();
             }
-            try { SyncSidePaneTopSortButtonVisuals(); } catch { }
-            try { SyncSceneSourceSortButtonHighlights(); } catch { }
+            if (!quietUi)
+            {
+                try { SyncSidePaneTopSortButtonVisuals(); } catch { }
+                try { SyncSceneSourceSortButtonHighlights(); } catch { }
+            }
             
-            ShowTemporaryStatus("Quick Filter Applied: " + entry.Name);
+            if (announce)
+                ShowTemporaryStatus("Quick Filter Applied: " + entry.Name);
         }
 
         private void CaptureQuickFilterSideTabState(QuickFilterEntry entry)
@@ -285,6 +327,20 @@ namespace VPB
             SyncQuickFilterToggleState();
         }
 
+        /// <summary>ALT+F — open/close floating filter-presets window (detach if needed; hide keeps float).</summary>
+        public void ToggleFloatingQuickFilters()
+        {
+            if (quickFiltersUI == null) return;
+            if (quickFiltersUI.IsVisible && quickFiltersUI.IsDetached)
+            {
+                quickFiltersUI.SetVisible(false);
+                SyncQuickFilterToggleState();
+                return;
+            }
+            quickFiltersUI.EnsureDetachedAndVisible();
+            SyncQuickFilterToggleState();
+        }
+
         public void SyncQuickFilterToggleState()
         {
             if (quickFiltersUI == null) return;
@@ -293,6 +349,32 @@ namespace VPB
                 quickFiltersToggleBtnIconImage.color = on ? Color.green : Color.white;
             else if (quickFiltersToggleBtnText != null)
                 quickFiltersToggleBtnText.color = on ? Color.green : Color.white;
+        }
+
+        /// <summary>Debounced VPBConfig.Save after filter-presets float geometry / detach changes.</summary>
+        internal void ScheduleQuickFiltersConfigSave()
+        {
+            if (!isActiveAndEnabled) return;
+            try
+            {
+                if (_quickFiltersConfigSaveCo != null)
+                    StopCoroutine(_quickFiltersConfigSaveCo);
+            }
+            catch { }
+            try { _quickFiltersConfigSaveCo = StartCoroutine(QuickFiltersConfigSaveCo()); }
+            catch { _quickFiltersConfigSaveCo = null; }
+        }
+
+        private IEnumerator QuickFiltersConfigSaveCo()
+        {
+            yield return new WaitForSecondsRealtime(0.35f);
+            _quickFiltersConfigSaveCo = null;
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.Save(false);
+            }
+            catch { }
         }
     }
 }

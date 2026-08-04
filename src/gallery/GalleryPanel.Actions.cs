@@ -221,8 +221,35 @@ namespace VPB
 
         private void LoadRandom()
         {
+            LoadRandom(null, null, 0);
+        }
+
+        /// <param name="excludeIdentityKey">
+        /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
+        /// </param>
+        private void LoadRandom(string excludeIdentityKey)
+        {
+            LoadRandom(excludeIdentityKey, null, 0);
+        }
+
+        /// <param name="excludeIdentityKey">
+        /// When set and pool has 2+ items, never pick this identity (path/uid). Retries then linear scan.
+        /// </param>
+        /// <param name="replaceModeOverride">
+        /// Null = persisted Add/Replace. Non-null forces mode for this sync apply only (filter multi-random).
+        /// </param>
+        /// <param name="replaceOverrideToken">Owner token for scoped override clear (filter-randomize gen).</param>
+        private void LoadRandom(string excludeIdentityKey, bool? replaceModeOverride, int replaceOverrideToken)
+        {
+            bool overrideHeld = false;
             try
             {
+                if (replaceModeOverride.HasValue && replaceOverrideToken != 0)
+                {
+                    BeginDragDropReplaceOverride(replaceModeOverride.Value, replaceOverrideToken);
+                    overrideHeld = true;
+                }
+
                 // Prefer the currently visible list (includes top search + filter-mode search).
                 // lastFilteredFiles is a post-refresh snapshot and does not change when the user searches.
                 var pool = (currentFilteredFiles != null && currentFilteredFiles.Count > 0)
@@ -235,8 +262,15 @@ namespace VPB
                     return;
                 }
 
-                int idx = UnityEngine.Random.Range(0, pool.Count);
-                FileEntry file = pool[idx];
+                bool historyBrowse = activeContentType == ContentType.History;
+
+                string excludeKey = excludeIdentityKey;
+                if (string.IsNullOrEmpty(excludeKey))
+                {
+                    try { excludeKey = GetCurrentSelectionAnchorIdentityKey(historyBrowse); } catch { excludeKey = null; }
+                }
+
+                FileEntry file = PickRandomFileEntry(pool, excludeKey, historyBrowse);
                 if (file == null)
                 {
                     LogUtil.LogWarning("[VPB] Load Random: selected file was null.");
@@ -276,6 +310,45 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] Load Random exception: " + ex);
             }
+            finally
+            {
+                if (overrideHeld)
+                    EndDragDropReplaceOverride(replaceOverrideToken);
+            }
+        }
+
+        /// <summary>
+        /// Pick random pool entry. When <paramref name="excludeIdentityKey"/> set and pool has 2+
+        /// candidates, never return that identity (retry then linear scan). Single-item pool may return it.
+        /// </summary>
+        private FileEntry PickRandomFileEntry(List<FileEntry> pool, string excludeIdentityKey, bool historyBrowse)
+        {
+            if (pool == null || pool.Count == 0) return null;
+
+            if (pool.Count == 1 || string.IsNullOrEmpty(excludeIdentityKey))
+                return pool[UnityEngine.Random.Range(0, pool.Count)];
+
+            int attempts = Mathf.Min(pool.Count * 2, 32);
+            for (int a = 0; a < attempts; a++)
+            {
+                FileEntry cand = pool[UnityEngine.Random.Range(0, pool.Count)];
+                if (cand == null) continue;
+                string key = GetSelectionIdentityKey(cand, historyBrowse);
+                if (!string.Equals(key, excludeIdentityKey, StringComparison.OrdinalIgnoreCase))
+                    return cand;
+            }
+
+            for (int i = 0; i < pool.Count; i++)
+            {
+                FileEntry cand = pool[i];
+                if (cand == null) continue;
+                string key = GetSelectionIdentityKey(cand, historyBrowse);
+                if (!string.Equals(key, excludeIdentityKey, StringComparison.OrdinalIgnoreCase))
+                    return cand;
+            }
+
+            // Only matching identity in pool — unavoidable.
+            return pool[UnityEngine.Random.Range(0, pool.Count)];
         }
 
         /// <summary>

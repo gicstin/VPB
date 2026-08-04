@@ -406,6 +406,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.GallerySearch.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.FilterPresets.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
@@ -452,6 +453,7 @@
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.FilterRandomizer.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorConsolidation.cs" />
     <Compile Include="src\gallery\CreatorNameConsolidation.cs" />

@@ -747,6 +747,13 @@ namespace VPB
                 try { FocusTitleSearchFromHotkey(); } catch { }
                 return;
             }
+            // Alt+F — floating filter presets (not Ctrl+F search). Before InputField gate.
+            bool altEarly = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
+            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.F))
+            {
+                try { ToggleFloatingQuickFilters(); } catch { }
+                return;
+            }
             if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
             {
                 try
@@ -806,11 +813,24 @@ namespace VPB
                 return;
             }
 
+            // In-app help: Esc / F1 before InputField gate (search field must not swallow Esc).
+            if (TryHandleInAppHelpKeyboard(allowQuestionKey: false))
+                return;
+
+            if (Input.GetKeyDown(KeyCode.Escape)
+                && quickFiltersUI != null
+                && quickFiltersUI.TryCancelPendingDelete())
+                return;
+
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
                 if (sel.GetComponent<InputField>() != null) return;
             }
+
+            // ? / Shift+/ — Hotkeys sheet (recognition). After InputField gate.
+            if (TryHandleInAppHelpKeyboard(allowQuestionKey: true))
+                return;
 
             if (Input.GetKeyDown(KeyCode.Escape) && _titleSearchPopupOpen)
             {

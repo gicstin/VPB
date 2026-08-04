@@ -77,7 +77,7 @@ namespace VPB
             _titleBarHelpBtnRT.anchorMin = new Vector2(0.5f, 0.5f);
             _titleBarHelpBtnRT.anchorMax = new Vector2(0.5f, 0.5f);
             _titleBarHelpBtnRT.pivot = new Vector2(0.5f, 0.5f);
-            AddTooltip(helpBtn, "gallery.help.tooltip", "Open gallery help (searchable topics)");
+            AddTooltip(helpBtn, "gallery.help.tooltip", "Open gallery help. ? or F1 jumps to Hotkeys; Esc closes.");
 
             if (backgroundBoxGO == null) return;
 
@@ -688,6 +688,54 @@ namespace VPB
         private void ToggleInAppHelpPanel()
         {
             SetInAppHelpOpen(!_inAppHelpOpen);
+        }
+
+        /// <summary>
+        /// Recognition path for gallery shortcuts: open Help on Hotkeys, or close if already there.
+        /// </summary>
+        private void ToggleGalleryShortcutHelp()
+        {
+            if (_inAppHelpOpen
+                && string.Equals(_inAppHelpActiveSectionId, "hotkeys", StringComparison.Ordinal))
+            {
+                SetInAppHelpOpen(false);
+                return;
+            }
+
+            ScrollInAppHelpToSection("hotkeys");
+        }
+
+        /// <summary>
+        /// Esc closes help. F1 / ? / Shift+/ toggles Hotkeys sheet. Returns true if consumed.
+        /// Call Esc/F1 before InputField gate; call ? after gate so typing is not stolen.
+        /// </summary>
+        private bool TryHandleInAppHelpKeyboard(bool allowQuestionKey)
+        {
+            if (Input.GetKeyDown(KeyCode.Escape) && _inAppHelpOpen)
+            {
+                SetInAppHelpOpen(false);
+                return true;
+            }
+
+            bool f1 = Input.GetKeyDown(KeyCode.F1);
+            bool question = allowQuestionKey
+                && (Input.GetKeyDown(KeyCode.Question)
+                    || (Input.GetKeyDown(KeyCode.Slash)
+                        && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))));
+
+            if (!f1 && !question) return false;
+
+            if (!IsVisible && !_inAppHelpOpen)
+                return false;
+
+            if (f1 && IsStripKeepSelectorOpen())
+            {
+                try { ToggleStripKeepShortcutHelp(); } catch { }
+                return true;
+            }
+
+            try { ToggleGalleryShortcutHelp(); } catch { }
+            return true;
         }
 
         public void OpenInAppHelpToSection(string sectionId)

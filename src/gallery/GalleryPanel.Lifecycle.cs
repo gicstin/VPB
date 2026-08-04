@@ -435,6 +435,19 @@ namespace VPB
         void OnDestroy()
         {
             StopCo(ref _categoryQuickApplyCoroutine);
+            try { _filterRandomizeGen++; } catch { }
+            StopCo(ref _filterRandomizeCo);
+            try { ClearDragDropReplaceOverride(); } catch { }
+            try { InvalidateClothingApplySerial(); } catch { }
+            try
+            {
+                if (_quietGalleryRefresh)
+                {
+                    _quietGalleryRefresh = false;
+                    _quietDisplayFiles.Clear();
+                }
+            }
+            catch { }
 
             // Creator Strip: clear static suppress + stop routine before canvas teardown.
             try
