@@ -754,6 +754,12 @@ namespace VPB
                 try { ToggleFloatingQuickFilters(); } catch { }
                 return;
             }
+            // Alt+I — floating Scene Import (detach if needed; hide keeps float).
+            if (!ctrlEarly && altEarly && Input.GetKeyDown(KeyCode.I))
+            {
+                try { ToggleFloatingImportSidebar(); } catch { }
+                return;
+            }
             if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
             {
                 try
@@ -819,6 +825,10 @@ namespace VPB
 
             // Remap Atom UIDs float: Esc ladder (filter → collapse → cancel) before InputField gate.
             if (TryHandleRemapAtomUidsEsc())
+                return;
+
+            // Scene Import float: Esc expand / hide-keep-detach.
+            if (TryHandleImportSidebarFloatEsc())
                 return;
 
             // Filter presets: Esc modes/hide, arrows/Enter/D/Ctrl+S/U (before InputField gate so rename Esc works).

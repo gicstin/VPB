@@ -132,6 +132,7 @@ Use **Edit** in the Tags column header to open the tag editor **Database** mode 
 
 - **Left-click** — open import sidebar on the same side as the button.
 - **Right-click** — open it on the **opposite** side.
+- Header **float** chip / **Alt+I** — detach as a **resizable floating window** (position and size remembered). **X** / **Esc** hide and keep float; footer **Dock** reattaches as the side column and **stays open**. Floating Import does not push the grid inset.
 
 ### Import sidebar steps
 1. Select **exactly one scene** in the grid (multi-select blocks import).
@@ -265,6 +266,7 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 ### Browse and search
 - **Ctrl+F** — focus title search (opens compact popup if needed)
 - **Alt+F** — open / close floating filter presets (hide keeps float; Dock reattaches)
+- **Alt+I** — open / close floating Scene Import (detach if needed; hide keeps float; Dock reattaches as side panel and stays open)
 - Filter presets open: **↑↓** / **Enter** / **D** / **Ctrl+S** / **Esc** / **U** (soft-delete undo)
 - **Enter** — commit draft search to an Include chip
 - **Shift+Enter** — commit draft to Exclude

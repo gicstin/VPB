@@ -564,6 +564,16 @@ namespace VPB
         public bool GalleryQuickFiltersSizeSaved = false;
         public float GalleryQuickFiltersWidthRef = 280f;
         public float GalleryQuickFiltersHeightRef = 420f;
+        /// <summary>Scene Import sidebar opens as floating window (side-rail still toggles open/close).</summary>
+        public bool GalleryImportSidebarDetached = false;
+        /// <summary>When true, restore last Scene Import floating position (canvas-local, center).</summary>
+        public bool GalleryImportSidebarPosSaved = false;
+        public float GalleryImportSidebarPosX = 0f;
+        public float GalleryImportSidebarPosY = 0f;
+        /// <summary>When true, restore last Scene Import floating size (design px at scale 1).</summary>
+        public bool GalleryImportSidebarSizeSaved = false;
+        public float GalleryImportSidebarWidthRef = 360f;
+        public float GalleryImportSidebarHeightRef = 560f;
         /// <summary>When true, restore last Remap Atom UIDs floating position (canvas-local, center).</summary>
         public bool GalleryRemapAtomUidsPosSaved = false;
         public float GalleryRemapAtomUidsPosX = 0f;
@@ -1176,6 +1186,13 @@ namespace VPB
             GalleryQuickFiltersSizeSaved = false;
             GalleryQuickFiltersWidthRef = 280f;
             GalleryQuickFiltersHeightRef = 420f;
+            GalleryImportSidebarDetached = false;
+            GalleryImportSidebarPosSaved = false;
+            GalleryImportSidebarPosX = 0f;
+            GalleryImportSidebarPosY = 0f;
+            GalleryImportSidebarSizeSaved = false;
+            GalleryImportSidebarWidthRef = 360f;
+            GalleryImportSidebarHeightRef = 560f;
             GalleryRemapAtomUidsPosSaved = false;
             GalleryRemapAtomUidsPosX = 0f;
             GalleryRemapAtomUidsPosY = 0f;
@@ -1535,6 +1552,20 @@ namespace VPB
                             GalleryQuickFiltersWidthRef = Mathf.Max(0f, node["GalleryQuickFiltersWidthRef"].AsFloat);
                         if (node["GalleryQuickFiltersHeightRef"] != null)
                             GalleryQuickFiltersHeightRef = Mathf.Max(0f, node["GalleryQuickFiltersHeightRef"].AsFloat);
+                        if (node["GalleryImportSidebarDetached"] != null)
+                            GalleryImportSidebarDetached = node["GalleryImportSidebarDetached"].AsBool;
+                        if (node["GalleryImportSidebarPosSaved"] != null)
+                            GalleryImportSidebarPosSaved = node["GalleryImportSidebarPosSaved"].AsBool;
+                        if (node["GalleryImportSidebarPosX"] != null)
+                            GalleryImportSidebarPosX = node["GalleryImportSidebarPosX"].AsFloat;
+                        if (node["GalleryImportSidebarPosY"] != null)
+                            GalleryImportSidebarPosY = node["GalleryImportSidebarPosY"].AsFloat;
+                        if (node["GalleryImportSidebarSizeSaved"] != null)
+                            GalleryImportSidebarSizeSaved = node["GalleryImportSidebarSizeSaved"].AsBool;
+                        if (node["GalleryImportSidebarWidthRef"] != null)
+                            GalleryImportSidebarWidthRef = Mathf.Max(0f, node["GalleryImportSidebarWidthRef"].AsFloat);
+                        if (node["GalleryImportSidebarHeightRef"] != null)
+                            GalleryImportSidebarHeightRef = Mathf.Max(0f, node["GalleryImportSidebarHeightRef"].AsFloat);
                         if (node["GalleryRemapAtomUidsPosSaved"] != null)
                             GalleryRemapAtomUidsPosSaved = node["GalleryRemapAtomUidsPosSaved"].AsBool;
                         if (node["GalleryRemapAtomUidsPosX"] != null)
@@ -1953,6 +1984,13 @@ namespace VPB
                 node["GalleryQuickFiltersSizeSaved"].AsBool = GalleryQuickFiltersSizeSaved;
                 node["GalleryQuickFiltersWidthRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersWidthRef);
                 node["GalleryQuickFiltersHeightRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersHeightRef);
+                node["GalleryImportSidebarDetached"].AsBool = GalleryImportSidebarDetached;
+                node["GalleryImportSidebarPosSaved"].AsBool = GalleryImportSidebarPosSaved;
+                node["GalleryImportSidebarPosX"].AsFloat = GalleryImportSidebarPosX;
+                node["GalleryImportSidebarPosY"].AsFloat = GalleryImportSidebarPosY;
+                node["GalleryImportSidebarSizeSaved"].AsBool = GalleryImportSidebarSizeSaved;
+                node["GalleryImportSidebarWidthRef"].AsFloat = Mathf.Max(0f, GalleryImportSidebarWidthRef);
+                node["GalleryImportSidebarHeightRef"].AsFloat = Mathf.Max(0f, GalleryImportSidebarHeightRef);
                 node["GalleryRemapAtomUidsPosSaved"].AsBool = GalleryRemapAtomUidsPosSaved;
                 node["GalleryRemapAtomUidsPosX"].AsFloat = GalleryRemapAtomUidsPosX;
                 node["GalleryRemapAtomUidsPosY"].AsFloat = GalleryRemapAtomUidsPosY;

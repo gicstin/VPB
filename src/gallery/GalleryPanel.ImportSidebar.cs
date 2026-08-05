@@ -148,6 +148,8 @@ namespace VPB
 
             if (active)
             {
+                // Dock vs float host (reparent + chrome) before layout/grid inset.
+                try { SyncImportSidebarHostChromeAfterActivate(); } catch { }
                 // Re-anchor in case the side differs from the previous open.
                 float s = ChromeScale;
                 ApplyImportSidebarBaseRect(s);
@@ -296,6 +298,12 @@ namespace VPB
             if (source == null) return;
             importSidebarOpenIntent = source.importSidebarOpenIntent;
             importSidebarOnLeft = source.importSidebarOnLeft;
+            importSidebarDetached = source.importSidebarDetached;
+            importSidebarFloatCollapsed = source.importSidebarFloatCollapsed;
+            importSidebarExpandHeightRef = source.importSidebarExpandHeightRef;
+            importSidebarSavedFloatPosCenter = source.importSidebarSavedFloatPosCenter;
+            importSidebarSavedFloatSizeRef = source.importSidebarSavedFloatSizeRef;
+            importSidebarCollapsedTopLeftPos = source.importSidebarCollapsedTopLeftPos;
             importSidebarOpenIntentLoaded = true;
             if (importSidebarOpenIntent)
             {

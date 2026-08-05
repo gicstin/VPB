@@ -132,10 +132,10 @@ namespace VPB
             float leftOffset = SyncSideRailChrome(BuildLeftSideRailChrome(), closedInset);
             float rightOffset = SyncSideRailChrome(BuildRightSideRailChrome(), -closedInset);
             
-            // Import sidebar hides its own side's tab column and pushes the grid edge in by 230,
-            // so the sidebar replaces (not overlaps) the Category / Creator slot it occupies.
+            // Docked Import sidebar hides its side's tab column and pushes the grid edge in by 230.
+            // Floating Import does not occupy the side column (grid stays full width).
             float importInset = GalleryUiDesignTokens.SideTabOpenGridInsetRef * paneScale;
-            if (importSidebarActive)
+            if (ImportSidebarOccupiesSideColumn)
             {
                 if (importSidebarOnLeft)
                 {
@@ -159,8 +159,9 @@ namespace VPB
                     if (rightSubSearchInput != null) rightSubSearchInput.gameObject.SetActive(false);
                     if (rightOffset > -importInset) rightOffset = -importInset;
                 }
-                if (importSidebarRoot != null) importSidebarRoot.transform.SetAsLastSibling();
             }
+            if (importSidebarActive && importSidebarRoot != null)
+                importSidebarRoot.transform.SetAsLastSibling();
 
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }
             try { SuppressImportOccupiedSideColumnChrome(); } catch { }
@@ -2283,7 +2284,7 @@ namespace VPB
         private void SyncSideRailOpenFacetChromeForSide(bool isLeft)
         {
             ContentType? active = isLeft ? leftActiveContent : rightActiveContent;
-            bool importOpen = importSidebarActive && importSidebarOnLeft == isLeft;
+            bool importOpen = ImportSidebarOccupiesSideColumn && importSidebarOnLeft == isLeft;
 
             GameObject cat = isLeft
                 ? (leftCategoryBtnImage != null ? leftCategoryBtnImage.gameObject : null)

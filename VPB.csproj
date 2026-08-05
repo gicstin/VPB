@@ -518,6 +518,7 @@
     <Compile Include="src\gallery\GalleryPanel.Toolbox.SceneImport.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.UI.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Float.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Atoms.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Options.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickMenuExports.cs" />

@@ -2082,9 +2082,9 @@ namespace VPB
                 if (_tryOnActive) TryOnLayoutBar();
                 try { DetailStripLayout(); } catch { }
                 try { DetailStripSyncExpandButtonChrome(ChromeScale); } catch { }
-                // The import sidebar's bottom inset comes from this same toolbox height; resync it so the Apply
-                // button doesn't overlap the toolbox when it expands to two rows.
-                if (importSidebarActive && importSidebarRT != null)
+                // Docked only: bottom inset tracks toolbox height so Apply doesn't overlap.
+                // Floating uses point anchors + sizeDelta — writing offsetMin.y fights resize / collapse.
+                if (importSidebarActive && importSidebarRT != null && !importSidebarDetached)
                     importSidebarRT.offsetMin = new Vector2(importSidebarRT.offsetMin.x, SideTabScrollBottomInsetY());
             }
 

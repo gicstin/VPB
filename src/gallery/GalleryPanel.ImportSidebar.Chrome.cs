@@ -27,7 +27,7 @@ namespace VPB
         /// <summary>Hide side-column filter/sort chrome on the edge replaced by the import sidebar.</summary>
         private void SuppressImportOccupiedSideColumnChrome()
         {
-            if (!importSidebarActive) return;
+            if (!ImportSidebarOccupiesSideColumn) return;
             SetSideColumnFilterChromeVisible(importSidebarOnLeft, false);
             try { SetUserTagScrollStepButtonsActive(importSidebarOnLeft, false); } catch { }
             try { SanitizeImportSidebarScrollChrome(); } catch { }

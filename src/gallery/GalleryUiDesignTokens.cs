@@ -212,6 +212,19 @@ namespace VPB
         public const float ImportSidebarRowHeightRef = ButtonSizeRef;
         public const int ImportSidebarFontRef = FontRef;
         public const int ImportSidebarFontMin = FontMinRef;
+        /// <summary>Floating Scene Import window defaults / clamps (design px at scale 1).</summary>
+        public const float ImportSidebarFloatDefaultWidthRef = 360f;
+        public const float ImportSidebarFloatDefaultHeightRef = 560f;
+        public const float ImportSidebarFloatMinWidthRef = 220f;
+        public const float ImportSidebarFloatMinHeightRef = 320f;
+        /// <summary>Soft floor for max size; live max also grows to float-host rect (low DPI / UI scale).</summary>
+        public const float ImportSidebarFloatMaxWidthRef = 900f;
+        public const float ImportSidebarFloatMaxHeightRef = 1600f;
+        /// <summary>Hard ceiling in design px (corrupt prefs / bad host read).</summary>
+        public const float ImportSidebarFloatAbsoluteMaxWidthRef = 4000f;
+        public const float ImportSidebarFloatAbsoluteMaxHeightRef = 4000f;
+        /// <summary>Inset from float host edges when computing max size.</summary>
+        public const float ImportSidebarFloatHostMarginRef = 24f;
 
         // In-app help panel
         public const float InAppHelpPanelWidthRef = 460f;
