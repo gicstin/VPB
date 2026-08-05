@@ -258,6 +258,64 @@ namespace VPB.src.util
             ReplacePluginKeyTokenWalk(root, fromKey, toKey);
         }
 
+        /// <summary>
+        /// Trigger-action aware: only rewrites leaf values under key <c>receiver</c> when the sibling
+        /// <c>receiverAtom</c> equals <paramref name="receiverAtomUid"/> and the receiver value equals
+        /// <paramref name="fromReceiver"/>. Leaves PluginManager dicts / unrelated plugin# tokens alone.
+        /// Cold path (scene atom import remap).
+        /// </summary>
+        public static void RemapTriggerReceiverMutable(
+            JSONNode root, string receiverAtomUid, string fromReceiver, string toReceiver)
+        {
+            if (root == null) return;
+            if (string.IsNullOrEmpty(receiverAtomUid)
+                || string.IsNullOrEmpty(fromReceiver)
+                || string.IsNullOrEmpty(toReceiver))
+                return;
+            if (string.Equals(fromReceiver, toReceiver, StringComparison.Ordinal)) return;
+            RemapTriggerReceiverWalk(root, receiverAtomUid, fromReceiver, toReceiver);
+        }
+
+        static void RemapTriggerReceiverWalk(
+            JSONNode node, string receiverAtomUid, string fromReceiver, string toReceiver)
+        {
+            if (node == null) return;
+
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    RemapTriggerReceiverWalk(ja[i], receiverAtomUid, fromReceiver, toReceiver);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc == null) return;
+
+            try
+            {
+                if (jc.HasKey("receiverAtom") && jc.HasKey("receiver"))
+                {
+                    string atom = jc["receiverAtom"] != null ? jc["receiverAtom"].Value : null;
+                    string recv = jc["receiver"] != null ? jc["receiver"].Value : null;
+                    if (!string.IsNullOrEmpty(atom)
+                        && atom.StartsWith("external_ref:", StringComparison.Ordinal))
+                        atom = atom.Substring("external_ref:".Length);
+                    if (string.Equals(atom, receiverAtomUid, StringComparison.Ordinal)
+                        && string.Equals(recv, fromReceiver, StringComparison.Ordinal))
+                    {
+                        jc["receiver"] = toReceiver;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            foreach (string key in jc.Keys)
+                RemapTriggerReceiverWalk(jc[key], receiverAtomUid, fromReceiver, toReceiver);
+        }
+
         static void ReplacePluginKeyTokenWalk(JSONNode node, string fromKey, string toKey)
         {
             if (node == null) return;

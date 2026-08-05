@@ -2194,7 +2194,7 @@ namespace VPB
                 LogUtil.Log("[VPB][Atoms][import] " + broken.Count
                     + " broken external UID ref(s) — showing Remap Atom UIDs modal.");
                 ContinueImportSelectedSceneAtomsAfterRemap(
-                    scene, sourceHostUid, selectedIds, null, broken);
+                    scene, sourceHostUid, selectedIds, null, null, broken);
                 return;
             }
 
@@ -2210,9 +2210,10 @@ namespace VPB
             string sourceHostUid,
             HashSet<string> selectedIds,
             Dictionary<string, string> remapAcc,
+            Dictionary<string, Dictionary<string, string>> receiverRemapAcc,
             List<SceneAtomImporter.BrokenUidRef> broken)
         {
-            ShowRemapAtomUidsModal(broken, (remap, createNew) =>
+            ShowRemapAtomUidsModal(broken, (remap, createNew, receiverRemap) =>
             {
                 if (remap != null)
                 {
@@ -2220,6 +2221,24 @@ namespace VPB
                         remapAcc = new Dictionary<string, string>(StringComparer.Ordinal);
                     foreach (KeyValuePair<string, string> kv in remap)
                         remapAcc[kv.Key] = kv.Value;
+                }
+
+                if (receiverRemap != null)
+                {
+                    if (receiverRemapAcc == null)
+                        receiverRemapAcc = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+                    foreach (KeyValuePair<string, Dictionary<string, string>> kv in receiverRemap)
+                    {
+                        if (kv.Value == null || kv.Value.Count == 0) continue;
+                        Dictionary<string, string> existing;
+                        if (!receiverRemapAcc.TryGetValue(kv.Key, out existing) || existing == null)
+                        {
+                            existing = new Dictionary<string, string>(StringComparer.Ordinal);
+                            receiverRemapAcc[kv.Key] = existing;
+                        }
+                        foreach (KeyValuePair<string, string> rv in kv.Value)
+                            existing[rv.Key] = rv.Value;
+                    }
                 }
 
                 if (createNew != null)
@@ -2252,11 +2271,11 @@ namespace VPB
                     LogUtil.Log("[VPB][Atoms][import] " + more.Count
                         + " more broken UID ref(s) after create — remap again.");
                     ContinueImportSelectedSceneAtomsAfterRemap(
-                        scene, sourceHostUid, selectedIds, remapAcc, more);
+                        scene, sourceHostUid, selectedIds, remapAcc, receiverRemapAcc, more);
                     return;
                 }
 
-                RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, remapAcc);
+                RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, remapAcc, receiverRemapAcc);
             });
         }
 
@@ -2266,7 +2285,24 @@ namespace VPB
             HashSet<string> selectedIds,
             Dictionary<string, string> uidRemap)
         {
+            RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, uidRemap, null);
+        }
+
+        private void RunImportSelectedSceneAtoms(
+            JSONClass scene,
+            string sourceHostUid,
+            HashSet<string> selectedIds,
+            Dictionary<string, string> uidRemap,
+            Dictionary<string, Dictionary<string, string>> receiverRemapByUid)
+        {
             if (scene == null || selectedIds == null || selectedIds.Count == 0) return;
+
+            int recvCount = 0;
+            if (receiverRemapByUid != null)
+            {
+                foreach (KeyValuePair<string, Dictionary<string, string>> kv in receiverRemapByUid)
+                    if (kv.Value != null) recvCount += kv.Value.Count;
+            }
 
             LogUtil.Log("[VPB][Atoms][import] apply sidebar pick=" + importSidebarPickSceneAtoms
                 + " selected=" + selectedIds.Count
@@ -2275,12 +2311,13 @@ namespace VPB
                 + " source='" + (importSidebarSourceAtomId ?? "") + "'"
                 + " target='" + (importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "(none)") + "'"
                 + " hostUid='" + (sourceHostUid ?? "") + "'"
-                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0"));
+                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0")
+                + " receiverRemap=" + recvCount.ToString());
 
             StartCoroutine(SceneAtomImporter.ImportSelectedAtoms(
                 scene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid,
                 selectedIds, importSidebarSceneAtomRelativeToPerson, importSidebarSceneAtomSkipDuplicates,
-                uidRemap));
+                uidRemap, receiverRemapByUid));
         }
 
         // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target

@@ -32,6 +32,25 @@ namespace VPB.src.util
             public string SuggestedLiveUid;
             /// <summary>Donor scene still has this atom — Remap modal can co-import it as Create new.</summary>
             public bool CanCreateFromSource;
+            /// <summary>
+            /// Distinct <c>plugin#N_ClassName</c> values from trigger <c>receiver</c> fields targeting
+            /// <see cref="OriginalUid"/> inside the selected import JSON. Empty/null when none.
+            /// </summary>
+            public List<string> SourcePluginReceivers;
+            /// <summary>
+            /// Parallel to <see cref="SourcePluginReceivers"/>: PluginManager URL for that slot on the
+            /// source-scene atom (may be empty). Used for URL-based live suggest.
+            /// </summary>
+            public List<string> SourcePluginReceiverUrls;
+        }
+
+        /// <summary>Live plugin slot on an atom (PluginManager key + param storable id + script URL).</summary>
+        public struct LivePluginSlot
+        {
+            public string SlotKey;
+            public string StoreId;
+            public string ClassName;
+            public string Url;
         }
 
         /// <summary>
@@ -176,7 +195,7 @@ namespace VPB.src.util
         {
             return ImportSelectedAtoms(
                 sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
-                selectedIds, relativeToTargetPerson, skipExistingInScene, null);
+                selectedIds, relativeToTargetPerson, skipExistingInScene, null, null);
         }
 
         public static IEnumerator ImportSelectedAtoms(
@@ -189,11 +208,38 @@ namespace VPB.src.util
             bool skipExistingInScene,
             Dictionary<string, string> uidRemap)
         {
+            return ImportSelectedAtoms(
+                sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
+                selectedIds, relativeToTargetPerson, skipExistingInScene, uidRemap, null);
+        }
+
+        /// <param name="receiverRemapByUid">
+        /// Optional: original atom uid → (source <c>plugin#N_Class</c> → live dest store id).
+        /// Applied to trigger <c>receiver</c> fields before atom UID remap.
+        /// </param>
+        public static IEnumerator ImportSelectedAtoms(
+            JSONClass sourceScene,
+            string sourcePersonAtomId,
+            Atom targetPerson,
+            string sourceHostUid,
+            HashSet<string> selectedIds,
+            bool relativeToTargetPerson,
+            bool skipExistingInScene,
+            Dictionary<string, string> uidRemap,
+            Dictionary<string, Dictionary<string, string>> receiverRemapByUid)
+        {
             if (sourceScene == null || selectedIds == null || selectedIds.Count == 0)
             {
                 LogAtom("abort — sourceScene=" + (sourceScene != null ? "ok" : "null")
                     + " selectedIds=" + (selectedIds != null ? selectedIds.Count.ToString() : "null"));
                 yield break;
+            }
+
+            int recvCount = 0;
+            if (receiverRemapByUid != null)
+            {
+                foreach (KeyValuePair<string, Dictionary<string, string>> kv in receiverRemapByUid)
+                    if (kv.Value != null) recvCount += kv.Value.Count;
             }
 
             LogAtom("start selected=" + selectedIds.Count
@@ -202,7 +248,8 @@ namespace VPB.src.util
                 + " sourcePerson='" + (sourcePersonAtomId ?? "") + "'"
                 + " targetPerson='" + (targetPerson != null ? targetPerson.uid : "(none)") + "'"
                 + " sourceHostUid='" + (sourceHostUid ?? "") + "'"
-                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0"));
+                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0")
+                + " receiverRemap=" + recvCount.ToString());
 
             while (s_importRunning)
                 yield return null;
@@ -211,7 +258,8 @@ namespace VPB.src.util
             {
                 yield return ImportSelectedAtomsCore(
                     sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
-                    selectedIds, relativeToTargetPerson, skipExistingInScene, uidRemap);
+                    selectedIds, relativeToTargetPerson, skipExistingInScene,
+                    uidRemap, receiverRemapByUid);
             }
             finally
             {
@@ -245,11 +293,13 @@ namespace VPB.src.util
             }
 
             var referenced = new HashSet<string>(StringComparer.Ordinal);
+            var pluginReceiversByUid = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             foreach (string id in selectedIds)
             {
                 JSONClass node = FindAtom(atoms, id);
                 if (node == null) continue;
                 CollectReferencedSourceAtomUids(node, sourceIdToType, referenced);
+                CollectTriggerPluginReceivers(node, pluginReceiversByUid);
             }
 
             // Live uid → type for same-type suggestions.
@@ -287,17 +337,430 @@ namespace VPB.src.util
                         suggested = sameType[0];
                 }
 
+                List<string> srcReceivers = null;
+                List<string> srcUrls = null;
+                HashSet<string> recvSet;
+                if (pluginReceiversByUid.TryGetValue(refUid, out recvSet) && recvSet != null && recvSet.Count > 0)
+                {
+                    srcReceivers = new List<string>(recvSet.Count);
+                    srcUrls = new List<string>(recvSet.Count);
+                    foreach (string r in recvSet)
+                        srcReceivers.Add(r);
+                    srcReceivers.Sort(StringComparer.OrdinalIgnoreCase);
+                    JSONClass targetAtomNode = FindAtom(atoms, refUid);
+                    for (int ri = 0; ri < srcReceivers.Count; ri++)
+                        srcUrls.Add(LookupSourcePluginUrl(targetAtomNode, srcReceivers[ri]));
+                }
+
                 result.Add(new BrokenUidRef
                 {
                     OriginalUid = refUid,
                     SourceType = srcType ?? string.Empty,
                     SuggestedLiveUid = suggested,
-                    CanCreateFromSource = sourceIdToType.ContainsKey(refUid)
+                    CanCreateFromSource = sourceIdToType.ContainsKey(refUid),
+                    SourcePluginReceivers = srcReceivers,
+                    SourcePluginReceiverUrls = srcUrls
                 });
             }
 
             result.Sort((a, b) => string.Compare(a.OriginalUid, b.OriginalUid, StringComparison.OrdinalIgnoreCase));
             return result;
+        }
+
+        /// <summary>
+        /// Walk trigger-action objects (<c>receiverAtom</c> + <c>receiver</c>) and collect distinct
+        /// <c>plugin#N_ClassName</c> receivers keyed by the target atom uid.
+        /// </summary>
+        private static void CollectTriggerPluginReceivers(
+            JSONNode node, Dictionary<string, HashSet<string>> sink)
+        {
+            if (node == null || sink == null) return;
+
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    CollectTriggerPluginReceivers(ja[i], sink);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc == null) return;
+
+            try
+            {
+                if (jc.HasKey("receiverAtom") && jc.HasKey("receiver"))
+                {
+                    string atom = jc["receiverAtom"] != null ? jc["receiverAtom"].Value : null;
+                    string recv = jc["receiver"] != null ? jc["receiver"].Value : null;
+                    atom = StripExternalRefPrefix(atom);
+                    if (!string.IsNullOrEmpty(atom)
+                        && !string.IsNullOrEmpty(recv)
+                        && IsPluginStoreId(recv))
+                    {
+                        HashSet<string> set;
+                        if (!sink.TryGetValue(atom, out set))
+                        {
+                            set = new HashSet<string>(StringComparer.Ordinal);
+                            sink[atom] = set;
+                        }
+                        set.Add(recv);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            foreach (string key in jc.Keys)
+                CollectTriggerPluginReceivers(jc[key], sink);
+        }
+
+        /// <summary>True for VaM plugin param storable ids like <c>plugin#0_Embody</c>.</summary>
+        public static bool IsPluginStoreId(string storeId)
+        {
+            if (string.IsNullOrEmpty(storeId)) return false;
+            if (!storeId.StartsWith("plugin#", StringComparison.Ordinal)) return false;
+            return storeId.IndexOf('_') > "plugin#".Length;
+        }
+
+        /// <summary>Strip subscene <c>external_ref:</c> prefix from a receiverAtom value.</summary>
+        public static string StripExternalRefPrefix(string receiverAtom)
+        {
+            if (string.IsNullOrEmpty(receiverAtom)) return receiverAtom;
+            const string prefix = "external_ref:";
+            if (receiverAtom.StartsWith(prefix, StringComparison.Ordinal))
+                return receiverAtom.Substring(prefix.Length);
+            return receiverAtom;
+        }
+
+        private static string LookupSourcePluginUrl(JSONClass atomNode, string storeId)
+        {
+            if (atomNode == null || string.IsNullOrEmpty(storeId)) return string.Empty;
+            string slot = PluginStoreSlotKey(storeId);
+            if (string.IsNullOrEmpty(slot)) return string.Empty;
+            try
+            {
+                JSONClass pm = atomNode.GetStorable("PluginManager");
+                if (pm == null) return string.Empty;
+                JSONClass plugins = pm["plugins"] != null ? pm["plugins"].AsObject : null;
+                if (plugins == null || !plugins.HasKey(slot)) return string.Empty;
+                string url = plugins[slot] != null ? plugins[slot].Value : null;
+                return url ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>Class / type suffix of <c>plugin#N_ClassName</c>, or null.</summary>
+        public static string PluginStoreClassName(string storeId)
+        {
+            if (!IsPluginStoreId(storeId)) return null;
+            int us = storeId.IndexOf('_');
+            if (us < 0 || us + 1 >= storeId.Length) return null;
+            return storeId.Substring(us + 1);
+        }
+
+        /// <summary>
+        /// Soft ClassName equality: exact ignore-case, or dotted suffix
+        /// (<c>VamTimeline.AtomPlugin</c> ↔ <c>AtomPlugin</c>).
+        /// </summary>
+        public static bool PluginClassNamesMatch(string a, string b)
+        {
+            if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return false;
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)) return true;
+            if (b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>Slot key <c>plugin#N</c> from a store id or bare slot key.</summary>
+        public static string PluginStoreSlotKey(string storeIdOrSlot)
+        {
+            if (string.IsNullOrEmpty(storeIdOrSlot)) return null;
+            if (!storeIdOrSlot.StartsWith("plugin#", StringComparison.Ordinal)) return null;
+            int us = storeIdOrSlot.IndexOf('_');
+            if (us < 0) return storeIdOrSlot;
+            return storeIdOrSlot.Substring(0, us);
+        }
+
+        /// <summary>
+        /// Live plugin slots on an atom (cold path). Prefer PluginManager URLs; also surfaces
+        /// <c>plugin#N_Class</c> store ids from <see cref="Atom.GetStorableIDs"/>.
+        /// </summary>
+        public static List<LivePluginSlot> ListLivePluginSlots(Atom atom)
+        {
+            var result = new List<LivePluginSlot>(8);
+            if (atom == null) return result;
+
+            var bySlot = new Dictionary<string, LivePluginSlot>(StringComparer.Ordinal);
+            try
+            {
+                JSONStorable pm = atom.GetStorableByID("PluginManager");
+                if (pm != null)
+                {
+                    JSONClass j = pm.GetJSON();
+                    JSONClass plugins = (j != null && j["plugins"] != null) ? j["plugins"].AsObject : null;
+                    if (plugins != null)
+                    {
+                        foreach (string k in plugins.Keys)
+                        {
+                            if (string.IsNullOrEmpty(k)) continue;
+                            string url = plugins[k] != null ? plugins[k].Value : string.Empty;
+                            string className = ClassNameFromPluginUrl(url);
+                            LivePluginSlot slot = new LivePluginSlot
+                            {
+                                SlotKey = k,
+                                StoreId = !string.IsNullOrEmpty(className) ? (k + "_" + className) : k,
+                                ClassName = className ?? string.Empty,
+                                Url = url ?? string.Empty
+                            };
+                            bySlot[k] = slot;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                foreach (string sid in atom.GetStorableIDs())
+                {
+                    if (!IsPluginStoreId(sid)) continue;
+                    string slotKey = PluginStoreSlotKey(sid);
+                    string className = PluginStoreClassName(sid);
+                    LivePluginSlot existing;
+                    if (!string.IsNullOrEmpty(slotKey) && bySlot.TryGetValue(slotKey, out existing))
+                    {
+                        existing.StoreId = sid;
+                        if (string.IsNullOrEmpty(existing.ClassName) && !string.IsNullOrEmpty(className))
+                            existing.ClassName = className;
+                        bySlot[slotKey] = existing;
+                    }
+                    else if (!string.IsNullOrEmpty(slotKey))
+                    {
+                        bySlot[slotKey] = new LivePluginSlot
+                        {
+                            SlotKey = slotKey,
+                            StoreId = sid,
+                            ClassName = className ?? string.Empty,
+                            Url = string.Empty
+                        };
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            foreach (KeyValuePair<string, LivePluginSlot> kv in bySlot)
+                result.Add(kv.Value);
+            result.Sort((a, b) => string.Compare(a.SlotKey, b.SlotKey, StringComparison.OrdinalIgnoreCase));
+            return result;
+        }
+
+        public static List<LivePluginSlot> ListLivePluginSlotsByUid(string atomUid)
+        {
+            if (string.IsNullOrEmpty(atomUid)) return new List<LivePluginSlot>(0);
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return new List<LivePluginSlot>(0);
+            Atom atom = null;
+            try { atom = sc.GetAtomByUid(atomUid); } catch { atom = null; }
+            return ListLivePluginSlots(atom);
+        }
+
+        /// <summary>
+        /// Suggest a live store id for <paramref name="sourceReceiver"/> on <paramref name="destAtomUid"/>.
+        /// Exact store id → unique ClassName → unique URL (when provided).
+        /// </summary>
+        public static string SuggestLiveReceiverStoreId(string destAtomUid, string sourceReceiver)
+        {
+            return SuggestLiveReceiverStoreId(destAtomUid, sourceReceiver, null);
+        }
+
+        public static string SuggestLiveReceiverStoreId(
+            string destAtomUid, string sourceReceiver, string sourcePluginUrl)
+        {
+            if (string.IsNullOrEmpty(destAtomUid) || string.IsNullOrEmpty(sourceReceiver))
+                return null;
+            List<LivePluginSlot> slots = ListLivePluginSlotsByUid(destAtomUid);
+            if (slots == null || slots.Count == 0) return null;
+
+            // Exact store id already on dest — no slot remap needed.
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (string.Equals(slots[i].StoreId, sourceReceiver, StringComparison.Ordinal))
+                    return sourceReceiver;
+            }
+
+            string className = PluginStoreClassName(sourceReceiver);
+            if (!string.IsNullOrEmpty(className))
+            {
+                string unique = null;
+                int hits = 0;
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    LivePluginSlot s = slots[i];
+                    if (string.IsNullOrEmpty(s.StoreId)) continue;
+                    if (!PluginClassNamesMatch(s.ClassName, className)) continue;
+                    hits++;
+                    unique = s.StoreId;
+                    if (hits > 1) { unique = null; break; }
+                }
+                if (!string.IsNullOrEmpty(unique)) return unique;
+            }
+
+            if (!string.IsNullOrEmpty(sourcePluginUrl))
+            {
+                string urlNorm = sourcePluginUrl.Trim();
+                string unique = null;
+                int hits = 0;
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    LivePluginSlot s = slots[i];
+                    if (string.IsNullOrEmpty(s.StoreId) || string.IsNullOrEmpty(s.Url)) continue;
+                    if (!string.Equals(s.Url.Trim(), urlNorm, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    hits++;
+                    unique = s.StoreId;
+                    if (hits > 1) { unique = null; break; }
+                }
+                if (!string.IsNullOrEmpty(unique)) return unique;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// True when every source plugin receiver for this row either matches a live store id
+        /// exactly, has an auto/explicit remap, or dest is Create new / empty (not applicable).
+        /// </summary>
+        public static int CountUnresolvedPluginReceivers(
+            BrokenUidRef row,
+            string destUid,
+            string explicitPrimaryChoice)
+        {
+            if (row.SourcePluginReceivers == null || row.SourcePluginReceivers.Count == 0)
+                return 0;
+            if (string.IsNullOrEmpty(destUid)) return 0;
+            if (string.Equals(destUid, CreateNewUidSentinel, StringComparison.Ordinal)) return 0;
+
+            int unresolved = 0;
+            for (int r = 0; r < row.SourcePluginReceivers.Count; r++)
+            {
+                string srcRecv = row.SourcePluginReceivers[r];
+                if (string.IsNullOrEmpty(srcRecv)) continue;
+
+                string url = null;
+                if (row.SourcePluginReceiverUrls != null && r < row.SourcePluginReceiverUrls.Count)
+                    url = row.SourcePluginReceiverUrls[r];
+
+                string suggested = SuggestLiveReceiverStoreId(destUid, srcRecv, url);
+                if (!string.IsNullOrEmpty(suggested))
+                    continue;
+
+                // Primary explicit UI choice covers index 0 only.
+                if (r == 0
+                    && !string.IsNullOrEmpty(explicitPrimaryChoice)
+                    && LiveAtomHasStoreId(destUid, explicitPrimaryChoice))
+                    continue;
+
+                unresolved++;
+            }
+            return unresolved;
+        }
+
+        public static bool LiveAtomHasStoreId(string atomUid, string storeId)
+        {
+            if (string.IsNullOrEmpty(atomUid) || string.IsNullOrEmpty(storeId)) return false;
+            List<LivePluginSlot> slots = ListLivePluginSlotsByUid(atomUid);
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (string.Equals(slots[i].StoreId, storeId, StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Build per-original-uid receiver remaps: unique ClassName/URL auto-map plus explicit
+        /// <paramref name="explicitChoices"/> (originalUid → chosen live store id for the primary/first source receiver).
+        /// </summary>
+        public static Dictionary<string, Dictionary<string, string>> BuildReceiverRemapByUid(
+            List<BrokenUidRef> rows,
+            Dictionary<string, string> uidChoices,
+            Dictionary<string, string> explicitReceiverChoices)
+        {
+            var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+            if (rows == null || uidChoices == null) return result;
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                BrokenUidRef row = rows[i];
+                if (string.IsNullOrEmpty(row.OriginalUid)) continue;
+                if (row.SourcePluginReceivers == null || row.SourcePluginReceivers.Count == 0) continue;
+
+                string dest;
+                if (!uidChoices.TryGetValue(row.OriginalUid, out dest) || string.IsNullOrEmpty(dest))
+                    continue;
+                if (string.Equals(dest, CreateNewUidSentinel, StringComparison.Ordinal)) continue;
+
+                var map = new Dictionary<string, string>(StringComparer.Ordinal);
+                for (int r = 0; r < row.SourcePluginReceivers.Count; r++)
+                {
+                    string srcRecv = row.SourcePluginReceivers[r];
+                    if (string.IsNullOrEmpty(srcRecv)) continue;
+
+                    string url = null;
+                    if (row.SourcePluginReceiverUrls != null && r < row.SourcePluginReceiverUrls.Count)
+                        url = row.SourcePluginReceiverUrls[r];
+
+                    string suggested = SuggestLiveReceiverStoreId(dest, srcRecv, url);
+                    if (!string.IsNullOrEmpty(suggested)
+                        && !string.Equals(srcRecv, suggested, StringComparison.Ordinal))
+                    {
+                        map[srcRecv] = suggested;
+                    }
+                }
+
+                // Explicit UI choice for primary receiver overrides / fills when auto failed.
+                string chosenRecv;
+                if (explicitReceiverChoices != null
+                    && explicitReceiverChoices.TryGetValue(row.OriginalUid, out chosenRecv)
+                    && !string.IsNullOrEmpty(chosenRecv)
+                    && row.SourcePluginReceivers.Count > 0)
+                {
+                    string primary = row.SourcePluginReceivers[0];
+                    if (!string.IsNullOrEmpty(primary)
+                        && !string.Equals(primary, chosenRecv, StringComparison.Ordinal))
+                        map[primary] = chosenRecv;
+                }
+
+                if (map.Count > 0)
+                    result[row.OriginalUid] = map;
+            }
+            return result;
+        }
+
+        private static string ClassNameFromPluginUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return null;
+            string path = url;
+            int colon = path.LastIndexOf(':');
+            if (colon >= 0 && colon + 1 < path.Length)
+                path = path.Substring(colon + 1);
+            path = path.Replace('\\', '/');
+            int slash = path.LastIndexOf('/');
+            if (slash >= 0 && slash + 1 < path.Length)
+                path = path.Substring(slash + 1);
+            // Embody.cslist / Embody.cs → Embody
+            int dot = path.LastIndexOf('.');
+            if (dot > 0) path = path.Substring(0, dot);
+            return string.IsNullOrEmpty(path) ? null : path;
         }
 
         private static void CollectReferencedSourceAtomUids(
@@ -384,6 +847,27 @@ namespace VPB.src.util
             }
         }
 
+        /// <summary>
+        /// Apply trigger receiver remaps while <c>receiverAtom</c> still names the original UID.
+        /// Must run before <see cref="ApplyUidRemapToNode"/>.
+        /// </summary>
+        private static void ApplyReceiverRemapToNode(
+            JSONClass node, Dictionary<string, Dictionary<string, string>> receiverRemapByUid)
+        {
+            if (node == null || receiverRemapByUid == null || receiverRemapByUid.Count == 0) return;
+            foreach (KeyValuePair<string, Dictionary<string, string>> byAtom in receiverRemapByUid)
+            {
+                if (string.IsNullOrEmpty(byAtom.Key) || byAtom.Value == null || byAtom.Value.Count == 0)
+                    continue;
+                foreach (KeyValuePair<string, string> kv in byAtom.Value)
+                {
+                    if (string.IsNullOrEmpty(kv.Key) || string.IsNullOrEmpty(kv.Value)) continue;
+                    if (string.Equals(kv.Key, kv.Value, StringComparison.Ordinal)) continue;
+                    JSONExtensions.RemapTriggerReceiverMutable(node, byAtom.Key, kv.Key, kv.Value);
+                }
+            }
+        }
+
         private static HashSet<string> FilterSkipExisting(HashSet<string> selectedIds)
         {
             var kept = new HashSet<string>(StringComparer.Ordinal);
@@ -407,7 +891,8 @@ namespace VPB.src.util
             HashSet<string> selectedIds,
             bool relativeToTargetPerson,
             bool skipExistingInScene,
-            Dictionary<string, string> uidRemap)
+            Dictionary<string, string> uidRemap,
+            Dictionary<string, Dictionary<string, string>> receiverRemapByUid)
         {
             JSONArray atoms = sourceScene["atoms"] != null ? sourceScene["atoms"].AsArray : null;
             if (atoms == null)
@@ -554,6 +1039,12 @@ namespace VPB.src.util
                 {
                     JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(node, sourceHostUid);
                     LogAtom("prepare '" + id + "' — rewrote self-prefix with hostUid '" + sourceHostUid + "'");
+                }
+
+                if (receiverRemapByUid != null && receiverRemapByUid.Count > 0)
+                {
+                    ApplyReceiverRemapToNode(node, receiverRemapByUid);
+                    LogAtom("prepare '" + id + "' — applied trigger receiver remap(s)");
                 }
 
                 if (uidRemap != null && uidRemap.Count > 0)

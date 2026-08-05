@@ -26,11 +26,11 @@ namespace VPB
         private static readonly Color RemapUnresolvedMuted = new Color(0.78f, 0.62f, 0.48f, 1f);
         private static readonly Color RemapAllMappedMuted = new Color(0.45f, 0.62f, 0.52f, 1f);
 
-        private const float RemapFloatDefaultWRef = 680f;
+        private const float RemapFloatDefaultWRef = 820f;
         private const float RemapFloatDefaultHRef = 460f;
-        private const float RemapFloatMinWRef = 420f;
+        private const float RemapFloatMinWRef = 520f;
         private const float RemapFloatMinHRef = 280f;
-        private const float RemapFloatMaxWRef = 960f;
+        private const float RemapFloatMaxWRef = 1100f;
         private const float RemapFloatMaxHRef = 900f;
         private const int RemapExpandFilterThreshold = 8;
         private const float RemapFooterBtnWRef = 96f;
@@ -45,9 +45,18 @@ namespace VPB
         /// <summary>Original → auto-filled choice at open (suggested live / Create new).</summary>
         private readonly Dictionary<string, string> _remapAtomUidsAutoSuggested
             = new Dictionary<string, string>(StringComparer.Ordinal);
+        /// <summary>Original UID → chosen live plugin store id (primary receiver).</summary>
+        private readonly Dictionary<string, string> _remapAtomUidsReceiverChoices
+            = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _remapAtomUidsReceiverAutoSuggested
+            = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, InputField> _remapAtomUidsInputs
             = new Dictionary<string, InputField>(StringComparer.Ordinal);
+        private readonly Dictionary<string, InputField> _remapAtomUidsReceiverInputs
+            = new Dictionary<string, InputField>(StringComparer.Ordinal);
         private readonly Dictionary<string, Image> _remapAtomUidsDestBgs
+            = new Dictionary<string, Image>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Image> _remapAtomUidsReceiverBgs
             = new Dictionary<string, Image>(StringComparer.Ordinal);
         private readonly Dictionary<string, GameObject> _remapAtomUidsRowShells
             = new Dictionary<string, GameObject>(StringComparer.Ordinal);
@@ -57,8 +66,14 @@ namespace VPB
             = new Dictionary<string, Image>(StringComparer.Ordinal);
         private readonly Dictionary<string, Image> _remapAtomUidsChevronIcons
             = new Dictionary<string, Image>(StringComparer.Ordinal);
-        private Action<Dictionary<string, string>, HashSet<string>> _remapAtomUidsOnConfirm;
+        /// <summary>uidRemap, createNew, receiverRemapByOriginalUid.</summary>
+        private Action<
+            Dictionary<string, string>,
+            HashSet<string>,
+            Dictionary<string, Dictionary<string, string>>> _remapAtomUidsOnConfirm;
         private string _remapAtomUidsOpenPickerFor;
+        /// <summary>When true, expand lists live plugin receivers for the open row's destination.</summary>
+        private bool _remapAtomUidsExpandIsReceiver;
         private float _remapAtomUidsChromeScale = 1f;
         private Vector2? _remapAtomUidsSavedPosCenter;
         private Vector2? _remapAtomUidsSavedSizeRef;
@@ -111,15 +126,19 @@ namespace VPB
 
         /// <summary>
         /// Power-user remap table: Original UID → live UID, typed name, or Create new (co-import donor).
+        /// Optional Receiver column remaps trigger <c>plugin#N_Class</c> onto the live destination atom.
         /// Floating drag/resize chrome (filter-presets pattern). Esc / close / Cancel = cancel.
         /// </summary>
         private void ShowRemapAtomUidsModal(
             List<SceneAtomImporter.BrokenUidRef> broken,
-            Action<Dictionary<string, string>, HashSet<string>> onConfirm)
+            Action<
+                Dictionary<string, string>,
+                HashSet<string>,
+                Dictionary<string, Dictionary<string, string>>> onConfirm)
         {
             if (backgroundBoxGO == null || broken == null || broken.Count == 0 || onConfirm == null)
             {
-                if (onConfirm != null) onConfirm(null, null);
+                if (onConfirm != null) onConfirm(null, null, null);
                 return;
             }
 
@@ -127,7 +146,10 @@ namespace VPB
             _remapAtomUidsOnConfirm = onConfirm;
             _remapAtomUidsChoices.Clear();
             _remapAtomUidsAutoSuggested.Clear();
+            _remapAtomUidsReceiverChoices.Clear();
+            _remapAtomUidsReceiverAutoSuggested.Clear();
             _remapAtomUidsImportForceArmed = false;
+            _remapAtomUidsExpandIsReceiver = false;
             for (int i = 0; i < broken.Count; i++)
             {
                 SceneAtomImporter.BrokenUidRef row = broken[i];
@@ -145,9 +167,14 @@ namespace VPB
                 }
                 else
                     _remapAtomUidsChoices[row.OriginalUid] = string.Empty;
+
+                TryAutoSuggestRemapReceiver(row.OriginalUid, force: true);
             }
 
             HideRemapAtomUidsModal();
+            // Hide clears UI refs only — choices / onConfirm / rows stay.
+            _remapAtomUidsOnConfirm = onConfirm;
+            _remapAtomUidsRows = broken;
             BuildRemapAtomUidsModal();
         }
 
@@ -167,8 +194,11 @@ namespace VPB
             _remapAtomUidsImportLabel = null;
             _remapAtomUidsImportBg = null;
             _remapAtomUidsImportForceArmed = false;
+            _remapAtomUidsExpandIsReceiver = false;
             _remapAtomUidsInputs.Clear();
+            _remapAtomUidsReceiverInputs.Clear();
             _remapAtomUidsDestBgs.Clear();
+            _remapAtomUidsReceiverBgs.Clear();
             _remapAtomUidsRowShells.Clear();
             _remapAtomUidsExpandHosts.Clear();
             _remapAtomUidsRowBgs.Clear();
@@ -235,16 +265,37 @@ namespace VPB
         {
             SyncRemapAtomUidsChoicesFromInputs();
 
-            int unresolved = CountRemapAtomUidsUnresolved();
+            int unresolved = CountRemapAtomUidsAllGaps();
             if (unresolved > 0 && !_remapAtomUidsImportForceArmed)
             {
                 _remapAtomUidsImportForceArmed = true;
                 RefreshRemapAtomUidsUnresolvedUi();
-                SetStatus(string.Format(
-                    VPBTranslation.T(
-                        "gallery.import.remap_uids.warn_unresolved",
-                        "{0} row(s) have no destination — Import again to continue with gaps"),
-                    unresolved));
+                int destGaps = CountRemapAtomUidsUnresolved();
+                int recvGaps = CountRemapAtomUidsUnresolvedReceivers();
+                if (destGaps > 0 && recvGaps > 0)
+                {
+                    SetStatus(string.Format(
+                        VPBTranslation.T(
+                            "gallery.import.remap_uids.warn_unresolved_both",
+                            "{0} dest + {1} receiver gap(s) — Import again to continue"),
+                        destGaps, recvGaps));
+                }
+                else if (recvGaps > 0)
+                {
+                    SetStatus(string.Format(
+                        VPBTranslation.T(
+                            "gallery.import.remap_uids.warn_unresolved_receiver",
+                            "{0} plugin receiver(s) unmatched — Import again to continue with gaps"),
+                        recvGaps));
+                }
+                else
+                {
+                    SetStatus(string.Format(
+                        VPBTranslation.T(
+                            "gallery.import.remap_uids.warn_unresolved",
+                            "{0} row(s) have no destination — Import again to continue with gaps"),
+                        destGaps));
+                }
                 return;
             }
 
@@ -265,11 +316,20 @@ namespace VPB
                 map[kv.Key] = kv.Value;
             }
 
-            Action<Dictionary<string, string>, HashSet<string>> cb = _remapAtomUidsOnConfirm;
+            Dictionary<string, Dictionary<string, string>> receiverRemap
+                = SceneAtomImporter.BuildReceiverRemapByUid(
+                    _remapAtomUidsRows, _remapAtomUidsChoices, _remapAtomUidsReceiverChoices);
+
+            var cb = _remapAtomUidsOnConfirm;
             _remapAtomUidsOnConfirm = null;
             HideRemapAtomUidsModal();
             if (cb != null)
-                cb(map.Count > 0 ? map : null, createNew.Count > 0 ? createNew : null);
+            {
+                cb(
+                    map.Count > 0 ? map : null,
+                    createNew.Count > 0 ? createNew : null,
+                    receiverRemap != null && receiverRemap.Count > 0 ? receiverRemap : null);
+            }
         }
 
         private void SyncRemapAtomUidsChoicesFromInputs()
@@ -279,6 +339,15 @@ namespace VPB
                 if (kv.Value == null) continue;
                 string typed = kv.Value.text != null ? kv.Value.text.Trim() : string.Empty;
                 _remapAtomUidsChoices[kv.Key] = RemapAtomUidsDisplayToStored(typed);
+            }
+            foreach (KeyValuePair<string, InputField> kv in _remapAtomUidsReceiverInputs)
+            {
+                if (kv.Value == null) continue;
+                string typed = kv.Value.text != null ? kv.Value.text.Trim() : string.Empty;
+                if (string.IsNullOrEmpty(typed))
+                    _remapAtomUidsReceiverChoices.Remove(kv.Key);
+                else
+                    _remapAtomUidsReceiverChoices[kv.Key] = typed;
             }
         }
 
@@ -297,6 +366,34 @@ namespace VPB
             return n;
         }
 
+        /// <summary>
+        /// Plugin receivers that need a live dest storable and still have no auto/explicit match.
+        /// Create new / empty dest → not counted (N/A).
+        /// </summary>
+        private int CountRemapAtomUidsUnresolvedReceivers()
+        {
+            int n = 0;
+            if (_remapAtomUidsRows == null) return 0;
+            for (int i = 0; i < _remapAtomUidsRows.Count; i++)
+            {
+                SceneAtomImporter.BrokenUidRef row = _remapAtomUidsRows[i];
+                if (string.IsNullOrEmpty(row.OriginalUid)) continue;
+                string dest;
+                if (!_remapAtomUidsChoices.TryGetValue(row.OriginalUid, out dest))
+                    dest = string.Empty;
+                string explicitRecv;
+                if (!_remapAtomUidsReceiverChoices.TryGetValue(row.OriginalUid, out explicitRecv))
+                    explicitRecv = null;
+                n += SceneAtomImporter.CountUnresolvedPluginReceivers(row, dest, explicitRecv);
+            }
+            return n;
+        }
+
+        private int CountRemapAtomUidsAllGaps()
+        {
+            return CountRemapAtomUidsUnresolved() + CountRemapAtomUidsUnresolvedReceivers();
+        }
+
         private bool RemapAtomUidsChoiceStillSuggested(string originalUid, string stored)
         {
             if (string.IsNullOrEmpty(originalUid) || string.IsNullOrEmpty(stored)) return false;
@@ -308,16 +405,37 @@ namespace VPB
 
         private void RefreshRemapAtomUidsUnresolvedUi()
         {
-            int unresolved = CountRemapAtomUidsUnresolved();
+            int unresolvedDest = CountRemapAtomUidsUnresolved();
+            int unresolvedRecv = CountRemapAtomUidsUnresolvedReceivers();
+            int unresolved = unresolvedDest + unresolvedRecv;
             if (_remapAtomUidsUnresolvedText != null)
             {
                 if (unresolved > 0)
                 {
-                    _remapAtomUidsUnresolvedText.text = string.Format(
-                        VPBTranslation.T(
-                            "gallery.import.remap_uids.unresolved_count",
-                            "{0} without destination"),
-                        unresolved);
+                    if (unresolvedDest > 0 && unresolvedRecv > 0)
+                    {
+                        _remapAtomUidsUnresolvedText.text = string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.remap_uids.unresolved_both",
+                                "{0} dest · {1} receiver"),
+                            unresolvedDest, unresolvedRecv);
+                    }
+                    else if (unresolvedRecv > 0)
+                    {
+                        _remapAtomUidsUnresolvedText.text = string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.remap_uids.unresolved_receiver",
+                                "{0} without receiver"),
+                            unresolvedRecv);
+                    }
+                    else
+                    {
+                        _remapAtomUidsUnresolvedText.text = string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.remap_uids.unresolved_count",
+                                "{0} without destination"),
+                            unresolvedDest);
+                    }
                     _remapAtomUidsUnresolvedText.color = RemapUnresolvedMuted;
                 }
                 else
@@ -348,6 +466,7 @@ namespace VPB
                 string uid = _remapAtomUidsRows[i].OriginalUid;
                 if (string.IsNullOrEmpty(uid)) continue;
                 SyncRemapAtomUidsRowDestVisual(uid);
+                SyncRemapAtomUidsReceiverInputVisual(uid);
             }
         }
 
@@ -362,10 +481,19 @@ namespace VPB
             bool suggested = RemapAtomUidsChoiceStillSuggested(originalUid, stored);
             bool expanded = string.Equals(_remapAtomUidsOpenPickerFor, originalUid, StringComparison.Ordinal);
 
+            string recv;
+            if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out recv)) recv = string.Empty;
+            SceneAtomImporter.BrokenUidRef row = FindRemapAtomUidsRow(originalUid);
+            bool destOk = !empty && !RemapAtomUidsIsCreateNewChoice(stored);
+            int recvGaps = destOk
+                ? SceneAtomImporter.CountUnresolvedPluginReceivers(row, stored, recv)
+                : 0;
+            bool recvGap = recvGaps > 0;
+
             Image rowBg;
             if (_remapAtomUidsRowBgs.TryGetValue(originalUid, out rowBg) && rowBg != null && !expanded)
             {
-                if (empty) rowBg.color = RemapRowUnresolvedBg;
+                if (empty || recvGap) rowBg.color = RemapRowUnresolvedBg;
                 else rowBg.color = RemapRowBg;
             }
 
@@ -382,7 +510,171 @@ namespace VPB
         {
             if (string.IsNullOrEmpty(originalUid)) return;
             _remapAtomUidsChoices[originalUid] = RemapAtomUidsDisplayToStored(displayOrStored);
-            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsUnresolved() == 0)
+            TryAutoSuggestRemapReceiver(originalUid, force: true);
+            SyncRemapAtomUidsReceiverInputVisual(originalUid);
+            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
+                _remapAtomUidsImportForceArmed = false;
+            RefreshRemapAtomUidsUnresolvedUi();
+        }
+
+        private SceneAtomImporter.BrokenUidRef FindRemapAtomUidsRow(string originalUid)
+        {
+            SceneAtomImporter.BrokenUidRef empty = default(SceneAtomImporter.BrokenUidRef);
+            if (_remapAtomUidsRows == null || string.IsNullOrEmpty(originalUid)) return empty;
+            for (int i = 0; i < _remapAtomUidsRows.Count; i++)
+            {
+                if (string.Equals(_remapAtomUidsRows[i].OriginalUid, originalUid, StringComparison.Ordinal))
+                    return _remapAtomUidsRows[i];
+            }
+            return empty;
+        }
+
+        private bool RemapAtomUidsRowHasPluginReceivers(string originalUid)
+        {
+            SceneAtomImporter.BrokenUidRef row = FindRemapAtomUidsRow(originalUid);
+            return row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0;
+        }
+
+        /// <summary>
+        /// Auto-fill Receiver from unique ClassName match on the current Destination live atom.
+        /// </summary>
+        private void TryAutoSuggestRemapReceiver(string originalUid, bool force)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            if (!RemapAtomUidsRowHasPluginReceivers(originalUid))
+            {
+                _remapAtomUidsReceiverChoices.Remove(originalUid);
+                _remapAtomUidsReceiverAutoSuggested.Remove(originalUid);
+                return;
+            }
+
+            string dest;
+            if (!_remapAtomUidsChoices.TryGetValue(originalUid, out dest) || string.IsNullOrEmpty(dest))
+            {
+                if (force)
+                {
+                    _remapAtomUidsReceiverChoices.Remove(originalUid);
+                    _remapAtomUidsReceiverAutoSuggested.Remove(originalUid);
+                }
+                return;
+            }
+            if (RemapAtomUidsIsCreateNewChoice(dest))
+            {
+                _remapAtomUidsReceiverChoices.Remove(originalUid);
+                _remapAtomUidsReceiverAutoSuggested.Remove(originalUid);
+                return;
+            }
+
+            if (!force)
+            {
+                string existing;
+                if (_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out existing)
+                    && !string.IsNullOrEmpty(existing))
+                {
+                    string autoPrev;
+                    if (!_remapAtomUidsReceiverAutoSuggested.TryGetValue(originalUid, out autoPrev)
+                        || !string.Equals(existing, autoPrev, StringComparison.Ordinal))
+                        return; // user override
+                }
+            }
+
+            SceneAtomImporter.BrokenUidRef row = FindRemapAtomUidsRow(originalUid);
+            string primary = row.SourcePluginReceivers[0];
+            string url = null;
+            if (row.SourcePluginReceiverUrls != null && row.SourcePluginReceiverUrls.Count > 0)
+                url = row.SourcePluginReceiverUrls[0];
+            string suggested = SceneAtomImporter.SuggestLiveReceiverStoreId(dest, primary, url);
+            if (!string.IsNullOrEmpty(suggested))
+            {
+                _remapAtomUidsReceiverChoices[originalUid] = suggested;
+                _remapAtomUidsReceiverAutoSuggested[originalUid] = suggested;
+            }
+            else if (force)
+            {
+                _remapAtomUidsReceiverChoices.Remove(originalUid);
+                _remapAtomUidsReceiverAutoSuggested.Remove(originalUid);
+            }
+        }
+
+        private void SyncRemapAtomUidsReceiverInputVisual(string originalUid)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            InputField input;
+            if (!_remapAtomUidsReceiverInputs.TryGetValue(originalUid, out input) || input == null)
+                return;
+
+            bool hasPlugin = RemapAtomUidsRowHasPluginReceivers(originalUid);
+            string dest;
+            _remapAtomUidsChoices.TryGetValue(originalUid, out dest);
+            bool destOk = !string.IsNullOrEmpty(dest) && !RemapAtomUidsIsCreateNewChoice(dest);
+            bool enabled = hasPlugin && destOk;
+
+            string recv;
+            if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out recv)) recv = string.Empty;
+
+            // Input stores raw primary choice; display suffix for multi is via placeholder/status only
+            // when not focused — keep raw store id in field for edit/export.
+            if (input.text != recv) input.text = recv ?? string.Empty;
+            input.interactable = enabled;
+
+            SceneAtomImporter.BrokenUidRef row = FindRemapAtomUidsRow(originalUid);
+            int recvGaps = enabled
+                ? SceneAtomImporter.CountUnresolvedPluginReceivers(row, dest, recv)
+                : 0;
+
+            Image bg;
+            if (_remapAtomUidsReceiverBgs.TryGetValue(originalUid, out bg) && bg != null)
+            {
+                if (!enabled) bg.color = new Color(0.12f, 0.13f, 0.15f, 1f);
+                else if (recvGaps > 0 || string.IsNullOrEmpty(recv)) bg.color = RemapDestUnresolvedBg;
+                else if (RemapAtomUidsReceiverStillSuggested(originalUid, recv)) bg.color = RemapDestSuggestedBg;
+                else bg.color = RemapDestNormalBg;
+            }
+
+            // Cue multi-plugin state on placeholder when empty / partial (change blindness).
+            if (input.placeholder != null)
+            {
+                Text ph = input.placeholder as Text;
+                if (ph != null)
+                {
+                    int srcCount = row.SourcePluginReceivers != null ? row.SourcePluginReceivers.Count : 0;
+                    if (!enabled)
+                        ph.text = string.Empty;
+                    else if (srcCount > 1 && recvGaps > 0)
+                        ph.text = string.Format(
+                            VPBTranslation.T(
+                                "gallery.import.remap_uids.receiver_ph_multi",
+                                "{0} plugin receivers — pick…"),
+                            srcCount);
+                    else if (hasPlugin)
+                        ph.text = VPBTranslation.T(
+                            "gallery.import.remap_uids.receiver_ph", "plugin#N_Class…");
+                    else
+                        ph.text = string.Empty;
+                    ph.gameObject.SetActive(string.IsNullOrEmpty(recv) && enabled);
+                }
+            }
+        }
+
+        private bool RemapAtomUidsReceiverStillSuggested(string originalUid, string stored)
+        {
+            if (string.IsNullOrEmpty(originalUid) || string.IsNullOrEmpty(stored)) return false;
+            string auto;
+            if (!_remapAtomUidsReceiverAutoSuggested.TryGetValue(originalUid, out auto) || string.IsNullOrEmpty(auto))
+                return false;
+            return string.Equals(stored, auto, StringComparison.Ordinal);
+        }
+
+        private void OnRemapAtomUidsReceiverEdited(string originalUid, string typed)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            string t = typed != null ? typed.Trim() : string.Empty;
+            if (string.IsNullOrEmpty(t))
+                _remapAtomUidsReceiverChoices.Remove(originalUid);
+            else
+                _remapAtomUidsReceiverChoices[originalUid] = t;
+            SyncRemapAtomUidsReceiverInputVisual(originalUid);
+            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
                 _remapAtomUidsImportForceArmed = false;
             RefreshRemapAtomUidsUnresolvedUi();
         }
@@ -516,11 +808,14 @@ namespace VPB
 
             RemapAtomUidsColLabel(colHdr.transform,
                 VPBTranslation.T("gallery.import.remap_uids.col_source", "Source"),
-                font, s, 1.1f, colHdrH - 8f * s);
+                font, s, 1.0f, colHdrH - 8f * s);
             RemapAtomUidsArrowGlyph(colHdr.transform, chromeSz * 0.5f, s, font);
             RemapAtomUidsColLabel(colHdr.transform,
                 VPBTranslation.T("gallery.import.remap_uids.col_destination", "Destination"),
-                font, s, 1.4f, colHdrH - 8f * s);
+                font, s, 1.2f, colHdrH - 8f * s);
+            RemapAtomUidsColLabel(colHdr.transform,
+                VPBTranslation.T("gallery.import.remap_uids.col_receiver", "Receiver"),
+                font, s, 1.1f, colHdrH - 8f * s);
 
             // ── Footer ────────────────────────────────────────────────────
             GameObject footer = UI.CreateChildRT(panel, "Footer", AnchorPresets.hStretchBottom,
@@ -576,13 +871,13 @@ namespace VPB
                 importHover.OnHoverChange += (enter) =>
                 {
                     if (!enter) { SetStatus(null); return; }
-                    int u = CountRemapAtomUidsUnresolved();
+                    int u = CountRemapAtomUidsAllGaps();
                     if (u > 0 && !_remapAtomUidsImportForceArmed)
                     {
                         SetStatus(string.Format(
                             VPBTranslation.T(
                                 "gallery.import.remap_uids.tip_import_unresolved",
-                                "Import — {0} row(s) still empty (warns once)"),
+                                "Import — {0} gap(s) still empty (warns once)"),
                             u));
                     }
                     else
@@ -688,7 +983,9 @@ namespace VPB
                 try { UnityEngine.Object.Destroy(_remapAtomUidsListParent.GetChild(c).gameObject); } catch { }
             }
             _remapAtomUidsInputs.Clear();
+            _remapAtomUidsReceiverInputs.Clear();
             _remapAtomUidsDestBgs.Clear();
+            _remapAtomUidsReceiverBgs.Clear();
             _remapAtomUidsRowShells.Clear();
             _remapAtomUidsExpandHosts.Clear();
             _remapAtomUidsRowBgs.Clear();
@@ -840,7 +1137,9 @@ namespace VPB
             {
                 if (ph != null) ph.gameObject.SetActive(string.IsNullOrEmpty(val));
                 _remapAtomUidsChoices[capturedOriginal] = RemapAtomUidsDisplayToStored(val);
-                if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsUnresolved() == 0)
+                TryAutoSuggestRemapReceiver(capturedOriginal, force: true);
+                SyncRemapAtomUidsReceiverInputVisual(capturedOriginal);
+                if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
                     _remapAtomUidsImportForceArmed = false;
                 RefreshRemapAtomUidsUnresolvedUi();
             });
@@ -891,6 +1190,109 @@ namespace VPB
                 if (iconImg != null) _remapAtomUidsChevronIcons[original] = iconImg;
             }
 
+            // Receiver column — plugin#N_Class on remapped live atom (Embody slot mismatch).
+            bool hasPluginRecv = row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0;
+            string recvChoice;
+            if (!_remapAtomUidsReceiverChoices.TryGetValue(original, out recvChoice))
+                recvChoice = string.Empty;
+            bool destOkForRecv = !string.IsNullOrEmpty(mapped) && !RemapAtomUidsIsCreateNewChoice(mapped);
+            bool recvEnabled = hasPluginRecv && destOkForRecv;
+
+            GameObject recvHost = new GameObject("ReceiverHost");
+            recvHost.transform.SetParent(main.transform, false);
+            HorizontalLayoutGroup recvHl = UI.AddHLG(
+                recvHost, spacing: 4f * s, padding: UI.Pad(0, 0, 0, 0),
+                childForceExpandWidth: false);
+            recvHl.childForceExpandHeight = false;
+            recvHl.childAlignment = TextAnchor.MiddleLeft;
+            UI.AddLE(recvHost, flexibleWidth: 1.1f, minWidth: 120f * s, preferredHeight: rowH - 8f * s);
+
+            Color recvBgColor = !recvEnabled
+                ? new Color(0.12f, 0.13f, 0.15f, 1f)
+                : (string.IsNullOrEmpty(recvChoice)
+                    ? RemapDestUnresolvedBg
+                    : (RemapAtomUidsReceiverStillSuggested(original, recvChoice)
+                        ? RemapDestSuggestedBg
+                        : RemapDestNormalBg));
+
+            GameObject recvInputGO = new GameObject("ReceiverInput");
+            recvInputGO.transform.SetParent(recvHost.transform, false);
+            Image recvBgImg = UI.AddGalleryElementRoundedBg(recvInputGO, recvBgColor);
+            if (recvBgImg != null) _remapAtomUidsReceiverBgs[original] = recvBgImg;
+            UI.AddLE(recvInputGO, flexibleWidth: 1f, minWidth: 72f * s, minHeight: inputH, preferredHeight: inputH);
+
+            InputField recvInput = recvInputGO.AddComponent<InputField>();
+            recvInput.lineType = InputField.LineType.SingleLine;
+            recvInput.transition = Selectable.Transition.None;
+            recvInput.interactable = recvEnabled;
+
+            Text recvTxt = UI.CreateLabel(
+                recvInputGO, recvChoice ?? string.Empty, font, UI.InputFieldTextColor,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, richText: false,
+                anchorPreset: AnchorPresets.stretchAll, name: "Text");
+            recvTxt.fontSize = font;
+            recvTxt.transform.localScale = Vector3.one;
+            RectTransform recvTxtRt = recvTxt.rectTransform;
+            recvTxtRt.offsetMin = new Vector2(padX, padY);
+            recvTxtRt.offsetMax = new Vector2(-padX, -padY);
+            recvTxtRt.pivot = new Vector2(0f, 0.5f);
+
+            string recvPhText = hasPluginRecv
+                ? VPBTranslation.T("gallery.import.remap_uids.receiver_ph", "plugin#N_Class…")
+                : string.Empty;
+            Text recvPh = UI.CreateLabel(
+                recvInputGO, recvPhText, font, UI.InputFieldPlaceholderColor,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, richText: false,
+                anchorPreset: AnchorPresets.stretchAll, name: "Placeholder");
+            recvPh.fontSize = font;
+            recvPh.fontStyle = FontStyle.Italic;
+            recvPh.transform.localScale = Vector3.one;
+            RectTransform recvPhRt = recvPh.rectTransform;
+            recvPhRt.offsetMin = new Vector2(padX, padY);
+            recvPhRt.offsetMax = new Vector2(-padX, -padY);
+            recvPhRt.pivot = new Vector2(0f, 0.5f);
+
+            recvInput.textComponent = recvTxt;
+            recvInput.placeholder = recvPh;
+            recvInput.text = recvChoice ?? string.Empty;
+            recvTxt.text = recvChoice ?? string.Empty;
+            recvPh.gameObject.SetActive(string.IsNullOrEmpty(recvChoice) && recvEnabled);
+
+            try { recvInputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(recvInput); } catch { }
+
+            recvInput.onEndEdit.AddListener(val => OnRemapAtomUidsReceiverEdited(capturedOriginal, val));
+            recvInput.onValueChanged.AddListener(val =>
+            {
+                if (recvPh != null) recvPh.gameObject.SetActive(string.IsNullOrEmpty(val) && recvInput.interactable);
+                OnRemapAtomUidsReceiverEdited(capturedOriginal, val);
+            });
+            _remapAtomUidsReceiverInputs[original] = recvInput;
+
+            if (hasPluginRecv)
+            {
+                EventTrigger recvEt = recvInputGO.AddComponent<EventTrigger>();
+                EventTrigger.Entry recvEntry = new EventTrigger.Entry();
+                recvEntry.eventID = EventTriggerType.PointerClick;
+                recvEntry.callback.AddListener(_ =>
+                {
+                    if (!recvInput.interactable) return;
+                    ToggleRemapAtomUidsReceiverExpand(capturedOriginal);
+                });
+                recvEt.triggers.Add(recvEntry);
+
+                GameObject recvPickBtn = RemapAtomUidsSquareIconButton(
+                    recvHost.transform, chevronSz, "vpb_icons/chevron_down.png",
+                    new Color(0.22f, 0.38f, 0.52f, 1f),
+                    () =>
+                    {
+                        if (!recvInput.interactable) return;
+                        ToggleRemapAtomUidsReceiverExpand(capturedOriginal);
+                    });
+                if (recvPickBtn != null) recvPickBtn.name = "ReceiverChevron";
+            }
+
             GameObject expandHost = new GameObject("Expand");
             expandHost.transform.SetParent(shell.transform, false);
             UI.AddImage(expandHost, new Color(0.06f, 0.07f, 0.09f, 1f));
@@ -906,7 +1308,8 @@ namespace VPB
         private void ToggleRemapAtomUidsExpand(string originalUid, string sourceType, bool canCreate)
         {
             if (string.IsNullOrEmpty(originalUid)) return;
-            if (string.Equals(_remapAtomUidsOpenPickerFor, originalUid, StringComparison.Ordinal))
+            if (string.Equals(_remapAtomUidsOpenPickerFor, originalUid, StringComparison.Ordinal)
+                && !_remapAtomUidsExpandIsReceiver)
             {
                 CollapseRemapAtomUidsExpand();
                 return;
@@ -914,10 +1317,23 @@ namespace VPB
             OpenRemapAtomUidsExpand(originalUid, sourceType, canCreate);
         }
 
+        private void ToggleRemapAtomUidsReceiverExpand(string originalUid)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            if (string.Equals(_remapAtomUidsOpenPickerFor, originalUid, StringComparison.Ordinal)
+                && _remapAtomUidsExpandIsReceiver)
+            {
+                CollapseRemapAtomUidsExpand();
+                return;
+            }
+            OpenRemapAtomUidsReceiverExpand(originalUid);
+        }
+
         private void CollapseRemapAtomUidsExpand()
         {
             string prev = _remapAtomUidsOpenPickerFor;
             _remapAtomUidsOpenPickerFor = null;
+            _remapAtomUidsExpandIsReceiver = false;
             _remapAtomUidsExpandFilterInput = null;
             _remapAtomUidsExpandFilter = string.Empty;
             _remapAtomUidsExpandSameType.Clear();
@@ -947,6 +1363,7 @@ namespace VPB
 
             SyncRemapAtomUidsRowExpandVisual(prev, false);
             SyncRemapAtomUidsRowDestVisual(prev);
+            SyncRemapAtomUidsReceiverInputVisual(prev);
         }
 
         private void OpenRemapAtomUidsExpand(string originalUid, string sourceType, bool canCreate)
@@ -954,6 +1371,7 @@ namespace VPB
             if (string.IsNullOrEmpty(originalUid)) return;
             CollapseRemapAtomUidsExpand();
             _remapAtomUidsOpenPickerFor = originalUid;
+            _remapAtomUidsExpandIsReceiver = false;
             _remapAtomUidsExpandSourceType = sourceType;
             _remapAtomUidsExpandCanCreate = canCreate;
             _remapAtomUidsExpandFilter = string.Empty;
@@ -980,6 +1398,36 @@ namespace VPB
             RebuildRemapAtomUidsExpandOptions();
         }
 
+        private void OpenRemapAtomUidsReceiverExpand(string originalUid)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            string dest;
+            if (!_remapAtomUidsChoices.TryGetValue(originalUid, out dest)
+                || string.IsNullOrEmpty(dest)
+                || RemapAtomUidsIsCreateNewChoice(dest))
+                return;
+
+            CollapseRemapAtomUidsExpand();
+            _remapAtomUidsOpenPickerFor = originalUid;
+            _remapAtomUidsExpandIsReceiver = true;
+            _remapAtomUidsExpandCanCreate = false;
+            _remapAtomUidsExpandFilter = string.Empty;
+            _remapAtomUidsExpandSameType.Clear();
+            _remapAtomUidsExpandOther.Clear();
+
+            List<SceneAtomImporter.LivePluginSlot> slots
+                = SceneAtomImporter.ListLivePluginSlotsByUid(dest);
+            for (int i = 0; i < slots.Count; i++)
+            {
+                string sid = slots[i].StoreId;
+                if (string.IsNullOrEmpty(sid)) continue;
+                _remapAtomUidsExpandSameType.Add(sid);
+            }
+            _remapAtomUidsExpandSameType.Sort(StringComparer.OrdinalIgnoreCase);
+
+            RebuildRemapAtomUidsExpandOptions();
+        }
+
         private void RebuildRemapAtomUidsExpandOptions()
         {
             string originalUid = _remapAtomUidsOpenPickerFor;
@@ -993,6 +1441,13 @@ namespace VPB
             GalleryModalTypography type = new GalleryModalTypography(s);
             int font = type.Body;
             float rowH = GalleryUiDesignTokens.ButtonSizeRef * s * 0.9f;
+
+            if (_remapAtomUidsExpandIsReceiver)
+            {
+                RebuildRemapAtomUidsReceiverExpandOptions(expandHost, originalUid, font, s, rowH);
+                return;
+            }
+
             string sourceType = _remapAtomUidsExpandSourceType;
             bool canCreate = _remapAtomUidsExpandCanCreate;
             string filter = _remapAtomUidsExpandFilter ?? string.Empty;
@@ -1234,10 +1689,147 @@ namespace VPB
                 if (input.placeholder != null)
                     input.placeholder.gameObject.SetActive(string.IsNullOrEmpty(display));
             }
-            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsUnresolved() == 0)
+            TryAutoSuggestRemapReceiver(originalUid, force: true);
+            SyncRemapAtomUidsReceiverInputVisual(originalUid);
+            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
                 _remapAtomUidsImportForceArmed = false;
             CollapseRemapAtomUidsExpand();
             RefreshRemapAtomUidsUnresolvedUi();
+        }
+
+        private void ApplyRemapAtomUidsReceiverPick(string originalUid, string storeId)
+        {
+            if (string.IsNullOrEmpty(originalUid)) return;
+            string t = storeId != null ? storeId.Trim() : string.Empty;
+            if (string.IsNullOrEmpty(t))
+                _remapAtomUidsReceiverChoices.Remove(originalUid);
+            else
+                _remapAtomUidsReceiverChoices[originalUid] = t;
+            SyncRemapAtomUidsReceiverInputVisual(originalUid);
+            if (_remapAtomUidsImportForceArmed && CountRemapAtomUidsAllGaps() == 0)
+                _remapAtomUidsImportForceArmed = false;
+            CollapseRemapAtomUidsExpand();
+            RefreshRemapAtomUidsUnresolvedUi();
+        }
+
+        private void RebuildRemapAtomUidsReceiverExpandOptions(
+            GameObject expandHost, string originalUid, int font, float s, float rowH)
+        {
+            for (int c = expandHost.transform.childCount - 1; c >= 0; c--)
+            {
+                try { UnityEngine.Object.Destroy(expandHost.transform.GetChild(c).gameObject); } catch { }
+            }
+
+            string current;
+            if (!_remapAtomUidsReceiverChoices.TryGetValue(originalUid, out current))
+                current = string.Empty;
+
+            SceneAtomImporter.BrokenUidRef row = FindRemapAtomUidsRow(originalUid);
+            string dest;
+            _remapAtomUidsChoices.TryGetValue(originalUid, out dest);
+
+            int optionCount = 0;
+            string capturedOrig = originalUid;
+
+            // Recognition: list every source plugin receiver + auto status (multi-plugin edge).
+            if (row.SourcePluginReceivers != null && row.SourcePluginReceivers.Count > 0)
+            {
+                Text hdr = UI.CreateLabel(
+                    expandHost,
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.receiver_sources",
+                        "Source receivers → live"),
+                    font, new Color(0.62f, 0.64f, 0.68f, 1f),
+                    TextAnchor.MiddleLeft, raycastTarget: false, name: "RecvHdr");
+                hdr.fontSize = font;
+                hdr.transform.localScale = Vector3.one;
+                UI.AddLE(hdr.gameObject, preferredHeight: rowH * 0.65f, flexibleWidth: 1f);
+                optionCount++;
+
+                for (int ri = 0; ri < row.SourcePluginReceivers.Count; ri++)
+                {
+                    string srcRecv = row.SourcePluginReceivers[ri];
+                    if (string.IsNullOrEmpty(srcRecv)) continue;
+                    string url = null;
+                    if (row.SourcePluginReceiverUrls != null && ri < row.SourcePluginReceiverUrls.Count)
+                        url = row.SourcePluginReceiverUrls[ri];
+                    string sug = SceneAtomImporter.SuggestLiveReceiverStoreId(dest, srcRecv, url);
+                    string line;
+                    if (!string.IsNullOrEmpty(sug))
+                    {
+                        if (string.Equals(sug, srcRecv, StringComparison.Ordinal))
+                            line = srcRecv + "  [ok]";
+                        else
+                            line = srcRecv + " -> " + sug;
+                    }
+                    else if (ri == 0 && !string.IsNullOrEmpty(current))
+                        line = srcRecv + " -> " + current + "  (pick)";
+                    else
+                        line = srcRecv + "  [!]";
+
+                    Text lineTxt = UI.CreateLabel(
+                        expandHost, line, font,
+                        string.IsNullOrEmpty(sug) && !(ri == 0 && !string.IsNullOrEmpty(current))
+                            ? RemapUnresolvedMuted
+                            : new Color(0.78f, 0.80f, 0.84f, 1f),
+                        TextAnchor.MiddleLeft, raycastTarget: false, name: "RecvSrc");
+                    lineTxt.fontSize = font;
+                    lineTxt.transform.localScale = Vector3.one;
+                    UI.AddLE(lineTxt.gameObject, preferredHeight: rowH * 0.7f, flexibleWidth: 1f);
+                    optionCount++;
+                }
+
+                Text pickHdr = UI.CreateLabel(
+                    expandHost,
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.receiver_pick",
+                        "Pick live store for primary:"),
+                    font, new Color(0.55f, 0.57f, 0.60f, 1f),
+                    TextAnchor.MiddleLeft, raycastTarget: false, name: "RecvPickHdr");
+                pickHdr.fontSize = font;
+                pickHdr.transform.localScale = Vector3.one;
+                UI.AddLE(pickHdr.gameObject, preferredHeight: rowH * 0.6f, flexibleWidth: 1f);
+                optionCount++;
+            }
+
+            for (int i = 0; i < _remapAtomUidsExpandSameType.Count; i++)
+            {
+                string sid = _remapAtomUidsExpandSameType[i];
+                bool active = string.Equals(sid, current, StringComparison.Ordinal);
+                string captured = sid;
+                RemapAtomUidsAddExpandOption(expandHost, sid, font, s, rowH, active, () =>
+                {
+                    ApplyRemapAtomUidsReceiverPick(capturedOrig, captured);
+                });
+                optionCount++;
+            }
+
+            if (_remapAtomUidsExpandSameType.Count == 0)
+            {
+                RemapAtomUidsAddExpandOption(
+                    expandHost,
+                    VPBTranslation.T(
+                        "gallery.import.remap_uids.receiver_none",
+                        "No plugins on destination"),
+                    font, s, rowH, false, CollapseRemapAtomUidsExpand);
+                optionCount++;
+            }
+
+            expandHost.SetActive(true);
+            LayoutElement ele = expandHost.GetComponent<LayoutElement>();
+            if (ele != null)
+                ele.preferredHeight = Mathf.Max(rowH, optionCount * (rowH + 2f * s) + 10f * s);
+
+            GameObject shell;
+            if (_remapAtomUidsRowShells.TryGetValue(originalUid, out shell) && shell != null)
+            {
+                LayoutElement shellLe = shell.GetComponent<LayoutElement>();
+                float baseH = GalleryUiDesignTokens.ButtonSizeRef * s;
+                if (shellLe != null)
+                    shellLe.preferredHeight = baseH + (ele != null ? ele.preferredHeight : 0f);
+            }
+
+            SyncRemapAtomUidsRowExpandVisual(originalUid, true);
         }
 
         private static void RemapAtomUidsColLabel(
@@ -1279,6 +1871,15 @@ namespace VPB
                 string typed = kv.Value.text != null ? kv.Value.text.Trim() : string.Empty;
                 _remapAtomUidsChoices[kv.Key] = RemapAtomUidsDisplayToStored(typed);
             }
+            foreach (KeyValuePair<string, InputField> kv in _remapAtomUidsReceiverInputs)
+            {
+                if (kv.Value == null) continue;
+                string typed = kv.Value.text != null ? kv.Value.text.Trim() : string.Empty;
+                if (string.IsNullOrEmpty(typed))
+                    _remapAtomUidsReceiverChoices.Remove(kv.Key);
+                else
+                    _remapAtomUidsReceiverChoices[kv.Key] = typed;
+            }
 
             CaptureRemapAtomUidsGeometryToMemory();
             PersistRemapAtomUidsGeometry();
@@ -1295,7 +1896,9 @@ namespace VPB
             _remapAtomUidsImportLabel = null;
             _remapAtomUidsImportBg = null;
             _remapAtomUidsInputs.Clear();
+            _remapAtomUidsReceiverInputs.Clear();
             _remapAtomUidsDestBgs.Clear();
+            _remapAtomUidsReceiverBgs.Clear();
             _remapAtomUidsRowShells.Clear();
             _remapAtomUidsExpandHosts.Clear();
             _remapAtomUidsRowBgs.Clear();
