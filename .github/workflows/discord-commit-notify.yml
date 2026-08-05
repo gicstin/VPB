@@ -14,10 +14,24 @@ jobs:
     if: github.event.head_commit != null
     runs-on: ubuntu-latest
     steps:
+      # Shallow clone only — full history (fetch-depth: 0) was taking minutes and
+      # delaying Discord. Version compare only needs the push "before" tip.
       - name: Checkout pushed revision
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tags: false
+
+      - name: Fetch before tip for version compare
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "No previous tip (new branch or empty before). Skipping before fetch."
+            exit 0
+          fi
+          git fetch --depth=1 --no-tags origin "${BEFORE_SHA}"
 
       - name: Post push summary to Discord
         env:
