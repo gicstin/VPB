@@ -564,6 +564,14 @@ namespace VPB
         public bool GalleryQuickFiltersSizeSaved = false;
         public float GalleryQuickFiltersWidthRef = 280f;
         public float GalleryQuickFiltersHeightRef = 420f;
+        /// <summary>When true, restore last Remap Atom UIDs floating position (canvas-local, center).</summary>
+        public bool GalleryRemapAtomUidsPosSaved = false;
+        public float GalleryRemapAtomUidsPosX = 0f;
+        public float GalleryRemapAtomUidsPosY = 0f;
+        /// <summary>When true, restore last Remap Atom UIDs floating size (design px at scale 1).</summary>
+        public bool GalleryRemapAtomUidsSizeSaved = false;
+        public float GalleryRemapAtomUidsWidthRef = 680f;
+        public float GalleryRemapAtomUidsHeightRef = 460f;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1168,6 +1176,12 @@ namespace VPB
             GalleryQuickFiltersSizeSaved = false;
             GalleryQuickFiltersWidthRef = 280f;
             GalleryQuickFiltersHeightRef = 420f;
+            GalleryRemapAtomUidsPosSaved = false;
+            GalleryRemapAtomUidsPosX = 0f;
+            GalleryRemapAtomUidsPosY = 0f;
+            GalleryRemapAtomUidsSizeSaved = false;
+            GalleryRemapAtomUidsWidthRef = 680f;
+            GalleryRemapAtomUidsHeightRef = 460f;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1521,6 +1535,18 @@ namespace VPB
                             GalleryQuickFiltersWidthRef = Mathf.Max(0f, node["GalleryQuickFiltersWidthRef"].AsFloat);
                         if (node["GalleryQuickFiltersHeightRef"] != null)
                             GalleryQuickFiltersHeightRef = Mathf.Max(0f, node["GalleryQuickFiltersHeightRef"].AsFloat);
+                        if (node["GalleryRemapAtomUidsPosSaved"] != null)
+                            GalleryRemapAtomUidsPosSaved = node["GalleryRemapAtomUidsPosSaved"].AsBool;
+                        if (node["GalleryRemapAtomUidsPosX"] != null)
+                            GalleryRemapAtomUidsPosX = node["GalleryRemapAtomUidsPosX"].AsFloat;
+                        if (node["GalleryRemapAtomUidsPosY"] != null)
+                            GalleryRemapAtomUidsPosY = node["GalleryRemapAtomUidsPosY"].AsFloat;
+                        if (node["GalleryRemapAtomUidsSizeSaved"] != null)
+                            GalleryRemapAtomUidsSizeSaved = node["GalleryRemapAtomUidsSizeSaved"].AsBool;
+                        if (node["GalleryRemapAtomUidsWidthRef"] != null)
+                            GalleryRemapAtomUidsWidthRef = Mathf.Max(0f, node["GalleryRemapAtomUidsWidthRef"].AsFloat);
+                        if (node["GalleryRemapAtomUidsHeightRef"] != null)
+                            GalleryRemapAtomUidsHeightRef = Mathf.Max(0f, node["GalleryRemapAtomUidsHeightRef"].AsFloat);
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -1927,6 +1953,12 @@ namespace VPB
                 node["GalleryQuickFiltersSizeSaved"].AsBool = GalleryQuickFiltersSizeSaved;
                 node["GalleryQuickFiltersWidthRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersWidthRef);
                 node["GalleryQuickFiltersHeightRef"].AsFloat = Mathf.Max(0f, GalleryQuickFiltersHeightRef);
+                node["GalleryRemapAtomUidsPosSaved"].AsBool = GalleryRemapAtomUidsPosSaved;
+                node["GalleryRemapAtomUidsPosX"].AsFloat = GalleryRemapAtomUidsPosX;
+                node["GalleryRemapAtomUidsPosY"].AsFloat = GalleryRemapAtomUidsPosY;
+                node["GalleryRemapAtomUidsSizeSaved"].AsBool = GalleryRemapAtomUidsSizeSaved;
+                node["GalleryRemapAtomUidsWidthRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsWidthRef);
+                node["GalleryRemapAtomUidsHeightRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsHeightRef);
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

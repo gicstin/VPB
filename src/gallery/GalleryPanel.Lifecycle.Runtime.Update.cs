@@ -817,6 +817,10 @@ namespace VPB
             if (TryHandleInAppHelpKeyboard(allowQuestionKey: false))
                 return;
 
+            // Remap Atom UIDs float: Esc ladder (filter → collapse → cancel) before InputField gate.
+            if (TryHandleRemapAtomUidsEsc())
+                return;
+
             // Filter presets: Esc modes/hide, arrows/Enter/D/Ctrl+S/U (before InputField gate so rename Esc works).
             if (quickFiltersUI != null && quickFiltersUI.IsVisible && quickFiltersUI.TryHandleKeyboard())
                 return;
@@ -826,6 +830,10 @@ namespace VPB
                 var sel = EventSystem.current.currentSelectedGameObject;
                 if (sel.GetComponent<InputField>() != null) return;
             }
+
+            // Remap Atom UIDs: Enter after InputField gate (collapse picker / Import).
+            if (TryHandleRemapAtomUidsEnter())
+                return;
 
             // ? / Shift+/ — Hotkeys sheet (recognition). After InputField gate.
             if (TryHandleInAppHelpKeyboard(allowQuestionKey: true))

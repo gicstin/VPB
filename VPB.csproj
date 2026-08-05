@@ -310,6 +310,7 @@
     <Compile Include="src\bench\SceneLoadBenchSnapshot.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.Bench.cs" />
     <Compile Include="src\gallery\GalleryPanel.Modal.MergeOutfit.cs" />
+    <Compile Include="src\gallery\GalleryPanel.Modal.RemapAtomUids.cs" />
     <Compile Include="src\gallery\GalleryPanel.BenchPickMode.cs" />
     <Compile Include="src\hook\AtomHook.cs" />
     <Compile Include="src\hook\MVRPluginManagerHook.cs" />

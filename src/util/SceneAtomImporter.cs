@@ -21,6 +21,25 @@ namespace VPB.src.util
             public bool UidCollision;
         }
 
+        /// <summary>
+        /// External atom UID referenced by selected import payload that does not resolve in the live scene
+        /// and is not itself being imported in this batch.
+        /// </summary>
+        public struct BrokenUidRef
+        {
+            public string OriginalUid;
+            public string SourceType;
+            public string SuggestedLiveUid;
+            /// <summary>Donor scene still has this atom — Remap modal can co-import it as Create new.</summary>
+            public bool CanCreateFromSource;
+        }
+
+        /// <summary>
+        /// Remap-choice sentinel: co-import the donor atom under its original UID (refs stay intact).
+        /// Not a legal VaM atom id.
+        /// </summary>
+        public const string CreateNewUidSentinel = "__vpb_create_new__";
+
         private static bool s_importRunning;
 
         private static void LogAtom(string msg)
@@ -155,6 +174,21 @@ namespace VPB.src.util
             bool relativeToTargetPerson,
             bool skipExistingInScene)
         {
+            return ImportSelectedAtoms(
+                sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
+                selectedIds, relativeToTargetPerson, skipExistingInScene, null);
+        }
+
+        public static IEnumerator ImportSelectedAtoms(
+            JSONClass sourceScene,
+            string sourcePersonAtomId,
+            Atom targetPerson,
+            string sourceHostUid,
+            HashSet<string> selectedIds,
+            bool relativeToTargetPerson,
+            bool skipExistingInScene,
+            Dictionary<string, string> uidRemap)
+        {
             if (sourceScene == null || selectedIds == null || selectedIds.Count == 0)
             {
                 LogAtom("abort — sourceScene=" + (sourceScene != null ? "ok" : "null")
@@ -167,7 +201,8 @@ namespace VPB.src.util
                 + " relativeToTarget=" + relativeToTargetPerson
                 + " sourcePerson='" + (sourcePersonAtomId ?? "") + "'"
                 + " targetPerson='" + (targetPerson != null ? targetPerson.uid : "(none)") + "'"
-                + " sourceHostUid='" + (sourceHostUid ?? "") + "'");
+                + " sourceHostUid='" + (sourceHostUid ?? "") + "'"
+                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0"));
 
             while (s_importRunning)
                 yield return null;
@@ -176,11 +211,176 @@ namespace VPB.src.util
             {
                 yield return ImportSelectedAtomsCore(
                     sourceScene, sourcePersonAtomId, targetPerson, sourceHostUid,
-                    selectedIds, relativeToTargetPerson, skipExistingInScene);
+                    selectedIds, relativeToTargetPerson, skipExistingInScene, uidRemap);
             }
             finally
             {
                 s_importRunning = false;
+            }
+        }
+
+        /// <summary>
+        /// Finds atom UIDs referenced by <paramref name="selectedIds"/> that are neither selected for import
+        /// nor already present in the live scene. Used to drive the Remap Atom UIDs modal.
+        /// Cold path — scene import only.
+        /// </summary>
+        public static List<BrokenUidRef> CollectBrokenExternalUidRefs(
+            JSONClass sourceScene, HashSet<string> selectedIds)
+        {
+            var result = new List<BrokenUidRef>();
+            if (sourceScene == null || selectedIds == null || selectedIds.Count == 0) return result;
+
+            JSONArray atoms = sourceScene["atoms"] != null ? sourceScene["atoms"].AsArray : null;
+            if (atoms == null) return result;
+
+            var sourceIdToType = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (int i = 0; i < atoms.Count; i++)
+            {
+                JSONClass a = atoms[i].AsObject;
+                if (a == null) continue;
+                string id = ResolveAtomId(a, i);
+                if (string.IsNullOrEmpty(id)) continue;
+                string type = a["type"] != null ? a["type"].Value : string.Empty;
+                sourceIdToType[id] = type ?? string.Empty;
+            }
+
+            var referenced = new HashSet<string>(StringComparer.Ordinal);
+            foreach (string id in selectedIds)
+            {
+                JSONClass node = FindAtom(atoms, id);
+                if (node == null) continue;
+                CollectReferencedSourceAtomUids(node, sourceIdToType, referenced);
+            }
+
+            // Live uid → type for same-type suggestions.
+            var liveByType = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            SuperController sc = SuperController.singleton;
+            if (sc != null)
+            {
+                foreach (Atom live in sc.GetAtoms())
+                {
+                    if (live == null || string.IsNullOrEmpty(live.uid) || string.IsNullOrEmpty(live.type)) continue;
+                    List<string> list;
+                    if (!liveByType.TryGetValue(live.type, out list))
+                    {
+                        list = new List<string>(4);
+                        liveByType[live.type] = list;
+                    }
+                    list.Add(live.uid);
+                }
+            }
+
+            foreach (string refUid in referenced)
+            {
+                if (string.IsNullOrEmpty(refUid)) continue;
+                if (selectedIds.Contains(refUid)) continue;
+                if (AtomAlreadyInScene(refUid)) continue;
+
+                string srcType = string.Empty;
+                sourceIdToType.TryGetValue(refUid, out srcType);
+
+                string suggested = null;
+                if (!string.IsNullOrEmpty(srcType))
+                {
+                    List<string> sameType;
+                    if (liveByType.TryGetValue(srcType, out sameType) && sameType != null && sameType.Count == 1)
+                        suggested = sameType[0];
+                }
+
+                result.Add(new BrokenUidRef
+                {
+                    OriginalUid = refUid,
+                    SourceType = srcType ?? string.Empty,
+                    SuggestedLiveUid = suggested,
+                    CanCreateFromSource = sourceIdToType.ContainsKey(refUid)
+                });
+            }
+
+            result.Sort((a, b) => string.Compare(a.OriginalUid, b.OriginalUid, StringComparison.OrdinalIgnoreCase));
+            return result;
+        }
+
+        private static void CollectReferencedSourceAtomUids(
+            JSONNode node, Dictionary<string, string> sourceIdToType, HashSet<string> sink)
+        {
+            if (node == null || sourceIdToType == null || sink == null) return;
+
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    CollectReferencedSourceAtomUids(ja[i], sourceIdToType, sink);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc != null)
+            {
+                foreach (string key in jc.Keys)
+                {
+                    JSONNode child = jc[key];
+                    if (child == null) continue;
+                    JSONArray childArr = child as JSONArray;
+                    JSONClass childObj = child as JSONClass;
+                    if (childArr == null && childObj == null)
+                    {
+                        CollectReferencedUidFromLeaf(child, key, sourceIdToType, sink);
+                        continue;
+                    }
+                    CollectReferencedSourceAtomUids(child, sourceIdToType, sink);
+                }
+                return;
+            }
+
+            CollectReferencedUidFromLeaf(node, null, sourceIdToType, sink);
+        }
+
+        private static void CollectReferencedUidFromLeaf(
+            JSONNode leaf, string key, Dictionary<string, string> sourceIdToType, HashSet<string> sink)
+        {
+            if (leaf == null) return;
+            string val;
+            try { val = leaf.Value; }
+            catch { return; }
+            if (string.IsNullOrEmpty(val)) return;
+
+            // Compound atom:storable — always consider the atom prefix.
+            int colon = val.IndexOf(':');
+            if (colon > 0)
+            {
+                string prefix = val.Substring(0, colon);
+                if (sourceIdToType.ContainsKey(prefix))
+                    sink.Add(prefix);
+            }
+
+            // Bare atom equals — skip type/id/url keys so "type":"Person" is not a Person ref.
+            if (JSONExtensions.JsonKeyIsNonAtomUidRef(key)) return;
+            if (sourceIdToType.ContainsKey(val))
+                sink.Add(val);
+        }
+
+        private static void ApplyUidRemapToNode(JSONClass node, Dictionary<string, string> uidRemap)
+        {
+            if (node == null || uidRemap == null || uidRemap.Count == 0) return;
+            // Two-phase via temps so A→B + B→C cannot collide mid-walk.
+            List<string> fromList = new List<string>(uidRemap.Count);
+            List<string> toList = new List<string>(uidRemap.Count);
+            foreach (KeyValuePair<string, string> kv in uidRemap)
+            {
+                if (string.IsNullOrEmpty(kv.Key) || string.IsNullOrEmpty(kv.Value)) continue;
+                if (string.Equals(kv.Key, kv.Value, StringComparison.Ordinal)) continue;
+                fromList.Add(kv.Key);
+                toList.Add(kv.Value);
+            }
+            for (int i = 0; i < fromList.Count; i++)
+            {
+                string tempId = "__vpb_import_ren_" + i.ToString();
+                JSONExtensions.RemapAtomUidReferencesKeyAwareMutable(node, fromList[i], tempId);
+            }
+            for (int i = 0; i < fromList.Count; i++)
+            {
+                string tempId = "__vpb_import_ren_" + i.ToString();
+                JSONExtensions.RemapAtomUidReferencesKeyAwareMutable(node, tempId, toList[i]);
             }
         }
 
@@ -206,7 +406,8 @@ namespace VPB.src.util
             string sourceHostUid,
             HashSet<string> selectedIds,
             bool relativeToTargetPerson,
-            bool skipExistingInScene)
+            bool skipExistingInScene,
+            Dictionary<string, string> uidRemap)
         {
             JSONArray atoms = sourceScene["atoms"] != null ? sourceScene["atoms"].AsArray : null;
             if (atoms == null)
@@ -353,6 +554,12 @@ namespace VPB.src.util
                 {
                     JSONExtensions.ReplaceSelfPrefixWithPackageUidMutable(node, sourceHostUid);
                     LogAtom("prepare '" + id + "' — rewrote self-prefix with hostUid '" + sourceHostUid + "'");
+                }
+
+                if (uidRemap != null && uidRemap.Count > 0)
+                {
+                    ApplyUidRemapToNode(node, uidRemap);
+                    LogAtom("prepare '" + id + "' — applied " + uidRemap.Count + " uid remap(s)");
                 }
 
                 node["id"] = liveId;

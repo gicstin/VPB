@@ -1763,7 +1763,10 @@ namespace VPB
             // yet still has person ids, so requiring a selected atom must hold on both paths.
             bool needSourceAtom = importSidebarSourcePersonIds.Count > 0;
             bool sourceOk = !needSourceAtom || !string.IsNullOrEmpty(importSidebarSourceAtomId);
-            bool targetOk = importSidebarTargetAtom != null;
+            // Atoms-only import can run without a Person target (UIButton/Empty/… scenes). Person-bound
+            // types, relative placement, and person-linked CUAs still require a live target person.
+            bool needTargetPerson = ImportSidebarNeedsPersonTarget();
+            bool targetOk = !needTargetPerson || importSidebarTargetAtom != null;
             bool sceneOk = importSidebarSourceScene != null;
             bool typeOk = importSidebarMultiSelectedTypes.Count > 0;
             bool multiBlock = ImportSidebarMultiSelectBlocked();
@@ -1786,26 +1789,66 @@ namespace VPB
             try { RefreshImportSidebarWizardHeader(); } catch { }
         }
 
+        /// <summary>
+        /// True when Apply needs a live Person target. Atoms-only without person-linked CUAs does not —
+        /// relative placement is best-effort when a person is selected (absolute coords otherwise).
+        /// Fixes Apply no-op on person-less scenes (UIButton import repro).
+        /// </summary>
+        private bool ImportSidebarNeedsPersonTarget()
+        {
+            if (importSidebarMultiSelectedTypes == null || importSidebarMultiSelectedTypes.Count == 0)
+                return true;
+
+            bool atomsSelected = importSidebarMultiSelectedTypes.Contains(VpbResourceType.Atoms);
+            bool onlyAtoms = atomsSelected && importSidebarMultiSelectedTypes.Count == 1;
+            if (!onlyAtoms)
+                return true;
+
+            // Person-linked CUAs in the scene-atom picker still route through CUAAtomImporter.
+            if (importSidebarPickSceneAtoms && importSidebarSelectedSceneAtomKeys.Count > 0
+                && importSidebarSceneAtomEntries != null)
+            {
+                for (int i = 0; i < importSidebarSceneAtomEntries.Count; i++)
+                {
+                    ImportSceneAtomEntry e = importSidebarSceneAtomEntries[i];
+                    if (e == null || string.IsNullOrEmpty(e.Id)) continue;
+                    if (!importSidebarSelectedSceneAtomKeys.Contains(e.Id)) continue;
+                    if (e.LinksToPerson || string.Equals(e.Type, "CustomUnityAsset", StringComparison.Ordinal))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         private void OnImportSidebarApplyClicked()
         {
-            if (importSidebarTargetAtom == null)
-            {
-                LogUtil.LogWarning("[VPB import] No target atom selected.");
-                return;
-            }
             if (importSidebarSourceScene == null)
             {
                 LogUtil.LogWarning("[VPB import] No source scene loaded.");
                 return;
             }
 
-            // Snapshot the target atom BEFORE any changes so the user can undo the entire import.
-            try
+            bool needTargetPerson = ImportSidebarNeedsPersonTarget();
+            if (needTargetPerson && importSidebarTargetAtom == null)
             {
-                Action undoAction = CaptureAtomSnapshotAction(importSidebarTargetAtom);
-                if (undoAction != null) PushUndo(undoAction);
+                LogUtil.LogWarning("[VPB import] No target atom selected.");
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.import.need_target", "Select a target Person atom first."),
+                    2f);
+                return;
             }
-            catch { }
+
+            // Snapshot the target atom BEFORE any changes so the user can undo the entire import.
+            if (importSidebarTargetAtom != null)
+            {
+                try
+                {
+                    Action undoAction = CaptureAtomSnapshotAction(importSidebarTargetAtom);
+                    if (undoAction != null) PushUndo(undoAction);
+                }
+                catch { }
+            }
 
             string sourceHostUid = (importSidebarSourceScene is VarFileEntry sceneVar && sceneVar.Package != null)
                 ? sceneVar.Package.Uid : null;
@@ -2088,11 +2131,14 @@ namespace VPB
         // Spawns the checked non-Person atoms from the source scene (CUAs delegate to CUAAtomImporter).
         private void StartImportSelectedSceneAtoms(string sourceHostUid)
         {
-            if (importSidebarSourceScene == null || importSidebarTargetAtom == null)
+            if (importSidebarSourceScene == null)
             {
-                LogUtil.LogWarning("[VPB][Atoms][import] abort — sourceScene="
-                    + (importSidebarSourceScene != null ? "ok" : "null")
-                    + " target=" + (importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "null"));
+                LogUtil.LogWarning("[VPB][Atoms][import] abort — sourceScene=null");
+                return;
+            }
+            if (ImportSidebarNeedsPersonTarget() && importSidebarTargetAtom == null)
+            {
+                LogUtil.LogWarning("[VPB][Atoms][import] abort — person target required but missing.");
                 return;
             }
 
@@ -2141,17 +2187,100 @@ namespace VPB
                 }
             }
 
+            List<SceneAtomImporter.BrokenUidRef> broken
+                = SceneAtomImporter.CollectBrokenExternalUidRefs(scene, selectedIds);
+            if (broken != null && broken.Count > 0)
+            {
+                LogUtil.Log("[VPB][Atoms][import] " + broken.Count
+                    + " broken external UID ref(s) — showing Remap Atom UIDs modal.");
+                ContinueImportSelectedSceneAtomsAfterRemap(
+                    scene, sourceHostUid, selectedIds, null, broken);
+                return;
+            }
+
+            RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, null);
+        }
+
+        /// <summary>
+        /// Remap modal loop: Create new co-imports donor atoms into <paramref name="selectedIds"/>;
+        /// remaps accumulate. Re-scan after create in case newly added atoms expose more broken refs.
+        /// </summary>
+        private void ContinueImportSelectedSceneAtomsAfterRemap(
+            JSONClass scene,
+            string sourceHostUid,
+            HashSet<string> selectedIds,
+            Dictionary<string, string> remapAcc,
+            List<SceneAtomImporter.BrokenUidRef> broken)
+        {
+            ShowRemapAtomUidsModal(broken, (remap, createNew) =>
+            {
+                if (remap != null)
+                {
+                    if (remapAcc == null)
+                        remapAcc = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (KeyValuePair<string, string> kv in remap)
+                        remapAcc[kv.Key] = kv.Value;
+                }
+
+                if (createNew != null)
+                {
+                    foreach (string id in createNew)
+                    {
+                        if (!string.IsNullOrEmpty(id))
+                            selectedIds.Add(id);
+                    }
+                }
+
+                List<SceneAtomImporter.BrokenUidRef> more
+                    = SceneAtomImporter.CollectBrokenExternalUidRefs(scene, selectedIds);
+                if (more != null && more.Count > 0 && remapAcc != null)
+                {
+                    // Drop refs already remapped away — JSON still names the old UID until prepare.
+                    var remaining = new List<SceneAtomImporter.BrokenUidRef>(more.Count);
+                    for (int i = 0; i < more.Count; i++)
+                    {
+                        SceneAtomImporter.BrokenUidRef row = more[i];
+                        if (string.IsNullOrEmpty(row.OriginalUid)) continue;
+                        if (remapAcc.ContainsKey(row.OriginalUid)) continue;
+                        remaining.Add(row);
+                    }
+                    more = remaining;
+                }
+
+                if (more != null && more.Count > 0)
+                {
+                    LogUtil.Log("[VPB][Atoms][import] " + more.Count
+                        + " more broken UID ref(s) after create — remap again.");
+                    ContinueImportSelectedSceneAtomsAfterRemap(
+                        scene, sourceHostUid, selectedIds, remapAcc, more);
+                    return;
+                }
+
+                RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, remapAcc);
+            });
+        }
+
+        private void RunImportSelectedSceneAtoms(
+            JSONClass scene,
+            string sourceHostUid,
+            HashSet<string> selectedIds,
+            Dictionary<string, string> uidRemap)
+        {
+            if (scene == null || selectedIds == null || selectedIds.Count == 0) return;
+
             LogUtil.Log("[VPB][Atoms][import] apply sidebar pick=" + importSidebarPickSceneAtoms
                 + " selected=" + selectedIds.Count
                 + " skipDup=" + importSidebarSceneAtomSkipDuplicates
                 + " relative=" + importSidebarSceneAtomRelativeToPerson
                 + " source='" + (importSidebarSourceAtomId ?? "") + "'"
-                + " target='" + importSidebarTargetAtom.uid + "'"
-                + " hostUid='" + (sourceHostUid ?? "") + "'");
+                + " target='" + (importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : "(none)") + "'"
+                + " hostUid='" + (sourceHostUid ?? "") + "'"
+                + " uidRemap=" + (uidRemap != null ? uidRemap.Count.ToString() : "0"));
 
             StartCoroutine(SceneAtomImporter.ImportSelectedAtoms(
                 scene, importSidebarSourceAtomId, importSidebarTargetAtom, sourceHostUid,
-                selectedIds, importSidebarSceneAtomRelativeToPerson, importSidebarSceneAtomSkipDuplicates));
+                selectedIds, importSidebarSceneAtomRelativeToPerson, importSidebarSceneAtomSkipDuplicates,
+                uidRemap));
         }
 
         // Removes live CustomUnityAsset atoms whose control links (transitively through CUA chains) to the target

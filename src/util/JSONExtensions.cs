@@ -156,6 +156,94 @@ namespace VPB.src.util
         }
 
         /// <summary>
+        /// Keys that hold atom types / storable ids / paths — never rewrite exact uid equals here.
+        /// Compound <c>uid:</c> prefixes still remapped (they cannot appear as type strings).
+        /// </summary>
+        public static bool JsonKeyIsNonAtomUidRef(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return true;
+            if (string.Equals(key, "type", StringComparison.Ordinal)) return true;
+            if (string.Equals(key, "id", StringComparison.Ordinal)) return true;
+            if (string.Equals(key, "name", StringComparison.Ordinal)) return true;
+            if (string.Equals(key, "storeId", StringComparison.Ordinal)) return true;
+            if (string.Equals(key, "url", StringComparison.Ordinal)) return true;
+            if (string.Equals(key, "uid", StringComparison.Ordinal)) return true;
+            if (key.EndsWith("Path", StringComparison.Ordinal)
+                || key.EndsWith("Url", StringComparison.Ordinal)
+                || key.EndsWith("URL", StringComparison.Ordinal))
+                return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Key-aware atom UID remap for scene/atom JSON: skips bare equals under type/id/url/… keys so
+        /// renaming <c>Person</c> cannot corrupt <c>"type":"Person"</c>. Compound <c>uid:storable</c>
+        /// links still rewrite under those keys. Cold path only.
+        /// </summary>
+        public static void RemapAtomUidReferencesKeyAwareMutable(JSONNode root, string fromUid, string toUid)
+        {
+            if (root == null) return;
+            if (string.IsNullOrEmpty(fromUid) || string.IsNullOrEmpty(toUid)) return;
+            if (fromUid == toUid) return;
+            RemapAtomUidKeyAwareWalk(root, fromUid, toUid);
+        }
+
+        static void RemapAtomUidKeyAwareWalk(JSONNode node, string fromUid, string toUid)
+        {
+            if (node == null) return;
+
+            JSONArray ja = node as JSONArray;
+            if (ja != null)
+            {
+                for (int i = 0; i < ja.Count; i++)
+                    RemapAtomUidKeyAwareWalk(ja[i], fromUid, toUid);
+                return;
+            }
+
+            JSONClass jc = node as JSONClass;
+            if (jc != null)
+            {
+                foreach (string key in jc.Keys)
+                {
+                    JSONNode child = jc[key];
+                    if (child == null) continue;
+                    JSONArray childArr = child as JSONArray;
+                    JSONClass childObj = child as JSONClass;
+                    if (childArr == null && childObj == null)
+                    {
+                        RemapAtomUidKeyAwareLeaf(child, fromUid, toUid, JsonKeyIsNonAtomUidRef(key));
+                        continue;
+                    }
+                    RemapAtomUidKeyAwareWalk(child, fromUid, toUid);
+                }
+                return;
+            }
+
+            RemapAtomUidKeyAwareLeaf(node, fromUid, toUid, exactMatchBlocked: false);
+        }
+
+        static void RemapAtomUidKeyAwareLeaf(JSONNode node, string fromUid, string toUid, bool exactMatchBlocked)
+        {
+            if (node == null) return;
+            try
+            {
+                string val = node.Value;
+                if (string.IsNullOrEmpty(val)) return;
+                if (!exactMatchBlocked && string.Equals(val, fromUid, StringComparison.Ordinal))
+                {
+                    node.Value = toUid;
+                    return;
+                }
+                string fromPrefix = fromUid + ":";
+                if (val.StartsWith(fromPrefix, StringComparison.Ordinal))
+                    node.Value = toUid + val.Substring(fromUid.Length);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
         /// Rewrites a plugin slot token in leaf string values: any value equal to <paramref name="fromKey"/>
         /// (e.g. <c>plugin#0</c>), or prefixed with <c>fromKey_</c> / <c>fromKey:</c> (param storable ids like
         /// <c>plugin#0_ClassName</c> and references), becomes <paramref name="toKey"/> with the remainder kept.
