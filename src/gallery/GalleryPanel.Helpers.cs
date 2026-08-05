@@ -107,6 +107,54 @@ namespace VPB
     }
 
     /// <summary>
+    /// Left-click on this graphic. Skips when the raycast hit is under a named child
+    /// (nested action chips) so parent rows do not steal chip clicks.
+    /// </summary>
+    public class UILeftClickDelegate : MonoBehaviour, IPointerClickHandler
+    {
+        public Action OnLeftClick;
+        /// <summary>Child transform names that own the click (RandomBtn, MoreBtn, …).</summary>
+        public string[] SkipWhenUnderChildNames;
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData == null || eventData.button != PointerEventData.InputButton.Left)
+                return;
+            if (OnLeftClick == null) return;
+            if (IsUnderSkippedChild(eventData))
+                return;
+            OnLeftClick.Invoke();
+        }
+
+        private bool IsUnderSkippedChild(PointerEventData eventData)
+        {
+            if (SkipWhenUnderChildNames == null || SkipWhenUnderChildNames.Length == 0)
+                return false;
+            GameObject hit = null;
+            try { hit = eventData.pointerCurrentRaycast.gameObject; } catch { }
+            if (hit == null)
+            {
+                try { hit = eventData.pointerPressRaycast.gameObject; } catch { }
+            }
+            if (hit == null) return false;
+
+            Transform t = hit.transform;
+            Transform self = transform;
+            while (t != null && t != self)
+            {
+                string n = t.name;
+                for (int i = 0; i < SkipWhenUnderChildNames.Length; i++)
+                {
+                    if (n == SkipWhenUnderChildNames[i])
+                        return true;
+                }
+                t = t.parent;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Forwards non-left pointer events from child raycasts (thumbnail, list detail columns) to the row root handler.
     /// </summary>
     internal sealed class UIFileEntryPointerForwarder : MonoBehaviour, IPointerUpHandler, IPointerClickHandler

@@ -453,6 +453,7 @@
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />
     <Compile Include="src\gallery\GalleryPanel.QuickFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.QuickFilter.Active.cs" />
     <Compile Include="src\gallery\GalleryPanel.FilterRandomizer.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorFilter.Multi.cs" />
     <Compile Include="src\gallery\GalleryPanel.CreatorConsolidation.cs" />
@@ -557,6 +558,7 @@
     <Compile Include="src\gallery\PackageListEntry.cs" />
     <Compile Include="src\gallery\QuickFilterSettings.cs" />
     <Compile Include="src\gallery\QuickFiltersUI.cs" />
+    <Compile Include="src\gallery\QuickFiltersUI.Keyboard.cs" />
     <Compile Include="src\gallery\UIColorPicker.cs" />
     <Compile Include="src\gallery\VPBUiPickers.cs" />
     <Compile Include="src\RatingsManager.cs" />

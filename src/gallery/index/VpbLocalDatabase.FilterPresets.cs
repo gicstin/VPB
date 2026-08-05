@@ -121,7 +121,7 @@ namespace VPB
                                 try
                                 {
                                     JSONNode node = entry.ToJSON();
-                                    json = VPB.src.util.JsonSerializationUtil.Serialize(node, 2048);
+                                    json = VPB.src.util.JsonSerializationUtil.Serialize(node, 32_768);
                                 }
                                 catch
                                 {

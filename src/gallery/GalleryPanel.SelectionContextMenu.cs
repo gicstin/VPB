@@ -1170,7 +1170,7 @@ namespace VPB
             );
             tboxLoadRandomBtn.name = "Tbox_LoadRandom";
             TboxConfigureActionButtonFlex(tboxLoadRandomBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxLoadRandomBtn, "gallery.tooltip.load_random", "Load random item");
+            AddTooltip(tboxLoadRandomBtn, "gallery.tooltip.load_random", "Random in current filtered view (not a preset Dice)");
             try
             {
                 var randomIcon = UI.LoadIconSprite("vpb_icons/random.png", Color.white);

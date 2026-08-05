@@ -817,9 +817,8 @@ namespace VPB
             if (TryHandleInAppHelpKeyboard(allowQuestionKey: false))
                 return;
 
-            if (Input.GetKeyDown(KeyCode.Escape)
-                && quickFiltersUI != null
-                && quickFiltersUI.TryCancelPendingDelete())
+            // Filter presets: Esc modes/hide, arrows/Enter/D/Ctrl+S/U (before InputField gate so rename Esc works).
+            if (quickFiltersUI != null && quickFiltersUI.IsVisible && quickFiltersUI.TryHandleKeyboard())
                 return;
 
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)

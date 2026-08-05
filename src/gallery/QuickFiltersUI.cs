@@ -8,9 +8,9 @@ namespace VPB
 {
     /// <summary>
     /// Filter-presets list: dropdown under title chip, or detachable floating window
-    /// (drag / resize / collapse / close-docks). Pos+size+detached flag live in <see cref="VPBConfig"/>.
+    /// (drag / resize / collapse / close-hides; Dock reattaches). Pos+size+detached flag live in <see cref="VPBConfig"/>.
     /// </summary>
-    public class QuickFiltersUI
+    public partial class QuickFiltersUI
     {
         private const float PanelMaxHeightRef = 500f;
         private const float ScrollBarWidthRef = GalleryUiDesignTokens.QuickFiltersScrollBarWidthRef;
@@ -22,9 +22,13 @@ namespace VPB
         /// <summary>Icon pad on ButtonSizeRef squares — matches side-rail / sort chips (glyph fills hit).</summary>
         private const float RowActionIconPadRef = 5f;
         private const float ChromeIconPadRef = 5f;
+        private const float SoftDeleteUndoSeconds = 5f;
 
         private static readonly Color FloatTitleBarBg = new Color(0.10f, 0.22f, 0.34f, 1f);
         private static readonly Color FloatFooterBarBg = new Color(0.08f, 0.10f, 0.13f, 1f);
+        private static readonly Color ActiveRowAccent = new Color(0.20f, 0.48f, 0.42f, 1f);
+        private static readonly Color KeyboardFocusAccent = new Color(0.28f, 0.40f, 0.58f, 1f);
+        private static readonly Color DirtyMarkColor = new Color(0.95f, 0.78f, 0.35f, 1f);
 
         private enum ListSortMode
         {
@@ -56,18 +60,31 @@ namespace VPB
         private GameObject collapseBtnGO;
         private Image collapseBtnIcon;
         private GameObject closeBtnGO;
+        private GameObject floatDockBtnGO;
         private GameObject floatUndoBtnGO;
         private GameObject floatRedoBtnGO;
         private GameObject floatRemoveModeBtnGO;
         private Image floatRemoveModeBtnIconImage;
+        private GameObject floatPresetUndoBtnGO;
         private GameObject resizeHandleGO;
+        private GameObject collapsePaletteGO;
         private List<GameObject> activeButtons = new List<GameObject>();
         private Dictionary<GameObject, QuickFilterEntry> buttonToEntry = new Dictionary<GameObject, QuickFilterEntry>();
-        private bool editMode;
-        private bool mergeMode;
         private QuickFilterEntry renamingEntry;
-        /// <summary>Edit-mode delete armed on this row — inline Confirm/Cancel (no external dialog).</summary>
+        /// <summary>Skip InputField onEndEdit when Cancel / Confirm already handled rename.</summary>
+        private bool ignoreRenameEndEdit;
+        private bool mergeMode;
+        /// <summary>Armed delete on this row — inline Confirm/Cancel (browse or edit; no external dialog).</summary>
         private QuickFilterEntry pendingDeleteEntry;
+        /// <summary>Row with inline More actions expanded (pin / rename / delete).</summary>
+        private QuickFilterEntry expandedMoreEntry;
+        /// <summary>Just-saved row — paint once with highlight (change blindness cue).</summary>
+        private QuickFilterEntry flashEntry;
+        /// <summary>Keyboard highlight in display list (recognition; arrows/Enter/D).</summary>
+        private QuickFilterEntry keyboardFocusEntry;
+        private QuickFilterEntry softDeleteEntry;
+        private int softDeleteIndex = -1;
+        private float softDeleteExpireTime;
         private readonly List<QuickFilterEntry> mergeSelection = new List<QuickFilterEntry>();
         private static readonly Color RemoveModeRailBackdrop = new Color(0.62f, 0.16f, 0.16f, 1f);
         private static readonly Color RemoveModeOutlineIdle = Color.white;
@@ -113,7 +130,7 @@ namespace VPB
 
         public void SetVisible(bool visible)
         {
-            // Backdrop only for docked dropdown (click-away). Floating stays open until X (reattach) / bar toggle.
+            // Backdrop only for docked dropdown (click-away). Floating: X/Alt+F hide keep detach; Dock reattaches.
             if (backdropGO != null)
             {
                 bool showBackdrop = visible && !detached;
@@ -129,7 +146,7 @@ namespace VPB
             if (visible)
             {
                 try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
-                try { if (searchInput != null) searchInput.Select(); } catch { }
+                // Do not focus list-search — trains "type name here" (false affordance).
             }
 
             if (panel != null)
@@ -216,16 +233,32 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            closeBtnGO = UI.CreateUIButton(titleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter, CloseAndDock);
+            closeBtnGO = UI.CreateUIButton(titleBarGO, chromeSz, chromeSz, " ", 16, 0, 0, AnchorPresets.middleCenter, HideFloatKeepDetach);
             closeBtnGO.name = "TitleClose";
             StyleChromeIconBtn(closeBtnGO, chromeSz, "vpb_icons/x.png");
             var closeHover = closeBtnGO.AddComponent<UIHoverDelegate>();
             closeHover.OnHoverChange += (enter) =>
             {
                 if (panel == null) return;
-                if (enter) panel.SetStatus(VPBTranslation.T("quickfilters.tip.close", "Close and reattach under title bar"));
+                if (enter) panel.SetStatus(VPBTranslation.T(
+                    "quickfilters.tip.close_hide",
+                    "Hide window (keeps floating position). Use Dock in footer to reattach."));
                 else panel.SetStatus(null);
             };
+
+            // Collapsed mini palette host (pinned Dice) — filled when collapsed.
+            collapsePaletteGO = UI.CreateChildRT(titleBarGO, "CollapsePalette", AnchorPresets.middleCenter,
+                new Vector2(0f, chromeSz), Vector2.zero);
+            UI.AddHLG(
+                collapsePaletteGO, spacing: 2f, padding: UI.Pad(0, 0, 0, 0),
+                childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: false, childForceExpandHeight: false);
+            UI.AddLE(collapsePaletteGO, flexibleWidth: 0f, minWidth: 0f);
+            collapsePaletteGO.SetActive(false);
+            // Sit between title and collapse/close chrome.
+            if (collapseBtnGO != null)
+                collapsePaletteGO.transform.SetSiblingIndex(collapseBtnGO.transform.GetSiblingIndex());
 
             var headerDrag = titleBarGO.AddComponent<QuickFiltersPanelDrag>();
             headerDrag.Target = containerRT;
@@ -287,7 +320,7 @@ namespace VPB
                 if (searchInput != null)
                 {
                     if (searchInput.placeholder is Text ph)
-                        ph.text = VPBTranslation.T("quickfilters.search_ph", "Filter presets…");
+                        ph.text = VPBTranslation.T("quickfilters.search_ph", "Search saved presets…");
                     RectTransform srt = searchInput.GetComponent<RectTransform>();
                     if (srt != null)
                     {
@@ -297,6 +330,18 @@ namespace VPB
                         srt.anchoredPosition = new Vector2(HeaderPadRef, -HeaderPadRef);
                         srt.sizeDelta = new Vector2(200f, GalleryUiDesignTokens.SearchFieldHeightRef);
                     }
+                    var searchHover = searchInput.gameObject.AddComponent<UIHoverDelegate>();
+                    searchHover.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter)
+                        {
+                            panel.SetStatus(VPBTranslation.T(
+                                "quickfilters.tip.list_search",
+                                "Search saved presets by name. Ctrl+S with text here names a new preset."));
+                        }
+                        else panel.SetStatus(null);
+                    };
                 }
             }
 
@@ -351,7 +396,7 @@ namespace VPB
             ContentSizeFitter csf = scrollContentGO.AddComponent<ContentSizeFitter>();
             csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Float footer: undo/redo + Remove Item Mode (left) · spacer · resize (right).
+            // Float footer: Dock · gallery Undo/Redo/Remove · soft-delete Undo · spacer · resize.
             float footerH = GalleryUiDesignTokens.QuickFiltersFooterHeightRef;
             footerGO = UI.CreateChildRT(containerGO, "Footer", AnchorPresets.hStretchBottom,
                 new Vector2(0f, footerH), Vector2.zero);
@@ -371,6 +416,21 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: false);
             if (footerGO.GetComponent<RectMask2D>() == null)
                 footerGO.AddComponent<RectMask2D>();
+
+            floatDockBtnGO = UI.CreateUIButton(footerGO, chromeSz, chromeSz, " ", 14, 0, 0, AnchorPresets.middleCenter, CloseAndDock);
+            floatDockBtnGO.name = "FloatDock";
+            StyleChromeIconBtn(floatDockBtnGO, chromeSz, "vpb_icons/panel_bottom.png", new Color(0f, 0f, 0f, 0.5f));
+            if (floatDockBtnGO.transform.Find("Icon") == null)
+                StyleChromeIconBtn(floatDockBtnGO, chromeSz, "vpb_icons/chevron_down.png", new Color(0f, 0f, 0f, 0.5f));
+            var dockHover = floatDockBtnGO.AddComponent<UIHoverDelegate>();
+            dockHover.OnHoverChange += (enter) =>
+            {
+                if (panel == null) return;
+                if (enter) panel.SetStatus(VPBTranslation.T(
+                    "quickfilters.tip.dock",
+                    "Dock — reattach under title bar"));
+                else panel.SetStatus(null);
+            };
 
             floatUndoBtnGO = UI.CreateUIButton(footerGO, chromeSz, chromeSz, " ", 14, 0, 0, AnchorPresets.middleCenter, () =>
             {
@@ -400,13 +460,15 @@ namespace VPB
                 else panel.SetStatus(null);
             };
 
-            // Same Remove Item Mode toggle as side rails (point → fade → click remove).
+            // Scene Remove Item Mode (not preset delete) — gallery_remove glyph to avoid trash collision.
             floatRemoveModeBtnGO = UI.CreateUIButton(footerGO, chromeSz, chromeSz, " ", 14, 0, 0, AnchorPresets.middleCenter, () =>
             {
                 if (panel != null) panel.ToggleRemoveMode(false, false);
             });
             floatRemoveModeBtnGO.name = "FloatRemoveMode";
-            StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "vpb_icons/delete.png", RemoveModeRailBackdrop);
+            StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "vpb_icons/gallery_remove.png", RemoveModeRailBackdrop);
+            if (floatRemoveModeBtnGO.transform.Find("Icon") == null)
+                StyleChromeIconBtn(floatRemoveModeBtnGO, chromeSz, "vpb_icons/list_remove.png", RemoveModeRailBackdrop);
             Transform rmIconTr = floatRemoveModeBtnGO.transform.Find("Icon");
             floatRemoveModeBtnIconImage = rmIconTr != null ? rmIconTr.GetComponent<Image>() : null;
             if (floatRemoveModeBtnGO.GetComponent<UIHoverBorder>() == null)
@@ -418,12 +480,26 @@ namespace VPB
                 if (enter)
                 {
                     panel.SetStatus(VPBTranslation.T(
-                        "gallery.tooltip.remove_mode",
-                        "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene."));
+                        "quickfilters.tip.scene_remove_mode",
+                        "Remove from scene (not presets): point at a loaded item to fade it, click to remove. Preset delete is the trash on each preset row."));
                 }
                 else panel.SetStatus(null);
             };
             try { SyncRemoveModeButton(panel != null && panel.IsRemoveModeActive); } catch { }
+
+            floatPresetUndoBtnGO = UI.CreateUIButton(footerGO, chromeSz, chromeSz, " ", 14, 0, 0, AnchorPresets.middleCenter, TryUndoSoftDelete);
+            floatPresetUndoBtnGO.name = "FloatPresetUndo";
+            StyleChromeIconBtn(floatPresetUndoBtnGO, chromeSz, "vpb_icons/undo.png", new Color(0.16f, 0.36f, 0.28f, 1f));
+            var presetUndoHover = floatPresetUndoBtnGO.AddComponent<UIHoverDelegate>();
+            presetUndoHover.OnHoverChange += (enter) =>
+            {
+                if (panel == null) return;
+                if (enter) panel.SetStatus(VPBTranslation.T(
+                    "quickfilters.tip.soft_undo",
+                    "Undo last deleted preset (U)"));
+                else panel.SetStatus(null);
+            };
+            floatPresetUndoBtnGO.SetActive(false);
 
             // Flexible spacer so resize sits visually on the right.
             GameObject footerSpacer = new GameObject("Spacer");
@@ -456,6 +532,7 @@ namespace VPB
             footerGO.SetActive(false);
             SyncSortButtonVisual();
             SyncMergeChrome();
+            SyncSoftDeleteUndoButton();
         }
 
         private static void StyleChromeIconBtn(GameObject go, float size, string iconPath, Color? backdropOverride = null)
@@ -629,6 +706,7 @@ namespace VPB
                 }
                 ScaleChromeIconBtn(collapseBtnGO, sortSq, s);
                 ScaleChromeIconBtn(closeBtnGO, sortSq, s);
+                ScaleCollapsePaletteChrome(sortSq, s);
                 SyncCollapseButtonVisual();
             }
 
@@ -737,6 +815,20 @@ namespace VPB
                         continue;
                     }
 
+                    if (ch.name == "EmptyHint")
+                    {
+                        float hintH = rowH * 1.35f;
+                        LayoutElement leEmpty = ch.GetComponent<LayoutElement>();
+                        if (leEmpty != null) leEmpty.preferredHeight = hintH;
+                        if (rowRT != null)
+                            rowRT.sizeDelta = new Vector2(panelW - pad * 2f - sbW, hintH);
+                        Text et = ch.Find("Text") != null ? ch.Find("Text").GetComponent<Text>() : null;
+                        if (et != null)
+                            GalleryUiMetrics.ApplyFont(et, GalleryUiDesignTokens.PopupMenuRowFontRef - 1, s, GalleryUiDesignTokens.FontMinRef);
+                        ApplyPopupRowTextInsets(ch, textPadL, textPadR);
+                        continue;
+                    }
+
                     if (ch.name == "DetachListBtn")
                     {
                         Text dt = ch.Find("Text") != null ? ch.Find("Text").GetComponent<Text>() : null;
@@ -749,11 +841,15 @@ namespace VPB
 
                     int actionCount = 0;
                     if (ch.Find("RandomBtn") != null) actionCount++;
+                    if (ch.Find("MoreBtn") != null) actionCount++;
                     if (ch.Find("PinBtn") != null) actionCount++;
                     if (ch.Find("RenameBtn") != null) actionCount++;
                     if (ch.Find("DeleteBtn") != null) actionCount++;
+                    if (ch.Find("MoreCloseBtn") != null) actionCount++;
                     if (ch.Find("ConfirmDeleteBtn") != null) actionCount++;
                     if (ch.Find("CancelDeleteBtn") != null) actionCount++;
+                    if (ch.Find("ConfirmRenameBtn") != null) actionCount++;
+                    if (ch.Find("CancelRenameBtn") != null) actionCount++;
                     float editReserve = actionCount > 0
                         ? (iconPadR + actionCount * iconSq + Mathf.Max(0, actionCount - 1) * iconGap)
                         : 0f;
@@ -763,37 +859,46 @@ namespace VPB
                     if (t != null)
                         GalleryUiMetrics.ApplyFont(t, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
 
-                    // Right-edge stack. Browse: dice only. Edit: pin / rename / delete (or inline delete confirm).
+                    // Right-edge stack.
                     if (mergeMode)
                     {
                         // Selection mode — no row action chips.
                     }
-                    else if (editMode)
+                    else if (ch.Find("ConfirmRenameBtn") != null)
                     {
-                        if (ch.Find("ConfirmDeleteBtn") != null)
-                        {
-                            PlaceRowAction(ch, "ConfirmDeleteBtn", iconSq, iconPadR, iconGap, 0);
-                            PlaceRowAction(ch, "CancelDeleteBtn", iconSq, iconPadR, iconGap, 1);
-                        }
-                        else
-                        {
-                            PlaceRowAction(ch, "DeleteBtn", iconSq, iconPadR, iconGap, 0);
-                            PlaceRowAction(ch, "RenameBtn", iconSq, iconPadR, iconGap, 1);
-                            PlaceRowAction(ch, "PinBtn", iconSq, iconPadR, iconGap, 2);
-                        }
+                        PlaceRowAction(ch, "ConfirmRenameBtn", iconSq, iconPadR, iconGap, 0);
+                        PlaceRowAction(ch, "CancelRenameBtn", iconSq, iconPadR, iconGap, 1);
+                    }
+                    else if (ch.Find("ConfirmDeleteBtn") != null)
+                    {
+                        PlaceRowAction(ch, "ConfirmDeleteBtn", iconSq, iconPadR, iconGap, 0);
+                        PlaceRowAction(ch, "CancelDeleteBtn", iconSq, iconPadR, iconGap, 1);
+                    }
+                    else if (ch.Find("MoreCloseBtn") != null)
+                    {
+                        // Expanded more: close · delete · rename · pin (no color).
+                        PlaceRowAction(ch, "MoreCloseBtn", iconSq, iconPadR, iconGap, 0);
+                        PlaceRowAction(ch, "DeleteBtn", iconSq, iconPadR, iconGap, 1);
+                        PlaceRowAction(ch, "RenameBtn", iconSq, iconPadR, iconGap, 2);
+                        PlaceRowAction(ch, "PinBtn", iconSq, iconPadR, iconGap, 3);
                     }
                     else
                     {
                         PlaceRowAction(ch, "RandomBtn", iconSq, iconPadR, iconGap, 0);
+                        PlaceRowAction(ch, "MoreBtn", iconSq, iconPadR, iconGap, 1);
                     }
 
                     float iconPad = RowActionIconPadRef * s;
                     ScaleRowActionIcon(ch, "RandomBtn", iconPad);
+                    ScaleRowActionIcon(ch, "MoreBtn", iconPad);
                     ScaleRowActionIcon(ch, "PinBtn", iconPad);
                     ScaleRowActionIcon(ch, "RenameBtn", iconPad);
                     ScaleRowActionIcon(ch, "DeleteBtn", iconPad);
+                    ScaleRowActionIcon(ch, "MoreCloseBtn", iconPad);
                     ScaleRowActionIcon(ch, "ConfirmDeleteBtn", iconPad);
                     ScaleRowActionIcon(ch, "CancelDeleteBtn", iconPad);
+                    ScaleRowActionIcon(ch, "ConfirmRenameBtn", iconPad);
+                    ScaleRowActionIcon(ch, "CancelRenameBtn", iconPad);
                 }
 
                 LayoutRebuilder.ForceRebuildLayoutImmediate(scrollContentGO.GetComponent<RectTransform>());
@@ -893,11 +998,14 @@ namespace VPB
                     footerHlg.spacing = 4f * s;
                     footerHlg.padding = UI.Pad(6, 6, 4, 4, s);
                 }
+                ScaleChromeIconBtn(floatDockBtnGO, sortSq, s);
                 ScaleChromeIconBtn(floatUndoBtnGO, sortSq, s);
                 ScaleChromeIconBtn(floatRedoBtnGO, sortSq, s);
                 ScaleChromeIconBtn(floatRemoveModeBtnGO, sortSq, s);
+                ScaleChromeIconBtn(floatPresetUndoBtnGO, sortSq, s);
                 ScaleChromeIconBtn(resizeHandleGO, sortSq, s);
                 SyncMergeChrome();
+                SyncSoftDeleteUndoButton();
                 try { SyncRemoveModeButton(panel != null && panel.IsRemoveModeActive); } catch { }
             }
 
@@ -1008,8 +1116,8 @@ namespace VPB
 
         public void Refresh()
         {
-            renamingEntry = null;
-            // pendingDeleteEntry kept — row rebuilds into inline Confirm/Cancel.
+            // renamingEntry / pendingDeleteEntry / expandedMoreEntry kept — row rebuilds into that chrome.
+            // flashEntry kept for this rebuild only — cleared at end.
             foreach (var btn in activeButtons) GameObject.Destroy(btn);
             activeButtons.Clear();
             buttonToEntry.Clear();
@@ -1019,6 +1127,9 @@ namespace VPB
             CreateSplitter("Splitter");
 
             List<QuickFilterEntry> display = BuildDisplayList();
+            if (display.Count == 0)
+                CreateEmptyHintRow();
+
             bool anyPinned = false;
             bool insertedPinSep = false;
             for (int i = 0; i < display.Count; i++)
@@ -1038,6 +1149,79 @@ namespace VPB
                 SetLayerRecursive(containerGO, containerGO.layer);
 
             try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
+            flashEntry = null;
+            SyncListSearchVisibility();
+            SyncSoftDeleteUndoButton();
+            SyncCollapsePalette();
+            if (renamingEntry != null)
+                FocusRenameField(renamingEntry);
+        }
+
+        private void CreateEmptyHintRow()
+        {
+            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef * 1.35f;
+            float rowW = GalleryUiDesignTokens.QuickFiltersPanelWidthRef - 12f;
+
+            bool filtered = !string.IsNullOrEmpty((listFilter ?? "").Trim());
+            if (!filtered)
+            {
+                GameObject cta = UI.CreateUIButton(
+                    scrollContentGO,
+                    rowW,
+                    rowH,
+                    VPBTranslation.T("quickfilters.empty_cta", "Save current filters"),
+                    GalleryUiDesignTokens.PopupMenuRowFontRef,
+                    0, 0,
+                    AnchorPresets.middleCenter,
+                    () => CaptureCurrentFilter(false));
+                if (cta != null)
+                {
+                    cta.name = "EmptyHintCta";
+                    Image img = cta.GetComponent<Image>();
+                    if (img != null) img.color = new Color(0.16f, 0.36f, 0.30f, 1f);
+                    Text txt = cta.GetComponentInChildren<Text>();
+                    if (txt != null)
+                    {
+                        txt.alignment = TextAnchor.MiddleCenter;
+                        txt.color = UI.PopupText;
+                        VPBUiFont.ApplyTo(txt);
+                    }
+                    ApplyPopupRowTextInsets(cta.transform, RowTextPadLeftRef, RowTextPadRightRef);
+                    UI.AddLE(cta, preferredHeight: rowH, flexibleWidth: 1f);
+                    var h = cta.AddComponent<UIHoverDelegate>();
+                    h.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter) panel.SetStatus(VPBTranslation.T(
+                            "quickfilters.empty_hint",
+                            "Save stores the gallery’s current filters. Then click a row or use Dice."));
+                        else panel.SetStatus(null);
+                    };
+                    activeButtons.Add(cta);
+                }
+                return;
+            }
+
+            GameObject row = new GameObject("EmptyHint");
+            row.transform.SetParent(scrollContentGO.transform, false);
+            row.AddComponent<RectTransform>().sizeDelta = new Vector2(rowW, rowH);
+            UI.AddLE(row, preferredHeight: rowH, flexibleWidth: 1f);
+
+            Text label = UI.CreateLabel(
+                row,
+                VPBTranslation.T("quickfilters.empty_filtered", "No presets match this search."),
+                GalleryUiDesignTokens.PopupMenuRowFontRef - 1,
+                new Color(0.72f, 0.74f, 0.78f, 1f),
+                TextAnchor.MiddleLeft,
+                raycastTarget: false,
+                name: "Text");
+            if (label != null)
+            {
+                VPBUiFont.ApplyTo(label);
+                ApplyPopupRowTextInsets(row.transform, RowTextPadLeftRef, RowTextPadRightRef);
+            }
+
+            activeButtons.Add(row);
         }
 
         private List<QuickFilterEntry> BuildDisplayList()
@@ -1138,13 +1322,13 @@ namespace VPB
 
             GameObject saveBtn = UI.CreateUIButton(
                 row,
-                rowW * 0.33f,
+                rowW * 0.4f,
                 rowH,
                 VPBTranslation.T("quickfilters.save_preset", "Save Preset"),
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
                 0, 0,
                 AnchorPresets.middleCenter,
-                () => { CaptureCurrentFilter(); });
+                () => { CaptureCurrentFilter(false); });
             if (saveBtn != null)
             {
                 saveBtn.name = "SaveBtn";
@@ -1163,63 +1347,95 @@ namespace VPB
                 del.OnHoverChange += (enter) =>
                 {
                     if (panel == null) return;
-                    if (enter) panel.SetStatus(VPBTranslation.T("quickfilters.tip.save", "Capture current filters into new preset (dice randomizes from it later)."));
+                    if (enter) panel.SetStatus(VPBTranslation.T(
+                        "quickfilters.tip.save",
+                        "Save gallery filters as a new preset, then rename. Ctrl+S: update dirty active, or name from search."));
                     else panel.SetStatus(null);
                 };
             }
 
-            string editLabel;
-            if (mergeMode)
-                editLabel = VPBTranslation.T("quickfilters.merge_cancel", "Cancel");
-            else if (editMode)
-                editLabel = VPBTranslation.T("quickfilters.done_editing", "Done Editing");
-            else
-                editLabel = VPBTranslation.T("quickfilters.edit_presets", "Edit Presets");
-            GameObject editBtn = UI.CreateUIButton(
-                row,
-                rowW * 0.33f,
-                rowH,
-                editLabel,
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                0, 0,
-                AnchorPresets.middleCenter,
-                () =>
-                {
-                    if (mergeMode)
-                    {
-                        ExitMergeMode();
-                        return;
-                    }
-                    editMode = !editMode;
-                    if (!editMode) pendingDeleteEntry = null;
-                    Refresh();
-                });
-            if (editBtn != null)
+            bool canUpdate = panel != null
+                && panel.ActiveQuickFilter != null
+                && !mergeMode;
+            if (canUpdate)
             {
-                editBtn.name = "EditBtn";
-                Image img = editBtn.GetComponent<Image>();
-                // Idle = same readable weight as Save (not muted/disabled look). Active = warm mode cue.
-                if (img != null)
+                bool dirty = false;
+                try { dirty = panel.IsActiveQuickFilterDirty(); } catch { }
+                GameObject updateBtn = UI.CreateUIButton(
+                    row,
+                    rowW * 0.3f,
+                    rowH,
+                    dirty
+                        ? VPBTranslation.T("quickfilters.update_dirty", "Update *")
+                        : VPBTranslation.T("quickfilters.update_preset", "Update"),
+                    GalleryUiDesignTokens.PopupMenuRowFontRef,
+                    0, 0,
+                    AnchorPresets.middleCenter,
+                    UpdateActivePreset);
+                if (updateBtn != null)
                 {
-                    if (mergeMode)
-                        img.color = UI.PopupRowActiveBackdrop;
-                    else if (editMode)
-                        img.color = new Color(0.40f, 0.34f, 0.16f, 1f);
-                    else
-                        img.color = new Color(0.28f, 0.26f, 0.18f, 1f);
+                    updateBtn.name = "UpdateBtn";
+                    Image img = updateBtn.GetComponent<Image>();
+                    if (img != null)
+                    {
+                        img.color = dirty
+                            ? new Color(0.32f, 0.42f, 0.22f, 1f)
+                            : new Color(0.22f, 0.34f, 0.28f, 1f);
+                    }
+                    Text txt = updateBtn.GetComponentInChildren<Text>();
+                    if (txt != null)
+                    {
+                        txt.alignment = TextAnchor.MiddleCenter;
+                        txt.color = dirty ? DirtyMarkColor : UI.PopupText;
+                        VPBUiFont.ApplyTo(txt);
+                    }
+                    ApplyPopupRowTextInsets(updateBtn.transform, RowTextPadLeftRef, RowTextPadRightRef);
+                    UI.AddLE(updateBtn, preferredHeight: rowH, flexibleWidth: 1f, minWidth: 50f);
+                    var uh = updateBtn.AddComponent<UIHoverDelegate>();
+                    uh.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter)
+                        {
+                            string n = panel.ActiveQuickFilter != null ? panel.ActiveQuickFilter.Name : "";
+                            panel.SetStatus(string.Format(
+                                VPBTranslation.T("quickfilters.tip.update", "Overwrite '{0}' with current gallery filters (keeps name)"),
+                                n ?? ""));
+                        }
+                        else panel.SetStatus(null);
+                    };
                 }
-                Text txt = editBtn.GetComponentInChildren<Text>();
-                if (txt != null)
-                {
-                    txt.alignment = TextAnchor.MiddleCenter;
-                    txt.color = UI.PopupText;
-                    VPBUiFont.ApplyTo(txt);
-                }
-                ApplyPopupRowTextInsets(editBtn.transform, RowTextPadLeftRef, RowTextPadRightRef);
-                UI.AddLE(editBtn, preferredHeight: rowH, flexibleWidth: 1f, minWidth: 60f);
             }
 
-            // Actions row: Save | Edit/Cancel | Merge — single chrome (float footer has no duplicate).
+            // Merge Cancel occupies former Edit slot — only while picking merge members.
+            if (mergeMode)
+            {
+                GameObject cancelBtn = UI.CreateUIButton(
+                    row,
+                    rowW * 0.3f,
+                    rowH,
+                    VPBTranslation.T("quickfilters.merge_cancel", "Cancel"),
+                    GalleryUiDesignTokens.PopupMenuRowFontRef,
+                    0, 0,
+                    AnchorPresets.middleCenter,
+                    ExitMergeMode);
+                if (cancelBtn != null)
+                {
+                    cancelBtn.name = "MergeCancelBtn";
+                    Image img = cancelBtn.GetComponent<Image>();
+                    if (img != null) img.color = UI.PopupRowActiveBackdrop;
+                    Text txt = cancelBtn.GetComponentInChildren<Text>();
+                    if (txt != null)
+                    {
+                        txt.alignment = TextAnchor.MiddleCenter;
+                        txt.color = UI.PopupText;
+                        VPBUiFont.ApplyTo(txt);
+                    }
+                    ApplyPopupRowTextInsets(cancelBtn.transform, RowTextPadLeftRef, RowTextPadRightRef);
+                    UI.AddLE(cancelBtn, preferredHeight: rowH, flexibleWidth: 1f, minWidth: 50f);
+                }
+            }
+
             string mergeLabel = mergeMode
                 ? string.Format(
                     VPBTranslation.T("quickfilters.merge_create_n", "Create ({0}/{1})"),
@@ -1228,7 +1444,7 @@ namespace VPB
                 : VPBTranslation.T("quickfilters.merge_to_new", "Merge to New");
             GameObject mergeBtn = UI.CreateUIButton(
                 row,
-                rowW * 0.33f,
+                rowW * 0.4f,
                 rowH,
                 mergeLabel,
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
@@ -1344,47 +1560,99 @@ namespace VPB
                 0, 0,
                 AnchorPresets.middleCenter,
                 null);
-            var b = btn != null ? btn.GetComponent<Button>() : null;
-            if (b != null)
+            // Disable row Button — nested chips bubble OnPointerClick to it and steal ⋮ / dice.
+            // Apply uses UILeftClickDelegate that ignores hits under action child names.
+            var rowBtn = btn != null ? btn.GetComponent<Button>() : null;
+            if (rowBtn != null)
             {
-                b.onClick.RemoveAllListeners();
-                b.onClick.AddListener(() =>
+                rowBtn.onClick.RemoveAllListeners();
+                rowBtn.enabled = false;
+                rowBtn.transition = Selectable.Transition.None;
+            }
+            var rowClick = btn != null ? btn.AddComponent<UILeftClickDelegate>() : null;
+            if (rowClick != null)
+            {
+                rowClick.SkipWhenUnderChildNames = new[]
+                {
+                    "RandomBtn", "MoreBtn", "PinBtn", "RenameBtn", "DeleteBtn",
+                    "MoreCloseBtn", "ConfirmDeleteBtn", "CancelDeleteBtn",
+                    "ConfirmRenameBtn", "CancelRenameBtn", "RenameInput"
+                };
+                rowClick.OnLeftClick = () =>
                 {
                     if (mergeMode)
                     {
                         ToggleMergeSelection(entry);
                         return;
                     }
-                    if (editMode)
+                    if (renamingEntry != null)
                     {
-                        if (pendingDeleteEntry != null && ReferenceEquals(pendingDeleteEntry, entry))
+                        if (ReferenceEquals(renamingEntry, entry))
                             return;
-                        if (pendingDeleteEntry != null)
-                        {
-                            pendingDeleteEntry = null;
-                            Refresh();
-                            return;
-                        }
-                        ShowContextMenu(btn, entry);
+                        CancelInlineRename();
                         return;
+                    }
+                    if (pendingDeleteEntry != null)
+                    {
+                        if (ReferenceEquals(pendingDeleteEntry, entry))
+                            return;
+                        pendingDeleteEntry = null;
+                        Refresh();
+                        return;
+                    }
+                    if (expandedMoreEntry != null && !ReferenceEquals(expandedMoreEntry, entry))
+                    {
+                        expandedMoreEntry = null;
+                        Refresh();
                     }
 
                     ApplyFilter(entry);
                     HideAfterApplyIfDocked();
-                });
+                };
             }
 
             Image img = btn.GetComponent<Image>();
             bool selectedForMerge = mergeMode && IsMergeSelected(entry);
-            bool pendingDelete = editMode && !mergeMode
+            bool pendingDelete = !mergeMode
                 && pendingDeleteEntry != null
                 && ReferenceEquals(pendingDeleteEntry, entry);
+            bool renaming = !mergeMode && !pendingDelete
+                && renamingEntry != null
+                && ReferenceEquals(renamingEntry, entry);
+            bool moreExpanded = !mergeMode && !pendingDelete && !renaming
+                && expandedMoreEntry != null
+                && ReferenceEquals(expandedMoreEntry, entry);
+            bool flash = !pendingDelete && !renaming
+                && flashEntry != null
+                && ReferenceEquals(flashEntry, entry);
+            bool isActive = !pendingDelete && !renaming && !mergeMode
+                && panel != null
+                && panel.ActiveQuickFilter != null
+                && ReferenceEquals(panel.ActiveQuickFilter, entry);
+            bool isKbFocus = !pendingDelete && !renaming && !mergeMode
+                && keyboardFocusEntry != null
+                && ReferenceEquals(keyboardFocusEntry, entry);
+            bool dirtyActive = false;
+            if (isActive)
+            {
+                try { dirtyActive = panel.IsActiveQuickFilterDirty(); } catch { }
+            }
             if (img != null)
             {
                 if (pendingDelete)
                     img.color = new Color(0.42f, 0.18f, 0.18f, 1f);
+                else if (renaming)
+                    img.color = Color.Lerp(entry.ButtonColor, new Color(0.22f, 0.32f, 0.42f, 1f), 0.5f);
+                else if (moreExpanded)
+                    img.color = Color.Lerp(entry.ButtonColor, new Color(0.32f, 0.34f, 0.40f, 1f), 0.45f);
                 else if (selectedForMerge)
                     img.color = new Color(0.18f, 0.48f, 0.38f, 1f);
+                else if (flash)
+                    img.color = Color.Lerp(entry.ButtonColor, new Color(0.55f, 0.72f, 0.58f, 1f), 0.55f);
+                else if (isKbFocus)
+                    img.color = Color.Lerp(entry.ButtonColor, KeyboardFocusAccent, 0.55f);
+                else if (isActive)
+                    img.color = Color.Lerp(entry.ButtonColor, ActiveRowAccent, 0.55f);
                 else
                     img.color = entry.ButtonColor;
             }
@@ -1392,41 +1660,51 @@ namespace VPB
             Text txt = btn.GetComponentInChildren<Text>();
             if (txt != null)
             {
-                string label = entry.Name ?? "";
-                if (pendingDelete)
+                if (renaming)
                 {
-                    label = string.Format(
-                        VPBTranslation.T("quickfilters.delete_inline", "Delete '{0}'?"),
-                        entry.Name ?? "");
-                    txt.color = Color.white;
+                    txt.gameObject.SetActive(false);
                 }
                 else
                 {
-                    if (entry.IsMerged)
+                    string label = entry.Name ?? "";
+                    if (pendingDelete)
                     {
-                        int n = entry.MergeMembers != null ? entry.MergeMembers.Count : 0;
-                        label = string.Format("{0} · {1}", label, n);
+                        label = string.Format(
+                            VPBTranslation.T("quickfilters.delete_inline", "Delete '{0}'?"),
+                            entry.Name ?? "");
+                        txt.color = Color.white;
                     }
-                    if (selectedForMerge)
-                        label = "✓ " + label;
-                    txt.color = entry.TextColor;
+                    else
+                    {
+                        if (entry.IsMerged)
+                        {
+                            int n = entry.MergeMembers != null ? entry.MergeMembers.Count : 0;
+                            label = string.Format("{0} · {1}", label, n);
+                        }
+                        if (isActive)
+                            label = (dirtyActive ? "●* " : "● ") + label;
+                        if (selectedForMerge)
+                            label = "✓ " + label;
+                        txt.color = dirtyActive ? DirtyMarkColor : entry.TextColor;
+                    }
+                    txt.text = label;
+                    txt.alignment = TextAnchor.MiddleLeft;
+                    txt.gameObject.SetActive(true);
+                    VPBUiFont.ApplyTo(txt);
                 }
-                txt.text = label;
-                txt.alignment = TextAnchor.MiddleLeft;
-                VPBUiFont.ApplyTo(txt);
             }
 
-            // Browse: dice only. Edit: pin + rename + delete (or Confirm/Cancel). Hide in merge select.
+            // Browse: dice+more. Expanded: 4 chips. Rename/delete: confirm pair.
             float iconReserve;
             if (mergeMode) iconReserve = 8f;
-            else if (pendingDelete) iconReserve = 80f;
-            else if (editMode) iconReserve = 120f;
-            else iconReserve = 40f;
+            else if (pendingDelete || renaming) iconReserve = 80f;
+            else if (moreExpanded) iconReserve = 140f;
+            else iconReserve = 80f;
             ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef, iconReserve);
 
             UI.AddLE(btn, preferredHeight: rowH, flexibleWidth: 1f);
 
-            bool canDrag = AllowDragReorder() && !mergeMode && !pendingDelete;
+            bool canDrag = AllowDragReorder() && !mergeMode && !pendingDelete && !moreExpanded && !renaming;
             UIListReorderable reorder = null;
             if (canDrag)
             {
@@ -1440,17 +1718,25 @@ namespace VPB
             float padR = 4f;
             float gap = 4f;
             Sprite sprRandom = UI.LoadIconSprite("vpb_icons/random.png", Color.white);
+            Sprite sprMore = UI.LoadIconSprite("vpb_icons/edit.png", Color.white)
+                ?? UI.LoadIconSprite("vpb_icons/clipboard_list.png", Color.white);
             Sprite sprPinOn = UI.LoadIconSprite("vpb_icons/pin_on.png", Color.white);
             Sprite sprPinOff = UI.LoadIconSprite("vpb_icons/pin_off.png", Color.white);
             Sprite sprRename = UI.LoadIconSprite("vpb_icons/rename.png", Color.white);
             Sprite sprDelete = UI.LoadIconSprite("vpb_icons/delete.png", Color.white);
             Sprite sprCancel = UI.LoadIconSprite("vpb_icons/x.png", Color.white);
+            Sprite sprConfirm = UI.LoadIconSprite("vpb_icons/clipboard_check.png", Color.white)
+                ?? UI.LoadIconSprite("vpb_icons/load.png", Color.white);
 
             void setupSquare(GameObject go, Sprite icon, Color iconTint, float x, Color backdrop)
             {
                 if (go == null) return;
                 var img2 = go.GetComponent<Image>();
-                if (img2 != null) img2.color = backdrop;
+                if (img2 != null)
+                {
+                    img2.color = backdrop;
+                    img2.raycastTarget = true;
+                }
                 var t = go.GetComponentInChildren<Text>(true);
                 if (t != null) t.gameObject.SetActive(false);
                 var rt2 = go.GetComponent<RectTransform>();
@@ -1466,7 +1752,11 @@ namespace VPB
                 {
                     UI.AddIconToButton(go, icon, padding: RowActionIconPadRef, backdropOverride: backdrop);
                     var iconImg = go.transform.Find("Icon") != null ? go.transform.Find("Icon").GetComponent<Image>() : null;
-                    if (iconImg != null) iconImg.color = iconTint;
+                    if (iconImg != null)
+                    {
+                        iconImg.color = iconTint;
+                        iconImg.raycastTarget = false;
+                    }
                 }
             }
 
@@ -1479,51 +1769,128 @@ namespace VPB
                 h.OnReorder = reorder.OnReorder;
             }
 
+            void wireChipClick(GameObject go, Action action)
+            {
+                if (go == null || action == null) return;
+                var chipBtn = go.GetComponent<Button>();
+                if (chipBtn != null)
+                {
+                    chipBtn.onClick.RemoveAllListeners();
+                    chipBtn.enabled = true;
+                    chipBtn.onClick.AddListener(() => action());
+                }
+            }
+
             if (!mergeMode)
             {
-            if (!editMode)
+            if (renaming)
             {
-                // Dice — full row-height square like side-rail / title chips (browse only).
-                GameObject randomBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
-                if (randomBtn != null) randomBtn.name = "RandomBtn";
-                Color randomBackdrop = new Color(0.18f, 0.32f, 0.28f, 1f);
-                setupSquare(randomBtn, sprRandom, Color.white, -padR, randomBackdrop);
-                addReorderHandle(randomBtn);
-                var randB = randomBtn != null ? randomBtn.GetComponent<Button>() : null;
-                if (randB != null)
+                float s = panel != null ? panel.ChromeScale : 1f;
+                float padL = RowTextPadLeftRef * s;
+                float padRs = 4f * s;
+                float iconSq = GalleryUiDesignTokens.ButtonSizeRef * s;
+                float rightReserve = padRs + 2f * iconSq + 4f * s;
+
+                GameObject cancelBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                GameObject confirmBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                if (cancelBtn != null) cancelBtn.name = "CancelRenameBtn";
+                if (confirmBtn != null) confirmBtn.name = "ConfirmRenameBtn";
+                Color cancelBackdrop = new Color(0.22f, 0.24f, 0.28f, 1f);
+                Color confirmBackdrop = new Color(0.16f, 0.42f, 0.28f, 1f);
+                setupSquare(confirmBtn, sprConfirm, Color.white, -padR, confirmBackdrop);
+                setupSquare(cancelBtn, sprCancel, Color.white, -(padR + sq + gap), cancelBackdrop);
+
+                GameObject inputHost = new GameObject("RenameInput");
+                inputHost.transform.SetParent(btn.transform, false);
+                RectTransform hostRT = inputHost.AddComponent<RectTransform>();
+                hostRT.anchorMin = Vector2.zero;
+                hostRT.anchorMax = Vector2.one;
+                hostRT.offsetMin = new Vector2(padL, 2f * s);
+                hostRT.offsetMax = new Vector2(-rightReserve, -2f * s);
+
+                float fieldH = Mathf.Max(18f, GalleryUiDesignTokens.PopupMenuRowHeightRef * s - 4f * s);
+                int font = Mathf.Max(
+                    GalleryUiDesignTokens.FontMinRef,
+                    Mathf.RoundToInt(GalleryUiDesignTokens.PopupMenuRowFontRef * s));
+
+                InputField field = UI.CreateChromeLayoutInputField(
+                    inputHost.transform,
+                    font,
+                    fieldH,
+                    1f,
+                    6f * s,
+                    2f * s,
+                    UI.InputFieldBg,
+                    UI.InputFieldPlaceholderColor,
+                    VPBTranslation.T("quickfilters.rename_ph", "Preset name"),
+                    "InlineRename");
+                if (field != null)
                 {
-                    randB.onClick.RemoveAllListeners();
-                    randB.onClick.AddListener(() =>
+                    RectTransform fieldRT = field.GetComponent<RectTransform>();
+                    if (fieldRT != null)
                     {
-                        if (panel == null) return;
-                        // Keep presets list open so user can dice again / pick another.
-                        panel.RandomizeFromFilterPreset(entry, true);
-                    });
-                }
-                var randH = randomBtn != null ? randomBtn.AddComponent<UIHoverDelegate>() : null;
-                if (randH != null)
-                {
-                    randH.OnHoverChange += (enter) =>
+                        fieldRT.anchorMin = Vector2.zero;
+                        fieldRT.anchorMax = Vector2.one;
+                        fieldRT.offsetMin = Vector2.zero;
+                        fieldRT.offsetMax = Vector2.zero;
+                    }
+                    LayoutElement fle = field.GetComponent<LayoutElement>();
+                    if (fle != null) fle.ignoreLayout = true;
+                    field.text = entry.Name ?? "";
+                    field.onEndEdit.AddListener(val =>
                     {
-                        if (panel == null) return;
-                        if (enter)
+                        if (ignoreRenameEndEdit)
                         {
-                            string tip = entry.IsMerged
-                                ? string.Format(
-                                    VPBTranslation.T("quickfilters.tip.randomize_merge", "Randomize '{0}' — loads each merged filter in order"),
-                                    entry.Name)
-                                : string.Format(
-                                    VPBTranslation.T("quickfilters.tip.randomize", "Randomize from '{0}' (loads random item; restores current view)"),
-                                    entry.Name);
-                            panel.SetStatus(tip);
+                            ignoreRenameEndEdit = false;
+                            return;
                         }
+                        ConfirmInlineRename(val);
+                    });
+                    try
+                    {
+                        var esc = inputHost.AddComponent<SearchInputESCHandler>();
+                        esc.Initialize(field, null, CancelInlineRename);
+                    }
+                    catch { }
+                    try { inputHost.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(field); }
+                    catch { }
+                }
+
+                wireChipClick(confirmBtn, () =>
+                {
+                    ignoreRenameEndEdit = true;
+                    string val = field != null ? field.text : (entry.Name ?? "");
+                    ConfirmInlineRename(val);
+                });
+                wireChipClick(cancelBtn, () =>
+                {
+                    ignoreRenameEndEdit = true;
+                    CancelInlineRename();
+                });
+
+                var tipC = confirmBtn != null ? confirmBtn.AddComponent<UIHoverDelegate>() : null;
+                if (tipC != null)
+                {
+                    tipC.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter) panel.SetStatus(VPBTranslation.T("quickfilters.tip.rename_confirm", "Confirm new name"));
+                        else panel.SetStatus(null);
+                    };
+                }
+                var tipX = cancelBtn != null ? cancelBtn.AddComponent<UIHoverDelegate>() : null;
+                if (tipX != null)
+                {
+                    tipX.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter) panel.SetStatus(VPBTranslation.T("quickfilters.tip.rename_cancel", "Cancel rename"));
                         else panel.SetStatus(null);
                     };
                 }
             }
             else if (pendingDelete)
             {
-                // Inline confirm — stay in list (no external DisplayConfirm modal).
                 GameObject cancelBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject confirmBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 if (cancelBtn != null) cancelBtn.name = "CancelDeleteBtn";
@@ -1533,27 +1900,15 @@ namespace VPB
                 setupSquare(confirmBtn, sprDelete, Color.white, -padR, confirmBackdrop);
                 setupSquare(cancelBtn, sprCancel, Color.white, -(padR + sq + gap), cancelBackdrop);
 
-                var cb = confirmBtn != null ? confirmBtn.GetComponent<Button>() : null;
-                if (cb != null)
+                wireChipClick(confirmBtn, () =>
                 {
-                    cb.onClick.RemoveAllListeners();
-                    cb.onClick.AddListener(() =>
-                    {
-                        QuickFilterSettings.Instance.RemoveFilter(entry);
-                        pendingDeleteEntry = null;
-                        Refresh();
-                    });
-                }
-                var xb = cancelBtn != null ? cancelBtn.GetComponent<Button>() : null;
-                if (xb != null)
+                    CommitSoftDelete(entry);
+                });
+                wireChipClick(cancelBtn, () =>
                 {
-                    xb.onClick.RemoveAllListeners();
-                    xb.onClick.AddListener(() =>
-                    {
-                        pendingDeleteEntry = null;
-                        Refresh();
-                    });
-                }
+                    pendingDeleteEntry = null;
+                    Refresh();
+                });
 
                 var chConfirm = confirmBtn != null ? confirmBtn.AddComponent<UIHoverDelegate>() : null;
                 if (chConfirm != null)
@@ -1581,92 +1936,129 @@ namespace VPB
                     };
                 }
             }
-            else
+            else if (moreExpanded)
             {
-                // Edit: pin (overflow investment) + rename + delete — pin hidden outside edit.
+                // Inline overflow: pin · rename · delete · close (no color/star).
                 GameObject pinBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject renameBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 GameObject deleteBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                GameObject closeBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
                 if (pinBtn != null) pinBtn.name = "PinBtn";
                 if (renameBtn != null) renameBtn.name = "RenameBtn";
                 if (deleteBtn != null) deleteBtn.name = "DeleteBtn";
-                if (pinBtn != null && renameBtn != null && deleteBtn != null)
+                if (closeBtn != null) closeBtn.name = "MoreCloseBtn";
+
+                Color pinBackdrop = entry.Pinned
+                    ? new Color(0.32f, 0.28f, 0.16f, 1f)
+                    : new Color(0.22f, 0.24f, 0.28f, 1f);
+                Color renameBackdrop = new Color(0.20f, 0.26f, 0.34f, 1f);
+                Color deleteBackdrop = new Color(0.45f, 0.22f, 0.22f, 1f);
+                Color closeBackdrop = new Color(0.22f, 0.24f, 0.28f, 1f);
+
+                setupSquare(closeBtn, sprCancel, Color.white, -padR, closeBackdrop);
+                setupSquare(deleteBtn, sprDelete, Color.white, -(padR + sq + gap), deleteBackdrop);
+                setupSquare(renameBtn, sprRename, Color.white, -(padR + 2f * (sq + gap)), renameBackdrop);
+                // Affordance: show action you can take — pinned → unpin (pin_off); unpinned → pin (pin_on).
+                setupSquare(pinBtn, entry.Pinned ? sprPinOff : sprPinOn, Color.white, -(padR + 3f * (sq + gap)), pinBackdrop);
+
+                wireChipClick(closeBtn, () =>
                 {
-                    Color pinBackdrop = entry.Pinned
-                        ? new Color(0.32f, 0.28f, 0.16f, 1f)
-                        : new Color(0.22f, 0.24f, 0.28f, 1f);
-                    Color renameBackdrop = new Color(0.20f, 0.26f, 0.34f, 1f);
-                    Color deleteBackdrop = new Color(0.45f, 0.22f, 0.22f, 1f);
-                    // From right: delete, rename, pin
-                    setupSquare(deleteBtn, sprDelete, Color.white, -padR, deleteBackdrop);
-                    setupSquare(renameBtn, sprRename, Color.white, -(padR + sq + gap), renameBackdrop);
-                    setupSquare(pinBtn, entry.Pinned ? sprPinOn : sprPinOff, Color.white, -(padR + 2f * (sq + gap)), pinBackdrop);
+                    expandedMoreEntry = null;
+                    Refresh();
+                });
+                wireChipClick(deleteBtn, () =>
+                {
+                    expandedMoreEntry = null;
+                    ArmInlineDelete(entry);
+                });
+                wireChipClick(renameBtn, () => StartInlineRename(entry));
+                wireChipClick(pinBtn, () =>
+                {
+                    QuickFilterSettings.Instance.TogglePinned(entry);
+                    expandedMoreEntry = null;
+                    Refresh();
+                });
 
-                    addReorderHandle(pinBtn);
-                    addReorderHandle(renameBtn);
-                    addReorderHandle(deleteBtn);
-
-                    var pb = pinBtn.GetComponent<Button>();
-                    if (pb != null)
+                void tip(GameObject go, string idle)
+                {
+                    if (go == null) return;
+                    var h = go.AddComponent<UIHoverDelegate>();
+                    h.OnHoverChange += (enter) =>
                     {
-                        pb.onClick.RemoveAllListeners();
-                        pb.onClick.AddListener(() =>
-                        {
-                            QuickFilterSettings.Instance.TogglePinned(entry);
-                            Refresh();
-                        });
-                    }
-                    var ph = pinBtn.AddComponent<UIHoverDelegate>();
-                    ph.OnHoverChange += (enter) =>
+                        if (panel == null) return;
+                        if (enter) panel.SetStatus(idle);
+                        else panel.SetStatus(null);
+                    };
+                }
+                tip(closeBtn, VPBTranslation.T("quickfilters.tip.more_close", "Close actions"));
+                tip(deleteBtn, string.Format(VPBTranslation.T("quickfilters.tip.delete", "Delete preset '{0}'"), entry.Name));
+                tip(renameBtn, string.Format(VPBTranslation.T("quickfilters.tip.rename", "Rename '{0}'"), entry.Name));
+                tip(pinBtn, entry.Pinned
+                    ? string.Format(VPBTranslation.T("quickfilters.tip.unpin", "Unpin '{0}' from overflow quick-random"), entry.Name)
+                    : string.Format(VPBTranslation.T("quickfilters.tip.pin", "Pin '{0}' to overflow as quick-random"), entry.Name));
+            }
+            else
+            {
+                // Browse: dice + more (edit.png — solid hit target like dice).
+                GameObject randomBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                GameObject moreBtn = UI.CreateUIButton(btn, sq, sq, " ", 16, 0, 0, AnchorPresets.middleRight, null);
+                if (randomBtn != null) randomBtn.name = "RandomBtn";
+                if (moreBtn != null) moreBtn.name = "MoreBtn";
+                Color randomBackdrop = new Color(0.18f, 0.32f, 0.28f, 1f);
+                Color moreBackdrop = new Color(0.22f, 0.24f, 0.28f, 1f);
+                setupSquare(randomBtn, sprRandom, Color.white, -padR, randomBackdrop);
+                setupSquare(moreBtn, sprMore, Color.white, -(padR + sq + gap), moreBackdrop);
+                addReorderHandle(randomBtn);
+
+                wireChipClick(randomBtn, () =>
+                {
+                    if (panel == null) return;
+                    panel.RandomizeFromFilterPreset(entry, true);
+                });
+                wireChipClick(moreBtn, () => ToggleRowMore(entry));
+
+                var randH = randomBtn != null ? randomBtn.AddComponent<UIHoverDelegate>() : null;
+                if (randH != null)
+                {
+                    randH.OnHoverChange += (enter) =>
                     {
                         if (panel == null) return;
                         if (enter)
                         {
-                            panel.SetStatus(entry.Pinned
-                                ? string.Format(VPBTranslation.T("quickfilters.tip.unpin", "Unpin '{0}' from overflow quick-random"), entry.Name)
-                                : string.Format(VPBTranslation.T("quickfilters.tip.pin", "Pin '{0}' to overflow as quick-random"), entry.Name));
+                            string tip = entry.IsMerged
+                                ? string.Format(
+                                    VPBTranslation.T("quickfilters.tip.randomize_merge", "Dice: random from each merge member in order — restores view"),
+                                    entry.Name)
+                                : string.Format(
+                                    VPBTranslation.T("quickfilters.tip.randomize", "Dice: random item from '{0}', restores current view (D)"),
+                                    entry.Name);
+                            panel.SetStatus(tip);
                         }
                         else panel.SetStatus(null);
                     };
-
-                    var rb = renameBtn.GetComponent<Button>();
-                    if (rb != null)
-                    {
-                        rb.onClick.RemoveAllListeners();
-                        rb.onClick.AddListener(() => BeginInlineRename(btn, entry));
-                    }
-
-                    var db = deleteBtn.GetComponent<Button>();
-                    if (db != null)
-                    {
-                        db.onClick.RemoveAllListeners();
-                        db.onClick.AddListener(() => ArmInlineDelete(entry));
-                    }
-
-                    var rh = renameBtn.AddComponent<UIHoverDelegate>();
-                    rh.OnHoverChange += (enter) =>
+                }
+                var moreH = moreBtn != null ? moreBtn.AddComponent<UIHoverDelegate>() : null;
+                if (moreH != null)
+                {
+                    moreH.OnHoverChange += (enter) =>
                     {
                         if (panel == null) return;
-                        if (enter) panel.SetStatus(string.Format(VPBTranslation.T("quickfilters.tip.rename", "Rename '{0}' inline"), entry.Name));
-                        else panel.SetStatus(null);
-                    };
-                    var dh = deleteBtn.AddComponent<UIHoverDelegate>();
-                    dh.OnHoverChange += (enter) =>
-                    {
-                        if (panel == null) return;
-                        if (enter) panel.SetStatus(string.Format(VPBTranslation.T("quickfilters.tip.delete", "Delete '{0}'"), entry.Name));
+                        if (enter)
+                        {
+                            panel.SetStatus(string.Format(
+                                VPBTranslation.T("quickfilters.tip.more", "More for '{0}': pin · rename · delete"),
+                                entry.Name));
+                        }
                         else panel.SetStatus(null);
                     };
                 }
             }
             } // !mergeMode
 
-            if (!mergeMode && !pendingDelete)
+            if (!mergeMode && !pendingDelete && !renaming)
             {
             var rightClick = btn.AddComponent<UIRightClickDelegate>();
-            rightClick.OnRightClick = () => {
-                ShowContextMenu(btn, entry);
-            };
+            rightClick.OnRightClick = () => ToggleRowMore(entry);
             }
 
             var del = btn.AddComponent<UIHoverDelegate>();
@@ -1680,23 +2072,29 @@ namespace VPB
                             ? string.Format(VPBTranslation.T("quickfilters.merge_deselect_hint", "Deselect '{0}' from merge"), entry.Name)
                             : string.Format(VPBTranslation.T("quickfilters.merge_select_hint", "Select '{0}' for merge (2–{1})"), entry.Name, GalleryUiDesignTokens.QuickFiltersMergeMaxMembers);
                     }
+                    else if (renaming)
+                    {
+                        info = VPBTranslation.T("quickfilters.rename_hint", "Edit name — Confirm to save · Cancel / Esc to discard");
+                    }
                     else if (pendingDelete)
                     {
                         info = string.Format(
                             VPBTranslation.T("quickfilters.delete_inline_hint", "Confirm or cancel delete of '{0}' (Esc cancels)"),
                             entry.Name);
                     }
-                    else if (editMode)
+                    else if (moreExpanded)
                     {
-                        info = string.Format(VPBTranslation.T("quickfilters.edit_hint", "Edit '{0}' (Icons: pin / rename / delete. Drag when Manual sort.)"), entry.Name);
+                        info = string.Format(
+                            VPBTranslation.T("quickfilters.more_expanded_hint", "Actions for '{0}' — Esc or ✕ to close"),
+                            entry.Name);
                     }
                     else if (entry.IsMerged)
                     {
-                        info = string.Format(VPBTranslation.T("quickfilters.merge_apply_hint", "Merged '{0}' — showing first filter. Dice loads all {1}."), entry.Name, entry.MergeMembers != null ? entry.MergeMembers.Count : 0);
+                        info = string.Format(VPBTranslation.T("quickfilters.merge_apply_hint", "Merged '{0}' — click = all {1} filters (OR browse). Dice = load each in order (D)."), entry.Name, entry.MergeMembers != null ? entry.MergeMembers.Count : 0);
                     }
                     else
                     {
-                        info = string.Format(VPBTranslation.T("quickfilters.apply_hint", "Apply '{0}' (Dice = randomize. Drag to reorder when Manual sort.)"), entry.Name);
+                        info = string.Format(VPBTranslation.T("quickfilters.apply_hint", "Apply '{0}' (Enter). Dice = random item, keep view (D). More = pin / rename / delete"), entry.Name);
                     }
                     panel.SetStatus(info);
                 }
@@ -1707,12 +2105,30 @@ namespace VPB
             buttonToEntry[btn] = entry;
         }
 
+        private void ToggleRowMore(QuickFilterEntry entry)
+        {
+            if (entry == null || mergeMode) return;
+            renamingEntry = null;
+            pendingDeleteEntry = null;
+            if (expandedMoreEntry != null && ReferenceEquals(expandedMoreEntry, entry))
+                expandedMoreEntry = null;
+            else
+                expandedMoreEntry = entry;
+            Refresh();
+            if (panel != null && expandedMoreEntry != null)
+            {
+                panel.SetStatus(string.Format(
+                    VPBTranslation.T("quickfilters.tip.more_open", "Actions for '{0}' — pin · rename · delete"),
+                    entry.Name));
+            }
+        }
+
         private void ArmInlineDelete(QuickFilterEntry entry)
         {
-            if (entry == null) return;
+            if (entry == null || mergeMode) return;
             renamingEntry = null;
+            expandedMoreEntry = null;
             pendingDeleteEntry = entry;
-            if (!editMode) editMode = true;
             Refresh();
             if (panel != null)
             {
@@ -1722,13 +2138,78 @@ namespace VPB
             }
         }
 
-        /// <summary>Esc / click-away cancel for armed inline delete. Returns true if consumed.</summary>
+        /// <summary>Esc cancel for rename, armed delete, or expanded row actions.</summary>
         public bool TryCancelPendingDelete()
         {
-            if (pendingDeleteEntry == null) return false;
-            pendingDeleteEntry = null;
+            bool any = false;
+            if (renamingEntry != null)
+            {
+                renamingEntry = null;
+                any = true;
+            }
+            if (pendingDeleteEntry != null)
+            {
+                pendingDeleteEntry = null;
+                any = true;
+            }
+            if (expandedMoreEntry != null)
+            {
+                expandedMoreEntry = null;
+                any = true;
+            }
+            if (!any) return false;
             Refresh();
             return true;
+        }
+
+        private void StartInlineRename(QuickFilterEntry entry)
+        {
+            if (entry == null || mergeMode) return;
+            pendingDeleteEntry = null;
+            expandedMoreEntry = null;
+            renamingEntry = entry;
+            Refresh();
+            if (panel != null)
+                panel.SetStatus(VPBTranslation.T("quickfilters.tip.rename_inline", "Confirm to save · Cancel / Esc to discard"));
+        }
+
+        private void FocusRenameField(QuickFilterEntry entry)
+        {
+            GameObject row = FindRowForEntry(entry);
+            if (row == null) return;
+            Transform host = row.transform.Find("RenameInput");
+            if (host == null) return;
+            InputField field = host.GetComponentInChildren<InputField>(true);
+            if (field == null) return;
+            try
+            {
+                field.ActivateInputField();
+                field.Select();
+                field.MoveTextEnd(false);
+            }
+            catch { }
+        }
+
+        private void ConfirmInlineRename(string val)
+        {
+            if (renamingEntry == null) return;
+            QuickFilterEntry entry = renamingEntry;
+            renamingEntry = null;
+            expandedMoreEntry = null;
+
+            string trimmed = val != null ? val.Trim() : "";
+            if (!string.IsNullOrEmpty(trimmed))
+                QuickFilterSettings.Instance.RenameFilter(entry, trimmed);
+
+            Refresh();
+        }
+
+        private void CancelInlineRename()
+        {
+            if (renamingEntry == null) return;
+            renamingEntry = null;
+            expandedMoreEntry = null;
+            Refresh();
         }
 
         /// <summary>Match side-rail Remove Item Mode selected rim + glyph tint.</summary>
@@ -1753,147 +2234,55 @@ namespace VPB
             catch { }
         }
 
+        /// <summary>Scale collapsed title Dice chips to match collapse/close chrome.</summary>
+        private void ScaleCollapsePaletteChrome(float sortSq, float s)
+        {
+            if (collapsePaletteGO == null) return;
+            HorizontalLayoutGroup hlg = collapsePaletteGO.GetComponent<HorizontalLayoutGroup>();
+            if (hlg != null)
+            {
+                hlg.spacing = 2f * s;
+                hlg.padding = UI.Pad(0, 0, 0, 0, s);
+            }
+            LayoutElement hostLe = collapsePaletteGO.GetComponent<LayoutElement>();
+            if (hostLe != null)
+            {
+                hostLe.minHeight = sortSq;
+                hostLe.preferredHeight = sortSq;
+            }
+            for (int i = 0; i < collapsePaletteGO.transform.childCount; i++)
+            {
+                Transform ch = collapsePaletteGO.transform.GetChild(i);
+                if (ch == null) continue;
+                ScaleChromeIconBtn(ch.gameObject, sortSq, s);
+            }
+        }
+
+        /// <summary>X / Esc hide: keep detach + geometry.</summary>
+        private void HideFloatKeepDetach()
+        {
+            if (mergeMode) ExitMergeMode();
+            pendingDeleteEntry = null;
+            expandedMoreEntry = null;
+            renamingEntry = null;
+            if (detached)
+            {
+                if (!floatCollapsed)
+                    CaptureFloatGeometryToMemory();
+                else
+                    RestoreExpandHeightIntoSavedSize();
+            }
+            SetVisible(false);
+            if (panel != null) panel.SyncQuickFilterToggleState();
+        }
+
         /// <summary>ALT+F path: ensure floating chrome + visible (keep detach on close).</summary>
         public void EnsureDetachedAndVisible()
         {
             if (!detached)
                 Detach();
             SetVisible(true);
-        }
-
-        private void BeginInlineRename(GameObject row, QuickFilterEntry entry)
-        {
-            if (row == null || entry == null || !editMode || mergeMode) return;
-            if (pendingDeleteEntry != null)
-            {
-                pendingDeleteEntry = null;
-                Refresh();
-                GameObject rebuiltAfterCancel = FindRowForEntry(entry);
-                if (rebuiltAfterCancel != null) BeginInlineRename(rebuiltAfterCancel, entry);
-                return;
-            }
-            if (renamingEntry != null)
-            {
-                if (ReferenceEquals(renamingEntry, entry)) return;
-                renamingEntry = null;
-                Refresh();
-                GameObject rebuilt = FindRowForEntry(entry);
-                if (rebuilt != null) BeginInlineRename(rebuilt, entry);
-                return;
-            }
-
-            renamingEntry = entry;
-
-            Transform textT = row.transform.Find("Text");
-            if (textT != null) textT.gameObject.SetActive(false);
-
-            Transform renameBtnT = row.transform.Find("RenameBtn");
-            if (renameBtnT != null) renameBtnT.gameObject.SetActive(false);
-
-            Button rowBtn = row.GetComponent<Button>();
-            if (rowBtn != null) rowBtn.interactable = false;
-
-            UIListReorderable[] reorders = row.GetComponentsInChildren<UIListReorderable>(true);
-            if (reorders != null)
-            {
-                for (int i = 0; i < reorders.Length; i++)
-                {
-                    if (reorders[i] != null) reorders[i].enabled = false;
-                }
-            }
-
-            float s = panel != null ? panel.ChromeScale : 1f;
-            float padL = RowTextPadLeftRef * s;
-            float iconSq = GalleryUiDesignTokens.ButtonSizeRef * s;
-            float padR = 4f * s;
-            float gap = 4f * s;
-            // Pin + delete still visible (rename chip hidden).
-            float rightReserve = padR + 2f * iconSq + gap;
-
-            GameObject inputHost = new GameObject("RenameInput");
-            inputHost.transform.SetParent(row.transform, false);
-            RectTransform hostRT = inputHost.AddComponent<RectTransform>();
-            hostRT.anchorMin = Vector2.zero;
-            hostRT.anchorMax = Vector2.one;
-            hostRT.offsetMin = new Vector2(padL, 2f * s);
-            hostRT.offsetMax = new Vector2(-rightReserve, -2f * s);
-
-            float fieldH = Mathf.Max(18f, GalleryUiDesignTokens.PopupMenuRowHeightRef * s - 4f * s);
-            int font = Mathf.Max(
-                GalleryUiDesignTokens.FontMinRef,
-                Mathf.RoundToInt(GalleryUiDesignTokens.PopupMenuRowFontRef * s));
-
-            InputField field = UI.CreateChromeLayoutInputField(
-                inputHost.transform,
-                font,
-                fieldH,
-                1f,
-                6f * s,
-                2f * s,
-                UI.InputFieldBg,
-                UI.InputFieldPlaceholderColor,
-                VPBTranslation.T("quickfilters.rename_ph", "Preset name"),
-                "InlineRename");
-            if (field == null)
-            {
-                renamingEntry = null;
-                Refresh();
-                return;
-            }
-
-            RectTransform fieldRT = field.GetComponent<RectTransform>();
-            if (fieldRT != null)
-            {
-                fieldRT.anchorMin = Vector2.zero;
-                fieldRT.anchorMax = Vector2.one;
-                fieldRT.offsetMin = Vector2.zero;
-                fieldRT.offsetMax = Vector2.zero;
-            }
-            LayoutElement fle = field.GetComponent<LayoutElement>();
-            if (fle != null) fle.ignoreLayout = true;
-
-            field.text = entry.Name ?? "";
-            field.onEndEdit.AddListener(val => FinishInlineRename(val));
-
-            try
-            {
-                var esc = inputHost.AddComponent<SearchInputESCHandler>();
-                esc.Initialize(field, null, () =>
-                {
-                    renamingEntry = null;
-                    Refresh();
-                });
-            }
-            catch { }
-            try
-            {
-                inputHost.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(field);
-            }
-            catch { }
-
-            try
-            {
-                field.ActivateInputField();
-                field.Select();
-                field.MoveTextEnd(false);
-            }
-            catch { }
-
-            if (panel != null)
-                panel.SetStatus(VPBTranslation.T("quickfilters.tip.rename_inline", "Enter to save · Esc to cancel"));
-        }
-
-        private void FinishInlineRename(string val)
-        {
-            if (renamingEntry == null) return;
-            QuickFilterEntry entry = renamingEntry;
-            renamingEntry = null;
-
-            string trimmed = val != null ? val.Trim() : "";
-            if (!string.IsNullOrEmpty(trimmed))
-                QuickFilterSettings.Instance.RenameFilter(entry, trimmed);
-
-            Refresh();
+            SyncCollapsePalette();
         }
 
         private GameObject FindRowForEntry(QuickFilterEntry entry)
@@ -1953,14 +2342,15 @@ namespace VPB
 
         private void EnterMergeMode()
         {
-            editMode = false;
             pendingDeleteEntry = null;
+            expandedMoreEntry = null;
+            renamingEntry = null;
             mergeMode = true;
             mergeSelection.Clear();
             if (panel != null)
             {
                 panel.SetStatus(string.Format(
-                    VPBTranslation.T("quickfilters.merge_pick", "Select 2–{0} presets to merge. Dice on result loads each."),
+                    VPBTranslation.T("quickfilters.merge_pick", "Select 2–{0} presets to merge. Click = all filters (OR); dice loads each."),
                     GalleryUiDesignTokens.QuickFiltersMergeMaxMembers));
             }
             SyncMergeChrome();
@@ -2088,7 +2478,7 @@ namespace VPB
             // Visual: blend toward teal so merged rows scan differently (von Restorff).
             entry.ButtonColor = new Color(0.14f, 0.28f, 0.30f, 1f);
             entry.TextColor = Color.white;
-            // Seed browse fields from first leaf for apply-first behavior consistency.
+            // Seed browse fields from first leaf; ApplyQuickFilterState OR-combines all leaves.
             QuickFilterEntry first = leaves[0];
             if (first != null)
             {
@@ -2113,90 +2503,97 @@ namespace VPB
 
         private void CaptureCurrentFilter()
         {
+            CaptureCurrentFilter(useListSearchAsName: false);
+        }
+
+        /// <param name="useListSearchAsName">
+        /// True only for Ctrl+S expert path. Button Save always suggests + inline rename (intentional naming).
+        /// </param>
+        private void CaptureCurrentFilter(bool useListSearchAsName)
+        {
             if (panel == null) return;
 
-            var entry = panel.CaptureQuickFilterState();
-            if (entry != null)
+            string typedName = "";
+            if (useListSearchAsName)
             {
-                QuickFilterSettings.Instance.AddFilter(entry);
-                Refresh();
+                typedName = (listFilter ?? "").Trim();
+                if (typedName.Length == 0 && searchInput != null)
+                    typedName = (searchInput.text ?? "").Trim();
+            }
+
+            var entry = panel.CaptureQuickFilterState(typedName.Length > 0 ? typedName : null);
+            if (entry == null) return;
+
+            if (typedName.Length > 0)
+            {
+                listFilter = "";
+                try
+                {
+                    if (searchInput != null)
+                        searchInput.text = "";
+                }
+                catch { }
+            }
+
+            QuickFilterSettings.Instance.AddFilter(entry);
+            flashEntry = entry;
+            keyboardFocusEntry = entry;
+            Refresh();
+
+            panel.ShowTemporaryStatus(
+                string.Format(
+                    VPBTranslation.T("quickfilters.saved", "Saved preset '{0}'"),
+                    entry.Name ?? ""),
+                2.5f);
+
+            // Typed name already applied — skip rename. Else open rename for intentional naming.
+            if (typedName.Length == 0)
+                StartInlineRename(entry);
+        }
+
+        /// <summary>
+        /// List-search only useful with 2+ presets. Hide when empty/single — removes false "name field" for new users.
+        /// </summary>
+        private void SyncListSearchVisibility()
+        {
+            int n = 0;
+            try
+            {
+                var filters = QuickFilterSettings.Instance != null ? QuickFilterSettings.Instance.Filters : null;
+                if (filters != null) n = filters.Count;
+            }
+            catch { }
+
+            bool showSearch = n >= 2;
+            if (searchInput != null && searchInput.gameObject != null)
+            {
+                if (searchInput.gameObject.activeSelf != showSearch)
+                    searchInput.gameObject.SetActive(showSearch);
+            }
+
+            if (!showSearch && !string.IsNullOrEmpty(listFilter))
+            {
+                listFilter = "";
+                try
+                {
+                    if (searchInput != null)
+                        searchInput.text = "";
+                }
+                catch { }
             }
         }
 
         private void ApplyFilter(QuickFilterEntry entry)
         {
             if (panel == null) return;
+            keyboardFocusEntry = entry;
             panel.ApplyQuickFilterState(entry);
-        }
-
-        private void ShowContextMenu(GameObject btn, QuickFilterEntry entry)
-        {
-            var options = new List<ContextMenuPanel.Option>();
-
-            options.Add(new ContextMenuPanel.Option(
-                VPBTranslation.T("quickfilters.ctx.randomize", "Randomize"),
-                VPBTranslation.T("quickfilters.ctx.randomize_sub", "Load random item from this filter set"),
-                () => {
-                    if (panel == null) return;
-                    panel.RandomizeFromFilterPreset(entry, true);
-                },
-                ContextMenuPanel.OptionKind.Normal));
-
-            options.Add(new ContextMenuPanel.Option(
-                entry.Pinned
-                    ? VPBTranslation.T("quickfilters.ctx.unpin", "Unpin")
-                    : VPBTranslation.T("quickfilters.ctx.pin", "Pin"),
-                entry.Pinned
-                    ? VPBTranslation.T("quickfilters.ctx.unpin_sub", "Remove from overflow quick-random")
-                    : VPBTranslation.T("quickfilters.ctx.pin_sub", "Add to overflow as quick-random"),
-                () => {
-                    QuickFilterSettings.Instance.TogglePinned(entry);
-                    Refresh();
-                },
-                ContextMenuPanel.OptionKind.Normal));
-
-            options.Add(new ContextMenuPanel.Option(
-                VPBTranslation.T("quickfilters.ctx.rename", "Rename"),
-                VPBTranslation.T("quickfilters.ctx.rename_sub", "Change name inline"),
-                () => {
-                    if (!editMode)
-                    {
-                        editMode = true;
-                        Refresh();
-                        // Find rebuilt row for this entry, then rename.
-                        GameObject rebuilt = FindRowForEntry(entry);
-                        if (rebuilt != null) BeginInlineRename(rebuilt, entry);
-                        return;
-                    }
-                    BeginInlineRename(btn, entry);
-                },
-                ContextMenuPanel.OptionKind.Normal));
-
-            options.Add(new ContextMenuPanel.Option(
-                VPBTranslation.T("quickfilters.ctx.change_color", "Change Color"),
-                VPBTranslation.T("quickfilters.ctx.color_sub", "Button tint"),
-                () => {
-                    panel.DisplayColorPicker(VPBTranslation.T("quickfilters.edit_color_title", "Edit Color"), entry.ButtonColor, (Color val) => {
-                        entry.ButtonColor = val;
-                        QuickFilterSettings.Instance.Save();
-                        Refresh();
-                    });
-                },
-                ContextMenuPanel.OptionKind.Normal));
-
-            options.Add(new ContextMenuPanel.Option(
-                VPBTranslation.T("quickfilters.ctx.delete", "Delete"),
-                VPBTranslation.T("quickfilters.ctx.delete_sub", "Remove this quick filter"),
-                () => { ArmInlineDelete(entry); },
-                ContextMenuPanel.OptionKind.Destructive));
-
-            ContextMenuPanel.Instance.Show(btn.transform.position, options, VPBTranslation.T("quickfilters.ctx.header_prefix", "Filter: ") + entry.Name);
         }
 
         public void RefreshLocalizedUi()
         {
             if (searchInput != null && searchInput.placeholder is Text ph)
-                ph.text = VPBTranslation.T("quickfilters.search_ph", "Filter presets…");
+                ph.text = VPBTranslation.T("quickfilters.search_ph", "Search saved presets…");
             if (titleBarLabel != null && !mergeMode)
                 titleBarLabel.text = VPBTranslation.T("quickfilters.float_title", "Filter Presets");
             if (detachListBtnText != null)
@@ -2269,6 +2666,8 @@ namespace VPB
         {
             if (mergeMode) ExitMergeMode();
             pendingDeleteEntry = null;
+            expandedMoreEntry = null;
+            renamingEntry = null;
             if (detached)
             {
                 if (!floatCollapsed)
@@ -2304,6 +2703,7 @@ namespace VPB
                 collapsedTopLeftPos = null;
             }
             SyncCollapseButtonVisual();
+            SyncCollapsePalette();
             try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
         }
 

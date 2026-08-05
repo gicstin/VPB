@@ -68,20 +68,70 @@ namespace VPB
                     ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint),
                 tipKey: "gallery.tooltip.filter_presets", tipDefault: "Filter Presets");
 
-            // Pinned filter presets → one-click background randomize (preserveUi).
+            // Session recent applies (recognition).
+            try
+            {
+                var recent = new System.Collections.Generic.List<QuickFilterEntry>(4);
+                CollectRecentQuickFilters(recent);
+                Sprite applyIcon = UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
+                for (int i = 0; i < recent.Count; i++)
+                {
+                    QuickFilterEntry re = recent[i];
+                    if (re == null) continue;
+                    string label = string.Format(
+                        VPBTranslation.T("gallery.title.recent_preset", "Recent: {0}"),
+                        re.Name ?? "?");
+                    QuickFilterEntry captured = re;
+                    AddOverflowMenuRow(
+                        panel,
+                        label,
+                        () =>
+                        {
+                            CloseTitleBarOverflowMenu();
+                            ApplyQuickFilterState(captured);
+                        },
+                        icon: applyIcon,
+                        tipKey: null,
+                        tipDefault: string.Format(
+                            VPBTranslation.T("quickfilters.apply_hint", "Apply '{0}'"),
+                            re.Name ?? "?"));
+                }
+            }
+            catch { }
+
+            // Pinned filter presets → Apply + Dice (preserveUi).
             try
             {
                 var pinned = new System.Collections.Generic.List<QuickFilterEntry>(4);
                 QuickFilterSettings.Instance.CollectPinnedFilters(pinned);
                 Sprite rndIcon = UI.LoadIconSprite("vpb_icons/random.png", UI.BarIconGlyphTint);
+                Sprite applyIcon = UI.LoadIconSprite("vpb_icons/filter_on.png", UI.BarIconGlyphTint)
+                    ?? UI.LoadIconSprite("vpb_icons/filter.png", UI.BarIconGlyphTint);
                 for (int i = 0; i < pinned.Count; i++)
                 {
                     QuickFilterEntry pe = pinned[i];
                     if (pe == null) continue;
+                    QuickFilterEntry captured = pe;
+                    string applyLabel = string.Format(
+                        VPBTranslation.T("gallery.title.apply_preset", "Apply: {0}"),
+                        pe.Name ?? "?");
+                    AddOverflowMenuRow(
+                        panel,
+                        applyLabel,
+                        () =>
+                        {
+                            CloseTitleBarOverflowMenu();
+                            ApplyQuickFilterState(captured);
+                        },
+                        icon: applyIcon,
+                        tipKey: null,
+                        tipDefault: string.Format(
+                            VPBTranslation.T("quickfilters.apply_hint", "Apply '{0}'"),
+                            pe.Name ?? "?"));
+
                     string label = string.Format(
                         VPBTranslation.T("gallery.title.randomize_preset", "Rnd: {0}"),
                         pe.Name ?? "?");
-                    QuickFilterEntry captured = pe;
                     AddOverflowMenuRow(
                         panel,
                         label,
@@ -93,7 +143,7 @@ namespace VPB
                         icon: rndIcon,
                         tipKey: null,
                         tipDefault: string.Format(
-                            VPBTranslation.T("quickfilters.tip.randomize", "Randomize from '{0}' (loads random item; restores current view)"),
+                            VPBTranslation.T("quickfilters.tip.randomize", "Dice: random item from '{0}', restores current view"),
                             pe.Name ?? "?"));
                 }
             }
