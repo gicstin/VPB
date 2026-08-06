@@ -3036,7 +3036,6 @@ namespace VPB
                 MarkGalleryPaneChromeDirty();
                 UpdateLayout();
                 try { SyncCategoryQuickSwitchChrome(); } catch { }
-                try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
                 return;
             }
 
@@ -3077,7 +3076,6 @@ namespace VPB
             MarkGalleryPaneChromeDirty();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
-            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         private void CycleDesktopFixedDockSide()
@@ -3119,7 +3117,6 @@ namespace VPB
             MarkGalleryPaneChromeDirty();
             UpdateLayout();
             try { SyncCategoryQuickSwitchChrome(); } catch { }
-            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         public bool IsCollapsed => isCollapsed;

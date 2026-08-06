@@ -581,6 +581,14 @@ namespace VPB
             }
             catch { }
 
+            // First-run gallery UI scale: retry if Awake Load ran before Screen.height was valid.
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.TryEnsureGalleryUiScaleAutoSeeded();
+            }
+            catch { }
+
             // Auto-create gallery pane on startup if enabled
             TryCreateAutoFixedGalleryPane();
         }

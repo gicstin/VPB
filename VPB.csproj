@@ -487,7 +487,6 @@
     <Compile Include="src\gallery\GalleryPanel.TagCategories.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Chrome.cs" />
     <Compile Include="src\gallery\GalleryPanel.ImportSidebar.Wizard.cs" />
-    <Compile Include="src\gallery\GalleryPanel.ModeSetupWizard.cs" />
     <Compile Include="src\gallery\GalleryPanel.InAppHelp.cs" />
     <Compile Include="src\gallery\GalleryPanel.UI.cs" />
     <Compile Include="src\gallery\GalleryPanel.SceneOverwriteSave.cs" />
@@ -497,6 +496,7 @@
     <Compile Include="src\gallery\GalleryPanel.ContentTypeDescriptor.cs" />
     <Compile Include="src\gallery\GalleryPanel.SideRail.cs" />
     <Compile Include="src\gallery\GalleryPanel.UiScale.cs" />
+    <Compile Include="src\gallery\GalleryUiScaleAutoDetect.cs" />
     <Compile Include="src\gallery\GalleryUiDesignTokens.cs" />
     <Compile Include="src\gallery\GalleryUiMetrics.cs" />
     <Compile Include="src\gallery\VpbWorldSpaceUiScale.cs" />

@@ -649,7 +649,7 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.galleryUiScaleDesktop", GroupKey = "visuals", Label = VPBTranslation.T("settings.gallery_ui_scale_desktop", "Gallery UI Scale (Desktop)"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_desktop", "Scales gallery chrome, side buttons, and in-pane controls on desktop. Also follows VaM's UI Scale setting."),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_ui_scale_desktop", "Scales gallery chrome, side buttons, and in-pane controls on desktop. Also multiplies by VaM Monitor UI Scale. New installs auto-pick a starting value from screen height."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.InnerPaneScaleDesktop,
                 SetFloat = v => { VPBConfig.Instance.InnerPaneScaleDesktop = Mathf.Clamp(v, VPBConfig.MinUiScale, VPBConfig.MaxUiScale); VPBConfig.Instance.TriggerChange(); },
                 Min = VPBConfig.MinUiScale, Max = VPBConfig.MaxUiScale, Step = 0.1f, Decimals = 1,
@@ -951,15 +951,16 @@ namespace VPB
             defs.Add(new InternalSettingDefinition {
                 Key = "lists.hideCreatorSideButtons", GroupKey = "lists",
                 Label = VPBTranslation.T("settings.gallery_hide_creator_side_buttons", "Hide creator side buttons"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_hide_creator_side_buttons", "Hides side-rail Creator buttons. Use title-bar creator control only. Closes open creator side lists."),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_hide_creator_side_buttons", "Does not create side-rail Creator buttons. Use title-bar creator control only. Closes open creator side lists."),
                 ControlType = InternalSettingControlType.Toggle,
                 GetBool = () => VPBConfig.Instance.GalleryHideCreatorSideButtons,
                 SetBool = v => {
                     VPBConfig.Instance.GalleryHideCreatorSideButtons = v;
                     try { VPBConfig.Instance.Save(false); } catch { }
-                    VPBConfig.Instance.TriggerChange();
-                    try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+                    // Presence sync once (create or destroy). Do not ToggleChange-layout thrash chips.
+                    try { SyncCreatorSideRailPresence(); } catch { }
                     try { UpdateSideButtonPositions(); } catch { }
+                    try { VPBConfig.Instance.TriggerChange(); } catch { }
                 }
             });
             defs.Add(new InternalSettingDefinition {

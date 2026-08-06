@@ -2139,14 +2139,12 @@ namespace VPB
                 }
             }
             catch { }
-            // Side-rail fit uses stable pane chrome (not live InfoBar/detail-strip height).
+            // Side-rail fit clears footer bar only (not InfoBar/toolbox). Re-fit when footer scale changes.
             try
             {
                 float s = ChromeScale;
                 if (s <= 0f) s = 1f;
-                float stableBot = (GalleryUiDesignTokens.FooterBarHeightRef
-                    + GalleryUiDesignTokens.FooterToolboxTopRef
-                    + 20f) * s;
+                float stableBot = (GalleryUiDesignTokens.FooterBarHeightRef + SideRailChromeEdgePadRef) * s;
                 if (Mathf.Abs(stableBot - _sideRailLastBottomInset) > 0.5f)
                 {
                     _sideRailLastBottomInset = stableBot;

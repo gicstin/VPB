@@ -58,8 +58,13 @@ namespace VPB
             {
                 try
                 {
-                    float vam = VPBConfig.Instance != null ? VPBConfig.Instance.UiScale : GalleryUiDesignTokens.VamUiScaleDesignBaseline;
-                    host = vam / GalleryUiDesignTokens.VamUiScaleDesignBaseline;
+                    // Follow VaM Monitor UI Scale (User Preferences), not BepInEx Settings.UIScale.
+                    float vam = VPBConfig.Instance != null
+                        ? VPBConfig.Instance.UiScale
+                        : GalleryUiDesignTokens.VamMonitorUiScaleDesignBaseline;
+                    float baseline = GalleryUiDesignTokens.VamMonitorUiScaleDesignBaseline;
+                    if (baseline <= 0f) baseline = 1f;
+                    host = vam / baseline;
                     if (host <= 0f) host = 1f;
                 }
                 catch { host = 1f; }

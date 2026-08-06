@@ -440,6 +440,9 @@ namespace VPB
             if (!isFixedLocally)
                 SyncWorldSpaceCanvasScaleIfWorldScaleChanged();
 
+            // Desktop: re-chrome when VaM Monitor UI Scale changes (HostScale).
+            SyncHostUiScaleIfChanged();
+
             try
             {
                 AdvanceSideButtonsFadeDelayTimer();

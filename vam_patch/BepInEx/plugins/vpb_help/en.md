@@ -260,7 +260,7 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 - **Ctrl+V** (default) — show / hide gallery (configurable)
 - **?** / **F1** — open / close this Hotkeys sheet
 - **Esc** — close help, menus, search popup, Creator Mode (ladder: innermost first)
-- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom)
+- **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom). New installs auto-pick a desktop starting scale from screen height; desktop chrome also multiplies by VaM Monitor UI Scale.
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
 
 ### Browse and search

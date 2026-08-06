@@ -426,11 +426,11 @@ namespace VPB
         private Text leftCreatorBtnText;
         private Image leftCreatorBtnImage;
         private Image leftCreatorBtnIconImage;
-        /// <summary>Root GO for left creator rail button (lifetime from Init; hide setting uses SetActive).</summary>
+        /// <summary>Root GO for left creator rail button (null when hide setting — never created).</summary>
         private GameObject leftCreatorSideBtnGO;
-        /// <summary>Root GO for right creator rail button (lifetime from Init; hide setting uses SetActive).</summary>
+        /// <summary>Root GO for right creator rail button (null when hide setting — never created).</summary>
         private GameObject rightCreatorSideBtnGO;
-        /// <summary>One-shot purge of deferred-Destroy creator ghosts after Init/Ensure.</summary>
+        /// <summary>One-shot purge of creator rail orphans after create/destroy.</summary>
         private bool _creatorSideRailOrphansPurged;
         private Text leftPathBtnText;
         private Image leftPathBtnImage;

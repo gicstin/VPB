@@ -1410,8 +1410,9 @@ namespace VPB
                     AddTooltip(rightUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator — always create once; hide setting uses SetActive (see ApplyCreatorSideRailButtonVisibility).
-                CreateRightCreatorSideRailButton();
+                // Creator — Path B only when hide setting off (Path A: never create).
+                if (!HideCreatorSideRailButtonsRequested())
+                    CreateRightCreatorSideRailButton();
 
                 // Path (Blue)
                 {
@@ -1956,8 +1957,9 @@ namespace VPB
                     AddTooltip(leftUserTagsBtn, "gallery.tooltip.user_tags_list", "Your tags (SQLite). Filter here; Edit opens tag manager.");
                 }
 
-                // Creator — always create once; hide setting uses SetActive (see ApplyCreatorSideRailButtonVisibility).
-                CreateLeftCreatorSideRailButton();
+                // Creator — Path B only when hide setting off (Path A: never create).
+                if (!HideCreatorSideRailButtonsRequested())
+                    CreateLeftCreatorSideRailButton();
 
                 // Path (Blue)
                 {
@@ -2429,7 +2431,6 @@ namespace VPB
 
             // Pagination Controls (Bottom Left)
             CreatePaginationControls();
-            try { CreateFirstRunHintStrip(); } catch { }
             try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
             try { RefreshFooterPerfChrome(); } catch { }
@@ -2504,6 +2505,13 @@ namespace VPB
             { var rt = minRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
             { var rt = closeRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(GalleryUiDesignTokens.TitleBarChipRef * s, GalleryUiDesignTokens.TitleBarChipRef * s); }); }
 
+            try
+            {
+                if (VPBConfig.Instance != null)
+                    VPBConfig.Instance.TryEnsureGalleryUiScaleAutoSeeded();
+            }
+            catch { }
+
             ApplyInnerPaneScale();
             ApplySidePanelDefaultsFromConfig();
             // Import last-session open only in-session; cold start uses settings defaults / Import via Apply above.
@@ -2513,6 +2521,8 @@ namespace VPB
                 && Gallery.SessionBrowseMemoryActive;
             TryRestoreImportSidebarOpenFromGlobalPref(restoreGlobalImportOpen);
             importSidebarInitAsClone = false;
+            // Creator presence once after rails built (hide = absent; else already created in Init).
+            try { SyncCreatorSideRailPresence(); } catch { }
             UpdateSideButtonsVisibility();
             UpdateLayout();
             SubscribeLocaleChanged();
@@ -2534,11 +2544,8 @@ namespace VPB
             // rebuilds counts on a worker thread when needed).
             try { lastAppliedPackageRefreshTime = FileManager.lastPackageRefreshTime; } catch { }
 
-            try { CreateFirstRunHintStrip(); } catch { }
             try { CreateTitleSearchChipHost(); } catch { }
             try { CreateActiveFilterChipBar(); } catch { }
-            try { RefreshFirstRunHintStrip(); } catch { }
-            try { StartCoroutine(ShowModeSetupWizardDeferred()); } catch { }
         }
 
         private void AddSubmenuSideHoverTrigger(GameObject go, bool isLeft)

@@ -15,6 +15,9 @@ namespace VPB
         /// <summary>In-app help uses chrome scale with a readability floor.</summary>
         internal float InAppHelpChromeScale => UiMetrics.HelpChromeScale();
 
+        /// <summary>Last HostScale applied via <see cref="ApplyInnerPaneScale"/> (desktop live VaM monitorUIScale sync).</summary>
+        private float _lastAppliedHostScale = float.NaN;
+
         internal bool IsFixedLocallyForUiScale() => isFixedLocally;
 
         internal float TabScrollTopOffsetPublic() => TabScrollTopOffset();
@@ -82,6 +85,7 @@ namespace VPB
         {
             GalleryUiMetrics m = UiMetrics;
             float chromeS = m.ChromeScale;
+            _lastAppliedHostScale = m.HostScale;
             try { ApplyInnerPaneScaleLegacyActions(chromeS); } catch { }
             try { SyncSideTabColumnHorizontalInsets(chromeS); } catch { }
             try { SyncSideTabListVerticalLayout(chromeS); } catch { }
@@ -599,10 +603,15 @@ namespace VPB
 
         public void ApplySideButtonScale()
         {
-            ApplySideButtonScale(UiMetrics);
+            ApplySideButtonScale(UiMetrics, true);
         }
 
         public void ApplySideButtonScale(GalleryUiMetrics metrics)
+        {
+            ApplySideButtonScale(metrics, true);
+        }
+
+        public void ApplySideButtonScale(GalleryUiMetrics metrics, bool updatePositions)
         {
             float scale = metrics.ChromeScale;
             bool topDock = IsFixedTopDockMode();
@@ -647,10 +656,23 @@ namespace VPB
                 }
             }
 
+            // Match pane height so tall floating/VR stacks stay inside rail hit bounds.
+            float containerH = 700f;
+            try
+            {
+                if (backgroundBoxGO != null)
+                {
+                    RectTransform bg = backgroundBoxGO.GetComponent<RectTransform>();
+                    if (bg != null && bg.rect.height > 8f)
+                        containerH = Mathf.Max(700f, bg.rect.height);
+                }
+            }
+            catch { }
+
             if (rightSideContainer != null)
             {
                 RectTransform rt = rightSideContainer.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, containerH); rt.anchoredPosition = new Vector2(containerOffset, 0); }
             }
             if (rightSideHoverStrip != null)
             {
@@ -660,7 +682,7 @@ namespace VPB
             if (leftSideContainer != null)
             {
                 RectTransform rt = leftSideContainer.GetComponent<RectTransform>();
-                if (rt != null) { rt.sizeDelta = new Vector2(containerW, 700f); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
+                if (rt != null) { rt.sizeDelta = new Vector2(containerW, containerH); rt.anchoredPosition = new Vector2(-containerOffset, 0); }
             }
             if (leftSideHoverStrip != null)
             {
@@ -685,6 +707,7 @@ namespace VPB
                 if (t != null) t.fontSize = subFontSize;
             }
 
+            if (!updatePositions) return;
             if (topDock)
                 ApplyTopDockSideButtonsLayout(scale);
             else

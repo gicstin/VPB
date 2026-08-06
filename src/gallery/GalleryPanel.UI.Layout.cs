@@ -213,7 +213,6 @@ namespace VPB
             _lastBrowseGridLeftInset = leftOffset;
             _lastBrowseGridRightInset = rightOffset;
 
-            try { ApplyFirstRunHintStripLayout(leftOffset, rightOffset, paneScale); } catch { }
             try { ApplyActiveFilterChipBarLayout(leftOffset, rightOffset, paneScale); } catch { }
 
             // Side button stacks stay vertically fixed (do not ride the footer inset).
@@ -260,7 +259,6 @@ namespace VPB
             catch { }
 
             RestorePreservedUserTagAvailScroll();
-            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
 
             // VR/world-space chrome resize can reflow RecyclingGridView while Settings is open —
             // re-assert 1-col list config so settings rows never become multi-column tiles.
@@ -716,7 +714,7 @@ namespace VPB
         public void UpdateSideButtonPositions()
         {
             if (backgroundBoxGO == null) return;
-            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
+            // Creator create/destroy only via UpdateSideButtonsVisibility / settings — not every layout.
             if (IsFixedTopDockMode())
             {
                 ApplyTopDockSideButtonsLayout(ChromeScale);
@@ -737,7 +735,8 @@ namespace VPB
             float stackHeight = GetSideButtonsStackHeight(spacing, groupGap);
             if (_sideRailOverflowCollapsedIdx.Count > 0)
                 stackHeight += spacing;
-            float topY = stackHeight * 0.5f;
+            // Center in title↔footer free band (bottom chrome ≠ top; pane-center left empty air below …).
+            float topY = GetSideRailStackTopY(stackHeight, scale);
 
             // Settings
             UpdateListPositions(rightSideButtons, topY, spacing, groupGap, isLeftRail: false);
@@ -1351,11 +1350,8 @@ namespace VPB
 
 
                     idxCategory = FindIndexByTextRef(rightCategoryBtnText != null ? rightCategoryBtnText : leftCategoryBtnText);
-                    // Hide-creator setting: omit from layout so button never takes a rail/footer slot.
-                    if (VPBConfig.Instance == null || !VPBConfig.Instance.GalleryHideCreatorSideButtons)
-                        idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
-                    else
-                        idxCreator = -1;
+                    // Absent when hide setting (never created) — same FindIndex miss as missing Category.
+                    idxCreator = FindIndexByTextRef(rightCreatorBtnText != null ? rightCreatorBtnText : leftCreatorBtnText);
                     idxPath = FindIndexByTextRef(rightPathBtnText != null ? rightPathBtnText : leftPathBtnText);
                     // idxTarget: target button moved to toolbox, no longer a side button
                     idxApplyMode = FindIndexByTextRef(rightApplyModeBtnText != null ? rightApplyModeBtnText : leftApplyModeBtnText);

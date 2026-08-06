@@ -396,7 +396,6 @@ namespace VPB
 
             SyncSidePaneTopSortButtonVisuals();
             UpdateSideButtonsVisibility();
-            try { EnforceCreatorSideRailButtonVisibilityFromConfig(); } catch { }
 
             float paneScale = ChromeScale;
             try { SyncSidePanelHeaderChrome(paneScale); } catch { }

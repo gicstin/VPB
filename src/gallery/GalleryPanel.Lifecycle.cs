@@ -62,8 +62,8 @@ namespace VPB
                     rightSideContainer.SetActive(mode == "Both" || mode == "Right");
             }
 
-            // Hide-creator setting + rail mode. Never Destroy/recreate here (deferred Destroy left centre-anchored orphans).
-            ApplyCreatorSideRailButtonVisibility();
+            // Creator chips: no SetActive here. Presence-only (see SyncCreatorSideRailPresence).
+            // Visibility = parent rail container, same as Category/Path.
 
             // Keep History side buttons on the same purple family as active side-tab buttons.
             Color historyBackdrop = ColorHistoryAccent;
@@ -91,42 +91,11 @@ namespace VPB
         }
 
         /// <summary>
-        /// Left/right creator chip wanted-active for current dock / ShowSideButtons / collapsed.
-        /// Hide-creator setting handled separately (always force off).
+        /// Cold/warm presence sync only (settings toggle / Init). Not called from layout refresh.
+        /// Hide on → chips absent. Hide off → chips exist and stay activeSelf like Category;
+        /// rail container SetActive owns show/hide (collapse / fixed dock / ShowSideButtons).
         /// </summary>
-        private void ComputeCreatorSideRailShowFlags(out bool showLeft, out bool showRight)
-        {
-            showLeft = false;
-            showRight = false;
-            if (VPBConfig.Instance == null || isCollapsed) return;
-
-            string mode = VPBConfig.Instance.ShowSideButtons ?? "Both";
-            bool fixedMode = isFixedLocally;
-            string dock = "Right";
-            try { dock = VPBConfig.NormalizeDesktopFixedDockSide(VPBConfig.Instance.DesktopFixedDockSide); } catch { dock = "Right"; }
-            bool topDock = fixedMode && string.Equals(dock, "Top", StringComparison.OrdinalIgnoreCase);
-
-            // Top dock reparents leftSideButtons into footer — only left creator participates.
-            if (topDock)
-            {
-                showLeft = true;
-                showRight = false;
-                return;
-            }
-
-            showLeft = mode == "Both" || mode == "Left";
-            if (fixedMode && string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showLeft = false;
-
-            showRight = mode == "Both" || mode == "Right";
-            if (fixedMode && !string.Equals(dock, "Left", StringComparison.OrdinalIgnoreCase)) showRight = false;
-        }
-
-        /// <summary>
-        /// Creator rail buttons: one lifetime from Init. Hide setting + rail mode use SetActive only.
-        /// Destroy/recreate caused duplicate centre-anchored ghosts (Unity Destroy is end-of-frame).
-        /// Layout omits chips when hide setting on; overflow must not resurrect them.
-        /// </summary>
-        private void ApplyCreatorSideRailButtonVisibility()
+        private void SyncCreatorSideRailPresence()
         {
             if (HideCreatorSideRailButtonsRequested())
             {
@@ -137,39 +106,88 @@ namespace VPB
                 {
                     try { SyncActiveContentTypeFromSidePanels(); } catch { }
                 }
-                EnsureCreatorSideRailButtonsExist();
-                SetCreatorSideRailButtonActive(leftCreatorSideBtnGO, false);
-                SetCreatorSideRailButtonActive(rightCreatorSideBtnGO, false);
+                DestroyCreatorSideRailButtons();
                 return;
             }
 
             EnsureCreatorSideRailButtonsExist();
-            bool showLeft;
-            bool showRight;
-            ComputeCreatorSideRailShowFlags(out showLeft, out showRight);
-            SetCreatorSideRailButtonActive(leftCreatorSideBtnGO, showLeft);
-            SetCreatorSideRailButtonActive(rightCreatorSideBtnGO, showRight);
+            // Match Category: leave activeSelf true; parent container gates visibility.
+            if (leftCreatorSideBtnGO != null && !leftCreatorSideBtnGO.activeSelf)
+                leftCreatorSideBtnGO.SetActive(true);
+            if (rightCreatorSideBtnGO != null && !rightCreatorSideBtnGO.activeSelf)
+                rightCreatorSideBtnGO.SetActive(true);
         }
 
-        private static void SetCreatorSideRailButtonActive(GameObject go, bool active)
-        {
-            if (go == null) return;
-            if (go.activeSelf != active) go.SetActive(active);
-        }
-
-        /// <summary>Re-apply creator hide using current ShowSideButtons / dock / collapsed (layout paths).</summary>
+        /// <summary>Settings / config: sync creator chip presence once, then relayout.</summary>
         private void EnforceCreatorSideRailButtonVisibilityFromConfig()
         {
-            ApplyCreatorSideRailButtonVisibility();
+            SyncCreatorSideRailPresence();
         }
 
-        /// <summary>Cold-path: kill deferred-Destroy orphans left at centre (0,0) beside edge-aligned rail.</summary>
+        private static void RemoveCreatorSideButtonFromList(List<RectTransform> list, GameObject go)
+        {
+            if (list == null || go == null) return;
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                RectTransform rt = list[i];
+                if (rt != null && rt.gameObject == go)
+                    list.RemoveAt(i);
+            }
+        }
+
+        private void ClearCreatorSideRailButtonComponentRefs(bool isLeft)
+        {
+            if (isLeft)
+            {
+                leftCreatorBtnText = null;
+                leftCreatorBtnImage = null;
+                leftCreatorBtnIconImage = null;
+            }
+            else
+            {
+                rightCreatorBtnText = null;
+                rightCreatorBtnImage = null;
+                rightCreatorBtnIconImage = null;
+            }
+        }
+
+        private void DestroyOneCreatorSideRailButton(ref GameObject go, List<RectTransform> list, bool isLeft)
+        {
+            // Unity fake-null: destroyed GO still referenced until cleared.
+            if (go == null)
+            {
+                go = null;
+                ClearCreatorSideRailButtonComponentRefs(isLeft);
+                return;
+            }
+            RemoveCreatorSideButtonFromList(list, go);
+            ClearCreatorSideRailButtonComponentRefs(isLeft);
+            GameObject victim = go;
+            go = null;
+            try { UnityEngine.Object.DestroyImmediate(victim); }
+            catch
+            {
+                try { UnityEngine.Object.Destroy(victim); } catch { }
+            }
+        }
+
+        private void DestroyCreatorSideRailButtons()
+        {
+            bool hadAny = leftCreatorSideBtnGO != null || rightCreatorSideBtnGO != null;
+            DestroyOneCreatorSideRailButton(ref leftCreatorSideBtnGO, leftSideButtons, isLeft: true);
+            DestroyOneCreatorSideRailButton(ref rightCreatorSideBtnGO, rightSideButtons, isLeft: false);
+            if (hadAny || !_creatorSideRailOrphansPurged)
+            {
+                try { PurgeAllOrphanCreatorSideRailButtons(); } catch { }
+                _creatorSideRailOrphansPurged = true;
+            }
+        }
+
         private bool LooksLikeOrphanCreatorSideButton(GameObject go, GameObject keep)
         {
             if (go == null || (keep != null && go == keep)) return false;
             string n = go.name;
             if (n == CreatorSideRailBtnNameLeft || n == CreatorSideRailBtnNameRight) return true;
-            // Prior builds / pre-rename CreateUIButton: identify by creator icon sprite.
             if (galleryCreatorSprite == null) return false;
             Transform iconT = go.transform.Find("Icon");
             if (iconT == null) return false;
@@ -186,7 +204,6 @@ namespace VPB
                 if (c == null) continue;
                 GameObject go = c.gameObject;
                 if (!LooksLikeOrphanCreatorSideButton(go, keep)) continue;
-                // Never remove the live tracked chip if keep was null but refs already set elsewhere.
                 if (leftCreatorSideBtnGO != null && go == leftCreatorSideBtnGO) continue;
                 if (rightCreatorSideBtnGO != null && go == rightCreatorSideBtnGO) continue;
                 try { UnityEngine.Object.DestroyImmediate(go); }
@@ -221,13 +238,13 @@ namespace VPB
 
         private void EnsureCreatorSideRailButtonsExist()
         {
-            // Unity fake-null: destroyed GO still referenced until cleared.
+            if (HideCreatorSideRailButtonsRequested()) return;
+
             if (leftCreatorSideBtnGO == null) leftCreatorSideBtnGO = null;
             if (rightCreatorSideBtnGO == null) rightCreatorSideBtnGO = null;
 
             bool needLeft = leftCreatorSideBtnGO == null && leftSideContainer != null;
             bool needRight = rightCreatorSideBtnGO == null && rightSideContainer != null;
-            // Purge ghosts only when (re)binding or once per ensure-miss — avoid per-layout DestroyImmediate.
             if (needLeft || needRight)
             {
                 try { PurgeAllOrphanCreatorSideRailButtons(); } catch { }
@@ -257,7 +274,7 @@ namespace VPB
             if (created)
             {
                 _creatorSideRailOrphansPurged = false;
-                try { ApplySideButtonScale(); } catch { }
+                try { ApplySideButtonScale(UiMetrics, false); } catch { }
             }
             if (!_creatorSideRailOrphansPurged)
             {
@@ -287,6 +304,7 @@ namespace VPB
 
         private void CreateLeftCreatorSideRailButton()
         {
+            if (HideCreatorSideRailButtonsRequested()) return;
             if (leftSideContainer == null || leftCreatorSideBtnGO != null) return;
             PurgeOrphanCreatorSideRailButtons(leftSideContainer.transform, null);
             if (_footerSideButtonsGroupRT != null)
@@ -330,6 +348,7 @@ namespace VPB
 
         private void CreateRightCreatorSideRailButton()
         {
+            if (HideCreatorSideRailButtonsRequested()) return;
             if (rightSideContainer == null || rightCreatorSideBtnGO != null) return;
             PurgeOrphanCreatorSideRailButtons(rightSideContainer.transform, null);
 

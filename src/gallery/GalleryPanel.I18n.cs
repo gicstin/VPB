@@ -201,7 +201,6 @@ namespace VPB
             SyncRatingSortToggleState();
 
             try { RebuildLanguageMenuOptions(); } catch { }
-            try { RefreshFirstRunHintStrip(); } catch { }
             try { RefreshActiveFilterChips(); } catch { }
         }
 

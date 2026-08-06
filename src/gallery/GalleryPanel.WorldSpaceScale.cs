@@ -55,6 +55,25 @@ namespace VPB
             _worldSpaceUiParent = null;
         }
 
+        /// <summary>
+        /// Desktop HostScale tracks VaM monitorUIScale. Cheap compare; ApplyInnerPaneScale only on change.
+        /// </summary>
+        private void SyncHostUiScaleIfChanged()
+        {
+            try
+            {
+                if (VPBConfig.Instance != null && VPBConfig.Instance.IsVR) return;
+            }
+            catch { return; }
+
+            GalleryUiMetrics m = UiMetrics;
+            float host = m.HostScale;
+            if (!float.IsNaN(_lastAppliedHostScale) && Mathf.Abs(_lastAppliedHostScale - host) < 0.001f)
+                return;
+
+            try { ApplyInnerPaneScale(); } catch { }
+        }
+
         /// <summary>Fixed overlay: leave HUD attach so ScreenSpaceOverlay is not under WorldSpace parent.</summary>
         private void DetachWorldSpaceCanvasFromPlayerUi()
         {

@@ -85,6 +85,20 @@ namespace VPB
             return false;
         }
 
+        /// <summary>
+        /// Non-file extension tokens used as category markers (not real internal-path suffixes).
+        /// Must not be applied as <c>LIKE %.<paramref name="extensionToken"/></c> filters.
+        /// </summary>
+        public static bool IsGalleryPseudoExtensionToken(string extensionToken)
+        {
+            if (string.IsNullOrEmpty(extensionToken)) return false;
+            string e = extensionToken.Trim();
+            if (e.Length == 0) return false;
+            if (string.Equals(e, EverythingExtensionToken, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(e, "varpkg", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         /// <summary>Preview textures inside VARs; omitted from EVERYTHING grid/index.</summary>
         public static bool IsEverythingExcludedPreviewExtension(string extensionNoDot)
         {

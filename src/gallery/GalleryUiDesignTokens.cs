@@ -3,7 +3,10 @@ namespace VPB
     /// <summary>Design-reference pixel sizes at gallery UI scale 1.0 (before host/DPI factors).</summary>
     public static class GalleryUiDesignTokens
     {
+        /// <summary>Legacy BepInEx overlay UI Scale default (Settings.UIScale). Not used for gallery HostScale.</summary>
         public const float VamUiScaleDesignBaseline = 1.5f;
+        /// <summary>VaM <c>SuperController.monitorUIScale</c> default. Gallery desktop HostScale = monitorUIScale / this.</summary>
+        public const float VamMonitorUiScaleDesignBaseline = 1.0f;
 
         // ── Golden ratio (major splits + decorative aspects only; not spacing/type) ──
         /// <summary>φ ≈ 1.618 — aspect ratios and scale accents.</summary>
@@ -88,6 +91,11 @@ namespace VPB
         public const float SideTabOpenGridInsetRef = 230f;
         public const float SideTabClosedGridInsetRef = 0f;
         public const float SideTabRowHeightRef = ButtonSizeRef;
+        /// <summary>
+        /// Creator list ★ badge — inset inside <see cref="SideTabRowHeightRef"/> so hover rim
+        /// stays smaller than the row inward outline (badge was full row tall + outward rim).
+        /// </summary>
+        public const float CreatorRatingBadgeSizeRef = ButtonSizeRef - 8f;
         public const float SideTabControlGapRef = 5f;
         public const float SideTabRefreshBtnWidthRef = ButtonSizeRef;
         /// <summary>Sort column + left margin reserved from tab width for main side search (10 + 35).</summary>

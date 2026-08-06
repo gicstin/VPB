@@ -3091,7 +3091,9 @@ namespace VPB
                         {
                             var counts = new Dictionary<string, int>();
                             // Package-only category: count packages by creator (not internal file entries)
-                            if (string.Equals(_bExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+                            bool packageOnlyCreators = string.Equals(_bExtension, "varpkg", StringComparison.OrdinalIgnoreCase)
+                                || VpbLocalDatabase.IsGalleryAllVarPseudoCategory(_bCategoryTitle);
+                            if (packageOnlyCreators)
                             {
                                 if (!VpbLocalDatabase.TryReadVarPackageCreatorCounts(counts, _bPackagePathFilter) && FileManager.PackagesByUid != null)
                                 {
@@ -3112,7 +3114,15 @@ namespace VPB
                             {
                                 string[] exts2 = string.IsNullOrEmpty(_bExtension) ? new string[0] : _bExtension.Split('|');
                                 var tExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                foreach (var e in exts2) if (!string.IsNullOrEmpty(e)) tExts.Add(e.Trim());
+                                foreach (var e in exts2)
+                                {
+                                    if (string.IsNullOrEmpty(e)) continue;
+                                    string et = e.Trim();
+                                    if (et.Length == 0 || Gallery.IsGalleryPseudoExtensionToken(et)) continue;
+                                    tExts.Add(et);
+                                }
+                                bool everythingExtForCreators = Gallery.IsEverythingCategoryExtension(_bExtension)
+                                    || Gallery.IsEverythingCategoryName(_bCategoryTitle);
 
                                 if (FileManager.PackagesByUid != null)
                                 {
@@ -3129,13 +3139,19 @@ namespace VPB
                                             string ip = pkg.FileEntries[i].InternalPath;
                                             int dot = ip.LastIndexOf('.');
                                             if (dot < 0 || dot == ip.Length - 1) continue;
-                                            if (!tExts.Contains(ip.Substring(dot + 1))) continue;
-                                            bool match = false;
-                                            if (_bPaths != null && _bPaths.Count > 0)
-                                            { for (int k = 0; k < _bPaths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, _bPaths[k])) { match = true; break; } }
-                                            else if (!string.IsNullOrEmpty(_bPath))
-                                                match = GalleryInternalPathStartsWithPrefix(ip, _bPath);
-                                            else match = true;
+                                            string fileExt = ip.Substring(dot + 1);
+                                            if (everythingExtForCreators && Gallery.IsEverythingExcludedPreviewExtension(fileExt)) continue;
+                                            if (!everythingExtForCreators && !tExts.Contains(fileExt)) continue;
+                                            // EVERYTHING: match all non-preview internals (category.paths are loose-disk roots only).
+                                            bool match = everythingExtForCreators;
+                                            if (!match)
+                                            {
+                                                if (_bPaths != null && _bPaths.Count > 0)
+                                                { for (int k = 0; k < _bPaths.Count; k++) if (GalleryInternalPathStartsWithPrefix(ip, _bPaths[k])) { match = true; break; } }
+                                                else if (!string.IsNullOrEmpty(_bPath))
+                                                    match = GalleryInternalPathStartsWithPrefix(ip, _bPath);
+                                                else match = true;
+                                            }
                                             if (match) { int cur; counts.TryGetValue(pkg.Creator, out cur); counts[pkg.Creator] = cur + 1; }
                                         }
                                     }

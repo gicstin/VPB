@@ -536,7 +536,8 @@ namespace VPB
 
             float s = ChromeScale;
             if (s <= 0f) s = 1f;
-            float edge = GalleryUiDesignTokens.ButtonSizeRef * s;
+            // Badge inset vs full row height — matches side-tab inward hover, not outward full-cell rim.
+            float edge = GalleryUiDesignTokens.CreatorRatingBadgeSizeRef * s;
             float cell = GalleryUiDesignTokens.ButtonSizeRef * s;
             float gap = GalleryUiDesignTokens.SideTabRowSpacingRef * 0.5f * s;
             float pad = 1f * s;
@@ -571,7 +572,21 @@ namespace VPB
             }
 
             ApplyCreatorRatingChromeLayout(btnGO, starGO, selectorGO, edge, cell, gap, pad, optFont, s);
+            ConfigureCreatorRatingStarHoverBorder(starGO);
             BringCreatorRatingChromeToFront(btnGO, starGO, selectorGO);
+        }
+
+        /// <summary>
+        /// Side-tab rows use inward hover; pane enforcer leaves nested ★ outward by default —
+        /// force inward so star rim never outgrows the row outline.
+        /// </summary>
+        private static void ConfigureCreatorRatingStarHoverBorder(GameObject starGO)
+        {
+            if (starGO == null) return;
+            UIHoverBorder hb = starGO.GetComponent<UIHoverBorder>();
+            if (hb == null) hb = starGO.AddComponent<UIHoverBorder>();
+            hb.inward = true;
+            try { hb.ApplyBorderSettings(); } catch { }
         }
 
         private GameObject CreateCreatorRatingBadge(GameObject btnGO)
@@ -592,6 +607,7 @@ namespace VPB
             UI.ConfigButtonFlat(starBtn, applyColors: true);
             starBtn.targetGraphic = bg;
             starBtn.navigation = new Navigation { mode = Navigation.Mode.None };
+            ConfigureCreatorRatingStarHoverBorder(starGO);
 
             GameObject labelGO = new GameObject("Digit");
             labelGO.transform.SetParent(starGO.transform, false);
@@ -794,6 +810,7 @@ namespace VPB
                 starRT.anchoredPosition = new Vector2(-2f * s, 0f);
             }
 
+            ConfigureCreatorRatingStarHoverBorder(starGO);
             EnsureCreatorRatingStarIcon(starGO);
             Text digitLabel = EnsureCreatorRatingDigit(starGO);
             if (digitLabel != null)

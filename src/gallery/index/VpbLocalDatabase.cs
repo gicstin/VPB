@@ -5683,7 +5683,9 @@ namespace VPB
                 for (int i = 0; i < exts2.Length; i++)
                 {
                     string e = exts2[i] != null ? exts2[i].Trim() : "";
-                    if (e.Length > 0) extSet.Add(e);
+                    // Pseudo tokens (vpbeverything / varpkg) are category markers, not file suffixes.
+                    if (e.Length > 0 && !Gallery.IsGalleryPseudoExtensionToken(e))
+                        extSet.Add(e);
                 }
             }
 
@@ -5693,6 +5695,9 @@ namespace VPB
                 {
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     bool hasCat = !string.IsNullOrEmpty(categoryTitle);
+                    // ALL VAR is package-level; cat_mem has no "ALL VAR" rows — caller must use TryReadVarPackageCreatorCounts.
+                    if (hasCat && IsGalleryAllVarPseudoCategory(categoryTitle))
+                        return false;
                     string normalizedPackagePathFilter = "";
                     bool hasPackagePathFilter = false;
                     if (!string.IsNullOrEmpty(packagePathFilter))
@@ -5700,8 +5705,10 @@ namespace VPB
                         normalizedPackagePathFilter = packagePathFilter.Replace('\\', '/').Trim().Trim('/');
                         hasPackagePathFilter = normalizedPackagePathFilter.Length > 0;
                     }
-                    bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
                     bool isEverythingC3 = hasCat && Gallery.IsEverythingCategoryName(categoryTitle);
+                    // EVERYTHING grid is all cat_mem (minus previews); category.paths are loose-disk roots only — do not AND them here.
+                    bool hasPathPrefix = !isEverythingC3
+                        && ((pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix));
                     var sb = new StringBuilder();
                     string countExpr = (hasCat && !isEverythingC3) ? "COUNT(*)" : "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)";
                     sb.Append("SELECT p.creator, ").Append(countExpr).Append(" ");
@@ -5905,7 +5912,8 @@ namespace VPB
                 for (int i = 0; i < exts.Length; i++)
                 {
                     string e = exts[i] != null ? exts[i].Trim() : "";
-                    if (e.Length > 0) extSet.Add(e.ToLowerInvariant());
+                    if (e.Length > 0 && !Gallery.IsGalleryPseudoExtensionToken(e))
+                        extSet.Add(e.ToLowerInvariant());
                 }
             }
 
@@ -5934,9 +5942,12 @@ namespace VPB
                     bool hasTags = activeTags != null && activeTags.Count > 0;
                     var creatorList = SplitCreatorFilterList(creatorFilter);
                     bool hasCreator = creatorList.Count > 0;
-                    bool hasPathPrefix = (pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix);
 
                     bool isEverythingC2 = Gallery.IsEverythingCategoryName(categoryTitle);
+                    // EVERYTHING: category.paths are loose-disk roots, not cat_mem path filters.
+                    bool hasPathPrefix = !isEverythingC2
+                        && ((pathPrefixes != null && pathPrefixes.Count > 0) || !string.IsNullOrEmpty(singlePathPrefix));
+
                     string countExprC2 = isEverythingC2 ? "COUNT(DISTINCT m.pkg_uid || char(0) || m.internal_path)" : "COUNT(*)";
                     var sb = new StringBuilder();
                     sb.Append("SELECT ifnull(p.var_path,''), ").Append(countExprC2).Append(" ");

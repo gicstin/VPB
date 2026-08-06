@@ -1434,7 +1434,9 @@ namespace VPB
 
             Dictionary<string, int> counts = new Dictionary<string, int>();
             // Package-only category: creators list must be package creators (not internal-file creators).
-            if (string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase))
+            bool packageOnlyCreators = string.Equals(currentExtension, "varpkg", StringComparison.OrdinalIgnoreCase)
+                || VpbLocalDatabase.IsGalleryAllVarPseudoCategory(currentCategoryTitle);
+            if (packageOnlyCreators)
             {
                 if (!VpbLocalDatabase.TryReadVarPackageCreatorCounts(counts, currentPackagePathFilter))
                 {
@@ -1455,8 +1457,15 @@ namespace VPB
             {
                 string[] extensions = string.IsNullOrEmpty(currentExtension) ? new string[0] : currentExtension.Split('|');
                 HashSet<string> targetExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var e in extensions) if (!string.IsNullOrEmpty(e)) targetExts.Add(e.Trim());
-                bool everythingExtForCreators = Gallery.IsEverythingCategoryExtension(currentExtension);
+                foreach (var e in extensions)
+                {
+                    if (string.IsNullOrEmpty(e)) continue;
+                    string et = e.Trim();
+                    if (et.Length == 0 || Gallery.IsGalleryPseudoExtensionToken(et)) continue;
+                    targetExts.Add(et);
+                }
+                bool everythingExtForCreators = Gallery.IsEverythingCategoryExtension(currentExtension)
+                    || Gallery.IsEverythingCategoryName(currentCategoryTitle);
 
                 foreach (var pkg in FileManager.PackagesByUid.Values)
                 {
@@ -1478,21 +1487,25 @@ namespace VPB
                         if (everythingExtForCreators && Gallery.IsEverythingExcludedPreviewExtension(ext)) continue;
                         if (!everythingExtForCreators && !targetExts.Contains(ext)) continue;
 
-                        bool match = false;
-                        if (currentPaths != null && currentPaths.Count > 0)
+                        // EVERYTHING: match all non-preview internals (category.paths are loose-disk roots only).
+                        bool match = everythingExtForCreators;
+                        if (!match)
                         {
-                            for (int k = 0; k < currentPaths.Count; k++)
+                            if (currentPaths != null && currentPaths.Count > 0)
                             {
-                                if (GalleryInternalPathStartsWithPrefix(internalPath, currentPaths[k])) { match = true; break; }
+                                for (int k = 0; k < currentPaths.Count; k++)
+                                {
+                                    if (GalleryInternalPathStartsWithPrefix(internalPath, currentPaths[k])) { match = true; break; }
+                                }
                             }
-                        }
-                        else if (!string.IsNullOrEmpty(currentPath))
-                        {
-                            if (GalleryInternalPathStartsWithPrefix(internalPath, currentPath)) match = true;
-                        }
-                        else
-                        {
-                            match = true;
+                            else if (!string.IsNullOrEmpty(currentPath))
+                            {
+                                if (GalleryInternalPathStartsWithPrefix(internalPath, currentPath)) match = true;
+                            }
+                            else
+                            {
+                                match = true;
+                            }
                         }
 
                         if (match)

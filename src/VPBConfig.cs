@@ -30,6 +30,9 @@ namespace VPB
             return v;
         }
 
+        /// <summary>Public clamp for gallery UI scale helpers (auto-detect, settings).</summary>
+        public static float ClampUiScalePublic(float v) => ClampUiScale(v);
+
         public static float ClampGalleryElementCornerRadiusFraction(float v)
         {
             if (float.IsNaN(v) || float.IsInfinity(v)) v = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
@@ -131,16 +134,8 @@ namespace VPB
         public bool EnableGalleryElementRounding = true;
         /// <summary>Corner radius as a fraction (0.05..0.5) of each element's shorter side. Used when <see cref="EnableGalleryElementRounding"/> is true.</summary>
         public float GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
-        /// <summary>When true, first-run hint strip under title bar is hidden permanently.</summary>
-        public bool FirstRunHintsDismissed = false;
         /// <summary>When true (default), VR hover dwell shows a local tooltip label on controls.</summary>
         public bool VrHoverTooltipEnabled = true;
-        /// <summary>Mode setup wizard completed for desktop fixed dock.</summary>
-        public bool ModeSetupWizardDoneDesktopFixed = false;
-        /// <summary>Mode setup wizard completed for desktop floating gallery.</summary>
-        public bool ModeSetupWizardDoneDesktopFloating = false;
-        /// <summary>Mode setup wizard completed for VR gallery sessions.</summary>
-        public bool ModeSetupWizardDoneVR = false;
         public string ShowSideButtons = "Both"; // "Both", "Left", "Right"
         public string _followAngle = "Both"; // "Off", "Desktop", "VR", "Both"
         public string FollowAngle
@@ -702,7 +697,7 @@ namespace VPB
         public bool GalleryScrollButtonsEnabled = true;
         /// <summary>When true, VR thumbstick forward/back scrolls the gallery while the pointer is over a pane (blocks free-move on that axis).</summary>
         public bool GalleryVrThumbstickScrollEnabled = true;
-        /// <summary>When true, gallery hides side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
+        /// <summary>When true, gallery does not create side-rail Creator buttons; creator filtering uses title-bar control only. Side creator panes stay closed.</summary>
         public bool GalleryHideCreatorSideButtons = false;
         /// <summary>When true (default), side-rail Category mode shows per-category left icons (c_*.png).</summary>
         public bool GalleryShowCategoryIcons = true;
@@ -831,11 +826,20 @@ namespace VPB
         public bool GalleryShowHiddenPackages = false;
         public float SideButtonScale = 1.0f;
         public float SideButtonScaleVR = 1.0f;
-        public float SideButtonScaleDesktop = 0.8f;
+        public float SideButtonScaleDesktop = 1.0f;
         private float _innerPaneScaleVR = 1.0f;
-        private float _innerPaneScaleDesktop = 0.8f;
+        private float _innerPaneScaleDesktop = 1.0f;
         /// <summary>One-time migration: merged separate inner/side scale sliders into unified gallery UI scale.</summary>
         public bool GalleryUiScaleUnifiedMigrated = false;
+        /// <summary>
+        /// True after first-run gallery UI scale auto-seed finished, or after grandfathering an existing VPB.cfg.
+        /// Prevents re-detect on later startups.
+        /// </summary>
+        public bool GalleryUiScaleAutoSeeded = false;
+        /// <summary>Seed formula revision last applied (see <see cref="GalleryUiScaleAutoDetect.SeedRevision"/>).</summary>
+        public int GalleryUiScaleAutoSeedRevision = 0;
+        /// <summary>True when Load() found an existing VPB.cfg (used to grandfather upgrades without re-seeding).</summary>
+        private bool _loadedFromExistingConfig;
         public float InnerPaneScaleVR
         {
             get { return ClampUiScale(_innerPaneScaleVR); }
@@ -890,14 +894,70 @@ namespace VPB
         {
             get
             {
-                try
-                {
-                    if (Settings.Instance != null && Settings.Instance.UIScale != null)
-                        return Settings.Instance.UIScale.Value;
-                }
-                catch { }
-                return GalleryUiDesignTokens.VamUiScaleDesignBaseline;
+                // Desktop HostScale follows VaM Monitor UI Scale (User Preferences → UI).
+                return GalleryUiScaleAutoDetect.ReadMonitorUiScale();
             }
+        }
+
+        /// <summary>
+        /// First-run / deferred seed of gallery pane scales. Safe to call repeatedly.
+        /// Existing configs without the flag are grandfathered (keep saved scales).
+        /// Revision bumps re-apply only when saved pane still matches the prior auto-seed formula.
+        /// </summary>
+        public bool TryEnsureGalleryUiScaleAutoSeeded()
+        {
+            if (GalleryUiScaleAutoSeeded
+                && GalleryUiScaleAutoSeedRevision >= GalleryUiScaleAutoDetect.SeedRevision)
+                return true;
+
+            int screenH = 0;
+            try { screenH = Screen.height; } catch { screenH = 0; }
+
+            // Brand-new install: wait until Screen.height is valid (may be 0 in early Awake).
+            if (!_loadedFromExistingConfig)
+            {
+                if (!GalleryUiScaleAutoDetect.TryApplyRecommendedPaneScales(this))
+                    return false;
+                GalleryUiScaleAutoSeeded = true;
+                GalleryUiScaleAutoSeedRevision = GalleryUiScaleAutoDetect.SeedRevision;
+                try { Save(false, true); } catch { }
+                return true;
+            }
+
+            // Existing cfg: grandfather once, or correct untouched rev-1 seeds after formula change.
+            bool changed = false;
+            if (!GalleryUiScaleAutoSeeded)
+            {
+                GalleryUiScaleAutoSeeded = true;
+                changed = true;
+            }
+
+            if (GalleryUiScaleAutoSeedRevision < GalleryUiScaleAutoDetect.SeedRevision)
+            {
+                bool retouch = false;
+                if (screenH > 0
+                    && GalleryUiScaleAutoSeedRevision >= 1
+                    && GalleryUiScaleAutoDetect.LooksLikeUntouchedRevision1Seed(InnerPaneScaleDesktop, screenH))
+                {
+                    retouch = GalleryUiScaleAutoDetect.TryApplyRecommendedPaneScales(this);
+                }
+                else if (GalleryUiScaleAutoSeedRevision == 0 && screenH > 0
+                    && GalleryUiScaleAutoDetect.LooksLikeUntouchedRevision1Seed(InnerPaneScaleDesktop, screenH))
+                {
+                    // Seeded under rev1 before revision field existed.
+                    retouch = GalleryUiScaleAutoDetect.TryApplyRecommendedPaneScales(this);
+                }
+
+                if (retouch) changed = true;
+                GalleryUiScaleAutoSeedRevision = GalleryUiScaleAutoDetect.SeedRevision;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                try { Save(false, true); } catch { }
+            }
+            return true;
         }
 
         private void MigrateGalleryUiScaleUnified()
@@ -1023,6 +1083,7 @@ namespace VPB
         {
             string cfgPath = ConfigPath;
             bool cfgExistedAtStart = File.Exists(cfgPath);
+            _loadedFromExistingConfig = false;
             Stopwatch loadSw = Stopwatch.StartNew();
             _lightweightGalleryTabRefreshSlotsRemaining = 0;
             VPBLogger.Config.LogInfo("Starting Load() from: " + cfgPath);
@@ -1030,11 +1091,7 @@ namespace VPB
             EnableButtonGaps = true;
             EnableGalleryElementRounding = true;
             GalleryElementCornerRadiusFraction = GalleryUiDesignTokens.ButtonCornerRadiusFraction;
-            FirstRunHintsDismissed = false;
             VrHoverTooltipEnabled = true;
-            ModeSetupWizardDoneDesktopFixed = false;
-            ModeSetupWizardDoneDesktopFloating = false;
-            ModeSetupWizardDoneVR = false;
             ShowSideButtons = "Both";
             _followAngle = "Both";
             _followDistance = "VR";
@@ -1219,11 +1276,20 @@ namespace VPB
             GalleryScrollButtonsEnabled = true;
             GalleryVrThumbstickScrollEnabled = true;
             GlobalSourceFilter = GlobalSourceFilterValue.All;
+            GalleryUiScaleAutoSeeded = false;
+            GalleryUiScaleAutoSeedRevision = 0;
+            GalleryUiScaleUnifiedMigrated = false;
+            SideButtonScale = 1.0f;
+            SideButtonScaleVR = 1.0f;
+            SideButtonScaleDesktop = 1.0f;
+            _innerPaneScaleVR = 1.0f;
+            _innerPaneScaleDesktop = 1.0f;
 
             try
             {
                 if (File.Exists(ConfigPath))
                 {
+                    _loadedFromExistingConfig = cfgExistedAtStart;
                     // Capture the value from the *previous* load (before defaults were reset above)
                     // so the log below can detect when the category actually changes between loads.
                     string prevLastGalleryCategory = s_LastLoggedLoadedGalleryCategory;
@@ -1235,20 +1301,7 @@ namespace VPB
                         if (node["EnableGalleryElementRounding"] != null) EnableGalleryElementRounding = node["EnableGalleryElementRounding"].AsBool;
                         if (node["GalleryElementCornerRadiusFraction"] != null)
                             GalleryElementCornerRadiusFraction = ClampGalleryElementCornerRadiusFraction(node["GalleryElementCornerRadiusFraction"].AsFloat);
-                        if (node["FirstRunHintsDismissed"] != null) FirstRunHintsDismissed = node["FirstRunHintsDismissed"].AsBool;
                         if (node["VrHoverTooltipEnabled"] != null) VrHoverTooltipEnabled = node["VrHoverTooltipEnabled"].AsBool;
-                        if (node["ModeSetupWizardDoneDesktopFixed"] != null) ModeSetupWizardDoneDesktopFixed = node["ModeSetupWizardDoneDesktopFixed"].AsBool;
-                        if (node["ModeSetupWizardDoneDesktopFloating"] != null) ModeSetupWizardDoneDesktopFloating = node["ModeSetupWizardDoneDesktopFloating"].AsBool;
-                        if (node["ModeSetupWizardDoneVR"] != null) ModeSetupWizardDoneVR = node["ModeSetupWizardDoneVR"].AsBool;
-                        if (cfgExistedAtStart
-                            && node["ModeSetupWizardDoneDesktopFixed"] == null
-                            && node["ModeSetupWizardDoneDesktopFloating"] == null
-                            && node["ModeSetupWizardDoneVR"] == null)
-                        {
-                            ModeSetupWizardDoneDesktopFixed = true;
-                            ModeSetupWizardDoneDesktopFloating = true;
-                            ModeSetupWizardDoneVR = true;
-                        }
                         if (node["ShowSideButtons"] != null) ShowSideButtons = node["ShowSideButtons"].Value;
                         
                         // Handle legacy bools if they exist, or just use string
@@ -1615,6 +1668,9 @@ namespace VPB
                         if (node["InnerPaneScaleDesktop"] != null) InnerPaneScaleDesktop = node["InnerPaneScaleDesktop"].AsFloat;
                         else InnerPaneScaleDesktop = InnerPaneScale;
                         if (node["GalleryUiScaleUnifiedMigrated"] != null) GalleryUiScaleUnifiedMigrated = node["GalleryUiScaleUnifiedMigrated"].AsBool;
+                        if (node["GalleryUiScaleAutoSeeded"] != null) GalleryUiScaleAutoSeeded = node["GalleryUiScaleAutoSeeded"].AsBool;
+                        if (node["GalleryUiScaleAutoSeedRevision"] != null) GalleryUiScaleAutoSeedRevision = node["GalleryUiScaleAutoSeedRevision"].AsInt;
+                        else if (GalleryUiScaleAutoSeeded) GalleryUiScaleAutoSeedRevision = 1; // pre-revision field = treated as rev1
                         MigrateGalleryUiScaleUnified();
                         if (node["SpringScrollButtonMode"] != null)
                             SpringScrollButtonMode = NormalizeSpringScrollButtonMode(node["SpringScrollButtonMode"].Value);
@@ -1764,6 +1820,9 @@ namespace VPB
             {
                 VPBLogger.Config.LogError("Error loading config: " + ex.Message);
             }
+
+            // First-run pane scale (deferred if Screen.height still 0). Existing cfgs grandfather.
+            try { TryEnsureGalleryUiScaleAutoSeeded(); } catch { }
         }
 
         public void Save()
@@ -1805,11 +1864,7 @@ namespace VPB
                 node["EnableButtonGaps"].AsBool = EnableButtonGaps;
                 node["EnableGalleryElementRounding"].AsBool = EnableGalleryElementRounding;
                 node["GalleryElementCornerRadiusFraction"].AsFloat = ClampGalleryElementCornerRadiusFraction(GalleryElementCornerRadiusFraction);
-                node["FirstRunHintsDismissed"].AsBool = FirstRunHintsDismissed;
                 node["VrHoverTooltipEnabled"].AsBool = VrHoverTooltipEnabled;
-                node["ModeSetupWizardDoneDesktopFixed"].AsBool = ModeSetupWizardDoneDesktopFixed;
-                node["ModeSetupWizardDoneDesktopFloating"].AsBool = ModeSetupWizardDoneDesktopFloating;
-                node["ModeSetupWizardDoneVR"].AsBool = ModeSetupWizardDoneVR;
                 node["ShowSideButtons"] = ShowSideButtons;
                 node["FollowAngle"] = _followAngle;
                 node["FollowDistance"] = _followDistance;
@@ -2023,6 +2078,8 @@ namespace VPB
                 node["InnerPaneScaleVR"].AsFloat = InnerPaneScaleVR;
                 node["InnerPaneScaleDesktop"].AsFloat = InnerPaneScaleDesktop;
                 node["GalleryUiScaleUnifiedMigrated"].AsBool = GalleryUiScaleUnifiedMigrated;
+                node["GalleryUiScaleAutoSeeded"].AsBool = GalleryUiScaleAutoSeeded;
+                node["GalleryUiScaleAutoSeedRevision"].AsInt = GalleryUiScaleAutoSeedRevision;
                 node["SpringScrollButtonMode"] = NormalizeSpringScrollButtonMode(SpringScrollButtonMode);
                 node["HoldToLaunchEnabled"].AsBool = HoldToLaunchEnabled;
                 node["TryOnModeEnabled"].AsBool = TryOnModeEnabled;
