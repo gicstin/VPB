@@ -75,6 +75,9 @@ namespace VPB
         private bool importSidebarSceneAtomSkipDuplicates = true;
         // Scene atoms: off-scene props placed relative to the target person root instead of raw source world coords.
         private bool importSidebarSceneAtomRelativeToPerson = true;
+        // Scene atoms: expert opt-out — when true, Remap Atom UIDs opens only if broken external refs exist.
+        // Default false = always show remap gate (predictable import path).
+        private bool importSidebarRemapUidsOnlyWhenConflicts;
         private string importSidebarSceneAtomSearchFilter = string.Empty;
         // Plugins: when the gate is on, import only the checked subset; selection is per source-atom (the sig
         // tracks scene+atom so switching source resets the checks to none), and is not persisted.
@@ -343,6 +346,7 @@ namespace VPB
             importSidebarPickCUAs                 = PrefBool(p, "pickCUAs", importSidebarPickCUAs);
             importSidebarPickSceneAtoms           = PrefBool(p, "pickSceneAtoms", importSidebarPickSceneAtoms);
             importSidebarSceneAtomSkipDuplicates  = PrefBool(p, "sceneAtomSkipDuplicates", importSidebarSceneAtomSkipDuplicates);
+            importSidebarRemapUidsOnlyWhenConflicts = PrefBool(p, "remapUidsOnlyWhenConflicts", importSidebarRemapUidsOnlyWhenConflicts);
             importSidebarCUARelativeToPerson      = PrefBool(p, "cuaRelativeToPerson", importSidebarCUARelativeToPerson);
             importSidebarCuaMergeLoad             = PrefBool(p, "cuaMergeLoad", importSidebarCuaMergeLoad);
             importSidebarDeleteTargetCUAs         = PrefBool(p, "deleteTargetCUAs", importSidebarDeleteTargetCUAs);
@@ -380,6 +384,7 @@ namespace VPB
             p["pickCUAs"].AsBool = importSidebarPickCUAs;
             p["pickSceneAtoms"].AsBool = importSidebarPickSceneAtoms;
             p["sceneAtomSkipDuplicates"].AsBool = importSidebarSceneAtomSkipDuplicates;
+            p["remapUidsOnlyWhenConflicts"].AsBool = importSidebarRemapUidsOnlyWhenConflicts;
             p["cuaRelativeToPerson"].AsBool = importSidebarCUARelativeToPerson;
             p["cuaMergeLoad"].AsBool = importSidebarCuaMergeLoad;
             p["deleteTargetCUAs"].AsBool = importSidebarDeleteTargetCUAs;

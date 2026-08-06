@@ -128,6 +128,8 @@ namespace VPB
         /// Power-user remap table: Original UID → live UID, typed name, or Create new (co-import donor).
         /// Optional Receiver column remaps trigger <c>plugin#N_Class</c> onto the live destination atom.
         /// Floating drag/resize chrome (filter-presets pattern). Esc / close / Cancel = cancel.
+        /// Empty <paramref name="broken"/> still opens (Jakob: predictable import gate) with empty state;
+        /// Enter / Import continues with no remaps.
         /// </summary>
         private void ShowRemapAtomUidsModal(
             List<SceneAtomImporter.BrokenUidRef> broken,
@@ -136,11 +138,14 @@ namespace VPB
                 HashSet<string>,
                 Dictionary<string, Dictionary<string, string>>> onConfirm)
         {
-            if (backgroundBoxGO == null || broken == null || broken.Count == 0 || onConfirm == null)
+            if (backgroundBoxGO == null || onConfirm == null)
             {
                 if (onConfirm != null) onConfirm(null, null, null);
                 return;
             }
+
+            if (broken == null)
+                broken = new List<SceneAtomImporter.BrokenUidRef>();
 
             _remapAtomUidsRows = broken;
             _remapAtomUidsOnConfirm = onConfirm;
@@ -403,6 +408,11 @@ namespace VPB
             return string.Equals(stored, auto, StringComparison.Ordinal);
         }
 
+        private bool RemapAtomUidsHasRows()
+        {
+            return _remapAtomUidsRows != null && _remapAtomUidsRows.Count > 0;
+        }
+
         private void RefreshRemapAtomUidsUnresolvedUi()
         {
             int unresolvedDest = CountRemapAtomUidsUnresolved();
@@ -410,7 +420,14 @@ namespace VPB
             int unresolved = unresolvedDest + unresolvedRecv;
             if (_remapAtomUidsUnresolvedText != null)
             {
-                if (unresolved > 0)
+                if (!RemapAtomUidsHasRows())
+                {
+                    _remapAtomUidsUnresolvedText.text = VPBTranslation.T(
+                        "gallery.import.remap_uids.no_remaps_needed",
+                        "No remaps needed");
+                    _remapAtomUidsUnresolvedText.color = RemapAllMappedMuted;
+                }
+                else if (unresolved > 0)
                 {
                     if (unresolvedDest > 0 && unresolvedRecv > 0)
                     {
@@ -871,6 +888,13 @@ namespace VPB
                 importHover.OnHoverChange += (enter) =>
                 {
                     if (!enter) { SetStatus(null); return; }
+                    if (!RemapAtomUidsHasRows())
+                    {
+                        SetStatus(VPBTranslation.T(
+                            "gallery.import.remap_uids.tip_import_empty",
+                            "No remaps needed — Import (Enter)"));
+                        return;
+                    }
                     int u = CountRemapAtomUidsAllGaps();
                     if (u > 0 && !_remapAtomUidsImportForceArmed)
                     {
@@ -992,12 +1016,56 @@ namespace VPB
             _remapAtomUidsChevronIcons.Clear();
             _remapAtomUidsOpenPickerFor = null;
 
+            if (_remapAtomUidsRows.Count == 0)
+            {
+                BuildRemapAtomUidsEmptyState(font, s, rowH);
+                return;
+            }
+
             for (int i = 0; i < _remapAtomUidsRows.Count; i++)
             {
                 SceneAtomImporter.BrokenUidRef row = _remapAtomUidsRows[i];
                 if (string.IsNullOrEmpty(row.OriginalUid)) continue;
                 BuildRemapAtomUidsRow(row, font, s, rowH);
             }
+        }
+
+        /// <summary>
+        /// Empty / success surface when import has no broken external UID refs.
+        /// Keeps gate predictable; Enter confirms (Doherty + keyboard path).
+        /// </summary>
+        private void BuildRemapAtomUidsEmptyState(int font, float s, float rowH)
+        {
+            GameObject shell = new GameObject("RemapEmpty");
+            shell.transform.SetParent(_remapAtomUidsListParent, false);
+            VerticalLayoutGroup v = UI.AddVLG(shell, spacing: 6f * s, padding: UI.Pad(16, 16, 20, 20, s));
+            v.childForceExpandHeight = false;
+            v.childForceExpandWidth = true;
+            v.childAlignment = TextAnchor.MiddleCenter;
+            UI.AddLE(shell, minHeight: rowH * 3f, preferredHeight: rowH * 3.5f, flexibleWidth: 1f);
+
+            Text title = UI.CreateLabel(
+                shell,
+                VPBTranslation.T(
+                    "gallery.import.remap_uids.empty_title",
+                    "No external UID remaps needed"),
+                font, RemapAllMappedMuted, TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
+                raycastTarget: false, name: "EmptyTitle");
+            GalleryUiMetrics.ApplyFont(title, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            title.fontStyle = FontStyle.Bold;
+            UI.AddLE(title.gameObject, flexibleWidth: 1f, preferredHeight: rowH);
+
+            Text hint = UI.CreateLabel(
+                shell,
+                VPBTranslation.T(
+                    "gallery.import.remap_uids.empty_hint",
+                    "Press Enter or Import to continue"),
+                font, new Color(0.62f, 0.66f, 0.70f, 1f), TextAnchor.MiddleCenter,
+                HorizontalWrapMode.Wrap, VerticalWrapMode.Truncate,
+                raycastTarget: false, name: "EmptyHint");
+            GalleryUiMetrics.ApplyFont(hint, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            UI.AddLE(hint.gameObject, flexibleWidth: 1f, preferredHeight: rowH * 0.9f);
         }
 
         private void BuildRemapAtomUidsRow(SceneAtomImporter.BrokenUidRef row, int font, float s, float rowH)

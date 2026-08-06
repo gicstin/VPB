@@ -474,6 +474,12 @@ namespace VPB
                         v => { importSidebarPickSceneAtoms = v; RefreshSceneAtomChecklist(); RebuildImportSidebarContent(); },
                         null,
                         VPBTranslation.T("gallery.import.opt.pick_atoms", "Show a searchable checklist to choose which scene atoms to import instead of importing all of them."));
+                    AddOptionToggle(panel.transform, "Remap UIDs only when conflicts",
+                        () => importSidebarRemapUidsOnlyWhenConflicts,
+                        v => importSidebarRemapUidsOnlyWhenConflicts = v, null,
+                        VPBTranslation.T(
+                            "gallery.import.opt.remap_only_conflicts",
+                            "Expert: skip Remap Atom UIDs when every external ref already resolves. Off (default) = always show remap before import."));
                     BuildImportSidebarSceneAtomSearchRow(panel.transform);
                     BuildImportSidebarSceneAtomChecklist(panel.transform);
                     break;
@@ -2195,18 +2201,31 @@ namespace VPB
                 }
             }
 
+            string preferredPersonUid = importSidebarTargetAtom != null
+                ? importSidebarTargetAtom.uid
+                : null;
+
             List<SceneAtomImporter.BrokenUidRef> broken
-                = SceneAtomImporter.CollectBrokenExternalUidRefs(scene, selectedIds);
-            if (broken != null && broken.Count > 0)
+                = SceneAtomImporter.CollectBrokenExternalUidRefs(scene, selectedIds, preferredPersonUid);
+            if (broken == null)
+                broken = new List<SceneAtomImporter.BrokenUidRef>();
+
+            // Default: always open Remap Atom UIDs (Jakob — predictable gate). Expert opt-out
+            // "only when conflicts" skips empty gate but still cues status (change blindness).
+            if (importSidebarRemapUidsOnlyWhenConflicts && broken.Count == 0)
             {
-                LogUtil.Log("[VPB][Atoms][import] " + broken.Count
-                    + " broken external UID ref(s) — showing Remap Atom UIDs modal.");
-                ContinueImportSelectedSceneAtomsAfterRemap(
-                    scene, sourceHostUid, selectedIds, null, null, broken);
+                LogUtil.Log("[VPB][Atoms][import] no broken external UID refs — remap gate skipped (expert).");
+                SetStatus(VPBTranslation.T(
+                    "gallery.import.remap_uids.skipped_no_conflicts",
+                    "No UID remaps needed — importing"));
+                RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, null);
                 return;
             }
 
-            RunImportSelectedSceneAtoms(scene, sourceHostUid, selectedIds, null);
+            LogUtil.Log("[VPB][Atoms][import] " + broken.Count
+                + " broken external UID ref(s) — showing Remap Atom UIDs modal.");
+            ContinueImportSelectedSceneAtomsAfterRemap(
+                scene, sourceHostUid, selectedIds, null, null, broken);
         }
 
         /// <summary>
@@ -2259,7 +2278,9 @@ namespace VPB
                 }
 
                 List<SceneAtomImporter.BrokenUidRef> more
-                    = SceneAtomImporter.CollectBrokenExternalUidRefs(scene, selectedIds);
+                    = SceneAtomImporter.CollectBrokenExternalUidRefs(
+                        scene, selectedIds,
+                        importSidebarTargetAtom != null ? importSidebarTargetAtom.uid : null);
                 if (more != null && more.Count > 0 && remapAcc != null)
                 {
                     // Drop refs already remapped away — JSON still names the old UID until prepare.

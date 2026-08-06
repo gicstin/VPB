@@ -22,8 +22,8 @@ namespace VPB.src.util
         }
 
         /// <summary>
-        /// External atom UID referenced by selected import payload that does not resolve in the live scene
-        /// and is not itself being imported in this batch.
+        /// External atom UID referenced by selected import payload that is not itself being imported.
+        /// Shown for missing live UIDs, person-like retarget (Person→Player), and plugin-receiver remap.
         /// </summary>
         public struct BrokenUidRef
         {
@@ -268,12 +268,33 @@ namespace VPB.src.util
         }
 
         /// <summary>
-        /// Finds atom UIDs referenced by <paramref name="selectedIds"/> that are neither selected for import
-        /// nor already present in the live scene. Used to drive the Remap Atom UIDs modal.
-        /// Cold path — scene import only.
+        /// True when live scene has an atom with this exact uid (not <c>uid#N</c> variants).
         /// </summary>
+        public static bool ExactAtomInScene(string atomUid)
+        {
+            if (string.IsNullOrEmpty(atomUid)) return false;
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return false;
+            try { return sc.GetAtomByUid(atomUid) != null; }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Finds external atom UIDs referenced by <paramref name="selectedIds"/> that need a Remap Atom UIDs
+        /// row: missing in live scene, person-like retarget (e.g. donor <c>Person</c> → live <c>Player</c>),
+        /// or trigger plugin receivers that may need slot remap. Cold path — scene import only.
+        /// </summary>
+        /// <param name="preferredPersonUid">
+        /// Import-sidebar target person uid — preferred suggest for person-like refs when present live.
+        /// </param>
         public static List<BrokenUidRef> CollectBrokenExternalUidRefs(
             JSONClass sourceScene, HashSet<string> selectedIds)
+        {
+            return CollectBrokenExternalUidRefs(sourceScene, selectedIds, null);
+        }
+
+        public static List<BrokenUidRef> CollectBrokenExternalUidRefs(
+            JSONClass sourceScene, HashSet<string> selectedIds, string preferredPersonUid)
         {
             var result = new List<BrokenUidRef>();
             if (sourceScene == null || selectedIds == null || selectedIds.Count == 0) return result;
@@ -324,18 +345,9 @@ namespace VPB.src.util
             {
                 if (string.IsNullOrEmpty(refUid)) continue;
                 if (selectedIds.Contains(refUid)) continue;
-                if (AtomAlreadyInScene(refUid)) continue;
 
                 string srcType = string.Empty;
                 sourceIdToType.TryGetValue(refUid, out srcType);
-
-                string suggested = null;
-                if (!string.IsNullOrEmpty(srcType))
-                {
-                    List<string> sameType;
-                    if (liveByType.TryGetValue(srcType, out sameType) && sameType != null && sameType.Count == 1)
-                        suggested = sameType[0];
-                }
 
                 List<string> srcReceivers = null;
                 List<string> srcUrls = null;
@@ -352,6 +364,31 @@ namespace VPB.src.util
                         srcUrls.Add(LookupSourcePluginUrl(targetAtomNode, srcReceivers[ri]));
                 }
 
+                bool missingLive = !ExactAtomInScene(refUid);
+                bool personLike = SceneUtils.IsPersonLikeAtomType(srcType);
+                bool hasPluginRecv = srcReceivers != null && srcReceivers.Count > 0;
+                // Always offer person-like retarget (Person→Player) and plugin-receiver rows even when
+                // the donor uid still exists live — prior skip hid Embody retarget entirely.
+                if (!missingLive && !personLike && !hasPluginRecv)
+                    continue;
+
+                string suggested = SuggestLiveUidForExternalRef(
+                    refUid, srcType, preferredPersonUid, liveByType);
+
+                // Non-person identity row with plugins that already match live → noise, skip.
+                if (!missingLive && !personLike && hasPluginRecv)
+                {
+                    string dest = !string.IsNullOrEmpty(suggested) ? suggested : refUid;
+                    BrokenUidRef probe = new BrokenUidRef
+                    {
+                        OriginalUid = refUid,
+                        SourcePluginReceivers = srcReceivers,
+                        SourcePluginReceiverUrls = srcUrls
+                    };
+                    if (CountUnresolvedPluginReceivers(probe, dest, null) == 0)
+                        continue;
+                }
+
                 result.Add(new BrokenUidRef
                 {
                     OriginalUid = refUid,
@@ -365,6 +402,47 @@ namespace VPB.src.util
 
             result.Sort((a, b) => string.Compare(a.OriginalUid, b.OriginalUid, StringComparison.OrdinalIgnoreCase));
             return result;
+        }
+
+        /// <summary>
+        /// Suggest live destination for an external ref: preferred person → exact uid → unique same-type.
+        /// </summary>
+        private static string SuggestLiveUidForExternalRef(
+            string refUid,
+            string srcType,
+            string preferredPersonUid,
+            Dictionary<string, List<string>> liveByType)
+        {
+            bool personLike = SceneUtils.IsPersonLikeAtomType(srcType);
+
+            // Person-like: prefer import-sidebar target (Player) over donor uid when names diverged.
+            if (personLike
+                && !string.IsNullOrEmpty(preferredPersonUid)
+                && ExactAtomInScene(preferredPersonUid))
+                return preferredPersonUid;
+
+            if (ExactAtomInScene(refUid))
+                return refUid;
+
+            if (!string.IsNullOrEmpty(srcType) && liveByType != null)
+            {
+                List<string> sameType;
+                if (liveByType.TryGetValue(srcType, out sameType) && sameType != null && sameType.Count > 0)
+                {
+                    if (sameType.Count == 1)
+                        return sameType[0];
+                    if (!string.IsNullOrEmpty(preferredPersonUid))
+                    {
+                        for (int i = 0; i < sameType.Count; i++)
+                        {
+                            if (string.Equals(sameType[i], preferredPersonUid, StringComparison.Ordinal))
+                                return preferredPersonUid;
+                        }
+                    }
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -805,6 +883,9 @@ namespace VPB.src.util
             string val;
             try { val = leaf.Value; }
             catch { return; }
+            if (string.IsNullOrEmpty(val)) return;
+
+            val = StripExternalRefPrefix(val);
             if (string.IsNullOrEmpty(val)) return;
 
             // Compound atom:storable — always consider the atom prefix.
