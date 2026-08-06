@@ -12,6 +12,21 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
+        static string InferPersonPresetTypeFromPath(string pathNormLower)
+        {
+            if (string.IsNullOrEmpty(pathNormLower)) return "unknown";
+            if (pathNormLower.Contains("/appearance/")) return "Appearance";
+            if (pathNormLower.Contains("/breastphysics/")) return "BreastPhysics";
+            if (pathNormLower.Contains("/glutephysics/")) return "GlutePhysics";
+            if (pathNormLower.Contains("/skin/")) return "Skin";
+            if (pathNormLower.Contains("/morphs/")) return "Morphs";
+            if (pathNormLower.Contains("/pose/")) return "Pose";
+            if (pathNormLower.Contains("/hair/")) return "Hair";
+            if (pathNormLower.Contains("/clothing/")) return "Clothing";
+            if (pathNormLower.Contains("/subscene/")) return "SubScene";
+            return "other";
+        }
+
         private void EnsureCanvasRegisteredWithSuperController()
         {
             if (_registeredWithSuperController) return;
@@ -114,16 +129,74 @@ namespace VPB
                         catch { return false; }
                     }
 
-                    if (pathLower.Contains("/clothing/") || pathLower.Contains("\\clothing\\") || category.Contains("Clothing"))
+                    // If Appearance category but entry is BreastPhysics/Skin/etc sibling, remap to look .vap.
+                    FileEntry remapped = VPB.src.util.AppearanceApplyProbe.TryRemapToAppearanceSibling(file, category);
+                    if (remapped != null)
+                    {
+                        file = remapped;
+                        dragger.FileEntry = remapped;
+                        pathLower = (file.Path ?? "").ToLowerInvariant();
+                    }
+
+                    // Path-first person presets. Category must not swallow Pose/BreastPhysics/etc.
+                    // (log: Appearance tab → Pose path → pose overwrite; Skin tab → BreastPhysics → LoadSkin).
+                    string pathNorm = pathLower.Replace('\\', '/');
+                    bool pathAppearance = pathNorm.Contains("/appearance/");
+                    bool pathPose = pathNorm.Contains("/pose/") || pathNorm.Contains("saves/person/pose");
+                    bool pathSkin = pathNorm.Contains("/skin/");
+                    bool pathBreast = pathNorm.Contains("/breastphysics/");
+                    bool pathGlute = pathNorm.Contains("/glutephysics/");
+                    bool pathMorphs = pathNorm.Contains("/morphs/");
+                    bool pathHair = pathNorm.Contains("/hair/");
+                    bool pathClothing = pathNorm.Contains("/clothing/");
+
+                    string itemTypeName = InferPersonPresetTypeFromPath(pathNorm);
+                    bool catPersonPreset =
+                        category.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
+                        || category.IndexOf("Skin", StringComparison.OrdinalIgnoreCase) >= 0
+                        || category.IndexOf("Morphs", StringComparison.OrdinalIgnoreCase) >= 0
+                        || category.IndexOf("Pose", StringComparison.OrdinalIgnoreCase) >= 0
+                        || category.IndexOf("Clothing", StringComparison.OrdinalIgnoreCase) >= 0
+                        || category.IndexOf("Hair", StringComparison.OrdinalIgnoreCase) >= 0;
+                    bool pathSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\");
+                    bool catSubScene = category.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                    if (pathClothing || (!pathAppearance && !pathPose && !pathSkin && !pathBreast && !pathGlute && !pathMorphs && !pathHair && category.Contains("Clothing")))
                     {
                         Atom target = GetBestTargetAtom();
+                        AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadClothing",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadClothing(target);
                         return true;
                     }
 
-                    if (pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || category.Contains("SubScene"))
+                    // SubScene path must not run under Appearance/Skin/etc — log proved crash:
+                    // Appearance click → show_Dae SubScene → Replace wiped Anjbgo → RemoveAtom .SELECTIONS hang.
+                    if (pathSubScene || catSubScene)
                     {
+                        if (catPersonPreset && !catSubScene)
+                        {
+                            AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "BLOCKED_SubScene_in_person_cat",
+                                pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing, null);
+                            AppearanceApplyProbe.Warn(
+                                "Blocked SubScene load while category='" + category
+                                + "'. Switch to SubScene tab (Replace wipe of scene SubScenes crashes/hangs). path="
+                                + (file.Path ?? ""));
+                            try
+                            {
+                                ShowTemporaryStatus(
+                                    VPBTranslation.T("gallery.status.subscene_wrong_category",
+                                        "That file is a SubScene — open SubScene category (Replace can wipe scene)."),
+                                    4f);
+                            }
+                            catch { }
+                            return false;
+                        }
+
+                        AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSubScene",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing, null);
                         dragger.LoadSubScene(file.Uid);
                         return true;
                     }
@@ -131,38 +204,88 @@ namespace VPB
                     bool isScene = pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || category.Contains("Scene"));
                     if (isScene)
                     {
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSceneFile",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing, null);
                         dragger.LoadSceneFile(file.Uid);
                         return true;
                     }
 
-                    if (pathLower.Contains("/hair/") || pathLower.Contains("\\hair\\") || category.Contains("Hair"))
+                    if (pathHair || (!pathAppearance && !pathPose && !pathSkin && category.Contains("Hair")))
                     {
                         Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadHair",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadHair(target);
                         return true;
                     }
 
-                    if (pathLower.Contains("/skin/") || pathLower.Contains("\\skin\\") || category.Contains("Skin"))
+                    if (pathSkin)
                     {
                         Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSkin",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadSkin(target);
                         return true;
                     }
 
-                    if (pathLower.Contains("/morphs/") || pathLower.Contains("\\morphs\\") || category.Contains("Morphs"))
+                    if (pathBreast || pathGlute)
                     {
                         Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSkin(breast/glute)",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        // ApplyClothingToAtom resolves BreastPhysics/Glute from path.
+                        dragger.LoadSkin(target);
+                        return true;
+                    }
+
+                    if (pathMorphs || (!pathAppearance && !pathPose && category.Contains("Morphs")))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadMorphs",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
                         dragger.LoadMorphs(target);
                         return true;
                     }
 
-                    if (pathLower.Contains("/appearance/") || pathLower.Contains("\\appearance\\") || category.Contains("Appearance"))
+                    // Pose before Appearance: Appearance category must not load Pose/*.vap as looks.
+                    if (pathPose || (!pathAppearance && category.Contains("Pose")))
                     {
-                        // Blank scene: auto-spawn Person then apply (no "select Person" splash).
+                        Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadPose",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadPose(target);
+                        return true;
+                    }
+
+                    if (pathAppearance || (category.Contains("Appearance") && !pathPose && !pathSkin && !pathBreast && !pathGlute && !pathMorphs && !pathHair && !pathClothing))
+                    {
+                        Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadAppearance",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
                         return TryLoadAppearanceAutoSpawningIfNeeded(file, dragger);
+                    }
+
+                    // Skin category fallback only when path is not another person-preset type.
+                    if (category.Contains("Skin") && !pathAppearance && !pathPose && !pathBreast && !pathGlute && !pathMorphs)
+                    {
+                        Atom target = GetBestTargetAtom();
+                        VPB.src.util.AppearanceApplyProbe.Route(category, file.Path, itemTypeName, "LoadSkin(catFallback)",
+                            pathAppearance, pathPose, pathSkin, pathBreast, pathGlute, pathMorphs, pathHair, pathClothing,
+                            target != null ? target.uid : null);
+                        if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
+                        dragger.LoadSkin(target);
+                        return true;
                     }
 
                     bool isPluginScript =
@@ -188,7 +311,7 @@ namespace VPB
                         }
                     }
 
-                    if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || pathLower.Contains("/person/") || pathLower.Contains("\\person\\") || category.Contains("Pose"))
+                    if (pathLower.Contains("/pose/") || pathLower.Contains("\\pose\\") || category.Contains("Pose"))
                     {
                         Atom target = GetBestTargetAtom();
                         if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
@@ -222,6 +345,73 @@ namespace VPB
         private void LoadRandom()
         {
             LoadRandom(null, null, 0);
+        }
+
+        /// <summary>
+        /// Drop rows that cannot belong to the current category (defense if refresh polluted the list).
+        /// </summary>
+        private List<FileEntry> FilterRandomPoolForCurrentCategory(List<FileEntry> pool)
+        {
+            if (pool == null || pool.Count == 0) return pool;
+            string cat = currentCategoryTitle ?? "";
+            bool appearanceCat = cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool subSceneCat = cat.IndexOf("SubScene", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool sceneCat = !subSceneCat && (
+                string.Equals(cat, "Scenes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cat, "Scene", StringComparison.OrdinalIgnoreCase));
+
+            if (!appearanceCat && !subSceneCat && !sceneCat)
+                return pool;
+
+            var filtered = new List<FileEntry>(pool.Count);
+            int dropped = 0;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                FileEntry f = pool[i];
+                if (f == null) continue;
+                string path = f.Path ?? f.Uid ?? "";
+                string pl = path.Replace('\\', '/');
+
+                if (appearanceCat)
+                {
+                    if (IsForbiddenInAppearanceCategory(pl) || !IsAppearanceLookInternalPath(pl))
+                    {
+                        dropped++;
+                        continue;
+                    }
+                }
+                else if (subSceneCat)
+                {
+                    if (pl.IndexOf("/SubScene/", StringComparison.OrdinalIgnoreCase) < 0
+                        && pl.IndexOf("Custom/SubScene", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        dropped++;
+                        continue;
+                    }
+                }
+                else if (sceneCat)
+                {
+                    string lower = pl.ToLowerInvariant();
+                    if (!(lower.Contains("/scene/") || lower.Contains("saves/scene"))
+                        || lower.Contains("/subscene/"))
+                    {
+                        dropped++;
+                        continue;
+                    }
+                }
+                filtered.Add(f);
+            }
+
+            if (dropped > 0)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB] Load Random: dropped " + dropped
+                        + " out-of-category item(s) from pool (cat='" + cat + "', kept=" + filtered.Count + ")");
+                }
+                catch { }
+            }
+            return filtered;
         }
 
         /// <param name="excludeIdentityKey">
@@ -262,6 +452,14 @@ namespace VPB
                     return;
                 }
 
+                // Category-safe pool: Appearance must not pick SubScene/Scene rows if list was polluted.
+                pool = FilterRandomPoolForCurrentCategory(pool);
+                if (pool == null || pool.Count == 0)
+                {
+                    LogUtil.LogWarning("[VPB] Load Random: no category-matching items in filtered view.");
+                    return;
+                }
+
                 bool historyBrowse = activeContentType == ContentType.History;
 
                 string excludeKey = excludeIdentityKey;
@@ -277,6 +475,9 @@ namespace VPB
                     return;
                 }
 
+                LogUtil.Log("[VPB] Load Random: pick cat='" + (currentCategoryTitle ?? "")
+                    + "' path=" + (file.Path ?? file.Uid ?? "?"));
+
                 // Select it
                 selectedFiles.Clear();
                 selectedFilePaths.Clear();
@@ -290,10 +491,12 @@ namespace VPB
                 RefreshSelectionVisuals();
                 UpdatePaginationText();
 
-                // Apply (same logic as click)
-                string pathLower = (file.Path ?? "").ToLowerInvariant();
-                bool isSubScene = pathLower.Contains("/subscene/") || pathLower.Contains("\\subscene\\") || (currentCategoryTitle != null && currentCategoryTitle.Contains("SubScene"));
-                bool isScene = !isSubScene && pathLower.EndsWith(".json") && (pathLower.Contains("/scene/") || pathLower.Contains("\\scene\\") || pathLower.Contains("saves/scene") || (currentCategoryTitle != null && currentCategoryTitle.Contains("Scene")));
+                // Apply (same logic as click). Scene shortcut only when path is a scene — never via
+                // category.Contains("Scene") (would false-match other titles if wording changes).
+                string pathLower = (file.Path ?? "").ToLowerInvariant().Replace('\\', '/');
+                bool isSubScene = pathLower.Contains("/subscene/");
+                bool isScene = !isSubScene && pathLower.EndsWith(".json")
+                    && (pathLower.Contains("/scene/") || pathLower.Contains("saves/scene"));
 
                 if (isScene)
                 {

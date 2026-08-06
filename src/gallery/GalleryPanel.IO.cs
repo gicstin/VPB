@@ -3408,7 +3408,15 @@ namespace VPB
                                             continue;
                                     }
 
-                                    if (!appearanceWorkerSkipPathMatch
+                                    // Appearance: always require look paths — even when skipPathMatch (non-Local).
+                                    // Else json|vap package fallback floods SubScene/Scene into Appearance grid.
+                                    if (titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        if (IsForbiddenInAppearanceCategory(internalPath)
+                                            || !IsAppearanceLookInternalPath(internalPath))
+                                            continue;
+                                    }
+                                    else if (!appearanceWorkerSkipPathMatch
                                         && !RefreshWorkerPathMatches(internalPath, workerPathsSnap, workerPathSnap))
                                         continue;
 
@@ -3692,7 +3700,14 @@ namespace VPB
                                     }
                                     if (!extMatch) continue;
 
-                                    if (!appearanceWorkerSkipPathMatch
+                                    // Appearance package scan: never accept SubScene/Scene/other Person presets.
+                                    if (titleForIndexMain.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        if (IsForbiddenInAppearanceCategory(checkPath)
+                                            || !IsAppearanceLookInternalPath(checkPath))
+                                            continue;
+                                    }
+                                    else if (!appearanceWorkerSkipPathMatch
                                         && !RefreshWorkerPathMatches(checkPath, workerPathsSnap, workerPathSnap))
                                         continue;
 

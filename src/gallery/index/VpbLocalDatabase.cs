@@ -6581,7 +6581,8 @@ namespace VPB
         }
 
         // Applies binds from a GalleryCategoryWhereContext to a prepared statement, starting at bind slot `bindStart`.
-        // Order: category (if not everything), creator, name/search text, exclusions, inclusions, tags, userTags, search int64 (time).
+        // Order must match SQL fragment order in TryQueryGalleryCategoryRows:
+        // category, creator, name/search text, search time (int64), exclusions, inclusions, tags, userTags, excluded userTags.
         // Returns next available bind slot.
         internal static int BindGalleryCategoryWhere(VpbSqlite3.Statement stmt, GalleryCategoryWhereContext ctx, int bindStart)
         {
@@ -6591,9 +6592,13 @@ namespace VPB
                 for (int i = 0; i < ctx.CreatorBindValues.Count; i++) stmt.BindText(b++, ctx.CreatorBindValues[i] ?? "");
             if (ctx.NameBindValues != null)
                 for (int i = 0; i < ctx.NameBindValues.Count; i++) stmt.BindText(b++, ctx.NameBindValues[i] ?? "");
-            // SearchTimeAndFragment sits immediately after NameAndFragment in SQL.
-            if (ctx.SearchInt64BindValues != null)
-                for (int i = 0; i < ctx.SearchInt64BindValues.Count; i++) stmt.BindInt64(b++, ctx.SearchInt64BindValues[i]);
+            // Only bind int64 time values when SearchTimeAndFragment actually has placeholders.
+            if (!string.IsNullOrEmpty(ctx.SearchTimeAndFragment)
+                && ctx.SearchInt64BindValues != null)
+            {
+                for (int i = 0; i < ctx.SearchInt64BindValues.Count; i++)
+                    stmt.BindInt64(b++, ctx.SearchInt64BindValues[i]);
+            }
             if (ctx.ExclusionBindValues != null)
                 for (int i = 0; i < ctx.ExclusionBindValues.Count; i++) stmt.BindText(b++, ctx.ExclusionBindValues[i] ?? "");
             if (ctx.InclusionBindValues != null)
@@ -6605,6 +6610,32 @@ namespace VPB
             if (ctx.ExcludedUserTagBindValues != null)
                 for (int i = 0; i < ctx.ExcludedUserTagBindValues.Count; i++) stmt.BindText(b++, ctx.ExcludedUserTagBindValues[i] ?? "");
             return b;
+        }
+
+        static int CountSqlPlaceholders(string sql)
+        {
+            if (string.IsNullOrEmpty(sql)) return 0;
+            int n = 0;
+            for (int i = 0; i < sql.Length; i++)
+            {
+                if (sql[i] == '?') n++;
+            }
+            return n;
+        }
+
+        static int CountGalleryCategoryWhereBinds(GalleryCategoryWhereContext ctx)
+        {
+            int n = ctx.IsEverything ? 0 : 1;
+            if (ctx.CreatorBindValues != null) n += ctx.CreatorBindValues.Count;
+            if (ctx.NameBindValues != null) n += ctx.NameBindValues.Count;
+            if (!string.IsNullOrEmpty(ctx.SearchTimeAndFragment) && ctx.SearchInt64BindValues != null)
+                n += ctx.SearchInt64BindValues.Count;
+            if (ctx.ExclusionBindValues != null) n += ctx.ExclusionBindValues.Count;
+            if (ctx.InclusionBindValues != null) n += ctx.InclusionBindValues.Count;
+            if (ctx.TagBindValues != null) n += ctx.TagBindValues.Count;
+            if (ctx.UserTagBindValues != null) n += ctx.UserTagBindValues.Count;
+            if (ctx.ExcludedUserTagBindValues != null) n += ctx.ExcludedUserTagBindValues.Count;
+            return n;
         }
 
         /// <summary>
@@ -6765,12 +6796,23 @@ namespace VPB
                          .Append(ctx.ExcludedUserTagAndFragment)
                          .Append(orderBy);
                     string sql = sbSql.ToString();
+                    int sqlPlaceholders = CountSqlPlaceholders(sql);
+                    int expectedBinds = CountGalleryCategoryWhereBinds(ctx);
+                    if (sqlPlaceholders != expectedBinds)
+                    {
+                        LogUtil.LogWarning("[VPB.Gallery.SQL] bind/placeholder mismatch cat='"
+                            + categoryTitle + "' placeholders=" + sqlPlaceholders
+                            + " binds=" + expectedBinds
+                            + " — retrying category-only query");
+                        // Fall through to category-only retry below via throw.
+                        throw new InvalidOperationException(
+                            "sqlite_bind_mismatch placeholders=" + sqlPlaceholders + " binds=" + expectedBinds);
+                    }
 
                     using (var stmt = conn.Prepare(sql))
                     {
                         int bind = 1;
                         BindGalleryCategoryWhere(stmt, ctx, bind);
-                        // BindGalleryCategoryWhere returns next slot; we don't need it here.
 
                         int step;
                         while ((step = stmt.Step()) == VpbSqlite3.SqliteRow)
@@ -6802,6 +6844,65 @@ namespace VPB
             }
             catch (Exception ex)
             {
+                // Bind mismatch / SQLITE_RANGE: retry minimal category=? query so Appearance does not
+                // fall through to package scan that accepts every json|vap (SubScenes).
+                if (!Gallery.IsEverythingCategoryName(categoryTitle)
+                    && outRows != null
+                    && (ex.Message != null && (ex.Message.IndexOf("sqlite3_bind", StringComparison.OrdinalIgnoreCase) >= 0
+                        || ex.Message.IndexOf("sqlite_bind_mismatch", StringComparison.OrdinalIgnoreCase) >= 0
+                        || ex.Message.IndexOf("bind_text failed: 25", StringComparison.OrdinalIgnoreCase) >= 0)))
+                {
+                    try
+                    {
+                        outRows.Clear();
+                        using (var conn2 = new VpbSqlite3.Connection(DbPath))
+                        {
+                            string loadedSel = "0";
+                            try { if (PkgHasLoadedColumn(conn2)) loadedSel = "ifnull(p.loaded,0)"; } catch { }
+                            string sqlRetry =
+                                "SELECT m.pkg_uid, m.internal_path, m.list_path, p.var_path, p.wtime, p.psize, ifnull(p.ictime, p.pctime), ifnull(m.cloth_attr,''), "
+                                + loadedSel + ", ifnull(p.first_scanned, 0) "
+                                + "FROM cat_mem m INNER JOIN pkg p ON p.uid = m.pkg_uid WHERE m.category = ?";
+                            using (var stmt2 = conn2.Prepare(sqlRetry))
+                            {
+                                stmt2.BindText(1, categoryTitle);
+                                int step;
+                                while ((step = stmt2.Step()) == VpbSqlite3.SqliteRow)
+                                {
+                                    Row r;
+                                    r.ItemUsageKey = null;
+                                    r.PackageUid = stmt2.ColumnText(0);
+                                    r.InternalPath = stmt2.ColumnText(1);
+                                    r.ListPath = stmt2.ColumnText(2) ?? "";
+                                    r.VarPath = stmt2.ColumnText(3) ?? "";
+                                    r.LastWriteTicksOrInvalid = stmt2.ColumnInt64(4);
+                                    r.PackageSizeOrInvalid = stmt2.ColumnInt64(5);
+                                    r.PackageCreationTicksOrInvalid = stmt2.ColumnInt64(6);
+                                    r.ClothingAttrPacked = (int)stmt2.ColumnInt64(7);
+                                    r.PackageIsLoaded = stmt2.ColumnInt64(8) != 0;
+                                    r.FirstScannedTicksOrInvalid = stmt2.ColumnInt64(9);
+                                    r.ItemUsageCount = 0;
+                                    r.ItemLastUsedBinary = 0;
+                                    if (r.PackageUid.Length > 0 && r.InternalPath.Length > 0)
+                                        outRows.Add(r);
+                                }
+                            }
+                        }
+                        stats.ExecutedQuery = true;
+                        stats.RowsRead = outRows.Count;
+                        stats.RejectReason = "bind_retry_category_only:" + ex.Message;
+                        LogUtil.LogWarning("[VPB.Gallery.SQL] category-only retry ok cat='"
+                            + categoryTitle + "' rows=" + outRows.Count + " after " + ex.Message);
+                        return true;
+                    }
+                    catch (Exception ex2)
+                    {
+                        s_LastError = ex2.Message;
+                        stats.RejectReason = "exception:" + ex.Message + "; retry:" + ex2.Message;
+                        return false;
+                    }
+                }
+
                 s_LastError = ex.Message;
                 stats.RejectReason = "exception:" + ex.Message;
                 return false;

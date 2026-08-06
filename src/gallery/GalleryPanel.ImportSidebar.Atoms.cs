@@ -16,6 +16,11 @@ namespace VPB
         private readonly List<GameObject> importSidebarSourceRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
         private readonly List<GameObject> importSidebarTargetRowPool = new List<GameObject>(ImportSidebarMaxRowsPerList);
 
+        // SubScene / bulk atom spawn fires onAtomAdded per atom. Coalesce to one rebuild/frame.
+        private bool importSidebarTargetRefreshQueued;
+        private Coroutine importSidebarTargetRefreshCo;
+        private int importSidebarLastLoggedPersonCount = -1;
+
         // Adds the Source/Target captions + atom row pools directly into the single body-scroll content (which already
         // carries a VerticalLayoutGroup + ContentSizeFitter from CreateVScrollableContent). Rows toggle active to show.
         private void BuildImportSidebarAtomRows(Transform content)
@@ -132,7 +137,7 @@ namespace VPB
             // Log BEFORE the guard so the log proves whether the handler fires at all (the open question for issue #2).
             LogUtil.Log($"[VPB import][diag] onSceneLoaded fired; built={importSidebarBuilt} persons={CountLivePersonAtoms()}");
             if (!importSidebarBuilt) return;
-            RefreshTargetCandidates();
+            RefreshTargetCandidatesImmediate();
             RefreshApplyButtonEnabled();
             StartCoroutine(DeferredTargetRefreshAfterSceneLoad());
         }
@@ -147,8 +152,9 @@ namespace VPB
                 for (int f = 0; f < 5; f++) yield return null;
                 if (!importSidebarBuilt) yield break;
                 int persons = CountLivePersonAtoms();
-                LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh attempt={attempt}; persons={persons}");
-                RefreshTargetCandidates();
+                if (attempt == 0 || persons != importSidebarLastLoggedPersonCount)
+                    LogUtil.Log($"[VPB import][diag] onSceneLoaded deferred refresh attempt={attempt}; persons={persons}");
+                RefreshTargetCandidatesImmediate();
                 RefreshApplyButtonEnabled();
                 if (persons > 0) yield break;
             }
@@ -165,24 +171,47 @@ namespace VPB
 
         private void OnImportSidebarAtomAdded(Atom a)
         {
-            // Newly-spawned atoms can flip the apply button's enabled state (e.g. user
-            // opens the sidebar in an empty scene, then adds a Person via VaM's atom
-            // creator). Refresh both candidates and the apply state to stay in sync
-            // with OnImportSidebarAtomRemoved's behavior on removal.
+            // Target list is Person-only. SubScene/CUA bulk adds would otherwise rebuild UI
+            // dozens of times per second (log: RefreshTargetCandidates spam).
             if (!importSidebarBuilt) return;
-            RefreshTargetCandidates();
-            RefreshApplyButtonEnabled();
+            if (a != null && a.type != "Person") return;
+            ScheduleRefreshTargetCandidates();
         }
 
         private void OnImportSidebarAtomRemoved(Atom a)
         {
             if (!importSidebarBuilt) return;
+            if (a != null && a.type != "Person") return;
             if (importSidebarTargetAtom == a) importSidebarTargetAtom = null;
-            RefreshTargetCandidates();
+            ScheduleRefreshTargetCandidates();
+        }
+
+        private void ScheduleRefreshTargetCandidates()
+        {
+            if (importSidebarTargetRefreshQueued) return;
+            importSidebarTargetRefreshQueued = true;
+            if (importSidebarTargetRefreshCo != null)
+                StopCoroutine(importSidebarTargetRefreshCo);
+            importSidebarTargetRefreshCo = StartCoroutine(CoalescedRefreshTargetCandidates());
+        }
+
+        private System.Collections.IEnumerator CoalescedRefreshTargetCandidates()
+        {
+            // Wait end of frame so a burst of Person add/remove collapses to one rebuild.
+            yield return new WaitForEndOfFrame();
+            importSidebarTargetRefreshQueued = false;
+            importSidebarTargetRefreshCo = null;
+            if (!importSidebarBuilt) yield break;
+            RefreshTargetCandidatesImmediate();
             RefreshApplyButtonEnabled();
         }
 
         partial void RefreshTargetCandidates()
+        {
+            RefreshTargetCandidatesImmediate();
+        }
+
+        private void RefreshTargetCandidatesImmediate()
         {
             importSidebarTargetCandidates.Clear();
             if (SuperController.singleton != null)
@@ -193,7 +222,12 @@ namespace VPB
                     if (a.type == "Person") importSidebarTargetCandidates.Add(a);
                 }
             }
-            LogUtil.Log("[VPB import][diag] RefreshTargetCandidates: " + importSidebarTargetCandidates.Count + " person(s)");
+            int n = importSidebarTargetCandidates.Count;
+            if (n != importSidebarLastLoggedPersonCount)
+            {
+                importSidebarLastLoggedPersonCount = n;
+                LogUtil.Log("[VPB import][diag] RefreshTargetCandidates: " + n + " person(s)");
+            }
             RenderTargetList();
         }
 
@@ -475,6 +509,12 @@ namespace VPB
             SuperController.singleton.onAtomAddedHandlers -= OnImportSidebarAtomAdded;
             SuperController.singleton.onAtomRemovedHandlers -= OnImportSidebarAtomRemoved;
             SuperController.singleton.onSceneLoadedHandlers -= OnImportSidebarSceneLoaded;
+            importSidebarTargetRefreshQueued = false;
+            if (importSidebarTargetRefreshCo != null)
+            {
+                try { StopCoroutine(importSidebarTargetRefreshCo); } catch { }
+                importSidebarTargetRefreshCo = null;
+            }
         }
     }
 }

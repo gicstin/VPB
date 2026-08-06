@@ -1936,7 +1936,14 @@ namespace VPB
 
             if (DAZMorphMgr.singleton.cache.ContainsKey(path))
             {
-                LogUtil.Log("LoadDeltas use cache:" + path);
+                try
+                {
+                    if (Settings.Instance != null
+                        && Settings.Instance.LogMorphDeltaCacheHits != null
+                        && Settings.Instance.LogMorphDeltaCacheHits.Value)
+                        LogUtil.Log("LoadDeltas use cache:" + path);
+                }
+                catch { }
                 __instance.deltas = DAZMorphMgr.singleton.cache[path];
                 return;
             }

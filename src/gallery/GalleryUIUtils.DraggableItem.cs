@@ -373,10 +373,26 @@ namespace VPB
                 // Handle subscenes differently - load directly without requiring atom
                 if (itemType == ItemType.SubScene && FileEntry != null)
                 {
-                    if (Panel != null && Panel.DragDropReplaceMode && TryGetSelectedSubSceneTarget() == null)
-                        RemoveAllSubSceneAtoms();
-
-                    LoadSubScene(FileEntry.Uid);
+                    string cat = Panel != null ? (Panel.CurrentCategoryTitle ?? "") : "";
+                    if (cat.IndexOf("Appearance", StringComparison.OrdinalIgnoreCase) >= 0
+                        || cat.IndexOf("Skin", StringComparison.OrdinalIgnoreCase) >= 0
+                        || cat.IndexOf("Morphs", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        LogUtil.LogWarning("[VPB] Blocked SubScene drag-load under category '" + cat
+                            + "' (prevents Replace wipe crash). path=" + FileEntry.Uid);
+                        try
+                        {
+                            if (Panel != null)
+                                Panel.ShowTemporaryStatus("SubScene file — use SubScene category.", 3f);
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        // Do not sync-wipe SubScenes here — RemoveAtom of many SubScenes freezes the main
+                        // thread. LoadSubSceneCoroutine yields removals when replace mode needs a wipe.
+                        LoadSubScene(FileEntry.Uid);
+                    }
                 }
                 else if (itemType == ItemType.Scene && FileEntry != null)
                 {
@@ -775,7 +791,12 @@ namespace VPB
                 LogUtil.LogWarning("[VPB] LoadSkin: No target atom provided.");
                 return;
             }
-            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "skin"); } catch { }
+            ItemType typed = GetItemType(FileEntry);
+            if (typed == ItemType.BreastPhysics)
+            {
+                LogUtil.LogWarning("[VPB] LoadSkin: entry is BreastPhysics — applying as breast physics, not skin.");
+            }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), typed == ItemType.Skin ? "skin" : "appearance"); } catch { }
             LogUtil.Log($"[VPB] LoadSkin: Applying {FileEntry.Name} to {target.uid}");
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
@@ -990,6 +1011,14 @@ namespace VPB
             if (target == null)
             {
                 LogUtil.LogWarning("[VPB] LoadAppearance: No target atom provided.");
+                return;
+            }
+            // Defensive: Appearance gallery must not apply Pose/*.vap (Actions routing + path typing).
+            ItemType typed = GetItemType(FileEntry);
+            if (typed == ItemType.Pose)
+            {
+                LogUtil.LogWarning("[VPB] LoadAppearance: entry is Pose — routing to LoadPose instead of overwriting look as pose.");
+                LoadPose(target);
                 return;
             }
             try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "appearance"); } catch { }

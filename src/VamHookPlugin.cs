@@ -456,6 +456,7 @@ namespace VPB
             DAZClothingHook.PatchAll(m_Harmony);
             DAZHairSwapHook.PatchAll(m_Harmony);
             VpbPerfHairHook.PatchAll(m_Harmony);
+            VpbCatalogRefreshHook.PatchAll(m_Harmony);
             ThirdPartyFixHook.PatchAll(m_Harmony);
             StateMachineDiagnostic.PatchAll(m_Harmony);
 

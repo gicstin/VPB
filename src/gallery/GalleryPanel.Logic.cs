@@ -812,6 +812,53 @@ namespace VPB
             return pathOk;
         }
 
+        /// <summary>
+        /// True for Person Appearance look paths only.
+        /// Used when Appearance package scan skips category-root path match (non-Local source) —
+        /// without this, <c>json|vap</c> pulls Custom/SubScene/*.json into the Appearance grid
+        /// (and Load Random then loads SubScenes/scenes).
+        /// </summary>
+        internal static bool IsAppearanceLookInternalPath(string checkPath)
+        {
+            if (string.IsNullOrEmpty(checkPath)) return false;
+            string p = GalleryNormalizePathSlashes(checkPath);
+            // Strip package prefix "Creator.Pkg.1:/" if present.
+            int sep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (sep >= 0 && sep + 2 < p.Length)
+                p = p.Substring(sep + 2);
+
+            if (p.StartsWith("Custom/Atom/Person/Appearance/", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p, "Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (p.StartsWith("Saves/Person/appearance/", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p, "Saves/Person/appearance", StringComparison.OrdinalIgnoreCase)
+                || p.StartsWith("Saves/Person/Appearance/", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
+        /// <summary>Reject SubScene/Scene/other person-preset folders when browsing Appearance.</summary>
+        internal static bool IsForbiddenInAppearanceCategory(string checkPath)
+        {
+            if (string.IsNullOrEmpty(checkPath)) return true;
+            string p = GalleryNormalizePathSlashes(checkPath);
+            int sep = p.IndexOf(":/", StringComparison.Ordinal);
+            if (sep >= 0 && sep + 2 < p.Length)
+                p = p.Substring(sep + 2);
+
+            if (p.IndexOf("/SubScene/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.StartsWith("Custom/SubScene", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (p.StartsWith("Saves/scene", StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/Saves/scene/", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            // Other Person preset folders must not pollute Appearance when ext is json|vap.
+            if (p.StartsWith("Custom/Atom/Person/", StringComparison.OrdinalIgnoreCase)
+                && !p.StartsWith("Custom/Atom/Person/Appearance", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
         public string CurrentCategoryTitle => currentCategoryTitle;
         public GalleryLayoutMode LayoutMode => layoutMode;
 

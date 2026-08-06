@@ -67,15 +67,27 @@ namespace VPB
             bool updateLastRestoredData = true,
             bool? suppressScaleChange = null)
         {
+            bool probe = resourceType == VpbResourceType.Appearance;
+            if (probe)
+            {
+                AppearanceApplyProbe.Begin("VpbImport.Appearance",
+                    "atom=" + (targetAtom != null ? targetAtom.uid : "null")
+                    + " mode=" + clothingMode
+                    + " entry=" + (sourceEntry != null ? (sourceEntry.Uid ?? sourceEntry.Path) : "(inline)")
+                    + " skipPrewarm=" + (skipDependencyPrewarm ? 1 : 0));
+            }
+
             if (targetAtom == null)
             {
                 LogUtil.LogWarning("VpbImport.LoadPreset: targetAtom is null; aborting.");
+                if (probe) AppearanceApplyProbe.End("abort", "targetAtom=null");
                 return;
             }
 
             if (sourceEntry == null && presetJC == null)
             {
                 LogUtil.LogWarning("VpbImport.LoadPreset: both sourceEntry and presetJC are null; aborting.");
+                if (probe) AppearanceApplyProbe.End("abort", "no source");
                 return;
             }
 
@@ -88,12 +100,17 @@ namespace VPB
             {
                 try
                 {
+                    if (probe) AppearanceApplyProbe.Phase("read_json_start");
                     string presetJson = FileManager.ReadAllText(sourceEntry);
                     preset = JSON.Parse(presetJson) as JSONClass;
+                    if (probe) AppearanceApplyProbe.Phase("read_json_done",
+                        "chars=" + (presetJson != null ? presetJson.Length : 0));
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogWarning($"VpbImport.LoadPreset: failed to load preset from sourceEntry: {ex.Message}");
+                    if (probe) AppearanceApplyProbe.Fail("read_json", ex);
+                    if (probe) AppearanceApplyProbe.End("abort", "read_json");
                     return;
                 }
             }
@@ -101,33 +118,42 @@ namespace VPB
             if (preset == null)
             {
                 LogUtil.LogWarning("VpbImport.LoadPreset: preset is null after resolution; aborting.");
+                if (probe) AppearanceApplyProbe.End("abort", "preset=null");
                 return;
             }
+
+            if (probe) AppearanceApplyProbe.Phase("preset_summary", AppearanceApplyProbe.SummarizePreset(preset));
 
             if (sourceEntry != null && !skipDependencyPrewarm)
             {
                 try
                 {
+                    if (probe) AppearanceApplyProbe.Phase("ensure_installed_start");
                     List<string> movedUids = null;
                     bool ensured = UI.EnsureInstalled(sourceEntry, movedUids);
                     if (ensured)
                     {
                         LogUtil.Log("[VpbImport] Dependencies ensured installed.");
                     }
+                    if (probe) AppearanceApplyProbe.Phase("ensure_installed_done", "ensured=" + (ensured ? 1 : 0));
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogWarning($"VpbImport.LoadPreset: EnsureInstalled failed: {ex.Message}");
+                    if (probe) AppearanceApplyProbe.Warn("EnsureInstalled: " + ex.Message);
                 }
 
                 try
                 {
+                    if (probe) AppearanceApplyProbe.Phase("prewarm_start");
                     int prewarmed = SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(sourceEntry, sourceEntry.Uid);
                     LogUtil.Log($"[VpbImport] Prewarm complete: {prewarmed} packages.");
+                    if (probe) AppearanceApplyProbe.Phase("prewarm_done", "packages=" + prewarmed);
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogWarning($"VpbImport.LoadPreset: PrewarmOnDemandPackagesForEntry failed: {ex.Message}");
+                    if (probe) AppearanceApplyProbe.Warn("prewarm: " + ex.Message);
                 }
             }
 
@@ -137,12 +163,16 @@ namespace VPB
             {
                 try
                 {
-                    VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_prewarm_flush");
+                    if (probe) AppearanceApplyProbe.Phase("flush_refresh_start",
+                        VamOnDemandLoader.DescribePendingCatalogRefreshForProbe());
+                    bool ran = VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_prewarm_flush");
                     LogUtil.Log("[VpbImport] Coalesced refresh flushed.");
+                    if (probe) AppearanceApplyProbe.Phase("flush_refresh_done", "ran=" + (ran ? 1 : 0));
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogWarning($"VpbImport.LoadPreset: ForceRunPendingCoalescedVamRefresh failed: {ex.Message}");
+                    if (probe) AppearanceApplyProbe.Fail("flush_refresh", ex);
                 }
             }
 
@@ -151,6 +181,7 @@ namespace VPB
                 if (presetJC != null)
                     preset = CloneJsonClassStatic(preset);
                 VarPresetPathFixups.Apply(preset, UI.NormalizePath(sourceEntry.Uid));
+                if (probe) AppearanceApplyProbe.Phase("path_fixups_done");
             }
 
             // REFACTOR-IN-PROGRESS: regions below tag which slice owns each resource type's body.
@@ -164,26 +195,54 @@ namespace VPB
                 {
                     try
                     {
+                        if (probe) AppearanceApplyProbe.Phase("appearance_dispatch", "clothingMode=" + clothingMode);
+
                         // Caller (e.g. import sidebar) can override the global config flag per-apply via suppressScaleChange.
                         bool doSuppressScale = suppressScaleChange ?? (VPBConfig.Instance != null && VPBConfig.Instance.SuppressAppearanceScaleChange);
                         if (doSuppressScale)
                         {
                             bool patched = AppearancePresetSuppress.PatchScaleToTargetCurrent(preset, targetAtom);
                             LogUtil.Log($"[VPB Scale] core suppress=ON patched={patched}");
+                            if (probe) AppearanceApplyProbe.Phase("scale_patch", "patched=" + (patched ? 1 : 0));
+                        }
+
+                        // Keep live pose: snapshot → strip look pose/controllers → restore after load.
+                        // No embed of FreeControllers into JSON (that made AppearancePresets apply crawl).
+                        List<JSONClass> livePoseSnap = null;
+                        bool fullLookApply = clothingMode != ClothingApplyMode.ClothingOnly
+                            && clothingMode != ClothingApplyMode.MergeOutfit;
+                        if (fullLookApply && targetAtom.type == "Person")
+                        {
+                            livePoseSnap = AppearancePresetSuppress.CaptureLivePoseStorables(targetAtom);
+                            int stripped = AppearancePresetSuppress.StripPoseStorables(preset);
+                            LogUtil.Log("[VPB] Appearance: pose snap="
+                                + (livePoseSnap != null ? livePoseSnap.Count : 0)
+                                + " stripped=" + stripped);
+                            AppearancePresetSuppress.BeginPosePreserve(targetAtom, livePoseSnap, seconds: 8f);
+                            if (probe) AppearanceApplyProbe.Phase("pose_preserve",
+                                "snap=" + (livePoseSnap != null ? livePoseSnap.Count : 0) + " stripped=" + stripped);
+                        }
+                        else
+                        {
+                            int strippedOnly = AppearancePresetSuppress.StripPoseStorables(preset);
+                            if (probe) AppearanceApplyProbe.Phase("pose_strip_only", "stripped=" + strippedOnly);
                         }
 
                         JSONStorable presetStorable = targetAtom.GetStorableByID("AppearancePresets");
                         if (presetStorable == null)
                         {
                             LogUtil.LogWarning("VpbImport: AppearancePresets storable not found on target atom; aborting.");
+                            if (probe) AppearanceApplyProbe.End("abort", "no AppearancePresets storable");
                             return;
                         }
                         MeshVR.PresetManager presetManager = presetStorable.GetComponentInChildren<MeshVR.PresetManager>();
                         if (presetManager == null)
                         {
                             LogUtil.LogWarning("VpbImport: PresetManager not found in AppearancePresets storable; aborting.");
+                            if (probe) AppearanceApplyProbe.End("abort", "no PresetManager");
                             return;
                         }
+                        if (probe) AppearanceApplyProbe.Phase("preset_manager_ok");
 
                         // Suppress loadPresetOnSelect so internal callbacks don't auto-trigger a second load.
                         JSONStorableBool lpos = presetStorable.GetBoolJSONParam("loadPresetOnSelect");
@@ -192,20 +251,31 @@ namespace VPB
                         string psNamePre = psName != null ? psName.val : "";
                         if (lpos != null) lpos.val = false;
 
+                        // Also suppress PosePresets loadPresetOnSelect — appearance loads can poke it
+                        // and re-apply a browse-path pose (log: Girl1 PosePresets after AppearancePresets).
+                        JSONStorable poseStorable = targetAtom.GetStorableByID("PosePresets");
+                        JSONStorableBool poseLpos = poseStorable != null ? poseStorable.GetBoolJSONParam("loadPresetOnSelect") : null;
+                        bool poseLposPre = poseLpos != null ? poseLpos.val : false;
+                        if (poseLpos != null) poseLpos.val = false;
+
                         string sourcePath = sourceEntry != null ? sourceEntry.Uid : "";
 
                         if (clothingMode == ClothingApplyMode.MergeOutfit)
                         {
+                            if (probe) AppearanceApplyProbe.Phase("merge_outfit_start");
                             // Merge Outfit without a picker selection merges every enabled clothing item
                             // from the appearance. Prefer GalleryPanel.ShowMergeOutfitPicker for choose-what.
                             MergeAppearanceOutfitItems(sourceEntry, targetAtom, selectedUids: null, presetJC: preset);
                             if (lpos != null) lpos.val = lposPre;
                             if (psName != null) psName.val = psNamePre;
+                            if (poseLpos != null) poseLpos.val = poseLposPre;
+                            if (probe) AppearanceApplyProbe.End("ok", "MergeOutfit");
                             break;
                         }
 
                         if (clothingMode == ClothingApplyMode.ClothingOnly)
                         {
+                            if (probe) AppearanceApplyProbe.Phase("clothing_only_start");
                             // Outfit Only: wear exactly the preset's real garments PLUS the target's
                             // current makeup/skin-overlay (cosmetic) clothing — body, face and hair are
                             // left untouched. Loaded through the dedicated ClothingPresets PresetManager
@@ -226,6 +296,8 @@ namespace VPB
                                 LogUtil.LogWarning("VpbImport: ClothingOnly slice empty; source preset has no garment storables.");
                                 if (lpos != null) lpos.val = lposPre;
                                 if (psName != null) psName.val = psNamePre;
+                                if (poseLpos != null) poseLpos.val = poseLposPre;
+                                if (probe) AppearanceApplyProbe.End("abort", "ClothingOnly empty slice");
                                 break;
                             }
 
@@ -241,6 +313,8 @@ namespace VPB
                                 LogUtil.LogWarning("VpbImport: ClothingPresets PresetManager not found; aborting ClothingOnly.");
                                 if (lpos != null) lpos.val = lposPre;
                                 if (psName != null) psName.val = psNamePre;
+                                if (poseLpos != null) poseLpos.val = poseLposPre;
+                                if (probe) AppearanceApplyProbe.End("abort", "no ClothingPresets PM");
                                 break;
                             }
 
@@ -251,7 +325,9 @@ namespace VPB
                             {
                                 if (!string.IsNullOrEmpty(sourcePath))
                                     MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
+                                if (probe) AppearanceApplyProbe.Phase("clothing_only_LoadPresetFromJSON_start");
                                 InvokeLoadPresetFromJSON(clothingPM, slice, mergeLoad: false);
+                                if (probe) AppearanceApplyProbe.Phase("clothing_only_LoadPresetFromJSON_done");
                             }
                             finally
                             {
@@ -260,6 +336,7 @@ namespace VPB
                                 RestorePresetParamsSnapshot(targetAtom, clothingSnap);
                                 if (lpos != null) lpos.val = lposPre;
                                 if (psName != null) psName.val = psNamePre;
+                                if (poseLpos != null) poseLpos.val = poseLposPre;
                             }
 
                             TryApplyPluginsFromSource(presetManager, preset);
@@ -272,6 +349,7 @@ namespace VPB
                                 try { SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom); }
                                 catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Post-apply fixup failed: {ex.Message}"); }
                             }
+                            if (probe) AppearanceApplyProbe.End("ok", "ClothingOnly");
                             break;
                         }
 
@@ -279,16 +357,20 @@ namespace VPB
                         {
                             try { ClearAllClothingHairBools(targetAtom); }
                             catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Replace pre-cleanup failed: {ex.Message}"); }
+                            if (probe) AppearanceApplyProbe.Phase("replace_clear_clothing_done");
                         }
 
                         // Keep: lock ClothingPresets PMC so VaM's preset loader skips clothing storables during the load.
+                        // Always lock PosePresets so appearance does not re-trigger pose browse/load.
                         PresetLockStore lockStore = null;
                         List<JSONClass> keepClothingMaterialSnapshots = null;
-                        if (clothingMode == ClothingApplyMode.Keep && targetAtom.type == "Person")
-                        {
-                            lockStore = new PresetLockStore();
-                            lockStore.StorePresetLocks(targetAtom, clearAllLocks: true, lockClothingPreset: true, lockMorphPreset: false);
+                        lockStore = new PresetLockStore();
+                        bool lockClothing = clothingMode == ClothingApplyMode.Keep && targetAtom.type == "Person";
+                        lockStore.StorePresetLocks(targetAtom, clearAllLocks: true, lockClothingPreset: lockClothing, lockMorphPreset: false, lockPosePreset: true);
+                        if (probe) AppearanceApplyProbe.Phase("locks_stored", "lockClothing=" + (lockClothing ? 1 : 0));
 
+                        if (lockClothing)
+                        {
                             // The lock preserves which clothing items are worn, but a non-merge appearance
                             // load resets unlisted storables to default — stripping textures/colors from the
                             // kept clothing since those material storables aren't in the incoming preset.
@@ -304,7 +386,10 @@ namespace VPB
                         {
                             if (!string.IsNullOrEmpty(sourcePath))
                                 MVR.FileManagement.FileManager.PushLoadDirFromFilePath(UI.NormalizePath(sourcePath));
+                            if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_start",
+                                "mergeLoad=" + (mergeLoad ? 1 : 0) + " " + AppearanceApplyProbe.SummarizePreset(preset));
                             InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad);
+                            if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_done");
                         }
                         finally
                         {
@@ -312,6 +397,7 @@ namespace VPB
                                 MVR.FileManagement.FileManager.PopLoadDir();
                             if (lpos != null) lpos.val = lposPre;
                             if (psName != null) psName.val = psNamePre;
+                            if (poseLpos != null) poseLpos.val = poseLposPre;
                             if (lockStore != null) lockStore.RestorePresetLocks(targetAtom);
                         }
 
@@ -322,6 +408,25 @@ namespace VPB
                         {
                             try { ClothingLoadingUtils.RestoreClothingStorableSnapshots(targetAtom, keepClothingMaterialSnapshots); }
                             catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Keep clothing material restore failed: {ex.Message}"); }
+                        }
+
+                        // Force live pose back once (no per-frame RestoreFromJSON spam).
+                        if (livePoseSnap != null && livePoseSnap.Count > 0)
+                        {
+                            try
+                            {
+                                int n = AppearancePresetSuppress.RestoreLivePoseStorables(targetAtom, livePoseSnap);
+                                LogUtil.Log("[VPB] Appearance: restored live pose controllers=" + n + " (immediate)");
+                                if (probe) AppearanceApplyProbe.Phase("pose_restore", "controllers=" + n);
+                            }
+                            catch (Exception ex) { LogUtil.LogWarning("VpbImport: live pose restore failed: " + ex.Message); }
+                            try
+                            {
+                                if (SuperController.singleton != null)
+                                    SuperController.singleton.StartCoroutine(
+                                        AppearancePresetSuppress.RestoreLivePoseDeferred(targetAtom, livePoseSnap, frames: 3));
+                            }
+                            catch (Exception ex) { LogUtil.LogWarning("VpbImport: deferred pose restore failed: " + ex.Message); }
                         }
 
                         // Issue #80: rebind custom clothing tex after settle — skip Keep (clothing
@@ -338,10 +443,13 @@ namespace VPB
                             try { SceneLoadingUtils.SchedulePostPersonApplyFixup(targetAtom); }
                             catch (Exception ex) { LogUtil.LogWarning($"VpbImport: Post-apply fixup failed: {ex.Message}"); }
                         }
+                        if (probe) AppearanceApplyProbe.End("ok", "fullLook mode=" + clothingMode);
                     }
                     catch (Exception ex)
                     {
                         LogUtil.LogError($"VpbImport: Appearance dispatch caught exception: {ex.Message}");
+                        if (probe) AppearanceApplyProbe.Fail("appearance_dispatch", ex);
+                        if (probe) AppearanceApplyProbe.End("exception", ex.Message);
                     }
                     break;
                 }

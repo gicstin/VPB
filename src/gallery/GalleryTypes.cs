@@ -72,7 +72,7 @@ namespace VPB
         public bool _hairPresetLock;
         public bool _clothingPresetLock;
 
-        public void StorePresetLocks(Atom atom, bool clearAllLocks = false, bool lockClothingPreset = false, bool lockMorphPreset = false)
+        public void StorePresetLocks(Atom atom, bool clearAllLocks = false, bool lockClothingPreset = false, bool lockMorphPreset = false, bool lockPosePreset = false)
         {
             if (atom == null || atom.presetManagerControls == null) return;
             
@@ -93,6 +93,7 @@ namespace VPB
 
                 if (pmc.name == "ClothingPresets" && lockClothingPreset) pmc.lockParams = true;
                 else if (pmc.name == "MorphPresets" && lockMorphPreset) pmc.lockParams = true;
+                else if (pmc.name == "PosePresets" && lockPosePreset) pmc.lockParams = true;
                 else if (clearAllLocks) pmc.lockParams = false;
             }
         }

@@ -281,6 +281,7 @@
     <Compile Include="src\util\XrUtils.cs" />
     <Compile Include="src\util\AtomGenderUtils.cs" />
     <Compile Include="src\util\AppearancePresetSuppress.cs" />
+    <Compile Include="src\util\AppearanceApplyProbe.cs" />
     <Compile Include="src\util\CslistParser.cs" />
     <Compile Include="src\util\VarPresetPathFixups.cs" />
     <Compile Include="src\util\VpbPerfTelemetry.cs" />
@@ -289,6 +290,8 @@
     <Compile Include="src\perf\VpbPerfSnapshot.cs" />
     <Compile Include="src\perf\VpbPerfController.cs" />
     <Compile Include="src\hook\VpbPerfHairHook.cs" />
+    <Compile Include="src\hook\VpbCatalogRefreshGuard.cs" />
+    <Compile Include="src\hook\VpbCatalogRefreshHook.cs" />
     <Compile Include="src\util\VamStartupProfiler.cs" />
     <Compile Include="src\util\VamStartupOptimizations.cs" />
     <Compile Include="src\util\VpbPackageIndexDiagnostics.cs" />

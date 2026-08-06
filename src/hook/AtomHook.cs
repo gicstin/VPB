@@ -208,7 +208,7 @@ namespace VPB
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MeshVR.PresetManager), "LoadPresetPreFromJSON",
             new Type[] { typeof(JSONClass), typeof(bool) })]
-        protected static void PreLoadPresetPreFromJSON(MeshVR.PresetManager __instance,
+        protected static bool PreLoadPresetPreFromJSON(MeshVR.PresetManager __instance,
             JSONClass inputJSON,
             bool isMerge = false)
         {
@@ -222,13 +222,14 @@ namespace VPB
             
             string storableId = "unknown";
             string atomName = "unknown";
+            Atom atom = null;
             try
             {
                 var storable = __instance.GetComponentInParent<JSONStorable>();
                 if (storable != null)
                 {
                     storableId = storable.storeId;
-                    var atom = storable.GetComponentInParent<Atom>();
+                    atom = storable.GetComponentInParent<Atom>();
                     if (atom != null)
                     {
                         atomName = atom.name;
@@ -236,6 +237,16 @@ namespace VPB
                 }
             }
             catch { }
+
+            string presetName = null;
+            try { presetName = __instance != null ? __instance.presetName : null; } catch { }
+
+            // Appearance pose-preserve: SubScene browse-sync fires empty-name PosePresets and resets pose.
+            if (VPB.src.util.AppearancePresetSuppress.ShouldSkipPosePresetAutoLoad(atomName, storableId, presetName))
+            {
+                LogUtil.Log("[VPB] Appearance pose-preserve: skip empty PosePresets auto-load on " + atomName);
+                return false;
+            }
 
             try
             {
@@ -289,6 +300,29 @@ namespace VPB
                     try { FileManager.NotifyInstalled(installResult.NewlyRegisteredUids); } catch { }
                 }
             }
+            return true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MeshVR.PresetManager), "LoadPresetPreFromJSON",
+            new Type[] { typeof(JSONClass), typeof(bool) })]
+        protected static void PostLoadPresetPreFromJSON(MeshVR.PresetManager __instance)
+        {
+            try
+            {
+                if (__instance == null) return;
+                var storable = __instance.GetComponentInParent<JSONStorable>();
+                if (storable == null) return;
+                if (!string.Equals(storable.storeId, "PosePresets", System.StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(storable.storeId, "AppearancePresets", System.StringComparison.OrdinalIgnoreCase))
+                    return;
+                // Boy1 PosePresets (SubScene) can yank linked Girl1 — restore preserve atom, not only loader.
+                int n = VPB.src.util.AppearancePresetSuppress.TryRestorePreservedPoseAny();
+                if (n > 0)
+                    LogUtil.Log("[VPB] Appearance pose-preserve: re-applied live pose after "
+                        + storable.storeId + " controllers=" + n);
+            }
+            catch { }
         }
 
         static PresetInstallResult EnsureInstalledFromJSON(JSONNode node)

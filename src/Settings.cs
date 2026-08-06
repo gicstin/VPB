@@ -66,6 +66,7 @@ namespace VPB
         public ConfigEntry<int> TextureLogLevel;
 
         public ConfigEntry<bool> LogStartupDetails;
+        public ConfigEntry<bool> LogMorphDeltaCacheHits;
         public ConfigEntry<string> IndexDiagUidSubstring;
         public ConfigEntry<bool> LogStartupTiming;
         public ConfigEntry<bool> StartupDeferGallerySqlRebuild;
@@ -114,6 +115,8 @@ namespace VPB
         public ConfigEntry<bool> HideOldVersions;
         public ConfigEntry<bool> LoadDependenciesWithPackage;
         public ConfigEntry<bool> SyncRefreshOnPresetLoad;
+        public ConfigEntry<bool> SkipPackageMorphRefreshOnClothingHairCatalog;
+        public ConfigEntry<bool> PreferLightClothingHairCatalogBeforeNativeRefresh;
         public ConfigEntry<bool> HairSwapKeepVisibleUntilLoaded;
         public ConfigEntry<bool> ReturnToSceneViewOnStartup;
         public ConfigEntry<bool> ForceLatestDependencies;
@@ -171,6 +174,8 @@ namespace VPB
             HideOldVersions = config.Bind<bool>("UI", "HideOldVersions", false, "Hide older versions of VAR packages in the gallery; show only the newest version per Creator.Package family.");
             LoadDependenciesWithPackage = config.Bind<bool>("Settings", "LoadDependenciesWithPackage", true, "When loading a package, also load all its dependencies.");
             SyncRefreshOnPresetLoad = config.Bind<bool>("Settings", "SyncRefreshOnPresetLoad", true, "On interactive preset apply (appearance/clothing/hair/plugin preset), run a synchronous coalesced native VaM FileManager.Refresh before VaM binds storables. Required for first-click preset apply to find morphs/clothing/hair from packages registered on demand. When false: coalesced native refresh only (~250ms delay) — first-click preset apply for on-demand packages may miss catalog entries until refresh completes; safe to disable if sync refresh causes stalls. No full VPB rescan on preset apply.");
+            SkipPackageMorphRefreshOnClothingHairCatalog = config.Bind<bool>("Settings", "SkipPackageMorphRefreshOnClothingHairCatalog", true, "During on-demand clothing/hair catalog FileManager.Refresh, skip DAZ RefreshPackageMorphs. Avoids ~18s/person morph re-ingest (e.g. Naturalis/TittyMagic) when only clothing/hair packages were registered. Morph packages still trigger full morph refresh. Disable if new morphs from a clothing .var are missing after dress.");
+            PreferLightClothingHairCatalogBeforeNativeRefresh = config.Bind<bool>("Settings", "PreferLightClothingHairCatalogBeforeNativeRefresh", true, "Before forced native FileManager.Refresh on clothing/hair apply, try DAZ RefreshClothingItems/RefreshHairItems on the target Person. If the clothing/hair param already exists, cancel the pending native refresh (avoids multi-second Person refresh × all atoms).");
             HairSwapKeepVisibleUntilLoaded = config.Bind<bool>("Helpers", "HairSwapKeepVisibleUntilLoaded", true, "During hair preset replace, keep previous hair visible until new hair finishes loading. Outgoing hair collisions are disabled first; outgoing mesh is hidden only after incoming hair is ready.");
             ReturnToSceneViewOnStartup = config.Bind<bool>("Helpers", "ReturnToSceneViewOnStartup", false, "On startup, skip VaM main menu (World UI) and return to scene view (same as Return To Scene View).");
             ForceLatestDependencies = config.Bind<bool>("Settings", "ForceLatestDependencies", false, "When resolving package dependencies, force certain dependency references to use the newest locally installed version.");
@@ -186,6 +191,7 @@ namespace VPB
             LogConfigPerf = config.Bind<bool>("Logging", "LogConfigPerf", false, "Log VPB.cfg Save timing and each ConfigChanged subscriber. Set false after troubleshooting.");
 
             LogStartupDetails = config.Bind<bool>("Logging", "LogStartupDetails", false, "Log additional startup/patch/initialization details (can be noisy). Enable when troubleshooting.");
+            LogMorphDeltaCacheHits = config.Bind<bool>("Logging", "LogMorphDeltaCacheHits", false, "Log every DAZMorph LoadDeltas cache hit (very noisy; Naturalis/TittyMagic can emit hundreds per clothing refresh). Keep off unless debugging morph cache.");
             IndexDiagUidSubstring = config.Bind<string>("Logging", "IndexDiagUidSubstring", "", "When set (e.g. RunRudolf.AlternativeFuta), emit [VPB.IndexDiag] logs for that package through disk scan, registry, SQLite index, and gallery listing. Empty = off.");
             LogStartupTiming = config.Bind<bool>("Logging", "LogStartupTiming", false, "Emit [VPB.Startup.Timing] milestones and a cold-start summary (native/VPB package refresh, SyncVamX, bootstrap). Also enabled when LogStartupDetails is true.");
             StartupDeferGallerySqlRebuild = config.Bind<bool>("Startup", "DeferGallerySqlRebuildUntilReady", true, "Defer full gallery SQLite index rebuild until World UI / startup-ready milestone. Speeds cold start; gallery SQL queries wait until rebuild runs.");

@@ -869,56 +869,240 @@ namespace VPB
                 s_CatalogStaleUids.Add(uid);
         }
 
-        static bool IsCatalogDependentEntryPath(string entryPath)
+        [Flags]
+        enum CatalogContentKind
         {
-            if (string.IsNullOrEmpty(entryPath)) return false;
-            string p = entryPath.Replace('\\', '/');
-            return p.IndexOf(":/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0
-                || p.IndexOf(":/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0
-                || p.IndexOf(":/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0;
+            None = 0,
+            Clothing = 1,
+            Hair = 2,
+            Morphs = 4,
         }
 
-        static bool IsCatalogDependentUid(string uid)
+        static bool IsCatalogDependentEntryPath(string entryPath)
         {
-            if (string.IsNullOrEmpty(uid)) return false;
+            return GetCatalogContentKindForEntryPath(entryPath) != CatalogContentKind.None;
+        }
+
+        static CatalogContentKind GetCatalogContentKindForEntryPath(string entryPath)
+        {
+            if (string.IsNullOrEmpty(entryPath)) return CatalogContentKind.None;
+            string p = entryPath.Replace('\\', '/');
+            CatalogContentKind kind = CatalogContentKind.None;
+            if (p.IndexOf(":/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Clothing;
+            if (p.IndexOf(":/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Hair;
+            if (p.IndexOf(":/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Morphs;
+            return kind;
+        }
+
+        static CatalogContentKind ClassifyInternalPathCatalogKind(string internalPath)
+        {
+            if (string.IsNullOrEmpty(internalPath)) return CatalogContentKind.None;
+            if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase))
+                return CatalogContentKind.Clothing;
+            if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase))
+                return CatalogContentKind.Hair;
+            if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase))
+                return CatalogContentKind.Morphs;
+            return CatalogContentKind.None;
+        }
+
+        static CatalogContentKind GetCatalogContentKindForUid(string uid)
+        {
+            if (string.IsNullOrEmpty(uid)) return CatalogContentKind.None;
             try
             {
                 SerializableVarPackage cached = VarPackageMgr.singleton.TryGetCache(uid);
                 if (cached != null && cached.FileEntryNames != null)
                 {
+                    CatalogContentKind kind = CatalogContentKind.None;
                     List<string> names = cached.FileEntryNames;
                     for (int i = 0; i < names.Count; i++)
-                    {
-                        string internalPath = names[i];
-                        if (string.IsNullOrEmpty(internalPath)) continue;
-                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
-                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
-                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
-                    }
-                    return false;
+                        kind |= ClassifyInternalPathCatalogKind(names[i]);
+                    return kind;
                 }
 
                 VarPackage pkg = FileManager.GetPackage(uid, false);
-                if (pkg == null) return true;
+                if (pkg == null)
+                {
+                    // Unknown package: treat as full catalog-dependent so we never skip morphs incorrectly.
+                    return CatalogContentKind.Clothing | CatalogContentKind.Hair | CatalogContentKind.Morphs;
+                }
 
                 List<string> manifestNames;
                 List<long> ticks;
                 List<long> sizes;
                 if (pkg.TryGetCachedFileEntryData(out manifestNames, out ticks, out sizes) && manifestNames != null)
                 {
+                    CatalogContentKind kind = CatalogContentKind.None;
                     for (int i = 0; i < manifestNames.Count; i++)
-                    {
-                        string internalPath = manifestNames[i];
-                        if (string.IsNullOrEmpty(internalPath)) continue;
-                        if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)) return true;
-                        if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)) return true;
-                        if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)) return true;
-                    }
-                    return false;
+                        kind |= ClassifyInternalPathCatalogKind(manifestNames[i]);
+                    return kind;
                 }
             }
             catch { }
+            return CatalogContentKind.Clothing | CatalogContentKind.Hair | CatalogContentKind.Morphs;
+        }
+
+        static bool IsCatalogDependentUid(string uid)
+        {
+            return GetCatalogContentKindForUid(uid) != CatalogContentKind.None;
+        }
+
+        /// <summary>
+        /// True when any pending catalog-stale UID carries morph content.
+        /// Clothing/hair-only stale sets must not re-run RefreshPackageMorphs (Naturalis cost).
+        /// </summary>
+        public static bool PendingCatalogNeedsMorphRefresh()
+        {
+            lock (s_CatalogStaleLock)
+            {
+                if (s_CatalogStaleUids.Count == 0) return false;
+                foreach (string uid in s_CatalogStaleUids)
+                {
+                    if ((GetCatalogContentKindForUid(uid) & CatalogContentKind.Morphs) != 0)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Skip package-morph re-ingest when enabled and pending stale UIDs are clothing/hair-only.
+        /// Empty stale set → do not skip (unknown refresh intent; keep morph refresh).
+        /// </summary>
+        public static bool ShouldSkipPackageMorphRefreshForCatalogUpdate()
+        {
+            try
+            {
+                if (Settings.Instance == null
+                    || Settings.Instance.SkipPackageMorphRefreshOnClothingHairCatalog == null
+                    || !Settings.Instance.SkipPackageMorphRefreshOnClothingHairCatalog.Value)
+                    return false;
+            }
+            catch { return false; }
+
+            lock (s_CatalogStaleLock)
+            {
+                if (s_CatalogStaleUids.Count == 0) return false;
+                foreach (string uid in s_CatalogStaleUids)
+                {
+                    if ((GetCatalogContentKindForUid(uid) & CatalogContentKind.Morphs) != 0)
+                        return false;
+                }
+                return true;
+            }
+        }
+
+        /// <summary>Drop coalesced native refresh without running it (light clothing catalog path succeeded).</summary>
+        public static bool CancelPendingCoalescedVamRefresh(string reason = null)
+        {
+            lock (s_RefreshRequestLock)
+            {
+                if (!s_PendingVamRefresh) return false;
+                s_PendingVamRefresh = false;
+                s_PendingVamRefreshRequestedAt = 0f;
+                s_PendingVamRefreshFirstRequestedAt = 0f;
+                s_PendingVamRefreshRequestCount = 0;
+                s_PendingVamRefreshReason = null;
+            }
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] Cancelled pending FileManager.Refresh"
+                    + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason)));
+            }
+            catch { }
             return true;
+        }
+
+        /// <summary>
+        /// Rebuild clothing/hair item lists on Person atoms without full FileManager.Refresh.
+        /// Prefer target atom when known; otherwise all Persons.
+        /// </summary>
+        public static void RefreshPersonClothingHairCatalogs(Atom targetAtom)
+        {
+            try
+            {
+                if (targetAtom != null && string.Equals(targetAtom.type, "Person", StringComparison.Ordinal))
+                {
+                    RefreshOnePersonClothingHairCatalog(targetAtom);
+                    return;
+                }
+
+                var sc = SuperController.singleton;
+                if (sc == null) return;
+                foreach (Atom atom in sc.GetAtoms())
+                {
+                    if (atom == null || atom.type != "Person") continue;
+                    RefreshOnePersonClothingHairCatalog(atom);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB OnDemand] RefreshPersonClothingHairCatalogs failed: " + ex.Message);
+            }
+        }
+
+        static void RefreshOnePersonClothingHairCatalog(Atom atom)
+        {
+            if (atom == null) return;
+            try
+            {
+                var clothing = atom.GetStorableByID("Clothing") as DAZClothingItemControl;
+                if (clothing != null) clothing.RefreshClothingItems();
+            }
+            catch { }
+            try
+            {
+                var hair = atom.GetStorableByID("Hair") as DAZHairGroupControl;
+                if (hair != null) hair.RefreshHairItems();
+            }
+            catch { }
+            try
+            {
+                var selector = atom.GetStorableByID("geometry") as DAZCharacterSelector;
+                if (selector != null) selector.RefreshDynamicClothes();
+            }
+            catch { }
+        }
+
+        /// <summary>Public entry for delayed MVR refresh coroutine (same morph-skip policy).</summary>
+        public static void InvokeNativeFileManagerRefreshForDelayedMvr(string reason)
+        {
+            InvokeNativeFileManagerRefresh("Running delayed FileManager.Refresh", reason);
+        }
+
+        static void InvokeNativeFileManagerRefresh(string logLabel, string reason)
+        {
+            bool skipMorphs = ShouldSkipPackageMorphRefreshForCatalogUpdate();
+            Action run = delegate
+            {
+                PausePhysicsForCatalogRefresh();
+                MVR.FileManagement.FileManager.Refresh();
+            };
+
+            if (skipMorphs)
+            {
+                try
+                {
+                    LogUtil.Log("[VPB OnDemand] " + logLabel + " (skipPackageMorphs=1 reason="
+                        + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
+                }
+                catch { }
+                VpbCatalogRefreshGuard.RunSkippingPackageMorphRefresh(run);
+            }
+            else
+            {
+                try
+                {
+                    LogUtil.Log("[VPB OnDemand] " + logLabel + " (skipPackageMorphs=0 reason="
+                        + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
+                }
+                catch { }
+                run();
+            }
         }
 
         /// <summary>
@@ -1848,10 +2032,7 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB OnDemand] Running immediate FileManager.Refresh (reason="
-                    + (string.IsNullOrEmpty(reason) ? "immediate" : reason) + ")");
-                PausePhysicsForCatalogRefresh();
-                MVR.FileManagement.FileManager.Refresh();
+                InvokeNativeFileManagerRefresh("Running immediate FileManager.Refresh", reason);
             }
             catch (Exception ex)
             {
@@ -1925,10 +2106,9 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB OnDemand] Running coalesced FileManager.Refresh (requests="
-                    + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "unknown" : reason) + ")");
-                PausePhysicsForCatalogRefresh();
-                MVR.FileManagement.FileManager.Refresh();
+                InvokeNativeFileManagerRefresh(
+                    "Running coalesced FileManager.Refresh requests=" + requestCount,
+                    reason);
             }
             catch (Exception ex)
             {
@@ -1940,6 +2120,56 @@ namespace VPB
         {
             lock (s_RefreshRequestLock)
                 return s_PendingVamRefresh;
+        }
+
+        /// <summary>Warm-path probe string: pending refresh + why morph-skip is on/off.</summary>
+        public static string DescribePendingCatalogRefreshForProbe()
+        {
+            int pendingCount = 0;
+            string pendingReason = null;
+            bool pending;
+            lock (s_RefreshRequestLock)
+            {
+                pending = s_PendingVamRefresh;
+                pendingCount = s_PendingVamRefreshRequestCount;
+                pendingReason = s_PendingVamRefreshReason;
+            }
+
+            bool skipMorphs = false;
+            int staleCount = 0;
+            int morphStale = 0;
+            string morphSample = "";
+            try
+            {
+                skipMorphs = ShouldSkipPackageMorphRefreshForCatalogUpdate();
+                lock (s_CatalogStaleLock)
+                {
+                    staleCount = s_CatalogStaleUids.Count;
+                    int shown = 0;
+                    foreach (string uid in s_CatalogStaleUids)
+                    {
+                        if ((GetCatalogContentKindForUid(uid) & CatalogContentKind.Morphs) != 0)
+                        {
+                            morphStale++;
+                            if (shown < 4)
+                            {
+                                if (shown > 0) morphSample += ",";
+                                morphSample += uid;
+                                shown++;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return "pending=" + (pending ? 1 : 0)
+                + " reqs=" + pendingCount
+                + " reason=" + (pendingReason ?? "-")
+                + " skipMorphs=" + (skipMorphs ? 1 : 0)
+                + " stale=" + staleCount
+                + " morphStale=" + morphStale
+                + (string.IsNullOrEmpty(morphSample) ? "" : (" morphSample=" + morphSample));
         }
 
         /// <summary>
@@ -1965,10 +2195,9 @@ namespace VPB
 
             try
             {
-                LogUtil.Log("[VPB OnDemand] Running forced FileManager.Refresh (pending_requests="
-                    + requestCount + ", reason=" + (string.IsNullOrEmpty(reason) ? "forced" : reason) + ")");
-                PausePhysicsForCatalogRefresh();
-                MVR.FileManagement.FileManager.Refresh();
+                InvokeNativeFileManagerRefresh(
+                    "Running forced FileManager.Refresh pending_requests=" + requestCount,
+                    reason);
             }
             catch (Exception ex)
             {

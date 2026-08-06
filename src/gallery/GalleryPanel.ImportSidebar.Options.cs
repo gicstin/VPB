@@ -1944,7 +1944,8 @@ namespace VPB
 
             // Appearance: sidebar "Disable clothing load" forces Keep. Otherwise honor the toolbox
             // Appearance clothing mode (Keep My Outfit / Full Look / Outfit Only / Merge Outfit) — same
-            // contract as drag-drop. Clothing/Hair use the merge toggle. Other types ignore the mode.
+            // contract as drag-drop. Clothing/Hair use the merge toggle. Morphs/Skin/Breast/etc. always
+            // Replace — clothing merge toggle must not append morph banks (deforms person).
             ClothingApplyMode mode;
             if (type == VpbResourceType.Appearance)
             {
@@ -1952,8 +1953,14 @@ namespace VPB
                     ? ClothingApplyMode.Keep
                     : ResolveAppearanceClothingApplyModeFromConfig();
             }
-            else
+            else if (type == VpbResourceType.Clothing || type == VpbResourceType.Hair)
+            {
                 mode = importSidebarMergeClothingOrHair ? ClothingApplyMode.Merge : ClothingApplyMode.Replace;
+            }
+            else
+            {
+                mode = ClothingApplyMode.Replace;
+            }
 
             // LoadPreset has no subToggles param: prune opted-out sub-trees here, on the fresh deep copy
             // from BuildPresetJSONForCurrentSelection (never the cached scene JSON).
@@ -2040,6 +2047,7 @@ namespace VPB
             try
             {
                 SceneLoadingUtils.PrewarmAndEnsureForPresetSlice(sliceJson, sourceHostUid);
+                // Clothing/hair-only stale UIDs skip RefreshPackageMorphs inside ForceRun (Naturalis cost).
                 VamOnDemandLoader.ForceRunPendingCoalescedVamRefresh("vpb_import_slice_prewarm_flush");
             }
             catch (System.Exception ex)
