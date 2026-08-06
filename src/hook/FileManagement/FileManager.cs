@@ -2353,6 +2353,8 @@ namespace VPB
 			{
 				try { VpbProgressService.EndDeepScan(); } catch { }
 				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
+				// RebuildCore may have coalesced while bulk scan held caches incomplete.
+				try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
 			}
 		}
 

@@ -137,8 +137,24 @@ namespace VPB
         /// <summary>Consecutive rebuilds that finished with incomplete package coverage. Capped to break re-queue loops when a handful of VARs are genuinely uncacheable.</summary>
         private static volatile int s_PostBulkIncompleteRebuildAttempts;
         private const int MaxPostBulkIncompleteRebuildAttempts = 3;
+        /// <summary>Set by <see cref="RebuildCore"/> when it bails for zip-cache readiness; <see cref="RebuildWorker"/> must not spin-requeue.</summary>
+        private static volatile int s_LastRebuildDeferredForCaches;
+        /// <summary>0=ok/completed, 1=deferred caches, 2=no-progress, 3=failed. Used to back off re-queues (Unity 2018: no Task.Delay; TickCount gap).</summary>
+        private static volatile int s_LastFullRebuildOutcome;
+        private const int RebuildOutcomeOk = 0;
+        private const int RebuildOutcomeDeferred = 1;
+        private const int RebuildOutcomeNoProgress = 2;
+        private const int RebuildOutcomeFailed = 3;
+        /// <summary>Consecutive full-rebuild finishes that did not advance ready meta. Circuit-breaks spin loops.</summary>
+        private static volatile int s_NoProgressFullRebuildStreak;
+        private const int MaxNoProgressFullRebuildStreak = 4;
+        /// <summary>Min gap between full-rebuild ThreadPool enqueues after a deferred/no-progress outcome (ms).</summary>
+        private const int MinFullRebuildEnqueueGapAfterNoProgressMs = 2500;
+        private static int s_LastFullRebuildEnqueueTick = unchecked((int)0x80000000);
+        private static volatile int s_LoggedFullRebuildCircuitBreak;
         static int s_LastSqlRebuildDeepScanProgress;
         static int s_LastGalleryRebuildDeferLogPctBucket = -1;
+        static int s_LastFullIndexQueueLogTick = unchecked((int)0x80000000);
         private static volatile bool s_GalleryIndexBuildIndicatorPending;
         private static volatile int s_RebuildProgressDone;
         private static volatile int s_RebuildProgressTotal;
@@ -2880,6 +2896,10 @@ namespace VPB
         {
             if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 1) != 1)
                 return;
+            // Allow a fresh attempt after scan made progress (clears circuit-break / backoff).
+            Interlocked.Exchange(ref s_LastFullRebuildOutcome, RebuildOutcomeOk);
+            Interlocked.Exchange(ref s_NoProgressFullRebuildStreak, 0);
+            Interlocked.Exchange(ref s_LoggedFullRebuildCircuitBreak, 0);
             lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
             try { ScheduleGalleryIndexUpdateAfterScan(forceFullRebuild: true); } catch { }
         }
@@ -3718,6 +3738,17 @@ namespace VPB
             return withCache;
         }
 
+        /// <summary>
+        /// Min zip file-list caches required before a destructive gallery SQL rebuild.
+        /// Always clamped to <paramref name="total"/> so small libraries cannot defer forever
+        /// (historical bug: Max(32, n/10) with n=7 → require 32 → spin forceFullRebuild).
+        /// </summary>
+        internal static int MinPackageCachesRequiredForGalleryRebuild(int total)
+        {
+            if (total <= 0) return 0;
+            return Math.Max(1, Math.Min(total, Math.Max(32, total / 10)));
+        }
+
         /// <summary>Destructive rebuild needs zip file lists; running early only wipes <c>cat_mem</c>.</summary>
         static bool ShouldDeferGalleryRebuildUntilPackageCachesReady(int withCache, int total)
         {
@@ -3729,8 +3760,7 @@ namespace VPB
                     return true;
             }
             catch { }
-            int minRequired = Math.Max(32, total / 10);
-            return withCache < minRequired;
+            return withCache < MinPackageCachesRequiredForGalleryRebuild(total);
         }
 
         static void LogGalleryRebuildDeferredIfChanged(int withCache, int total)
@@ -3882,7 +3912,15 @@ namespace VPB
             }
             // Explorer moves keep UID set; sync pkg.var_path before Path rail / filters query SQL.
             SyncPkgPathsAfterIndexReuse();
-            try { ScheduleGalleryIndexUpdateAfterScan(); } catch { }
+            // Prefer flushing a rebuild that was coalesced while caches/scan were not ready.
+            try
+            {
+                if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 0) == 1)
+                    FlushPendingGalleryIndexAfterDeepScan();
+                else
+                    ScheduleGalleryIndexUpdateAfterScan();
+            }
+            catch { try { ScheduleGalleryIndexUpdateAfterScan(); } catch { } }
         }
 
         static void QueueGalleryIndexUpdateWorker(bool forceFullRebuild)
@@ -3901,24 +3939,17 @@ namespace VPB
 
             if (forceFullRebuild || NeedsFullGalleryIndexBuild())
             {
-                if (!TryClaimGalleryIndexRebuildSlot()) return;
-                if (forceFullRebuild)
-                {
-                    Interlocked.Exchange(ref s_WorkerBypassGallerySkipCheck, 1);
-                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-                }
-                try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (" + (forceFullRebuild ? "forceFullRebuild" : "NeedsFullGalleryIndexBuild") + ")"); } catch { }
-                s_GalleryIndexBuildIndicatorPending = true;
-                ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
+                if (!TryEnqueueFullGalleryIndexRebuild(forceFullRebuild
+                    ? "forceFullRebuild"
+                    : "NeedsFullGalleryIndexBuild", forceFullRebuild))
+                    return;
                 return;
             }
 
             if (!VamStartupOptimizations.PreferIncrementalGallerySqlIndex)
             {
-                if (!TryClaimGalleryIndexRebuildSlot()) return;
-                try { LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (prefer-incremental off)"); } catch { }
-                s_GalleryIndexBuildIndicatorPending = true;
-                ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
+                if (!TryEnqueueFullGalleryIndexRebuild("prefer-incremental off", false))
+                    return;
                 return;
             }
 
@@ -3937,6 +3968,94 @@ namespace VPB
             var removedPackagesCopy = removedPackages;
             var removedUidsCopy = removedUidsOnly;
             ThreadPool.QueueUserWorkItem(_ => IncrementalIndexUpdateWorker(addedCopy, removedPackagesCopy, removedUidsCopy));
+        }
+
+        /// <summary>
+        /// Single choke point for full gallery SQL rebuild enqueue.
+        /// Rate-limits after deferred/no-progress outcomes and circuit-breaks spin loops
+        /// (warm/concurrent path — no Unity API; Environment.TickCount only).
+        /// </summary>
+        static bool TryEnqueueFullGalleryIndexRebuild(string reason, bool forceBypassSkip)
+        {
+            int lastOutcome = s_LastFullRebuildOutcome;
+            if (lastOutcome == RebuildOutcomeDeferred
+                || lastOutcome == RebuildOutcomeNoProgress
+                || lastOutcome == RebuildOutcomeFailed)
+            {
+                int streak = s_NoProgressFullRebuildStreak;
+                if (streak >= MaxNoProgressFullRebuildStreak)
+                {
+                    Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                    if (Interlocked.CompareExchange(ref s_LoggedFullRebuildCircuitBreak, 1, 0) == 0)
+                    {
+                        try
+                        {
+                            LogUtil.LogWarning(VamStartupOptimizations.LogTag
+                                + " gallery FULL rebuild circuit-break streak=" + streak
+                                + " — coalescing until scan flush / package-scan complete (reason=" + (reason ?? "?") + ")");
+                        }
+                        catch { }
+                    }
+                    return false;
+                }
+
+                int nowTick = Environment.TickCount;
+                int elapsed = unchecked(nowTick - s_LastFullRebuildEnqueueTick);
+                if (s_LastFullRebuildEnqueueTick != unchecked((int)0x80000000)
+                    && elapsed >= 0
+                    && elapsed < MinFullRebuildEnqueueGapAfterNoProgressMs)
+                {
+                    Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                    return false;
+                }
+            }
+
+            if (!TryClaimGalleryIndexRebuildSlot()) return false;
+            if (forceBypassSkip)
+            {
+                Interlocked.Exchange(ref s_WorkerBypassGallerySkipCheck, 1);
+                lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
+            }
+
+            s_LastFullRebuildEnqueueTick = Environment.TickCount;
+            try
+            {
+                int nowTick = Environment.TickCount;
+                int logElapsed = unchecked(nowTick - s_LastFullIndexQueueLogTick);
+                bool logLine = logElapsed < 0 || logElapsed >= 1000;
+                if (logLine)
+                    s_LastFullIndexQueueLogTick = nowTick;
+                if (logLine)
+                    LogUtil.Log(VamStartupOptimizations.LogTag + " gallery index update -> FULL (" + (reason ?? "?") + ")");
+            }
+            catch { }
+
+            s_GalleryIndexBuildIndicatorPending = true;
+            ThreadPool.QueueUserWorkItem(_ => FullIndexBuildWorker());
+            return true;
+        }
+
+        static void NoteFullRebuildOutcome(int outcome)
+        {
+            Interlocked.Exchange(ref s_LastFullRebuildOutcome, outcome);
+            if (outcome == RebuildOutcomeOk)
+            {
+                Interlocked.Exchange(ref s_NoProgressFullRebuildStreak, 0);
+                Interlocked.Exchange(ref s_LoggedFullRebuildCircuitBreak, 0);
+                return;
+            }
+            if (outcome == RebuildOutcomeDeferred
+                || outcome == RebuildOutcomeNoProgress
+                || outcome == RebuildOutcomeFailed)
+            {
+                Interlocked.Increment(ref s_NoProgressFullRebuildStreak);
+            }
+        }
+
+        static void CoalesceFullRebuildInsteadOfSpin()
+        {
+            Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+            lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
         }
 
         static bool TryClaimGalleryIndexRebuildSlot()
@@ -4164,7 +4283,7 @@ namespace VPB
             {
                 try { LogUtil.LogWarning("[VPB] VpbLocalDatabase: incremental gallery index update failed: " + ex.Message); } catch { }
                 lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-                try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                // Caller (IncrementalIndexUpdateWorker) enqueues full rebuild — do not Queue while rebuild slot held.
                 return false;
             }
 
@@ -4266,14 +4385,9 @@ namespace VPB
             bool bulkScan = false;
             try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
             if (bulkScan)
-            {
-                Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
-                lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-            }
-            else
-            {
-                try { QueueGalleryIndexUpdateWorker(true); } catch { }
-            }
+                CoalesceFullRebuildInsteadOfSpin();
+            else if (!TryEnqueueFullGalleryIndexRebuild("incrementalFallback", true))
+                CoalesceFullRebuildInsteadOfSpin();
         }
 
         static void FullIndexBuildWorker()
@@ -4337,6 +4451,8 @@ namespace VPB
             bool suppressIncompleteReschedule = false;
             bool pendingReschedule = false;
             bool bypassSkip = Interlocked.CompareExchange(ref s_WorkerBypassGallerySkipCheck, 0, 1) == 1;
+            Interlocked.Exchange(ref s_LastRebuildDeferredForCaches, 0);
+            bool failed = false;
             try
             {
                 s_RebuildRunning = true;
@@ -4345,6 +4461,7 @@ namespace VPB
             }
             catch (Exception ex)
             {
+                failed = true;
                 s_LastError = ex.Message;
                 try { LogUtil.LogError("[VPB] VpbLocalDatabase: gallery index rebuild failed: " + ex); } catch { }
                 lock (s_Sync)
@@ -4354,7 +4471,8 @@ namespace VPB
                     s_ReadyPkgInvSig = null;
                     s_SkipDeferredGallerySqlRebuild = false;
                 }
-                try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                // Do not Queue while still marked running — that raced with claim/defer and spun.
+                Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
             }
             finally
             {
@@ -4372,10 +4490,34 @@ namespace VPB
             if (rebuildCompleted)
             {
                 try { Gallery.NotifyGalleryIndexUpdateCompleted(); } catch { }
+                NoteFullRebuildOutcome(RebuildOutcomeOk);
             }
+
+            // Zip caches not ready / bulk scan: RebuildCore already set PendingSqlRebuildAfterDeepScan.
+            // Immediate force re-queue here was the thousands-of-FULL-lines/sec loop.
+            bool deferredCaches = Interlocked.CompareExchange(ref s_LastRebuildDeferredForCaches, 0, 1) == 1;
+            if (deferredCaches)
+            {
+                NoteFullRebuildOutcome(RebuildOutcomeDeferred);
+                if (pendingReschedule)
+                    CoalesceFullRebuildInsteadOfSpin();
+                return;
+            }
+            if (failed)
+                NoteFullRebuildOutcome(RebuildOutcomeFailed);
+            else if (!rebuildCompleted)
+                NoteFullRebuildOutcome(RebuildOutcomeNoProgress);
+
+            if (Interlocked.CompareExchange(ref s_PendingSqlRebuildAfterDeepScan, 0, 0) == 1)
+            {
+                // Coalesced for scan/cache readiness — wait for FlushPending / NotifyPackageScanCompleted.
+                return;
+            }
+
             if (pendingReschedule)
             {
-                try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                if (!TryEnqueueFullGalleryIndexRebuild("pendingReschedule", true))
+                    CoalesceFullRebuildInsteadOfSpin();
                 return;
             }
             if (rebuildCompleted || suppressIncompleteReschedule) return;
@@ -4385,12 +4527,9 @@ namespace VPB
                 bool bulkScan = false;
                 try { bulkScan = FileManager.IsBulkDeepScanActive; } catch { }
                 if (bulkScan)
-                {
-                    Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
-                    lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
-                }
-                else
-                    QueueGalleryIndexUpdateWorker(true);
+                    CoalesceFullRebuildInsteadOfSpin();
+                else if (!TryEnqueueFullGalleryIndexRebuild("incompleteNeedsFull", true))
+                    CoalesceFullRebuildInsteadOfSpin();
             }
             catch { }
         }
@@ -5056,6 +5195,7 @@ namespace VPB
             if (ShouldDeferGalleryRebuildUntilPackageCachesReady(pkgWithCache, pkgTotal))
             {
                 Interlocked.Exchange(ref s_PendingSqlRebuildAfterDeepScan, 1);
+                Interlocked.Exchange(ref s_LastRebuildDeferredForCaches, 1);
                 lock (s_Sync) { s_SkipDeferredGallerySqlRebuild = false; }
                 LogGalleryRebuildDeferredIfChanged(pkgWithCache, pkgTotal);
                 return;
@@ -5436,7 +5576,9 @@ namespace VPB
                 if (catMemIncomplete && bulkActive) queueAnotherRebuild = false;
                 if (queueAnotherRebuild)
                 {
-                    try { QueueGalleryIndexUpdateWorker(true); } catch { }
+                    // Still inside RebuildCore / RebuildWorker slot — coalesce; worker postamble enqueues with backoff.
+                    CoalesceFullRebuildInsteadOfSpin();
+                    Interlocked.Exchange(ref s_PendingRescheduleAfterRunningRebuild, 1);
                 }
                 return;
             }
