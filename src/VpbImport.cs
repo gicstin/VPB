@@ -176,6 +176,35 @@ namespace VPB
                 }
             }
 
+            // Appearance / Morphs: ensure package morphs are in DAZ banks before LoadPresetFromJSON.
+            // Clothing/hair-only coalesced refresh may have skipped RefreshPackageMorphs.
+            if (resourceType == VpbResourceType.Appearance || resourceType == VpbResourceType.Morphs)
+            {
+                try
+                {
+                    if (probe) AppearanceApplyProbe.Phase("morph_ingest_start",
+                        VamOnDemandLoader.DescribePendingCatalogRefreshForProbe());
+                    // Pass preset text so Ensure can mark morph package UIDs even when catalog
+                    // classification missed Morphs/ (incomplete manifest) or pending was cleared.
+                    string morphProbeJson = null;
+                    if (preset != null)
+                    {
+                        try { morphProbeJson = JsonSerializationUtil.Serialize(preset, 1 << 20); }
+                        catch { morphProbeJson = null; }
+                    }
+                    bool morphChanged = VamOnDemandLoader.EnsurePackageMorphsIngestedIfNeeded(
+                        targetAtom,
+                        morphProbeJson,
+                        "VpbImport." + resourceType);
+                    if (probe) AppearanceApplyProbe.Phase("morph_ingest_done", "changed=" + (morphChanged ? 1 : 0));
+                }
+                catch (Exception ex)
+                {
+                    LogUtil.LogWarning("VpbImport.LoadPreset: EnsurePackageMorphsIngested failed: " + ex.Message);
+                    if (probe) AppearanceApplyProbe.Warn("morph_ingest: " + ex.Message);
+                }
+            }
+
             if (resourceType == VpbResourceType.Appearance && sourceEntry != null)
             {
                 if (presetJC != null)
@@ -382,6 +411,23 @@ namespace VPB
                         bool mergeLoad = clothingMode == ClothingApplyMode.Merge;
                         MaybeSetLastRestoredData(targetAtom, preset, updateLastRestoredData);
 
+                        // Non-merge Appearance: clear prior look appearance morphs even when morph-ingest
+                        // skipped (re-import / completed cache). Prevents leftover values from earlier
+                        // looks after many RefreshPackageMorphs cycles.
+                        if (!mergeLoad)
+                        {
+                            try
+                            {
+                                VamOnDemandLoader.ResetAppearanceMorphValues(targetAtom, "VpbImport.Appearance_pre_apply");
+                                if (probe) AppearanceApplyProbe.Phase("morph_reset_pre_apply");
+                            }
+                            catch (Exception ex)
+                            {
+                                LogUtil.LogWarning("VpbImport: ResetAppearanceMorphValues failed: " + ex.Message);
+                                if (probe) AppearanceApplyProbe.Warn("morph_reset: " + ex.Message);
+                            }
+                        }
+
                         try
                         {
                             if (!string.IsNullOrEmpty(sourcePath))
@@ -390,6 +436,21 @@ namespace VPB
                                 "mergeLoad=" + (mergeLoad ? 1 : 0) + " " + AppearanceApplyProbe.SummarizePreset(preset));
                             InvokeLoadPresetFromJSON(presetManager, preset, mergeLoad);
                             if (probe) AppearanceApplyProbe.Phase("LoadPresetFromJSON_done");
+
+                            // Drop inactive demand morphs from prior looks (Yuna Body/Head etc.) so banks
+                            // do not keep formula-heavy character morphs loaded for the next replace.
+                            if (!mergeLoad)
+                            {
+                                try
+                                {
+                                    VamOnDemandLoader.UnloadInactiveDemandMorphs(targetAtom, "VpbImport.Appearance_post_apply");
+                                    if (probe) AppearanceApplyProbe.Phase("morph_unload_demand");
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogWarning("VpbImport: UnloadInactiveDemandMorphs failed: " + ex.Message);
+                                }
+                            }
                         }
                         finally
                         {

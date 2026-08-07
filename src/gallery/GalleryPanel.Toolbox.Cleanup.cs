@@ -1388,6 +1388,7 @@ namespace VPB
 
                 cleanupModeActive = true;
                 cleanupFilterMode = 0;
+                try { RefreshModeAmbientChrome(); } catch { }
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: starting scan...");
 
                 try { if (creatorModeActive || creatorModeStripBusy) ExitCreatorMode(force: true); } catch { }
@@ -1430,6 +1431,7 @@ namespace VPB
             cleanupStaleBucketMode = 0;
             cleanupCandidatesAll.Clear();
             cleanupCandidateByPath.Clear();
+            try { RefreshModeAmbientChrome(); } catch { }
 
             if (cleanupSideHostIsLeft)
             {

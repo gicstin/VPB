@@ -3607,17 +3607,27 @@ namespace VPB
 
         public void PushUndo(Action action)
         {
+            PushUndo(action, null);
+        }
+
+        public void PushUndo(Action action, string label)
+        {
             if (action == null) return;
             undoStack.Push(action);
+            if (undoLabelStack == null) undoLabelStack = new Stack<string>();
+            undoLabelStack.Push(string.IsNullOrEmpty(label)
+                ? VPBTranslation.T("gallery.undo.default_label", "Change")
+                : label);
             if (!isApplyingUndoRedo)
             {
                 try { redoStack.Clear(); } catch { }
+                try { if (redoLabelStack != null) redoLabelStack.Clear(); } catch { }
             }
             TrimUndoRedoStacks();
             UpdateUndoRedoButtonLabels();
         }
 
-        private const int MaxUndoRedoHistory = 6;
+        private const int MaxUndoRedoHistory = 24;
 
         private static void TrimStackToMax<T>(ref Stack<T> stack, int max)
         {
@@ -3638,6 +3648,47 @@ namespace VPB
         {
             TrimStackToMax(ref undoStack, MaxUndoRedoHistory);
             TrimStackToMax(ref redoStack, MaxUndoRedoHistory);
+            TrimStackToMax(ref undoLabelStack, MaxUndoRedoHistory);
+            TrimStackToMax(ref redoLabelStack, MaxUndoRedoHistory);
+            // Keep label stacks aligned if trim drifted (defensive).
+            while (undoLabelStack != null && undoStack != null && undoLabelStack.Count > undoStack.Count)
+                undoLabelStack.Pop();
+            while (redoLabelStack != null && redoStack != null && redoLabelStack.Count > redoStack.Count)
+                redoLabelStack.Pop();
+        }
+
+        private string PeekUndoLabel()
+        {
+            if (undoLabelStack == null || undoLabelStack.Count == 0)
+                return VPBTranslation.T("gallery.undo.default_label", "Change");
+            return undoLabelStack.Peek();
+        }
+
+        private string PeekRedoLabel()
+        {
+            if (redoLabelStack == null || redoLabelStack.Count == 0)
+                return VPBTranslation.T("gallery.undo.default_label", "Change");
+            return redoLabelStack.Peek();
+        }
+
+        private string BuildUndoTooltip()
+        {
+            int n = undoStack != null ? undoStack.Count : 0;
+            if (n <= 0)
+                return VPBTranslation.T("gallery.tooltip.undo_empty", "Nothing to undo (Ctrl+Z)");
+            return string.Format(
+                VPBTranslation.T("gallery.tooltip.undo_next", "Undo: {0} (Ctrl+Z)"),
+                PeekUndoLabel());
+        }
+
+        private string BuildRedoTooltip()
+        {
+            int n = redoStack != null ? redoStack.Count : 0;
+            if (n <= 0)
+                return VPBTranslation.T("gallery.tooltip.redo_empty", "Nothing to redo (Ctrl+Y)");
+            return string.Format(
+                VPBTranslation.T("gallery.tooltip.redo_next", "Redo: {0} (Ctrl+Y / Ctrl+Shift+Z)"),
+                PeekRedoLabel());
         }
 
         private void UpdateUndoRedoButtonLabels()
@@ -4167,16 +4218,31 @@ namespace VPB
             if (undoStack.Count > 0)
             {
                 Action action = undoStack.Pop();
+                string undoneLabel = VPBTranslation.T("gallery.undo.default_label", "Change");
+                if (undoLabelStack != null && undoLabelStack.Count > 0)
+                    undoneLabel = undoLabelStack.Pop();
                 try
                 {
                     Action redoAction = CaptureUndoRedoSnapshotAction();
-                    if (redoAction != null) redoStack.Push(redoAction);
+                    if (redoAction != null)
+                    {
+                        redoStack.Push(redoAction);
+                        if (redoLabelStack == null) redoLabelStack = new Stack<string>();
+                        redoLabelStack.Push(undoneLabel);
+                    }
                     isApplyingUndoRedo = true;
                     action?.Invoke();
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogError("Error during Undo: " + ex.Message);
+                    try
+                    {
+                        ShowTemporaryStatus(
+                            VPBTranslation.T("gallery.undo.failed", "Undo failed. See log."),
+                            2.5f);
+                    }
+                    catch { }
                 }
                 finally
                 {
@@ -4185,6 +4251,15 @@ namespace VPB
 
                 TrimUndoRedoStacks();
                 UpdateUndoRedoButtonLabels();
+                try
+                {
+                    ShowTemporaryStatus(
+                        string.Format(
+                            VPBTranslation.T("gallery.undo.done", "Undid: {0}"),
+                            undoneLabel),
+                        1.5f);
+                }
+                catch { }
                 try
                 {
                     // Ensure context submenus refresh immediately after Undo restores items.
@@ -4198,7 +4273,13 @@ namespace VPB
             }
             else
             {
-                LogUtil.Log("[VPB] Undo: stack empty");
+                try
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.undo.empty", "Nothing to undo."),
+                        1.5f);
+                }
+                catch { }
                 UpdateUndoRedoButtonLabels();
             }
         }
@@ -4208,16 +4289,31 @@ namespace VPB
             if (redoStack.Count > 0)
             {
                 Action action = redoStack.Pop();
+                string redoneLabel = VPBTranslation.T("gallery.undo.default_label", "Change");
+                if (redoLabelStack != null && redoLabelStack.Count > 0)
+                    redoneLabel = redoLabelStack.Pop();
                 try
                 {
                     Action undoAction = CaptureUndoRedoSnapshotAction();
-                    if (undoAction != null) undoStack.Push(undoAction);
+                    if (undoAction != null)
+                    {
+                        undoStack.Push(undoAction);
+                        if (undoLabelStack == null) undoLabelStack = new Stack<string>();
+                        undoLabelStack.Push(redoneLabel);
+                    }
                     isApplyingUndoRedo = true;
                     action?.Invoke();
                 }
                 catch (Exception ex)
                 {
                     LogUtil.LogError("Error during Redo: " + ex.Message);
+                    try
+                    {
+                        ShowTemporaryStatus(
+                            VPBTranslation.T("gallery.redo.failed", "Redo failed. See log."),
+                            2.5f);
+                    }
+                    catch { }
                 }
                 finally
                 {
@@ -4226,6 +4322,15 @@ namespace VPB
 
                 TrimUndoRedoStacks();
                 UpdateUndoRedoButtonLabels();
+                try
+                {
+                    ShowTemporaryStatus(
+                        string.Format(
+                            VPBTranslation.T("gallery.redo.done", "Redid: {0}"),
+                            redoneLabel),
+                        1.5f);
+                }
+                catch { }
                 try
                 {
                     Atom tgt = null;
@@ -4238,7 +4343,13 @@ namespace VPB
             }
             else
             {
-                LogUtil.Log("[VPB] Redo: stack empty");
+                try
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.redo.empty", "Nothing to redo."),
+                        1.5f);
+                }
+                catch { }
                 UpdateUndoRedoButtonLabels();
             }
         }

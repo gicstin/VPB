@@ -463,6 +463,8 @@ namespace VPB
         public bool IsPackagePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
+            // Windows drive abs paths contain ":/" (C:/...) — not VaM pkg:/internal.
+            if (LocalSceneGallerySupport.IsWindowsDriveAbsolutePath(path)) return false;
             return path.Contains(":/") || path.EndsWith(".var", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
         }
 

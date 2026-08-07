@@ -10,6 +10,10 @@ namespace VPB
 		public bool isVar = false;
 		public VarPackage package;
 
+		/// <summary>Cached <see cref="IsHidden"/> result for loose files (scroll/badge hot path).</summary>
+		private bool? _hiddenCached;
+		private static string s_cachedGameRootFull;
+
 		/// <summary>
 		/// Fast-path constructor when caller already knows file stat. Avoids per-entry FileInfo calls
 		/// (used by SQLite-cached loose-file listings).
@@ -114,18 +118,36 @@ namespace VPB
 		public override bool IsHidden()
 		{
 			if (isVar) return false;
+			if (_hiddenCached.HasValue) return _hiddenCached.Value;
+			bool hidden = false;
 			try
 			{
 				// VaM "system file" hide marker: adjacent "<file>.hide"
 				string full = FileManager.GetFullPath(Path);
-				string root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
-				if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root)) return false;
-				if (!full.StartsWith(root.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-					&& !string.Equals(full.TrimEnd('\\', '/'), root.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+				string root = s_cachedGameRootFull;
+				if (string.IsNullOrEmpty(root))
+				{
+					root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
+					s_cachedGameRootFull = root;
+				}
+				if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root))
+				{
+					_hiddenCached = false;
 					return false;
-				return File.Exists(full + ".hide");
+				}
+				string rootTrim = root.TrimEnd('\\', '/');
+				string rootPrefix = rootTrim + System.IO.Path.DirectorySeparatorChar;
+				if (!full.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+					&& !string.Equals(full.TrimEnd('\\', '/'), rootTrim, StringComparison.OrdinalIgnoreCase))
+				{
+					_hiddenCached = false;
+					return false;
+				}
+				hidden = File.Exists(full + ".hide");
 			}
-			catch { return false; }
+			catch { hidden = false; }
+			_hiddenCached = hidden;
+			return hidden;
 		}
 
 		public override void SetHidden(bool b)
@@ -134,7 +156,12 @@ namespace VPB
 			try
 			{
 				string full = FileManager.GetFullPath(Path);
-				string root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
+				string root = s_cachedGameRootFull;
+				if (string.IsNullOrEmpty(root))
+				{
+					root = FileManager.GetFullPath(Directory.GetCurrentDirectory());
+					s_cachedGameRootFull = root;
+				}
 				if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root)) return;
 				string rootPrefix = root.TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
 				if (!full.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
@@ -144,18 +171,34 @@ namespace VPB
 				string hidePath = full + ".hide";
 				if (b)
 				{
-					if (File.Exists(hidePath)) return;
+					if (File.Exists(hidePath))
+					{
+						_hiddenCached = true;
+						return;
+					}
 					string dir = System.IO.Path.GetDirectoryName(hidePath);
 					if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
 					File.WriteAllText(hidePath, string.Empty);
+					_hiddenCached = File.Exists(hidePath);
 				}
 				else
 				{
-					if (!File.Exists(hidePath)) return;
+					if (!File.Exists(hidePath))
+					{
+						_hiddenCached = false;
+						return;
+					}
 					File.Delete(hidePath);
+					_hiddenCached = false;
 				}
 			}
-			catch { }
+			catch { _hiddenCached = null; }
+		}
+
+		/// <summary>Force next <see cref="IsHidden"/> to re-probe disk (after external hide-marker change).</summary>
+		public void InvalidateHiddenCache()
+		{
+			_hiddenCached = null;
 		}
 
         public bool Install()

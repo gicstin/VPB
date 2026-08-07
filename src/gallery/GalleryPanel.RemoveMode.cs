@@ -51,17 +51,17 @@ namespace VPB
                 return "item";
             }
 
-            // Richer label for the floating pointer popup: "Remove <type>: <name>".
+            // Richer label for the floating pointer popup: "Erase <type>: <name>" (Scene Eraser).
             public string PopupLabel()
             {
                 try
                 {
-                    if (kind == RemoveTargetKind.ClothingItem) return "Remove clothing: " + DisplayName();
-                    if (kind == RemoveTargetKind.HairItem) return "Remove hair: " + DisplayName();
-                    if (kind == RemoveTargetKind.Atom && atom != null) return "Remove " + atom.type + ": " + atom.uid;
+                    if (kind == RemoveTargetKind.ClothingItem) return "Erase clothing: " + DisplayName();
+                    if (kind == RemoveTargetKind.HairItem) return "Erase hair: " + DisplayName();
+                    if (kind == RemoveTargetKind.Atom && atom != null) return "Erase " + atom.type + ": " + atom.uid;
                 }
                 catch { }
-                return "Remove " + DisplayName();
+                return "Erase " + DisplayName();
             }
         }
 
@@ -242,6 +242,12 @@ namespace VPB
             RemoveModeFreezeAnimation(true);
             RemoveModeUpdateButtonVisual();
             try { EnsureRemoveSiderailOpenForCurrentCategory(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
+            ShowTemporaryStatus(
+                VPBTranslation.T(
+                    "gallery.remove.entered",
+                    "Scene Eraser on — point and click to remove. Esc exits."),
+                2f);
         }
 
         private void RemoveModeExit()
@@ -257,6 +263,10 @@ namespace VPB
             RemoveModeFreezeAnimation(false);
             RemoveModeUpdateButtonVisual();
             try { CloseRemoveSiderailsIfOpen(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
+            ShowTemporaryStatus(
+                VPBTranslation.T("gallery.remove.exited", "Scene Eraser off."),
+                1.25f);
         }
 
         /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>

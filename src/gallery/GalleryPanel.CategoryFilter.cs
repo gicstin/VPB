@@ -70,6 +70,7 @@ namespace VPB
             if (_categoryFilterStates.TryGetValue(key, out state) && state != null)
             {
                 ApplyCategoryFilterState(state, restoreUserTagFilter: true);
+                NotifyCategoryFiltersRestored(categoryTitle);
                 return;
             }
 
@@ -81,11 +82,30 @@ namespace VPB
                 {
                     _categoryFilterStates[key] = state;
                     ApplyCategoryFilterState(state, restoreUserTagFilter: true);
+                    NotifyCategoryFiltersRestored(categoryTitle);
                     return;
                 }
             }
 
             ClearFiltersForNewCategory();
+        }
+
+        /// <summary>Gulf of evaluation: category switch restored hidden filters — surface in status.</summary>
+        private void NotifyCategoryFiltersRestored(string categoryTitle)
+        {
+            try
+            {
+                if (!HasActiveBrowseFilters()) return;
+                string cat = string.IsNullOrEmpty(categoryTitle) ? "category" : categoryTitle;
+                ShowTemporaryStatus(
+                    string.Format(
+                        VPBTranslation.T(
+                            "gallery.filter.restored_for_category",
+                            "Restored filters for {0}. Clear all in chip bar."),
+                        cat),
+                    2.25f);
+            }
+            catch { }
         }
 
         /// <summary>Load filter JSON for this pane; fall back to primary slot so Close/recreate and old single-pane rows still restore.</summary>

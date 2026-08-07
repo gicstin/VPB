@@ -6024,6 +6024,8 @@ namespace VPB
                 try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
                 // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
                 try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
+                // Same settle point as expanded scrub: import source must track preview scroll.
+                try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
                 DetailStripEndScrubHeightLock();
                 return;
             }
@@ -6048,6 +6050,8 @@ namespace VPB
             try { RefreshSelectionVisualsCore(runHeavySideEffects: false); } catch { }
             // Heavy path skipped during scrub spin — refresh side-rail applied/avail now.
             try { RefreshUserTagsSideRailAfterScrubSelection(); } catch { }
+            // Defer LoadSourceScene to scrub settle (warm path) — avoid cancel/reparse per wheel tick.
+            try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
         }
 
         /// <summary>

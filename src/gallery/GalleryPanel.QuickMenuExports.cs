@@ -95,9 +95,11 @@ namespace VPB
 
             FileEntry sceneFile = pool[UnityEngine.Random.Range(0, pool.Count)];
 
-            // LoadSourceScene is synchronous: populates importSidebarSourcePersonIds + importSidebarLoadedSceneJSON.
+            // LoadSourceScene is async for full JSON; wait so person ids + scene JSON are ready.
             try { LoadSourceScene(sceneFile); }
             catch (Exception ex) { LogUtil.LogWarning("[VPB] Random Scene Import: LoadSourceScene failed: " + ex.Message); }
+
+            yield return WaitForImportSourceSceneReady(30f);
 
             // Restore view before any heavier work so the UI doesn't stay on Scenes.
             if (navigated && !string.IsNullOrEmpty(prevTitle))

@@ -499,7 +499,7 @@ namespace VPB
                 || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
             {
                 tipKey = "gallery.tooltip.creator_mode";
-                tipDefault = "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.";
+                tipDefault = "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.";
                 return true;
             }
             if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
@@ -568,17 +568,17 @@ namespace VPB
             if (SideRailGoIs(go, leftUserTagsSideBtn, rightUserTagsSideBtn))
                 return VPBTranslation.T("gallery.side.overflow_tags", "User Tags");
             if (SideRailGoIs(go, leftRemoveModeSideBtn, rightRemoveModeSideBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_mode", "Remove mode");
+                return VPBTranslation.T("gallery.side.overflow_remove_mode", "Scene Eraser");
             if (SideRailGoIs(go, leftCreatorModeSideBtn, rightCreatorModeSideBtn)
                 || SideRailGoMatchesIcon(go, leftCreatorModeBtnIconImage, rightCreatorModeBtnIconImage))
-                return VPBTranslation.T("gallery.side.overflow_creator_mode", "Creator Mode");
+                return VPBTranslation.T("gallery.side.overflow_creator_mode", "Scene Tools");
             if (SideRailGoIs(go, leftRemoveAtomBtn, rightRemoveAtomBtn)
                 || SideRailGoMatchesIcon(go, leftRemoveAtomBtnIconImage, rightRemoveAtomBtnIconImage))
-                return VPBTranslation.T("gallery.side.overflow_remove", "Remove");
+                return VPBTranslation.T("gallery.side.overflow_remove", "Unequip");
             if (SideRailGoIs(go, leftRemoveAllClothingBtn, rightRemoveAllClothingBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_clothing", "Remove clothing");
+                return VPBTranslation.T("gallery.side.overflow_remove_clothing", "Unequip clothing");
             if (SideRailGoIs(go, leftRemoveAllHairBtn, rightRemoveAllHairBtn))
-                return VPBTranslation.T("gallery.side.overflow_remove_hair", "Remove hair");
+                return VPBTranslation.T("gallery.side.overflow_remove_hair", "Unequip hair");
             if (SideRailGoMatches(go, leftCategoryBtnImage, rightCategoryBtnImage, leftCategoryBtnText, rightCategoryBtnText))
                 return VPBTranslation.T("gallery.side.overflow_category", "Category");
             if (SideRailGoMatches(go, leftCreatorBtnImage, rightCreatorBtnImage, leftCreatorBtnText, rightCreatorBtnText))

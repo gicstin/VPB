@@ -453,6 +453,8 @@
     <Compile Include="src\gallery\GalleryPanel.StickyTooltip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Transparency.cs" />
     <Compile Include="src\gallery\GalleryPanel.RemoveMode.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ModeAmbient.cs" />
+    <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
     <Compile Include="src\gallery\GalleryPanel.Logic.cs" />

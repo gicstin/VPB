@@ -48,6 +48,10 @@ namespace VPB
         private readonly Dictionary<string, string> _packagePreviewInternalPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         // Cache for fast ALL VAR sister JPG existence checks: package UID -> set of internal .jpg paths (normalized, no leading "/").
         private readonly Dictionary<string, HashSet<string>> _packageInternalJpgSetCache = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        // Loose-file (local scene) sister JPG: source Path -> jpg path, or "" if none. Avoids FileExists per scroll bind.
+        private readonly Dictionary<string, string> _looseSisterJpgPathCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Loose thumb imgPath -> last-write filetime. Avoids GetFullPath/Exists/mtime per scroll bind.
+        private readonly Dictionary<string, long> _looseThumbWriteTimeCache = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Gallery thumbnails / previews: <c>.jpg</c> only (no <c>.png</c> / <c>.jpeg</c> probes).</summary>
         private static bool IsImagePath(string path)
@@ -594,10 +598,70 @@ namespace VPB
             }
             catch { }
 
+            try { InvalidateLooseThumbCachesForAsset(savedAssetPath); } catch { }
+
             try { RefreshVisibleGridVisualsOnly(); } catch { }
         }
 
-        private static long GetThumbnailSourceWriteTimeForBinding(string imgPath)
+        private void InvalidateLooseThumbCachesForAsset(string savedAssetPath)
+        {
+            if (string.IsNullOrEmpty(savedAssetPath))
+            {
+                _looseSisterJpgPathCache.Clear();
+                _looseThumbWriteTimeCache.Clear();
+                return;
+            }
+
+            string norm = savedAssetPath.Replace('\\', '/');
+            try { _looseSisterJpgPathCache.Remove(norm); } catch { }
+            try { _looseSisterJpgPathCache.Remove(savedAssetPath); } catch { }
+
+            string jpg = null;
+            try { jpg = Path.ChangeExtension(norm, ".jpg"); } catch { jpg = null; }
+            if (!string.IsNullOrEmpty(jpg))
+            {
+                try { _looseThumbWriteTimeCache.Remove(jpg); } catch { }
+                // Also drop sister resolve for the JSON row this jpg belongs to.
+                string json = null;
+                try { json = Path.ChangeExtension(norm, ".json"); } catch { json = null; }
+                if (!string.IsNullOrEmpty(json))
+                {
+                    try { _looseSisterJpgPathCache.Remove(json); } catch { }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sister <c>.jpg</c> next to a loose gallery file (local scene JSON). Cached — scroll binds must not
+        /// re-hit <see cref="FileManager.FileExists"/> every cell.
+        /// </summary>
+        private string ResolveLooseSisterJpgPathCached(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return null;
+            string cached;
+            if (_looseSisterJpgPathCache.TryGetValue(filePath, out cached))
+                return string.IsNullOrEmpty(cached) ? null : cached;
+
+            string result = null;
+            try
+            {
+                string testJpg = Path.ChangeExtension(filePath, ".jpg");
+                if (!string.IsNullOrEmpty(testJpg) && FileManager.FileExists(testJpg))
+                    result = testJpg;
+            }
+            catch (ArgumentException)
+            {
+                // Invalid path characters — treat as no sister.
+            }
+            catch { }
+
+            if (_looseSisterJpgPathCache.Count > 8000)
+                _looseSisterJpgPathCache.Clear();
+            _looseSisterJpgPathCache[filePath] = result ?? string.Empty;
+            return result;
+        }
+
+        private long GetLooseThumbWriteTimeCached(string imgPath)
         {
             if (string.IsNullOrEmpty(imgPath)) return 0;
 
@@ -608,22 +672,33 @@ namespace VPB
             }
             catch { }
 
+            long cached;
+            if (_looseThumbWriteTimeCache.TryGetValue(imgPath, out cached))
+                return cached;
+
+            long wt = 0;
             try
             {
                 string full = FileManager.GetFullPath(imgPath.Replace('\\', '/'));
                 if (!string.IsNullOrEmpty(full) && File.Exists(full))
-                    return File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
+                    wt = File.GetLastWriteTimeUtc(full).ToFileTimeUtc();
             }
             catch { }
 
-            try
+            if (wt == 0)
             {
-                FileEntry fe = FileManager.GetFileEntry(imgPath);
-                if (fe != null) return fe.LastWriteTime.ToFileTime();
+                try
+                {
+                    FileEntry fe = FileManager.GetFileEntry(imgPath);
+                    if (fe != null) wt = fe.LastWriteTime.ToFileTime();
+                }
+                catch { }
             }
-            catch { }
 
-            return 0;
+            if (_looseThumbWriteTimeCache.Count > 8000)
+                _looseThumbWriteTimeCache.Clear();
+            _looseThumbWriteTimeCache[imgPath] = wt;
+            return wt;
         }
 
         private void EnqueueThumbnailCacheJob(string path, Texture2D tex, long lastWriteTime, string groupId, int turboJpegScaleDenom)
@@ -721,13 +796,7 @@ namespace VPB
                 else
                 {
                     // Local cleanup rows: sidecar .jpg next to source (.json -> .jpg).
-                    try
-                    {
-                        string testJpg = Path.ChangeExtension(file.Path, ".jpg");
-                        if (File.Exists(testJpg) || FileManager.FileExists(testJpg))
-                            imgPath = testJpg;
-                    }
-                    catch { }
+                    imgPath = ResolveLooseSisterJpgPathCached(file.Path) ?? "";
                 }
             }
             else if (file is PackageListEntry ple)
@@ -842,19 +911,8 @@ namespace VPB
             }
             else
             {
-                // Sister-file rule: same basename, .jpg only
-                // Optimized discovery via archive flattening (FileManager.FileExists)
-                try
-                {
-                    string testJpg = Path.ChangeExtension(file.Path, ".jpg");
-                    if (FileManager.FileExists(testJpg))
-                        imgPath = testJpg;
-                }
-                catch (ArgumentException)
-                {
-                    // file.Path contains invalid characters (e.g., from VarFileEntry with internal paths)
-                    // Skip sister-file lookup for such paths
-                }
+                // Sister-file rule: same basename, .jpg only (cached — local scenes scroll-hot).
+                imgPath = ResolveLooseSisterJpgPathCached(file.Path) ?? "";
             }
 
             // IMPORTANT: if we can't resolve a thumbnail path for this row, explicitly clear any
@@ -871,7 +929,7 @@ namespace VPB
             if (CustomImageLoaderThreaded.singleton == null) return;
 
             string capturedGroupId = currentLoadingGroupId;
-            string expectedTag = capturedGroupId + "|" + imgPath + "|" + GetThumbnailSourceWriteTimeForBinding(imgPath);
+            string expectedTag = capturedGroupId + "|" + imgPath + "|" + GetLooseThumbWriteTimeCached(imgPath);
             ThumbnailBindingTag bind = null;
             if (target != null)
             {
@@ -967,22 +1025,11 @@ namespace VPB
                         try { SyncThumbPlaceholderForFile(target.transform, target, fileForCallback); } catch { }
                     }
 
-                    // Disk enqueue idle-gated in ProcessThumbnailCacheQueue. Avoid FileManager.GetFileEntry while scroll-hot.
+                    // Disk enqueue idle-gated in ProcessThumbnailCacheQueue.
+                    // Use sister-jpg mtime (cached) — never JSON FileEntry.LastWriteTime (cache key mismatch vs decode).
                     if (!res.loadedFromGalleryCache && capturedGroupId == currentLoadingGroupId && res.tex != null)
                     {
-                        long imgTime = 0;
-                        if (GalleryThumbnailCache.Instance != null && GalleryThumbnailCache.Instance.IsPackagePath(imgPath))
-                            imgTime = 0;
-                        else if (fileForCallback != null && imgPath == fileForCallback.Path)
-                            imgTime = fileForCallback.LastWriteTime.ToFileTime();
-                        else if (!CustomImageLoaderThreaded.IsGalleryScrollHot)
-                        {
-                            FileEntry fe = FileManager.GetFileEntry(imgPath);
-                            if (fe != null) imgTime = fe.LastWriteTime.ToFileTime();
-                            else if (fileForCallback != null) imgTime = fileForCallback.LastWriteTime.ToFileTime();
-                        }
-                        else if (fileForCallback != null)
-                            imgTime = fileForCallback.LastWriteTime.ToFileTime();
+                        long imgTime = GetLooseThumbWriteTimeCached(imgPath);
                         EnqueueThumbnailCacheJob(imgPath, res.tex, imgTime, capturedGroupId, res.turboJpegScaleDenom);
                     }
                     return;

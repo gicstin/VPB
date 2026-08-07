@@ -1301,6 +1301,11 @@ namespace VPB
                 catch { }
             }
 
+            // Appearance/Morphs slices: keep morph-ingest pending even when packages were already
+            // registered under a prior clothing/hair-only skip refresh (newlyRegistered==0).
+            try { VamOnDemandLoader.NoteMorphIngestPendingForSlice(uidCandidates, sliceJson); }
+            catch { }
+
             try
             {
                 string sample = string.Join(", ", uidCandidates.Take(5).ToArray());

@@ -506,7 +506,7 @@ namespace VPB
                 case QuickMenuAssignableAction.Redo: return VPBTranslation.T("hook.qmbutton.redo", "Redo");
                 case QuickMenuAssignableAction.Hub: return VPBTranslation.T("hook.qmbutton.hub", "Hub");
                 case QuickMenuAssignableAction.Cleanup: return VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup");
-                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmtooltip.creator_mode", "Creator Mode — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
+                case QuickMenuAssignableAction.CreatorMode: return VPBTranslation.T("hook.qmtooltip.creator_mode", "Scene Tools — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
                 case QuickMenuAssignableAction.ReplaceAddToggle: return VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add");
                 case QuickMenuAssignableAction.CompressCache: return VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache");
                 case QuickMenuAssignableAction.AutoHideGallery: return VPBTranslation.T("hook.qmbutton.autohide", "Auto-Hide");
@@ -2000,7 +2000,7 @@ namespace VPB
                 VPBTranslation.T("hook.qmbutton.redo", "Redo"),
                 VPBTranslation.T("hook.qmbutton.hub", "Hub"),
                 VPBTranslation.T("hook.qmbutton.cleanup", "Cleanup"),
-                VPBTranslation.T("hook.qmbutton.creator_mode", "Creator Mode"),
+                VPBTranslation.T("hook.qmbutton.creator_mode", "Scene Tools"),
                 VPBTranslation.T("hook.qmbutton.target_atom", "Target Atom"),
                 VPBTranslation.T("hook.qmbutton.replace_add", "Replace/Add"),
                 VPBTranslation.T("hook.qmbutton.compress_cache", "Compress Cache"),

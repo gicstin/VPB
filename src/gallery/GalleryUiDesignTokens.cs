@@ -209,6 +209,8 @@ namespace VPB
         public const float ImportSidebarWidthRef = 220f;
         public const float ImportSidebarHeaderHeightRef = 32f;
         public const float ImportSidebarApplyHeightRef = ButtonSizeRef;
+        /// <summary>Pinned reason line above Apply when import is blocked.</summary>
+        public const float ImportSidebarApplyReasonHeightRef = 18f;
         public const float ImportSidebarSideMarginRef = 10f;
         public const float ImportSidebarTopRowRef = 65f;
         public const float ImportSidebarScrollBarWidthRef = 10f;
@@ -263,8 +265,8 @@ namespace VPB
         public const int PopupMenuOverflowFontRef = FontRef;
         public const float PopupMenuAnchorGapRef = 2f;
         public const float PopupMenuPanelWidthRef = 230f;
-        /// <summary>Filter-presets dropdown: search + sort chip need wider panel than plain popup rows.</summary>
-        public const float QuickFiltersPanelWidthRef = 280f;
+        /// <summary>Filter-presets dropdown: search + Float chip + sort need wider panel than plain popup rows.</summary>
+        public const float QuickFiltersPanelWidthRef = 300f;
         /// <summary>Filter-presets list scrollbar — match dense secondary panels (import sidebar), not fat side-tab track.</summary>
         public const float QuickFiltersScrollBarWidthRef = 10f;
         /// <summary>Floating filter-presets window defaults / clamps (design px at scale 1).</summary>

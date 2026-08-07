@@ -32,7 +32,8 @@ namespace VPB
         private readonly HashSet<VpbResourceType> importSidebarMultiSelectedTypes = new HashSet<VpbResourceType>();
         // User-toggleable (VR-friendly on-screen toggle): true = chips accumulate (multi-select),
         // false = each click selects only the clicked type. Persisted in ImportSidebarPrefs.
-        private bool importSidebarMultiSelectTypes = true;
+        // Default single-select — multi is opt-in (less option-panel stack for novices).
+        private bool importSidebarMultiSelectTypes = false;
         private UnityEngine.UI.Image importSidebarMultiToggleBg;
         private UnityEngine.UI.Text importSidebarMultiToggleLabel;
 
@@ -91,9 +92,15 @@ namespace VPB
         private readonly HashSet<string> importSidebarSelectedPluginKeys = new HashSet<string>(StringComparer.Ordinal);
         private string importSidebarPluginSelectionSig;
 
-        // Cached source scene JSON. One-shot, kept until source scene changes.
+        // Cached source scene JSON. Filled async after open (ThreadPool parse); kept until source changes.
         private JSONClass importSidebarLoadedSceneJSON;
         private readonly List<string> importSidebarSourcePersonIds = new List<string>(4);
+        /// <summary>Bumps on source change / cancel so stale background parses are dropped.</summary>
+        private int importSidebarSceneJsonLoadGen;
+        private Coroutine importSidebarSceneJsonLoadCo;
+        private bool importSidebarSceneJsonLoading;
+        /// <summary>True while person ids still pending (cache-miss async parse).</summary>
+        private bool importSidebarSourcePersonsPending;
 
         // Live target list. Refreshed on atom-add / atom-remove.
         private readonly List<Atom> importSidebarTargetCandidates = new List<Atom>(8);
@@ -103,10 +110,46 @@ namespace VPB
 
         public void ToggleImportSidebar()
         {
+            // Outside Scenes: navigate back so docked Import can reopen (intent may already be on).
+            if (!ImportSidebarCategoryAllowed())
+            {
+                if (!TryNavigateGalleryToScenes())
+                {
+                    try
+                    {
+                        ShowTemporaryStatus(VPBTranslation.T(
+                            "gallery.import.sidebar_gated_tip",
+                            "Import sidebar opens in Scenes category only"), 2f);
+                    }
+                    catch { }
+                    return;
+                }
+                if (importSidebarOpenIntent)
+                {
+                    RefreshImportSidebarCategoryGate();
+                    return;
+                }
+            }
+
             importSidebarOpenIntent = !importSidebarOpenIntent;
             importSidebarOpenIntentLoaded = true;
             RefreshImportSidebarCategoryGate();
             PersistImportSidebarOpenIntent();
+        }
+
+        /// <summary>Switch gallery browse to Scenes so Import source selection works.</summary>
+        private bool TryNavigateGalleryToScenes()
+        {
+            if (ImportSidebarCategoryAllowed()) return true;
+            if (categories == null) return false;
+            for (int i = 0; i < categories.Count; i++)
+            {
+                Gallery.Category c = categories[i];
+                if (!string.Equals(c.name, "Scenes", StringComparison.OrdinalIgnoreCase)) continue;
+                try { Show(c.name, c.extension, c.path); } catch { return false; }
+                return true;
+            }
+            return false;
         }
 
         public void SetImportSidebarActive(bool active)
@@ -180,6 +223,16 @@ namespace VPB
 
             try { RefreshImportSidebarWizardHeader(); } catch { }
             UpdateImportToggleBtnVisual();
+            try { RefreshModeAmbientChrome(); } catch { }
+            try
+            {
+                ShowTemporaryStatus(
+                    active
+                        ? VPBTranslation.T("gallery.import.opened", "Import sidebar open.")
+                        : VPBTranslation.T("gallery.import.closed", "Import sidebar closed."),
+                    1.25f);
+            }
+            catch { }
         }
 
         public void OpenImportSidebarWith(FileEntry sourceFile, Atom targetAtom)
@@ -240,16 +293,24 @@ namespace VPB
             return currentCategoryTitle == "Scenes";
         }
 
-        // The ONLY caller of SetImportSidebarActive: reconciles visibility to (intent && in-Scenes) on every
-        // intent change and category nav (end of Show), so leaving Scenes hides it and returning restores it.
+        /// <summary>Float outside Scenes: keep panel, freeze source scene/person picks.</summary>
+        private bool ImportSidebarSourceEditsLocked()
+        {
+            return importSidebarDetached && !ImportSidebarCategoryAllowed();
+        }
+
+        // Reconciles visibility on intent change and category nav.
+        // Docked: intent && Scenes. Float: intent alone (survives leaving Scenes; source edits stay locked).
         internal void RefreshImportSidebarCategoryGate()
         {
             bool allowed = ImportSidebarCategoryAllowed();
-            bool shouldBeActive = allowed && importSidebarOpenIntent;
+            bool shouldBeActive = importSidebarOpenIntent && (allowed || importSidebarDetached);
             if (shouldBeActive != importSidebarActive)
                 SetImportSidebarActive(shouldBeActive);
             try { SyncImportSidebarHeaderGateVisual(); } catch { }
             try { UpdateImportToggleBtnVisual(); } catch { }
+            try { RefreshImportSidebarWizardHeader(); } catch { }
+            try { RefreshSceneImportSideButtonVisibility(); } catch { }
         }
 
         /// <summary>Primary pane only: restore persisted open flag + dock side once at init (not per Show, not clones/extra panes).</summary>
@@ -320,10 +381,11 @@ namespace VPB
             try { UpdateImportToggleBtnVisual(); } catch { }
         }
 
-        // Reflect the scene already highlighted in the grid into the source list on open, so the user doesn't
-        // have to re-click it. selectedFiles holds the single-click selection (set even while the sidebar is closed).
+        // Reflect gallery selection into import source. Used on open + any selection change while open
+        // (click, keyboard, preview scrub commit). Cheap no-op when inactive / multi-select / same entry.
         private void TryLoadSelectedSceneIntoImportSidebar()
         {
+            if (!importSidebarActive) return;
             if (!ImportSidebarCategoryAllowed()) return;
             if (selectedFiles == null || selectedFiles.Count == 0) return;
             if (ImportSidebarMultiSelectBlocked()) return;
@@ -368,6 +430,11 @@ namespace VPB
                 try { importSidebarPresetType = (VpbResourceType)p["presetType"].AsInt; }
                 catch { }
             }
+            if (p.HasKey("wizardCollapsedMask"))
+            {
+                try { _importWizardCollapsedMask = p["wizardCollapsedMask"].AsInt; }
+                catch { }
+            }
         }
 
         private void SaveImportSidebarPrefs()
@@ -392,6 +459,7 @@ namespace VPB
             p["migratePluginUIDs"].AsBool = importSidebarMigratePluginUIDs;
             p["clearExistingPlugins"].AsBool = importSidebarClearExistingPlugins;
             p["multiSelectTypes"].AsBool = importSidebarMultiSelectTypes;
+            p["wizardCollapsedMask"].AsInt = _importWizardCollapsedMask;
             p["open"].AsBool = importSidebarOpenIntent;
             p["onLeft"].AsBool = importSidebarOnLeft;
             p["incAppearanceMorphs"].AsBool = importSidebarSubToggles.IncludeAppearanceMorphs;

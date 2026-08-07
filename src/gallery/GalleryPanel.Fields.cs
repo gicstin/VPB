@@ -131,6 +131,8 @@ namespace VPB
         private string selectedPath = null;
         private Stack<Action> undoStack = new Stack<Action>();
         private Stack<Action> redoStack = new Stack<Action>();
+        private Stack<string> undoLabelStack = new Stack<string>();
+        private Stack<string> redoLabelStack = new Stack<string>();
         private bool isApplyingUndoRedo = false;
         private List<GameObject> leftActiveTabButtons = new List<GameObject>();
         private List<GameObject> leftSubActiveTabButtons = new List<GameObject>(); // NEW

@@ -654,7 +654,25 @@ namespace VPB
         // UIDs registered on-demand this session whose clothing/hair/morph catalogs may still be stale.
         private static readonly HashSet<string> s_CatalogStaleUids =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Morph packages registered while RefreshPackageMorphs was skipped (clothing/hair-only
+        // catalog refresh). Survives NotifyNativeCatalogRefreshed under skip guard — otherwise
+        // Appearance import sees newlyRegistered=0, skips refresh, and VaM logs missing morph UIDs.
+        private static readonly HashSet<string> s_MorphIngestPendingUids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // UIDs that already had a successful EnsurePackageMorphsIngested / full morph refresh this
+        // session. Prevents re-paying RefreshPackageMorphs on every Appearance import.
+        private static readonly HashSet<string> s_MorphIngestCompletedUids =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly object s_CatalogStaleLock = new object();
+        private const string MorphCatalogPathNeedle = "Custom/Atom/Person/Morphs/";
+        // DAZCharacterSelector.ResetMorphsToDefault(bool physical, bool appearance) — protected.
+        static MethodInfo s_ResetMorphsToDefaultMi;
+        static FieldInfo s_CharacterRunFi;
+        static MethodInfo s_SmoothApplyMorphsLiteMi;
+        static MethodInfo s_CharacterRunResetMorphsMi;
+        // physical=true, appearance=true — Appearance replace must clear pose morphs too
+        // (Yuna hand-straighten + Life breathing stick otherwise and poison later looks).
+        static readonly object[] s_ResetAllMorphArgs = new object[] { true, true };
 
         private const int MaxDrainPerFrame = 10;
         private const float CoalescedVamRefreshDelayStartupSeconds = 1.0f;
@@ -786,7 +804,11 @@ namespace VPB
             }
             Interlocked.Exchange(ref s_UidOnlyResolveFailLogged, 0);
             lock (s_CatalogStaleLock)
+            {
                 s_CatalogStaleUids.Clear();
+                s_MorphIngestPendingUids.Clear();
+                s_MorphIngestCompletedUids.Clear();
+            }
         }
 
         /// <summary>True when UID was on-demand registered this session and native catalogs may still be stale.</summary>
@@ -797,11 +819,27 @@ namespace VPB
                 return s_CatalogStaleUids.Contains(uid);
         }
 
-        /// <summary>Called when native FileManager.Refresh completes — DAZ catalogs are fresh again.</summary>
+        /// <summary>
+        /// Called when native FileManager.Refresh completes — clothing/hair catalogs are fresh.
+        /// Morph-ingest pending clears only when RefreshPackageMorphs actually ran (skip guard off).
+        /// </summary>
         public static void NotifyNativeCatalogRefreshed()
         {
+            bool skipMorphs = VpbCatalogRefreshGuard.SkipPackageMorphRefresh;
             lock (s_CatalogStaleLock)
+            {
                 s_CatalogStaleUids.Clear();
+                if (!skipMorphs)
+                {
+                    // Full morph refresh ran with FM.Refresh — treat pending as completed.
+                    foreach (string uid in s_MorphIngestPendingUids)
+                    {
+                        if (!string.IsNullOrEmpty(uid))
+                            s_MorphIngestCompletedUids.Add(uid);
+                    }
+                    s_MorphIngestPendingUids.Clear();
+                }
+            }
         }
 
         /// <summary>
@@ -815,6 +853,9 @@ namespace VPB
                 s_RegisteredOnDemand.Clear();
             lock (s_FailedLock)
                 s_LastFailedAttemptTicksByUid.Clear();
+            // Keep s_MorphIngestCompletedUids across skip-morph clothing refreshes — clearing it
+            // would re-pay RefreshPackageMorphs after every dress. Re-register (MarkPromoted)
+            // removes the UID from completed when ingest is needed again.
         }
 
         /// <summary>
@@ -837,6 +878,8 @@ namespace VPB
         /// <summary>
         /// Whether a coalesced native refresh is needed after on-demand registration for these UIDs.
         /// Skips refresh when every UID was already registered and no catalog is stale.
+        /// Morph-ingest pending alone does not queue FileManager.Refresh — Appearance/Morphs import
+        /// calls <see cref="EnsurePackageMorphsIngested"/> (cheaper than a full native refresh).
         /// </summary>
         public static bool ShouldRequestCoalescedNativeRefreshForUids(ICollection<string> uids, int newlyRegisteredCount)
         {
@@ -865,8 +908,16 @@ namespace VPB
         static void MarkPromotedPackageCatalogStale(string uid)
         {
             if (string.IsNullOrEmpty(uid)) return;
+            CatalogContentKind kind = GetCatalogContentKindForUid(uid);
             lock (s_CatalogStaleLock)
+            {
                 s_CatalogStaleUids.Add(uid);
+                if ((kind & CatalogContentKind.Morphs) != 0)
+                {
+                    s_MorphIngestPendingUids.Add(uid);
+                    s_MorphIngestCompletedUids.Remove(uid);
+                }
+            }
         }
 
         [Flags]
@@ -900,13 +951,20 @@ namespace VPB
         static CatalogContentKind ClassifyInternalPathCatalogKind(string internalPath)
         {
             if (string.IsNullOrEmpty(internalPath)) return CatalogContentKind.None;
-            if (internalPath.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase))
-                return CatalogContentKind.Clothing;
-            if (internalPath.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase))
-                return CatalogContentKind.Hair;
-            if (internalPath.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase))
-                return CatalogContentKind.Morphs;
-            return CatalogContentKind.None;
+            // Manifest / zip names may use '\'; IndexOf so mid-path or odd prefixes still match.
+            string p = internalPath.Replace('\\', '/');
+            CatalogContentKind kind = CatalogContentKind.None;
+            if (p.StartsWith("Custom/Clothing/", StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/Custom/Clothing/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Clothing;
+            if (p.StartsWith("Custom/Hair/", StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/Custom/Hair/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Hair;
+            if (p.StartsWith("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase)
+                || p.IndexOf("/Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0
+                || p.IndexOf("Custom/Atom/Person/Morphs/", StringComparison.OrdinalIgnoreCase) >= 0)
+                kind |= CatalogContentKind.Morphs;
+            return kind;
         }
 
         static CatalogContentKind GetCatalogContentKindForUid(string uid)
@@ -951,14 +1009,123 @@ namespace VPB
             return GetCatalogContentKindForUid(uid) != CatalogContentKind.None;
         }
 
+        /// <summary>True when any morph package still needs DAZ bank ingest.</summary>
+        public static bool HasPendingMorphIngest()
+        {
+            lock (s_CatalogStaleLock)
+                return s_MorphIngestPendingUids.Count > 0;
+        }
+
         /// <summary>
-        /// True when any pending catalog-stale UID carries morph content.
+        /// Slice JSON references morph package paths: mark those package UIDs for bank ingest.
+        /// Only UIDs that appear in morph path refs are marked — not every dep that happens to
+        /// contain a Morphs/ folder (Yuna's 113-dep closure was marking 34 packages and forcing a
+        /// full ClearPackageMorphs rebuild that poisoned later looks).
+        /// </summary>
+        public static void NoteMorphIngestPendingForSlice(ICollection<string> uids, string sliceJson)
+        {
+            if (!JsonReferencesPackageMorphContent(sliceJson)) return;
+
+            int marked = 0;
+            lock (s_CatalogStaleLock)
+            {
+                marked += NoteMorphPackageUidsFromJsonUnlocked(sliceJson);
+            }
+
+            if (marked > 0)
+            {
+                try
+                {
+                    int depCount = uids != null ? uids.Count : 0;
+                    LogUtil.Log("[VPB OnDemand] NoteMorphIngestPendingForSlice marked=" + marked
+                        + " deps=" + depCount);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Walk slice/preset JSON for <c>uid:/Custom/Atom/Person/Morphs/</c> and mark those package UIDs.
+        /// Caller must hold <see cref="s_CatalogStaleLock"/>. Warm path — import only.
+        /// </summary>
+        static int NoteMorphPackageUidsFromJsonUnlocked(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return 0;
+            const string needle = ":/Custom/Atom/Person/Morphs/";
+            int marked = 0;
+            int searchFrom = 0;
+            while (searchFrom < json.Length)
+            {
+                int idx = json.IndexOf(needle, searchFrom, StringComparison.OrdinalIgnoreCase);
+                if (idx < 0) break;
+
+                int end = idx;
+                int start = end - 1;
+                while (start >= 0)
+                {
+                    char c = json[start];
+                    if (c == '"' || c == '\'' || c == '[' || c == ',' || c == '{' || c == ':'
+                        || c == ' ' || c == '\t' || c == '\r' || c == '\n')
+                    {
+                        start++;
+                        break;
+                    }
+                    start--;
+                }
+                if (start < 0) start = 0;
+
+                if (end > start)
+                {
+                    string uid = json.Substring(start, end - start);
+                    if (!string.IsNullOrEmpty(uid)
+                        && !string.Equals(uid, "SELF", StringComparison.OrdinalIgnoreCase)
+                        && !s_MorphIngestCompletedUids.Contains(uid)
+                        && s_MorphIngestPendingUids.Add(uid))
+                    {
+                        marked++;
+                    }
+                }
+
+                searchFrom = idx + needle.Length;
+            }
+            return marked;
+        }
+
+        /// <summary>True when any of the given UIDs still needs morph-bank ingest.</summary>
+        public static bool HasMorphIngestPendingForUids(ICollection<string> uids)
+        {
+            if (uids == null || uids.Count == 0) return false;
+            lock (s_CatalogStaleLock)
+            {
+                if (s_MorphIngestPendingUids.Count == 0) return false;
+                foreach (string uid in uids)
+                {
+                    if (string.IsNullOrEmpty(uid)) continue;
+                    if (s_MorphIngestPendingUids.Contains(uid)) return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True when JSON text references package morph paths (warm gate; no alloc).
+        /// </summary>
+        public static bool JsonReferencesPackageMorphContent(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+            return json.IndexOf(MorphCatalogPathNeedle, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
+        /// True when any pending catalog-stale UID carries morph content, or morph ingest is still pending
+        /// after a clothing/hair-only skip refresh.
         /// Clothing/hair-only stale sets must not re-run RefreshPackageMorphs (Naturalis cost).
         /// </summary>
         public static bool PendingCatalogNeedsMorphRefresh()
         {
             lock (s_CatalogStaleLock)
             {
+                if (s_MorphIngestPendingUids.Count > 0) return true;
                 if (s_CatalogStaleUids.Count == 0) return false;
                 foreach (string uid in s_CatalogStaleUids)
                 {
@@ -972,6 +1139,8 @@ namespace VPB
         /// <summary>
         /// Skip package-morph re-ingest when enabled and pending stale UIDs are clothing/hair-only.
         /// Empty stale set → do not skip (unknown refresh intent; keep morph refresh).
+        /// Morph-ingest-pending alone does not block skip — Appearance/Morphs import calls
+        /// <see cref="EnsurePackageMorphsIngested"/> so clothing dress keeps the Naturalis saving.
         /// </summary>
         public static bool ShouldSkipPackageMorphRefreshForCatalogUpdate()
         {
@@ -994,6 +1163,259 @@ namespace VPB
                 }
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Zero ALL morph values (appearance + pose) on a Person before package-morph bank rebuild
+        /// or Appearance replace apply.
+        /// VaM <c>RefreshPackageMorphs</c> snapshots morphValue != startValue, ClearPackageMorphs,
+        /// reimports, then restores — previous look values bleed across imports.
+        /// Yuna-style character morphs also drive bones via formulas and ship pose morphs at 1
+        /// (hand straighten); appearance-only reset left those active and corrupted later looks.
+        /// Forces <c>morphValue = 0</c> (not <c>Reset()</c>/defaultVal) then flushes characterRun.
+        /// Warm path — import only.
+        /// </summary>
+        public static void ResetAppearanceMorphValues(Atom targetAtom, string reason = null)
+        {
+            if (!IsMainThread()) return;
+            if (targetAtom == null || !string.Equals(targetAtom.type, "Person", StringComparison.Ordinal))
+                return;
+
+            try
+            {
+                var selector = targetAtom.GetStorableByID("geometry") as DAZCharacterSelector;
+                if (selector == null) return;
+
+                // Force zero on every morph in the UI lists (includes demand-activated).
+                ZeroMorphList(selector.morphsControlUI);
+                ZeroMorphList(selector.morphsControlUIAlt);
+                ZeroMorphList(selector.morphsControlUIOtherGender);
+
+                if (s_ResetMorphsToDefaultMi == null)
+                {
+                    s_ResetMorphsToDefaultMi = typeof(DAZCharacterSelector).GetMethod(
+                        "ResetMorphsToDefault",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
+                        null,
+                        new Type[] { typeof(bool), typeof(bool) },
+                        null);
+                }
+                if (s_ResetMorphsToDefaultMi != null)
+                    s_ResetMorphsToDefaultMi.Invoke(selector, s_ResetAllMorphArgs);
+                else
+                    selector.ResetMorphsOtherGender(true, true);
+
+                // Flush bone formulas (Yuna Body targets carpals/neck/hip) so zeroed values take effect.
+                FlushCharacterRunMorphs(selector);
+
+                try
+                {
+                    LogUtil.Log("[VPB OnDemand] ResetAppearanceMorphValues"
+                        + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason))
+                        + " atom=" + targetAtom.uid);
+                }
+                catch { }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] ResetAppearanceMorphValues failed: " + ex.Message
+                        + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason)));
+                }
+                catch { }
+            }
+        }
+
+        static void ZeroMorphList(GenerateDAZMorphsControlUI ui)
+        {
+            if (ui == null) return;
+            List<DAZMorph> morphs = ui.GetMorphs();
+            if (morphs == null) return;
+            for (int i = 0; i < morphs.Count; i++)
+            {
+                DAZMorph m = morphs[i];
+                if (m == null) continue;
+                try { m.morphValue = 0f; }
+                catch
+                {
+                    try { m.Reset(); } catch { }
+                }
+            }
+        }
+
+        static void FlushCharacterRunMorphs(DAZCharacterSelector selector)
+        {
+            if (selector == null) return;
+            try
+            {
+                if (s_CharacterRunFi == null)
+                    s_CharacterRunFi = typeof(DAZCharacterSelector).GetField(
+                        "_characterRun", BindingFlags.Instance | BindingFlags.NonPublic);
+                object run = s_CharacterRunFi != null ? s_CharacterRunFi.GetValue(selector) : null;
+                if (run == null) return;
+
+                if (s_CharacterRunResetMorphsMi == null)
+                    s_CharacterRunResetMorphsMi = run.GetType().GetMethod(
+                        "ResetMorphs", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null, Type.EmptyTypes, null);
+                if (s_CharacterRunResetMorphsMi != null)
+                    s_CharacterRunResetMorphsMi.Invoke(run, null);
+
+                if (s_SmoothApplyMorphsLiteMi == null)
+                    s_SmoothApplyMorphsLiteMi = run.GetType().GetMethod(
+                        "SmoothApplyMorphsLite", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null, Type.EmptyTypes, null);
+                if (s_SmoothApplyMorphsLiteMi != null)
+                    s_SmoothApplyMorphsLiteMi.Invoke(run, null);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// After Appearance replace: unload inactive demand-activated package morphs (e.g. Yuna Body/Head)
+        /// so they cannot linger in banks and re-corrupt later looks.
+        /// </summary>
+        public static void UnloadInactiveDemandMorphs(Atom targetAtom, string reason = null)
+        {
+            if (!IsMainThread()) return;
+            if (targetAtom == null || !string.Equals(targetAtom.type, "Person", StringComparison.Ordinal))
+                return;
+            try
+            {
+                var selector = targetAtom.GetStorableByID("geometry") as DAZCharacterSelector;
+                if (selector == null) return;
+                selector.UnloadDemandActivatedMorphs();
+                selector.CleanDemandActivatedMorphs();
+                try
+                {
+                    LogUtil.Log("[VPB OnDemand] UnloadInactiveDemandMorphs"
+                        + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason))
+                        + " atom=" + targetAtom.uid);
+                }
+                catch { }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] UnloadInactiveDemandMorphs failed: " + ex.Message);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Re-ingest package morphs into DAZ banks so Appearance/Morphs apply can resolve UIDs.
+        /// Target-only when known (import); all Persons when null (plugin dep path).
+        /// Clears morph-ingest pending after a successful call (VaM no-ops when unchanged).
+        /// Main thread only. Warm path — not per-frame.
+        /// </summary>
+        public static bool EnsurePackageMorphsIngested(Atom targetAtom, string reason = null)
+        {
+            if (!IsMainThread()) return false;
+            if (VpbCatalogRefreshGuard.SkipPackageMorphRefresh)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] EnsurePackageMorphsIngested skipped (skip guard active)"
+                        + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason)));
+                }
+                catch { }
+                return false;
+            }
+
+            bool hadPending;
+            int pendingCount;
+            lock (s_CatalogStaleLock)
+            {
+                pendingCount = s_MorphIngestPendingUids.Count;
+                hadPending = pendingCount > 0;
+            }
+
+            // Clear previous look values before bank rebuild — otherwise RefreshPackageMorphs
+            // snapshots+restores them and they survive the next Appearance replace.
+            // Import reasons only: plugin_dep ingest must not wipe live appearance morphs.
+            bool resetForImport = !string.IsNullOrEmpty(reason)
+                && (reason.IndexOf("vpb_import", StringComparison.OrdinalIgnoreCase) >= 0
+                    || reason.IndexOf("VpbImport", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (resetForImport && targetAtom != null)
+                ResetAppearanceMorphValues(targetAtom, "pre_ingest:" + reason);
+
+            bool changed = false;
+            try
+            {
+                if (targetAtom != null && string.Equals(targetAtom.type, "Person", StringComparison.Ordinal))
+                {
+                    changed = RefreshPackageMorphsOnAtom(targetAtom);
+                }
+                else
+                {
+                    var sc = SuperController.singleton;
+                    if (sc != null)
+                    {
+                        foreach (Atom atom in sc.GetAtoms())
+                        {
+                            if (atom == null || atom.type != "Person") continue;
+                            if (RefreshPackageMorphsOnAtom(atom)) changed = true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB OnDemand] EnsurePackageMorphsIngested failed: " + ex.Message
+                        + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason)));
+                }
+                catch { }
+                return false;
+            }
+
+            lock (s_CatalogStaleLock)
+            {
+                foreach (string uid in s_MorphIngestPendingUids)
+                {
+                    if (!string.IsNullOrEmpty(uid))
+                        s_MorphIngestCompletedUids.Add(uid);
+                }
+                s_MorphIngestPendingUids.Clear();
+            }
+
+            try
+            {
+                LogUtil.Log("[VPB OnDemand] EnsurePackageMorphsIngested changed=" + (changed ? 1 : 0)
+                    + " pendingWas=" + pendingCount
+                    + " hadPending=" + (hadPending ? 1 : 0)
+                    + (string.IsNullOrEmpty(reason) ? "" : (" reason=" + reason))
+                    + (targetAtom != null ? (" atom=" + targetAtom.uid) : " atom=all"));
+            }
+            catch { }
+
+            return changed;
+        }
+
+        /// <summary>
+        /// Warm gate: run morph ingest only when morph packages still need bank ingest.
+        /// When <paramref name="jsonOrNull"/> names package morph paths, mark those UIDs pending first
+        /// (fixes clothing/hair-only ForceRun skip + incomplete manifest classification).
+        /// </summary>
+        public static bool EnsurePackageMorphsIngestedIfNeeded(Atom targetAtom, string jsonOrNull, string reason = null)
+        {
+            if (!string.IsNullOrEmpty(jsonOrNull))
+                NoteMorphIngestPendingForSlice(null, jsonOrNull);
+            if (!HasPendingMorphIngest())
+                return false;
+            return EnsurePackageMorphsIngested(targetAtom, reason);
+        }
+
+        static bool RefreshPackageMorphsOnAtom(Atom atom)
+        {
+            if (atom == null) return false;
+            var selector = atom.GetStorableByID("geometry") as DAZCharacterSelector;
+            if (selector == null) return false;
+            return selector.RefreshPackageMorphs();
         }
 
         /// <summary>Drop coalesced native refresh without running it (light clothing catalog path succeeded).</summary>
@@ -2138,6 +2560,7 @@ namespace VPB
             bool skipMorphs = false;
             int staleCount = 0;
             int morphStale = 0;
+            int morphIngestPending = 0;
             string morphSample = "";
             try
             {
@@ -2145,6 +2568,7 @@ namespace VPB
                 lock (s_CatalogStaleLock)
                 {
                     staleCount = s_CatalogStaleUids.Count;
+                    morphIngestPending = s_MorphIngestPendingUids.Count;
                     int shown = 0;
                     foreach (string uid in s_CatalogStaleUids)
                     {
@@ -2159,6 +2583,17 @@ namespace VPB
                             }
                         }
                     }
+                    if (shown < 4)
+                    {
+                        foreach (string uid in s_MorphIngestPendingUids)
+                        {
+                            if (string.IsNullOrEmpty(uid)) continue;
+                            if (shown > 0) morphSample += ",";
+                            morphSample += uid;
+                            shown++;
+                            if (shown >= 4) break;
+                        }
+                    }
                 }
             }
             catch { }
@@ -2169,7 +2604,8 @@ namespace VPB
                 + " skipMorphs=" + (skipMorphs ? 1 : 0)
                 + " stale=" + staleCount
                 + " morphStale=" + morphStale
-                + (string.IsNullOrEmpty(morphSample) ? "" : (" morphSample=" + morphSample));
+                + " morphIngestPending=" + morphIngestPending
+                + " morphSample=" + (string.IsNullOrEmpty(morphSample) ? "-" : morphSample);
         }
 
         /// <summary>

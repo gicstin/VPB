@@ -1678,7 +1678,7 @@ namespace VPB
 
         private void UpdateRemoveHairButtonLabels(int optionCount)
         {
-            UpdateRemoveButtonLabels(leftRemoveAllHairBtn, rightRemoveAllHairBtn, "Remove\nHair", optionCount);
+            UpdateRemoveButtonLabels(leftRemoveAllHairBtn, rightRemoveAllHairBtn, "Unequip\nHair", optionCount);
         }
 
         private void ApplyHairPreview(Atom target, string itemUid)
@@ -1863,7 +1863,8 @@ namespace VPB
 
         private void RefreshSceneImportSideButtonVisibility()
         {
-            bool show = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            bool show = !cleanupModeActive && !IsSettingsPanelOpen()
+                && (ImportSidebarCategoryAllowed() || importSidebarOpenIntent);
             if (rightSceneImportSideBtn != null && rightSceneImportSideBtn.activeSelf != show)
                 rightSceneImportSideBtn.SetActive(show);
             if (leftSceneImportSideBtn != null && leftSceneImportSideBtn.activeSelf != show)

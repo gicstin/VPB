@@ -3000,6 +3000,9 @@ namespace VPB
 
         public static bool IsPackagePath(string path)
         {
+            if (string.IsNullOrEmpty(path)) return false;
+            // Windows drive abs paths contain ":/" (C:/...) — not VaM pkg:/internal.
+            if (LocalSceneGallerySupport.IsWindowsDriveAbsolutePath(path)) return false;
             string input = path.Replace('\\', '/');
             string packageUidOrPath = Regex.Replace(input, ":/.*", string.Empty);
             // IMPORTANT: do not use GetPackage default (ensureInstalled: true) here.

@@ -158,8 +158,10 @@ namespace VPB
             if (leftSaveBtnIconImage == null) RefreshGoText(leftSaveBtnGO, "gallery.side.save", "Save");
             if (rightRemoveAtomBtnIconImage == null) RefreshGoText(rightRemoveAtomBtn, "gallery.side.remove", "Remove");
             if (leftRemoveAtomBtnIconImage == null) RefreshGoText(leftRemoveAtomBtn, "gallery.side.remove", "Remove");
-            if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
-            if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Remove\nClothing");
+            if (rightRemoveAllClothingBtnIconImage == null) RefreshGoText(rightRemoveAllClothingBtn, "gallery.side.remove_clothing", "Unequip\nClothing");
+            if (leftRemoveAllClothingBtnIconImage == null) RefreshGoText(leftRemoveAllClothingBtn, "gallery.side.remove_clothing", "Unequip\nClothing");
+            if (rightRemoveAllHairBtnIconImage == null) RefreshGoText(rightRemoveAllHairBtn, "gallery.side.remove_hair", "Unequip\nHair");
+            if (leftRemoveAllHairBtnIconImage == null) RefreshGoText(leftRemoveAllHairBtn, "gallery.side.remove_hair", "Unequip\nHair");
 
             // Selection toolbox: Copy/Delete/Autoinstall/Hide/Unhide/No autoinstall — labels from selection (counts).
             try { RefreshTboxConditionalActionButtons(); } catch { }

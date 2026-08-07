@@ -159,7 +159,7 @@ Select rows, then use the **toolbox** at the bottom for cleanup actions: filter 
 - **Ctrl+click** — add or remove a row from selection.
 - **Shift+click** — select a range from the last anchor.
 - **Ctrl+A** — select all visible rows.
-- **Escape** — clear selection when no menu is open.
+- **Escape** — clear selection when no menu/mode claimed Esc (see Hotkeys).
 
 Select one or more rows to expand the **toolbox** at the bottom (hover the bar if it is collapsed).
 
@@ -192,11 +192,12 @@ Availability depends on category and selection:
 The **Target** dropdown in the toolbox picks which **Person** atom receives presets, clothing, hair, and imports.
 
 ### Scene helper side lists
-Lower side-rail buttons help edit the open scene (not the package grid):
+Lower side-rail buttons help edit the open scene (not the package grid). Three different “remove” families:
 
-- **Remove clothing** — find and remove clothing on persons.
-- **Remove hair** — remove hair items.
-- **Remove atom** — remove atoms from the scene.
+- **Unequip clothing / hair** — list and unequip wearables on persons (not package Delete).
+- **Unequip / remove atom** — remove atoms from the scene via the side list.
+- **Scene Eraser** (separate rail tool) — point-and-click erase in the 3D scene; **Esc** exits.
+- **Delete** (toolbox) — move packages/scenes to Deleted* folders on disk.
 - **Target** — pick or filter target persons for apply operations.
 
 ## Layout
@@ -240,8 +241,12 @@ Pagination sits at the bottom-left when the list has multiple pages.
 The **Target** menu in the toolbox chooses which **Person** atom gets appearances, clothing, hair, poses, and scene imports.
 
 ### Applying from the grid
-- **Single-click** or **double-click** — set in Settings → Browse → Interaction.
-- {{icon:hold|Hold-to-launch}} (footer) — hold mouse or controller on a thumbnail to apply.
+- **Apply** — single-click or double-click (Settings → Browse → Interaction; side-rail toggle). Commits to the target Person.
+- **Try-On** (Settings → Interaction) — eligible clothing/hair/skin/morph/appearance/pose/plugin applies preview first. Toolbox bar: **Keep** / **Revert** / Compare; **Esc** reverts. Next try auto-keeps the previous preview (status toast).
+- **Import to atom** — Scene Import sidebar button (not grid Apply): copy resources from a scene onto a Person.
+- **Load scene** — scenes/vars use load/drag paths, not Apply.
+- **Enter** / **Space** — same as click Apply / Try-On intercept.
+- {{icon:hold|Hold-to-launch}} (footer) — hold mouse or controller on a thumbnail to apply (overrides 1-Click toggle).
 - **Replace vs merge** (side rail in appearance categories) — toggles whether clothing/hair replaces or merges.
 
 ### Drag and drop
@@ -259,7 +264,8 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 ### Gallery chrome
 - **Ctrl+V** (default) — show / hide gallery (configurable)
 - **?** / **F1** — open / close this Hotkeys sheet
-- **Esc** — close help, menus, search popup, Creator Mode (ladder: innermost first)
+- **Ctrl+Shift+P** — command palette (undo, apply, clear filters/selection, Scene Tools, Scene Eraser, Import, Cleanup, Try-On toggle, Hold-launch, Delete, …)
+- **Esc** — close help/menus/search, then exit Scene Tools / Scene Eraser / Try-On (revert) / Cleanup / Import, else clear selection (ladder: innermost first)
 - **Ctrl+Alt+= / Ctrl+Alt+-** — gallery UI scale up / down (also keypad +/-; separate from grid zoom). New installs auto-pick a desktop starting scale from screen height; desktop chrome also multiplies by VaM Monitor UI Scale.
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
 
@@ -275,20 +281,32 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 
 ### Selection
 - **Arrow keys** — move selection in the grid (Shift = range, Ctrl = add)
+- **Enter** / **Space** — apply selection
 - **Ctrl+A** — select all visible items
 - **Delete / Backspace** — delete eligible selection (History: remove from history)
 - Context menu **1–9** — run numbered actions while the menu is open
 - **0–9** — jump to numbered category (same order as the category quick-switch menu)
 
 ### Undo / redo
-- **Ctrl+Z** — undo (footer Undo; also undoes recent History remove / search clear within 5s)
+- **Ctrl+Z** — undo (footer Undo stays pinned; tooltip names next action; also undoes recent History remove / search clear within 5s)
 - **Ctrl+Y** / **Ctrl+Shift+Z** — redo
 - **Ctrl+R** — refresh History browse (History category only)
 
-### Creator Mode
-- **Ctrl+Shift+K** — toggle Creator Mode
+### Scene Tools (not Creators list)
+- **Ctrl+Shift+K** — toggle Scene Tools
 - **Ctrl+Shift+S** — open / close Strip Scene keep picker
 - While Strip Scene is open: **?** help · **/** filter · **↑↓** nav · **Space** toggle · **←→** expand · **F2** rename · **Enter** strip · **Esc** back
+- Status bar shows sticky modes (Scene Eraser · Scene Tools · Try-On · Import · Cleanup · …); soft toasts append after the mode line. **Esc** exits tool modes listed there.
+
+### Scene Eraser
+- Side-rail eraser / **Ctrl+Shift+E** — point and click to erase scene items; **Esc** exits
+- Pointer popup says **Erase …** (scene edit). Wearable side lists say **Unequip**. Toolbox **Delete** is disk only.
+
+### Try-On
+- Settings → Interaction → **Try-On Mode** (also command palette). Eligible grid applies preview; bar **Keep** / **Revert** / Compare; **Esc** reverts. Next try auto-keeps previous (toast).
+
+### Filters
+- Active browse filters show as chips under the title bar (**Clear all**). Switching category restores that category’s saved filters and toasts when any are active.
 
 ### VR
 - **VR hover tooltips** (Settings) — short hover shows control labels.

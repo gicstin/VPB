@@ -637,7 +637,7 @@ namespace VPB
 								{
 	                                try { debugStage = 20; debugStageAux = 0; debugStageRealtime = Time.realtimeSinceStartup; } catch { }
 	                                bool isVarPath = false;
-	                                try { isVarPath = imgPath != null && imgPath.IndexOf(":/", StringComparison.Ordinal) > 0; } catch { isVarPath = false; }
+	                                try { isVarPath = IsVarPackageVfsPath(imgPath); } catch { isVarPath = false; }
 
 	                                if (isThumbnail && isVarPath)
 	                                {
@@ -1635,6 +1635,8 @@ namespace VPB
         private static bool IsVarPackageVfsPath(string imgPath)
         {
             if (string.IsNullOrEmpty(imgPath)) return false;
+            // Windows drive abs paths contain ":/" (C:/...) — not VaM pkg:/internal.
+            if (LocalSceneGallerySupport.IsWindowsDriveAbsolutePath(imgPath)) return false;
             return imgPath.IndexOf(":/", StringComparison.Ordinal) > 0;
         }
 

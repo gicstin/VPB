@@ -537,7 +537,7 @@ namespace VPB
                     if (quickFiltersToggleBtnIconImage != null) quickFiltersToggleBtnIconImage.color = UI.BarIconGlyphTint;
                 }
             }
-            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets — Alt+F toggles floating window; Float as Window detaches; X reattaches");
+            AddTooltip(qfToggleBtn, "gallery.tooltip.filter_presets", "Filter Presets — Alt+F toggles floating window; Float detaches; Dock reattaches");
 
             // Register inner pane button scale actions (title bar)
             { var rt = titleBarRT; innerPaneScaleActions.Add(s => { rt.sizeDelta = new Vector2(0, GalleryUiDesignTokens.TitleBarHeightRef * s); }); }
@@ -1521,7 +1521,7 @@ namespace VPB
                         rmImg.color = colorRemoveModeRail;
                         if (rmTxt != null)
                         {
-                            rmTxt.text = VPBTranslation.T("gallery.side.remove_mode_short", "Erase");
+                            rmTxt.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
                             rmTxt.fontSize = btnFontSize;
                             rmTxt.gameObject.SetActive(true);
                         }
@@ -1529,7 +1529,7 @@ namespace VPB
                     rightRemoveModeBtnOutline = RemoveModeAddRailOutline(rightRemoveModeBtn);
                     rightSideButtons.Add(rightRemoveModeBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightRemoveModeBtn, () => ToggleRemoveMode(false, true));
-                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
+                    AddTooltip(rightRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
                 }
 
                 // Creator Mode (Right) — sticky scene-tools mode (Strip Scene, …). Not Creators author list.
@@ -1553,7 +1553,7 @@ namespace VPB
                         cmImg.color = CreatorModeRailBackdrop;
                         if (cmTxt != null)
                         {
-                            cmTxt.text = VPBTranslation.T("gallery.side.creator_mode_short", "Make");
+                            cmTxt.text = VPBTranslation.T("gallery.side.creator_mode_short", "Tools");
                             cmTxt.fontSize = btnFontSize;
                             cmTxt.gameObject.SetActive(true);
                         }
@@ -1562,7 +1562,7 @@ namespace VPB
                     rightSideButtons.Add(rightCreatorModeBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(rightCreatorModeBtn, () => ToggleCreatorMode(false, true));
                     AddTooltip(rightCreatorModeBtn, "gallery.tooltip.creator_mode",
-                        "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.");
+                        "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.");
                 }
 
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
@@ -1661,12 +1661,12 @@ namespace VPB
                             LogUtil.LogError("[VPB] Remove (scene) (Right RMB) exception: " + ex);
                         }
                     });
-                    AddTooltip(rightRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                    AddTooltip(rightRemoveAtomBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
                 }
 
 
                 // Context Actions (Right)
-                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllClothingBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Unequip\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Right)");
                     try
                     {
@@ -1713,10 +1713,10 @@ namespace VPB
                         LogUtil.LogError("[VPB] Remove Clothing (Right RMB) exception: " + ex);
                     }
                 });
-                AddTooltip(rightRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                AddTooltip(rightRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
 
 
-                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
+                rightRemoveAllHairBtn = UI.CreateUIButton(rightSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Unequip\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Right)");
                     try
                     {
@@ -1759,7 +1759,7 @@ namespace VPB
                         LogUtil.LogError("[VPB] Remove Hair (Right RMB) exception: " + ex);
                     }
                 });
-                AddTooltip(rightRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                AddTooltip(rightRemoveAllHairBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
 
 
                 // Left Button Container
@@ -2063,7 +2063,7 @@ namespace VPB
                         rmImgL.color = colorRemoveModeRailL;
                         if (rmTxtL != null)
                         {
-                            rmTxtL.text = VPBTranslation.T("gallery.side.remove_mode_short", "Erase");
+                            rmTxtL.text = VPBTranslation.T("gallery.side.remove_mode_short", "Eraser");
                             rmTxtL.fontSize = btnFontSize;
                             rmTxtL.gameObject.SetActive(true);
                         }
@@ -2071,7 +2071,7 @@ namespace VPB
                     leftRemoveModeBtnOutline = RemoveModeAddRailOutline(leftRemoveModeBtn);
                     leftSideButtons.Add(leftRemoveModeBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftRemoveModeBtn, () => ToggleRemoveMode(true, true));
-                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Remove Item Mode: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene.");
+                    AddTooltip(leftRemoveModeBtn, "gallery.tooltip.remove_mode", "Scene Eraser: point at an item to fade it, click to remove. Also opens the remove list siderail for clothing/hair/scene. Esc exits.");
                 }
 
                 // Creator Mode (Left) — sticky scene-tools mode. Not Creators author list.
@@ -2095,7 +2095,7 @@ namespace VPB
                         cmImgL.color = CreatorModeRailBackdrop;
                         if (cmTxtL != null)
                         {
-                            cmTxtL.text = VPBTranslation.T("gallery.side.creator_mode_short", "Make");
+                            cmTxtL.text = VPBTranslation.T("gallery.side.creator_mode_short", "Tools");
                             cmTxtL.fontSize = btnFontSize;
                             cmTxtL.gameObject.SetActive(true);
                         }
@@ -2104,7 +2104,7 @@ namespace VPB
                     leftSideButtons.Add(leftCreatorModeBtn.GetComponent<RectTransform>());
                     AddRightClickDelegate(leftCreatorModeBtn, () => ToggleCreatorMode(true, true));
                     AddTooltip(leftCreatorModeBtn, "gallery.tooltip.creator_mode",
-                        "Creator Mode — sticky scene authoring tools. Not the Creators author list. Ctrl+Shift+K. Esc exits.");
+                        "Scene Tools — sticky scene authoring (Strip Scene, …). Not the Creators author list. Ctrl+Shift+K. Esc exits.");
                 }
 
                 // Appearance clothing-apply-mode is now a 3-button segmented row docked in the
@@ -2198,12 +2198,12 @@ namespace VPB
                             LogUtil.LogError("[VPB] Remove (scene) (Left RMB) exception: " + ex);
                         }
                     });
-                    AddTooltip(leftRemoveAtomBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                    AddTooltip(leftRemoveAtomBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
                 }
 
 
                 // Context Actions (Left)
-                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Remove\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllClothingBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_clothing", "Unequip\nClothing"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Clothing (Left)");
                     try
                     {
@@ -2250,9 +2250,9 @@ namespace VPB
                         LogUtil.LogError("[VPB] Remove Clothing (Left RMB) exception: " + ex);
                     }
                 });
-                AddTooltip(leftRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                AddTooltip(leftRemoveAllClothingBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
 
-                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Remove\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
+                leftRemoveAllHairBtn = UI.CreateUIButton(leftSideContainer, removeCtxW, removeCtxH, VPBTranslation.T("gallery.side.remove_hair", "Unequip\nHair"), 18, 0, 0, AnchorPresets.centre, () => {
                     LogUtil.Log("[VPB] SideButton click: Remove Hair (Left)");
                     try
                     {
@@ -2295,7 +2295,7 @@ namespace VPB
                         LogUtil.LogError("[VPB] Remove Hair (Left RMB) exception: " + ex);
                     }
                 });
-                AddTooltip(leftRemoveAllHairBtn, "gallery.tooltip.remove_context", "Remove or open remove options for the current category (clothing, hair, or scene).");
+                AddTooltip(leftRemoveAllHairBtn, "gallery.tooltip.remove_context", "Unequip / open unequip options for the current category (clothing, hair, or scene atoms). Not Scene Eraser and not package Delete.");
 
 
 

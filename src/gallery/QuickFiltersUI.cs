@@ -55,8 +55,9 @@ namespace VPB
         private InputField searchInput;
         private GameObject sortBtnGO;
         private Image sortBtnIcon;
-        private GameObject detachListBtnGO;
-        private Text detachListBtnText;
+        /// <summary>Docked header Float chip (import-sidebar pattern). Hidden while detached.</summary>
+        private GameObject headerFloatBtnGO;
+        private Text headerFloatBtnText;
         private GameObject collapseBtnGO;
         private Image collapseBtnIcon;
         private GameObject closeBtnGO;
@@ -264,27 +265,115 @@ namespace VPB
             headerDrag.Target = containerRT;
             headerDrag.OnMoved = OnFloatMoved;
 
-            // Fixed header: search + sort (float detach is a full-width list button).
+            // Fixed header: search · Float (docked) · sort — match import sidebar chrome (Jakob).
             headerGO = UI.CreateChildRT(containerGO, "Header", AnchorPresets.hStretchTop,
                 new Vector2(0f, GalleryUiDesignTokens.SearchFieldHeightRef + HeaderPadRef * 2f),
                 new Vector2(0f, 0f));
             RectTransform headerRT = headerGO.GetComponent<RectTransform>();
             headerRT.pivot = new Vector2(0.5f, 1f);
+            UI.AddHLG(
+                headerGO,
+                spacing: HeaderSortGapRef,
+                padding: UI.Pad(HeaderPadRef, HeaderPadRef, HeaderPadRef, HeaderPadRef),
+                childAlignment: TextAnchor.MiddleCenter,
+                childControlWidth: true,
+                childControlHeight: true,
+                childForceExpandWidth: false,
+                childForceExpandHeight: true);
 
             float sortSq = GalleryUiDesignTokens.ButtonSizeRef;
-            sortBtnGO = UI.CreateUIButton(headerGO, sortSq, sortSq, " ", 16, 0, 0, AnchorPresets.topRight, null);
+            float searchH = GalleryUiDesignTokens.SearchFieldHeightRef;
+
+            if (panel != null)
+            {
+                searchInput = panel.CreateSearchInput(headerGO, 200f, val =>
+                {
+                    listFilter = val ?? "";
+                    Refresh();
+                }, () =>
+                {
+                    listFilter = "";
+                    Refresh();
+                });
+                if (searchInput != null)
+                {
+                    if (searchInput.placeholder is Text ph)
+                        ph.text = VPBTranslation.T("quickfilters.search_ph", "Search saved presets…");
+                    // HLG + LayoutElement own size (avoid stretch anchors fighting layout).
+                    RectTransform srt = searchInput.GetComponent<RectTransform>();
+                    if (srt != null)
+                    {
+                        srt.anchorMin = new Vector2(0f, 0.5f);
+                        srt.anchorMax = new Vector2(0f, 0.5f);
+                        srt.pivot = new Vector2(0.5f, 0.5f);
+                        srt.anchoredPosition = Vector2.zero;
+                        srt.sizeDelta = new Vector2(200f, searchH);
+                    }
+                    UI.AddLE(
+                        searchInput.gameObject,
+                        preferredHeight: searchH,
+                        flexibleWidth: 1f,
+                        minWidth: 80f);
+                    var searchHover = searchInput.gameObject.AddComponent<UIHoverDelegate>();
+                    searchHover.OnHoverChange += (enter) =>
+                    {
+                        if (panel == null) return;
+                        if (enter)
+                        {
+                            panel.SetStatus(VPBTranslation.T(
+                                "quickfilters.tip.list_search",
+                                "Search saved presets by name. Ctrl+S with text here names a new preset."));
+                        }
+                        else panel.SetStatus(null);
+                    };
+                }
+            }
+
+            // Compact Float chip — docked only (same contract as import header Float).
+            headerFloatBtnGO = UI.CreateUIButton(
+                headerGO,
+                sortSq * 1.6f,
+                sortSq,
+                VPBTranslation.T("quickfilters.detach_short", "Float"),
+                GalleryUiDesignTokens.PopupMenuRowFontRef,
+                0, 0,
+                AnchorPresets.middleCenter,
+                Detach);
+            if (headerFloatBtnGO != null)
+            {
+                headerFloatBtnGO.name = "HeaderFloat";
+                Image floatImg = headerFloatBtnGO.GetComponent<Image>();
+                if (floatImg != null) floatImg.color = new Color(0.18f, 0.30f, 0.40f, 1f);
+                Text floatTxt = headerFloatBtnGO.GetComponentInChildren<Text>();
+                if (floatTxt != null)
+                {
+                    headerFloatBtnText = floatTxt;
+                    floatTxt.alignment = TextAnchor.MiddleCenter;
+                    floatTxt.color = UI.PopupText;
+                    try { VPBUiFont.ApplyTo(floatTxt); } catch { }
+                }
+                UI.AddLE(
+                    headerFloatBtnGO,
+                    preferredWidth: sortSq * 1.6f,
+                    preferredHeight: sortSq,
+                    flexibleWidth: 0f);
+                var floatHover = headerFloatBtnGO.AddComponent<UIHoverDelegate>();
+                floatHover.OnHoverChange += (enter) =>
+                {
+                    if (panel == null) return;
+                    if (enter) panel.SetStatus(VPBTranslation.T(
+                        "quickfilters.tip.detach",
+                        "Detach as floating window (move / resize). Alt+F toggles."));
+                    else panel.SetStatus(null);
+                };
+                headerFloatBtnGO.SetActive(!detached);
+            }
+
+            sortBtnGO = UI.CreateUIButton(headerGO, sortSq, sortSq, " ", 16, 0, 0, AnchorPresets.middleCenter, null);
             if (sortBtnGO != null)
             {
                 sortBtnGO.name = "SortBtn";
-                RectTransform srtBtn = sortBtnGO.GetComponent<RectTransform>();
-                if (srtBtn != null)
-                {
-                    srtBtn.anchorMin = new Vector2(1f, 1f);
-                    srtBtn.anchorMax = new Vector2(1f, 1f);
-                    srtBtn.pivot = new Vector2(1f, 1f);
-                    srtBtn.anchoredPosition = new Vector2(-HeaderPadRef, -HeaderPadRef);
-                    srtBtn.sizeDelta = new Vector2(sortSq, sortSq);
-                }
+                UI.AddLE(sortBtnGO, preferredWidth: sortSq, preferredHeight: sortSq, flexibleWidth: 0f);
                 Color sortBackdrop = new Color(0.22f, 0.42f, 0.58f, 1f);
                 Sprite sortSpr = UI.LoadIconSprite("vpb_icons/sort_name_asc.png", UI.BarIconGlyphTint);
                 if (sortSpr != null)
@@ -304,45 +393,6 @@ namespace VPB
                     if (enter) panel.SetStatus(GetSortStatusTip());
                     else panel.SetStatus(null);
                 };
-            }
-
-            if (panel != null)
-            {
-                searchInput = panel.CreateSearchInput(headerGO, 200f, val =>
-                {
-                    listFilter = val ?? "";
-                    Refresh();
-                }, () =>
-                {
-                    listFilter = "";
-                    Refresh();
-                });
-                if (searchInput != null)
-                {
-                    if (searchInput.placeholder is Text ph)
-                        ph.text = VPBTranslation.T("quickfilters.search_ph", "Search saved presets…");
-                    RectTransform srt = searchInput.GetComponent<RectTransform>();
-                    if (srt != null)
-                    {
-                        srt.anchorMin = new Vector2(0f, 1f);
-                        srt.anchorMax = new Vector2(0f, 1f);
-                        srt.pivot = new Vector2(0f, 1f);
-                        srt.anchoredPosition = new Vector2(HeaderPadRef, -HeaderPadRef);
-                        srt.sizeDelta = new Vector2(200f, GalleryUiDesignTokens.SearchFieldHeightRef);
-                    }
-                    var searchHover = searchInput.gameObject.AddComponent<UIHoverDelegate>();
-                    searchHover.OnHoverChange += (enter) =>
-                    {
-                        if (panel == null) return;
-                        if (enter)
-                        {
-                            panel.SetStatus(VPBTranslation.T(
-                                "quickfilters.tip.list_search",
-                                "Search saved presets by name. Ctrl+S with text here names a new preset."));
-                        }
-                        else panel.SetStatus(null);
-                    };
-                }
             }
 
             // Scroll host sits between header/footer — viewport + scrollbar stay inside this rect.
@@ -685,9 +735,7 @@ namespace VPB
             float headerH = HeaderHeightRef() * s;
             float titleH = TitleBarHeightRef() * s;
             float footerH = FooterHeightRef() * s;
-            float headerPad = HeaderPadRef * s;
             float sortSq = GalleryUiDesignTokens.ButtonSizeRef * s;
-            float chromeReserve = sortSq + HeaderSortGapRef * s;
             bool showBody = !detached || !floatCollapsed;
 
             if (titleBarGO != null)
@@ -719,26 +767,53 @@ namespace VPB
                     hrt.sizeDelta = new Vector2(0f, headerH);
                     hrt.anchoredPosition = new Vector2(0f, -titleH);
                 }
+                HorizontalLayoutGroup headerHlg = headerGO.GetComponent<HorizontalLayoutGroup>();
+                if (headerHlg != null)
+                {
+                    headerHlg.spacing = HeaderSortGapRef * s;
+                    headerHlg.padding = UI.Pad(HeaderPadRef, HeaderPadRef, HeaderPadRef, HeaderPadRef, s);
+                }
+                // Paint above scroll so search never disappears under list (change-blindness).
+                headerGO.transform.SetAsLastSibling();
+            }
+
+            if (headerFloatBtnGO != null)
+            {
+                bool showFloat = showBody && !detached;
+                headerFloatBtnGO.SetActive(showFloat);
+                LayoutElement floatLe = headerFloatBtnGO.GetComponent<LayoutElement>();
+                if (floatLe != null)
+                {
+                    floatLe.preferredWidth = sortSq * 1.6f;
+                    floatLe.preferredHeight = sortSq;
+                }
+                if (headerFloatBtnText != null)
+                    GalleryUiMetrics.ApplyFont(
+                        headerFloatBtnText,
+                        GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
             }
 
             if (sortBtnGO != null)
             {
-                RectTransform srtBtn = sortBtnGO.GetComponent<RectTransform>();
-                if (srtBtn != null)
+                LayoutElement sortLe = sortBtnGO.GetComponent<LayoutElement>();
+                if (sortLe != null)
                 {
-                    srtBtn.anchoredPosition = new Vector2(-headerPad, -headerPad);
-                    srtBtn.sizeDelta = new Vector2(sortSq, sortSq);
+                    sortLe.preferredWidth = sortSq;
+                    sortLe.preferredHeight = sortSq;
                 }
             }
 
             if (searchInput != null)
             {
-                RectTransform srt = searchInput.GetComponent<RectTransform>();
-                if (srt != null)
+                // Keep search always visible — recognition over hide-when-few (Norman/Jakob).
+                if (!searchInput.gameObject.activeSelf)
+                    searchInput.gameObject.SetActive(true);
+                LayoutElement searchLe = searchInput.GetComponent<LayoutElement>();
+                if (searchLe != null)
                 {
-                    float searchW = Mathf.Max(80f * s, panelW - headerPad * 2f - chromeReserve - sbW);
-                    srt.anchoredPosition = new Vector2(headerPad, -headerPad);
-                    srt.sizeDelta = new Vector2(searchW, GalleryUiDesignTokens.SearchFieldHeightRef * s);
+                    searchLe.preferredHeight = GalleryUiDesignTokens.SearchFieldHeightRef * s;
+                    searchLe.minWidth = 80f * s;
+                    searchLe.flexibleWidth = 1f;
                 }
                 GalleryPanel.RescaleSearchInput(searchInput, s);
             }
@@ -825,16 +900,6 @@ namespace VPB
                         Text et = ch.Find("Text") != null ? ch.Find("Text").GetComponent<Text>() : null;
                         if (et != null)
                             GalleryUiMetrics.ApplyFont(et, GalleryUiDesignTokens.PopupMenuRowFontRef - 1, s, GalleryUiDesignTokens.FontMinRef);
-                        ApplyPopupRowTextInsets(ch, textPadL, textPadR);
-                        continue;
-                    }
-
-                    if (ch.name == "DetachListBtn")
-                    {
-                        Text dt = ch.Find("Text") != null ? ch.Find("Text").GetComponent<Text>() : null;
-                        if (dt == null) dt = ch.GetComponentInChildren<Text>();
-                        if (dt != null)
-                            GalleryUiMetrics.ApplyFont(dt, GalleryUiDesignTokens.PopupMenuRowFontRef, s, GalleryUiDesignTokens.FontMinRef);
                         ApplyPopupRowTextInsets(ch, textPadL, textPadR);
                         continue;
                     }
@@ -1007,7 +1072,12 @@ namespace VPB
                 SyncMergeChrome();
                 SyncSoftDeleteUndoButton();
                 try { SyncRemoveModeButton(panel != null && panel.IsRemoveModeActive); } catch { }
+                if (showFooter)
+                    footerGO.transform.SetAsLastSibling();
             }
+
+            if (titleBarGO != null && detached)
+                titleBarGO.transform.SetAsLastSibling();
 
             if (containerRT != null && panel != null)
             {
@@ -1123,7 +1193,6 @@ namespace VPB
             buttonToEntry.Clear();
 
             CreateActionsRow();
-            CreateDetachListButton();
             CreateSplitter("Splitter");
 
             List<QuickFilterEntry> display = BuildDisplayList();
@@ -1150,7 +1219,6 @@ namespace VPB
 
             try { ApplyLayout(panel != null ? panel.ChromeScale : 1f); } catch { }
             flashEntry = null;
-            SyncListSearchVisibility();
             SyncSoftDeleteUndoButton();
             SyncCollapsePalette();
             if (renamingEntry != null)
@@ -1298,8 +1366,8 @@ namespace VPB
             txtRT.offsetMax = new Vector2(-right, 0f);
         }
 
-        /// <summary>Leading non-filter rows in scroll content (ActionsRow, optional Detach, Splitter).</summary>
-        private int ListChromeChildCount => detached ? 2 : 3;
+        /// <summary>Leading non-filter rows in scroll content (ActionsRow, Splitter).</summary>
+        private int ListChromeChildCount => 2;
 
         private void CreateActionsRow()
         {
@@ -1486,51 +1554,6 @@ namespace VPB
             }
 
             activeButtons.Add(row);
-        }
-
-        private void CreateDetachListButton()
-        {
-            detachListBtnGO = null;
-            detachListBtnText = null;
-            if (detached) return;
-
-            float rowH = GalleryUiDesignTokens.PopupMenuRowHeightRef;
-            float rowW = GalleryUiDesignTokens.QuickFiltersPanelWidthRef - 12f;
-            GameObject btn = UI.CreateUIButton(
-                scrollContentGO,
-                rowW,
-                rowH,
-                VPBTranslation.T("quickfilters.detach_list", "Float as Window"),
-                GalleryUiDesignTokens.PopupMenuRowFontRef,
-                0, 0,
-                AnchorPresets.middleCenter,
-                Detach);
-            if (btn == null) return;
-
-            btn.name = "DetachListBtn";
-            detachListBtnGO = btn;
-            Image img = btn.GetComponent<Image>();
-            if (img != null) img.color = new Color(0.18f, 0.30f, 0.40f, 1f);
-            Text txt = btn.GetComponentInChildren<Text>();
-            if (txt != null)
-            {
-                detachListBtnText = txt;
-                txt.alignment = TextAnchor.MiddleCenter;
-                txt.color = UI.PopupText;
-                VPBUiFont.ApplyTo(txt);
-            }
-            ApplyPopupRowTextInsets(btn.transform, RowTextPadLeftRef, RowTextPadRightRef);
-            UI.AddLE(btn, preferredHeight: rowH, flexibleWidth: 1f);
-
-            var del = btn.AddComponent<UIHoverDelegate>();
-            del.OnHoverChange += (enter) =>
-            {
-                if (panel == null) return;
-                if (enter) panel.SetStatus(VPBTranslation.T("quickfilters.tip.detach", "Detach as floating window (move / resize)"));
-                else panel.SetStatus(null);
-            };
-
-            activeButtons.Add(btn);
         }
 
         private void CreateSplitter(string name = "Splitter")
@@ -2551,38 +2574,6 @@ namespace VPB
                 StartInlineRename(entry);
         }
 
-        /// <summary>
-        /// List-search only useful with 2+ presets. Hide when empty/single — removes false "name field" for new users.
-        /// </summary>
-        private void SyncListSearchVisibility()
-        {
-            int n = 0;
-            try
-            {
-                var filters = QuickFilterSettings.Instance != null ? QuickFilterSettings.Instance.Filters : null;
-                if (filters != null) n = filters.Count;
-            }
-            catch { }
-
-            bool showSearch = n >= 2;
-            if (searchInput != null && searchInput.gameObject != null)
-            {
-                if (searchInput.gameObject.activeSelf != showSearch)
-                    searchInput.gameObject.SetActive(showSearch);
-            }
-
-            if (!showSearch && !string.IsNullOrEmpty(listFilter))
-            {
-                listFilter = "";
-                try
-                {
-                    if (searchInput != null)
-                        searchInput.text = "";
-                }
-                catch { }
-            }
-        }
-
         private void ApplyFilter(QuickFilterEntry entry)
         {
             if (panel == null) return;
@@ -2596,8 +2587,8 @@ namespace VPB
                 ph.text = VPBTranslation.T("quickfilters.search_ph", "Search saved presets…");
             if (titleBarLabel != null && !mergeMode)
                 titleBarLabel.text = VPBTranslation.T("quickfilters.float_title", "Filter Presets");
-            if (detachListBtnText != null)
-                detachListBtnText.text = VPBTranslation.T("quickfilters.detach_list", "Float as Window");
+            if (headerFloatBtnText != null)
+                headerFloatBtnText.text = VPBTranslation.T("quickfilters.detach_short", "Float");
             SyncSortButtonVisual();
             SyncMergeChrome();
             Refresh();
@@ -2757,7 +2748,7 @@ namespace VPB
             if (backdropGO != null) backdropGO.SetActive(false);
             if (titleBarGO != null) titleBarGO.SetActive(true);
             if (footerGO != null) footerGO.SetActive(!floatCollapsed);
-            if (detachListBtnGO != null) detachListBtnGO.SetActive(false);
+            if (headerFloatBtnGO != null) headerFloatBtnGO.SetActive(false);
 
             if (containerRT != null)
             {
@@ -2806,7 +2797,7 @@ namespace VPB
             if (viewportGO != null) viewportGO.SetActive(true);
             if (scrollbarGO != null) scrollbarGO.SetActive(true);
             if (headerGO != null) headerGO.SetActive(true);
-            // Detach list button rebuilt on next Refresh when docked.
+            if (headerFloatBtnGO != null) headerFloatBtnGO.SetActive(true);
 
             if (persist) PersistDetachedState(false);
         }

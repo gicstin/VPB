@@ -1237,9 +1237,9 @@ namespace VPB
             AddHoverDelegate(footerClearFilterBtn);
             AddTooltip(footerClearFilterBtn, "gallery.tooltip.clear_filter", "Clear all filters");
             AddHoverDelegate(footerUndoBtnGO);
-            AddTooltip(footerUndoBtnGO, "gallery.tooltip.undo", "Undo last change (Ctrl+Z)");
+            AddDynamicTooltip(footerUndoBtnGO, BuildUndoTooltip);
             AddHoverDelegate(footerRedoBtnGO);
-            AddTooltip(footerRedoBtnGO, "gallery.tooltip.redo", "Redo (Ctrl+Y / Ctrl+Shift+Z)");
+            AddDynamicTooltip(footerRedoBtnGO, BuildRedoTooltip);
             AddHoverDelegate(footerHubBtnGO);
             AddTooltip(footerHubBtnGO, "gallery.tooltip.hub", "Hub browse / dev Hub panel");
             AddHoverDelegate(footerFollowAngleBtn);
@@ -1772,7 +1772,13 @@ namespace VPB
             catch { }
             UpdateHoldToLaunchToggleUI();
             try { UpdateApplyModeButtonState(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
             try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
+            ShowTemporaryStatus(
+                holdToLaunchEnabled
+                    ? VPBTranslation.T("gallery.hold.enabled", "Hold-launch ON — hold thumbnail to apply (not 1-Click).")
+                    : VPBTranslation.T("gallery.hold.disabled", "Hold-launch OFF."),
+                1.5f);
         }
 
         private void UpdateHoldToLaunchToggleUI()
@@ -2830,7 +2836,7 @@ namespace VPB
 
         private void UpdateRemoveClothingButtonLabels(int optionCount)
         {
-            UpdateRemoveButtonLabels(leftRemoveAllClothingBtn, rightRemoveAllClothingBtn, "Remove\nClothing", optionCount);
+            UpdateRemoveButtonLabels(leftRemoveAllClothingBtn, rightRemoveAllClothingBtn, "Unequip\nClothing", optionCount);
         }
 
         private void ApplyClothingPreview(Atom target, string itemUid)
@@ -3760,6 +3766,12 @@ namespace VPB
             LogUtil.Log("[GalleryPanel] ToggleApplyMode: " + oldMode + " -> " + newMode);
             ItemApplyMode = newMode;
             UpdateApplyModeButtonState();
+            try { RefreshModeAmbientChrome(); } catch { }
+            ShowTemporaryStatus(
+                newMode == ApplyMode.SingleClick
+                    ? VPBTranslation.T("gallery.apply.mode_1click", "Apply mode: 1-Click")
+                    : VPBTranslation.T("gallery.apply.mode_2click", "Apply mode: 2-Click"),
+                1.5f);
         }
 
 

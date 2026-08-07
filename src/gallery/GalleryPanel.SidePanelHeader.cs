@@ -266,8 +266,8 @@ namespace VPB
                 case ContentType.History: return VPBTranslation.T("gallery.history.title", "History");
                 case ContentType.Settings: return VPBTranslation.T("settings.title", "Settings");
                 case ContentType.SavePresets: return SidePanelHeaderTranslation("gallery.side.save", "Save");
-                case ContentType.RemoveClothing: return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Remove Clothing");
-                case ContentType.RemoveHair: return SidePanelHeaderTranslation("gallery.side.remove_hair", "Remove Hair");
+                case ContentType.RemoveClothing: return SidePanelHeaderTranslation("gallery.side.remove_clothing", "Unequip Clothing");
+                case ContentType.RemoveHair: return SidePanelHeaderTranslation("gallery.side.remove_hair", "Unequip Hair");
                 case ContentType.RemoveAtom: return SidePanelHeaderTranslation("gallery.side.remove_atom", "Remove Atom");
                 case ContentType.CleanupCategories: return ResolveCleanupSidePanelHeaderTitle();
                 default: return "";

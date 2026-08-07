@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace VPB
@@ -14,16 +15,49 @@ namespace VPB
         private const string SceneImportCachePrefix = "Saves/scene/VPB/";
         private const string TempScenesPrefix = "Saves/scene/VPB_TempScenes/";
 
+        private static string s_savesSceneDirFullPath;
+        private static string s_savesSceneDirFullPathNormalized;
+        /// <summary>Gallery path → AutoInstall lookup key (empty string = known non-scene / miss).</summary>
+        private static Dictionary<string, string> s_autoInstallKeyByPath;
+
+        /// <summary>
+        /// True for Windows rooted drive paths (<c>C:/...</c>). These contain <c>:/</c> and must not be
+        /// treated as VaM <c>pkg:/internal</c> VFS paths on scroll/thumb hot paths.
+        /// </summary>
+        public static bool IsWindowsDriveAbsolutePath(string path)
+        {
+            if (string.IsNullOrEmpty(path) || path.Length < 3) return false;
+            return char.IsLetter(path[0]) && path[1] == ':'
+                && (path[2] == '/' || path[2] == '\\');
+        }
+
         public static string GetSavesSceneDirectoryFullPath()
         {
+            if (!string.IsNullOrEmpty(s_savesSceneDirFullPath))
+                return s_savesSceneDirFullPath;
             try
             {
-                return FileManager.GetFullPath(Path.Combine(Path.Combine(Directory.GetCurrentDirectory(), "Saves"), "scene"));
+                s_savesSceneDirFullPath = FileManager.GetFullPath(
+                    Path.Combine(Path.Combine(Directory.GetCurrentDirectory(), "Saves"), "scene"));
+                if (!string.IsNullOrEmpty(s_savesSceneDirFullPath))
+                {
+                    s_savesSceneDirFullPathNormalized = Path.GetFullPath(s_savesSceneDirFullPath)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+                return s_savesSceneDirFullPath;
             }
             catch
             {
                 return null;
             }
+        }
+
+        /// <summary>Clear path caches (rare; e.g. after VaM cwd / install-root change).</summary>
+        public static void InvalidatePathCaches()
+        {
+            s_savesSceneDirFullPath = null;
+            s_savesSceneDirFullPathNormalized = null;
+            s_autoInstallKeyByPath = null;
         }
 
         /// <summary>
@@ -166,8 +200,7 @@ namespace VPB
             // IMPORTANT: On Windows, absolute disk paths like "C:/.../Saves/scene/foo.json" contain ":/" and can be
             // misclassified as a package path by VaM helpers that treat any ":/" as "pkg:/internalPath".
             // Treat rooted drive-letter paths as local disk paths, not package refs.
-            bool isWindowsDriveAbs = (p.Length >= 3 && char.IsLetter(p[0]) && p[1] == ':' && p[2] == '/');
-            if (!isWindowsDriveAbs)
+            if (!IsWindowsDriveAbsolutePath(p))
             {
                 try
                 {
@@ -240,14 +273,106 @@ namespace VPB
             return true;
         }
 
-        /// <summary>Builds the AutoInstall.txt key for this local scene row, if it resolves on disk.</summary>
+        /// <summary>
+        /// Gallery-relative <c>Saves/scene/...</c> from a listed row path — path math only (no <c>File.Exists</c>).
+        /// Scroll/badge hot path: gallery already listed the JSON.
+        /// </summary>
+        public static bool TryBuildGalleryRelativeScenePathNoDisk(string rawPath, out string galleryRelativePath)
+        {
+            galleryRelativePath = null;
+            if (string.IsNullOrEmpty(rawPath)) return false;
+            string p = rawPath.Replace('\\', '/');
+            if (!LooksLikeLocalUserScenePath(p)) return false;
+
+            if (p.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase))
+            {
+                galleryRelativePath = "Saves/scene/" + p.Substring("Saves/scene/".Length).TrimStart('/');
+                return true;
+            }
+
+            int idx = p.IndexOf("/Saves/scene/", StringComparison.OrdinalIgnoreCase);
+            if (idx >= 0)
+            {
+                galleryRelativePath = "Saves/scene/" + p.Substring(idx + "/Saves/scene/".Length).TrimStart('/');
+                return true;
+            }
+
+            // Absolute under cached Saves/scene root → strip prefix.
+            try
+            {
+                string sceneRoot = GetSavesSceneDirectoryFullPath();
+                if (string.IsNullOrEmpty(sceneRoot)) return false;
+                string rootNorm = s_savesSceneDirFullPathNormalized;
+                if (string.IsNullOrEmpty(rootNorm))
+                {
+                    rootNorm = Path.GetFullPath(sceneRoot)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    s_savesSceneDirFullPathNormalized = rootNorm;
+                }
+
+                string full = Path.IsPathRooted(p)
+                    ? Path.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar))
+                    : FileManager.GetFullPath(p.Replace('/', Path.DirectorySeparatorChar));
+                if (string.IsNullOrEmpty(full)) return false;
+                string fileFull = Path.GetFullPath(full);
+                if (fileFull.Length <= rootNorm.Length + 1) return false;
+                if (!fileFull.StartsWith(rootNorm, StringComparison.OrdinalIgnoreCase)) return false;
+                char boundary = fileFull[rootNorm.Length];
+                if (boundary != Path.DirectorySeparatorChar && boundary != Path.AltDirectorySeparatorChar)
+                    return false;
+                string relPart = fileFull.Substring(rootNorm.Length + 1).Replace('\\', '/');
+                if (string.IsNullOrEmpty(relPart)) return false;
+                galleryRelativePath = "Saves/scene/" + relPart;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Builds the AutoInstall.txt key for this local scene row.
+        /// Uses path-only resolve + cache — no per-bind <c>File.Exists</c> (scroll-hot badge path).
+        /// </summary>
         public static bool TryGetLocalSceneAutoInstallLookupKey(FileEntry f, out string key)
         {
             key = null;
-            if (!TryResolveSavesSceneJson(f, out _, out string rel, false)) return false;
-            if (string.IsNullOrEmpty(rel)) return false;
+            if (f == null || f is VarFileEntry) return false;
+            string p = f.Path;
+            if (string.IsNullOrEmpty(p)) return false;
+
+            if (s_autoInstallKeyByPath != null && s_autoInstallKeyByPath.TryGetValue(p, out string cached))
+            {
+                if (string.IsNullOrEmpty(cached)) return false;
+                key = cached;
+                return true;
+            }
+
+            string rel;
+            if (!TryBuildGalleryRelativeScenePathNoDisk(p, out rel) || string.IsNullOrEmpty(rel))
+            {
+                // Fall back to full resolve once (security / odd paths), then cache.
+                if (!TryResolveSavesSceneJson(f, out _, out rel, false) || string.IsNullOrEmpty(rel))
+                {
+                    CacheAutoInstallKey(p, string.Empty);
+                    return false;
+                }
+            }
+
             key = AutoInstallLookupKeyPrefix + rel.Replace('\\', '/');
+            CacheAutoInstallKey(p, key);
             return true;
+        }
+
+        private static void CacheAutoInstallKey(string path, string keyOrEmpty)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            if (s_autoInstallKeyByPath == null)
+                s_autoInstallKeyByPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (s_autoInstallKeyByPath.Count > 8000)
+                s_autoInstallKeyByPath.Clear();
+            s_autoInstallKeyByPath[path] = keyOrEmpty ?? string.Empty;
         }
 
         public static bool IsLocalSceneAutoInstallMarked(FileEntry f)

@@ -1927,6 +1927,7 @@ namespace VPB
 
             // Import sidebar active: a single click sets the import source (instead of launching the scene),
             // but a double click still opens/launches the scene (falls through to the normal handling below).
+            // Source sync lives in RefreshSelectionVisualsCore so keyboard / scrub share the same path.
             if (importSidebarActive)
             {
                 float importClickTime = Time.realtimeSinceStartup;
@@ -1944,7 +1945,6 @@ namespace VPB
                     selectedPath = importFileKey;
                     SetHoverPath("");
                     RefreshSelectionVisuals();
-                    OpenImportSidebarWith(file, importSidebarTargetAtom);
                     return;
                 }
                 // double click: continue to the normal launch path below.
@@ -2316,6 +2316,9 @@ namespace VPB
             try { RefreshAppliedUserTagsPaneAfterSelectionChange(); } catch { }
             // Immediate detail-strip / toolbox height sync (avoid waiting for the 250ms poll).
             try { UpdateSelectionContextMenu(); } catch { }
+            // Scene Import source follows gallery selection for all heavy selection paths
+            // (click / keyboard). Scrub uses runHeavySideEffects:false — syncs on commit.
+            try { TryLoadSelectedSceneIntoImportSidebar(); } catch { }
         }
 
         public bool NotifyPackagesChanged(DateTime refreshTime)

@@ -107,10 +107,11 @@ namespace VPB
             try { RefreshTboxConditionalActionButtons(); } catch { }
             // Snapshot only — never Raise/ForceReset here (would abort an in-flight scene load).
             try { VpbLoadingIconUtil.LogFlagSnapshot("creator-mode-enter", raise: false); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
             ShowTemporaryStatus(
                 VPBTranslation.T(
                     "gallery.creator.entered",
-                    "Creator Mode — scene tools ready. Esc exits."),
+                    "Scene Tools on — strip/authoring ready. Esc exits."),
                 2f);
             LogUtil.LogWarning("[VPB] Creator Mode ON");
         }
@@ -163,10 +164,11 @@ namespace VPB
             creatorModeActive = false;
             RefreshCreatorModeChrome();
             try { RefreshTboxConditionalActionButtons(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
             if (!force)
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.creator.exited", "Creator Mode off."),
+                    VPBTranslation.T("gallery.creator.exited", "Scene Tools off."),
                     1.25f);
             }
             LogUtil.LogWarning("[VPB] Creator Mode OFF");

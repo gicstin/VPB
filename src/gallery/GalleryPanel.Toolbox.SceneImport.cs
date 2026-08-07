@@ -77,6 +77,21 @@ namespace VPB
         // when closed, close on a second click. Docked: LMB=left column, RMB=right column. Floating: LMB follows clicked rail.
         private void OpenImportSidebarFromSideButton(bool fromLeftRailButton, bool rightClick)
         {
+            if (!ImportSidebarCategoryAllowed())
+            {
+                if (!TryNavigateGalleryToScenes())
+                {
+                    try
+                    {
+                        ShowTemporaryStatus(VPBTranslation.T(
+                            "gallery.import.sidebar_gated_tip",
+                            "Import sidebar opens in Scenes category only"), 2f);
+                    }
+                    catch { }
+                    return;
+                }
+            }
+
             if (IsImportSidebarActive)
             {
                 ToggleImportSidebar();

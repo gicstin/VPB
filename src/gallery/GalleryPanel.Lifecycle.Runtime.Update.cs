@@ -461,15 +461,8 @@ namespace VPB
 
             AdvanceStickyHoverTooltip();
 
-            string finalStatus = null;
-            if (dragStatusMsg != null)
-            {
-                finalStatus = dragStatusMsg;
-            }
-            else if (temporaryStatusMsg != null)
-            {
-                finalStatus = temporaryStatusMsg;
-            }
+            // Mode sticky: toast never blanks ambient modes (concat when both). Drag still wins.
+            string finalStatus = ResolveStatusBarText(dragStatusMsg, temporaryStatusMsg, ModeAmbientMsg);
 
             // When a status message is showing, interrupt any in-progress path fade
             if (!string.IsNullOrEmpty(finalStatus) && hoverPathCanvasGroup != null)
@@ -492,6 +485,8 @@ namespace VPB
                 bool showStatus = !string.IsNullOrEmpty(finalStatus);
                 if (statusBarText.gameObject.activeSelf != showStatus)
                     statusBarText.gameObject.SetActive(showStatus);
+                // Stronger mode cue: tint when sticky modes present (not toast-only).
+                ApplyStatusBarModeTint(ModeAmbientMsg != null);
             }
 
             if (hoverPathText != null)
@@ -745,9 +740,17 @@ namespace VPB
 
             // Ctrl+F — focus title search even when another InputField is selected.
             bool ctrlEarly = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            bool shiftEarly = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (ctrlEarly && Input.GetKeyDown(KeyCode.F))
             {
                 try { FocusTitleSearchFromHotkey(); } catch { }
+                return;
+            }
+
+            // Ctrl+Shift+P — command palette (works even with search focused).
+            if (ctrlEarly && shiftEarly && Input.GetKeyDown(KeyCode.P))
+            {
+                try { ToggleCommandPalette(); } catch { }
                 return;
             }
             // Alt+F — floating filter presets (not Ctrl+F search). Before InputField gate.
@@ -822,6 +825,10 @@ namespace VPB
                 return;
             }
 
+            // Command palette: Esc / arrows / Enter (search field must not trap Esc forever).
+            if (TryHandleCommandPaletteKeyboard())
+                return;
+
             // In-app help: Esc / F1 before InputField gate (search field must not swallow Esc).
             if (TryHandleInAppHelpKeyboard(allowQuestionKey: false))
                 return;
@@ -870,6 +877,19 @@ namespace VPB
                 return;
             }
 
+            if (TryHandleRemoveModeEsc())
+                return;
+
+            if (TryHandleTryOnEsc())
+                return;
+
+            if (TryHandleCleanupModeEsc())
+                return;
+
+            // Docked Import Esc (float handled earlier via TryHandleImportSidebarFloatEsc).
+            if (TryHandleImportSidebarDockedEsc())
+                return;
+
             if (Input.GetKeyDown(KeyCode.Escape)
                 && _detailStripTagMenuRoot != null
                 && _detailStripTagMenuRoot.activeSelf)
@@ -878,6 +898,10 @@ namespace VPB
                 DetailStripTagMenuOnSearchEscape();
                 return;
             }
+
+            // Bare Esc — clear selection when no menu/mode claimed it.
+            if (TryHandleClearSelectionEsc())
+                return;
 
             if (IsVisible && TryConsumeCategoryQuickNumberKey())
                 return;
@@ -919,10 +943,17 @@ namespace VPB
                 return;
             }
 
-            // Ctrl+Shift+K — toggle Creator Mode (side-rail parity).
+            // Ctrl+Shift+K — toggle Scene Tools (side-rail parity).
             if (ctrl && shift && Input.GetKeyDown(KeyCode.K))
             {
                 try { ToggleCreatorMode(); } catch { }
+                return;
+            }
+
+            // Ctrl+Shift+E — toggle Scene Eraser.
+            if (ctrl && shift && Input.GetKeyDown(KeyCode.E))
+            {
+                try { ToggleRemoveMode(false, false); } catch { }
                 return;
             }
 
@@ -955,6 +986,15 @@ namespace VPB
                         try { TboxDeleteSelectedPackages(); } catch { }
                     }
                 }
+                return;
+            }
+
+            // Enter / Space — apply selection (keyboard expert path). Before arrow early-out.
+            if (Input.GetKeyDown(KeyCode.Return)
+                || Input.GetKeyDown(KeyCode.KeypadEnter)
+                || Input.GetKeyDown(KeyCode.Space))
+            {
+                try { TryKeyboardApplySelection(); } catch { }
                 return;
             }
 

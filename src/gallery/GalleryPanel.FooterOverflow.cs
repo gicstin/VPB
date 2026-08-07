@@ -109,8 +109,8 @@ namespace VPB
             if (footerPerfMinusBtn != null) into.Add(footerPerfMinusBtn);
             if (footerPerfToggleBtn != null) into.Add(footerPerfToggleBtn);
             if (footerHubBtnGO != null) into.Add(footerHubBtnGO);
+            // Redo may collapse; Undo stays pinned (never added) for recovery Fitts path.
             if (footerRedoBtnGO != null) into.Add(footerRedoBtnGO);
-            if (footerUndoBtnGO != null) into.Add(footerUndoBtnGO);
         }
 
         private int ComputeFooterOverflowLayoutSig(float footerW, float s)

@@ -568,8 +568,11 @@ namespace VPB
 					return false;
 				}
 				UncacheLocalSceneHiddenPath(hp);
+				SystemFileEntry sfe = entry as SystemFileEntry;
+				if (sfe != null) sfe.InvalidateHiddenCache();
 				if (File.Exists(hp)) return true;
 				File.WriteAllText(hp, string.Empty);
+				if (sfe != null) sfe.InvalidateHiddenCache();
 				if (File.Exists(hp)) return true;
 				LogUtil.LogWarning("[VPB] HidePrefs: wrote local-scene hide marker but file did not materialize at " + hp);
 				return false;
@@ -592,12 +595,15 @@ namespace VPB
 					return false;
 				}
 				UncacheLocalSceneHiddenPath(hp);
+				SystemFileEntry sfe = entry as SystemFileEntry;
+				if (sfe != null) sfe.InvalidateHiddenCache();
 				if (!File.Exists(hp))
 				{
 					LogUtil.LogWarning("[VPB] HidePrefs: local-scene hide marker missing at " + hp + " (already unhidden?)");
 					return false;
 				}
 				File.Delete(hp);
+				if (sfe != null) sfe.InvalidateHiddenCache();
 				return true;
 			}
 			catch (Exception ex)

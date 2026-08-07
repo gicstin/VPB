@@ -106,7 +106,22 @@ namespace VPB
                 // preset/item, on this atom or another) auto-accepts it: commit the candidate and
                 // push its undo before starting a fresh session. The new session's baseline is the
                 // just-accepted look, so Revert returns to it rather than discarding it.
-                if (_tryOnActive) TryOnKeep();
+                if (_tryOnActive)
+                {
+                    string keptName = _tryOnCurrentName;
+                    TryOnKeep();
+                    try
+                    {
+                        ShowTemporaryStatus(
+                            string.Format(
+                                VPBTranslation.T(
+                                    "gallery.tryon.auto_kept",
+                                    "Try-On kept previous: {0}. New try started."),
+                                string.IsNullOrEmpty(keptName) ? "…" : keptName),
+                            2f);
+                    }
+                    catch { }
+                }
 
                 _tryOnBaseline = TryOnCaptureState(target);
                 if (_tryOnBaseline == null) return false; // capture failed, fall through
@@ -127,6 +142,7 @@ namespace VPB
 
                 TryOnShowBar();
                 TryOnUpdateLabel();
+                try { RefreshModeAmbientChrome(); } catch { }
                 return true;
             }
             catch (Exception ex)
@@ -275,6 +291,7 @@ namespace VPB
             _tryOnComparing = false;
             _tryOnCurrentName = null;
             TryOnHideBar();
+            try { RefreshModeAmbientChrome(); } catch { }
         }
 
         // ---- UI ----
@@ -288,6 +305,14 @@ namespace VPB
                 _tryOnBarGO.SetActive(true);
                 _tryOnBarGO.transform.SetAsLastSibling();
             }
+            try { RefreshModeAmbientChrome(); } catch { }
+            try
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.tryon.entered", "Try-On session — Compare / Revert / Keep."),
+                    1.75f);
+            }
+            catch { }
         }
 
         // Height (in toolbox units) of the Try-On row. Matches a standard toolbox row so the
@@ -342,8 +367,8 @@ namespace VPB
             if (_tryOnLabel == null) return;
             string name = string.IsNullOrEmpty(_tryOnCurrentName) ? "preset" : _tryOnCurrentName;
             _tryOnLabel.text = _tryOnComparing
-                ? "Try-On: showing ORIGINAL  (" + name + ")"
-                : "Try-On: " + name;
+                ? "Try-On: showing ORIGINAL  (" + name + ") — Esc reverts"
+                : "Try-On: " + name + " — Keep / Revert / Esc";
         }
 
         private void TryOnEnsureBar()

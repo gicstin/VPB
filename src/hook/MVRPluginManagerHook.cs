@@ -1,6 +1,5 @@
 using System;
 using HarmonyLib;
-using UnityEngine;
 
 namespace VPB
 {
@@ -23,28 +22,12 @@ namespace VPB
                 if (string.IsNullOrEmpty(parentUid)) return;
 
                 if (VamOnDemandLoader.EnsureDeclaredDependenciesActivatedForParent(parentUid))
-                    RefreshPackageMorphsOnAllPersons();
+                    VamOnDemandLoader.EnsurePackageMorphsIngested(null, "plugin_dep:" + parentUid);
             }
             catch (Exception e)
             {
                 LogUtil.Log("[VPB PluginDep] " + e);
             }
-        }
-
-        // RefreshPackageMorphs re-ingests morphs from newly-registered packages into the morph DB
-        // that GetMorphByDisplayName reads. Idempotent: a no-op when the package set is unchanged.
-        static bool RefreshPackageMorphsOnAllPersons()
-        {
-            var sc = SuperController.singleton;
-            if (sc == null) return false;
-            bool changed = false;
-            foreach (Atom atom in sc.GetAtoms())
-            {
-                if (atom == null || atom.type != "Person") continue;
-                var selector = atom.GetStorableByID("geometry") as DAZCharacterSelector;
-                if (selector != null && selector.RefreshPackageMorphs()) changed = true;
-            }
-            return changed;
         }
     }
 }

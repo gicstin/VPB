@@ -1356,7 +1356,7 @@ namespace VPB
             tboxCreatorModeBtn.name = "Tbox_CreatorMode";
             TboxConfigureActionButtonFlex(tboxCreatorModeBtn, innerRowH, innerRowH, innerRowH);
             AddTooltip(tboxCreatorModeBtn, "gallery.tooltip.tbox_creator_mode",
-                "Creator Mode — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
+                "Scene Tools — sticky scene authoring tools. Ctrl+Shift+K. Esc exits.");
             try
             {
                 var creatorIcon = UI.LoadIconSprite("vpb_icons/creator_mode.png", Color.white);
@@ -1364,7 +1364,7 @@ namespace VPB
                 else
                 {
                     Text t = tboxCreatorModeBtn.GetComponentInChildren<Text>(true);
-                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.creator_mode", "CM");
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.creator_mode", "Tools");
                 }
             }
             catch { }
