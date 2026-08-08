@@ -577,6 +577,24 @@ namespace VPB
         public bool GalleryRemapAtomUidsSizeSaved = false;
         public float GalleryRemapAtomUidsWidthRef = 680f;
         public float GalleryRemapAtomUidsHeightRef = 460f;
+        public bool GallerySettingsFloatPosSaved = false;
+        public float GallerySettingsFloatPosX = 0f;
+        public float GallerySettingsFloatPosY = 0f;
+        /// <summary>When true, restore last Settings floating size (design px at scale 1).</summary>
+        public bool GallerySettingsFloatSizeSaved = false;
+        public float GallerySettingsFloatWidthRef = 520f;
+        public float GallerySettingsFloatHeightRef = 640f;
+        public bool GalleryPluginsFloatPosSaved = false;
+        public float GalleryPluginsFloatPosX = 0f;
+        public float GalleryPluginsFloatPosY = 0f;
+        /// <summary>When true, restore last Plugins floating size (design px at scale 1).</summary>
+        public bool GalleryPluginsFloatSizeSaved = false;
+        public float GalleryPluginsFloatWidthRef = 460f;
+        public float GalleryPluginsFloatHeightRef = 560f;
+        /// <summary>Plugins float: show only highest integer version per Author.Name package group.</summary>
+        public bool GalleryPluginsFloatLatestOnly = false;
+        /// <summary>Plugins float: hide orphan .cs/.dll roots; keep .cslist parents (and their children on expand).</summary>
+        public bool GalleryPluginsFloatCslistOnly = false;
         /// <summary>When true, gallery pane only shows while the VaM menu (main HUD) is visible.</summary>
         public bool GalleryOnlyWhenVamMenuVisible = false;
         /// <summary>When true, gallery pane is anchored to the VAM menu system in VR mode.</summary>
@@ -1256,6 +1274,20 @@ namespace VPB
             GalleryRemapAtomUidsSizeSaved = false;
             GalleryRemapAtomUidsWidthRef = 680f;
             GalleryRemapAtomUidsHeightRef = 460f;
+            GallerySettingsFloatPosSaved = false;
+            GallerySettingsFloatPosX = 0f;
+            GallerySettingsFloatPosY = 0f;
+            GallerySettingsFloatSizeSaved = false;
+            GallerySettingsFloatWidthRef = 520f;
+            GallerySettingsFloatHeightRef = 640f;
+            GalleryPluginsFloatPosSaved = false;
+            GalleryPluginsFloatPosX = 0f;
+            GalleryPluginsFloatPosY = 0f;
+            GalleryPluginsFloatSizeSaved = false;
+            GalleryPluginsFloatWidthRef = 460f;
+            GalleryPluginsFloatHeightRef = 560f;
+            GalleryPluginsFloatLatestOnly = false;
+            GalleryPluginsFloatCslistOnly = false;
             UiLocale = "";
             SpringScrollButtonMode = "Desktop & VR";
             HoldToLaunchEnabled = false;
@@ -1631,6 +1663,34 @@ namespace VPB
                             GalleryRemapAtomUidsWidthRef = Mathf.Max(0f, node["GalleryRemapAtomUidsWidthRef"].AsFloat);
                         if (node["GalleryRemapAtomUidsHeightRef"] != null)
                             GalleryRemapAtomUidsHeightRef = Mathf.Max(0f, node["GalleryRemapAtomUidsHeightRef"].AsFloat);
+                        if (node["GallerySettingsFloatPosSaved"] != null)
+                            GallerySettingsFloatPosSaved = node["GallerySettingsFloatPosSaved"].AsBool;
+                        if (node["GallerySettingsFloatPosX"] != null)
+                            GallerySettingsFloatPosX = node["GallerySettingsFloatPosX"].AsFloat;
+                        if (node["GallerySettingsFloatPosY"] != null)
+                            GallerySettingsFloatPosY = node["GallerySettingsFloatPosY"].AsFloat;
+                        if (node["GallerySettingsFloatSizeSaved"] != null)
+                            GallerySettingsFloatSizeSaved = node["GallerySettingsFloatSizeSaved"].AsBool;
+                        if (node["GallerySettingsFloatWidthRef"] != null)
+                            GallerySettingsFloatWidthRef = Mathf.Max(0f, node["GallerySettingsFloatWidthRef"].AsFloat);
+                        if (node["GallerySettingsFloatHeightRef"] != null)
+                            GallerySettingsFloatHeightRef = Mathf.Max(0f, node["GallerySettingsFloatHeightRef"].AsFloat);
+                        if (node["GalleryPluginsFloatPosSaved"] != null)
+                            GalleryPluginsFloatPosSaved = node["GalleryPluginsFloatPosSaved"].AsBool;
+                        if (node["GalleryPluginsFloatPosX"] != null)
+                            GalleryPluginsFloatPosX = node["GalleryPluginsFloatPosX"].AsFloat;
+                        if (node["GalleryPluginsFloatPosY"] != null)
+                            GalleryPluginsFloatPosY = node["GalleryPluginsFloatPosY"].AsFloat;
+                        if (node["GalleryPluginsFloatSizeSaved"] != null)
+                            GalleryPluginsFloatSizeSaved = node["GalleryPluginsFloatSizeSaved"].AsBool;
+                        if (node["GalleryPluginsFloatWidthRef"] != null)
+                            GalleryPluginsFloatWidthRef = Mathf.Max(0f, node["GalleryPluginsFloatWidthRef"].AsFloat);
+                        if (node["GalleryPluginsFloatHeightRef"] != null)
+                            GalleryPluginsFloatHeightRef = Mathf.Max(0f, node["GalleryPluginsFloatHeightRef"].AsFloat);
+                        if (node["GalleryPluginsFloatLatestOnly"] != null)
+                            GalleryPluginsFloatLatestOnly = node["GalleryPluginsFloatLatestOnly"].AsBool;
+                        if (node["GalleryPluginsFloatCslistOnly"] != null)
+                            GalleryPluginsFloatCslistOnly = node["GalleryPluginsFloatCslistOnly"].AsBool;
                         if (node["GalleryOnlyWhenVamMenuVisible"] != null) GalleryOnlyWhenVamMenuVisible = node["GalleryOnlyWhenVamMenuVisible"].AsBool;
                         if (node["GalleryAnchorToVamMenu"] != null) GalleryAnchorToVamMenu = node["GalleryAnchorToVamMenu"].AsBool;
                         if (node["GalleryAnchorOffset"] != null)
@@ -2052,6 +2112,20 @@ namespace VPB
                 node["GalleryRemapAtomUidsSizeSaved"].AsBool = GalleryRemapAtomUidsSizeSaved;
                 node["GalleryRemapAtomUidsWidthRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsWidthRef);
                 node["GalleryRemapAtomUidsHeightRef"].AsFloat = Mathf.Max(0f, GalleryRemapAtomUidsHeightRef);
+                node["GallerySettingsFloatPosSaved"].AsBool = GallerySettingsFloatPosSaved;
+                node["GallerySettingsFloatPosX"].AsFloat = GallerySettingsFloatPosX;
+                node["GallerySettingsFloatPosY"].AsFloat = GallerySettingsFloatPosY;
+                node["GallerySettingsFloatSizeSaved"].AsBool = GallerySettingsFloatSizeSaved;
+                node["GallerySettingsFloatWidthRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatWidthRef);
+                node["GallerySettingsFloatHeightRef"].AsFloat = Mathf.Max(0f, GallerySettingsFloatHeightRef);
+                node["GalleryPluginsFloatPosSaved"].AsBool = GalleryPluginsFloatPosSaved;
+                node["GalleryPluginsFloatPosX"].AsFloat = GalleryPluginsFloatPosX;
+                node["GalleryPluginsFloatPosY"].AsFloat = GalleryPluginsFloatPosY;
+                node["GalleryPluginsFloatSizeSaved"].AsBool = GalleryPluginsFloatSizeSaved;
+                node["GalleryPluginsFloatWidthRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatWidthRef);
+                node["GalleryPluginsFloatHeightRef"].AsFloat = Mathf.Max(0f, GalleryPluginsFloatHeightRef);
+                node["GalleryPluginsFloatLatestOnly"].AsBool = GalleryPluginsFloatLatestOnly;
+                node["GalleryPluginsFloatCslistOnly"].AsBool = GalleryPluginsFloatCslistOnly;
                 node["GalleryOnlyWhenVamMenuVisible"].AsBool = GalleryOnlyWhenVamMenuVisible;
                 node["GalleryAnchorToVamMenu"].AsBool = GalleryAnchorToVamMenu;
                 JSONClass o = new JSONClass();

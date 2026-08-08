@@ -263,8 +263,8 @@ namespace VPB
             titleGO.transform.SetParent(titleBarGO.transform, false);
             titleText = titleGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(titleText);
-            titleText.fontSize = GalleryUiDesignTokens.FontRef;
-            titleText.fontStyle = FontStyle.Normal;
+            titleText.fontSize = GalleryUiDesignTokens.FontTitleRef;
+            titleText.fontStyle = FontStyle.Bold;
             titleText.color = Color.white;
             titleText.alignment = TextAnchor.MiddleLeft;
             RectTransform titleRT = titleGO.GetComponent<RectTransform>();
@@ -281,7 +281,8 @@ namespace VPB
             fpsGO.transform.SetParent(titleBarGO.transform, false);
             fpsText = fpsGO.AddComponent<Text>();
             VPBUiFont.ApplyTo(fpsText);
-            fpsText.fontSize = GalleryUiDesignTokens.FontBodyRef;
+            fpsText.fontSize = GalleryUiDesignTokens.FpsFontRef;
+            fpsText.fontStyle = FontStyle.Normal;
             fpsText.color = Color.white;
             fpsText.alignment = TextAnchor.MiddleRight;
             RectTransform fpsRT = fpsGO.GetComponent<RectTransform>();
@@ -296,14 +297,7 @@ namespace VPB
 
             _titleBarSearchOnValueChanged = (val) => {
                 if (_suppressTitleBarSearchValueChanged) return;
-                if (IsSettingsPanelOpen())
-                {
-                    settingsFilter = val ?? "";
-                    try { UpdateTabs(); } catch { }
-                    try { RefreshInternalSettingsListRows(true); } catch { }
-                    try { SyncTitleBarSearchBackdrop(); } catch { }
-                    return;
-                }
+                // Title search is ALWAYS the grid find — settings uses side-rail list filter only.
                 // Chip mode: field is draft only — filter updates on Enter / chip toggle.
                 if (HasTitleSearchChips())
                 {
@@ -321,7 +315,7 @@ namespace VPB
             {
                 Text ph = titleSearchInput != null ? titleSearchInput.placeholder as Text : null;
                 if (ph != null)
-                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Shift+Enter exclude · Ctrl+F");
+                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Tab/↓ grid · Shift+Enter exclude");
             }
             catch { }
             RectTransform titleSearchRT = titleSearchInput.GetComponent<RectTransform>();
@@ -1553,7 +1547,7 @@ namespace VPB
                         cmImg.color = CreatorModeRailBackdrop;
                         if (cmTxt != null)
                         {
-                            cmTxt.text = VPBTranslation.T("gallery.side.creator_mode_short", "Tools");
+                            cmTxt.text = VPBTranslation.T("gallery.side.creator_mode_short", "Scene");
                             cmTxt.fontSize = btnFontSize;
                             cmTxt.gameObject.SetActive(true);
                         }
@@ -2095,7 +2089,7 @@ namespace VPB
                         cmImgL.color = CreatorModeRailBackdrop;
                         if (cmTxtL != null)
                         {
-                            cmTxtL.text = VPBTranslation.T("gallery.side.creator_mode_short", "Tools");
+                            cmTxtL.text = VPBTranslation.T("gallery.side.creator_mode_short", "Scene");
                             cmTxtL.fontSize = btnFontSize;
                             cmTxtL.gameObject.SetActive(true);
                         }
@@ -2410,6 +2404,7 @@ namespace VPB
             CreateLoadingOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             CreateEmptyGridStateOverlay(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
             CreateThumbnailCacheProgressPanel(scrollRect != null && scrollRect.viewport != null ? scrollRect.viewport.gameObject : scrollGO);
+            try { CreateModeSemanticsBanner(backgroundBoxGO != null ? backgroundBoxGO : scrollGO); } catch { }
 
             // Clean up legacy layout components that interfere with virtualization
             var legacyGLG = contentGO.GetComponent<GridLayoutGroup>();
@@ -2440,7 +2435,7 @@ namespace VPB
             statusBarGO.transform.SetParent(hoverPathRT.transform, false);
             statusBarText = statusBarGO.AddComponent<Text>();
             statusBarText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            statusBarText.fontSize = GalleryUiDesignTokens.FontRef;
+            statusBarText.fontSize = GalleryUiDesignTokens.StatusBarFontRef;
             statusBarText.fontStyle = FontStyle.Normal;
             statusBarText.color = Color.white;
             var statusShadow = statusBarGO.AddComponent<Shadow>();

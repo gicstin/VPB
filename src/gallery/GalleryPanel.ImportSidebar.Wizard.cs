@@ -30,7 +30,7 @@ namespace VPB
             Image hdrBg = AddImportSidebarRoundedBg(header, ImportSidebarStepHeaderBg, raycastTarget: true);
 
             Text hdrTxt = UI.CreateLabel(header, "", ImportSidebarBaseFontSize,
-                new Color(0.92f, 0.94f, 0.98f, 1f), TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
+                GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleLeft, raycastTarget: false, name: "Label");
             RectTransform hdrLabelRT = hdrTxt.GetComponent<RectTransform>();
 
             LayoutElement hdrLe = UI.AddLE(header, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
@@ -138,7 +138,7 @@ namespace VPB
             LayoutElement hintLe = UI.AddLE(hintRow, preferredHeight: ImportSidebarBaseRowHeight * 0.75f, flexibleWidth: 1f);
             _importWizardMultiSelectHint = hintRow.AddComponent<Text>();
             _importWizardMultiSelectHint.text = "";
-            _importWizardMultiSelectHint.color = new Color(1f, 0.75f, 0.45f, 1f);
+            _importWizardMultiSelectHint.color = GalleryUiColorTokens.ModeStatusTextApply;
             _importWizardMultiSelectHint.fontSize = ImportSidebarBaseFontSize;
             _importWizardMultiSelectHint.alignment = TextAnchor.MiddleLeft;
             try { VPBUiFont.ApplyTo(_importWizardMultiSelectHint); } catch { }
@@ -225,7 +225,7 @@ namespace VPB
             if (multi)
             {
                 _importWizardMultiSelectHint.gameObject.SetActive(true);
-                _importWizardMultiSelectHint.color = new Color(1f, 0.75f, 0.45f, 1f);
+                _importWizardMultiSelectHint.color = GalleryUiColorTokens.ModeStatusTextApply;
                 _importWizardMultiSelectHint.text = VPBTranslation.T(
                     "gallery.import.wizard.multi_select",
                     "Select only one scene package in the grid to import.");

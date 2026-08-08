@@ -20,10 +20,6 @@ namespace VPB
         private CanvasGroup backgroundCanvasGroup;
         private GameObject contentGO;
         private ScrollRect scrollRect;
-        private GameObject loadingOverlayGO;
-        private RectTransform loadingBarContainerRT;
-        private RectTransform loadingBarFillRT;
-        private float _loadingOverlayPulseStart = -1f;
         /// <summary>
         /// Filter-randomize / background refresh: rebuild lists without clearing or rebinding the visible grid.
         /// </summary>
@@ -452,9 +448,6 @@ namespace VPB
         private bool settingsListViewActive = false;
         private bool internalSettingsSessionActive = false;
         private InternalSettingsSnapshot internalSettingsBackup;
-        private bool internalSettingsHadPreSessionViewState = false;
-        private GalleryLayoutMode internalSettingsPreSessionLayoutMode = GalleryLayoutMode.Grid;
-        private float internalSettingsPreSessionScrollNormalized = 1f;
         /// <summary>Isolated list zoom while internal Settings panel open; does not persist to <see cref="ListRowHeight"/>.</summary>
         private float internalSettingsListRowHeightSession = 100f;
 
@@ -476,6 +469,9 @@ namespace VPB
         private Image leftRemoveAtomBtnIconImage;
 
         private GameObject clothingSlotPickerOverlayGO;
+        private GameObject _confirmOverlayGO;
+        private UnityAction _confirmOnConfirm;
+        private UnityAction _confirmOnCancel;
         private GameObject clothingSlotPickerPanelGO;
 
         private GameObject hairSlotPickerOverlayGO;
@@ -836,12 +832,12 @@ namespace VPB
         private Coroutine _scanWlBadgePulseCoroutine;
         private const float ScanWlBadgePulseSeconds = 0.55f;
 
-        private static readonly Color UserTagStateOnColor = new Color(0.14f, 0.42f, 0.48f, 1f);
-        private static readonly Color UserTagStateMixedColor = new Color(0.35f, 0.38f, 0.22f, 1f);
-        private static readonly Color UserTagStatePulseColor = new Color(0.20f, 0.55f, 0.58f, 1f);
-        private static readonly Color UserTagFilterActiveColor = new Color(0.18f, 0.38f, 0.62f, 1f);
-        private static readonly Color UserTagFilterExcludedColor = new Color(0.62f, 0.20f, 0.22f, 1f);
-        private static readonly Color UserTagDropGlowColor = new Color(0.35f, 0.95f, 0.55f, 1f);
+        private static readonly Color UserTagStateOnColor = GalleryUiColorTokens.UserTagOn;
+        private static readonly Color UserTagStateMixedColor = GalleryUiColorTokens.UserTagMixed;
+        private static readonly Color UserTagStatePulseColor = GalleryUiColorTokens.UserTagPulse;
+        private static readonly Color UserTagFilterActiveColor = GalleryUiColorTokens.UserTagFilterOn;
+        private static readonly Color UserTagFilterExcludedColor = GalleryUiColorTokens.UserTagFilterExclude;
+        private static readonly Color UserTagDropGlowColor = GalleryUiColorTokens.UserTagDropGlow;
         private const float UserTagVisualPulseSeconds = 0.65f;
         private const string UserTagDropFlashName = "VPB_UserTagDropFlash";
 
@@ -1002,14 +998,11 @@ namespace VPB
         private int _titleSearchPopupOpenedFrame = -1;
         /// <summary>Unscaled end time for open-cue flash; 0 = idle.</summary>
         private float _titleSearchPopupCueUntil;
-        private static readonly Color TitleSearchPopupPanelIdle = new Color(0.14f, 0.14f, 0.16f, 1f);
-        private static readonly Color TitleSearchPopupPanelCue = new Color(0.28f, 0.42f, 0.55f, 1f);
+        private static readonly Color TitleSearchPopupPanelIdle = GalleryUiColorTokens.TitleSearchPopupIdle;
+        private static readonly Color TitleSearchPopupPanelCue = GalleryUiColorTokens.TitleSearchPopupCue;
         private const float TitleSearchPopupCueSeconds = 0.28f;
 
-        /// <summary>Soft-undo snapshot after clear-all (chips + filter string).</summary>
-        private string _pendingTitleSearchUndoSerialized;
-        private float _pendingTitleSearchUndoUntilRealtime;
-        private const float TitleSearchClearUndoSeconds = 5f;
+        /// <summary>Soft-undo for search clear now uses main PushUndo stack (label "Search clear").</summary>
         private int targetDropdownValue = 0;
         private List<string> targetDropdownOptions = new List<string>();
         private List<GameObject> tboxPersonAtomBtns = new List<GameObject>();
@@ -1275,7 +1268,7 @@ namespace VPB
         /// <summary>Row height for RecyclingGridView / list rows; settings UI uses session zoom only.</summary>
         private float EffectiveListRowHeightForGallery()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
                 return internalSettingsListRowHeightSession;
             return ListRowHeight;
         }
@@ -1283,7 +1276,7 @@ namespace VPB
         /// <summary>Thumb decode density: settings list acts as single-column (widest) regardless of saved grid columns.</summary>
         private int EffectiveGridColumnsForThumbDecode()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
                 return 1;
             return GridColumnCount;
         }
@@ -1387,8 +1380,6 @@ namespace VPB
         private bool pendingHistoryRemoveConfirm = false;
         private int pendingHistoryRemoveConfirmCount = 0;
         private float pendingHistoryRemoveConfirmUntilRealtime = 0f;
-        private List<VpbLocalDatabase.ItemUsageSnapshot> pendingHistoryUndoSnapshots = null;
-        private float pendingHistoryUndoUntilRealtime = 0f;
         private List<FileEntry> lastFilteredFiles = new List<FileEntry>();
 
         /// <summary>Scratch build list for <see cref="RefreshFilesRoutine"/> — Clear+reuse; never share with snapshot cache storage.</summary>
@@ -1429,29 +1420,29 @@ namespace VPB
         #pragma warning disable CS0414
         #pragma warning restore CS0414
         
-        // Content-type accent colors (side tabs / title chrome).
-        public static readonly Color ColorCategory = new Color(0.60f, 0.15f, 0.15f, 1f);
-        public static readonly Color ColorCreator = new Color(0.60f, 0.45f, 0.15f, 1f);
-        public static readonly Color ColorTagFilter = new Color(0.50f, 0.20f, 0.50f, 1f);
-        public static readonly Color ColorRatingFilter = new Color(0.70f, 0.60f, 0.20f, 1f);
+        // Content-type accent colors — <see cref="GalleryUiColorTokens"/> facets.
+        public static readonly Color ColorCategory = GalleryUiColorTokens.FacetCategory;
+        public static readonly Color ColorCreator = GalleryUiColorTokens.FacetCreator;
+        public static readonly Color ColorTagFilter = GalleryUiColorTokens.FacetTag;
+        public static readonly Color ColorRatingFilter = GalleryUiColorTokens.FacetRating;
         /// <summary>★ Not-rated filter armed (slate; distinct from rated purple accent).</summary>
-        public static readonly Color ColorUnratedFilterAccent = new Color(0.28f, 0.45f, 0.58f, 1f);
+        public static readonly Color ColorUnratedFilterAccent = GalleryUiColorTokens.FacetUnrated;
         /// <summary>★ Not-rated label/text tint on title-bar chrome.</summary>
-        public static readonly Color ColorUnratedFilterLabel = new Color(0.55f, 0.78f, 1f, 1f);
+        public static readonly Color ColorUnratedFilterLabel = GalleryUiColorTokens.FacetUnratedLabel;
         /// <summary>★ Not-rated icon tint when presence filter armed.</summary>
-        public static readonly Color ColorUnratedFilterIcon = new Color(0.65f, 0.85f, 1f, 1f);
-        public static readonly Color ColorSourceFilter = new Color(0.20f, 0.40f, 0.70f, 1f);
-        public static readonly Color ColorSubfilterFilter = new Color(0.35f, 0.35f, 0.60f, 1f);
-        public static readonly Color ColorUserTagFilter = new Color(0.55f, 0.28f, 0.55f, 1f);
-        public static readonly Color ColorTitleSearchBackdropIdle = new Color(0.07f, 0.07f, 0.09f, 1f);
-        public static readonly Color ColorTitleSearchFilterActive = new Color(0.18f, 0.38f, 0.62f, 1f);
-        public static readonly Color ColorPath = new Color(0.15f, 0.15f, 0.45f, 1f);
-        public static readonly Color ColorHistory = new Color(0.50f, 0.20f, 0.50f, 1f);
-        public static readonly Color ColorHistoryAccent = new Color(0.55f, 0.28f, 0.55f, 1f);
+        public static readonly Color ColorUnratedFilterIcon = GalleryUiColorTokens.FacetUnratedIcon;
+        public static readonly Color ColorSourceFilter = GalleryUiColorTokens.FacetSource;
+        public static readonly Color ColorSubfilterFilter = GalleryUiColorTokens.FacetSubfilter;
+        public static readonly Color ColorUserTagFilter = GalleryUiColorTokens.FacetUserTag;
+        public static readonly Color ColorTitleSearchBackdropIdle = GalleryUiColorTokens.SurfaceDeep;
+        public static readonly Color ColorTitleSearchFilterActive = GalleryUiColorTokens.FacetTitleSearchActive;
+        public static readonly Color ColorPath = GalleryUiColorTokens.FacetPath;
+        public static readonly Color ColorHistory = GalleryUiColorTokens.FacetHistory;
+        public static readonly Color ColorHistoryAccent = GalleryUiColorTokens.FacetHistoryAccent;
         /// <summary>Scene Import side-rail button backdrop (idle + active).</summary>
-        public static readonly Color ColorSceneImport = new Color(0.72f, 0.58f, 0.18f, 1f);
-        public static readonly Color ColorHub = new Color(0.20f, 0.50f, 0.35f, 1f);
-        public static readonly Color ColorLicense = new Color(0.45f, 0.45f, 0.20f, 1f);
+        public static readonly Color ColorSceneImport = GalleryUiColorTokens.FacetSceneImport;
+        public static readonly Color ColorHub = GalleryUiColorTokens.FacetHub;
+        public static readonly Color ColorLicense = GalleryUiColorTokens.FacetLicense;
 
         private string dragStatusMsg = null;
         private string temporaryStatusMsg = null;

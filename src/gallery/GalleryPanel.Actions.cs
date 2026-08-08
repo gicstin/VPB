@@ -305,9 +305,20 @@ namespace VPB
                             || pathLower.EndsWith(".vap"))
                         {
                             Atom target = GetBestTargetAtom();
-                            if (target == null) { LogUtil.LogWarning("[VPB] Please select a Person atom."); return false; }
-                            dragger.LoadPlugins(target);
-                            return true;
+                            if (target != null && SceneUtils.IsPersonLikeAtom(target))
+                            {
+                                dragger.LoadPlugins(target);
+                                return true;
+                            }
+                            // No Person: scripts → session plugin (same as void drop).
+                            if (isPluginScript
+                                || pathLower.EndsWith(".cs") || pathLower.EndsWith(".cslist") || pathLower.EndsWith(".dll"))
+                            {
+                                dragger.LoadPluginsAsSession();
+                                return true;
+                            }
+                            LogUtil.LogWarning("[VPB] Please select a Person atom.");
+                            return false;
                         }
                     }
 
@@ -667,6 +678,13 @@ namespace VPB
 
         public void Show(string title, string extension, string path)
         {
+            // Plugins = float palette only — never populate gallery grid with script rows.
+            if (!string.IsNullOrEmpty(title)
+                && string.Equals(title, "Plugins", StringComparison.OrdinalIgnoreCase))
+            {
+                try { OpenPluginsFloat(forceShow: true); } catch { }
+                return;
+            }
             if (_showReentrancyDepth > 0)
             {
                 LogUtil.LogWarning("[Gallery] GalleryPanel.Show re-entrancy ignored: title='" + title
@@ -729,9 +747,8 @@ namespace VPB
             if (needsInit) Init();
             LogUtil.Log("[Gallery] GalleryPanel.Show post-init: " + sw.ElapsedMilliseconds + "ms");
 
-            // Switching middle content (category/page) must leave internal settings mode.
-            // Default behavior: auto-save on exit; only explicit Discard uses cancel path.
-            bool exitedSettingsMode = IsSettingsPanelOpen() || settingsListViewActive;
+            // Legacy middle-pane settings only — float Settings is modeless (keep open across Show).
+            bool exitedSettingsMode = settingsListViewActive;
             if (exitedSettingsMode)
                 ExitInternalSettingsMode(true);
 
@@ -1579,6 +1596,11 @@ namespace VPB
 
         private void SetNameFilter(string val)
         {
+            // Settings filter is side-rail settingsFilter only. Title search must not
+            // snapshot/filter settings rows — toggle refresh would wipe that ephemeral list.
+            if (settingsListViewActive)
+                return;
+
             string f = val ?? "";
             if (f == nameFilter) return;
             AssignNameFilterState(f);
@@ -1868,17 +1890,21 @@ namespace VPB
         {
             if (file == null || file is InternalSettingRowEntry) return;
 
-            // Right click selects if not selected.
-            // Note: We intentionally do NOT open the actions panel here; right-click should not
-            // force any bottom UI to appear (a separate context menu implementation will handle actions).
+            // Right-click: select + open grid actions menu (Apply / whitelist / Select).
             bool applyWhitelistToSelection = PrepareFileEntryGestureSelection(file);
 
             try
             {
-                bool temporary = IsCtrlHeld();
-                HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary);
+                ShowGridItemContextMenu(file);
             }
-            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
+            catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick grid menu: " + ex); }
+
+            // Preserve middle-button-style temporary whitelist when Ctrl held on RMB.
+            if (IsCtrlHeld())
+            {
+                try { HandleDesktopScanWhitelistClickGesture(file, applyWhitelistToSelection, temporary: true); }
+                catch (Exception ex) { LogUtil.LogError("[VPB] OnFileRightClick scan whitelist: " + ex); }
+            }
 
             if (isFixedLocally && VPBConfig.Instance != null && VPBConfig.Instance.DesktopFixedHeightMode == 0)
             {
@@ -2347,7 +2373,7 @@ namespace VPB
         /// <summary>When manual-refresh-only blocked FileManager observer, apply hub/download delta on next Show.</summary>
         private void TryApplyPendingPackageDeltaOnShow()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (settingsListViewActive) return;
             if (!hasLoadedContent || recyclingGrid == null) return;
             bool hasPending = false;
             try { hasPending = FileManager.HasPendingGalleryPackageDelta(); } catch { }
@@ -2379,7 +2405,7 @@ namespace VPB
 
         internal void OnGallerySqlIndexUpdated()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive) return;
+            if (settingsListViewActive) return;
             if (!IsVisible && !hasLoadedContent) return;
             if (activeContentType != ContentType.Category && activeContentType != ContentType.History) return;
 

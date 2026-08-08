@@ -56,7 +56,49 @@ namespace VPB
             }
             catch { cam = null; }
 
-            try { return RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
+            bool inside;
+            try { inside = RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam); }
+            catch { return false; }
+            if (!inside) return false;
+
+            // Modeless floats live on canvas (siblings of backgroundBoxGO). Their panels often
+            // sit over the pane screen-rect — raw contains would pin AH/opacity forever.
+            // If the live raycast hit is outside the pane subtree, pointer is on float chrome.
+            GameObject hitGo;
+            if (TryGetCurrentPointerRaycastGameObject(out hitGo) && hitGo != null
+                && !IsTransformUnderGalleryPaneSubtree(hitGo.transform))
+                return false;
+
+            return true;
+        }
+
+        /// <summary>EventSystem raycast under pointer when sample is valid. Warm path — no alloc.</summary>
+        private bool TryGetCurrentPointerRaycastGameObject(out GameObject hitGo)
+        {
+            hitGo = null;
+            try
+            {
+                if (currentPointerData == null) return false;
+                if (!currentPointerData.pointerCurrentRaycast.isValid) return false;
+                hitGo = currentPointerData.pointerCurrentRaycast.gameObject;
+                return hitGo != null;
+            }
+            catch
+            {
+                hitGo = null;
+                return false;
+            }
+        }
+
+        /// <summary>True when transform is backgroundBoxGO or a descendant (not canvas-sibling floats).</summary>
+        private bool IsTransformUnderGalleryPaneSubtree(Transform t)
+        {
+            if (t == null || backgroundBoxGO == null) return false;
+            try
+            {
+                Transform pane = backgroundBoxGO.transform;
+                return t == pane || t.IsChildOf(pane);
+            }
             catch { return false; }
         }
 
@@ -132,7 +174,6 @@ namespace VPB
 
                 try { ApplyVamMenuGateVisibility(); } catch { }
                 try { ApplyVamMenuAnchoring(); } catch { }
-                try { UpdateLoadingOverlayPulse(); } catch { }
 
                 // Determine whether the gallery is "active" (scrolling or thumbnails still loading).
                 // While active we pause all disk saves — background threads must not contend on
@@ -212,7 +253,7 @@ namespace VPB
                     }
                     else if (autoCollapse)
                     {
-                        // AH mode: auto-collapse after user stops hovering
+                        // AH mode: collapse after idle (no pointer engagement AND no text/chrome engagement)
                         // Manual hover check for trigger area when it is NOT a raycast target (to avoid blocking scrollbar)
                         bool isHoveringTriggerManual = false;
                         GameObject activeTrigger = null;
@@ -232,16 +273,10 @@ namespace VPB
                                 isHoveringTriggerManual = RectTransformUtility.RectangleContainsScreenPoint(ctRT, Input.mousePosition, cam);
                         }
 
-                        bool isPointerInsideGalleryWindow = IsPointerInsideGalleryWindowRect();
-
-                        // Item drag uses a full-canvas blocker — pointer leaves the pane and AH would
-                        // collapse (SetActive false → UIDraggableItem.OnDisable cancels the drop).
-                        bool galleryItemDragActive = false;
-                        try { galleryItemDragActive = UIDraggableItem.IsDragging; } catch { galleryItemDragActive = false; }
-
-                        // If NOT hovering gallery and NOT hovering side buttons and NOT hovering trigger, collapse after delay
-                        bool isHoveringAny = hoverCount > 0 || isPointerInsideGalleryWindow || isHoveringTrigger || isHoveringTriggerManual || IsSettingsPanelOpen() || galleryItemDragActive;
-                        if (!isHoveringAny)
+                        // Engagement = pointer on pane OR text focus / modal chrome (Ctrl+F, fields…).
+                        // Modeless floats do not pin expanded. Hover-only gate collapsed mid-typing.
+                        bool isEngaged = IsGalleryInteractionEngaged() || isHoveringTrigger || isHoveringTriggerManual;
+                        if (!isEngaged)
                         {
                             collapseTimer += Time.deltaTime;
                             float delay = 1.0f;
@@ -442,6 +477,9 @@ namespace VPB
 
             // Desktop: re-chrome when VaM Monitor UI Scale changes (HostScale).
             SyncHostUiScaleIfChanged();
+
+            // Coalesced VPB.cfg write after Ctrl+Alt+/- scale nudges (idle = one bool).
+            try { GalleryUiScaleHotkey.TickDeferredSave(); } catch { }
 
             try
             {
@@ -684,49 +722,21 @@ namespace VPB
             }
         }
 
-        /// <summary>Frame stamp so multi-pane Update does not apply UI-scale hotkey more than once.</summary>
-        private static int _uiScaleHotkeyHandledFrame = -1;
-
         /// <summary>
         /// Ctrl+Alt+= / Ctrl+Alt+KeypadPlus → scale up; Ctrl+Alt+- / Ctrl+Alt+KeypadMinus → scale down.
         /// Avoids Ctrl+/- / Ctrl+scroll (grid column / list thumb zoom). Step 0.1; persists desktop/VR value.
         /// </summary>
         private bool TryHandleGalleryUiScaleHotkey()
         {
-            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-            bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
-            if (!ctrl || !alt) return false;
-
-            float delta = 0f;
-            if (Input.GetKeyDown(KeyCode.Equals) || Input.GetKeyDown(KeyCode.KeypadPlus))
-                delta = 0.1f;
-            else if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
-                delta = -0.1f;
-            else
+            if (!GalleryUiScaleHotkey.TryNudgeFromKeyboard())
                 return false;
-
-            int frame = Time.frameCount;
-            if (_uiScaleHotkeyHandledFrame == frame)
-                return true;
-            _uiScaleHotkeyHandledFrame = frame;
-
-            var cfg = VPBConfig.Instance;
-            if (cfg == null) return true;
-
-            float before = cfg.InnerPaneScale;
-            float after = Mathf.Clamp(Mathf.Round((before + delta) * 10f) / 10f, VPBConfig.MinUiScale, VPBConfig.MaxUiScale);
-            if (!Mathf.Approximately(before, after))
-            {
-                cfg.InnerPaneScale = after;
-                try { cfg.TriggerChange(); } catch { }
-                try { cfg.Save(false); } catch { }
-            }
 
             try
             {
+                float scale = VPBConfig.Instance != null ? VPBConfig.Instance.InnerPaneScale : 1f;
                 ShowTemporaryStatus(string.Format(
                     VPBTranslation.T("gallery.status.ui_scale", "UI scale: {0:0.0}"),
-                    cfg.InnerPaneScale), 1.25f);
+                    scale), 1.25f);
             }
             catch { }
 
@@ -738,7 +748,7 @@ namespace VPB
             if (IsPluginHotkeyCaptureActive())
                 return;
 
-            // Ctrl+F — focus title search even when another InputField is selected.
+            // Ctrl+F — focus title search (expanded Settings float → settings filter). Works with another InputField selected.
             bool ctrlEarly = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
             bool shiftEarly = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             if (ctrlEarly && Input.GetKeyDown(KeyCode.F))
@@ -768,10 +778,14 @@ namespace VPB
             }
             if (ctrlEarly && Input.GetKeyDown(KeyCode.Z))
             {
+                // Search clear lives on main Undo stack — allow Ctrl+Z while title-search field focused.
                 try
                 {
-                    if (TryUndoTitleSearchClear())
+                    if (IsSearchClearUndoTop())
+                    {
+                        Undo();
                         return;
+                    }
                 }
                 catch { }
             }
@@ -786,6 +800,16 @@ namespace VPB
                 if (DetailStripTagMenuHandleListKey(k))
                     return;
             }
+
+            // Confirm modal: Esc=Cancel (or dismiss-only for Try-On sticky gate), Enter=Confirm.
+            if (TryHandleConfirmOverlayKeys())
+                return;
+
+            if (TryHandleGridContextMenuEsc())
+                return;
+
+            if (TryHandleFilterChipOverflowEsc())
+                return;
 
             // Strip keep: Esc ladder + / focus before InputField gate.
             if (StripKeepHandleSubScenePickKeys())
@@ -837,12 +861,65 @@ namespace VPB
             if (TryHandleRemapAtomUidsEsc())
                 return;
 
+            // Settings float: Esc → Cancel+close before InputField gate.
+            if (TryHandleSettingsFloatEsc())
+                return;
+
+            // Plugins float: apply orphan .cs after async cslist-ref warm (never block open).
+            try { TickPluginsFloatRefsRefresh(); } catch { }
+
+            // Plugins float: Esc clear filter → close.
+            if (TryHandlePluginsFloatEsc())
+                return;
+
             // Scene Import float: Esc expand / hide-keep-detach.
             if (TryHandleImportSidebarFloatEsc())
                 return;
 
             // Filter presets: Esc modes/hide, arrows/Enter/D/Ctrl+S/U (before InputField gate so rename Esc works).
             if (quickFiltersUI != null && quickFiltersUI.IsVisible && quickFiltersUI.TryHandleKeyboard())
+                return;
+
+            // Sticky tools + apply/hold Esc BEFORE InputField gate.
+            // Banner advertises Esc → mode; search focus must not trap exit (Norman false signifier).
+            if (Input.GetKeyDown(KeyCode.Escape)
+                && (ModeAmbientEscExitsAny() || ApplySemanticsEscExitsAny()))
+            {
+                try
+                {
+                    if (EventSystem.current != null)
+                        EventSystem.current.SetSelectedGameObject(null);
+                }
+                catch { }
+            }
+
+            if (Input.GetKeyDown(KeyCode.Escape) && creatorModeActive && !creatorModeStripBusy)
+            {
+                ExitCreatorMode();
+                return;
+            }
+
+            if (TryHandleRemoveModeEsc())
+                return;
+
+            if (TryHandleTryOnEsc())
+                return;
+
+            if (TryHandleCleanupModeEsc())
+                return;
+
+            // Docked Import Esc (float handled earlier via TryHandleImportSidebarFloatEsc).
+            if (TryHandleImportSidebarDockedEsc())
+                return;
+
+            if (TryHandleBenchPickModeEsc())
+                return;
+
+            if (TryHandleApplySemanticsEsc())
+                return;
+
+            // Search ↔ grid focus transfer before InputField gate (no Unity Tab cycle — Mode.None).
+            if (TryHandleKeyboardFocusTransfer())
                 return;
 
             if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != null)
@@ -870,25 +947,6 @@ namespace VPB
                 SetCategoryQuickMenuVisible(false);
                 return;
             }
-
-            if (Input.GetKeyDown(KeyCode.Escape) && creatorModeActive && !creatorModeStripBusy)
-            {
-                ExitCreatorMode();
-                return;
-            }
-
-            if (TryHandleRemoveModeEsc())
-                return;
-
-            if (TryHandleTryOnEsc())
-                return;
-
-            if (TryHandleCleanupModeEsc())
-                return;
-
-            // Docked Import Esc (float handled earlier via TryHandleImportSidebarFloatEsc).
-            if (TryHandleImportSidebarDockedEsc())
-                return;
 
             if (Input.GetKeyDown(KeyCode.Escape)
                 && _detailStripTagMenuRoot != null
@@ -923,12 +981,7 @@ namespace VPB
             }
             if (ctrl && Input.GetKeyDown(KeyCode.Z))
             {
-                if (activeContentType == ContentType.History)
-                {
-                    if (TryUndoRecentHistoryRemoval())
-                        return;
-                }
-                // Ctrl+Shift+Z — Redo; Ctrl+Z — same as footer Undo.
+                // Ctrl+Shift+Z — Redo; Ctrl+Z — footer Undo (History/search also on this stack).
                 if (shift)
                 {
                     try { Redo(); } catch { }
@@ -1056,6 +1109,10 @@ namespace VPB
                 currentIndex = 0;
             }
 
+            // Up from first item → title search (keyboard loop; skip when range/add modifiers).
+            if (TryKeyboardUpToTitleSearch(currentIndex, move, moveH, shift, ctrl))
+                return;
+
             int newIndex = currentIndex;
 
             if (layoutMode == GalleryLayoutMode.List)
@@ -1131,7 +1188,13 @@ namespace VPB
                 selectedPath = historyBrowseForNav ? GetSelectionIdentityKey(newFile, true) : newFile.Path;
                 SetHoverPath(newFile);
                 if (recyclingGrid != null) recyclingGrid.EnsureItemVisible(newIndex);
-                RefreshSelectionVisuals();
+                if (settingsListViewActive)
+                {
+                    try { DetailStripHide(); } catch { }
+                    RefreshSelectionVisualsCore(runHeavySideEffects: false);
+                }
+                else
+                    RefreshSelectionVisuals();
                 UpdatePaginationText();
             }
         }

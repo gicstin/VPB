@@ -409,7 +409,7 @@ namespace VPB
                     BuildImportSidebarCUAChecklist(panel.transform, importSidebarAppearanceCUAUi);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
-                        new Color(0.91f, 0.53f, 0.53f, 1f),
+                        GalleryUiColorTokens.AccentDangerStrong,
                         VPBTranslation.T("gallery.import.opt.cua_delete", "Destructive: remove all CUAs currently on the target person before importing."));
                     RefreshAppearanceConditionalRows();
                     break;
@@ -485,7 +485,7 @@ namespace VPB
                     BuildImportSidebarCUAChecklist(panel.transform, importSidebarCuaOnlyCUAUi);
                     AddOptionToggle(panel.transform, "Delete current atom CUAs",
                         () => importSidebarDeleteTargetCUAs, v => importSidebarDeleteTargetCUAs = v,
-                        new Color(0.91f, 0.53f, 0.53f, 1f),
+                        GalleryUiColorTokens.AccentDangerStrong,
                         VPBTranslation.T("gallery.import.opt.cua_delete", "Destructive: remove all CUAs currently on the target person before importing."));
                     break;
 
@@ -551,7 +551,7 @@ namespace VPB
             Image bg = AddImportSidebarRoundedBg(row, ImportSidebarGroupHeaderBg, raycastTarget: false);
             Text t = CreateImportSidebarLabel(row.transform, label, ImportSidebarBaseFontSize);
             t.alignment = TextAnchor.MiddleLeft;
-            t.color = new Color(0.92f, 0.95f, 1f, 1f);
+            t.color = GalleryUiColorTokens.TextPrimary;
             LayoutElement leC = le;
             Text tC = t;
             innerPaneScaleActions.Add(s => {
@@ -565,7 +565,7 @@ namespace VPB
             GameObject row = new GameObject("GroupNote");
             row.transform.SetParent(parent, false);
             LayoutElement le = UI.AddLE(row, preferredHeight: ImportSidebarBaseRowHeight * 0.85f, flexibleWidth: 1f);
-            Text t = AddSimpleLabelText(row.transform, note, ImportSidebarBaseFontSize, new Color(0.62f, 0.64f, 0.68f, 1f));
+            Text t = AddSimpleLabelText(row.transform, note, ImportSidebarBaseFontSize, GalleryUiColorTokens.TextDim);
             t.fontStyle = FontStyle.Italic;
             LayoutElement leC = le;
             Text tC = t;
@@ -674,7 +674,7 @@ namespace VPB
             // Lock min+preferred so [ ]/[x] text swap cannot change CSF/VLG row height.
             LayoutElement le = UI.AddLE(row, minHeight: ImportSidebarBaseRowHeight, preferredHeight: ImportSidebarBaseRowHeight, flexibleWidth: 1f);
 
-            Image bg = AddImportSidebarRoundedBg(row, ColorInactiveRow);
+            Image bg = AddImportSidebarRoundedBg(row, get() ? ImportSidebarSelectedAccent : ColorInactiveRow);
 
             Button btn = row.AddComponent<Button>();
             btn.targetGraphic = bg;
@@ -691,12 +691,14 @@ namespace VPB
                 bool nv = !get();
                 set(nv);
                 t.text = (nv ? "[x] " : "[ ] ") + label;
+                if (bg != null) bg.color = nv ? ImportSidebarSelectedAccent : ColorInactiveRow;
                 SaveImportSidebarPrefs();
             });
 
             importSidebarOptionToggleRefreshers.Add(() =>
             {
                 if (t != null) t.text = (get() ? "[x] " : "[ ] ") + label;
+                if (bg != null) bg.color = get() ? ImportSidebarSelectedAccent : ColorInactiveRow;
             });
 
             if (!string.IsNullOrEmpty(tooltip)) AddTooltipPlain(row, tooltip);
@@ -824,7 +826,7 @@ namespace VPB
             Text t = row.GetComponentInChildren<Text>();
             if (t != null) t.text = text;
             Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
+            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -992,7 +994,7 @@ namespace VPB
             Text t = row.GetComponentInChildren<Text>();
             if (t != null) t.text = text;
             Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
+            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -1155,7 +1157,7 @@ namespace VPB
                 emptyGO.transform,
                 "No importable atoms in this scene.",
                 ImportSidebarBaseFontSize,
-                new Color(0.62f, 0.64f, 0.68f, 1f));
+                GalleryUiColorTokens.TextDim);
             importSidebarSceneAtomEmptyHint.fontStyle = FontStyle.Italic;
             importSidebarSceneAtomEmptyHint.alignment = TextAnchor.MiddleCenter;
             emptyGO.SetActive(false);
@@ -1290,7 +1292,7 @@ namespace VPB
             }
             ApplySceneAtomRowScale(row, ChromeScale);
             Image bg = row.GetComponent<Image>();
-            if (bg != null) bg.color = selected ? ImportSidebarSelectAllBg : ColorInactiveRow;
+            if (bg != null) bg.color = selected ? ImportSidebarSelectedAccent : ColorInactiveRow;
 
             Button btn = row.GetComponent<Button>();
             if (btn != null)
@@ -1586,7 +1588,7 @@ namespace VPB
             importSidebarApplyReasonRT.anchorMin = new Vector2(0f, 0f);
             importSidebarApplyReasonRT.anchorMax = new Vector2(1f, 0f);
             importSidebarApplyReasonRT.pivot = new Vector2(0.5f, 0f);
-            importSidebarApplyReasonBg = AddImportSidebarRoundedBg(reasonGO, new Color(0.18f, 0.12f, 0.08f, 0.95f), raycastTarget: false);
+            importSidebarApplyReasonBg = AddImportSidebarRoundedBg(reasonGO, ImportSidebarApplyReasonBg, raycastTarget: false);
             importSidebarApplyReasonLabel = AddSimpleLabelText(reasonGO.transform, "", ImportSidebarBaseFontSize - 1, ImportSidebarApplyReasonText);
             importSidebarApplyReasonLabel.alignment = TextAnchor.MiddleCenter;
             importSidebarApplyReasonLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1606,7 +1608,7 @@ namespace VPB
             rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta = new Vector2(0f, ImportSidebarBaseApplyHeight);
 
-            Image bg = AddImportSidebarRoundedBg(btn, new Color(0.16f, 0.36f, 0.56f, 1f));
+            Image bg = AddImportSidebarRoundedBg(btn, ImportSidebarApplyBg);
 
             Button b = btn.AddComponent<Button>();
             b.targetGraphic = bg;
@@ -1956,7 +1958,12 @@ namespace VPB
             bool ok = block == null;
 
             if (importSidebarApplyButton != null)
+            {
                 importSidebarApplyButton.interactable = ok;
+                Image applyBg = importSidebarApplyButton.targetGraphic as Image;
+                if (applyBg != null)
+                    applyBg.color = ok ? ImportSidebarApplyBg : GalleryUiColorTokens.SurfaceMid;
+            }
 
             if (importSidebarApplyReasonLabel != null && importSidebarApplyReasonRT != null)
             {

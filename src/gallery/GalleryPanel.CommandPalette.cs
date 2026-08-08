@@ -298,7 +298,7 @@ namespace VPB
             {
                 cfg.InnerPaneScale = after;
                 try { cfg.TriggerChange(); } catch { }
-                try { cfg.Save(false); } catch { }
+                try { ScheduleQuickFiltersConfigSave(); } catch { }
             }
             ShowTemporaryStatus(string.Format(
                 VPBTranslation.T("gallery.status.ui_scale", "UI scale: {0:0.0}"),
@@ -1166,14 +1166,19 @@ namespace VPB
             return false;
         }
 
-        /// <summary>Apply current grid selection via keyboard (Enter/Space). Warm path.</summary>
+        /// <summary>Apply current grid selection via keyboard (Enter/Space). Settings: toggle row. Warm path.</summary>
         private void TryKeyboardApplySelection()
         {
             if (!IsVisible) return;
             if (_benchPickModeActive || _stripKeepSubScenePickActive) return;
             if (_removeModeActive) return;
-            if (IsSettingsPanelOpen() || settingsListViewActive) return;
             if (_commandPaletteOpen) return;
+
+            if (settingsListViewActive)
+            {
+                TryKeyboardToggleSelectedSetting();
+                return;
+            }
 
             FileEntry file = null;
             if (selectedFiles != null && selectedFiles.Count > 0)
@@ -1214,6 +1219,48 @@ namespace VPB
             }
 
             ApplyFileEntryNow(file);
+        }
+
+        /// <summary>Enter/Space on settings list — toggle/cycle selected row (filter preserved).</summary>
+        private void TryKeyboardToggleSelectedSetting()
+        {
+            FileEntry file = null;
+            if (selectedFiles != null && selectedFiles.Count > 0)
+                file = selectedFiles[selectedFiles.Count - 1];
+
+            if (file == null && currentFilteredFiles != null && currentFilteredFiles.Count > 0
+                && !string.IsNullOrEmpty(selectedPath))
+            {
+                for (int i = 0; i < currentFilteredFiles.Count; i++)
+                {
+                    FileEntry f = currentFilteredFiles[i];
+                    if (f == null) continue;
+                    if (string.Equals(f.Path, selectedPath, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(f.Uid, selectedPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        file = f;
+                        break;
+                    }
+                }
+            }
+
+            if (!(file is InternalSettingRowEntry))
+            {
+                EnsureKeyboardGridSelection();
+                if (selectedFiles != null && selectedFiles.Count > 0)
+                    file = selectedFiles[selectedFiles.Count - 1];
+            }
+
+            if (!(file is InternalSettingRowEntry))
+            {
+                ShowTemporaryStatus(
+                    VPBTranslation.T("gallery.keyboard.settings_none", "No setting selected."),
+                    1.5f);
+                return;
+            }
+
+            bool secondary = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            try { HandleInternalSettingsRowClick(file, secondary); } catch { }
         }
 
         private void FocusTitleSearchInput()

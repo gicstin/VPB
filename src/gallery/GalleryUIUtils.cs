@@ -17,37 +17,37 @@ namespace VPB
     {
         private static float _lastLoadSceneStartTime = -9999f;
 
-        // Universal gallery chrome colors.
-        public static readonly Color PopupBackdrop = new Color(0.12f, 0.12f, 0.14f, 0.72f);
-        public static readonly Color PopupRowBackdrop = new Color(0.18f, 0.18f, 0.20f, 1f);
-        public static readonly Color PopupRowActiveBackdrop = new Color(0.28f, 0.30f, 0.34f, 1f);
-        public static readonly Color PopupText = Color.white;
-        public static readonly Color PopupMutedText = new Color(0.65f, 0.65f, 0.68f, 1f);
-        public static readonly Color TextPrimary = new Color(0.92f, 0.92f, 0.92f, 1f);
-        public static readonly Color TextMuted = new Color(0.72f, 0.72f, 0.75f, 1f);
-        public static readonly Color TextDim = new Color(0.55f, 0.55f, 0.58f, 1f);
-        public static readonly Color InputFieldTextColor = Color.white;
-        public static readonly Color InputFieldPlaceholderColor = new Color(0.5f, 0.5f, 0.52f, 1f);
-        public static readonly Color InputFieldBg = new Color(0.10f, 0.10f, 0.12f, 1f);
-        public static readonly Color TextShadowColor = new Color(0f, 0f, 0f, 0.75f);
+        // Universal gallery chrome — aliases <see cref="GalleryUiColorTokens"/> (single source).
+        public static readonly Color PopupBackdrop = GalleryUiColorTokens.PopupSurface;
+        public static readonly Color PopupRowBackdrop = GalleryUiColorTokens.PopupRowIdle;
+        public static readonly Color PopupRowActiveBackdrop = GalleryUiColorTokens.PopupRowActive;
+        public static readonly Color PopupText = GalleryUiColorTokens.TextOnAccent;
+        public static readonly Color PopupMutedText = GalleryUiColorTokens.TextMuted;
+        public static readonly Color TextPrimary = GalleryUiColorTokens.TextPrimary;
+        public static readonly Color TextMuted = GalleryUiColorTokens.TextMuted;
+        public static readonly Color TextDim = GalleryUiColorTokens.TextDim;
+        public static readonly Color InputFieldTextColor = GalleryUiColorTokens.TextOnAccent;
+        public static readonly Color InputFieldPlaceholderColor = GalleryUiColorTokens.TextPlaceholder;
+        public static readonly Color InputFieldBg = GalleryUiColorTokens.SurfaceDarker;
+        public static readonly Color TextShadowColor = GalleryUiColorTokens.TextShadow;
 
         // Neutral chrome fills (formerly written inline as raw new Color(...) dozens of times).
-        public static readonly Color ChromeDarker = new Color(0.1f, 0.1f, 0.1f, 1f);
-        public static readonly Color ChromeDark = new Color(0.15f, 0.15f, 0.15f, 1f);
-        public static readonly Color ChromePanel = new Color(0.2f, 0.2f, 0.2f, 1f);
-        public static readonly Color ChromeMid = new Color(0.3f, 0.3f, 0.3f, 1f);
-        // Interactive accents: blue = active/selected state, green = on/confirm, red = off/clear/destructive.
-        public static readonly Color AccentBlue = new Color(0.15f, 0.45f, 0.6f, 1f);
-        public static readonly Color AccentGreen = new Color(0.2f, 0.6f, 0.2f, 1f);
-        public static readonly Color AccentRed = new Color(0.6f, 0.2f, 0.2f, 1f);
+        public static readonly Color ChromeDarker = GalleryUiColorTokens.SurfaceDarker;
+        public static readonly Color ChromeDark = GalleryUiColorTokens.SurfaceDark;
+        public static readonly Color ChromePanel = GalleryUiColorTokens.SurfacePanel;
+        public static readonly Color ChromeMid = GalleryUiColorTokens.SurfaceMid;
+        // Interactive accents: selected = muted cool-grey, green = confirm CTA, red = destructive.
+        public static readonly Color AccentBlue = GalleryUiColorTokens.AccentSelected;
+        public static readonly Color AccentGreen = GalleryUiColorTokens.AccentConfirm;
+        public static readonly Color AccentRed = GalleryUiColorTokens.AccentDanger;
 
         /// <summary>Background of centered modal panels (formerly inline new Color(0.06,0.06,0.08,1)).</summary>
-        public static readonly Color ModalPanel = new Color(0.06f, 0.06f, 0.08f, 1f);
+        public static readonly Color ModalPanel = GalleryUiColorTokens.ModalSurface;
         // Standard gallery Button ColorBlock tints (formerly inlined per button). White normalColor keeps the
         // RoundedRect fill unchanged; hover brightens, press darkens, disabled dims + fades.
-        public static readonly Color ButtonHighlight = new Color(1.2f, 1.2f, 1.2f, 1f);
-        public static readonly Color ButtonPressed = new Color(0.8f, 0.8f, 0.8f, 1f);
-        public static readonly Color ButtonDisabled = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+        public static readonly Color ButtonHighlight = GalleryUiColorTokens.ButtonHighlight;
+        public static readonly Color ButtonPressed = GalleryUiColorTokens.ButtonPressed;
+        public static readonly Color ButtonDisabled = GalleryUiColorTokens.ButtonDisabled;
 
         /// <summary>White with the given alpha — for hover/separator/overlay tints (replaces inline new Color(1,1,1,a)).</summary>
         public static Color White(float alpha) => new Color(1f, 1f, 1f, alpha);
@@ -444,6 +444,7 @@ namespace VPB
         private static void EndSceneLoadBanner()
         {
             try { VpbProgressService.EndSceneLoad(); } catch { }
+            try { VpbProgressService.ClearBlocking(); } catch { }
         }
 
         private static bool TryBeginSceneLoadThrottle()
@@ -659,7 +660,7 @@ namespace VPB
         }
 
         /// <summary>
-        /// Clears scene banner when merge loads skip WorldUI.Activate / EndSceneLoadTotal.
+        /// Clears scene banner + OS heartbeat when merge loads skip WorldUI.Activate / EndSceneLoadTotal.
         /// </summary>
         private static IEnumerator SceneLoadBannerFallbackRoutine(int serialAtStart, float timeoutSec = 180f)
         {
@@ -672,12 +673,22 @@ namespace VPB
             {
                 try
                 {
-                    if (!VpbProgressService.IsSceneLoadBannerActive)
+                    bool banner = VpbProgressService.IsSceneLoadBannerActive;
+                    bool blocking = VpbProgressService.IsBlocking;
+                    // Only idle-exit when both gone (serial bump clears via EndSceneLoadTotal).
+                    if (!banner && !blocking)
                         yield break;
                     if (LogUtil.GetSceneLoadTotalSerial() != serialAtStart)
+                    {
+                        EndSceneLoadBanner();
                         yield break;
+                    }
                 }
-                catch { yield break; }
+                catch
+                {
+                    EndSceneLoadBanner();
+                    yield break;
+                }
 
                 bool busy = false;
                 try { busy = LogUtil.IsSceneLoading(); } catch { busy = false; }
@@ -730,11 +741,20 @@ namespace VPB
             }
 
             try { VpbProgressService.HandoffSceneLoadNative(merge); } catch { }
+            try
+            {
+                VpbProgressService.EnterBlocking(
+                    merge ? "Merging scene" : "Loading scene",
+                    merge ? "VaM may freeze — merging…" : "VaM may freeze — restoring…");
+            }
+            catch { }
             ScheduleSceneLoadBannerFallback();
+            // One frame so busy chrome + strip paint before sync Load stalls main thread.
             yield return null;
 
             int serialBefore = LogUtil.GetSceneLoadTotalSerial();
             LogUtil.Log("[VPB] Calling scene load: " + normalizedPath + (merge ? " (merge)" : ""));
+
             bool ok = false;
             if (merge)
                 ok = SceneLoadingUtils.LoadScene(normalizedPath, true);
@@ -1819,14 +1839,164 @@ namespace VPB
             taRt.offsetMin = new Vector2(padX, padY);
             taRt.offsetMax = new Vector2(-padX, -padY);
 
-            Text phT = CreateLabel(ta, placeholderText ?? "", fontSize, placeholderColor, name: "Placeholder");
-            Text tcT = CreateLabel(ta, "", fontSize, Color.white, name: "Text");
+            Text phT = CreateLabel(ta, placeholderText ?? "", fontSize, placeholderColor,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, richText: false, name: "Placeholder");
+            Text tcT = CreateLabel(ta, "", fontSize, Color.white,
+                TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Truncate,
+                raycastTarget: false, richText: false, name: "Text");
 
             InputField input = go.AddComponent<InputField>();
             input.textComponent = tcT;
             input.placeholder = phT;
             input.lineType = InputField.LineType.SingleLine;
             return input;
+        }
+
+        /// <summary>
+        /// Magnifying-glass inside a chrome input (idempotent). Sets left TextArea inset;
+        /// caller keeps right inset for clear (X) if present.
+        /// </summary>
+        public static void LayoutChromeSearchIcon(GameObject inputGO, float scale = 1f)
+        {
+            if (inputGO == null) return;
+            float s = scale <= 0f ? 1f : scale;
+
+            Transform iconTr = inputGO.transform.Find("SearchIcon");
+            if (iconTr == null)
+            {
+                Sprite spr = null;
+                try { spr = LoadIconSprite("vpb_icons/search.png", GalleryUiColorTokens.SearchIconTint); }
+                catch { spr = null; }
+                if (spr != null)
+                {
+                    GameObject iconGO = new GameObject("SearchIcon");
+                    iconGO.transform.SetParent(inputGO.transform, false);
+                    Image iconImg = AddImage(iconGO, GalleryUiColorTokens.SearchIconTint);
+                    if (iconImg != null)
+                    {
+                        iconImg.sprite = spr;
+                        iconImg.raycastTarget = false;
+                        iconImg.preserveAspect = true;
+                    }
+                    iconTr = iconGO.transform;
+                }
+            }
+
+            if (iconTr != null)
+            {
+                RectTransform iconRT = iconTr as RectTransform;
+                if (iconRT != null)
+                {
+                    float iconSz = GalleryUiDesignTokens.SearchIconSizeRef * s;
+                    iconRT.anchorMin = new Vector2(0f, 0.5f);
+                    iconRT.anchorMax = new Vector2(0f, 0.5f);
+                    iconRT.pivot = new Vector2(0f, 0.5f);
+                    iconRT.anchoredPosition = new Vector2(GalleryUiDesignTokens.SearchIconLeftPadRef * s, 0f);
+                    iconRT.sizeDelta = new Vector2(iconSz, iconSz);
+                }
+            }
+
+            Transform textArea = inputGO.transform.Find("TextArea");
+            if (textArea == null) return;
+            RectTransform taRt = textArea as RectTransform;
+            if (taRt == null) return;
+            float left = GalleryUiDesignTokens.SearchTextLeftInsetRef * s;
+            taRt.offsetMin = new Vector2(left, taRt.offsetMin.y);
+        }
+
+        /// <summary>
+        /// Non-interactive window-type glyph for float title bars (after grip, before title).
+        /// Host includes trailing gap so label is not stuck to icon.
+        /// </summary>
+        public static GameObject CreateFloatTitleWindowIcon(GameObject titleBar, string iconRelativePath, float size)
+        {
+            if (titleBar == null || string.IsNullOrEmpty(iconRelativePath) || size <= 0f) return null;
+            float gap = size * (GalleryUiDesignTokens.FloatTitleWindowIconGapRef
+                / GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
+
+            GameObject host = new GameObject("WindowIcon");
+            host.transform.SetParent(titleBar.transform, false);
+            AddHLG(
+                host, spacing: 0f, padding: Pad(0, 0, 0, 0),
+                childAlignment: TextAnchor.MiddleLeft,
+                childControlWidth: true, childControlHeight: true,
+                childForceExpandWidth: false, childForceExpandHeight: false);
+            AddLE(host,
+                minWidth: size + gap, preferredWidth: size + gap,
+                minHeight: size, preferredHeight: size,
+                flexibleWidth: 0f, flexibleHeight: 0f);
+
+            GameObject icon = new GameObject("Icon");
+            icon.transform.SetParent(host.transform, false);
+            Image img = AddImage(icon, GalleryUiColorTokens.TitleWindowIconTint);
+            if (img != null)
+            {
+                img.raycastTarget = false;
+                img.preserveAspect = true;
+                try
+                {
+                    Sprite spr = LoadIconSprite(iconRelativePath, GalleryUiColorTokens.TitleWindowIconTint);
+                    if (spr != null) img.sprite = spr;
+                }
+                catch { }
+            }
+            AddLE(icon,
+                minWidth: size, preferredWidth: size,
+                minHeight: size, preferredHeight: size,
+                flexibleWidth: 0f, flexibleHeight: 0f);
+
+            GameObject spacer = new GameObject("Gap");
+            spacer.transform.SetParent(host.transform, false);
+            AddLE(spacer,
+                minWidth: gap, preferredWidth: gap,
+                minHeight: 1f, preferredHeight: 1f,
+                flexibleWidth: 0f, flexibleHeight: 0f);
+
+            return host;
+        }
+
+        /// <summary>Rescale <c>WindowIcon</c> host + glyph + trailing gap under a float title bar.</summary>
+        public static void LayoutFloatTitleWindowIcon(GameObject titleBar, float size)
+        {
+            if (titleBar == null || size <= 0f) return;
+            Transform hostTr = titleBar.transform.Find("WindowIcon");
+            if (hostTr == null) return;
+            float gap = size * (GalleryUiDesignTokens.FloatTitleWindowIconGapRef
+                / GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
+
+            LayoutElement hostLe = hostTr.GetComponent<LayoutElement>();
+            if (hostLe != null)
+            {
+                hostLe.minWidth = size + gap;
+                hostLe.preferredWidth = size + gap;
+                hostLe.minHeight = size;
+                hostLe.preferredHeight = size;
+            }
+
+            Transform iconTr = hostTr.Find("Icon");
+            if (iconTr != null)
+            {
+                LayoutElement iconLe = iconTr.GetComponent<LayoutElement>();
+                if (iconLe != null)
+                {
+                    iconLe.minWidth = size;
+                    iconLe.preferredWidth = size;
+                    iconLe.minHeight = size;
+                    iconLe.preferredHeight = size;
+                }
+            }
+
+            Transform gapTr = hostTr.Find("Gap");
+            if (gapTr != null)
+            {
+                LayoutElement gapLe = gapTr.GetComponent<LayoutElement>();
+                if (gapLe != null)
+                {
+                    gapLe.minWidth = gap;
+                    gapLe.preferredWidth = gap;
+                }
+            }
         }
 
         /// <summary>
@@ -2289,7 +2459,7 @@ namespace VPB
         }
 
         /// <summary>Standard backdrop applied to every icon button.</summary>
-        public static readonly Color IconButtonBackdrop = new Color(0.25f, 0.25f, 0.25f, 1f);
+        public static readonly Color IconButtonBackdrop = GalleryUiColorTokens.SurfaceIconBtn;
 
         /// <summary>Recolor passed to <see cref="LoadIconSprite"/> for gallery left/right rail icon PNGs (glyph pixels only).</summary>
         public static readonly Color SideRailIconGlyphTint = Color.white;

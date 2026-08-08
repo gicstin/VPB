@@ -50,7 +50,7 @@ namespace VPB
 
             try
             {
-                if (IsSettingsPanelOpen() || settingsListViewActive)
+                if (settingsListViewActive)
                     ExitInternalSettingsMode(true);
             }
             catch { }

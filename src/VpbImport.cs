@@ -77,6 +77,60 @@ namespace VPB
                     + " skipPrewarm=" + (skipDependencyPrewarm ? 1 : 0));
             }
 
+            bool enteredBlocking = false;
+            try
+            {
+                VpbProgressService.EnterBlocking(
+                    BlockingTitleForResource(resourceType),
+                    "VaM may freeze — applying…");
+                enteredBlocking = true;
+            }
+            catch { }
+
+            try
+            {
+                LoadPresetCore(sourceEntry, targetAtom, resourceType, clothingMode, presetJC,
+                    suppressRoot, storableNameOverride, skipDependencyPrewarm,
+                    updateLastRestoredData, suppressScaleChange, probe);
+            }
+            finally
+            {
+                if (enteredBlocking)
+                {
+                    try { VpbProgressService.ExitBlocking(); } catch { }
+                }
+            }
+        }
+
+        private static string BlockingTitleForResource(VpbResourceType resourceType)
+        {
+            switch (resourceType)
+            {
+                case VpbResourceType.Appearance: return "Applying appearance";
+                case VpbResourceType.Clothing:
+                case VpbResourceType.ClothingItem: return "Applying clothing";
+                case VpbResourceType.Hair:
+                case VpbResourceType.HairItem: return "Applying hair";
+                case VpbResourceType.Pose: return "Applying pose";
+                case VpbResourceType.Morphs: return "Applying morphs";
+                case VpbResourceType.Skin: return "Applying skin";
+                default: return "Applying preset";
+            }
+        }
+
+        private static void LoadPresetCore(
+            FileEntry sourceEntry,
+            Atom targetAtom,
+            VpbResourceType resourceType,
+            ClothingApplyMode clothingMode,
+            JSONClass presetJC,
+            bool suppressRoot,
+            string storableNameOverride,
+            bool skipDependencyPrewarm,
+            bool updateLastRestoredData,
+            bool? suppressScaleChange,
+            bool probe)
+        {
             if (targetAtom == null)
             {
                 LogUtil.LogWarning("VpbImport.LoadPreset: targetAtom is null; aborting.");

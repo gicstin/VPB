@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -1666,7 +1667,7 @@ namespace VPB
                 case QuickMenuAssignableAction.OpenCategoryHair: QuickMenuOpenGalleryCategory("Hair"); break;
                 case QuickMenuAssignableAction.OpenCategoryPose: QuickMenuOpenGalleryCategory("Pose"); break;
                 case QuickMenuAssignableAction.OpenCategoryAppearance: QuickMenuOpenGalleryCategory("Appearance"); break;
-                case QuickMenuAssignableAction.OpenCategoryPlugins: QuickMenuOpenGalleryCategory("Plugins"); break;
+                case QuickMenuAssignableAction.OpenCategoryPlugins: OpenCategoryPlugins(); break;
                 case QuickMenuAssignableAction.OpenCategoryAll: QuickMenuOpenGalleryCategory("All"); break;
                 case QuickMenuAssignableAction.TargetAtom:
                 {
@@ -1779,6 +1780,12 @@ namespace VPB
         private void QuickMenuOpenGalleryCategory(string categoryName)
         {
             if (string.IsNullOrEmpty(categoryName)) return;
+            // Plugins = float palette only — never switch gallery grid to Plugins.
+            if (string.Equals(categoryName, "Plugins", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenCategoryPlugins();
+                return;
+            }
             if (Gallery.singleton == null) return;
 
             try

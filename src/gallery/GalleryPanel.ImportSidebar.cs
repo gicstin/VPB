@@ -154,24 +154,7 @@ namespace VPB
 
         public void SetImportSidebarActive(bool active)
         {
-            if (active)
-            {
-                // Lock the side at toggle-on time. Config default Import uses importSidebarForceOnLeft;
-                // otherwise prefer the side already showing a panel, default right when both or neither are open.
-                if (importSidebarForceOnLeft.HasValue)
-                {
-                    importSidebarOnLeft = importSidebarForceOnLeft.Value;
-                    importSidebarForceOnLeft = null;
-                }
-                else
-                    importSidebarOnLeft = leftActiveContent.HasValue && !rightActiveContent.HasValue;
-
-                // Act like a regular side panel: opening Import CLOSES whatever Category / Creator /
-                // History column occupied the same physical side, instead of layering on top of it.
-                if (importSidebarOnLeft) leftActiveContent = null;
-                else rightActiveContent = null;
-                SyncActiveContentTypeFromSidePanels();
-            }
+            bool wasActive = importSidebarActive;
 
             if (active && !importSidebarBuilt)
             {
@@ -181,9 +164,54 @@ namespace VPB
                 SubscribeToAtomEvents();
             }
 
-            if (active && cleanupModeActive)
+            // Floating Import is modeless — skip sticky Try-On gate / exclusivity.
+            // Docked Import still owns sticky enter (side column rewrites grid click).
+            // Prefer post-build detach flag (config may mark float before first activate).
+            bool dockedStickyEnter = active && !wasActive && !importSidebarDetached;
+            if (dockedStickyEnter)
+            {
+                // Gate before mutating side panels / cleanup.
+                if (!GateStickyEnterWhileTryOn(StickyToolMode.Import))
+                    return;
+            }
+
+            if (active)
+            {
+                // Lock the side at toggle-on time. Config default Import uses importSidebarForceOnLeft;
+                // otherwise prefer the side already showing a panel, default right when both or neither are open.
+                // Floating Import does not steal a side column — skip closing Category/Creator panes.
+                if (!importSidebarDetached)
+                {
+                    if (importSidebarForceOnLeft.HasValue)
+                    {
+                        importSidebarOnLeft = importSidebarForceOnLeft.Value;
+                        importSidebarForceOnLeft = null;
+                    }
+                    else
+                        importSidebarOnLeft = leftActiveContent.HasValue && !rightActiveContent.HasValue;
+
+                    // Act like a regular side panel: opening Import CLOSES whatever Category / Creator /
+                    // History column occupied the same physical side, instead of layering on top of it.
+                    if (importSidebarOnLeft) leftActiveContent = null;
+                    else rightActiveContent = null;
+                    SyncActiveContentTypeFromSidePanels();
+                }
+                else if (importSidebarForceOnLeft.HasValue)
+                {
+                    // Prefer left/right remembered for later dock; do not clear live side panes.
+                    importSidebarOnLeft = importSidebarForceOnLeft.Value;
+                    importSidebarForceOnLeft = null;
+                }
+            }
+
+            if (active && cleanupModeActive && !importSidebarDetached)
             {
                 try { ExitCleanupModeForSidePanelNavigation(); } catch { }
+            }
+
+            if (dockedStickyEnter)
+            {
+                try { ExitOtherStickyToolModes(StickyToolMode.Import); } catch { }
             }
 
             importSidebarActive = active;
@@ -215,9 +243,9 @@ namespace VPB
             // Header category chip stays visible; sync before layout so title-bar pin order is correct.
             try { SyncCategoryQuickSwitchChrome(); } catch { }
 
-            // UpdateLayout reads importSidebarActive + importSidebarOnLeft to hide the
-            // matching side's tab column and force the gallery offset, so the sidebar
-            // replaces (not overlaps) the Category / Creator slot.
+            // UpdateLayout reads ImportSidebarOccupiesSideColumn + importSidebarOnLeft to hide the
+            // matching side's tab column and force the gallery offset, so the docked sidebar
+            // replaces (not overlaps) the Category / Creator slot. Float leaves grid full-width.
             try { UpdateLayout(); }
             catch (System.Exception ex) { LogUtil.LogWarning("[VPB import] UpdateLayout failed: " + ex.Message); }
 
@@ -233,6 +261,10 @@ namespace VPB
                     1.25f);
             }
             catch { }
+            if (!active)
+            {
+                try { ResetArmedApplySemanticsIfIdle(toast: true); } catch { }
+            }
         }
 
         public void OpenImportSidebarWith(FileEntry sourceFile, Atom targetAtom)

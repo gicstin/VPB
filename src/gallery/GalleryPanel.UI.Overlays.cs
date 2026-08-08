@@ -26,60 +26,44 @@ namespace VPB
 
         private void CreateLoadingOverlay(GameObject parentGO)
         {
-            if (parentGO == null) return;
-            if (loadingOverlayGO != null) return;
-
-            loadingOverlayGO = UI.CreateChildRT(parentGO, "LoadingOverlay");
-            Image overlayImg = UI.AddImage(loadingOverlayGO, UI.Black(0.35f));
-
-            GameObject barGO = UI.CreateChildRT(loadingOverlayGO, "LoadingBar", AnchorPresets.middleCenter, new Vector2(420, 10));
-            loadingBarContainerRT = barGO.GetComponent<RectTransform>();
-            Image barBg = UI.AddImage(barGO, UI.White(0.18f), false);
-
-            GameObject fillGO = UI.CreateChildRT(barGO, "Fill", AnchorPresets.middleCenter, new Vector2(120, 10));
-            loadingBarFillRT = fillGO.GetComponent<RectTransform>();
-            Image fillImg = UI.AddImage(fillGO, UI.White(0.85f), false);
-
-            SetLayerRecursive(loadingOverlayGO, parentGO.layer);
-            loadingOverlayGO.SetActive(false);
+            // Progress lives on external VpbBusyChrome via VpbProgressService — no panel dim bar.
         }
 
         private void ShowLoadingOverlay(string message)
         {
-            if (_quietGalleryRefresh) return;
-            if (loadingOverlayGO == null) return;
-            _loadingOverlayPulseStart = Time.unscaledTime;
-            loadingOverlayGO.SetActive(true);
+            // Quiet refresh freezes cells (no blank flash) but still needs BusyChrome —
+            // otherwise empty/quiet paths look dead (gulf of evaluation).
+            try
+            {
+                VpbProgressService.BeginBrowseRefresh(
+                    string.IsNullOrEmpty(message)
+                        ? (_quietGalleryRefresh
+                            ? "Updating gallery"
+                            : "Preparing items for browse")
+                        : message);
+            }
+            catch { }
         }
 
         private void UpdateLoadingOverlayPulse()
         {
-            if (loadingOverlayGO == null || !loadingOverlayGO.activeSelf || loadingBarFillRT == null || loadingBarContainerRT == null)
-                return;
-            if (_loadingOverlayPulseStart < 0f) _loadingOverlayPulseStart = Time.unscaledTime;
-            float trackW = loadingBarContainerRT.sizeDelta.x;
-            if (trackW <= 1f) trackW = 420f;
-            float fillW = Mathf.Max(48f, trackW * 0.28f);
-            float cycle = 1.35f;
-            float t = ((Time.unscaledTime - _loadingOverlayPulseStart) % cycle) / cycle;
-            float travel = trackW - fillW;
-            loadingBarFillRT.sizeDelta = new Vector2(fillW, loadingBarFillRT.sizeDelta.y);
-            loadingBarFillRT.anchoredPosition = new Vector2(-travel * 0.5f + travel * t, 0f);
+            // Motion owned by VpbBusyChrome / OS heartbeat.
         }
 
         private void HideLoadingOverlay()
         {
-            _loadingOverlayPulseStart = -1f;
-            if (loadingOverlayGO != null) loadingOverlayGO.SetActive(false);
+            try { VpbProgressService.EndBrowseRefresh(); } catch { }
         }
 
-        // ── Thumbnail cache progress bar (1px, bottom of viewport) ─────────
+        // ── Thumbnail cache progress bar (bottom of viewport) ─────────
+
+        private const float ThumbCacheProgressBarHeightPx = 3f;
 
         private void CreateThumbnailCacheProgressPanel(GameObject viewportGO)
         {
             if (viewportGO == null || _thumbCacheProgressGO != null) return;
 
-            // 1px full-width bar anchored to the very bottom of the viewport
+            // Full-width bar — 3px so progress is perceptible (1px was change-blindness bait).
             _thumbCacheProgressGO = new GameObject("ThumbCacheProgress");
             _thumbCacheProgressGO.transform.SetParent(viewportGO.transform, false);
             RectTransform panelRT = _thumbCacheProgressGO.AddComponent<RectTransform>();
@@ -87,7 +71,7 @@ namespace VPB
             panelRT.anchorMax = new Vector2(1f, 0f);
             panelRT.pivot     = new Vector2(0.5f, 0f);
             panelRT.anchoredPosition = Vector2.zero;
-            panelRT.sizeDelta = new Vector2(0f, 1f);
+            panelRT.sizeDelta = new Vector2(0f, ThumbCacheProgressBarHeightPx);
 
             // Dark track (background)
             Image trackImg = UI.AddImage(_thumbCacheProgressGO, new Color(1f, 1f, 1f, 0.12f), false);
@@ -324,28 +308,118 @@ namespace VPB
 
         public void DisplayConfirm(string title, string message, UnityAction onConfirm)
         {
+            DisplayConfirm(title, message, onConfirm, null, null, null);
+        }
+
+        /// <summary>
+        /// Modal confirm. Esc → cancel (or onCancel), Enter → confirm.
+        /// Custom button labels optional (e.g. Keep / Revert).
+        /// </summary>
+        public void DisplayConfirm(
+            string title,
+            string message,
+            UnityAction onConfirm,
+            UnityAction onCancel,
+            string confirmLabel,
+            string cancelLabel)
+        {
+            try { CloseConfirmOverlay(invokeCancel: false); } catch { }
+
             GameObject panelGO;
             GameObject overlayGO = UI.CreateModalChrome(
                 backgroundBoxGO, "ConfirmOverlay", 500f, 420f, UI.ChromeDarker, null, out panelGO, dimAlpha: 0.5f);
 
-            // Title
+            _confirmOverlayGO = overlayGO;
+            _confirmOnConfirm = onConfirm;
+            _confirmOnCancel = onCancel;
+
             UI.CreateLabel(panelGO, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0, 40), anchoredPosition: new Vector2(0, -15), name: "Title");
 
-            // Message
             Text msgText = UI.CreateLabel(panelGO, message, GalleryUiDesignTokens.FontBodyRef, new Color(0.8f, 0.8f, 0.8f, 1f), TextAnchor.MiddleCenter, name: "Message");
             RectTransform msgRT = msgText.GetComponent<RectTransform>();
             msgRT.offsetMin = new Vector2(20, 80);
             msgRT.offsetMax = new Vector2(-20, -60);
 
-            // Buttons
-            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, "Cancel", 18, -100, 40, AnchorPresets.bottomMiddle, () => Destroy(overlayGO));
-            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, "Confirm", 18, 100, 40, AnchorPresets.bottomMiddle, () => {
-                onConfirm?.Invoke();
-                Destroy(overlayGO);
-            });
+            string cancelText = string.IsNullOrEmpty(cancelLabel) ? "Cancel" : cancelLabel;
+            string confirmText = string.IsNullOrEmpty(confirmLabel) ? "Confirm" : confirmLabel;
+
+            GameObject cancelBtn = UI.CreateUIButton(panelGO, 160, 45, cancelText, 18, -100, 40, AnchorPresets.bottomMiddle, ConfirmOverlayCancel);
+            GameObject confirmBtn = UI.CreateUIButton(panelGO, 160, 45, confirmText, 18, 100, 40, AnchorPresets.bottomMiddle, ConfirmOverlayConfirm);
             confirmBtn.GetComponent<Image>().color = new Color(0.4f, 0.2f, 0.2f, 1f);
 
             SetLayerRecursive(overlayGO, backgroundBoxGO.layer);
+        }
+
+        private bool IsConfirmOverlayOpen()
+        {
+            return _confirmOverlayGO != null;
+        }
+
+        private bool TryHandleConfirmOverlayKeys()
+        {
+            if (_confirmOverlayGO == null) return false;
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (_confirmEscIsDismiss)
+                {
+                    _confirmEscIsDismiss = false;
+                    _deferredStickyEnter = StickyToolMode.None;
+                    CloseConfirmOverlay(invokeCancel: false);
+                    return true;
+                }
+                ConfirmOverlayCancel();
+                return true;
+            }
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+            {
+                ConfirmOverlayConfirm();
+                return true;
+            }
+            return false;
+        }
+
+        private void ConfirmOverlayConfirm()
+        {
+            _confirmEscIsDismiss = false;
+            UnityAction act = _confirmOnConfirm;
+            CloseConfirmOverlay(invokeCancel: false);
+            if (act != null)
+            {
+                try { act.Invoke(); } catch (Exception ex) { LogUtil.LogError("[VPB] ConfirmOverlayConfirm: " + ex); }
+            }
+        }
+
+        private void ConfirmOverlayCancel()
+        {
+            _confirmEscIsDismiss = false;
+            UnityAction act = _confirmOnCancel;
+            CloseConfirmOverlay(invokeCancel: false);
+            if (act != null)
+            {
+                try { act.Invoke(); } catch (Exception ex) { LogUtil.LogError("[VPB] ConfirmOverlayCancel: " + ex); }
+            }
+        }
+
+        private void CloseConfirmOverlay(bool invokeCancel)
+        {
+            if (invokeCancel && _confirmOnCancel != null)
+            {
+                UnityAction act = _confirmOnCancel;
+                _confirmOnCancel = null;
+                _confirmOnConfirm = null;
+                try { act.Invoke(); } catch { }
+            }
+            else
+            {
+                _confirmOnConfirm = null;
+                _confirmOnCancel = null;
+            }
+
+            if (_confirmOverlayGO != null)
+            {
+                try { Destroy(_confirmOverlayGO); } catch { }
+                _confirmOverlayGO = null;
+            }
         }
 
         public void DisplayClothingSlotPicker(string title, System.Action<string> onSelect)

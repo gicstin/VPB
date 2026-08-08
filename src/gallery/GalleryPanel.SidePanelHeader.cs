@@ -411,7 +411,10 @@ namespace VPB
             bool show = SidePanelHeaderVisibleForSide(isLeft);
             if (headerGo != null) headerGo.SetActive(show);
             if (titleTxt != null)
-                GalleryUiMetrics.ApplyFont(titleTxt, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            {
+                GalleryUiMetrics.ApplyFont(titleTxt, GalleryUiDesignTokens.FontTitleRef, s, GalleryUiDesignTokens.FontMinRef);
+                titleTxt.fontStyle = FontStyle.Bold;
+            }
             if (show && ct.HasValue)
             {
                 if (titleTxt != null)

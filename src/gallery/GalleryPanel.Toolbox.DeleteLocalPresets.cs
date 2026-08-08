@@ -125,7 +125,7 @@ namespace VPB
             catch { }
         }
 
-        private void PerformLocalPresetsDeleteMove(List<LocalPresetDeleteItem> items, string deletedDir, out int moved, out int failed)
+        private void PerformLocalPresetsDeleteMove(List<LocalPresetDeleteItem> items, string deletedDir, out int moved, out int failed, List<FileMoveUndoPair> undoOut = null)
         {
             moved = 0;
             failed = 0;
@@ -175,6 +175,13 @@ namespace VPB
                     moved++;
                     if (!string.IsNullOrEmpty(items[i].RelativePath))
                         movedRelPaths.Add(items[i].RelativePath.Replace('\\', '/'));
+                    if (undoOut != null)
+                    {
+                        FileMoveUndoPair pair;
+                        pair.FromDeletedPath = dst;
+                        pair.ToOriginalPath = src;
+                        undoOut.Add(pair);
+                    }
 
                     // Keep VaM markers with file when moving.
                     TryMovePresetSidecar(src, dst, ".fav", "Local preset sidecar fav");

@@ -1516,15 +1516,8 @@ namespace VPB
 
         private bool StripKeepNeedsSoftConfirm()
         {
-            if (_stripKeepDropCount >= StripKeepSoftConfirmDropThreshold) return true;
-            for (int i = 0; i < _stripKeepItems.Count; i++)
-            {
-                StripKeepItem it = _stripKeepItems[i];
-                if (it.Kind != CreatorStripKeepKind.Persons) continue;
-                if (!_stripKeepSelectedUids.Contains(it.Uid))
-                    return true;
-            }
-            return false;
+            // Risk policy Medium: any drop requires second Confirm (no threshold lottery).
+            return RiskPolicyStripNeedsSoftConfirm(_stripKeepDropCount);
         }
 
         private void ConfirmStripKeepSelector()
@@ -1578,8 +1571,8 @@ namespace VPB
                 ShowTemporaryStatus(
                     VPBTranslation.T(
                         "gallery.creator.strip_soft_confirm",
-                        "Large strip — press Confirm / Enter again to proceed."),
-                    2f);
+                        "Strip removes atoms — Confirm / Enter again. Ctrl+Z restores scene after."),
+                    2.5f);
                 return;
             }
             _stripKeepAwaitingSoftConfirm = false;

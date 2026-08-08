@@ -297,7 +297,7 @@ namespace VPB
             {
                 bool listLayout = layoutMode == GalleryLayoutMode.List;
                 bool blockLayout = false;
-                try { blockLayout = IsSettingsPanelOpen() || settingsListViewActive; } catch { }
+                try { blockLayout = settingsListViewActive; } catch { }
                 AddFooterOverflowMenuRow(
                     panel,
                     listLayout

@@ -5,28 +5,37 @@ namespace VPB
 {
     public partial class GalleryPanel
     {
-        private static readonly Color ImportSidebarHeaderBg = new Color(0.10f, 0.26f, 0.44f, 1f);
-        private static readonly Color ImportSidebarStepHeaderBg = new Color(0.18f, 0.24f, 0.32f, 0.98f);
-        internal static readonly Color ImportSidebarSelectedAccent = new Color(0.14f, 0.40f, 0.62f, 1f);
-        // Bulk-select action buttons: deliberately off the blue/gray type-chip palette so they read as
-        // commands, not selectable chips. Faint green = add, faint red = clear.
-        private static readonly Color ImportSidebarSelectAllBg = new Color(0.20f, 0.34f, 0.26f, 1f);
-        private static readonly Color ImportSidebarClearAllBg = new Color(0.36f, 0.24f, 0.24f, 1f);
-        // Multi-select toggle: amber when on (chips accumulate), muted when off (single-select).
-        private static readonly Color ImportSidebarMultiToggleBg = new Color(0.44f, 0.30f, 0.12f, 1f);
-        private static readonly Color ImportSidebarMultiToggleOffBg = new Color(0.26f, 0.24f, 0.22f, 1f);
-        // Per-type option group caption: blue-tinted to tie it to the matching selected (blue) type chip.
-        private static readonly Color ImportSidebarGroupHeaderBg = new Color(0.16f, 0.30f, 0.46f, 1f);
-        // Type chip with nothing to import from the source: visibly recessed + greyed.
-        private static readonly Color ImportSidebarUnavailableRow = new Color(0.16f, 0.16f, 0.17f, 1f);
-        private static readonly Color ImportSidebarUnavailableText = new Color(0.45f, 0.46f, 0.48f, 1f);
-        // Selected type that source currently lacks: keep intent visible (paused), not silently dropped.
-        private static readonly Color ImportSidebarPausedSelectedRow = new Color(0.22f, 0.28f, 0.34f, 1f);
-        private static readonly Color ImportSidebarApplyReasonText = new Color(1f, 0.72f, 0.42f, 1f);
-        private static readonly Color ImportSidebarScenesLockedBanner = new Color(0.95f, 0.78f, 0.45f, 1f);
-        // Mid-tone between ColorInactiveRow and ImportSidebarSelectedAccent: marks rows whose ID
-        // name-matches a counterpart on the opposite list without stealing the selected-state color.
-        private static readonly Color ImportSidebarMatchHintColor = new Color(0.20f, 0.30f, 0.40f, 1f);
+        // Match Settings float shell. Role-split accents — not one green on every control.
+        private static readonly Color ImportSidebarHeaderBg = GalleryUiColorTokens.SurfaceDark;
+        private static readonly Color ImportSidebarStepHeaderBg = GalleryUiColorTokens.SurfaceDarker;
+        /// <summary>Selected type / atom / checklist — quiet ActiveSelected (not Apply green).</summary>
+        internal static readonly Color ImportSidebarSelectedAccent = GalleryUiColorTokens.ActiveSelected;
+        // Bulk commands: secondary mid vs destroy.
+        private static readonly Color ImportSidebarSelectAllBg = GalleryUiColorTokens.ActiveSecondary;
+        private static readonly Color ImportSidebarClearAllBg = GalleryUiColorTokens.AccentDanger;
+        // Accumulate toggle: ON = ActiveOn; OFF = mid chrome.
+        private static readonly Color ImportSidebarMultiToggleBg = GalleryUiColorTokens.ActiveOn;
+        private static readonly Color ImportSidebarMultiToggleOffBg = GalleryUiColorTokens.SurfaceMid;
+        // Option group caption — quiet chrome.
+        private static readonly Color ImportSidebarGroupHeaderBg = GalleryUiColorTokens.SurfacePanel;
+        private static readonly Color ImportSidebarUnavailableRow = GalleryUiColorTokens.RowZero;
+        private static readonly Color ImportSidebarUnavailableText = GalleryUiColorTokens.TextDim;
+        // Selected but empty on source — keep intent without shouting.
+        private static readonly Color ImportSidebarPausedSelectedRow = GalleryUiColorTokens.SurfaceMid;
+        private static readonly Color ImportSidebarApplyReasonText = GalleryUiColorTokens.ActiveWarnText;
+        private static readonly Color ImportSidebarApplyReasonBg = GalleryUiColorTokens.ActiveWarnSurface;
+        private static readonly Color ImportSidebarScenesLockedBanner = GalleryUiColorTokens.ModeApplyStripe;
+        private static readonly Color ImportSidebarScenesLockedHeaderBg = GalleryUiColorTokens.ActiveWarnHeader;
+        // Match hint: raised idle row.
+        private static readonly Color ImportSidebarMatchHintColor = GalleryUiColorTokens.PopupRowActive;
+        // Primary Apply CTA only — AccentConfirm reserved here.
+        private static readonly Color ImportSidebarApplyBg = GalleryUiColorTokens.AccentConfirm;
+        // Float shell mirrors SettingsFloat*.
+        private static readonly Color ImportSidebarFloatTitleBarBg = GalleryUiColorTokens.SurfaceDark;
+        private static readonly Color ImportSidebarFloatFooterBarBg = GalleryUiColorTokens.SurfaceDarker;
+        private static readonly Color ImportSidebarFloatPanelBg = GalleryUiColorTokens.SurfaceDeep;
+        private static readonly Color ImportSidebarFloatChromeIconBg = GalleryUiColorTokens.ChromeIconWell;
+        private static readonly Color ImportSidebarSecondaryActionBg = GalleryUiColorTokens.SurfaceMid;
 
         /// <summary>Hide side-column filter/sort chrome on the edge replaced by the import sidebar.</summary>
         private void SuppressImportOccupiedSideColumnChrome()
@@ -106,7 +115,7 @@ namespace VPB
             if (bg != null) bg.color = ImportSidebarHeaderBg;
             if (importSidebarHeaderLabel != null)
             {
-                importSidebarHeaderLabel.color = Color.white;
+                importSidebarHeaderLabel.color = GalleryUiColorTokens.TextPrimary;
                 importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
                 importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
                 importSidebarHeaderLabel.verticalOverflow = VerticalWrapMode.Truncate;

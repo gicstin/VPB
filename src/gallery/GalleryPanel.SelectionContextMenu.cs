@@ -13,7 +13,8 @@ namespace VPB
 {
     public partial class GalleryPanel : MonoBehaviour
     {
-        // Selection toolbox ("tbox")
+        // Selection toolbox ("tbox") — bottom action chrome for selection / sticky tools.
+        // Not a floating OS-style context menu; grid RMB uses ShowGridItemContextMenu.
         private GameObject tbox;
         private Text tboxLabel;
         private GameObject tboxCopyPkgNamesBtn;
@@ -344,52 +345,44 @@ namespace VPB
             // IMPORTANT: only layout active buttons. Hidden buttons still have widths and would force 2-row wrap.
             var ltr = new List<GameObject>(28 + tboxPersonAtomBtns.Count);
 
-            // Settings mode: fixed 1-row layout, only CANCEL + SAVE.
-            if (IsSettingsPanelOpen())
-            {
-                if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
-                if (vis(tboxSettingsSaveBtn)) ltr.Add(tboxSettingsSaveBtn);
-            }
-            else
-            {
-                // Person atom target buttons appear leftmost in the flex pack.
-                // Details restore is fixed chrome on the buttons layer (not flex-packed).
-                foreach (var go in tboxPersonAtomBtns) { if (vis(go)) ltr.Add(go); }
-                // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
-                if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
-                if (vis(tboxSettingsSaveBtn)) ltr.Add(tboxSettingsSaveBtn);
-                if (vis(tboxDisableAutoInstallBtn)) ltr.Add(tboxDisableAutoInstallBtn);
-                if (vis(tboxAutoInstallBtn)) ltr.Add(tboxAutoInstallBtn);
-                if (vis(tboxUnhideBtn)) ltr.Add(tboxUnhideBtn);
-                if (vis(tboxHideBtn)) ltr.Add(tboxHideBtn);
-                if (vis(tboxScanWhitelistTemporaryBtn)) ltr.Add(tboxScanWhitelistTemporaryBtn);
-                if (vis(tboxDeleteBtn)) ltr.Add(tboxDeleteBtn);
-                if (vis(tboxRemoveHistoryBtn)) ltr.Add(tboxRemoveHistoryBtn);
-                if (vis(tboxCleanupBtn)) ltr.Add(tboxCleanupBtn);
-                if (vis(tboxCleanupApplyBtn)) ltr.Add(tboxCleanupApplyBtn);
-                if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
-                if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
-                if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
-                // Scene Strip near cleanup cluster (scene tools, not mid package ops).
-                if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
-                if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
-                if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
-                if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
-                if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
-                if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
-                if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
-                if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
-                if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
-                if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
-                if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
-                if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
-                if (vis(tboxReplaceBtn)) ltr.Add(tboxReplaceBtn);
-                if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
-                if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
-            }
+            // Settings float owns Save/Cancel — never replace toolbox with settings chrome.
+            // Person atom target buttons appear leftmost in the flex pack.
+            // Details restore is fixed chrome on the buttons layer (not flex-packed).
+            foreach (var go in tboxPersonAtomBtns) { if (vis(go)) ltr.Add(go); }
+            // Keep these buttons in a fixed order to avoid layout shuffling as state flips.
+            if (vis(tboxSettingsCancelBtn)) ltr.Add(tboxSettingsCancelBtn);
+            if (vis(tboxSettingsSaveBtn)) ltr.Add(tboxSettingsSaveBtn);
+            if (vis(tboxDisableAutoInstallBtn)) ltr.Add(tboxDisableAutoInstallBtn);
+            if (vis(tboxAutoInstallBtn)) ltr.Add(tboxAutoInstallBtn);
+            if (vis(tboxUnhideBtn)) ltr.Add(tboxUnhideBtn);
+            if (vis(tboxHideBtn)) ltr.Add(tboxHideBtn);
+            if (vis(tboxScanWhitelistTemporaryBtn)) ltr.Add(tboxScanWhitelistTemporaryBtn);
+            if (vis(tboxDeleteBtn)) ltr.Add(tboxDeleteBtn);
+            if (vis(tboxRemoveHistoryBtn)) ltr.Add(tboxRemoveHistoryBtn);
+            if (vis(tboxCleanupBtn)) ltr.Add(tboxCleanupBtn);
+            if (vis(tboxCleanupApplyBtn)) ltr.Add(tboxCleanupApplyBtn);
+            if (vis(tboxCleanupClearBtn)) ltr.Add(tboxCleanupClearBtn);
+            if (vis(tboxCleanupAddExcludeBtn)) ltr.Add(tboxCleanupAddExcludeBtn);
+            if (vis(tboxCleanupRemoveExcludeBtn)) ltr.Add(tboxCleanupRemoveExcludeBtn);
+            // Scene Strip near cleanup cluster (scene tools, not mid package ops).
+            if (vis(tboxCreatorStripSceneBtn)) ltr.Add(tboxCreatorStripSceneBtn);
+            if (vis(tboxCreatorModeBtn)) ltr.Add(tboxCreatorModeBtn);
+            if (vis(tboxLoadBtn)) ltr.Add(tboxLoadBtn);
+            if (vis(tboxLoadRandomBtn)) ltr.Add(tboxLoadRandomBtn);
+            if (vis(tboxUnloadBtn)) ltr.Add(tboxUnloadBtn);
+            if (vis(tboxLoadDepsBtn)) ltr.Add(tboxLoadDepsBtn);
+            if (vis(tboxCacheTexturesBtn)) ltr.Add(tboxCacheTexturesBtn);
+            if (vis(tboxOpenHubBtn)) ltr.Add(tboxOpenHubBtn);
+            if (vis(tboxCopyPkgNamesBtn)) ltr.Add(tboxCopyPkgNamesBtn);
+            if (vis(tboxGridRateBtn)) ltr.Add(tboxGridRateBtn);
+            if (vis(tboxOverwriteSceneBtn)) ltr.Add(tboxOverwriteSceneBtn);
+            if (vis(tboxSuppressScaleBtn)) ltr.Add(tboxSuppressScaleBtn);
+            if (vis(tboxReplaceBtn)) ltr.Add(tboxReplaceBtn);
+            if (vis(tboxSelectAllBtn)) ltr.Add(tboxSelectAllBtn);
+            if (vis(tboxClearSelectionBtn)) ltr.Add(tboxClearSelectionBtn);
 
             // Prefer target selector on last row (acts like "wide control").
-            if (!IsSettingsPanelOpen() && tboxTargetDropdownRowGO != null && ltr.Contains(tboxTargetDropdownRowGO) && ltr.Count > 1)
+            if (tboxTargetDropdownRowGO != null && ltr.Contains(tboxTargetDropdownRowGO) && ltr.Count > 1)
             {
                 ltr.Remove(tboxTargetDropdownRowGO);
                 ltr.Add(tboxTargetDropdownRowGO);
@@ -1214,7 +1207,7 @@ namespace VPB
             );
             tboxRemoveHistoryBtn.name = "Tbox_RemoveHistory";
             TboxConfigureActionButtonFlex(tboxRemoveHistoryBtn, innerRowH, innerRowH, innerRowH);
-            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files). Delete / Backspace. Ctrl+Z undoes within 5s.");
+            AddTooltip(tboxRemoveHistoryBtn, "gallery.tooltip.tbox_remove_history", "Remove selected entries from History (does not delete packages or files). Delete / Backspace. Ctrl+Z undoes.");
             try
             {
                 var rhIcon = UI.LoadIconSprite("vpb_icons/list_remove.png", new Color(0.92f, 0.82f, 0.55f, 1f));
@@ -1364,7 +1357,7 @@ namespace VPB
                 else
                 {
                     Text t = tboxCreatorModeBtn.GetComponentInChildren<Text>(true);
-                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.creator_mode", "Tools");
+                    if (t != null) t.text = VPBTranslation.T("gallery.tbox.creator_mode", "Scene Tools");
                 }
             }
             catch { }
@@ -1382,7 +1375,7 @@ namespace VPB
             TboxConfigureActionButtonFlex(
                 tboxCreatorStripSceneBtn, 96f * tboxCmTextScale, 128f * tboxCmTextScale, innerRowH);
             AddTooltip(tboxCreatorStripSceneBtn, "gallery.tooltip.tbox_creator_strip",
-                "Strip Scene — pick atoms to keep; rest removed. No Undo. Ctrl+Shift+S.");
+                "Strip Scene — pick atoms to keep; rest removed. Soft-confirm, then Ctrl+Z undoes. Ctrl+Shift+S.");
             try
             {
                 Image stripImg = tboxCreatorStripSceneBtn.GetComponent<Image>();
@@ -2043,10 +2036,11 @@ namespace VPB
                 catch { _activeSubfilterChipText = null; }
             }
 
-            // Action buttons when there is a selection, cleanup/strip session, or person atoms present.
+            // Action buttons when selection, cleanup session, strip selector, or person atoms.
+            // Scene Tools alone does not expand toolbox (von Restorff: grid stays primary).
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
-            bool isSettingsMode = IsSettingsPanelOpen();
-            bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive || creatorModeActive
+            bool isSettingsMode = false;
+            bool canExpand = isSettingsMode || sel > 0 || cleanupModeActive
                 || IsStripKeepSelectorOpen() || hasPersonAtoms;
             if (!canExpand && tboxExpandT < 0.01f)
             {
@@ -2067,7 +2061,7 @@ namespace VPB
             // Animate bar height: grow offsetMax upward to reveal the button band (1 or 2 rows)
             if (tboxRT != null)
             {
-                if ((sel > 0 || cleanupModeActive || creatorModeActive || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
+                if ((sel > 0 || cleanupModeActive || IsStripKeepSelectorOpen() || hasPersonAtoms) && tboxButtonsFlexRootRT != null && tboxExpandT > 0.02f)
                 {
                     float w = tboxButtonsFlexRootRT.rect.width;
                     if (w > 8f && Mathf.Abs(w - tboxLastFlexAvailW) > 2f)
@@ -2077,6 +2071,7 @@ namespace VPB
                 }
 
                 // Detail strip: visible on selection when expanded (not gated on toolbox hover).
+                // Settings list is not packages — strip stays hidden (DetailStripRefresh early-out).
                 try { DetailStripRefresh(); } catch { }
                 try { ApplyTboxBarHeightNow(); } catch { }
                 if (_tryOnActive) TryOnLayoutBar();
@@ -2110,7 +2105,7 @@ namespace VPB
                 tboxButtonsCG.interactable = canExpand && tboxExpandT > 0.85f;
             }
 
-            bool needsTboxActions = sel > 0 || cleanupModeActive || creatorModeActive || activeContentType == ContentType.History || IsSettingsPanelOpen();
+            bool needsTboxActions = sel > 0 || cleanupModeActive || IsStripKeepSelectorOpen() || activeContentType == ContentType.History;
             if (needsTboxActions)
             {
                 string tboxKey = BuildTboxConditionalRefreshCacheKey();
@@ -2162,6 +2157,7 @@ namespace VPB
             sb.Append(IsSettingsPanelOpen() ? 'S' : 's');
             sb.Append(activeContentType == ContentType.History ? 'H' : 'h');
             sb.Append(DetailStripIsExpanded() ? 'D' : 'd');
+            try { AppendTaskChromeTboxCacheKey(sb); } catch { }
             try { sb.Append(ScanWhitelistManager.Instance.IsEnabled ? 'W' : 'w'); }
             catch { sb.Append('w'); }
 
@@ -2210,7 +2206,7 @@ namespace VPB
             bool isCleanup = cleanupModeActive;
             bool isCreator = creatorModeActive;
             bool historyBrowse = activeContentType == ContentType.History;
-            bool isSettings = IsSettingsPanelOpen();
+            bool isSettings = false;
             void show(GameObject go, bool on)
             {
                 if (go != null && go.activeSelf != on) go.SetActive(on);
@@ -2258,11 +2254,16 @@ namespace VPB
                 try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 try { RefreshTboxFlexButtonLayout(); } catch { }
+                try { RefreshTaskChrome(force: true); } catch { }
                 return;
             }
 
             show(tboxSettingsCancelBtn, false);
             show(tboxSettingsSaveBtn, false);
+
+            // Sticky Eraser / Try-On / Bench: mass-hide browse peers (mode-conditioned chrome).
+            if (TaskChromeTryApplyStickyTbox(show))
+                return;
 
             // Person target dropdown row: keep visible whenever person list exists.
             bool hasPersonAtoms = personAtoms != null && personAtoms.Count > 0 && personAtoms[0] != null;
@@ -2331,6 +2332,7 @@ namespace VPB
                 try { UpdateSideButtonPositions(); } catch { }
                 try { RefreshTboxGridRateControlState(); } catch { }
                 RefreshTboxFlexButtonLayout();
+                try { RefreshTaskChrome(force: true); } catch { }
                 return;
             }
 
@@ -2496,6 +2498,9 @@ namespace VPB
                 && !DetailStripIsExpanded();
             show(_detailStripExpandBtnGO, showDetailsExpand);
 
+            // Mode-conditioned demotion last — cannot be resurrected by earlier show().
+            try { TaskChromeApplyTboxPostPass(show); } catch { }
+
             try { RefreshSceneImportSideButtonVisibility(); } catch { }
             try { UpdateSideButtonPositions(); } catch { }
             try { RefreshTboxGridRateControlState(); } catch { }
@@ -2626,7 +2631,6 @@ namespace VPB
             bool allow =
                 layoutMode == GalleryLayoutMode.Grid
                 && !cleanupModeActive
-                && !IsSettingsPanelOpen()
                 && eligible.Count >= 1;
             if (!allow)
             {
@@ -2753,8 +2757,7 @@ namespace VPB
             }
             var snapshotMap = new Dictionary<string, VpbLocalDatabase.ItemUsageSnapshot>(StringComparer.OrdinalIgnoreCase);
             VpbLocalDatabase.TryReadItemUsageSnapshotsForKeys(keys, snapshotMap);
-            pendingHistoryUndoSnapshots = new List<VpbLocalDatabase.ItemUsageSnapshot>(snapshotMap.Values);
-            pendingHistoryUndoUntilRealtime = now + 5f;
+            var snapshots = new List<VpbLocalDatabase.ItemUsageSnapshot>(snapshotMap.Values);
 
             if (VpbLocalDatabase.LogHistoryUsageDebug)
             {
@@ -2781,45 +2784,29 @@ namespace VPB
                 try { LogUtil.Log("[VPB.History] TboxRemoveSelectedFromHistory RefreshHistoryListInPlace next"); } catch { }
             }
             RefreshHistoryListInPlace(true);
+
+            if (snapshots.Count > 0)
+            {
+                List<VpbLocalDatabase.ItemUsageSnapshot> snapCopy = snapshots;
+                PushUndo(() =>
+                {
+                    bool restored = VpbLocalDatabase.TryRestoreItemUsageSnapshots(snapCopy);
+                    RefreshHistoryListInPlace(true);
+                    ShowTemporaryStatus(
+                        restored
+                            ? string.Format(
+                                VPBTranslation.T("gallery.history.undo_restored_n", "Restored {0} History entries."),
+                                snapCopy.Count)
+                            : VPBTranslation.T("gallery.history.undo_failed", "Could not restore removed History entries. See log."),
+                        2f);
+                }, VPBTranslation.T("gallery.undo.history_remove", "History remove"));
+            }
+
             ShowTemporaryStatus(
                 string.Format(
-                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Press Ctrl+Z within 5s to undo."),
+                    VPBTranslation.T("gallery.history.removed_n_with_undo", "Removed {0} from History. Ctrl+Z undoes."),
                     keys.Count),
-                5f);
-        }
-
-        private bool TryUndoRecentHistoryRemoval()
-        {
-            if (pendingHistoryUndoSnapshots == null || pendingHistoryUndoSnapshots.Count == 0)
-                return false;
-
-            if (Time.realtimeSinceStartup > pendingHistoryUndoUntilRealtime)
-            {
-                pendingHistoryUndoSnapshots = null;
-                pendingHistoryUndoUntilRealtime = 0f;
-                return false;
-            }
-
-            bool restored = VpbLocalDatabase.TryRestoreItemUsageSnapshots(pendingHistoryUndoSnapshots);
-            int restoredCount = pendingHistoryUndoSnapshots.Count;
-            pendingHistoryUndoSnapshots = null;
-            pendingHistoryUndoUntilRealtime = 0f;
-
-            if (!restored)
-            {
-                ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.history.undo_failed", "Could not restore removed History entries. See log."),
-                    2f);
-                return true;
-            }
-
-            RefreshHistoryListInPlace(true);
-            ShowTemporaryStatus(
-                string.Format(
-                    VPBTranslation.T("gallery.history.undo_restored_n", "Restored {0} History entries."),
-                    restoredCount),
-                2f);
-            return true;
+                3f);
         }
 
         private void TboxOpenSelectedItemOnHub()

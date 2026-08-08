@@ -1188,13 +1188,13 @@ namespace VPB
 
         public static void EndSceneLoadTotal(string context)
         {
+            try { VpbProgressService.EndSceneLoad(); } catch { }
+            try { VpbProgressService.ClearBlocking(); } catch { }
+
             if (!sceneLoadActive)
             {
-                try { VpbProgressService.EndSceneLoad(); } catch { }
                 return;
             }
-
-            try { VpbProgressService.EndSceneLoad(); } catch { }
 
             sceneLoadActive = false;
             sceneLoadStopwatch.Stop();

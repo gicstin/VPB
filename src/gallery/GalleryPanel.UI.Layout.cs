@@ -41,14 +41,18 @@ namespace VPB
             }
         }
 
-        /// <summary>Keeps title bar search aligned: package name filter in browse mode, settings row filter while settings side is open.</summary>
+        /// <summary>Keeps title bar search on the browse/grid query (never settings hijack).</summary>
         private void SyncTitleSearchInputWithActiveMode()
         {
             if (titleSearchInput == null || _titleBarSearchOnValueChanged == null) return;
-            if (IsSettingsPanelOpen())
-                SetTitleSearchInputTextWithoutNotify(titleSearchInput, CanonicalSettingsSideSearchText(), _titleBarSearchOnValueChanged);
-            else
-                SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
+            SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged);
+        }
+
+        private void SyncSettingsSideSearchInputFromFilter()
+        {
+            if (!IsSettingsPanelOpen()) return;
+            string t = settingsFilter ?? "";
+            SetSettingsFloatFilterTextWithoutNotify(t);
         }
 
         private void SetSideSearchInputTextWithoutNotify(InputField input, string text, UnityAction<string> handler)
@@ -98,7 +102,7 @@ namespace VPB
                 LayoutRebuilder.ForceRebuildLayoutImmediate(backgroundBoxGO.GetComponent<RectTransform>());
             }
             Canvas.ForceUpdateCanvases();
-            bool skipBrowseSideCaches = IsSettingsPanelOpen() || settingsListViewActive;
+            bool skipBrowseSideCaches = settingsListViewActive;
             if (allowSynchronousCreatorCategoryCaches && !skipBrowseSideCaches)
             {
                 // Prefer facet-specific caching from UpdateTabs builders when opening side panes
@@ -180,6 +184,7 @@ namespace VPB
 
             float filterTopInset = 0f;
             try { filterTopInset = ActiveFilterChromeTopInsetPx(paneScale); } catch { }
+            try { filterTopInset += ModeSemanticsBannerTopInsetPx(paneScale); } catch { }
             float topOffset = -GalleryUiDesignTokens.SideTabTopOffsetRef * paneScale - filterTopInset;
             float tabTopOffset = TabScrollTopOffset(); // clears sort/search row aligned with grid top
             ApplySideTabFilterRowVerticalLayout(paneScale);
@@ -214,6 +219,7 @@ namespace VPB
             _lastBrowseGridRightInset = rightOffset;
 
             try { ApplyActiveFilterChipBarLayout(leftOffset, rightOffset, paneScale); } catch { }
+            try { ApplyModeSemanticsBannerLayout(leftOffset, rightOffset, paneScale); } catch { }
 
             // Side button stacks stay vertically fixed (do not ride the footer inset).
             if (leftSideContainer != null)
@@ -262,7 +268,7 @@ namespace VPB
 
             // VR/world-space chrome resize can reflow RecyclingGridView while Settings is open —
             // re-assert 1-col list config so settings rows never become multi-column tiles.
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 try
                 {
@@ -1205,7 +1211,7 @@ namespace VPB
 
             SideButtonLayoutEntry[] layout = GetSideButtonsLayout();
             List<RectTransform> buttonList = leftSideButtons;
-            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive;
             float gap = 10f * s;
             float btnSz = GalleryUiDesignTokens.ButtonSizeRef * s;
             GameObject sceneImportGo = leftSceneImportSideBtn != null ? leftSceneImportSideBtn : rightSceneImportSideBtn;
@@ -1425,7 +1431,7 @@ namespace VPB
             }
             catch { }
 
-            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive && !IsSettingsPanelOpen();
+            bool showSceneImport = ImportSidebarCategoryAllowed() && !cleanupModeActive;
             int zone = GalleryUiDesignTokens.SideButtonZoneGapTier;
 
             var layout = new List<SideButtonLayoutEntry>()
@@ -1863,8 +1869,18 @@ namespace VPB
 
         private void RefreshSceneImportSideButtonVisibility()
         {
-            bool show = !cleanupModeActive && !IsSettingsPanelOpen()
+            // Task chrome: hide Import enter while foreign sticky / cleanup.
+            // Settings float is modeless — Import rail stays available.
+            StickyToolMode tool = GetActiveStickyToolMode();
+            bool stickyBlocks = tool != StickyToolMode.None && tool != StickyToolMode.Import;
+            bool armedBlocks = tool == StickyToolMode.None
+                && (holdToLaunchEnabled || ItemApplyMode == ApplyMode.SingleClick);
+            bool show = !cleanupModeActive
+                && !stickyBlocks && !armedBlocks
                 && (ImportSidebarCategoryAllowed() || importSidebarOpenIntent);
+            // Own Import sticky: keep button visible as exit/toggle affordance.
+            if (tool == StickyToolMode.Import)
+                show = ImportSidebarCategoryAllowed() || importSidebarOpenIntent || IsImportStickyToolActive();
             if (rightSceneImportSideBtn != null && rightSceneImportSideBtn.activeSelf != show)
                 rightSceneImportSideBtn.SetActive(show);
             if (leftSceneImportSideBtn != null && leftSceneImportSideBtn.activeSelf != show)
@@ -2304,7 +2320,7 @@ namespace VPB
             SetSideRailFacetSelected(hist, active == ContentType.History, ColorHistoryAccent);
             SetSideRailFacetSelected(tags,
                 active == ContentType.UserTags || active == ContentType.UserTagsApplied,
-                new Color(0.14f, 0.42f, 0.48f, 1f));
+                GalleryUiColorTokens.FacetUserTagsSide);
             SetSideRailFacetSelected(imp, importOpen, ColorSceneImport);
         }
 
@@ -2326,7 +2342,7 @@ namespace VPB
             // Selected: bright facet rim. Idle: default yellow hover (do not leave selected tint).
             Color accent = selected
                 ? Color.Lerp(facetColor, Color.white, 0.55f)
-                : new Color(1f, 1f, 0f, 1f);
+                : GalleryUiColorTokens.HoverRimDefault;
 
             bool selChanged = hb.isSelected != selected;
             bool colorChanged = hb.hoverColor != accent;

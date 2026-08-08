@@ -1,10 +1,11 @@
 namespace VPB
 {
-    /// <summary>Resolved modal prose size (single gallery font tier).</summary>
+    /// <summary>Resolved modal prose sizes (title / body / caption hierarchy).</summary>
     public readonly struct GalleryModalTypography
     {
-        /// <summary>Scaled prose fontSize — use with <see cref="GalleryUiMetrics.ApplyEmphasisTitle"/> for headers.</summary>
+        /// <summary>Legacy alias for <see cref="Body"/>.</summary>
         public readonly int Prose;
+        /// <summary>Scaled title — use with <see cref="GalleryUiMetrics.ApplyEmphasisTitle"/> for headers.</summary>
         public readonly int Title;
         public readonly int Body;
         public readonly int Caption;
@@ -12,10 +13,10 @@ namespace VPB
         public GalleryModalTypography(float chromeScale)
         {
             float s = chromeScale <= 0f ? 1f : chromeScale;
-            Prose = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontRef, s, GalleryUiDesignTokens.FontMinRef);
-            Title = Prose;
-            Body = Prose;
-            Caption = Prose;
+            Title = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontTitleRef, s, GalleryUiDesignTokens.FontMinRef);
+            Body = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+            Caption = GalleryUiMetrics.ScaledFontSize(GalleryUiDesignTokens.FontCaptionRef, s, GalleryUiDesignTokens.FontMinRef);
+            Prose = Body;
         }
 
         public static GalleryModalTypography FromPanel(GalleryPanel panel)

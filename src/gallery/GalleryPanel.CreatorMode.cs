@@ -10,8 +10,8 @@ using VPB.src.util;
 namespace VPB
 {
     /// <summary>
-    /// Creator Mode: sticky power-user scene-tools mode (side-rail toggle).
-    /// When ON, toolbox reveals creator actions (Strip Scene, …). Distinct from Creators author list.
+    /// Scene Tools: sticky power-user scene-authoring mode (side-rail toggle).
+    /// When ON, toolbox reveals Scene Tools actions (Strip Scene, …). Distinct from Creators author list.
     /// </summary>
     public partial class GalleryPanel
     {
@@ -30,7 +30,7 @@ namespace VPB
         private Outline leftCreatorModeBtnOutline;
         private Outline rightCreatorModeBtnOutline;
 
-        /// <summary>Rail idle/active chrome — blue family (not Creators gold, not Remove red).</summary>
+        /// <summary>Rail idle/active chrome — blue family (not Creators gold, not Eraser red).</summary>
         private static readonly Color CreatorModeRailBackdrop = new Color(0.16f, 0.38f, 0.58f, 1f);
         private static readonly Color CreatorModeOutlineIdle = Color.white;
         private static readonly Color CreatorModeOutlineActive = new Color(0.35f, 0.75f, 1f, 1f);
@@ -45,11 +45,11 @@ namespace VPB
         {
             if (creatorModeActive) ExitCreatorMode();
             else EnterCreatorMode();
-            // fromLeft/rightClick reserved for future side-panel affinity (parity with Remove Mode).
+            // fromLeft/rightClick reserved for future side-panel affinity (parity with Scene Eraser).
         }
 
         /// <summary>
-        /// Open Strip keep selector. Enters Creator Mode when needed (hotkey / QM direct path).
+        /// Open Strip keep selector. Enters Scene Tools when needed (hotkey / QM direct path).
         /// </summary>
         private void OpenSceneStripKeepSelector()
         {
@@ -60,7 +60,7 @@ namespace VPB
 
         /// <summary>
         /// Ctrl+Shift+S — toggle Strip Scene window (canvas-hosted; independent of pane collapse).
-        /// Enters Creator Mode when opening.
+        /// Enters Scene Tools when opening.
         /// </summary>
         private void HotkeyOpenStripSceneDirect()
         {
@@ -80,40 +80,22 @@ namespace VPB
         private void EnterCreatorMode()
         {
             if (creatorModeActive) return;
+            if (!GateStickyEnterWhileTryOn(StickyToolMode.Creator)) return;
 
-            if (cleanupModeActive)
-            {
-                try { ExitCleanupModeForSidePanelNavigation(); } catch { }
-            }
-            if (_removeModeActive)
-            {
-                try { RemoveModeExit(); } catch { }
-            }
-            if (IsSettingsPanelOpen() || settingsListViewActive)
-            {
-                try { ExitInternalSettingsMode(true); } catch { }
-            }
-            if (_benchPickModeActive)
-            {
-                try { BenchAbortPickMode(reopenModal: false); } catch { }
-            }
-            if (_stripKeepSubScenePickActive)
-            {
-                try { StripKeepAbortSubScenePickMode(reopenStrip: false); } catch { }
-            }
+            try { ExitOtherStickyToolModes(StickyToolMode.Creator); } catch { }
 
             creatorModeActive = true;
             RefreshCreatorModeChrome();
             try { RefreshTboxConditionalActionButtons(); } catch { }
             // Snapshot only — never Raise/ForceReset here (would abort an in-flight scene load).
-            try { VpbLoadingIconUtil.LogFlagSnapshot("creator-mode-enter", raise: false); } catch { }
+            try { VpbLoadingIconUtil.LogFlagSnapshot("scene-tools-enter", raise: false); } catch { }
             try { RefreshModeAmbientChrome(); } catch { }
             ShowTemporaryStatus(
                 VPBTranslation.T(
                     "gallery.creator.entered",
                     "Scene Tools on — strip/authoring ready. Esc exits."),
                 2f);
-            LogUtil.LogWarning("[VPB] Creator Mode ON");
+            LogUtil.LogWarning("[VPB] Scene Tools ON");
         }
 
         private void ExitCreatorMode(bool force = false)
@@ -152,12 +134,12 @@ namespace VPB
                 try { if (!loadOngoing && LogUtil.IsSceneLoading()) loadOngoing = true; } catch { }
                 if (!loadOngoing)
                 {
-                    try { VpbLoadingIconUtil.RecoverAfterBulkAtomTeardown("creator-mode-force-exit"); } catch { }
+                    try { VpbLoadingIconUtil.RecoverAfterBulkAtomTeardown("scene-tools-force-exit"); } catch { }
                 }
                 else
                 {
-                    try { VpbLoadingIconUtil.LogFlagSnapshot("creator-mode-force-exit-load-ongoing"); } catch { }
-                    LogUtil.LogWarning("[VPB] Creator Mode force-exit during strip load — left VaM load alone");
+                    try { VpbLoadingIconUtil.LogFlagSnapshot("scene-tools-force-exit-load-ongoing"); } catch { }
+                    LogUtil.LogWarning("[VPB] Scene Tools force-exit during strip load — left VaM load alone");
                 }
             }
 
@@ -171,7 +153,8 @@ namespace VPB
                     VPBTranslation.T("gallery.creator.exited", "Scene Tools off."),
                     1.25f);
             }
-            LogUtil.LogWarning("[VPB] Creator Mode OFF");
+            LogUtil.LogWarning("[VPB] Scene Tools OFF");
+            try { ResetArmedApplySemanticsIfIdle(toast: !force); } catch { }
         }
 
         private void RefreshCreatorModeChrome()
@@ -289,10 +272,12 @@ namespace VPB
             HashSet<string> keepUids,
             Dictionary<string, string> renames,
             out string tempPath,
+            out string undoScenePath,
             out int keepCount,
             out int dropCount)
         {
             tempPath = null;
+            undoScenePath = null;
             keepCount = 0;
             dropCount = 0;
             SuperController sc = SuperController.singleton;
@@ -307,10 +292,31 @@ namespace VPB
             }
             if (sceneJson == null) return false;
 
+            // Pre-strip full scene for Ctrl+Z (one GetSaveJSON — write before filter mutate).
+            // Cold path: disk IO OK. LoadScene(merge:false) on undo matches strip replace.
+            try
+            {
+                undoScenePath = Path.Combine(
+                    sc.savesDir,
+                    "vpb_temp_undo_redo_scene_" + Guid.NewGuid().ToString() + ".json");
+                File.WriteAllText(undoScenePath, JsonSerializationUtil.Serialize(sceneJson, 200_000));
+                if (!File.Exists(undoScenePath)) undoScenePath = null;
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] Creator Strip undo snapshot failed: " + ex.Message);
+                undoScenePath = null;
+            }
+
             JSONArray src = null;
             try { src = sceneJson["atoms"].AsArray; }
             catch { src = null; }
-            if (src == null) return false;
+            if (src == null)
+            {
+                TryDeleteStripTempFile(undoScenePath);
+                undoScenePath = null;
+                return false;
+            }
 
             JSONArray keepArr = new JSONArray();
             for (int i = 0; i < src.Count; i++)
@@ -328,7 +334,12 @@ namespace VPB
             }
             sceneJson["atoms"] = keepArr;
 
-            if (dropCount <= 0) return false;
+            if (dropCount <= 0)
+            {
+                TryDeleteStripTempFile(undoScenePath);
+                undoScenePath = null;
+                return false;
+            }
 
             // CoreControl always kept — blank Skyshop sphere so strip ≠ inherit old backdrop.
             CreatorStripBlankSkyInSceneJson(sceneJson);
@@ -348,8 +359,16 @@ namespace VPB
             {
                 LogUtil.LogError("[VPB] Creator Strip write temp failed: " + ex.Message);
                 tempPath = null;
+                TryDeleteStripTempFile(undoScenePath);
+                undoScenePath = null;
                 return false;
             }
+        }
+
+        private static void TryDeleteStripTempFile(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
         /// <summary>
@@ -697,7 +716,9 @@ namespace VPB
 
                 int keepCount;
                 int dropCount;
-                if (!TryBuildCreatorStripKeepersSceneJson(keepUids, renames, out tempPath, out keepCount, out dropCount))
+                string undoScenePath;
+                if (!TryBuildCreatorStripKeepersSceneJson(
+                    keepUids, renames, out tempPath, out undoScenePath, out keepCount, out dropCount))
                 {
                     ShowTemporaryStatus(
                         VPBTranslation.T("gallery.creator.strip_failed", "Strip failed — could not build keepers scene."),
@@ -730,10 +751,50 @@ namespace VPB
                 }
                 if (!ok)
                 {
+                    TryDeleteStripTempFile(undoScenePath);
                     ShowTemporaryStatus(
                         VPBTranslation.T("gallery.creator.strip_failed", "Strip failed — could not build keepers scene."),
                         2.5f);
                     yield break;
+                }
+
+                // Push undo only after replace succeeds (cold path; captures path string only).
+                if (!string.IsNullOrEmpty(undoScenePath))
+                {
+                    string undoPath = undoScenePath;
+                    try
+                    {
+                        PushUndo(
+                            () =>
+                            {
+                                try
+                                {
+                                    SuperController scU = SuperController.singleton;
+                                    if (scU != null)
+                                    {
+                                        bool busy = false;
+                                        try { busy = scU.isLoading; } catch { }
+                                        try { if (!busy && LogUtil.IsSceneLoading()) busy = true; } catch { }
+                                        if (busy) return;
+                                    }
+                                    if (File.Exists(undoPath))
+                                        SceneLoadingUtils.LoadScene(undoPath, false);
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogUtil.LogError("[VPB] Strip Scene undo failed: " + ex.Message);
+                                }
+                                finally
+                                {
+                                    TryDeleteStripTempFile(undoPath);
+                                }
+                            },
+                            VPBTranslation.T("gallery.undo.strip_scene", "Strip Scene"));
+                    }
+                    catch
+                    {
+                        TryDeleteStripTempFile(undoPath);
+                    }
                 }
 
                 float deadline = Time.realtimeSinceStartup + 180f;

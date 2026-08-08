@@ -401,7 +401,7 @@ namespace VPB
                     titleText.gameObject.SetActive(showTitle);
                 if (showTitle)
                 {
-                    if (IsSettingsPanelOpen())
+                    if (settingsListViewActive)
                         titleText.text = VPBTranslation.T("settings.title", "Settings");
                     else
                         titleText.text = currentCategoryTitle;
@@ -1804,7 +1804,7 @@ namespace VPB
                 return;
             }
             
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(keepScroll);
                 return;
@@ -1872,7 +1872,7 @@ namespace VPB
                 LogPackageDeltaSkip("suppressed");
                 return false;
             }
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 LogPackageDeltaSkip("settings_open");
                 return false;
@@ -2717,7 +2717,7 @@ namespace VPB
                     }
                 };
 
-                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                 {
                     recyclingGrid.fixedColumns = 1;
                     recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
@@ -2915,7 +2915,7 @@ namespace VPB
                 if (recyclingGrid == null) recyclingGrid = contentGO.GetComponent<RecyclingGridView>();
                 if (recyclingGrid != null)
                 {
-                    if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
+                    if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                     {
                         recyclingGrid.fixedColumns = 1;
                         recyclingGrid.SetGridConfig(100f, EffectiveListRowHeightForGallery(), 5f, 5f, 1, deferRefresh: true);
@@ -3850,7 +3850,30 @@ namespace VPB
                             int needCap = files.Count + bulk.Count;
                             if (files.Capacity < needCap)
                                 files.Capacity = needCap;
-                            files.AddRange(bulk);
+                            try { VpbProgressService.ReportBrowseRefreshPhase("Loading items"); } catch { }
+                            // Chunk AddRange — zero-yield AddRange stalls busy chrome strip.
+                            const int browseChunk = 512;
+                            for (int bi = 0; bi < bulk.Count; bi++)
+                            {
+                                if (localLoadingGroupId != currentLoadingGroupId)
+                                {
+                                    HideLoadingOverlay();
+                                    refreshCoroutine = null;
+                                    CompletePaneLoadTimingIfPending("(refresh superseded)");
+                                    yield break;
+                                }
+                                files.Add(bulk[bi]);
+                                if ((bi % browseChunk) == browseChunk - 1 || bi == bulk.Count - 1)
+                                {
+                                    try { VpbProgressService.ReportBrowseRefresh(bi + 1, bulk.Count, "Loading items"); } catch { }
+                                    if (yieldWatch.ElapsedMilliseconds >= bulkBudgetMs)
+                                    {
+                                        yield return null;
+                                        yieldWatch.Reset();
+                                        yieldWatch.Start();
+                                    }
+                                }
+                            }
                         }
                         else
                         {
@@ -4208,7 +4231,10 @@ namespace VPB
                 var swSortMain = System.Diagnostics.Stopwatch.StartNew();
                 bool historyBrowseOrder = activeContentType == ContentType.History;
                 if (!historyBrowseOrder && !skipMainThreadSort)
+                {
+                    try { VpbProgressService.ReportBrowseRefreshPhase("Sorting"); } catch { }
                     GallerySortManager.Instance.SortFiles(files, sortState);
+                }
                 swSortMain.Stop();
                 if (LogGalleryRefreshDeepTiming)
                 {
@@ -4219,7 +4245,7 @@ namespace VPB
             }
             if (swDeep != null) deepAfterSortMs = swDeep.ElapsedMilliseconds;
 
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(keepScroll);
                 refreshCoroutine = null;
@@ -4227,24 +4253,62 @@ namespace VPB
             }
 
             // Cache the filtered list for selection operations (Select All, counts, etc)
+            try { VpbProgressService.ReportBrowseRefreshPhase("Building grid"); } catch { }
             lastFilteredFiles.Clear();
-            lastFilteredFiles.AddRange(files);
+            if (files.Count > 0)
+            {
+                if (lastFilteredFiles.Capacity < files.Count)
+                    lastFilteredFiles.Capacity = files.Count;
+                const int snapChunk = 1024;
+                for (int si = 0; si < files.Count; si++)
+                {
+                    lastFilteredFiles.Add(files[si]);
+                    if ((si % snapChunk) == snapChunk - 1)
+                    {
+                        try { VpbProgressService.ReportBrowseRefresh(si + 1, files.Count, "Building grid"); } catch { }
+                        yield return null;
+                    }
+                }
+            }
 
+            bool snapOk = false;
             try
             {
                 galleryFilesPreHideSnapshot.Clear();
-                galleryFilesPreHideSnapshot.AddRange(files);
-                galleryPreHideSnapshotValid = true;
+                if (files.Count > 0 && galleryFilesPreHideSnapshot.Capacity < files.Count)
+                    galleryFilesPreHideSnapshot.Capacity = files.Count;
+                snapOk = true;
             }
             catch
             {
-                galleryFilesPreHideSnapshot.Clear();
+                try { galleryFilesPreHideSnapshot.Clear(); } catch { }
                 galleryPreHideSnapshotValid = false;
+            }
+
+            if (snapOk)
+            {
+                const int hideChunk = 1024;
+                for (int si = 0; si < files.Count; si++)
+                {
+                    try { galleryFilesPreHideSnapshot.Add(files[si]); }
+                    catch
+                    {
+                        try { galleryFilesPreHideSnapshot.Clear(); } catch { }
+                        galleryPreHideSnapshotValid = false;
+                        snapOk = false;
+                        break;
+                    }
+                    if ((si % hideChunk) == hideChunk - 1)
+                        yield return null;
+                }
+                if (snapOk)
+                    galleryPreHideSnapshotValid = true;
             }
 
             // Promote to class member for RecyclingGridView — one copy pass from lastFilteredFiles (same snapshot as files)
             currentFilteredFiles.Clear();
             currentFilteredFiles.AddRange(lastFilteredFiles);
+            try { NotifyPluginsFloatAfterGridReady(); } catch { }
             // If no name filter was active, the next SetNameFilter call can use currentFilteredFiles
             // as a trustworthy unfiltered base for in-memory search.
             if (!HasActiveNameFilter())
@@ -4293,7 +4357,7 @@ namespace VPB
                 int cols = GridColumnCount;
                 
                 // Initialize spacing and adaptive config
-                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive || IsSettingsPanelOpen())
+                if (layoutMode == GalleryLayoutMode.List || settingsListViewActive)
                 {
                     // List/Table mode: ALWAYS 1 column; +/- controls row height/thumb size.
                     recyclingGrid.fixedColumns = 1;

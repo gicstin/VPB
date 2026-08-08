@@ -1368,11 +1368,15 @@ namespace VPB
 		}
 		// Writes the .cs paths referenced by any .cslist in this VAR. Always writes, even with
 		// zero references, so a later sig check is a positive hit instead of a re-parse.
+		// Never call SQLite from bulk deep-scan workers (8-way) — writer storm freezes startup
+		// against VarPackageMgr SQL manifest load. Deferred single-thread flush after scan.
 		private void PersistCslistReferencedPathsToDb()
 		{
 			try
 			{
 				if (string.IsNullOrEmpty(Uid)) return;
+				if (FileManager.IsBulkDeepScanActive)
+					return;
 
 				// Already persisted under this LastWriteTime: skip the zip-open and SQLite write.
 				// An unchanged VAR costs only the in-memory sig lookup.
@@ -1422,9 +1426,17 @@ namespace VPB
 					}
 				}
 
-				var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				// Startup/scan: keep writes minimal. Parent→child tree SQL is filled lazily when
+				// Plugins float opens — never LIKE-delete during Refresh/scan (locked SQLite against
+				// 19k-package manifest load). Zero-.cslist packages: meta sig only (no BEGIN IMMEDIATE).
+				if (cslistNames.Count == 0)
+				{
+					try { VpbLocalDatabase.StampCslistRefVarSigOnly(Uid, sig); } catch { }
+					return;
+				}
 
-				if (cslistNames.Count > 0 && File.Exists(Path))
+				var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				if (File.Exists(Path))
 				{
 					int codePage = _resolvedZipNameCodePage != int.MinValue ? _resolvedZipNameCodePage : CodePageUtf8;
 					ZipFile zf = null;
@@ -1481,6 +1493,12 @@ namespace VPB
 				try { VpbLocalDatabase.WriteCslistReferencedForVar(Uid, sig, rows); } catch { }
 			}
 			catch { }
+		}
+
+		/// <summary>Post-bulk-scan ThreadPool: fill cslist-ref SQL without contending scan workers.</summary>
+		internal void PersistCslistReferencedPathsToDbDeferred()
+		{
+			PersistCslistReferencedPathsToDb();
 		}
 
 		public void Scan()

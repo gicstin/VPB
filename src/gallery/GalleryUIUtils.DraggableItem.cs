@@ -352,7 +352,11 @@ namespace VPB
             DestroyGhost();
             DestroyGroundIndicator();
             dragCam = null;
-            if (Panel != null) Panel.SetStatus("");
+            if (Panel != null)
+            {
+                try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                Panel.SetStatus("");
+            }
         }
 
         public void OnEndDrag(PointerEventData eventData)
@@ -365,6 +369,7 @@ namespace VPB
                 
                 if (Panel != null)
                 {
+                    try { Panel.ClearPluginsFloatSessionDropHover(); } catch { }
                     Panel.SetStatus("");
                 }
 
@@ -466,6 +471,18 @@ namespace VPB
                             HandleDropWithContext(atom, FileEntry, dropPos);
                         }
                     }
+                    // Scripts: Person → person PluginManager; UI strip / void → SessionPluginManager (not Scene).
+                    else if (itemTypeForDrop == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
+                    {
+                        if (Panel != null && Panel.TryConsumePluginsFloatSessionDrop(eventData, FileEntry))
+                        {
+                            // Add-new or replace handled by Plugins float session strip.
+                        }
+                        else if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
+                            LoadPlugins(atom);
+                        else
+                            LoadPluginsAsSession();
+                    }
                     else if (atom != null && FileEntry != null)
                     {
                         if (IsAmbiguousDrop(atom, FileEntry))
@@ -565,6 +582,19 @@ namespace VPB
                  {
                      statusMsg = $"Drop to create new Custom Unity Asset";
                  }
+            }
+            else if (itemType == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
+            {
+                string pluginName = !string.IsNullOrEmpty(FileEntry.Name) ? FileEntry.Name : "plugin";
+                string floatDropMsg = null;
+                if (Panel != null)
+                    floatDropMsg = Panel.DescribePluginsFloatSessionDrop(eventData, pluginName);
+                if (!string.IsNullOrEmpty(floatDropMsg))
+                    statusMsg = floatDropMsg;
+                else if (atom != null && SceneUtils.IsPersonLikeAtom(atom))
+                    statusMsg = "Adding " + pluginName + " to " + atom.name;
+                else
+                    statusMsg = "Release for session: " + pluginName;
             }
             else if (atom != null && atom.type == "Person")
             {
@@ -846,6 +876,345 @@ namespace VPB
             ApplyClothingToAtom(target, FileEntry.Uid);
         }
 
+        /// <summary>
+        /// Load script onto VaM SessionPluginManager (persists across scenes). Void / non-person drops.
+        /// Not ScenePluginManager — that saves with the scene only.
+        /// </summary>
+        public void LoadPluginsAsSession()
+        {
+            if (FileEntry == null) return;
+            if (!IsPluginScriptEntry(FileEntry))
+            {
+                LogUtil.LogWarning("[VPB] LoadPluginsAsSession: not a script entry: " + FileEntry.Name);
+                return;
+            }
+            Atom sessionAtom = GetSessionPluginAtom();
+            MVRPluginManager sessionMgr = GetSessionPluginManager();
+            if (sessionMgr == null)
+            {
+                string atomInfo = "none";
+                try
+                {
+                    if (sessionAtom != null)
+                        atomInfo = "uid=" + sessionAtom.uid + " name=" + sessionAtom.name + " type=" + sessionAtom.type;
+                }
+                catch { atomInfo = "err"; }
+                LogUtil.LogWarning("[VPB] LoadPluginsAsSession: SessionPluginManager not found (" + atomInfo + ").");
+                try
+                {
+                    if (Panel != null)
+                        Panel.ShowTemporaryStatus(
+                            VPBTranslation.T("gallery.plugins.session_missing", "Session plugins unavailable."),
+                            2.5f);
+                }
+                catch { }
+                return;
+            }
+            try { VpbLocalDatabase.TryRecordItemUse(VpbLocalDatabase.BuildUsageKey(FileEntry), "plugins"); } catch { }
+            // UIAssist/BA Start gate needs type SessionPluginManager. Older VaM keeps type CoreControl
+            // on the same host — promote before CreatePlugin so script Start() sees the modern type.
+            Atom hostForGate = sessionAtom ?? sessionMgr.containingAtom;
+            EnsureSessionHostTypeForPluginGate(hostForGate);
+            try
+            {
+                Atom ca = sessionMgr.containingAtom;
+                LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name
+                    + " host name=" + (ca != null ? ca.name : "?")
+                    + " uid=" + (ca != null ? ca.uid : "?")
+                    + " type=" + (ca != null ? ca.type : "?"));
+            }
+            catch
+            {
+                LogUtil.Log("[VPB] LoadPluginsAsSession: " + FileEntry.Name);
+            }
+            ApplyPluginScriptToManager(sessionMgr, FileEntry, undoAtomUid: null);
+            try
+            {
+                if (Panel != null)
+                {
+                    Panel.ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.plugins.loaded_session", "Loaded session plugin: ") + FileEntry.Name,
+                        2f);
+                    Panel.NotifyPluginsFloatSessionPluginsChanged();
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Session PluginManager = Main Menu TabSessionPlugins binding, else CoreControl.PluginManager
+        /// when it is NOT the ScenePluginManager instance.
+        /// Scene plugins live on SuperController/ScenePluginManager — never use that for session loads.
+        /// </summary>
+        internal static MVRPluginManager GetSessionPluginManager()
+        {
+            MVRPluginManager sceneMgr = GetScenePluginManagerInstance();
+
+            // 1) Manager whose UI is parented under TabSessionPlugins (authoritative).
+            MVRPluginManager tabMgr = FindPluginManagerBoundToMainMenuTab("TabSessionPlugins");
+            if (tabMgr != null && !RefEqPluginManager(tabMgr, sceneMgr))
+            {
+                try
+                {
+                    Atom ca = tabMgr.containingAtom;
+                    LogUtil.Log("[VPB] GetSessionPluginManager: TabSessionPlugins"
+                        + " name=" + (ca != null ? ca.name : "?")
+                        + " uid=" + (ca != null ? ca.uid : "?")
+                        + " type=" + (ca != null ? ca.type : "?"));
+                }
+                catch { }
+                return tabMgr;
+            }
+
+            // 2) CoreControl.PluginManager — only if distinct from ScenePluginManager.
+            Atom host = GetSessionPluginAtom();
+            MVRPluginManager coreMgr = null;
+            if (host != null)
+            {
+                try { coreMgr = host.GetStorableByID("PluginManager") as MVRPluginManager; } catch { coreMgr = null; }
+                if (coreMgr == null)
+                {
+                    try { coreMgr = host.GetComponentInChildren<MVRPluginManager>(true); } catch { coreMgr = null; }
+                }
+            }
+
+            if (coreMgr != null && RefEqPluginManager(coreMgr, sceneMgr))
+            {
+                try
+                {
+                    LogUtil.LogWarning("[VPB] GetSessionPluginManager: CoreControl.PluginManager is ScenePluginManager — skip");
+                }
+                catch { }
+                coreMgr = null;
+            }
+
+            if (coreMgr != null)
+            {
+                try
+                {
+                    Atom ca = coreMgr.containingAtom;
+                    LogUtil.Log("[VPB] GetSessionPluginManager: CoreControl.PluginManager"
+                        + " name=" + (ca != null ? ca.name : "?")
+                        + " uid=" + (ca != null ? ca.uid : "?")
+                        + " type=" + (ca != null ? ca.type : "?")
+                        + " sceneMgrSame=0");
+                }
+                catch { }
+                return coreMgr;
+            }
+
+            try
+            {
+                LogUtil.LogWarning("[VPB] GetSessionPluginManager: no session manager"
+                    + " tab=" + (tabMgr != null ? "1" : "0")
+                    + " scene=" + (sceneMgr != null ? "1" : "0")
+                    + " host=" + (host != null ? host.type : "null"));
+            }
+            catch { }
+            return null;
+        }
+
+        internal static MVRPluginManager GetScenePluginManagerInstance()
+        {
+            try
+            {
+                if (SuperController.singleton == null) return null;
+                Transform tr = SuperController.singleton.transform.Find("ScenePluginManager");
+                if (tr == null) return null;
+                return tr.GetComponent<MVRPluginManager>();
+            }
+            catch { return null; }
+        }
+
+        private static bool RefEqPluginManager(MVRPluginManager a, MVRPluginManager b)
+        {
+            if (a == null || b == null) return false;
+            try { return object.ReferenceEquals(a, b); } catch { return false; }
+        }
+
+        /// <summary>
+        /// Find MVRPluginManager whose UITransform / pluginListPanel lives under main-menu tab.
+        /// </summary>
+        private static MVRPluginManager FindPluginManagerBoundToMainMenuTab(string tabName)
+        {
+            if (string.IsNullOrEmpty(tabName) || SuperController.singleton == null) return null;
+            try
+            {
+                UITabSelector selector = SuperController.singleton.mainMenuTabSelector;
+                if (selector == null) return null;
+                Transform tabTr = null;
+                foreach (Transform child in selector.transform)
+                {
+                    if (child == null) continue;
+                    if (string.Equals(child.name, tabName, StringComparison.Ordinal))
+                    {
+                        tabTr = child;
+                        break;
+                    }
+                }
+                if (tabTr == null) return null;
+
+                MVRPluginManager[] all = UnityEngine.Object.FindObjectsOfType<MVRPluginManager>();
+                if (all == null || all.Length == 0) return null;
+                for (int i = 0; i < all.Length; i++)
+                {
+                    MVRPluginManager mgr = all[i];
+                    if (mgr == null) continue;
+                    try
+                    {
+                        if (mgr.pluginListPanel != null && IsTransformUnder(mgr.pluginListPanel, tabTr))
+                            return mgr;
+                    }
+                    catch { }
+                    try
+                    {
+                        if (mgr.UITransform != null && IsTransformUnder(mgr.UITransform, tabTr))
+                            return mgr;
+                    }
+                    catch { }
+                }
+
+                // Fallback: manager component under the tab itself (rare).
+                try { return tabTr.GetComponentInChildren<MVRPluginManager>(true); } catch { return null; }
+            }
+            catch { return null; }
+        }
+
+        private static bool IsTransformUnder(Transform node, Transform ancestor)
+        {
+            if (node == null || ancestor == null) return false;
+            Transform t = node;
+            while (t != null)
+            {
+                if (object.ReferenceEquals(t, ancestor)) return true;
+                t = t.parent;
+            }
+            return false;
+        }
+
+        /// <summary>True if atom is CoreControl by name/uid (session plugin host).</summary>
+        private static bool IsCoreControlNamed(Atom a)
+        {
+            if (a == null) return false;
+            string n = null;
+            string u = null;
+            try { n = a.name; } catch { n = null; }
+            try { u = a.uid; } catch { u = null; }
+            return string.Equals(n, "CoreControl", StringComparison.Ordinal)
+                || string.Equals(u, "CoreControl", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Session host atom: CoreControl name/uid with type SessionPluginManager (modern)
+        /// or type CoreControl (legacy — GiveMeFPS).
+        /// </summary>
+        private static bool IsSessionPluginHostAtom(Atom a)
+        {
+            if (a == null || !IsCoreControlNamed(a)) return false;
+            string t = null;
+            try { t = a.type; } catch { return false; }
+            return string.Equals(t, "SessionPluginManager", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "CoreControl", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSessionPluginManagerType(Atom a)
+        {
+            if (a == null) return false;
+            string t = null;
+            try { t = a.type; } catch { return false; }
+            return string.Equals(t, "SessionPluginManager", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// UIAssist/BrowserAssist require type == SessionPluginManager. Older installs keep
+        /// type CoreControl on the session host — promote so plugin Start() gates pass.
+        /// Only touch the manager's containingAtom (not a random CoreControl).
+        /// </summary>
+        private static void EnsureSessionHostTypeForPluginGate(Atom host)
+        {
+            if (host == null || !IsCoreControlNamed(host)) return;
+            string t = null;
+            try { t = host.type; } catch { return; }
+            if (string.Equals(t, "SessionPluginManager", StringComparison.OrdinalIgnoreCase))
+                return;
+            if (!string.Equals(t, "CoreControl", StringComparison.OrdinalIgnoreCase))
+                return;
+            try
+            {
+                host.type = "SessionPluginManager";
+                LogUtil.Log("[VPB] Session host type CoreControl → SessionPluginManager (UIAssist/BA gate)");
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] Session host type promote failed: " + ex.Message); } catch { }
+            }
+        }
+
+        internal static Atom GetSessionPluginAtom()
+        {
+            try
+            {
+                if (SuperController.singleton == null) return null;
+
+                // Prefer containingAtom of TabSessionPlugins-bound manager.
+                try
+                {
+                    MVRPluginManager tabMgr = FindPluginManagerBoundToMainMenuTab("TabSessionPlugins");
+                    MVRPluginManager sceneMgr = GetScenePluginManagerInstance();
+                    if (tabMgr != null && !RefEqPluginManager(tabMgr, sceneMgr) && tabMgr.containingAtom != null)
+                        return tabMgr.containingAtom;
+                }
+                catch { }
+
+                // Gold: uid CoreControl (modern SessionPluginManager or legacy CoreControl type).
+                Atom byUid = null;
+                try { byUid = SuperController.singleton.GetAtomByUid("CoreControl"); } catch { byUid = null; }
+                if (IsSessionPluginHostAtom(byUid))
+                    return byUid;
+
+                Atom typedFallback = null;
+                foreach (Atom a in SuperController.singleton.GetAtoms())
+                {
+                    if (a == null) continue;
+                    if (IsSessionPluginHostAtom(a))
+                        return a;
+                    if (IsSessionPluginManagerType(a) && typedFallback == null)
+                        typedFallback = a;
+                }
+
+                try
+                {
+                    Transform container = null;
+                    try { container = SuperController.singleton.atomContainer; } catch { container = null; }
+                    if (container != null)
+                    {
+                        Atom[] kids = container.GetComponentsInChildren<Atom>(true);
+                        if (kids != null)
+                        {
+                            for (int i = 0; i < kids.Length; i++)
+                            {
+                                Atom a = kids[i];
+                                if (a == null) continue;
+                                if (IsSessionPluginHostAtom(a))
+                                    return a;
+                                if (IsSessionPluginManagerType(a) && typedFallback == null)
+                                    typedFallback = a;
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                if (typedFallback != null)
+                    return typedFallback;
+            }
+            catch (Exception ex)
+            {
+                try { LogUtil.LogWarning("[VPB] GetSessionPluginAtom failed: " + ex.Message); } catch { }
+            }
+            return null;
+        }
+
         /// <summary>True for Custom/Scripts session plugins (.cs / .cslist / .dll), including VAR-internal paths.</summary>
         private static bool IsPluginScriptEntry(FileEntry entry)
         {
@@ -879,6 +1248,24 @@ namespace VPB
         private void ApplyPluginScriptToAtom(Atom atom, FileEntry entry)
         {
             if (atom == null || entry == null) return;
+            MVRPluginManager mgr = null;
+            try { mgr = atom.GetStorableByID("PluginManager") as MVRPluginManager; }
+            catch { mgr = null; }
+            if (mgr == null)
+            {
+                LogUtil.LogWarning("[VPB] LoadPlugins: PluginManager not found on atom " + atom.uid);
+                return;
+            }
+            ApplyPluginScriptToManager(mgr, entry, undoAtomUid: atom.uid);
+        }
+
+        /// <summary>
+        /// Shared CreatePlugin + URL path for Person PluginManager or SessionPluginManager.
+        /// undoAtomUid null → undo removes from SessionPluginManager.
+        /// </summary>
+        private void ApplyPluginScriptToManager(MVRPluginManager mgr, FileEntry entry, string undoAtomUid)
+        {
+            if (mgr == null || entry == null) return;
 
             var movedUids = new List<string>();
             bool installed = false;
@@ -904,7 +1291,6 @@ namespace VPB
             {
                 try
                 {
-                    // Persist UID override for script packages (same policy as FileExists on-demand hook).
                     SceneLoadingUtils.PrewarmOnDemandPackagesForEntry(entry, pluginUrl, queueCoalescedRefresh: true);
                     VamOnDemandLoader.TryRegisterPackageOnDemandForEntryPath(pluginUrl);
                     pluginUrl = VamOnDemandLoader.RewriteEntryPathToBestAvailable(pluginUrl, attemptRegister: true);
@@ -914,15 +1300,6 @@ namespace VPB
                 {
                     LogUtil.LogWarning("[VPB] LoadPlugins: on-demand register failed: " + ex.Message);
                 }
-            }
-
-            MVRPluginManager mgr = null;
-            try { mgr = atom.GetStorableByID("PluginManager") as MVRPluginManager; }
-            catch { mgr = null; }
-            if (mgr == null)
-            {
-                LogUtil.LogWarning("[VPB] LoadPlugins: PluginManager not found on atom " + atom.uid);
-                return;
             }
 
             MVRPlugin plugin = null;
@@ -944,7 +1321,9 @@ namespace VPB
             try
             {
                 plugin.pluginURLJSON.val = pluginUrl;
-                LogUtil.Log("[VPB] LoadPlugins: loaded script slot=" + (pluginSlotUid ?? "?") + " url=" + pluginUrl);
+                LogUtil.Log("[VPB] LoadPlugins: loaded script slot=" + (pluginSlotUid ?? "?")
+                    + " url=" + pluginUrl
+                    + (string.IsNullOrEmpty(undoAtomUid) ? " (session)" : " atom=" + undoAtomUid));
             }
             catch (Exception ex)
             {
@@ -958,29 +1337,60 @@ namespace VPB
                 return;
             }
 
-            if (Panel != null && !string.IsNullOrEmpty(pluginSlotUid))
+            // Person drop closure (session toast lives in LoadPluginsAsSession).
+            if (Panel != null && !string.IsNullOrEmpty(undoAtomUid))
             {
-                string atomUid = atom.uid;
-                string removeUid = pluginSlotUid;
                 try
                 {
-                    Panel.PushUndo(() =>
+                    string pluginName = !string.IsNullOrEmpty(entry.Name) ? entry.Name : "plugin";
+                    string personName = undoAtomUid;
+                    try
+                    {
+                        Atom a = SuperController.singleton != null
+                            ? SuperController.singleton.GetAtomByUid(undoAtomUid)
+                            : null;
+                        if (a != null && !string.IsNullOrEmpty(a.name))
+                            personName = a.name;
+                    }
+                    catch { }
+                    Panel.ShowTemporaryStatus(
+                        string.Format(
+                            VPBTranslation.T("gallery.plugins.added_to_person", "Added {0} to {1}"),
+                            pluginName, personName),
+                        2f);
+                }
+                catch { }
+            }
+
+            if (Panel == null || string.IsNullOrEmpty(pluginSlotUid)) return;
+            string removeUid = pluginSlotUid;
+            string atomUid = undoAtomUid;
+            try
+            {
+                Panel.PushUndo(() =>
+                {
+                    MVRPluginManager undoMgr = null;
+                    if (!string.IsNullOrEmpty(atomUid))
                     {
                         Atom targetAtom = SuperController.singleton != null
                             ? SuperController.singleton.GetAtomByUid(atomUid)
                             : null;
                         if (targetAtom == null) return;
-                        MVRPluginManager undoMgr = targetAtom.GetStorableByID("PluginManager") as MVRPluginManager;
-                        if (undoMgr == null) return;
-                        try { undoMgr.RemovePluginWithUID(removeUid); }
-                        catch (Exception ex)
-                        {
-                            LogUtil.LogWarning("[VPB] LoadPlugins undo failed: " + ex.Message);
-                        }
-                    });
-                }
-                catch { }
+                        undoMgr = targetAtom.GetStorableByID("PluginManager") as MVRPluginManager;
+                    }
+                    else
+                    {
+                        undoMgr = GetSessionPluginManager();
+                    }
+                    if (undoMgr == null) return;
+                    try { undoMgr.RemovePluginWithUID(removeUid); }
+                    catch (Exception ex)
+                    {
+                        LogUtil.LogWarning("[VPB] LoadPlugins undo failed: " + ex.Message);
+                    }
+                });
             }
+            catch { }
         }
 
         private static string ResolvePluginScriptUrl(FileEntry entry)

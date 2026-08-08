@@ -289,7 +289,7 @@ namespace VPB
             });
             AddTooltipPlain(resetBtn, VPBTranslation.T("settings.category_quick.editor.reset_tip", "Reset to built-in defaults and clear hidden list (does not save until Save)."));
 
-            GameObject saveBtn = UI.CreateChromeLayoutButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.save", "Save"), bodyFont, new Color(0.22f, 0.42f, 0.58f, 1f), () =>
+            GameObject saveBtn = UI.CreateChromeLayoutButton(header.transform, 120f * s, 44f * s, VPBTranslation.T("settings.save", "Save"), bodyFont, GalleryUiColorTokens.AccentConfirm, () =>
             {
                 SaveCategoryQuickEditorDraftToConfig();
                 HideCategoryQuickEditor();

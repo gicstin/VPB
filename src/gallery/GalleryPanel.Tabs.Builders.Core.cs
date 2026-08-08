@@ -44,6 +44,12 @@ namespace VPB
                 TextAnchor labelAnchor = catIcon != null ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
 
                 CreateTabButton(container.transform, label, btnColor, isActive, () => {
+                    // Plugins float is overlay palette — keep current gallery category/grid (e.g. Clothing).
+                    if (string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { OpenPluginsFloat(forceShow: true); } catch { }
+                        return;
+                    }
                     if (LogGalleryCategoryTypeSwitchTiming)
                         BeginGalleryCategoryTypeNavigationTiming(c.name);
                     Show(c.name, c.extension, c.path);

@@ -1459,6 +1459,52 @@ namespace VPB
                  }
                  return;
              }
+
+             // Scripts: name the plugin (not generic "Item") — gulf of evaluation while aiming Person / session strip.
+             if (itemType == ItemType.Plugins && FileEntry != null && IsPluginScriptEntry(FileEntry))
+             {
+                 string pluginName = !string.IsNullOrEmpty(FileEntry.Name) ? FileEntry.Name : "plugin";
+                 string floatMsg = null;
+                 bool floatPersonChip = false;
+                 if (Panel != null)
+                     floatMsg = Panel.DescribePluginsFloatSessionDrop(eventData, pluginName, out floatPersonChip);
+                 if (!string.IsNullOrEmpty(floatMsg))
+                 {
+                     if (ghostBorder != null)
+                         ghostBorder.color = floatPersonChip
+                             ? new Color(0.45f, 0.75f, 1f, 0.45f)
+                             : new Color(0.35f, 0.95f, 0.55f, 0.45f);
+                     if (ghostText != null)
+                     {
+                         ghostText.text = floatMsg.Replace(" · ", "\n");
+                         ghostText.color = floatPersonChip
+                             ? new Color(0.65f, 0.9f, 1f)
+                             : new Color(0.55f, 1f, 0.65f);
+                     }
+                     try { if (Panel != null) Panel.SetPluginsFloatSessionDropHover(eventData); } catch { }
+                     return;
+                 }
+                 try { if (Panel != null) Panel.ClearPluginsFloatSessionDropHover(); } catch { }
+                 if (isValidTarget)
+                 {
+                     if (ghostBorder != null) ghostBorder.color = new Color(0f, 1f, 0f, 0.4f);
+                     if (ghostText != null)
+                     {
+                         ghostText.text = "Adding " + pluginName + " to\n" + atom.name;
+                         ghostText.color = new Color(0.5f, 1f, 0.5f);
+                     }
+                 }
+                 else
+                 {
+                     if (ghostBorder != null) ghostBorder.color = new Color(0.6f, 0.9f, 1f, 0.35f);
+                     if (ghostText != null)
+                     {
+                         ghostText.text = "Release for session\n" + pluginName;
+                         ghostText.color = new Color(0.6f, 0.9f, 1f);
+                     }
+                 }
+                 return;
+             }
              
              if (isValidTarget)
              {

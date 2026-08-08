@@ -31,7 +31,7 @@ namespace VPB
             _emptyGridStateActionBtn = UI.CreateUIButton(
                 colGO, 200, 36,
                 VPBTranslation.T("gallery.empty.clear_search", "Clear search"),
-                16, 0, 0, AnchorPresets.middleCenter,
+                GalleryUiDesignTokens.FontBodyRef, 0, 0, AnchorPresets.middleCenter,
                 OnEmptyGridStateActionClicked);
             _emptyGridStateActionBtn.name = "EmptyGridAction";
             _emptyGridStateActionText = _emptyGridStateActionBtn.GetComponentInChildren<Text>(true);
@@ -82,30 +82,45 @@ namespace VPB
         {
             if (_emptyGridStateGO == null) return;
 
-            bool show = hasLoadedContent
-                && !IsSettingsPanelOpen()
-                && !settingsListViewActive
-                && (currentFilteredFiles == null || currentFilteredFiles.Count == 0)
-                && (loadingOverlayGO == null || !loadingOverlayGO.activeSelf);
+            bool emptyFiles = currentFilteredFiles == null || currentFilteredFiles.Count == 0;
+            bool refreshing = VpbProgressService.IsBrowseRefreshActive || _quietGalleryRefresh;
+            bool baseOk = hasLoadedContent
+                && !settingsListViewActive;
 
+            // Never blank with no cue: refreshing + empty → "Updating…"; idle empty → filters/search CTAs.
+            bool show = baseOk && emptyFiles;
             _emptyGridStateGO.SetActive(show);
             if (!show) return;
+
+            if (refreshing)
+            {
+                _emptyGridStateMessage.text = VPBTranslation.T(
+                    "gallery.empty.updating",
+                    "Updating gallery…");
+                if (_emptyGridStateActionBtn != null)
+                    _emptyGridStateActionBtn.SetActive(false);
+                return;
+            }
+
+            if (_emptyGridStateActionBtn != null)
+                _emptyGridStateActionBtn.SetActive(true);
 
             bool hasSearch = !string.IsNullOrEmpty(nameFilter) && nameFilter.Trim().Length > 0;
             bool hasOtherFilters = HasActiveBrowseFiltersExcludingTitleSearch();
 
             if (hasSearch)
             {
-                _emptyGridStateMessage.text = VPBTranslation.T("gallery.empty.no_match_search", "No items match your search.");
+                _emptyGridStateMessage.text = VPBTranslation.T(
+                    "gallery.empty.no_match_search",
+                    "No items match the title search.");
                 if (_emptyGridStateActionText != null)
                     _emptyGridStateActionText.text = VPBTranslation.T("gallery.empty.clear_search", "Clear search");
             }
             else if (hasOtherFilters)
             {
-                _emptyGridStateMessage.text = hasSearch
-                    ? VPBTranslation.T("gallery.empty.no_match_search_and_filters",
-                        "No items match. Title bar search filters the grid; side panel search filters that list.")
-                    : VPBTranslation.T("gallery.empty.no_match_filters", "No items match the current filters.");
+                _emptyGridStateMessage.text = VPBTranslation.T(
+                    "gallery.empty.no_match_filters",
+                    "No items match the current filters.");
                 if (_emptyGridStateActionText != null)
                     _emptyGridStateActionText.text = VPBTranslation.T("gallery.empty.clear_filters", "Clear filters");
             }
@@ -117,29 +132,28 @@ namespace VPB
             }
         }
 
-        // Title search field styling when Settings side panel is open.
-
-        public static readonly Color ColorTitleSearchSettingsMode = new Color(0.14f, 0.28f, 0.42f, 1f);
-
+        /// <summary>
+        /// Title search is always the gallery grid find.
+        /// Settings / side lists use the side-rail filter field — never hijack this chrome.
+        /// </summary>
         public void SyncTitleSearchChromeForActiveMode()
         {
             if (titleSearchInput == null) return;
 
-            bool settingsMode = IsSettingsPanelOpen() || settingsListViewActive;
             if (titleSearchInput.placeholder is Text ph)
             {
-                ph.text = settingsMode
-                    ? VPBTranslation.T("gallery.search.settings", "Filter settings...")
-                    : VPBTranslation.T("gallery.search.main", "Search name, #tag, OR, badge…");
+                ph.text = HasTitleSearchChips()
+                    ? VPBTranslation.T(
+                        "gallery.search.main_chips",
+                        "Type + Enter chip · Tab/↓ grid · Shift+Enter exclude")
+                    : VPBTranslation.T(
+                        "gallery.search.main",
+                        "Search grid: name, #tag, OR, badge…");
             }
 
             string tSearch = titleSearchInput.text ?? "";
             bool hasTerm = tSearch.Trim().Length > 0;
-            Color c;
-            if (settingsMode)
-                c = hasTerm ? ColorTitleSearchFilterActive : ColorTitleSearchSettingsMode;
-            else
-                c = hasTerm ? ColorTitleSearchFilterActive : ColorTitleSearchBackdropIdle;
+            Color c = hasTerm ? ColorTitleSearchFilterActive : ColorTitleSearchBackdropIdle;
 
             Image fieldBg = titleSearchInput.GetComponent<Image>();
             if (fieldBg != null) fieldBg.color = c;

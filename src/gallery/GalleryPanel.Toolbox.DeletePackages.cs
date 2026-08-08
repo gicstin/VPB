@@ -234,12 +234,21 @@ namespace VPB
                 DisplayConfirm("Delete", msg, () =>
                 {
                     int pm = 0, pf = 0, sm = 0, sf = 0, prm = 0, prf = 0;
+                    var undoPairs = new List<FileMoveUndoPair>();
                     if (toDelete.Count > 0)
-                        PerformDeleteMove(toDelete, deletedPkgDir, out pm, out pf);
+                        PerformDeleteMove(toDelete, deletedPkgDir, out pm, out pf, undoPairs);
                     if (localScenes.Count > 0)
-                        PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf);
+                        PerformLocalScenesDeleteMove(localScenes, deletedSceneDir, out sm, out sf, undoPairs);
                     if (localPresets.Count > 0)
-                        PerformLocalPresetsDeleteMove(localPresets, deletedPresetDir, out prm, out prf);
+                        PerformLocalPresetsDeleteMove(localPresets, deletedPresetDir, out prm, out prf, undoPairs);
+                    try
+                    {
+                        PushFileMoveUndo(
+                            undoPairs,
+                            VPBTranslation.T("gallery.undo.delete", "Delete"),
+                            "tbox_undo_delete");
+                    }
+                    catch { }
                     ShowCombinedDeleteStatus(pm, pf, sm, sf, prm, prf);
                 });
             }
@@ -263,7 +272,7 @@ namespace VPB
 
             if (fail == 0)
             {
-                ShowTemporaryStatus("Deleted " + string.Join(" and ", parts.ToArray()) + ".", 2f);
+                ShowTemporaryStatus("Deleted " + string.Join(" and ", parts.ToArray()) + ". Ctrl+Z undoes.", 2.5f);
                 return;
             }
 
@@ -285,7 +294,7 @@ namespace VPB
             }
         }
 
-        private void PerformDeleteMove(List<string> uids, string deletedDir, out int moved, out int failed)
+        private void PerformDeleteMove(List<string> uids, string deletedDir, out int moved, out int failed, List<FileMoveUndoPair> undoOut = null)
         {
             moved = 0;
             failed = 0;
@@ -315,6 +324,13 @@ namespace VPB
                     File.Move(srcPath, dstPath);
                     moved++;
                     movedUids.Add(uid);
+                    if (undoOut != null)
+                    {
+                        FileMoveUndoPair pair;
+                        pair.FromDeletedPath = dstPath;
+                        pair.ToOriginalPath = srcPath;
+                        undoOut.Add(pair);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -328,7 +344,6 @@ namespace VPB
 
             try
             {
-                // Best-effort refresh to reflect moved packages
                 try { FileManagerBridge.Refresh("tbox_delete_packages", RefreshScope.Both); }
                 catch (Exception ex) { LogSuppressed("DeletePackages.FileManagerBridge.Refresh", ex); }
             }

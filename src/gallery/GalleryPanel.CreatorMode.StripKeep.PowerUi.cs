@@ -41,7 +41,6 @@ namespace VPB
         }
 
         private const int StripKeepMaxRecipes = 8;
-        private const int StripKeepSoftConfirmDropThreshold = 8;
 
         private string _stripKeepFilterText = "";
         private string _stripKeepFilterLower = "";

@@ -168,10 +168,12 @@ namespace VPB
                 try { UpdatePaginationText(); } catch { }
                 try { UpdateEmptyGridState(); } catch { }
                 try { _detailStripCacheKey = ""; DetailStripRefresh(); } catch { }
+                try { NotifyPluginsFloatRatingChanged(); } catch { }
                 return;
             }
 
             try { RefreshVisibleGridVisualsOnly(); } catch { }
+            try { NotifyPluginsFloatRatingChanged(); } catch { }
         }
 
         /// <summary>

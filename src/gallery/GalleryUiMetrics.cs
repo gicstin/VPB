@@ -90,13 +90,14 @@ namespace VPB
         public int FontPane(int designPt, int minPt = GalleryUiDesignTokens.FontMinRef)
             => ScaledFontSize(designPt, PaneScale, minPt);
 
-        public int FontTitle(int minPt = GalleryUiDesignTokens.FontMinRef) => FontBody(minPt);
+        public int FontTitle(int minPt = GalleryUiDesignTokens.FontMinRef)
+            => Font(GalleryUiDesignTokens.FontTitleRef, minPt);
 
         public int FontBody(int minPt = GalleryUiDesignTokens.FontMinRef)
             => Font(GalleryUiDesignTokens.FontBodyRef, minPt);
 
         public int FontCaption(int minPt = GalleryUiDesignTokens.FontMinRef)
-            => FontBody(minPt);
+            => Font(GalleryUiDesignTokens.FontCaptionRef, minPt);
 
         /// <param name="designControlHeightPx">Unscaled control height (design ref).</param>
         public static int GlyphFontFromControlHeight(float designControlHeightPx, float scale, int minPt = GalleryUiDesignTokens.FontMinRef)
@@ -198,8 +199,8 @@ namespace VPB
 
         public void ApplyTitleFont(Text txt, int minPt = GalleryUiDesignTokens.FontMinRef)
         {
-            ApplyBodyFont(txt, minPt);
-            if (txt != null) txt.fontStyle = FontStyle.Normal;
+            ApplyFont(txt, GalleryUiDesignTokens.FontTitleRef, minPt);
+            if (txt != null) txt.fontStyle = FontStyle.Bold;
         }
 
         public void ApplyBodyFont(Text txt, int minPt = GalleryUiDesignTokens.FontMinRef)
@@ -208,17 +209,20 @@ namespace VPB
             if (txt != null) txt.fontStyle = FontStyle.Normal;
         }
 
-        /// <summary>Modal / section header — same size as body; emphasis via color/alpha, not weight.</summary>
+        /// <summary>Modal / section header — title size + bold weight.</summary>
         public static void ApplyEmphasisTitle(Text txt, int scaledFontSize)
         {
             if (txt == null) return;
             txt.fontSize = scaledFontSize;
-            txt.fontStyle = FontStyle.Normal;
+            txt.fontStyle = FontStyle.Bold;
             txt.transform.localScale = Vector3.one;
         }
 
         public void ApplyCaptionFont(Text txt, int minPt = GalleryUiDesignTokens.FontMinRef)
-            => ApplyBodyFont(txt, minPt);
+        {
+            ApplyFont(txt, GalleryUiDesignTokens.FontCaptionRef, minPt);
+            if (txt != null) txt.fontStyle = FontStyle.Normal;
+        }
 
         public static void ApplyGlyphFont(Text txt, float designControlHeightPx, float scale, int minPt = GalleryUiDesignTokens.FontMinRef)
         {

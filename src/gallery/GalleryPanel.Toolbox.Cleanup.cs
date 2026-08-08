@@ -1374,24 +1374,20 @@ namespace VPB
         private void TboxOpenCleanupView()
         {
             if (cleanupScanInProgress) return;
+            if (!GateStickyEnterWhileTryOn(StickyToolMode.Cleanup)) return;
             cleanupScanInProgress = true;
             var openSw = Stopwatch.StartNew();
             try
             {
-                if (IsSettingsPanelOpen() || settingsListViewActive)
+                if (settingsListViewActive)
                     ExitInternalSettingsMode(true);
 
-                if (_benchPickModeActive)
-                    BenchAbortPickMode(reopenModal: false);
-                if (_stripKeepSubScenePickActive)
-                    StripKeepAbortSubScenePickMode(reopenStrip: false);
+                try { ExitOtherStickyToolModes(StickyToolMode.Cleanup); } catch { }
 
                 cleanupModeActive = true;
                 cleanupFilterMode = 0;
                 try { RefreshModeAmbientChrome(); } catch { }
                 LogUtil.LogWarning("[VPB] Cleanup(list) open: starting scan...");
-
-                try { if (creatorModeActive || creatorModeStripBusy) ExitCreatorMode(force: true); } catch { }
 
                 try { EnsureTemporaryTaskListLayoutSession(); } catch { }
 
@@ -1467,6 +1463,8 @@ namespace VPB
             cleanupPrevPath = null;
 
             TryRestoreLayoutAfterTemporaryTaskExit();
+
+            try { ResetArmedApplySemanticsIfIdle(toast: true); } catch { }
 
             if (refreshGalleryFiles)
                 try { RefreshFiles(); } catch { }
@@ -1568,10 +1566,11 @@ namespace VPB
             SetCleanupFilterMode(4, true);
         }
 
-        private bool TryMoveCleanupCandidateFile(CleanupCandidate c, out bool moved, out string failReason)
+        private bool TryMoveCleanupCandidateFile(CleanupCandidate c, out bool moved, out string failReason, out string dstPath)
         {
             moved = false;
             failReason = null;
+            dstPath = null;
             if (c == null || string.IsNullOrEmpty(c.SourcePath))
             {
                 failReason = "missing source";
@@ -1639,6 +1638,7 @@ namespace VPB
                 return false;
             }
             moved = true;
+            dstPath = dst;
 
             // Local scene sidecars are moved together when possible.
             if (c.SourceKind == CleanupCandidateSourceKind.LocalScene)
@@ -1701,9 +1701,11 @@ namespace VPB
                 int moved = 0;
                 int failed = 0;
                 var movedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var undoPairs = new List<FileMoveUndoPair>();
                 for (int i = 0; i < selected.Count; i++)
                 {
-                    if (TryMoveCleanupCandidateFile(selected[i], out bool ok, out string failReason) && ok)
+                    string dstPath;
+                    if (TryMoveCleanupCandidateFile(selected[i], out bool ok, out string failReason, out dstPath) && ok)
                     {
                         moved++;
                         try
@@ -1712,6 +1714,14 @@ namespace VPB
                             if (!string.IsNullOrEmpty(p)) movedPaths.Add(p);
                         }
                         catch { }
+                        if (!string.IsNullOrEmpty(dstPath) && !string.IsNullOrEmpty(selected[i].SourcePath)
+                            && selected[i].SourceKind != CleanupCandidateSourceKind.StaleCache)
+                        {
+                            FileMoveUndoPair pair;
+                            pair.FromDeletedPath = dstPath;
+                            pair.ToOriginalPath = selected[i].SourcePath;
+                            undoPairs.Add(pair);
+                        }
                     }
                     else
                     {
@@ -1728,8 +1738,17 @@ namespace VPB
                 }
                 ApplyCleanupFilterToList(true);
 
+                try
+                {
+                    PushFileMoveUndo(
+                        undoPairs,
+                        VPBTranslation.T("gallery.undo.cleanup", "Cleanup"),
+                        "tbox_undo_cleanup");
+                }
+                catch { }
+
                 if (failed == 0)
-                    ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_ok", "Cleanup moved {0} item(s)."), moved), 2f);
+                    ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_ok", "Cleanup moved {0} item(s). Ctrl+Z undoes moves."), moved), 2f);
                 else
                     ShowTemporaryStatus(string.Format(VPBTranslation.T("gallery.cleanup.done_partial", "Cleanup moved {0} item(s), {1} failed. See log."), moved, failed), 3f);
             });

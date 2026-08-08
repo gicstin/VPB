@@ -6,18 +6,9 @@ using UnityEngine.UI;
 
 namespace VPB
 {
-    // Remove Item Mode: a hover-to-remove tool. While active, the item the user points at in the
-    // 3D scene is faded to half opacity and a "Click to remove X" hint is shown; clicking removes it.
-    // Clothing/hair worn on a Person are removed via the character selector (they are not atoms);
-    // everything else (CUA, lights, mirrors, persons, ...) is removed as a whole atom. Desktop uses
-    // the monitor camera + mouse; VR uses the controller pointer. Clicking the rail button again
-    // exits; so does Esc / cancel. Every removal pushes an Undo (the gallery's existing Undo button
-    // reverts it).
-    //
-    // Picking is render-accurate: VaM clothing/hair render through Graphics.DrawMesh and expose no
-    // Renderer or usable bounds, so we raycast the actual garment mesh triangles (see
-    // TryRaycastGarmentMesh) to find exactly the garment drawn under the cursor. Pointing at bare
-    // skin pierces no garment and a click removes the owning Person atom instead.
+    // Scene Eraser: hover-to-erase tool. While active, item under pointer fades and an
+    // "Erase …" hint is shown; click erases it. Clothing/hair = immediate + Undo; atoms/Person =
+    // world confirm. Distinct from Creators author facet and from Scene Tools (strip/authoring).
     public partial class GalleryPanel
     {
         private enum RemoveTargetKind { None, ClothingItem, HairItem, Atom }
@@ -216,6 +207,24 @@ namespace VPB
         private GameObject _removePopupGO;
         private RectTransform _removePopupRT;
         private Text _removePopupText;
+        private Image _removePopupBg;
+        private Outline _removePopupOutline;
+        private bool _removePopupPersonStyle;
+
+        // World-space Atom/Person erase confirm (not VaM Alert / not gallery overlay).
+        private bool _removeAtomConfirmOpen;
+        private GameObject _removeAtomConfirmGO;
+        private Canvas _removeAtomConfirmCanvas;
+        private UnityEngine.Events.UnityAction _removeAtomConfirmOk;
+        private UnityEngine.Events.UnityAction _removeAtomConfirmCancel;
+
+        private static readonly Color RemovePopupBgDefault = new Color(0.09f, 0.09f, 0.16f, 0.95f);
+        private static readonly Color RemovePopupOutlineDefault = new Color(0.92f, 0.26f, 0.26f, 0.9f);
+        /// <summary>Person erase hover — yellow backdrop (not color-only: label still says Erase Person).</summary>
+        private static readonly Color RemovePopupBgPerson = new Color(0.92f, 0.78f, 0.12f, 0.96f);
+        private static readonly Color RemovePopupOutlinePerson = new Color(0.55f, 0.40f, 0.02f, 0.95f);
+        private static readonly Color RemovePopupTextDefault = Color.white;
+        private static readonly Color RemovePopupTextPerson = new Color(0.12f, 0.10f, 0.02f, 1f);
 
         /// <param name="fromLeftRailButton">Which rail button was pressed.</param>
         /// <param name="rightClick">True for RMB; only affects side when docked.</param>
@@ -227,13 +236,12 @@ namespace VPB
 
         private void RemoveModeEnter(bool useLeftSide)
         {
-            if (creatorModeActive || creatorModeStripBusy)
-            {
-                try { ExitCreatorMode(force: true); } catch { }
-            }
+            _removeModeSiderailUseLeft = useLeftSide;
+            if (!GateStickyEnterWhileTryOn(StickyToolMode.Remove)) return;
+
+            try { ExitOtherStickyToolModes(StickyToolMode.Remove); } catch { }
             _removeModeActive = true;
             _removeModeOwner = this;
-            _removeModeSiderailUseLeft = useLeftSide;
             _removeModeSiderailDismissed = false;
             _removeModeSiderailLastWant = null;
             if (_removeHighlight == null) _removeHighlight = new RemoveModeHighlight();
@@ -246,8 +254,8 @@ namespace VPB
             ShowTemporaryStatus(
                 VPBTranslation.T(
                     "gallery.remove.entered",
-                    "Scene Eraser on — point and click to remove. Esc exits."),
-                2f);
+                    "Scene Eraser on — clothing/hair erase immediately (Ctrl+Z). Atoms ask confirm. Esc exits."),
+                2.5f);
         }
 
         private void RemoveModeExit()
@@ -260,6 +268,7 @@ namespace VPB
             RemoveModeClearHighlight();
             RemoveModeClearHelp();
             RemoveModeHidePopup();
+            RemoveModeCloseAtomConfirm(invokeCancel: true);
             RemoveModeFreezeAnimation(false);
             RemoveModeUpdateButtonVisual();
             try { CloseRemoveSiderailsIfOpen(); } catch { }
@@ -267,6 +276,7 @@ namespace VPB
             ShowTemporaryStatus(
                 VPBTranslation.T("gallery.remove.exited", "Scene Eraser off."),
                 1.25f);
+            try { ResetArmedApplySemanticsIfIdle(toast: true); } catch { }
         }
 
         /// <summary>Open clothing/hair/atom remove list siderail to match current gallery category (with Remove Mode).</summary>
@@ -439,15 +449,15 @@ namespace VPB
 
                 GameObject panel = new GameObject("Panel");
                 panel.transform.SetParent(canvasGO.transform, false);
-                Image bg = UI.AddImage(panel, new Color(0.09f, 0.09f, 0.16f, 0.95f), false);
-                Outline ol = panel.AddComponent<Outline>();
-                ol.effectColor = new Color(0.92f, 0.26f, 0.26f, 0.9f);
-                ol.effectDistance = new Vector2(1.5f, -1.5f);
+                _removePopupBg = UI.AddImage(panel, RemovePopupBgDefault, false);
+                _removePopupOutline = panel.AddComponent<Outline>();
+                _removePopupOutline.effectColor = RemovePopupOutlineDefault;
+                _removePopupOutline.effectDistance = new Vector2(1.5f, -1.5f);
                 RectTransform prt = panel.GetComponent<RectTransform>();
                 prt.anchorMin = prt.anchorMax = Vector2.zero; // bottom-left origin = Input.mousePosition space
                 prt.pivot = new Vector2(0f, 1f);              // top-left corner pinned to the cursor
 
-                Text txt = UI.CreateLabel(panel, "", 26, Color.white, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
+                Text txt = UI.CreateLabel(panel, "", 26, RemovePopupTextDefault, TextAnchor.MiddleLeft, HorizontalWrapMode.Overflow, VerticalWrapMode.Overflow, raycastTarget: false, name: "Text");
                 RectTransform trt = txt.GetComponent<RectTransform>();
                 trt.offsetMin = new Vector2(12f, 8f);
                 trt.offsetMax = new Vector2(-12f, -8f);
@@ -455,16 +465,48 @@ namespace VPB
                 _removePopupGO = canvasGO;
                 _removePopupRT = prt;
                 _removePopupText = txt;
+                _removePopupPersonStyle = false;
             }
             catch (Exception ex) { LogUtil.LogError("[VPB] RemoveMode popup create error: " + ex); _removePopupGO = null; }
         }
 
-        // Shows the popup with the given label and positions it next to the desktop cursor (clamped).
-        private void RemoveModeShowPopup(string label)
+        private static bool RemoveModeIsPersonAtom(Atom atom)
         {
+            if (atom == null) return false;
+            try
+            {
+                return string.Equals(atom.type, "Person", StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        private void RemoveModeApplyPopupStyle(bool person)
+        {
+            if (_removePopupPersonStyle == person
+                && _removePopupBg != null
+                && _removePopupText != null)
+                return;
+            _removePopupPersonStyle = person;
+            if (_removePopupBg != null)
+                _removePopupBg.color = person ? RemovePopupBgPerson : RemovePopupBgDefault;
+            if (_removePopupOutline != null)
+                _removePopupOutline.effectColor = person ? RemovePopupOutlinePerson : RemovePopupOutlineDefault;
+            if (_removePopupText != null)
+                _removePopupText.color = person ? RemovePopupTextPerson : RemovePopupTextDefault;
+        }
+
+        // Shows the popup with the given label and positions it next to the desktop cursor (clamped).
+        private void RemoveModeShowPopup(RemoveTarget target)
+        {
+            if (target == null) return;
             RemoveModeEnsurePopup();
             if (_removePopupGO == null || _removePopupText == null || _removePopupRT == null) return;
             if (!_removePopupGO.activeSelf) _removePopupGO.SetActive(true);
+
+            bool person = target.kind == RemoveTargetKind.Atom && RemoveModeIsPersonAtom(target.atom);
+            RemoveModeApplyPopupStyle(person);
+
+            string label = target.PopupLabel();
             if (_removePopupText.text != label) _removePopupText.text = label;
 
             float w = _removePopupText.preferredWidth + 24f;
@@ -492,6 +534,9 @@ namespace VPB
             _removePopupGO = null;
             _removePopupRT = null;
             _removePopupText = null;
+            _removePopupBg = null;
+            _removePopupOutline = null;
+            _removePopupPersonStyle = false;
         }
 
         // Per-frame entry point, called from Update() while the gallery canvas is enabled.
@@ -500,6 +545,32 @@ namespace VPB
             if (!_removeModeActive) return;
             if (!ReferenceEquals(_removeModeOwner, this)) return;
             if (SuperController.singleton == null) return;
+
+            // World confirm owns input — freeze eraser until Remove/Cancel.
+            if (_removeAtomConfirmOpen)
+            {
+                RemoveModeClearHighlight();
+                RemoveModeClearHelp();
+                RemoveModeHidePopup();
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    RemoveModeCloseAtomConfirm(invokeCancel: true);
+                    return;
+                }
+                bool cancel = false;
+                try { cancel = SuperController.singleton.GetCancel(); } catch { }
+                if (cancel)
+                {
+                    RemoveModeCloseAtomConfirm(invokeCancel: true);
+                    return;
+                }
+                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter))
+                {
+                    RemoveModeAcceptAtomConfirm();
+                    return;
+                }
+                return;
+            }
 
             try { if (SuperController.singleton.GetCancel()) { RemoveModeExit(); return; } }
             catch { }
@@ -552,11 +623,45 @@ namespace VPB
             else RemoveModeClearHelp();
 
             // Floating popup follows the desktop pointer every frame while a target is held.
-            if (desktop && target != null) RemoveModeShowPopup(target.PopupLabel());
+            if (desktop && target != null) RemoveModeShowPopup(target);
             else RemoveModeHidePopup();
 
             if (clickThisFrame && target != null)
             {
+                // Modal confirm owns input — do not fire remove under an open dialog.
+                if (_removeAtomConfirmOpen || IsConfirmOverlayOpen())
+                    return;
+
+                // Atom/Person remove is high cost — world-space confirm (works when gallery collapsed / VR).
+                if (target.kind == RemoveTargetKind.Atom && target.atom != null)
+                {
+                    Atom atomRef = target.atom;
+                    string uid = null;
+                    try { uid = atomRef.uid; } catch { }
+                    if (string.IsNullOrEmpty(uid))
+                    {
+                        // Fail closed: cannot confirm without uid.
+                        try
+                        {
+                            ShowTemporaryStatus(
+                                VPBTranslation.T(
+                                    "gallery.remove.no_uid",
+                                    "Remove cancelled — atom has no id."),
+                                2f);
+                        }
+                        catch { }
+                        return;
+                    }
+
+                    string label = target.PopupLabel();
+                    bool isPerson = RemoveModeIsPersonAtom(atomRef);
+                    RemoveModeClearHighlight();
+                    RemoveModeClearHelp();
+                    RemoveModeHidePopup();
+                    RemoveModeConfirmAtomRemoval(uid, label, isPerson);
+                    return;
+                }
+
                 // Restore the look before mutating the scene so a removed-but-recreated (undo)
                 // item never carries a stale property block.
                 RemoveModeClearHighlight();
@@ -564,6 +669,231 @@ namespace VPB
                 RemoveModeHidePopup();
                 try { RemoveModeExecuteRemoval(target); }
                 catch (Exception ex) { LogUtil.LogError("[VPB] RemoveModeExecuteRemoval error: " + ex); }
+            }
+        }
+
+        /// <summary>
+        /// World-space Remove/Cancel panel in front of the player — not VaM Alert, not gallery overlay.
+        /// </summary>
+        private void RemoveModeConfirmAtomRemoval(string uid, string label, bool isPerson)
+        {
+            if (string.IsNullOrEmpty(uid)) return;
+            if (_removeAtomConfirmOpen) return;
+
+            string display = string.IsNullOrEmpty(label) ? uid : label;
+            string title = isPerson
+                ? VPBTranslation.T("gallery.remove.confirm_person_title", "Remove Person?")
+                : VPBTranslation.T("gallery.remove.confirm_atom_title", "Remove from scene?");
+            string msg = string.Format(
+                VPBTranslation.T(
+                    "gallery.remove.confirm_atom_msg",
+                    "{0}\n\nRemove = erase · Cancel / Esc = abort · Ctrl+Z undoes after remove."),
+                display);
+
+            _removeAtomConfirmOk = () =>
+            {
+                Atom live = null;
+                try
+                {
+                    live = SuperController.singleton != null
+                        ? SuperController.singleton.GetAtomByUid(uid)
+                        : null;
+                }
+                catch { live = null; }
+                if (live == null) return;
+                var t = new RemoveTarget
+                {
+                    kind = RemoveTargetKind.Atom,
+                    atom = live,
+                    identity = live,
+                    highlightRoot = live.gameObject
+                };
+                try { RemoveModeExecuteRemoval(t); }
+                catch (Exception ex) { LogUtil.LogError("[VPB] RemoveModeExecuteRemoval error: " + ex); }
+            };
+            _removeAtomConfirmCancel = null;
+
+            try
+            {
+                RemoveModeBuildAtomConfirmWorld(title, msg, isPerson);
+                _removeAtomConfirmOpen = true;
+            }
+            catch (Exception ex)
+            {
+                _removeAtomConfirmOpen = false;
+                LogUtil.LogError("[VPB] RemoveModeConfirmAtomRemoval world UI failed: " + ex);
+                // Fail closed (High risk): never erase without confirm UI.
+                _removeAtomConfirmOk = null;
+                _removeAtomConfirmCancel = null;
+                try
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T(
+                            "gallery.remove.confirm_ui_failed",
+                            "Confirm UI failed — remove cancelled."),
+                        2.5f);
+                }
+                catch { }
+            }
+        }
+
+        private void RemoveModeBuildAtomConfirmWorld(string title, string msg, bool isPerson)
+        {
+            RemoveModeDestroyAtomConfirmCanvas();
+
+            GameObject root = new GameObject("VPB_RemoveAtomConfirm");
+            Canvas c = root.AddComponent<Canvas>();
+            c.renderMode = RenderMode.WorldSpace;
+            c.pixelPerfect = false;
+            c.sortingOrder = 32750;
+            root.AddComponent<CanvasScaler>();
+            root.AddComponent<GraphicRaycaster>();
+            try { c.worldCamera = Camera.main; } catch { }
+
+            RectTransform rootRT = root.GetComponent<RectTransform>();
+            if (rootRT == null) rootRT = root.AddComponent<RectTransform>();
+            rootRT.sizeDelta = new Vector2(520f, 280f);
+
+            // Face player camera — independent of gallery collapsed / fixed overlay.
+            Transform camTf = null;
+            try
+            {
+                SuperController sc = SuperController.singleton;
+                if (sc != null && sc.centerCameraTarget != null)
+                    camTf = sc.centerCameraTarget.transform;
+            }
+            catch { }
+            if (camTf == null && Camera.main != null) camTf = Camera.main.transform;
+
+            if (camTf != null)
+            {
+                Vector3 toPanel = camTf.forward * 1.15f;
+                root.transform.position = camTf.position + toPanel;
+                root.transform.rotation = Quaternion.LookRotation(toPanel, Vector3.up);
+            }
+            root.transform.localScale = new Vector3(
+                VpbWorldSpaceUiScale.MetersPerUiPixel,
+                VpbWorldSpaceUiScale.MetersPerUiPixel,
+                VpbWorldSpaceUiScale.MetersPerUiPixel);
+
+            try
+            {
+                if (SuperController.singleton != null)
+                    SuperController.singleton.AddCanvas(c);
+            }
+            catch { }
+            try
+            {
+                if (SuperController.singleton != null && SuperController.singleton.mainHUD != null)
+                    root.layer = SuperController.singleton.mainHUD.gameObject.layer;
+            }
+            catch { }
+
+            Color panelBg = isPerson
+                ? new Color(0.18f, 0.15f, 0.04f, 0.97f)
+                : new Color(0.10f, 0.08f, 0.10f, 0.97f);
+            Color accent = isPerson ? RemovePopupBgPerson : GalleryUiColorTokens.AccentDangerStrong;
+
+            GameObject panel = new GameObject("Panel");
+            panel.transform.SetParent(root.transform, false);
+            Image panelImg = UI.AddImage(panel, panelBg, false);
+            Outline ol = panel.AddComponent<Outline>();
+            ol.effectColor = accent;
+            ol.effectDistance = new Vector2(2f, -2f);
+            RectTransform panelRT = panel.GetComponent<RectTransform>();
+            panelRT.anchorMin = Vector2.zero;
+            panelRT.anchorMax = Vector2.one;
+            panelRT.offsetMin = Vector2.zero;
+            panelRT.offsetMax = Vector2.zero;
+
+            // Top accent stripe (Person = yellow).
+            GameObject stripe = new GameObject("AccentStripe");
+            stripe.transform.SetParent(panel.transform, false);
+            Image stripeImg = UI.AddImage(stripe, accent, false);
+            if (stripeImg != null) stripeImg.raycastTarget = false;
+            RectTransform stripeRT = stripe.GetComponent<RectTransform>();
+            stripeRT.anchorMin = new Vector2(0f, 1f);
+            stripeRT.anchorMax = new Vector2(1f, 1f);
+            stripeRT.pivot = new Vector2(0.5f, 1f);
+            stripeRT.sizeDelta = new Vector2(0f, 8f);
+            stripeRT.anchoredPosition = Vector2.zero;
+
+            UI.CreateLabel(
+                panel, title, GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleCenter,
+                anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(0f, 44f),
+                anchoredPosition: new Vector2(0f, -22f), name: "Title");
+
+            Text msgText = UI.CreateLabel(
+                panel, msg, GalleryUiDesignTokens.FontBodyRef, new Color(0.9f, 0.9f, 0.92f, 1f),
+                TextAnchor.UpperCenter, name: "Message");
+            RectTransform msgRT = msgText.GetComponent<RectTransform>();
+            msgRT.anchorMin = new Vector2(0f, 0f);
+            msgRT.anchorMax = new Vector2(1f, 1f);
+            msgRT.offsetMin = new Vector2(24f, 72f);
+            msgRT.offsetMax = new Vector2(-24f, -60f);
+
+            GameObject cancelBtn = UI.CreateUIButton(
+                panel, 160f, 44f,
+                VPBTranslation.T("gallery.remove.confirm_cancel", "Cancel"),
+                18, -100f, 28f, AnchorPresets.bottomMiddle,
+                () => RemoveModeCloseAtomConfirm(invokeCancel: true));
+
+            GameObject removeBtn = UI.CreateUIButton(
+                panel, 160f, 44f,
+                VPBTranslation.T("gallery.remove.confirm_remove", "Remove"),
+                18, 100f, 28f, AnchorPresets.bottomMiddle,
+                RemoveModeAcceptAtomConfirm);
+            Image removeImg = removeBtn != null ? removeBtn.GetComponent<Image>() : null;
+            if (removeImg != null)
+                removeImg.color = isPerson ? RemovePopupBgPerson : GalleryUiColorTokens.AccentDangerStrong;
+            Text removeLabel = removeBtn != null ? removeBtn.GetComponentInChildren<Text>() : null;
+            if (removeLabel != null && isPerson)
+                removeLabel.color = RemovePopupTextPerson;
+
+            _removeAtomConfirmGO = root;
+            _removeAtomConfirmCanvas = c;
+        }
+
+        private void RemoveModeAcceptAtomConfirm()
+        {
+            UnityEngine.Events.UnityAction ok = _removeAtomConfirmOk;
+            RemoveModeCloseAtomConfirm(invokeCancel: false);
+            if (ok != null)
+            {
+                try { ok(); } catch (Exception ex) { LogUtil.LogError("[VPB] RemoveModeAcceptAtomConfirm: " + ex); }
+            }
+        }
+
+        private void RemoveModeCloseAtomConfirm(bool invokeCancel)
+        {
+            if (invokeCancel && _removeAtomConfirmCancel != null)
+            {
+                UnityEngine.Events.UnityAction cancel = _removeAtomConfirmCancel;
+                _removeAtomConfirmCancel = null;
+                try { cancel(); } catch { }
+            }
+            _removeAtomConfirmOk = null;
+            _removeAtomConfirmCancel = null;
+            _removeAtomConfirmOpen = false;
+            RemoveModeDestroyAtomConfirmCanvas();
+        }
+
+        private void RemoveModeDestroyAtomConfirmCanvas()
+        {
+            if (_removeAtomConfirmCanvas != null)
+            {
+                try
+                {
+                    if (SuperController.singleton != null)
+                        SuperController.singleton.RemoveCanvas(_removeAtomConfirmCanvas);
+                }
+                catch { }
+                _removeAtomConfirmCanvas = null;
+            }
+            if (_removeAtomConfirmGO != null)
+            {
+                try { Destroy(_removeAtomConfirmGO); } catch { }
+                _removeAtomConfirmGO = null;
             }
         }
 

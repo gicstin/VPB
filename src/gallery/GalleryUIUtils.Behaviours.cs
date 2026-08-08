@@ -466,7 +466,7 @@ namespace VPB
     public class UIHoverBorder : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public Graphic targetGraphic;
-        public Color hoverColor = new Color(1f, 1f, 0f, 1f); // Bright yellow visible highlight
+        public Color hoverColor = GalleryUiColorTokens.HoverRimDefault; // Bright yellow visible highlight
         public float borderSize = 2f;
         /// <summary>When true, border effect is rendered inward (negative outline offset).</summary>
         public bool inward = false;
@@ -1994,6 +1994,77 @@ namespace VPB
                 panel.CopyMissingDependenciesToClipboard(file);
             else
                 panel.OpenFileOnHub(file);
+        }
+    }
+
+    /// <summary>
+    /// Clamps Scrollbar handle fraction so long lists keep a grab-able handle (Unity shrinks to ~1px).
+    /// </summary>
+    public class ScrollbarMinHandleHeight : MonoBehaviour
+    {
+        public float minHandlePixels = 28f;
+        private Scrollbar _sb;
+
+        void Awake()
+        {
+            _sb = GetComponent<Scrollbar>();
+        }
+
+        void LateUpdate()
+        {
+            if (_sb == null) _sb = GetComponent<Scrollbar>();
+            if (_sb == null || _sb.handleRect == null) return;
+            RectTransform track = _sb.handleRect.parent as RectTransform;
+            if (track == null) return;
+            float trackLen = (_sb.direction == Scrollbar.Direction.LeftToRight
+                || _sb.direction == Scrollbar.Direction.RightToLeft)
+                ? track.rect.width
+                : track.rect.height;
+            if (trackLen < 1f) return;
+            float minFrac = Mathf.Clamp01(minHandlePixels / trackLen);
+            if (_sb.size < minFrac)
+                _sb.size = minFrac;
+        }
+    }
+
+    /// <summary>Holds per-row rating picker GO when parented under float panel (not under recycled row).</summary>
+    public class PluginsFloatRowSelectorRef : MonoBehaviour
+    {
+        public GameObject selector;
+    }
+
+    /// <summary>Row background tint on pointer hover (Plugins float virt rows).</summary>
+    public class PluginsFloatRowHover : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        public Image target;
+        public Color normalColor = Color.black;
+        public Color hoverColor = Color.gray;
+        private bool _hovering;
+
+        public void SetColors(Color normal, Color hover)
+        {
+            normalColor = normal;
+            hoverColor = hover;
+            if (!_hovering && target != null)
+                target.color = normalColor;
+        }
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            _hovering = true;
+            if (target != null) target.color = hoverColor;
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            _hovering = false;
+            if (target != null) target.color = normalColor;
+        }
+
+        void OnDisable()
+        {
+            _hovering = false;
+            if (target != null) target.color = normalColor;
         }
     }
 }

@@ -12,8 +12,7 @@ namespace VPB
         bool _benchPickModeActive;
         BenchPickTarget _benchPickTarget;
         string _benchPickExpectedCategoryTitle;
-        bool _benchPickRestoreSettingsLeft;
-        bool _benchPickRestoreSettingsRight;
+        bool _benchPickRestoreSettingsOpen;
 
         GameObject _benchPickBannerRoot;
         Text _benchPickBannerLabel;
@@ -41,12 +40,13 @@ namespace VPB
                 try { StripKeepAbortSubScenePickMode(reopenStrip: false); } catch { }
             }
 
-            _benchPickRestoreSettingsLeft = leftActiveContent == ContentType.Settings;
-            _benchPickRestoreSettingsRight = rightActiveContent == ContentType.Settings;
+            try { ExitOtherStickyToolModes(StickyToolMode.BenchPick); } catch { }
+
+            _benchPickRestoreSettingsOpen = IsSettingsPanelOpen();
 
             try
             {
-                if (IsSettingsPanelOpen() || settingsListViewActive)
+                if (IsSettingsPanelOpen())
                     ExitInternalSettingsMode(true);
             }
             catch { }
@@ -71,6 +71,7 @@ namespace VPB
             if (!TryNavigateBenchPickCategory(categoryToken, out string resolvedTitle))
             {
                 _benchPickModeActive = false;
+                try { RefreshModeAmbientChrome(); } catch { }
                 ShowTemporaryStatus(VPBTranslation.T("bench.pick.category_missing",
                     "Could not open gallery category for selection."), 3f);
                 if (_benchModalRoot != null) _benchModalRoot.SetActive(true);
@@ -80,6 +81,7 @@ namespace VPB
             _benchPickExpectedCategoryTitle = resolvedTitle;
             BenchEnsurePickBanner();
             BenchUpdatePickBanner();
+            try { RefreshModeAmbientChrome(); } catch { }
 
             string hint = target == BenchPickTarget.Scenes
                 ? VPBTranslation.T("bench.pick.hint_scenes", "Select scenes, then tap Done.")
@@ -169,6 +171,8 @@ namespace VPB
             _benchPickModeActive = false;
             _benchPickExpectedCategoryTitle = null;
             BenchDestroyPickBanner();
+            try { RefreshModeAmbientChrome(); } catch { }
+            try { ResetArmedApplySemanticsIfIdle(toast: true); } catch { }
 
             int selCount = selectedFiles != null ? selectedFiles.Count : 0;
             int added = 0;
@@ -212,15 +216,12 @@ namespace VPB
 
             try
             {
-                if (_benchPickRestoreSettingsLeft)
-                    ToggleLeft(ContentType.Settings);
-                else if (_benchPickRestoreSettingsRight)
-                    ToggleRight(ContentType.Settings);
+                if (_benchPickRestoreSettingsOpen)
+                    OpenSettingsSideTab();
             }
             catch { }
 
-            _benchPickRestoreSettingsLeft = false;
-            _benchPickRestoreSettingsRight = false;
+            _benchPickRestoreSettingsOpen = false;
 
             if (reopenModal)
             {

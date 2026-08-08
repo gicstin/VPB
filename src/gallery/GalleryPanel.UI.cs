@@ -1187,7 +1187,7 @@ namespace VPB
                     footerHoldToLaunchToggleIconImage = footerHoldToLaunchToggleBtn.transform.Find("Icon")?.GetComponent<Image>();
                 }
             }
-            AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold trigger/button on item to apply/launch (see Settings for duration)");
+            AddTooltip(footerHoldToLaunchToggleBtn, "gallery.tooltip.hold_to_launch_toggle", "Hold trigger/button on item to apply/launch. While ON, drag-drop is paused (same press). See Settings for duration.");
 
             footerLayoutBtn = UI.CreateUIButton(rightSection, GalleryUiDesignTokens.ButtonSizeRef, GalleryUiDesignTokens.ButtonSizeRef,"▤", 20, 0, 0, AnchorPresets.middleCenter, ToggleLayoutMode);
             footerLayoutBtnImage = footerLayoutBtn.GetComponent<Image>();
@@ -1761,6 +1761,15 @@ namespace VPB
 
         private void ToggleHoldToLaunch()
         {
+            // Sticky tools own input — do not arm Hold; still allow clear if somehow armed.
+            try
+            {
+                if (!holdToLaunchEnabled
+                    && TaskChromeSuppressArmedApplyChrome(ResolveTaskChromeState()))
+                    return;
+            }
+            catch { }
+
             holdToLaunchEnabled = !holdToLaunchEnabled;
             try
             {
@@ -1788,9 +1797,13 @@ namespace VPB
             try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
             ShowTemporaryStatus(
                 holdToLaunchEnabled
-                    ? VPBTranslation.T("gallery.hold.enabled", "Hold-launch ON — hold thumbnail to apply (not 1-Click).")
-                    : VPBTranslation.T("gallery.hold.disabled", "Hold-launch OFF."),
-                1.5f);
+                    ? VPBTranslation.T(
+                        "gallery.hold.enabled",
+                        "Hold-launch ON — drag-drop paused. Hold thumbnail to apply.")
+                    : VPBTranslation.T(
+                        "gallery.hold.disabled",
+                        "Hold-launch OFF — drag-drop restored if enabled in Settings."),
+                2f);
         }
 
         private void UpdateHoldToLaunchToggleUI()
@@ -2354,7 +2367,7 @@ namespace VPB
             {
                 var del = footerLayoutBtn.GetComponent<UIHoverDelegate>();
                 if (del != null) del.OnHoverChange = null;
-                bool blockGridWhileSettings = IsSettingsPanelOpen() || settingsListViewActive;
+                bool blockGridWhileSettings = settingsListViewActive;
                 var b = footerLayoutBtn.GetComponent<Button>();
                 if (b != null) b.interactable = !blockGridWhileSettings;
                 string modeText = blockGridWhileSettings
@@ -2537,8 +2550,10 @@ namespace VPB
                 AddTooltipPlain(
                     footerAutoHideBtn,
                     VPBConfig.Instance.DesktopFixedAutoCollapse
-                        ? VPBTranslation.T("gallery.tooltip.autohide_enabled", "Auto-Hide (Enabled)")
-                        : VPBTranslation.T("gallery.tooltip.autohide_disabled", "Auto-Hide (Disabled)"));
+                        ? VPBTranslation.T(
+                            "gallery.tooltip.autohide_enabled",
+                            "Auto-Hide on — collapses when idle (pointer away, no text focus)")
+                        : VPBTranslation.T("gallery.tooltip.autohide_disabled", "Auto-Hide off — stays expanded"));
             }
         }
 
@@ -3347,7 +3362,7 @@ namespace VPB
             RecyclingGridView rgvState = null;
             if (contentGO != null) rgvState = contentGO.GetComponent<RecyclingGridView>();
 
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 if (contentGO != null)
                 {
@@ -3525,16 +3540,20 @@ namespace VPB
                 RefreshImportSidebarCategoryGate();
                 PersistImportSidebarOpenIntent();
             }
-            if (type == ContentType.Settings) HideGlobalSourceFilterDropdownIfOpen();
+            if (type == ContentType.Settings)
+            {
+                HideGlobalSourceFilterDropdownIfOpen();
+                OpenSettingsSideTab();
+                return;
+            }
             bool hadSettingsPanel = IsSettingsPanelOpen();
             bool userTagsWasOpen = leftActiveContent == ContentType.UserTags || rightActiveContent == ContentType.UserTags;
-            if (type != ContentType.Settings && (hadSettingsPanel || settingsListViewActive))
+            // Legacy middle-pane settings only — float Settings stays open with side panes (modeless).
+            if (settingsListViewActive)
                 ExitInternalSettingsMode(true);
             if (type == ContentType.Creator && VPBConfig.Instance != null && VPBConfig.Instance.GalleryHideCreatorSideButtons
                 && leftActiveContent != ContentType.Creator && rightActiveContent != ContentType.Creator)
                 return;
-            if (type == ContentType.UserTags)
-                ForceCloseSettingsSidePanels();
             bool hadHistorySide = leftActiveContent == ContentType.History || rightActiveContent == ContentType.History;
             bool wasCleanup = cleanupModeActive;
             if (wasCleanup && SidePanelToggleExitsCleanupMode(type))
@@ -3584,7 +3603,10 @@ namespace VPB
 
             bool hasSettingsPanel = IsSettingsPanelOpen();
             if (!hadSettingsPanel && hasSettingsPanel)
-                try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, settingsFilter ?? "", _titleBarSearchOnValueChanged); } catch { }
+            {
+                // Keep title search on browse/grid query; settings filter lives in side rail.
+                try { SyncSettingsSideSearchInputFromFilter(); } catch { }
+            }
             else if (hadSettingsPanel && !hasSettingsPanel)
                 try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
 
@@ -3685,9 +3707,9 @@ namespace VPB
         private static void StyleClothingModeButton(Image img, Text text, bool selected, Color selectedColor)
         {
             if (img != null)
-                img.color = selected ? selectedColor : new Color(0.16f, 0.16f, 0.18f, 1f);
+                img.color = selected ? selectedColor : GalleryUiColorTokens.SegmentIdle;
             if (text != null)
-                text.color = selected ? new Color(1f, 1f, 1f, 1f) : new Color(0.6f, 0.6f, 0.62f, 1f);
+                text.color = selected ? GalleryUiColorTokens.TextOnAccent : GalleryUiColorTokens.SegmentIdleText;
         }
 
         private void SetAppearanceClothingMode(string mode)
@@ -3740,7 +3762,10 @@ namespace VPB
             if (leftApplyModeBtnImage != null) leftApplyModeBtnImage.color = color;
 
             // Hold-to-launch overrides 1-click apply: disable the toggle button while hold mode is on.
-            bool disableApplyToggle = holdToLaunchEnabled;
+            // Task chrome sticky suppress also locks the toggle (ApplyTaskChromeApplyHoldPolicy dims peers).
+            bool stickySuppress = false;
+            try { stickySuppress = TaskChromeSuppressArmedApplyChrome(ResolveTaskChromeState()); } catch { }
+            bool disableApplyToggle = holdToLaunchEnabled || stickySuppress;
             try
             {
                 if (rightApplyModeBtnImage != null)
@@ -3749,18 +3774,30 @@ namespace VPB
                     if (b != null) b.interactable = !disableApplyToggle;
                     if (disableApplyToggle) rightApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
                     // Tooltip swap (best-effort)
-                    AddTooltip(rightApplyModeBtnImage.gameObject,
-                        disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode",
-                        disableApplyToggle ? "Hold-to-launch is ON. Turn it off to change 1-click/2-click apply." : "Toggle 1-click vs 2-click apply.");
+                    string tipKey = stickySuppress
+                        ? "gallery.tooltip.apply_mode_disabled_sticky"
+                        : (disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode");
+                    string tipFallback = stickySuppress
+                        ? "Sticky tool active — Esc exits tool before changing apply mode."
+                        : (disableApplyToggle
+                            ? "Hold-launch ON — drag-drop paused. Turn Hold off to change 1-click/2-click and restore drag-drop."
+                            : "Toggle 1-click vs 2-click apply.");
+                    AddTooltip(rightApplyModeBtnImage.gameObject, tipKey, tipFallback);
                 }
                 if (leftApplyModeBtnImage != null)
                 {
                     var b = leftApplyModeBtnImage.GetComponent<Button>();
                     if (b != null) b.interactable = !disableApplyToggle;
                     if (disableApplyToggle) leftApplyModeBtnImage.color = new Color(0.25f, 0.25f, 0.25f, 0.9f);
-                    AddTooltip(leftApplyModeBtnImage.gameObject,
-                        disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode",
-                        disableApplyToggle ? "Hold-to-launch is ON. Turn it off to change 1-click/2-click apply." : "Toggle 1-click vs 2-click apply.");
+                    string tipKey = stickySuppress
+                        ? "gallery.tooltip.apply_mode_disabled_sticky"
+                        : (disableApplyToggle ? "gallery.tooltip.apply_mode_disabled_hold_to_launch" : "gallery.tooltip.apply_mode");
+                    string tipFallback = stickySuppress
+                        ? "Sticky tool active — Esc exits tool before changing apply mode."
+                        : (disableApplyToggle
+                            ? "Hold-launch ON — drag-drop paused. Turn Hold off to change 1-click/2-click and restore drag-drop."
+                            : "Toggle 1-click vs 2-click apply.");
+                    AddTooltip(leftApplyModeBtnImage.gameObject, tipKey, tipFallback);
                 }
             }
             catch { }
@@ -3768,6 +3805,12 @@ namespace VPB
 
         private void ToggleApplyMode()
         {
+            try
+            {
+                if (TaskChromeSuppressArmedApplyChrome(ResolveTaskChromeState()))
+                    return;
+            }
+            catch { }
             if (holdToLaunchEnabled)
             {
                 // Hold-to-launch overrides single-click apply; keep the toggle disabled until hold mode is off.

@@ -328,6 +328,8 @@
     <Compile Include="src\hook\NativeTextureOnDemandCache.cs" />
     <Compile Include="src\hook\OnDemandBackgroundDecode.cs" />
     <Compile Include="src\hook\NativeTextureCacheBuildOverlay.cs" />
+    <Compile Include="src\hook\VpbBusyChrome.cs" />
+    <Compile Include="src\hook\VpbOsBusyHeartbeat.cs" />
     <Compile Include="src\hook\VpbProgressService.cs" />
     <Compile Include="src\hook\SceneLoadNativeUiBridge.cs" />
     <Compile Include="src\hook\CustomImageLoaderThreaded.cs" />
@@ -411,6 +413,7 @@
     <Compile Include="src\gallery\index\VpbLocalDatabase.FacetTally.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.SceneAtomCache.cs" />
     <Compile Include="src\gallery\index\VpbLocalDatabase.FilterPresets.cs" />
+    <Compile Include="src\gallery\index\VpbLocalDatabase.PluginsCatalog.cs" />
     <Compile Include="src\gallery\TagsManager.cs" />
     <Compile Include="src\gallery\PosePeopleCountIndex.cs" />
     <Compile Include="src\gallery\GalleryPanel.Actions.cs" />
@@ -432,6 +435,7 @@
     <Compile Include="src\gallery\GalleryPanel.AppearanceAutoSpawn.cs" />
     <Compile Include="src\gallery\GalleryPanel.Fields.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsInternal.cs" />
+    <Compile Include="src\gallery\GalleryPanel.SettingsFloat.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPerf.cs" />
     <Compile Include="src\gallery\GalleryPanel.SettingsPlugin.cs" />
     <Compile Include="src\gallery\GalleryPanel.CompressCache.cs" />
@@ -445,6 +449,10 @@
     <Compile Include="src\gallery\GalleryPanel.GlobalSourceFilter.cs" />
     <Compile Include="src\gallery\GalleryPanel.IO.cs" />
     <Compile Include="src\gallery\GalleryPanel.PluginsFilter.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Catalog.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Tree.cs" />
+    <Compile Include="src\gallery\GalleryPanel.PluginsFloat.Dest.cs" />
     <Compile Include="src\gallery\GalleryPanel.NavigationTiming.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.cs" />
     <Compile Include="src\gallery\GalleryPanel.Lifecycle.Init.cs" />
@@ -454,6 +462,10 @@
     <Compile Include="src\gallery\GalleryPanel.Transparency.cs" />
     <Compile Include="src\gallery\GalleryPanel.RemoveMode.cs" />
     <Compile Include="src\gallery\GalleryPanel.ModeAmbient.cs" />
+    <Compile Include="src\gallery\GalleryPanel.TaskChrome.cs" />
+    <Compile Include="src\gallery\GalleryPanel.RiskPolicy.cs" />
+    <Compile Include="src\gallery\GalleryPanel.UxConsistency.cs" />
+    <Compile Include="src\gallery\GalleryPanel.KeyboardFocus.cs" />
     <Compile Include="src\gallery\GalleryPanel.CommandPalette.cs" />
     <Compile Include="src\gallery\GalleryPanel.TryOn.cs" />
     <Compile Include="src\gallery\GalleryPanel.DetailStrip.cs" />
@@ -482,6 +494,7 @@
     <Compile Include="src\gallery\GalleryPanel.I18n.cs" />
     <Compile Include="src\gallery\GalleryPanel.Onboarding.cs" />
     <Compile Include="src\gallery\GalleryPanel.FilterChips.cs" />
+    <Compile Include="src\gallery\GalleryPanel.ContextBar.cs" />
     <Compile Include="src\gallery\GalleryPanel.TitleBarOverflow.cs" />
     <Compile Include="src\gallery\GalleryPanel.FooterOverflow.cs" />
     <Compile Include="src\gallery\GalleryPanel.SideRailOverflow.cs" />
@@ -499,7 +512,9 @@
     <Compile Include="src\gallery\GalleryPanel.SideRail.cs" />
     <Compile Include="src\gallery\GalleryPanel.UiScale.cs" />
     <Compile Include="src\gallery\GalleryUiScaleAutoDetect.cs" />
+    <Compile Include="src\gallery\GalleryUiScaleHotkey.cs" />
     <Compile Include="src\gallery\GalleryUiDesignTokens.cs" />
+    <Compile Include="src\gallery\GalleryUiColorTokens.cs" />
     <Compile Include="src\gallery\GalleryUiMetrics.cs" />
     <Compile Include="src\gallery\VpbWorldSpaceUiScale.cs" />
     <Compile Include="src\gallery\GalleryPanel.WorldSpaceScale.cs" />

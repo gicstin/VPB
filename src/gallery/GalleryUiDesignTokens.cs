@@ -16,20 +16,21 @@ namespace VPB
         /// <summary>1/φ² ≈ 0.382 — minor share of a unit split (e.g. category side sub-pane).</summary>
         public const float GoldenRatioMinor = 1f - GoldenRatioMajor;
 
-        // ── Typography (single prose size + glyph sizing) ─────────────────────
-        /// <summary>All gallery chrome prose. Hierarchy = color / alpha, not weight or fontSize (all text is non-bold).</summary>
+        // ── Typography (3-step hierarchy: caption / body / title) ──────────
+        /// <summary>Legacy alias for <see cref="FontBodyRef"/> (dense chrome default).</summary>
         public const int FontRef = 16;
+        /// <summary>Primary readable prose — buttons, fields, list rows.</summary>
         public const int FontBodyRef = FontRef;
-        /// <summary>Same as <see cref="FontRef"/> — emphasis comes from color/alpha, not bold weight.</summary>
-        public const int FontTitleRef = FontRef;
-        /// <summary>Same as <see cref="FontRef"/> — de-emphasis via reduced alpha on the Text color.</summary>
-        public const int FontCaptionRef = FontRef;
+        /// <summary>Section / window titles — larger than body.</summary>
+        public const int FontTitleRef = 18;
+        /// <summary>Hints, FPS, status secondary — smaller than body.</summary>
+        public const int FontCaptionRef = 13;
         /// <summary>Minimum readable fontSize after int clamp (ApplyFont floor).</summary>
         public const int FontMinRef = 10;
         /// <summary>Icon-only text: fontSize ≈ control height × this factor × scale.</summary>
         public const float GlyphFontHeightFactor = 0.55f;
-        /// <summary>All interactive buttons: 2× FontRef. Ratio is global and intentional.</summary>
-        public const float ButtonSizeRef = FontRef * 2; // 32
+        /// <summary>All interactive buttons: 2× FontBody. Ratio is global and intentional.</summary>
+        public const float ButtonSizeRef = FontBodyRef * 2; // 32
         /// <summary>Rounded-corner radius for gallery buttons + their hover border, as a fraction of the
         /// control's shorter side (0..0.5). Default when no user override is stored in VPB.cfg.
         /// Live value comes from <see cref="VPBConfig.GalleryElementCornerRadiusFraction"/> /
@@ -41,9 +42,9 @@ namespace VPB
         public const float TitleBarChipRef = ButtonSizeRef;
         public const float TitleBarCategoryRowHeightRef = 36f;
         public const float TitleBarTitleLeftInsetRef = 60f;
-        public const int TitleFontRef = FontRef;
-        public const int FpsFontRef = FontRef;
-        public const int StatusBarFontRef = FontRef;
+        public const int TitleFontRef = FontTitleRef;
+        public const int FpsFontRef = FontCaptionRef;
+        public const int StatusBarFontRef = FontCaptionRef;
         /// <summary>
         /// Shared hide grace for gallery info-bar + quick-menu assignable tips.
         /// Instant show / tip→tip; delay clear only so exit→enter on adjacent targets does not blink.
@@ -70,6 +71,14 @@ namespace VPB
         public const int SearchClearFontRef = FontRef;
         public const float SearchClearBtnRightInsetRef = 0f;
         public const float SearchIconButtonPadRef = 4f;
+        /// <summary>Pad around float chrome search rows (settings / filter presets).</summary>
+        public const float FloatSearchRowPadRef = 6f;
+        /// <summary>Title-adjacent search row height (field + pad). Shared by settings + presets.</summary>
+        public const float FloatSearchRowHeightRef = SearchFieldHeightRef + FloatSearchRowPadRef * 2f;
+        /// <summary>Window-type glyph in float title bars (settings gear, tags, filter, import).</summary>
+        public const float FloatTitleWindowIconSizeRef = 22f;
+        /// <summary>Space after window icon before title label (design px at scale 1).</summary>
+        public const float FloatTitleWindowIconGapRef = 10f;
 
         // Resize handles — sized/positioned like the corner-most bar button (40px, seated in the bar).
         // Horizontal centre inset = EdgeMargin + half button (mirrors the footer's 10px right padding).
@@ -116,6 +125,14 @@ namespace VPB
         public const float FooterBarHeightRef = 44f;
         public const float FooterInfoRowHeightRef = 36f;
         public const float FooterToolboxTopRef = 80f;
+        /// <summary>Near-grid sticky mode / apply-semantics banner (below filter chips).</summary>
+        public const float ModeSemanticsBannerHeightRef = 34f;
+        public const float ModeSemanticsBannerGapRef = 4f;
+        /// <summary>
+        /// Context Bar: ActiveFilterChipBar hard-caps to this many wrap rows.
+        /// Extra filters go to +N overflow (never grow grid inset).
+        /// </summary>
+        public const int ContextBarMaxFilterChipRows = 1;
         /// <summary>
         /// Drag floor ≈ title + actions + tags + path (no meta). Smaller than old 96 comfort.
         /// </summary>
@@ -245,11 +262,11 @@ namespace VPB
         public const float InAppHelpIconPreviewDockSizeRef = 82f;
         public const float InAppHelpIconPreviewGlyphSizeRef = 64f;
         public const float InAppHelpScaleFloor = 0.85f;
-        public const int InAppHelpHeaderFontRef = FontRef;
-        public const int InAppHelpNavFontRef = FontRef;
-        public const int InAppHelpSearchFontRef = FontRef;
-        public const int InAppHelpSectionTitleFontRef = FontRef;
-        public const int InAppHelpBodyFontRef = FontRef;
+        public const int InAppHelpHeaderFontRef = FontTitleRef;
+        public const int InAppHelpNavFontRef = FontBodyRef;
+        public const int InAppHelpSearchFontRef = FontBodyRef;
+        public const int InAppHelpSectionTitleFontRef = FontTitleRef;
+        public const int InAppHelpBodyFontRef = FontBodyRef;
         public const int InAppHelpBodyFontMin = FontMinRef;
 
         // Popup / dropdown menus
@@ -260,9 +277,9 @@ namespace VPB
         public const float PopupMenuRowTextPadXRef = 10f;
         public const float PopupMenuRowIconSizeRef = 22f;
         public const float PopupMenuRowIconGapRef = 8f;
-        public const int PopupMenuRowFontRef = FontRef;
-        public const int PopupMenuRowFontLargeRef = FontRef;
-        public const int PopupMenuOverflowFontRef = FontRef;
+        public const int PopupMenuRowFontRef = FontBodyRef;
+        public const int PopupMenuRowFontLargeRef = FontTitleRef;
+        public const int PopupMenuOverflowFontRef = FontBodyRef;
         public const float PopupMenuAnchorGapRef = 2f;
         public const float PopupMenuPanelWidthRef = 230f;
         /// <summary>Filter-presets dropdown: search + Float chip + sort need wider panel than plain popup rows.</summary>
@@ -282,6 +299,32 @@ namespace VPB
         public const float QuickFiltersFooterHeightRef = ButtonSizeRef + 8f;
         /// <summary>Max leaf presets selectable when merging into one multi-random preset.</summary>
         public const int QuickFiltersMergeMaxMembers = 6;
+        /// <summary>Settings floating window defaults / clamps (design px at scale 1).</summary>
+        public const float SettingsFloatDefaultWidthRef = 520f;
+        public const float SettingsFloatDefaultHeightRef = 640f;
+        public const float SettingsFloatMinWidthRef = 360f;
+        public const float SettingsFloatMinHeightRef = 320f;
+        public const float SettingsFloatMaxWidthRef = 900f;
+        public const float SettingsFloatMaxHeightRef = 1200f;
+        /// <summary>Plugins float tree palette (creator→package→cs) — dense power-user browse + drag.</summary>
+        public const float PluginsFloatDefaultWidthRef = 460f;
+        public const float PluginsFloatDefaultHeightRef = 560f;
+        public const float PluginsFloatMinWidthRef = 320f;
+        public const float PluginsFloatMinHeightRef = 280f;
+        public const float PluginsFloatMaxWidthRef = 800f;
+        public const float PluginsFloatMaxHeightRef = 1100f;
+        public const float PluginsFloatRowHeightRef = 36f;
+        public const float PluginsFloatExpandWidthRef = 28f;
+        public const float PluginsFloatChildIndentRef = 14f;
+        /// <summary>Fixed version column width (vN) — recognition over recall.</summary>
+        public const float PluginsFloatVersionWidthRef = 44f;
+        /// <summary>Gap between version label and ★ so digits do not crowd the star.</summary>
+        public const float PluginsFloatVersionStarGapRef = 10f;
+        /// <summary>Options strip under search (latest-version filter).</summary>
+        /// <summary>Two filter toggles side-by-side under search.</summary>
+        public const float PluginsFloatOptionsRowHeightRef = 30f;
+        /// <summary>Min scrollbar handle height so huge lists stay grab-able.</summary>
+        public const float PluginsFloatScrollbarMinHandleRef = 32f;
         public const float OverflowMenuPanelWidthRef = 300f;
         public const float FileSortMenuPanelWidthRef = 248f;
         public const float SidePaneSortMenuPanelWidthRef = 228f;
@@ -313,10 +356,10 @@ namespace VPB
         public const float InAppHelpCloseBtnLeftInsetRef = 40f;
 
         // Footer info / hover path tooltip row
-        public const int FooterHoverPathFontRef = FontRef;
-        public const int FooterInfoLabelFontRef = FontRef;
-        public const int SettingsListRowNameFontRef = FontRef;
-        public const int SettingsListRowDetailFontRef = FontRef;
+        public const int FooterHoverPathFontRef = FontCaptionRef;
+        public const int FooterInfoLabelFontRef = FontCaptionRef;
+        public const int SettingsListRowNameFontRef = FontBodyRef;
+        public const int SettingsListRowDetailFontRef = FontCaptionRef;
 
         // Layout anchors used throughout chrome math.
         // Content top reserve must equal the title bar height so grid/chips/side tabs clear it

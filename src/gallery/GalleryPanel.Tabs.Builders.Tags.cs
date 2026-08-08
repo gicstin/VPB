@@ -242,7 +242,7 @@ namespace VPB
                 if (count == 0 && !isActive) continue;
 
                 string label = tag + " (" + count + ")";
-                Color btnColor = isActive ? new Color(0.5f, 0.2f, 0.5f, 1f) : ColorInactiveRow;
+                Color btnColor = isActive ? GalleryUiColorTokens.FacetTag : ColorInactiveRow;
 
                 CreateTabButton(container.transform, label, btnColor, isActive, () => {
                     if (activeTags.Contains(tag)) activeTags.Remove(tag);

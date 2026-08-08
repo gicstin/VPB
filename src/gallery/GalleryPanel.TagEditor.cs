@@ -22,8 +22,8 @@ namespace VPB
         private const float DetailStripTagMenuDbNewTagHRef = 72f;
         private const float DetailStripTagMenuModeTabWRef = 56f;
 
-        private static readonly Color DetailStripTagMenuModeOnCol = new Color(0.22f, 0.42f, 0.58f, 1f);
-        private static readonly Color DetailStripTagMenuModeOffCol = new Color(0.16f, 0.17f, 0.21f, 1f);
+        private static readonly Color DetailStripTagMenuModeOnCol = GalleryUiColorTokens.ActiveSelected;
+        private static readonly Color DetailStripTagMenuModeOffCol = GalleryUiColorTokens.SurfaceDarker;
 
         private DetailStripTagMenuMode _detailStripTagMenuMode = DetailStripTagMenuMode.Apply;
         private GameObject _detailStripTagMenuModeTabsGO;
@@ -419,9 +419,13 @@ namespace VPB
             Button dbBtn = _detailStripTagMenuModeDbBtn.GetComponent<Button>();
             if (dbBtn != null) dbBtn.transition = Selectable.Transition.None;
 
-            // Sit after Header + HeaderRule (indices 0,1) — before Tip.
+            // Sit after Header + HeaderRule + FilterRow — before Tip.
             int insertAt = 2;
-            if (_detailStripTagMenuPanelGO.transform.Find("HeaderRule") == null) insertAt = 1;
+            Transform filterRow = _detailStripTagMenuPanelGO.transform.Find("FilterRow");
+            if (filterRow != null)
+                insertAt = filterRow.GetSiblingIndex() + 1;
+            else if (_detailStripTagMenuPanelGO.transform.Find("HeaderRule") == null)
+                insertAt = 1;
             _detailStripTagMenuModeTabsGO.transform.SetSiblingIndex(insertAt);
         }
 
@@ -473,7 +477,7 @@ namespace VPB
                 flexibleWidth: 1f,
                 flexibleHeight: 0f);
 
-            Color sortBackdropCol = new Color(0.22f, 0.42f, 0.58f, 1f);
+            Color sortBackdropCol = GalleryUiColorTokens.ActiveUtility;
             Sprite sortSpr0 = sceneSourceSortModeSprites != null && sceneSourceSortModeSprites.Length > 0
                 ? sceneSourceSortModeSprites[0]
                 : null;
@@ -504,8 +508,8 @@ namespace VPB
                 GalleryUiDesignTokens.FontMinRef);
             UI.AddLE(_detailStripTagMenuDbListHintText.gameObject, flexibleWidth: 1f, minWidth: 40f * s);
 
-            Sprite clearSpr = UI.LoadIconSprite("vpb_icons/clear_selection.png", new Color(0.78f, 0.78f, 0.78f, 1f));
-            Color clearSearchBackdrop = new Color(0.44f, 0.36f, 0.20f, 1f);
+            Sprite clearSpr = UI.LoadIconSprite("vpb_icons/clear_selection.png", GalleryUiColorTokens.TextMuted);
+            Color clearSearchBackdrop = GalleryUiColorTokens.ActiveWarnHeader;
             _detailStripTagMenuDbClearBtnGO = UI.CreateSideTabSquareIconButton(
                 _detailStripTagMenuDbListHeaderGO, chromeBtn, clearSpr, UserTagEditorClearFilter, clearSearchBackdrop, iconPadChrome);
             AddTooltipPlain(
@@ -596,11 +600,11 @@ namespace VPB
             arPadL.transform.SetParent(_detailStripTagMenuDbActionRowGO.transform, false);
             UI.AddLE(arPadL, minWidth: 0f, flexibleWidth: 1f);
 
-            Color createCol = new Color(0.25f, 0.45f, 0.28f, 1f);
-            Color removeCol = new Color(0.45f, 0.22f, 0.22f, 1f);
-            Color mergeCol = new Color(0.22f, 0.38f, 0.55f, 1f);
-            Color ioImpCol = new Color(0.24f, 0.40f, 0.35f, 1f);
-            Color ioExpCol = new Color(0.24f, 0.32f, 0.48f, 1f);
+            Color createCol = GalleryUiColorTokens.AccentConfirm;
+            Color removeCol = GalleryUiColorTokens.AccentDanger;
+            Color mergeCol = GalleryUiColorTokens.ActiveUtility;
+            Color ioImpCol = GalleryUiColorTokens.ActiveOn;
+            Color ioExpCol = GalleryUiColorTokens.ActiveSecondary;
             Sprite sprPlus = UI.LoadIconSprite("vpb_icons/tag_plus.png", Color.white);
             Sprite sprMinus = UI.LoadIconSprite("vpb_icons/tag_minus.png", Color.white);
             Sprite sprMerge = UI.LoadIconSprite("vpb_icons/arrow_merge.png", Color.white);
@@ -616,17 +620,17 @@ namespace VPB
             AddTooltipPlain(removeSelBtn, VPBTranslation.T("gallery.usertags.editor_remove_selected_tip", "Delete selected tag(s) from the database for all items (cannot undo)."));
             GameObject mergeBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprMerge, UserTagEditorOpenMergeDialog, mergeCol, iconPadAction);
             AddTooltipPlain(mergeBtn, VPBTranslation.T("gallery.usertags.editor_merge_tip", "Merge selected tags into one name (opens confirmation)."));
-            Color renameCol = new Color(0.26f, 0.34f, 0.46f, 1f);
+            Color renameCol = GalleryUiColorTokens.ActiveUtility;
             GameObject renameBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprRename, UserTagEditorOpenRenameDialog, renameCol, iconPadAction);
             AddTooltipPlain(renameBtn, VPBTranslation.T("gallery.usertags.editor_rename_tip", "Rename the selected tag (opens dialog)."));
-            Color catCol = new Color(0.42f, 0.34f, 0.55f, 1f);
+            Color catCol = GalleryUiColorTokens.SurfaceMid;
             GameObject catBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprCat, UserTagEditorOpenCategoryDialog, catCol, iconPadAction);
             AddTooltipPlain(catBtn, VPBTranslation.T("gallery.usertags.editor_category_tip", "Assign the selected tag(s) to a color category, or create/manage categories."));
             GameObject impBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprImp, UserTagEditorBeginImportYaml, ioImpCol, iconPadAction);
             AddTooltipPlain(impBtn, VPBTranslation.T("gallery.usertags.editor_import_tip", "Import tag assignments from a YAML file (tag→items or item→tags)."));
             GameObject expBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprExp, UserTagEditorBeginExportYaml, ioExpCol, iconPadAction);
             AddTooltipPlain(expBtn, VPBTranslation.T("gallery.usertags.editor_export_tip", "Export two YAML files: tag→items and item→tags (same folder, shared base name)."));
-            Color infoBackdrop = new Color(0.30f, 0.34f, 0.38f, 1f);
+            Color infoBackdrop = GalleryUiColorTokens.ActiveSecondary;
             GameObject infoBtn = UI.CreateSideTabSquareIconButton(_detailStripTagMenuDbActionRowGO, actionBtn, sprInfo, null, infoBackdrop, iconPadAction);
             AddTooltipPlain(infoBtn, userTagEditorInfoWisdom);
 
@@ -708,12 +712,18 @@ namespace VPB
                 _detailStripTagMenuDragged = false;
             DetailStripPositionTagMenu();
             if (_detailStripTagMenuSavedPos.HasValue && _detailStripTagMenuPanelRT != null)
-                _detailStripTagMenuPanelRT.anchoredPosition = _detailStripTagMenuSavedPos.Value;
+            {
+                Vector2 size = _detailStripTagMenuPanelRT.sizeDelta;
+                _detailStripTagMenuPanelRT.anchoredPosition =
+                    DetailStripTagMenuCenterToTopLeft(_detailStripTagMenuSavedPos.Value, size);
+            }
             DetailStripClampTagMenuPanelInView();
             if (_detailStripTagMenuDragged && _detailStripTagMenuPanelRT != null)
             {
-                _detailStripTagMenuSavedPos = _detailStripTagMenuPanelRT.anchoredPosition;
-                DetailStripPersistTagMenuPos(_detailStripTagMenuPanelRT.anchoredPosition);
+                Vector2 center = DetailStripTagMenuTopLeftToCenter(
+                    _detailStripTagMenuPanelRT.anchoredPosition, _detailStripTagMenuPanelRT.sizeDelta);
+                _detailStripTagMenuSavedPos = center;
+                DetailStripPersistTagMenuPos(center);
             }
 
             _detailStripTagMenuRoot.SetActive(true);
@@ -883,6 +893,7 @@ namespace VPB
         private void DetailStripOnTagMenuFilterChanged(string val)
         {
             _detailStripTagMenuFilter = val ?? "";
+            DetailStripRefreshTagMenuFilterClearVisible();
             if (DetailStripTagMenuIsDatabaseMode())
             {
                 // Debounce — RebuildUserTagEditorRows destroys/recreates UI (warm hitch if per-key).
@@ -896,6 +907,7 @@ namespace VPB
         private void DetailStripOnTagMenuFilterCleared()
         {
             _detailStripTagMenuFilter = "";
+            DetailStripRefreshTagMenuFilterClearVisible();
             DetailStripStopTagMenuFilterRebuild();
             if (DetailStripTagMenuIsDatabaseMode())
             {

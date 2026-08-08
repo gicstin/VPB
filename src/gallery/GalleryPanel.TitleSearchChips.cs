@@ -89,7 +89,7 @@ namespace VPB
                 clearHb.borderSize = 2f;
                 try { clearHb.ApplyBorderSettings(); } catch { }
             }
-            try { AddTooltip(_titleSearchChipClearAllGO, "gallery.search.clear_all_tip", "Clear all search. Ctrl+Z undoes within 5s."); } catch { }
+            try { AddTooltip(_titleSearchChipClearAllGO, "gallery.search.clear_all_tip", "Clear all search. Ctrl+Z undoes."); } catch { }
 
             _titleSearchChipRowsColGO = new GameObject("TitleSearchChipRows");
             _titleSearchChipRowsColGO.transform.SetParent(_titleSearchChipHostGO.transform, false);
@@ -300,7 +300,6 @@ namespace VPB
         /// <summary>Enter: commit draft into Include chips. Shift+Enter: commit into Exclude.</summary>
         internal void TitleSearchOnCommitDraft(InputField sourceField, bool forceExclude = false)
         {
-            if (IsSettingsPanelOpen()) return;
             if (sourceField == null) return;
 
             string draft = sourceField.text ?? "";
@@ -360,7 +359,6 @@ namespace VPB
 
         private void OnTitleSearchClearClicked()
         {
-            if (IsSettingsPanelOpen()) return;
             // Field X already wiped draft text; only soft-undo when chips / committed filter existed.
             bool canUndo = HasTitleSearchChips() || !string.IsNullOrEmpty(nameFilter);
             if (!canUndo) return;
@@ -377,8 +375,8 @@ namespace VPB
             try
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Press Ctrl+Z within 5s to undo."),
-                    TitleSearchClearUndoSeconds);
+                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Ctrl+Z undoes."),
+                    2.5f);
             }
             catch { }
         }
@@ -392,50 +390,31 @@ namespace VPB
                 snap = nameFilter ?? "";
             if (string.IsNullOrEmpty(snap))
             {
-                // Draft-only clear: nothing to restore into chips.
-                _pendingTitleSearchUndoSerialized = null;
-                _pendingTitleSearchUndoUntilRealtime = 0f;
                 return;
             }
-            _pendingTitleSearchUndoSerialized = snap;
-            _pendingTitleSearchUndoUntilRealtime = Time.realtimeSinceStartup + TitleSearchClearUndoSeconds;
-        }
 
-        private bool TryUndoTitleSearchClear()
-        {
-            if (string.IsNullOrEmpty(_pendingTitleSearchUndoSerialized))
-                return false;
-            if (Time.realtimeSinceStartup > _pendingTitleSearchUndoUntilRealtime)
+            string snapCopy = snap;
+            PushUndo(() =>
             {
-                _pendingTitleSearchUndoSerialized = null;
-                _pendingTitleSearchUndoUntilRealtime = 0f;
-                return false;
-            }
-
-            string snap = _pendingTitleSearchUndoSerialized;
-            _pendingTitleSearchUndoSerialized = null;
-            _pendingTitleSearchUndoUntilRealtime = 0f;
-
-            try { SetNameFilter(snap); } catch { }
-            try { HydrateTitleSearchChipsFromCurrentFilter(); } catch { }
-            try { SetTitleSearchDraftText("", null); } catch { }
-            try { RebuildTitleSearchChipUi(); } catch { }
-            try { SyncBrowseFilterChipChrome(); } catch { }
-            try { SyncTitleBarSearchBackdrop(); } catch { }
-            try
-            {
-                ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.search.undo_clear_ok", "Restored previous search."),
-                    2f);
-            }
-            catch { }
-            return true;
+                try { SetNameFilter(snapCopy); } catch { }
+                try { HydrateTitleSearchChipsFromCurrentFilter(); } catch { }
+                try { SetTitleSearchDraftText("", null); } catch { }
+                try { RebuildTitleSearchChipUi(); } catch { }
+                try { SyncBrowseFilterChipChrome(); } catch { }
+                try { SyncTitleBarSearchBackdrop(); } catch { }
+                try
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T("gallery.search.undo_clear_ok", "Restored previous search."),
+                        2f);
+                }
+                catch { }
+            }, VPBTranslation.T("gallery.undo.search_clear", "Search clear"));
         }
 
         /// <summary>ESC: clear draft + close popup / unfocus — keep committed chips.</summary>
         private void TitleSearchOnEscape()
         {
-            if (IsSettingsPanelOpen()) return;
             try { SetTitleSearchDraftText("", null); } catch { }
             try { CloseTitleSearchPopup(); } catch { }
             try
@@ -520,7 +499,7 @@ namespace VPB
         /// <summary>Side / detail tag drag began — reveal Incl/Excl drop rows.</summary>
         internal void TitleSearchOnExternalTagDragBegan()
         {
-            if (IsSettingsPanelOpen() || cleanupModeActive) return;
+            if (cleanupModeActive) return;
             if (!IsBrowseFilterChipContextActive()) return;
             _titleSearchChipDragReveal = true;
             try { CreateTitleSearchChipHost(); } catch { }
@@ -532,7 +511,7 @@ namespace VPB
         /// <summary>Committed search chip drag began — keep both rows visible without destroying chips.</summary>
         internal void TitleSearchOnChipDragBegan(int chipIndex)
         {
-            if (IsSettingsPanelOpen() || cleanupModeActive) return;
+            if (cleanupModeActive) return;
             _titleSearchChipDragReveal = true;
             _titleSearchChipDragActive = true;
             UserTagDragSession.PendingTitleSearchChipIndex = chipIndex;
@@ -580,7 +559,6 @@ namespace VPB
         internal void TitleSearchAcceptDroppedTags(List<string> tags, TitleSearchChipPolarity polarity)
         {
             if (tags == null || tags.Count == 0) return;
-            if (IsSettingsPanelOpen()) return;
 
             bool changed = false;
             for (int i = 0; i < tags.Count; i++)
@@ -698,7 +676,6 @@ namespace VPB
             bool show = (HasTitleSearchChips() || dragReveal)
                 && IsVisible
                 && !isCollapsed
-                && !IsSettingsPanelOpen()
                 && !settingsListViewActive
                 && !cleanupModeActive
                 && IsBrowseFilterChipContextActive();
@@ -1064,7 +1041,6 @@ namespace VPB
             private void OnGUI()
             {
                 if (Panel == null || Field == null || !Field.isFocused) return;
-                if (Panel.IsSettingsPanelOpen()) return;
                 Event e = Event.current;
                 if (e == null || e.type != EventType.KeyDown) return;
 
@@ -1073,6 +1049,14 @@ namespace VPB
                     e.Use();
                     bool forceExclude = e.shift;
                     try { Panel.TitleSearchOnCommitDraft(Field, forceExclude); } catch { }
+                    return;
+                }
+
+                // Consume Tab/Down — transfer owned by HandleKeyboardInput (avoid OnGUI+Update flip-flop).
+                if (e.keyCode == KeyCode.Tab
+                    || (e.keyCode == KeyCode.DownArrow && !e.control && !e.alt && !e.command))
+                {
+                    e.Use();
                     return;
                 }
 

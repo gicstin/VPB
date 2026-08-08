@@ -129,7 +129,8 @@ namespace VPB
 
         private void AdvanceSideButtonsFadeDelayTimer()
         {
-            if (hoverCount > 0 || IsPointerInsideGalleryWindowRect())
+            // Same engagement as auto-hide — typing / search chrome keeps side rails visible.
+            if (IsGalleryInteractionEngaged())
             {
                 sideButtonsFadeDelayTimer = 0f;
                 return;
@@ -139,7 +140,7 @@ namespace VPB
 
         private bool ShouldShowSideButtonsAfterFadeDelay()
         {
-            if (hoverCount > 0 || IsPointerInsideGalleryWindowRect() || isResizing)
+            if (IsGalleryInteractionEngaged())
                 return true;
             return sideButtonsFadeDelayTimer < SideButtonsFadeDelay;
         }
@@ -163,9 +164,9 @@ namespace VPB
 
             backgroundImageColor = GalleryBackgroundTinted;
 
-            bool isHovered = hoverCount > 0 || IsPointerInsideGalleryWindowRect() || isResizing;
+            bool isEngaged = IsGalleryInteractionEngaged();
             if (!VPBConfig.Instance.ShouldDisableGalleryPaneTransparency()
-                && VPBConfig.Instance.EnableGalleryTranslucency && !isHovered)
+                && VPBConfig.Instance.EnableGalleryTranslucency && !isEngaged)
                 paneCanvasAlpha = Mathf.Max(0.1f, VPBConfig.Instance.GalleryOpacity);
 
             bool enableFade = VPBConfig.Instance.EnableGalleryFade;

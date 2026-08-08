@@ -403,22 +403,7 @@ namespace VPB
         /// <summary>Title search field + compact icon: grey when empty; blue when query non-empty.</summary>
         private void SyncTitleBarSearchBackdrop()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive)
-            {
-                try { SyncTitleSearchChromeForActiveMode(); } catch { }
-                return;
-            }
-            if (titleSearchInput == null) return;
-            string tSearch = titleSearchInput.text ?? "";
-            bool hasTerm = tSearch.Trim().Length > 0;
-            Color c = hasTerm ? ColorTitleSearchFilterActive : ColorTitleSearchBackdropIdle;
-            Image fieldBg = titleSearchInput.GetComponent<Image>();
-            if (fieldBg != null) fieldBg.color = c;
-            if (_titleSearchCompactGO != null)
-            {
-                Image cmpBg = _titleSearchCompactGO.GetComponent<Image>();
-                if (cmpBg != null) cmpBg.color = c;
-            }
+            try { SyncTitleSearchChromeForActiveMode(); } catch { }
         }
 
         private void SetupTitleSearchCompactControl(GameObject titleBarGO)
@@ -448,7 +433,7 @@ namespace VPB
             var compactIconImg = _titleSearchCompactGO.transform.Find("Icon")?.GetComponent<Image>();
             if (compactIconImg != null) compactIconImg.color = Color.white;
             _titleSearchCompactRT = crt;
-            try { AddTooltip(_titleSearchCompactGO, "gallery.search.shortcuts_tip", "Ctrl+F focus · Enter → chip · Shift+Enter exclude"); } catch { }
+            try { AddTooltip(_titleSearchCompactGO, "gallery.search.shortcuts_tip", "Ctrl+F focus · Tab/↓ grid · Enter chip · Shift+Enter exclude"); } catch { }
             AddRightClickDelegate(_titleSearchCompactGO, ClearTitleBarSearch);
         }
 
@@ -458,7 +443,7 @@ namespace VPB
             try
             {
                 AddTooltip(field.gameObject, "gallery.search.shortcuts_tip",
-                    "Ctrl+F focus · Enter → chip · Shift+Enter exclude");
+                    "Ctrl+F focus · Tab/↓ grid · Enter chip · Shift+Enter exclude");
             }
             catch { }
             try
@@ -467,7 +452,7 @@ namespace VPB
                 if (clearTr != null)
                 {
                     AddTooltip(clearTr.gameObject, "gallery.search.clear_all_tip",
-                        "Clear all search. Ctrl+Z undoes within 5s.");
+                        "Clear all search. Ctrl+Z undoes.");
                 }
             }
             catch { }
@@ -498,8 +483,8 @@ namespace VPB
             try
             {
                 ShowTemporaryStatus(
-                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Press Ctrl+Z within 5s to undo."),
-                    TitleSearchClearUndoSeconds);
+                    VPBTranslation.T("gallery.search.cleared_with_undo", "Search cleared. Ctrl+Z undoes."),
+                    2.5f);
             }
             catch { }
         }
@@ -532,7 +517,7 @@ namespace VPB
             {
                 Text ph = _titleSearchPopupField != null ? _titleSearchPopupField.placeholder as Text : null;
                 if (ph != null)
-                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Shift+Enter exclude · Ctrl+F");
+                    ph.text = VPBTranslation.T("gallery.search.main_chips", "Type + Enter chip · Tab/↓ grid · Shift+Enter exclude");
             }
             catch { }
             RectTransform ifrt = _titleSearchPopupField.GetComponent<RectTransform>();
@@ -605,11 +590,26 @@ namespace VPB
             FocusTitleSearchInputField(_titleSearchPopupField, selectAll);
         }
 
-        /// <summary>Ctrl+F: open/focus title search and select draft text.</summary>
+        /// <summary>Ctrl+F: open/focus title search and select draft text.
+        /// Settings float owns Ctrl+F only while keyboard focus is already inside it (modeless).</summary>
         private void FocusTitleSearchFromHotkey()
         {
             if (!IsVisible || isCollapsed) return;
             if (cleanupModeActive) return;
+
+            // Expanded Settings float + focus already in float → settings filter (not title-search popup).
+            if (IsSettingsPanelOpen() && !_settingsFloatCollapsed && IsKeyboardFocusInsideSettingsFloat())
+            {
+                try { FocusSettingsSideSearchFromHotkey(); } catch { }
+                return;
+            }
+
+            // Legacy middle-pane settings list (if ever re-enabled).
+            if (settingsListViewActive)
+            {
+                try { FocusSettingsSideSearchFromHotkey(); } catch { }
+                return;
+            }
 
             bool compact = _titleSearchCompactGO != null && _titleSearchCompactGO.activeSelf;
             bool fieldHidden = titleSearchInput == null

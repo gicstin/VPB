@@ -874,6 +874,31 @@ namespace VPB
 
         // Writes the referenced rows and the queryable cslref_sig:<uid> sig in one connection.
         // The sig is what a later scan checks to skip re-parsing an unchanged VAR.
+        /// <summary>
+        /// Stamp cslist-ref sig only (meta + memory). No sys_file churn — use for packages with zero .cslist
+        /// so startup scan of 10k+ VARs does not open BEGIN IMMEDIATE per package.
+        /// </summary>
+        internal static void StampCslistRefVarSigOnly(string uid, string sig)
+        {
+            if (!VpbSqlite3.IsAvailable) return;
+            if (string.IsNullOrEmpty(uid)) return;
+            try
+            {
+                using (var conn = new VpbSqlite3.Connection(DbPath))
+                {
+                    EnsureSchema(conn);
+                    using (var up = conn.Prepare("INSERT OR REPLACE INTO meta(k,v) VALUES(?,?)"))
+                    {
+                        up.BindText(1, CslistRefVarSigMetaPrefix + uid);
+                        up.BindText(2, sig ?? string.Empty);
+                        up.Step();
+                    }
+                }
+                UpdateCslistRefVarSig(uid, sig);
+            }
+            catch { }
+        }
+
         public static void WriteCslistReferencedForVar(string uid, string sig, List<SystemFileRow> rows)
         {
             if (!VpbSqlite3.IsAvailable) return;

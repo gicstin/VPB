@@ -2355,7 +2355,38 @@ namespace VPB
 				System.Threading.Interlocked.Exchange(ref s_BulkDeepScanActive, 0);
 				// RebuildCore may have coalesced while bulk scan held caches incomplete.
 				try { VpbLocalDatabase.FlushPendingGalleryIndexAfterDeepScan(); } catch { }
+				// cslist-ref SQL skipped during bulk (no 8-worker SQLite storm). Single-thread fill.
+				try { ScheduleDeferredCslistReferencedPersist(); } catch { }
 			}
+		}
+
+		static void ScheduleDeferredCslistReferencedPersist()
+		{
+			VarPackage[] snapshot = null;
+			try
+			{
+				if (packagesByUid == null) return;
+				lock (packagesLock)
+				{
+					snapshot = packagesByUid.Values.ToArray();
+				}
+			}
+			catch { return; }
+			if (snapshot == null || snapshot.Length == 0) return;
+
+			ThreadPool.QueueUserWorkItem(_ =>
+			{
+				try
+				{
+					for (int i = 0; i < snapshot.Length; i++)
+					{
+						VarPackage pkg = snapshot[i];
+						if (pkg == null) continue;
+						try { pkg.PersistCslistReferencedPathsToDbDeferred(); } catch { }
+					}
+				}
+				catch { }
+			});
 		}
 
 		public List<string> GetAllVars()

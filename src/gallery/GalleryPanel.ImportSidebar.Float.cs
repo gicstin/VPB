@@ -11,9 +11,7 @@ namespace VPB
     /// </summary>
     public partial class GalleryPanel
     {
-        private static readonly Color ImportSidebarFloatTitleBarBg = new Color(0.10f, 0.22f, 0.34f, 1f);
-        private static readonly Color ImportSidebarFloatFooterBarBg = new Color(0.08f, 0.10f, 0.13f, 1f);
-        private static readonly Color ImportSidebarFloatPanelBg = new Color(0.07f, 0.08f, 0.10f, 0.98f);
+        // Float shell colors live in ImportSidebar.Chrome (Settings Surface* ladder).
         private const float ImportSidebarFloatChromeIconPadRef = 5f;
 
         private bool importSidebarDetached;
@@ -123,11 +121,17 @@ namespace VPB
             }
             ApplyImportSidebarDetachChrome(reposition: true, persist: true);
             ApplyImportSidebarBaseRect(ChromeScale);
-            // BaseRect final size/clamp may shift center after DetachChrome persist.
+            // Clamp is visual-only now — capture post-layout center so first detach persists
+            // without requiring a drag (matches prior Clamp writeback behavior).
+            CaptureImportSidebarFloatGeometryToMemory();
             PersistImportSidebarFloatGeometry();
             RebuildImportSidebarContent();
             try { UpdateLayout(); } catch { }
             UpdateImportToggleBtnVisual();
+            // Leaving docked sticky → modeless float: restore gallery task chrome.
+            try { InvalidateTaskChrome(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
+            try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
         /// <summary>Float footer Dock → reattach side column; stay open (work surface).</summary>
@@ -157,6 +161,14 @@ namespace VPB
                 return;
             }
 
+            // Docked Import is sticky — gate before mutating float chrome / geometry.
+            if (importSidebarActive)
+            {
+                if (!GateStickyEnterWhileTryOn(StickyToolMode.Import))
+                    return;
+                try { ExitOtherStickyToolModes(StickyToolMode.Import); } catch { }
+            }
+
             if (!importSidebarFloatCollapsed)
                 CaptureImportSidebarFloatGeometryToMemory();
             else
@@ -164,6 +176,7 @@ namespace VPB
             importSidebarFloatCollapsed = false;
             importSidebarExpandHeightRef = null;
             importSidebarCollapsedTopLeftPos = null;
+
             ApplyImportSidebarDockChrome(persist: true);
             importSidebarOpenIntent = true;
             importSidebarOpenIntentLoaded = true;
@@ -173,6 +186,9 @@ namespace VPB
             RebuildImportSidebarContent();
             try { UpdateLayout(); } catch { }
             UpdateImportToggleBtnVisual();
+            try { InvalidateTaskChrome(); } catch { }
+            try { RefreshModeAmbientChrome(); } catch { }
+            try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
         private void ToggleImportSidebarFloatCollapsed()
@@ -222,15 +238,19 @@ namespace VPB
                 childForceExpandWidth: false, childForceExpandHeight: false);
 
             Text grip = UI.CreateLabel(importSidebarFloatTitleBarGO, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
-                new Color(0.65f, 0.72f, 0.80f, 1f), TextAnchor.MiddleCenter,
+                GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
             UI.AddLE(grip.gameObject, minWidth: 18f, preferredWidth: 18f);
 
-            importSidebarFloatTitleLabel = UI.CreateLabel(
+            UI.CreateFloatTitleWindowIcon(
+                importSidebarFloatTitleBarGO, "vpb_icons/import.png",
+                GalleryUiDesignTokens.FloatTitleWindowIconSizeRef);
+
+            importSidebarFloatTitleLabel = UI.CreateEmphasisTitleLabel(
                 importSidebarFloatTitleBarGO,
                 VPBTranslation.T("gallery.import.float_title", "Scene Import"),
                 GalleryUiDesignTokens.PopupMenuRowFontRef,
-                Color.white, TextAnchor.MiddleLeft, raycastTarget: false, name: "Title");
+                GalleryUiColorTokens.TextPrimary, TextAnchor.MiddleLeft, name: "Title");
             UI.AddLE(importSidebarFloatTitleLabel.gameObject, flexibleWidth: 1f, minWidth: 60f);
             if (importSidebarFloatTitleBarGO.GetComponent<RectMask2D>() == null)
                 importSidebarFloatTitleBarGO.AddComponent<RectMask2D>();
@@ -317,7 +337,7 @@ namespace VPB
                 DockImportSidebar);
             importSidebarFloatDockBtnGO.name = "FloatDock";
             Image dockImg = importSidebarFloatDockBtnGO.GetComponent<Image>();
-            if (dockImg != null) dockImg.color = new Color(0.16f, 0.28f, 0.38f, 1f);
+            if (dockImg != null) dockImg.color = ImportSidebarSecondaryActionBg;
             Button dockBtn = importSidebarFloatDockBtnGO.GetComponent<Button>();
             if (dockBtn != null) dockBtn.transition = Selectable.Transition.None;
             LayoutElement dockLe = importSidebarFloatDockBtnGO.GetComponent<LayoutElement>();
@@ -355,7 +375,7 @@ namespace VPB
             spacerDrag.OnDragging = ClampImportSidebarFloatIntoHost;
             spacerDrag.OnMoved = OnImportSidebarFloatMoved;
             Text footerGrip = UI.CreateLabel(footerSpacer, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
-                new Color(0.65f, 0.72f, 0.80f, 1f), TextAnchor.MiddleCenter,
+                GalleryUiColorTokens.TextDim, TextAnchor.MiddleCenter,
                 raycastTarget: false, name: "Grip");
             if (footerGrip != null)
             {
@@ -419,7 +439,7 @@ namespace VPB
             btn.transform.SetAsFirstSibling();
 
             Image img = btn.GetComponent<Image>();
-            if (img != null) img.color = new Color(0.18f, 0.30f, 0.40f, 1f);
+            if (img != null) img.color = ImportSidebarSecondaryActionBg;
             Text txt = btn.GetComponentInChildren<Text>();
             if (txt != null)
             {
@@ -468,7 +488,7 @@ namespace VPB
             if (go == null) return;
             Image img = go.GetComponent<Image>();
             if (img != null)
-                img.color = backdropOverride.HasValue ? backdropOverride.Value : new Color(0f, 0f, 0f, 0.01f);
+                img.color = backdropOverride.HasValue ? backdropOverride.Value : ImportSidebarFloatChromeIconBg;
             Button btn = go.GetComponent<Button>();
             if (btn != null) btn.transition = Selectable.Transition.None;
             LayoutElement le = go.GetComponent<LayoutElement>();
@@ -501,7 +521,7 @@ namespace VPB
                         }
                     }
                     else
-                        UI.AddIconToButton(go, spr, pad, backdropOverride ?? new Color(0f, 0f, 0f, 0f));
+                        UI.AddIconToButton(go, spr, pad, backdropOverride ?? ImportSidebarFloatChromeIconBg);
                 }
             }
             catch { }
@@ -570,8 +590,8 @@ namespace VPB
 
                 if (reposition)
                 {
-                    // Fresh detach: leave saved null so Apply uses pane center on canvas host.
-                    // Never keep docked world pos (pivot/sizeDelta mismatch).
+                    // Saved center (config / prior float) or pane center when unset.
+                    // Must run only after reparent to float host (canvas-local space).
                     ApplyImportSidebarFloatAnchorsAndPos(ChromeScale > 0f ? ChromeScale : 1f);
                 }
             }
@@ -615,7 +635,7 @@ namespace VPB
             }
 
             if (importSidebarRootBg != null)
-                importSidebarRootBg.color = new Color(0f, 0f, 0f, 0f);
+                importSidebarRootBg.color = ImportSidebarFloatPanelBg;
             RectMask2D mask = importSidebarRoot != null ? importSidebarRoot.GetComponent<RectMask2D>() : null;
             if (mask != null) UnityEngine.Object.Destroy(mask);
 
@@ -763,11 +783,9 @@ namespace VPB
             }
 
             importSidebarRT.anchoredPosition = pos;
-
-            if (importSidebarFloatCollapsed)
-                importSidebarCollapsedTopLeftPos = pos;
-            else
-                importSidebarSavedFloatPosCenter = ImportSidebarTopLeftToCenter(pos, size);
+            // Visual clamp only — do not rewrite saved center here. Layout under a wrong /
+            // interim host used to corrupt canvas-local restore coords. Drag/resize end
+            // captures via OnImportSidebarFloatMoved / CaptureImportSidebarFloatGeometryToMemory.
         }
 
         private float ResolveImportSidebarFloatWidthRef()

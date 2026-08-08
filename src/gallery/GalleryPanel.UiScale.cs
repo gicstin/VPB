@@ -113,6 +113,8 @@ namespace VPB
             try { ApplyFooterOverflowLayout(chromeS); } catch { }
             try { if (IsFixedTopDockMode()) ApplyTopDockSideButtonsLayout(chromeS); } catch { }
             try { RescaleRemapAtomUidsIfOpen(chromeS); } catch { }
+            try { RescaleSettingsFloatIfOpen(chromeS); } catch { }
+            try { RescalePluginsFloatIfOpen(chromeS); } catch { }
             try { RescaleCommandPaletteIfOpen(); } catch { }
         }
 
@@ -126,9 +128,9 @@ namespace VPB
             tboxInfoRowHeight = GalleryUiDesignTokens.FooterInfoRowHeightRef * s;
             // Same global chrome font as rest of gallery UI.
             if (hoverPathText != null)
-                GalleryUiMetrics.ApplyFont(hoverPathText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                GalleryUiMetrics.ApplyFont(hoverPathText, GalleryUiDesignTokens.FooterHoverPathFontRef, s, GalleryUiDesignTokens.FontMinRef);
             if (statusBarText != null)
-                GalleryUiMetrics.ApplyFont(statusBarText, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
+                GalleryUiMetrics.ApplyFont(statusBarText, GalleryUiDesignTokens.StatusBarFontRef, s, GalleryUiDesignTokens.FontMinRef);
             if (tboxLabel != null)
                 GalleryUiMetrics.ApplyFont(tboxLabel, GalleryUiDesignTokens.FontBodyRef, s, GalleryUiDesignTokens.FontMinRef);
             try { SyncTboxFooterRowChrome(s); } catch { }
@@ -595,8 +597,8 @@ namespace VPB
         internal void RescaleInitChromeTextsInternal(GalleryUiMetrics metrics)
         {
             if (titleText != null) metrics.ApplyTitleFont(titleText);
-            if (fpsText != null) metrics.ApplyBodyFont(fpsText);
-            if (statusBarText != null) metrics.ApplyTitleFont(statusBarText, 11);
+            if (fpsText != null) metrics.ApplyCaptionFont(fpsText);
+            if (statusBarText != null) metrics.ApplyCaptionFont(statusBarText);
             if (collapseHandleText != null) metrics.ApplyBodyFont(collapseHandleText);
             if (collapseHandleLeftText != null) metrics.ApplyBodyFont(collapseHandleLeftText);
             if (collapseHandleTopText != null) metrics.ApplyBodyFont(collapseHandleTopText);

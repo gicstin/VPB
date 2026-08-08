@@ -56,7 +56,11 @@ namespace VPB
             float total = TitleSearchChipChromeTopInsetPx(s);
             if (_activeFilterChipBarVisible)
             {
+                // Context Bar: hard-cap filter chip rows (overflow goes to +N popup).
+                int maxRows = GalleryUiDesignTokens.ContextBarMaxFilterChipRows;
+                if (maxRows < 1) maxRows = 1;
                 int rows = _activeFilterChipRowCount < 1 ? 1 : _activeFilterChipRowCount;
+                if (rows > maxRows) rows = maxRows;
                 float rowsH = rows * FilterChipRowHeightRef + (rows - 1) * FilterChipRowSpacingRef;
                 total += (rowsH + FilterChipRowVerticalMarginRef) * s;
             }
@@ -66,8 +70,10 @@ namespace VPB
         private bool ShouldShowActiveFilterChipBar()
         {
             if (!IsVisible || isCollapsed) return false;
-            if (IsSettingsPanelOpen() || settingsListViewActive) return false;
+            if (settingsListViewActive) return false;
             if (cleanupModeActive) return false;
+            // Mode / armed apply owns Context Bar — filters collapse to banner count.
+            if (ContextBarModeOwnsChrome()) return false;
             if (!IsBrowseFilterChipContextActive()) return false;
             return HasActiveBrowseFilters();
         }
@@ -104,31 +110,28 @@ namespace VPB
         {
             if (_activeFilterChipBarGO == null) return;
 
+            if (availWidth > 1f) _lastChipBarAvailWidth = availWidth;
+
+            // Reuse scratch list — warm path, no per-refresh List alloc.
+            _filterChipSpecScratch.Clear();
+            CollectActiveFilterChipSpecs(_filterChipSpecScratch);
+            RefreshContextBarFilterCountCache(_filterChipSpecScratch);
+
             _activeFilterChipBarVisible = ShouldShowActiveFilterChipBar();
+            // Title-search chips own their host; empty filter specs → no bar strip.
+            if (_filterChipSpecScratch.Count == 0)
+                _activeFilterChipBarVisible = false;
+
             _activeFilterChipBarGO.SetActive(_activeFilterChipBarVisible);
             if (!_activeFilterChipBarVisible)
             {
                 ClearActiveFilterChipButtons();
+                _filterChipOverflowSpecs.Clear();
+                CloseFilterChipOverflowMenu();
                 _activeFilterChipRowCount = 1;
                 return;
             }
 
-            if (availWidth > 1f) _lastChipBarAvailWidth = availWidth;
-
-            var specs = new List<ActiveFilterChipSpec>(12);
-            CollectActiveFilterChipSpecs(specs);
-
-            // Title-search chips own their host; don't leave an empty ActiveFilterChipBar strip.
-            if (specs.Count == 0)
-            {
-                _activeFilterChipBarVisible = false;
-                _activeFilterChipBarGO.SetActive(false);
-                ClearActiveFilterChipButtons();
-                _activeFilterChipRowCount = 1;
-                return;
-            }
-
-            ReturnActiveFilterChipsToPool();
             if (_activeFilterChipScrollContentRT == null) return;
 
             float s = ChromeScale;
@@ -136,24 +139,20 @@ namespace VPB
             int fontSize = UiMetrics.FontBody();
             float chipH = FilterChipRowHeightRef * s;
 
-            for (int i = 0; i < specs.Count; i++)
-            {
-                ActiveFilterChipSpec spec = specs[i];
-                GameObject chip = AcquireFilterChipControl(_activeFilterChipScrollContentRT, spec, chipH, fontSize, s);
-                if (chip != null) _activeFilterChipButtons.Add(chip);
-            }
-
-            FlowActiveFilterChips(s);
+            // Context Bar: hard-cap one row; rest → +N overflow popup.
+            PackActiveFilterChipsOneRow(_filterChipSpecScratch, s, fontSize, chipH);
         }
 
-        /// <summary>Wrap chips into rows that fit <see cref="_lastChipBarAvailWidth"/>; updates row count for grid inset.</summary>
+        /// <summary>
+        /// Position chips LTR on one row (Context Bar). Packer already capped contents;
+        /// row count forced to <see cref="GalleryUiDesignTokens.ContextBarMaxFilterChipRows"/>.
+        /// </summary>
         private void FlowActiveFilterChips(float s)
         {
             if (_activeFilterChipScrollContentRT == null) return;
             if (s <= 0f) s = 1f;
 
             float chipH = FilterChipRowHeightRef * s;
-            float rowSpacing = FilterChipRowSpacingRef * s;
             float colSpacing = FilterChipColumnSpacingRef * s;
 
             float availW = _lastChipBarAvailWidth;
@@ -161,8 +160,8 @@ namespace VPB
             if (availW <= 1f) availW = float.MaxValue;
 
             int n = _activeFilterChipButtons.Count;
-            float x = 0f, y = 0f;
-            int rows = 1;
+            float x = 0f;
+            const float y = 0f;
 
             for (int i = 0; i < n; i++)
             {
@@ -175,13 +174,7 @@ namespace VPB
                 float w = LayoutUtility.GetPreferredWidth(rt);
                 if (w <= 1f) w = rt.rect.width;
 
-                if (x > 0f && x + w > availW + 0.5f)
-                {
-                    x = 0f;
-                    y -= chipH + rowSpacing;
-                    rows++;
-                }
-
+                // One-row Context Bar — never wrap (packer owns overflow).
                 rt.anchorMin = new Vector2(0f, 1f);
                 rt.anchorMax = new Vector2(0f, 1f);
                 rt.pivot = new Vector2(0f, 1f);
@@ -190,7 +183,9 @@ namespace VPB
                 x += w + colSpacing;
             }
 
-            _activeFilterChipRowCount = rows < 1 ? 1 : rows;
+            int maxRows = GalleryUiDesignTokens.ContextBarMaxFilterChipRows;
+            if (maxRows < 1) maxRows = 1;
+            _activeFilterChipRowCount = maxRows;
         }
 
         private struct ActiveFilterChipSpec
@@ -220,6 +215,8 @@ namespace VPB
             HideOldVersions,
             ShowHiddenItems,
             License,
+            /// <summary>Context Bar compact "+N" — opens overflow popup (not a dismissible filter).</summary>
+            Overflow,
         }
 
         private static Color ResolveFilterChipAccent(FilterChipKind kind)
@@ -244,6 +241,7 @@ namespace VPB
                 case FilterChipKind.HideOldVersions: return new Color(0.45f, 0.50f, 0.40f, 1f);
                 case FilterChipKind.ShowHiddenItems: return new Color(0.55f, 0.40f, 0.35f, 1f);
                 case FilterChipKind.License: return ColorLicense;
+                case FilterChipKind.Overflow: return ColorCategory;
                 default: return ColorTitleSearchFilterActive;
             }
         }
@@ -264,7 +262,9 @@ namespace VPB
 
         private static bool IsCompactFilterChipKind(FilterChipKind kind)
         {
-            return kind == FilterChipKind.ClearAll || kind == FilterChipKind.PackageFilterBack;
+            return kind == FilterChipKind.ClearAll
+                || kind == FilterChipKind.PackageFilterBack
+                || kind == FilterChipKind.Overflow;
         }
 
         private GameObject AcquireFilterChipControl(Transform parent, ActiveFilterChipSpec spec, float chipH, int fontSize, float s = 1f)
@@ -466,6 +466,8 @@ namespace VPB
                 {
                     if (spec.Kind == FilterChipKind.PackageFilterBack)
                         AddTooltip(chip, "gallery.tooltip.filter_back", "Back");
+                    else if (spec.Kind == FilterChipKind.Overflow)
+                        AddTooltip(chip, "gallery.filter_chip.overflow_tip", "Show more active filters");
                     else
                         AddTooltip(chip, "gallery.filter_chip.clear_all_tip", "Clear all active filters");
                 }
@@ -714,12 +716,14 @@ namespace VPB
                 }
             }
 
-            // Back is navigation within package-filter mode — don't count it toward Clear all.
+            // Back / Overflow are chrome — don't count toward Clear all eligibility.
             int clearAllEligible = 0;
             for (int i = 0; i < specs.Count; i++)
             {
-                if (specs[i].Kind != FilterChipKind.PackageFilterBack)
-                    clearAllEligible++;
+                FilterChipKind k = specs[i].Kind;
+                if (k == FilterChipKind.PackageFilterBack || k == FilterChipKind.Overflow)
+                    continue;
+                clearAllEligible++;
             }
             if (clearAllEligible >= 2)
             {
@@ -934,6 +938,13 @@ namespace VPB
             int wasSearchRows = _titleSearchChipRowCount;
             try { RebuildTitleSearchChipUi(); } catch { }
             try { RefreshActiveFilterChips(); } catch { }
+            // Mode banner may show "N filters" when chip bar suppressed — refresh copy only.
+            try
+            {
+                InvalidateModeSemanticsBannerCache();
+                SyncModeSemanticsBanner(GetActiveStickyToolMode(), ApplySemanticsLabel());
+            }
+            catch { }
             try
             {
                 bool nowVisible = _activeFilterChipBarVisible || _titleSearchChipHostVisible;

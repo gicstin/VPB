@@ -563,8 +563,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.idleTransparency", GroupKey = "visuals",
-                Label = VPBTranslation.T("settings.gallery_idle_transparency", "Transparency when not hovered over"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_transparency", "Makes the gallery pane translucent when the pointer is not over it. Fully opaque while hovered."),
+                Label = VPBTranslation.T("settings.gallery_idle_transparency", "Transparency when idle"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_transparency", "Makes the gallery pane translucent when idle (pointer away and no text field / search chrome active). Fully opaque while hovered or editing."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableGalleryTranslucency,
                 SetBool = v => {
                     VPBConfig.Instance.EnableGalleryTranslucency = v;
@@ -576,8 +576,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.idleOpacity", GroupKey = "visuals",
-                Label = VPBTranslation.T("settings.gallery_idle_opacity", "Opacity when not hovered over"),
-                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_opacity", "How visible the gallery pane is when the pointer is not over it (1.0 = fully opaque, 0.1 = barely visible)."),
+                Label = VPBTranslation.T("settings.gallery_idle_opacity", "Opacity when idle"),
+                Tooltip = VPBTranslation.T("settings.tip.gallery_idle_opacity", "How visible the gallery pane is when idle (pointer away and no text focus). 1.0 = fully opaque, 0.1 = barely visible."),
                 ControlType = InternalSettingControlType.Slider, GetFloat = () => VPBConfig.Instance.GalleryOpacity,
                 SetFloat = v => {
                     VPBConfig.Instance.GalleryOpacity = v;
@@ -590,8 +590,8 @@ namespace VPB
             });
             defs.Add(new InternalSettingDefinition {
                 Key = "visuals.fade", GroupKey = "visuals",
-                Label = VPBTranslation.T("settings.side_button_fade_idle", "Fade side buttons when not hovered over"),
-                Tooltip = VPBTranslation.T("settings.tip.side_button_fade_idle", "Hides side buttons when the pointer is not over the gallery pane or side strip."),
+                Label = VPBTranslation.T("settings.side_button_fade_idle", "Fade side buttons when idle"),
+                Tooltip = VPBTranslation.T("settings.tip.side_button_fade_idle", "Hides side buttons when idle (pointer away and no text field / search chrome active)."),
                 ControlType = InternalSettingControlType.Toggle, GetBool = () => VPBConfig.Instance.EnableGalleryFade,
                 SetBool = v => {
                     VPBConfig.Instance.EnableGalleryFade = v;
@@ -806,7 +806,7 @@ namespace VPB
 
             defs.Add(new InternalSettingDefinition {
                 Key = "desktop.fixedAutoHideSeconds", GroupKey = "desktop", Label = VPBTranslation.T("settings.desktop.fixed_auto_hide_seconds", "Fixed auto-hide delay (s)"),
-                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_auto_hide_seconds", "Seconds cursor must be outside pane before auto-hide collapses (Desktop fixed mode)."),
+                Tooltip = VPBTranslation.T("settings.tip.desktop.fixed_auto_hide_seconds", "Seconds pane must stay idle (pointer outside, no text focus / search chrome) before auto-hide collapses (Desktop fixed mode)."),
                 ControlType = InternalSettingControlType.Slider,
                 GetFloat = () => VPBConfig.Instance.DesktopFixedAutoHideSeconds,
                 SetFloat = v => {
@@ -1786,9 +1786,6 @@ namespace VPB
         {
             if (internalSettingsSessionActive) return;
             internalSettingsListRowHeightSession = 80f;
-            internalSettingsPreSessionLayoutMode = layoutMode;
-            internalSettingsPreSessionScrollNormalized = (scrollRect != null) ? scrollRect.verticalNormalizedPosition : 1f;
-            internalSettingsHadPreSessionViewState = true;
             internalSettingsBackup = CreateInternalSettingsSnapshot();
             PluginSettingsBeginSession();
             internalSettingsSessionActive = true;
@@ -1807,15 +1804,21 @@ namespace VPB
                 RefreshInternalSettingsListRows(true);
         }
 
-        /// <summary>Open gallery Settings side tab (title bar gear / shortcuts).</summary>
+        /// <summary>Open gallery Settings floating window (title bar gear / shortcuts). Toggle: Save+close when already open.</summary>
         public void OpenSettingsSideTab()
         {
-            if (IsSettingsPanelOpen()) return;
+            if (IsSettingsPanelOpen())
+            {
+                ExitInternalSettingsMode(true);
+                return;
+            }
             try { CancelPluginHotkeyCapture(false); } catch { }
-            if (isFixedLocally)
-                ToggleLeft(ContentType.Settings);
-            else
-                ToggleRight(ContentType.Settings);
+            EnsureSettingsFloatBuilt();
+            ShowSettingsFloat();
+            EnsureInternalSettingsSession();
+            try { SyncSettingsSideSearchInputFromFilter(); } catch { }
+            RefreshInternalSettingsListRows(false);
+            try { TryShowBaMigrationPromptOnSettingsEnter(); } catch { }
         }
 
         /// <summary>Open gallery Settings on a specific category tab (e.g. updater).</summary>
@@ -1826,50 +1829,39 @@ namespace VPB
             if (!IsSettingsPanelOpen())
                 OpenSettingsSideTab();
             else
-            {
-                try { UpdateTabs(); } catch { }
                 RefreshInternalSettingsListRows(true);
-            }
         }
 
         private bool IsSettingsPanelOpen()
         {
-            return leftActiveContent == ContentType.Settings || rightActiveContent == ContentType.Settings;
+            return _settingsFloatRoot != null && _settingsFloatRoot.activeInHierarchy;
         }
 
-        /// <summary>Merges backing <see cref="settingsFilter"/>, title bar search (primary UX while settings list is open), and side-rail search.</summary>
+        /// <summary>
+        /// Settings list filter: backing <see cref="settingsFilter"/> is source of truth.
+        /// Live side-rail field wins only while focused (typing). Title search never owns this.
+        /// </summary>
         private string CanonicalSettingsSideSearchText()
         {
             if (!IsSettingsPanelOpen())
                 return settingsFilter ?? "";
 
-            string fromVar = (settingsFilter ?? "").Trim();
-            string fromTitle = titleSearchInput != null ? (titleSearchInput.text ?? "").Trim() : "";
-            InputField sideBox = null;
-            if (leftActiveContent == ContentType.Settings) sideBox = leftSearchInput;
-            else if (rightActiveContent == ContentType.Settings) sideBox = rightSearchInput;
-            string fromSide = sideBox != null ? (sideBox.text ?? "").Trim() : "";
+            InputField sideBox = GetSettingsSideSearchInput();
+            try
+            {
+                if (sideBox != null && sideBox.isFocused)
+                    return sideBox.text ?? "";
+            }
+            catch { }
 
-            if (fromTitle.Length > 0 && fromVar.Length > 0 && fromSide.Length > 0) return settingsFilter ?? "";
-            if (fromVar.Length > 0 && fromTitle.Length > 0) return settingsFilter ?? "";
-            if (fromVar.Length > 0 && fromSide.Length > 0) return settingsFilter ?? "";
-            if (fromTitle.Length > 0 && fromSide.Length > 0) return titleSearchInput.text ?? "";
-            if (fromVar.Length > 0) return settingsFilter ?? "";
-            if (fromTitle.Length > 0) return titleSearchInput.text ?? "";
-            if (fromSide.Length > 0) return sideBox.text ?? "";
-            return "";
+            return settingsFilter ?? "";
         }
 
-        /// <summary>Closes Settings side tab(s) and syncs internal session — use when navigating to Tags so Save→Tags never leaves Settings open on other rail.</summary>
+        /// <summary>Closes Settings float — use when navigating to Tags so Save→Tags never leaves Settings open.</summary>
         private void ForceCloseSettingsSidePanels()
         {
-            if (leftActiveContent != ContentType.Settings && rightActiveContent != ContentType.Settings)
-                return;
-            if (leftActiveContent == ContentType.Settings) leftActiveContent = null;
-            if (rightActiveContent == ContentType.Settings) rightActiveContent = null;
-            try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
-            SyncInternalSettingsListView();
-            try { RefreshTboxConditionalActionButtons(); } catch { }
+            if (!IsSettingsPanelOpen()) return;
+            ExitInternalSettingsMode(true);
         }
 
         /// <summary>
@@ -1906,36 +1898,15 @@ namespace VPB
 
         private void SyncInternalSettingsListView()
         {
-            bool open = IsSettingsPanelOpen();
-            if (open)
+            if (IsSettingsPanelOpen())
             {
-                settingsListViewActive = true;
                 InvalidateInternalSettingsDefsCache();
                 RefreshInternalSettingsListRows();
                 return;
             }
 
-            // settingsListViewActive is also set in RefreshInternalSettingsListRows; still allow exit if pre-session restore pending (fixes Save after paths that never toggled Settings tab through Sync).
-            if (!settingsListViewActive && !internalSettingsHadPreSessionViewState) return;
-            settingsListViewActive = false;
-            if (internalSettingsSessionActive) CancelInternalSettingsSession();
-
-            // Atomic handoff: never SetLayoutMode(Grid)+Refresh while settings rows still bound.
-            ClearMiddlePaneOfSettingsRows();
-
-            GalleryLayoutMode restoreMode = internalSettingsPreSessionLayoutMode;
-            float restoreScroll = internalSettingsPreSessionScrollNormalized;
-            bool needLayoutRestore = internalSettingsHadPreSessionViewState;
-            internalSettingsHadPreSessionViewState = false;
-
-            if (needLayoutRestore)
-            {
-                // keepInternalSettingsMode: session already torn down; avoid re-entering Exit.
-                SetLayoutMode(restoreMode, persistConfig: false, keepInternalSettingsMode: true);
-                if (scrollRect != null)
-                    scrollRect.verticalNormalizedPosition = Mathf.Clamp01(restoreScroll);
-            }
-            RefreshFiles(true);
+            if (internalSettingsSessionActive)
+                CancelInternalSettingsSession();
         }
 
         private void RefreshGalleryScanWlBorderVisuals()
@@ -1949,48 +1920,24 @@ namespace VPB
             StopCo(ref refreshCoroutine);
             try
             {
+                CommitSettingsSideSearchIntoFilter();
                 string c = CanonicalSettingsSideSearchText();
-                if (!string.IsNullOrEmpty((c ?? "").Trim()))
-                    settingsFilter = c;
+                settingsFilter = c ?? "";
             }
             catch { }
-            settingsListViewActive = true;
             EnsureInternalSettingsSession();
-            // Settings list view: always minimum row height (no +/- scaling),
-            // but still respect chrome scale so text/controls remain readable.
             float paneScale = ChromeScale;
             internalSettingsListRowHeightSession = 80f * Mathf.Clamp(paneScale, 0.01f, 100f);
 
-            if (titleText != null)
-                titleText.text = VPBTranslation.T("settings.title", "Settings");
+            float s = InternalSettingsChromeScale();
+            GalleryModalTypography type = new GalleryModalTypography(s);
+            int font = type.Body;
+            float chromeSz = GalleryUiDesignTokens.ButtonSizeRef * s;
+            float rowH = internalSettingsListRowHeightSession;
 
-            List<FileEntry> rows = BuildInternalSettingsRows();
-            currentFilteredFiles.Clear();
-            currentFilteredFiles.AddRange(rows);
-            selectedFiles.Clear();
-            selectedFilePaths.Clear();
-
-            RecyclingGridView rgv = recyclingGrid;
-            if (rgv == null && contentGO != null)
-            {
-                try { rgv = contentGO.GetComponent<RecyclingGridView>(); } catch { }
-            }
-
-            if (rgv != null)
-                rgv.SetItemCount(currentFilteredFiles.Count, deferRefresh: true);
-
-            if (layoutMode != GalleryLayoutMode.List)
-                SetLayoutMode(GalleryLayoutMode.List, false, true);
-
-            try { ApplyInternalSettingsListGridConfig(rgv, deferRefresh: true); } catch { }
-
-            if (rgv != null)
-            {
-                if (!keepScroll) ScrollGalleryToTop();
-                rgv.Refresh();
-            }
-            try { UpdatePaginationText(); } catch { }
-            try { UpdateFooterLayoutState(); } catch { }
+            try { SyncSettingsSideSearchInputFromFilter(); } catch { }
+            RebuildSettingsFloatGroupTabs(font, s, chromeSz);
+            RebuildSettingsFloatRows(font, s, rowH, keepScroll);
         }
 
         private List<FileEntry> BuildInternalSettingsRows()
@@ -2151,7 +2098,9 @@ namespace VPB
 
             AddTooltipPlain(btnGO, def.Tooltip ?? def.Label ?? "");
 
-            float rowH = EffectiveListRowHeightForGallery();
+            float rowH = IsSettingsPanelOpen()
+                ? internalSettingsListRowHeightSession
+                : EffectiveListRowHeightForGallery();
             float uiS = InternalSettingsChromeScale();
             float chipH = GalleryUiDesignTokens.ButtonSizeRef * uiS;
 
@@ -2212,7 +2161,7 @@ namespace VPB
                 string cur = def.GetString() ?? "";
                 string display = (cur ?? "").ToUpperInvariant();
                 GameObject cycleBtn = null;
-                cycleBtn = CreateMiniButton(controls.transform, display, 150f, new Color(0.25f, 0.5f, 0.8f, 1f), () => {
+                cycleBtn = CreateMiniButton(controls.transform, display, 150f, GalleryUiColorTokens.SurfaceMid, () => {
                     // Read current value at click time (avoid stale captured value when row reuses objects).
                     string curNow = def.GetString() ?? "";
                     string next = NextOf(curNow, def.Options);
@@ -2249,7 +2198,7 @@ namespace VPB
                     controls.transform,
                     VPBTranslation.T("settings.grid_border_color.choose", "CHOOSE…"),
                     120f,
-                    new Color(0.25f, 0.5f, 0.8f, 1f),
+                    GalleryUiColorTokens.SurfaceMid,
                     () =>
                     {
                         Color initial = def.GetColor();
@@ -2297,7 +2246,7 @@ namespace VPB
 
                 GameObject bg = new GameObject("Background");
                 bg.transform.SetParent(sliderHost.transform, false);
-                var bgImg = AddSettingsControlRoundedBg(bg, new Color(0.2f, 0.2f, 0.2f), false);
+                var bgImg = AddSettingsControlRoundedBg(bg, GalleryUiColorTokens.SurfacePanel, false);
                 RectTransform bgRT = bg.GetComponent<RectTransform>();
                 bgRT.anchorMin = new Vector2(0, 0.28f); bgRT.anchorMax = new Vector2(1, 0.72f);
                 bgRT.offsetMin = new Vector2(trackEndPad, 0f); bgRT.offsetMax = new Vector2(-trackEndPad, 0f);
@@ -2310,7 +2259,7 @@ namespace VPB
 
                 GameObject fill = new GameObject("Fill");
                 fill.transform.SetParent(fillArea.transform, false);
-                var fillImg = AddSettingsControlRoundedBg(fill, new Color(0.25f, 0.5f, 0.8f), false);
+                var fillImg = AddSettingsControlRoundedBg(fill, GalleryUiColorTokens.SurfaceMid, false);
                 RectTransform fillRT = fill.GetComponent<RectTransform>();
                 fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one; fillRT.sizeDelta = Vector2.zero;
                 slider.fillRect = fillRT;
@@ -2361,11 +2310,9 @@ namespace VPB
                         def.SetFloat(slider.value);
                         if (string.Equals(def.SubGroupKey, "hover", StringComparison.OrdinalIgnoreCase))
                             NotifyInternalSettingsHoverPreviewChanged();
-                        // UI-scale sliders defer until release; now that the gesture is over it is safe
-                        // to rescale the gallery chrome and rebuild the settings rows so the new scale
-                        // shows immediately without saving and re-opening Settings.
+                        // UI-scale sliders defer until release; ApplyInnerPaneScale → RescaleSettingsFloatIfOpen
+                        // already rebuilds rows once. Do not Refresh again (double Destroy+rebuild hitch).
                         try { ApplyInnerPaneScale(); } catch { }
-                        try { if (IsSettingsPanelOpen()) RefreshInternalSettingsListRows(true); } catch { }
                     };
                 }
                 input.onEndEdit.AddListener(s =>
@@ -2396,7 +2343,7 @@ namespace VPB
                     HorizontalLayoutGroup bh = UI.AddHLG(btnRow, spacing: 6f * uiS, childAlignment: TextAnchor.MiddleRight, childForceExpandWidth: false);
                     LayoutElement ble = UI.AddLE(btnRow, minHeight: chipH);
 
-                    CreateMiniButton(btnRow.transform, "EDIT…", 96f, new Color(0.25f, 0.5f, 0.8f, 1f), () =>
+                    CreateMiniButton(btnRow.transform, "EDIT…", 96f, GalleryUiColorTokens.SurfaceMid, () =>
                     {
                         ShowCategoryQuickEditor();
                     });
@@ -2505,30 +2452,17 @@ namespace VPB
             if (saveChanges) SaveInternalSettingsSession();
             else CancelInternalSettingsSession();
 
-            bool changed = false;
             if (leftActiveContent == ContentType.Settings)
-            {
                 leftActiveContent = null;
-                changed = true;
-            }
             if (rightActiveContent == ContentType.Settings)
-            {
                 rightActiveContent = null;
-                changed = true;
-            }
+
+            HideSettingsFloat();
 
             try { ApplySidePanelDefaultsFromConfig(); } catch { }
-
-            // Orphan settingsListViewActive (panel already cleared) must still Sync — otherwise
-            // RefreshFiles diverts to a dead settings refresh and middle pane stays tile-stuck.
-            bool needsSync = changed || settingsListViewActive || internalSettingsHadPreSessionViewState;
-            if (!needsSync) return;
-
             try { SetTitleSearchInputTextWithoutNotify(titleSearchInput, GetTitleSearchBrowseFieldText(), _titleBarSearchOnValueChanged); } catch { }
-            UpdateLayout();
-            UpdateTabs();
-            SyncInternalSettingsListView();
-            // Ensure toolbox exits Settings chrome immediately (Delete/etc reappear)
+            try { UpdateLayout(); } catch { }
+            try { UpdateTabs(); } catch { }
             try { RefreshTboxConditionalActionButtons(); } catch { }
         }
 
@@ -2734,22 +2668,7 @@ namespace VPB
                     {
                         dismiss();
                         SetDismissed();
-                        try
-                        {
-                            if (!IsSettingsPanelOpen())
-                            {
-                                // If prompt ever called outside Settings, force Settings open on right by default.
-                                ToggleRight(ContentType.Settings);
-                            }
-                        }
-                        catch { }
-                        try
-                        {
-                            SetActiveSettingsGroup("ba_migration");
-                            UpdateTabs();
-                            RefreshInternalSettingsListRows(false);
-                        }
-                        catch { }
+                        try { OpenSettingsGroup("ba_migration"); } catch { }
                     });
 
                 // OK button

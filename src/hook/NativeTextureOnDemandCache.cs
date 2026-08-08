@@ -40,6 +40,8 @@ namespace VPB
             public string Title;
             public string Subtitle;
             public string SummaryText;
+            /// <summary>Right column for two-column completion report; null/empty = single column.</summary>
+            public string SummaryTextRight;
         }
 
         private static bool s_OnDemandBusy;
@@ -50,6 +52,7 @@ namespace VPB
         private static string s_UiTitle;
         private static string s_UiSubtitle;
         private static string s_UiSummary;
+        private static string s_UiSummaryRight;
 
         private static float s_JobStartUnscaledTime;
         private static float s_LastElapsedSeconds;
@@ -147,7 +150,8 @@ namespace VPB
                 Progress01 = progress,
                 Title = s_UiTitle,
                 Subtitle = s_UiSubtitle,
-                SummaryText = s_UiSummary
+                SummaryText = s_UiSummary,
+                SummaryTextRight = s_UiSummaryRight
             };
         }
 
@@ -274,6 +278,7 @@ namespace VPB
 
             s_CompletionSoundPlayed = false;
             s_UiSummary = null;
+            s_UiSummaryRight = null;
             s_UiShowSummary = false;
             s_UiVisible = true;
             s_UiTitle = title;
@@ -387,14 +392,15 @@ namespace VPB
 
             if (s_IsPurgeJob)
             {
-                s_UiSummary = "Elapsed: " + elapsedStr + "\n"
-                    + "Packages: " + s_PackagesProcessed + "/" + s_PackagesPlanned
-                    + "    Resolved: " + s_PackagesResolved + "\n"
-                    + "Textures: " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
-                    + "Purged\n"
-                    + "Packages: " + s_PurgePackagesDeleted + "    Textures: " + s_PurgeTexturesDeleted + "\n"
-                    + "Deleted\n"
-                    + "Native: " + s_NativeDeletes + "    Zstd: " + s_ZstdDeletes;
+                // Left: run summary + purged counts. Right: delete tallies.
+                s_UiSummary = FormatReportOverview(elapsedStr)
+                    + FormatReportMetric("Resolved", s_PackagesResolved.ToString()) + "\n\n"
+                    + FormatReportSection("Purged")
+                    + FormatReportMetric("Packages", s_PurgePackagesDeleted.ToString()) + "\n"
+                    + FormatReportMetric("Textures", s_PurgeTexturesDeleted.ToString());
+                s_UiSummaryRight = FormatReportSection("Deleted")
+                    + FormatReportMetric("Native", s_NativeDeletes.ToString()) + "\n"
+                    + FormatReportMetric("Zstd", s_ZstdDeletes.ToString());
 
                 s_OnDemandBusy = false;
                 return;
@@ -448,26 +454,32 @@ namespace VPB
                 totalPct = savedPct.ToString("0");
             }
 
-            s_UiSummary = "Elapsed: " + elapsedStr + "\n"
-                + "Packages: " + s_PackagesProcessed + "/" + s_PackagesPlanned + "    Textures: " + s_TexturesProcessed + "/" + s_TexturesPlanned + "\n\n"
-                + "Size\n"
-                + "Native Cache Size: " + totalBase + "\n"
-                + "Zstd Compressed Size: " + totalFinal + "\n"
-                + "Saved Space: " + totalSaved + " (" + totalPct + "%)\n\n"
-                + "Zstd Cache\n"
-                + "Wrote: " + s_ZstdWrites + "    Skipped: " + s_ZstdSkips + "    Failed: " + s_ZstdFails;
+            // Two columns: overview+size | write stats (fills unused width, shortens dialog).
+            s_UiSummary = FormatReportOverview(elapsedStr)
+                + "\n"
+                + FormatReportSection("Size")
+                + FormatReportMetric("Native Cache", totalBase) + "\n"
+                + FormatReportMetric("Zstd Compressed", totalFinal) + "\n"
+                + FormatReportMetric("Saved Space", totalSaved + "  (" + totalPct + "%)");
+
+            s_UiSummaryRight = FormatReportSection("Zstd Cache")
+                + FormatReportWriteStats(s_ZstdWrites, s_ZstdSkips, s_ZstdFails);
 
             if (s_ZstdRewrites > 0)
             {
-                s_UiSummary += "\nRewrote existing: " + s_ZstdRewrites;
+                s_UiSummaryRight += "\n" + FormatReportMetric("Rewrote existing", s_ZstdRewrites.ToString());
             }
 
             if (s_ZstdDownscaleWrites > 0)
             {
-                s_UiSummary += "\nResize 8k→4k: " + s_ZstdDownscaleWrites + "    Saved: " + resizeSaved + " (" + resizePct + "%)";
+                s_UiSummaryRight += "\n" + FormatReportMetric(
+                    "Resize 8k→4k",
+                    s_ZstdDownscaleWrites + "  ·  saved " + resizeSaved + " (" + resizePct + "%)");
             }
 
-            s_UiSummary += "\n\nNative Wrote: " + s_CacheWrites + "    Skipped: " + s_CacheSkips + "    Failed: " + s_CacheFails;
+            s_UiSummaryRight += "\n\n"
+                + FormatReportSection("Native Cache")
+                + FormatReportWriteStats(s_CacheWrites, s_CacheSkips, s_CacheFails);
 
             FlushOnDemandIssueLogToDebug();
 
@@ -533,6 +545,51 @@ namespace VPB
             }
             catch { }
             try { if (File.Exists(path + "meta")) File.Delete(path + "meta"); } catch { }
+        }
+
+        // Completion-report rich text (Unity Text). Hierarchy via color, not weight —
+        // matches gallery token philosophy; keeps dense scan without monospace columns.
+        private const string ReportLabelHex = "#8B97A5";
+        private const string ReportValueHex = "#E8EEF4";
+        private const string ReportSectionHex = "#C4D0DC";
+        private const string ReportFailHex = "#E8A090";
+
+        private static string FormatReportLabel(string label)
+        {
+            return "<color=" + ReportLabelHex + ">" + label + "</color>";
+        }
+
+        private static string FormatReportValue(string value)
+        {
+            return "<color=" + ReportValueHex + ">" + value + "</color>";
+        }
+
+        private static string FormatReportSection(string title)
+        {
+            return "<color=" + ReportSectionHex + ">" + title + "</color>\n";
+        }
+
+        private static string FormatReportMetric(string label, string value)
+        {
+            return FormatReportLabel(label) + "    " + FormatReportValue(value);
+        }
+
+        private static string FormatReportOverview(string elapsedStr)
+        {
+            return FormatReportMetric("Elapsed", elapsedStr) + "\n"
+                + FormatReportMetric("Packages", s_PackagesProcessed + " / " + s_PackagesPlanned) + "\n"
+                + FormatReportMetric("Textures", s_TexturesProcessed + " / " + s_TexturesPlanned) + "\n";
+        }
+
+        private static string FormatReportWriteStats(int wrote, int skipped, int failed)
+        {
+            // Stacked rows fit narrow right column without wrap (vs inline · separators).
+            string failValue = failed > 0
+                ? "<color=" + ReportFailHex + ">" + failed + "</color>"
+                : FormatReportValue("0");
+            return FormatReportMetric("Wrote", wrote.ToString()) + "\n"
+                + FormatReportMetric("Skipped", skipped.ToString()) + "\n"
+                + FormatReportLabel("Failed") + "    " + failValue;
         }
 
         private static string FormatBytes(long bytes)
@@ -704,20 +761,56 @@ namespace VPB
                 total = s_TexturesPlanned;
             }
 
-            string etaStr = "";
-            if (total > 0 && done > 0)
+            s_UiSubtitle = FormatLiveProgressLine(
+                done,
+                total,
+                elapsed,
+                s_CurrentPackage,
+                includeThroughput: true);
+        }
+
+        /// <summary>
+        /// Dense live progress: count · % · elapsed · ETA · rate · focus label.
+        /// </summary>
+        internal static string FormatLiveProgressLine(
+            int done,
+            int total,
+            float elapsedSec,
+            string focusLabel,
+            bool includeThroughput)
+        {
+            var sb = new StringBuilder(96);
+            if (total > 0)
             {
-                float rate = done / Mathf.Max(0.0001f, elapsed);
-                float remaining = (total - done) / Mathf.Max(0.0001f, rate);
-                etaStr = " | ETA " + FormatDuration(remaining);
+                sb.Append(done).Append('/').Append(total);
+                int pct = Mathf.Clamp(Mathf.RoundToInt(100f * done / Mathf.Max(1, total)), 0, 100);
+                sb.Append(" (").Append(pct).Append("%)");
+                int left = total - done;
+                if (left > 0) sb.Append(" · left ").Append(left);
+            }
+            else
+            {
+                sb.Append(done).Append(" done");
             }
 
-            string pkgStr = string.IsNullOrEmpty(s_CurrentPackage) ? "" : (" | " + s_CurrentPackage);
+            sb.Append(" · ").Append(FormatDuration(elapsedSec));
 
-            s_UiSubtitle = "Progress " + done + "/" + total
-                + " | " + FormatDuration(elapsed)
-                + etaStr
-                + pkgStr;
+            if (total > 0 && done > 0 && elapsedSec > 0.2f)
+            {
+                float rate = done / Mathf.Max(0.0001f, elapsedSec);
+                float remaining = (total - done) / Mathf.Max(0.0001f, rate);
+                sb.Append(" · ETA ").Append(FormatDuration(remaining));
+                if (includeThroughput)
+                {
+                    if (rate >= 10f) sb.Append(" · ").Append(rate.ToString("0")).Append("/s");
+                    else sb.Append(" · ").Append(rate.ToString("0.0")).Append("/s");
+                }
+            }
+
+            if (!string.IsNullOrEmpty(focusLabel))
+                sb.Append(" · ").Append(focusLabel);
+
+            return sb.ToString();
         }
 
         private static void UpdateUiStatusThrottled(bool force = false)

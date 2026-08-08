@@ -309,6 +309,8 @@ namespace VPB
         private GameObject[] borderGOs;
         /// <summary>Host panel — grid picker reparents under background to escape ScrollRect mask.</summary>
         public GalleryPanel panel;
+        /// <summary>When set, picker reparents here (Plugins float panel) instead of gallery backgroundBox.</summary>
+        public Transform selectorEscapeHost;
         private Transform _selectorHomeParent;
         private int _selectorHomeSibling;
 
@@ -408,21 +410,31 @@ namespace VPB
             selectorCG.blocksRaycasts = visible;
             if (visible)
                 selectorGO.transform.SetAsLastSibling();
+            else
+            {
+                // Inactive closed picker cannot steal hits (alpha-0 active still blocks).
+                try { selectorGO.SetActive(false); } catch { }
+            }
         }
 
         private void TryReparentSelectorOutsideScroll(GameObject selectorGO)
         {
             if (selectorGO == null || panel == null) return;
-            if (panel.layoutMode != GalleryLayoutMode.Grid) return;
-            GameObject host = panel.backgroundBoxGO;
-            if (host == null) return;
+            Transform hostTr = selectorEscapeHost;
+            if (hostTr == null)
+            {
+                if (panel.layoutMode != GalleryLayoutMode.Grid) return;
+                GameObject host = panel.backgroundBoxGO;
+                if (host == null) return;
+                hostTr = host.transform;
+            }
             Transform home = selectorGO.transform.parent;
-            if (home == host.transform) return;
+            if (home == hostTr) return;
             _selectorHomeParent = home;
             _selectorHomeSibling = selectorGO.transform.GetSiblingIndex();
             // Keep world pose so it stays under the star after leaving the masked scroll content.
             // (VaM Unity has no Graphic.maskable — reparent is the mask escape.)
-            selectorGO.transform.SetParent(host.transform, true);
+            selectorGO.transform.SetParent(hostTr, true);
         }
 
         private void RestoreSelectorHomeParent(GameObject selectorGO)
@@ -542,22 +554,46 @@ namespace VPB
         {
             int rating = Mathf.Clamp(currentRating, 0, 5);
             Color c = ResolveDigitColor(rating);
-            if (starIconText != null)
+            bool useStarDigitToggle = starIconImage != null && !statusChrome;
+            if (useStarDigitToggle)
             {
-                // Digit + rainbow color = meaning; never ★ alone.
-                if (!starIconText.gameObject.activeSelf)
-                    starIconText.gameObject.SetActive(true);
-                starIconText.text = currentRating.ToString();
-                starIconText.color = c;
-                starIconText.raycastTarget = false;
-                // Grid badge: digit on top of star. Toolbox chrome lays out ★|digit — skip sibling shuffle.
-                if (!statusChrome)
-                    starIconText.transform.SetAsLastSibling();
+                // Creator-row style: unrated → ★ glyph; rated → colored digit only.
+                bool rated = rating > 0;
+                try { starIconImage.gameObject.SetActive(!rated); } catch { }
+                if (!rated)
+                {
+                    starIconImage.color = new Color(1f, 1f, 1f, 0.72f);
+                    starIconImage.raycastTarget = false;
+                }
+                if (starIconText != null)
+                {
+                    starIconText.gameObject.SetActive(rated);
+                    if (rated)
+                    {
+                        starIconText.text = rating.ToString();
+                        starIconText.color = c;
+                        starIconText.raycastTarget = false;
+                        starIconText.transform.SetAsLastSibling();
+                    }
+                }
             }
-            if (starIconImage != null)
+            else
             {
-                starIconImage.color = statusChrome ? ChromeStarAffordance : StarIconWatermark;
-                starIconImage.raycastTarget = false;
+                if (starIconText != null)
+                {
+                    if (!starIconText.gameObject.activeSelf)
+                        starIconText.gameObject.SetActive(true);
+                    starIconText.text = currentRating.ToString();
+                    starIconText.color = c;
+                    starIconText.raycastTarget = false;
+                    if (!statusChrome)
+                        starIconText.transform.SetAsLastSibling();
+                }
+                if (starIconImage != null)
+                {
+                    starIconImage.color = statusChrome ? ChromeStarAffordance : StarIconWatermark;
+                    starIconImage.raycastTarget = false;
+                }
             }
             if (statusChrome && chromeButtonImage != null)
             {

@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace VPB
 {
-    /// <summary>Unified startup / long-task progress for top banner overlay.</summary>
+        /// <summary>Unified long-task progress for external <see cref="VpbBusyChrome"/>.</summary>
     internal static class VpbProgressService
     {
         internal enum GalleryPhase
@@ -22,6 +22,8 @@ namespace VPB
             public string Subtitle;
             public bool ShowMovingStrip;
             public bool Cancellable;
+            /// <summary>True when Unity main thread may stall — strip off; OS heartbeat on.</summary>
+            public bool Blocking;
         }
 
         private static volatile bool s_DeepScanActive;
@@ -62,10 +64,29 @@ namespace VPB
         private static volatile int s_SceneLoadDepDone;
         private static volatile int s_SceneLoadDepTotal;
 
+        private static volatile bool s_BrowseRefreshActive;
+        private static volatile int s_BrowseRefreshDone;
+        private static volatile int s_BrowseRefreshTotal;
+        private static volatile string s_BrowseRefreshPhase;
+
+        private static readonly object s_BlockingSync = new object();
+        private static int s_BlockingDepth;
+        private static string s_BlockingTitle;
+        private static string s_BlockingSubtitle;
+
+        internal const string DefaultBlockingSubtitle = "VaM may freeze — working…";
+
         internal static bool IsDeepScanActive => s_DeepScanActive;
 
         internal static bool IsGalleryProgressActive =>
             s_GalleryActive || s_GalleryPending;
+
+        internal static bool IsBrowseRefreshActive => s_BrowseRefreshActive;
+
+        internal static bool IsBlocking
+        {
+            get { lock (s_BlockingSync) { return s_BlockingDepth > 0; } }
+        }
 
         internal static bool IsStartupProgressVisible
         {
@@ -86,16 +107,34 @@ namespace VPB
 
         internal static void EnsureOverlay()
         {
-            try { NativeTextureCacheBuildOverlay.EnsureCreated(); } catch { }
+            try { VpbBusyChrome.EnsureCreated(); } catch { }
         }
 
         internal static bool TryGetActiveDisplaySnapshot(out DisplaySnapshot snapshot)
         {
             if (TryGetSceneLoadDisplaySnapshot(out snapshot))
+            {
+                ApplyBlockingOverlay(ref snapshot);
+                return true;
+            }
+            if (TryGetBlockingDisplaySnapshot(out snapshot))
                 return true;
             if (TryGetStartupDisplaySnapshot(out snapshot))
+            {
+                ApplyBlockingOverlay(ref snapshot);
                 return true;
-            return TryGetBulkZstdDisplaySnapshot(out snapshot);
+            }
+            if (TryGetBulkZstdDisplaySnapshot(out snapshot))
+            {
+                ApplyBlockingOverlay(ref snapshot);
+                return true;
+            }
+            if (TryGetBrowseRefreshDisplaySnapshot(out snapshot))
+            {
+                ApplyBlockingOverlay(ref snapshot);
+                return true;
+            }
+            return false;
         }
 
         internal static void BeginSceneLoadPrep(string displayName, string actionVerb = "Loading")
@@ -140,8 +179,8 @@ namespace VPB
             string nativeStatus = merge ? "Merging scene..." : "Loading scene...";
             try { SceneLoadNativeUiBridge.ShowForSceneLoad(merge, nativeStatus); } catch { }
 
-            // VaM native HUD owns the rest of load UX; hide VPB top banner to avoid double overlay.
-            EndSceneLoad();
+            // Keep VPB busy chrome + moving strip through native Load — do not EndSceneLoad here.
+            EnsureOverlay();
         }
 
         internal static void EndSceneLoad()
@@ -152,6 +191,168 @@ namespace VPB
             s_SceneLoadSubtitle = null;
             s_SceneLoadDepDone = 0;
             s_SceneLoadDepTotal = 0;
+        }
+
+        /// <summary>
+        /// Tier B: main thread may stall. Start OS heartbeat. Unity strip stays enabled when frames pump.
+        /// Nestable — pair with <see cref="ExitBlocking"/>.
+        /// </summary>
+        internal static void EnterBlocking(string title, string subtitle = null)
+        {
+            bool first;
+            lock (s_BlockingSync)
+            {
+                s_BlockingDepth++;
+                first = s_BlockingDepth == 1;
+                if (!string.IsNullOrEmpty(title))
+                    s_BlockingTitle = title;
+                else if (string.IsNullOrEmpty(s_BlockingTitle))
+                    s_BlockingTitle = "Working";
+                s_BlockingSubtitle = string.IsNullOrEmpty(subtitle)
+                    ? DefaultBlockingSubtitle
+                    : subtitle;
+            }
+            EnsureOverlay();
+            if (first)
+            {
+                try { VpbOsBusyHeartbeat.Show(); } catch { }
+            }
+        }
+
+        internal static void ExitBlocking()
+        {
+            bool last = false;
+            lock (s_BlockingSync)
+            {
+                if (s_BlockingDepth <= 0) return;
+                s_BlockingDepth--;
+                last = s_BlockingDepth == 0;
+                if (last)
+                {
+                    s_BlockingTitle = null;
+                    s_BlockingSubtitle = null;
+                }
+            }
+            if (last)
+            {
+                try { VpbOsBusyHeartbeat.Hide(); } catch { }
+            }
+        }
+
+        /// <summary>Force-clear blocking depth (scene banner cleanup / recovery).</summary>
+        internal static void ClearBlocking()
+        {
+            lock (s_BlockingSync)
+            {
+                s_BlockingDepth = 0;
+                s_BlockingTitle = null;
+                s_BlockingSubtitle = null;
+            }
+            try { VpbOsBusyHeartbeat.Hide(); } catch { }
+        }
+
+        internal static void BeginBrowseRefresh(string phase = null)
+        {
+            s_BrowseRefreshActive = true;
+            s_BrowseRefreshDone = 0;
+            s_BrowseRefreshTotal = 0;
+            s_BrowseRefreshPhase = string.IsNullOrEmpty(phase)
+                ? "Preparing items for browse"
+                : phase;
+            EnsureOverlay();
+        }
+
+        internal static void ReportBrowseRefreshPhase(string phase)
+        {
+            if (!s_BrowseRefreshActive) return;
+            if (!string.IsNullOrEmpty(phase))
+                s_BrowseRefreshPhase = phase;
+        }
+
+        internal static void ReportBrowseRefresh(int done, int total, string phase = null)
+        {
+            if (!s_BrowseRefreshActive) return;
+            s_BrowseRefreshDone = Math.Max(0, done);
+            s_BrowseRefreshTotal = Math.Max(0, total);
+            if (!string.IsNullOrEmpty(phase))
+                s_BrowseRefreshPhase = phase;
+        }
+
+        internal static void EndBrowseRefresh()
+        {
+            s_BrowseRefreshActive = false;
+            s_BrowseRefreshDone = 0;
+            s_BrowseRefreshTotal = 0;
+            s_BrowseRefreshPhase = null;
+        }
+
+        private static void ApplyBlockingOverlay(ref DisplaySnapshot snapshot)
+        {
+            if (!IsBlocking) return;
+            snapshot.Blocking = true;
+            // Keep ShowMovingStrip — Unity animates when frames pump; OS heartbeat covers stalls.
+            snapshot.Cancellable = false;
+            string freeze = null;
+            lock (s_BlockingSync) { freeze = s_BlockingSubtitle; }
+            if (string.IsNullOrEmpty(freeze)) freeze = DefaultBlockingSubtitle;
+            if (string.IsNullOrEmpty(snapshot.Subtitle))
+                snapshot.Subtitle = freeze;
+            else if (snapshot.Subtitle.IndexOf("freeze", StringComparison.OrdinalIgnoreCase) < 0)
+                snapshot.Subtitle = snapshot.Subtitle + " — " + freeze;
+        }
+
+        private static bool TryGetBlockingDisplaySnapshot(out DisplaySnapshot snapshot)
+        {
+            snapshot = default(DisplaySnapshot);
+            string title;
+            string subtitle;
+            lock (s_BlockingSync)
+            {
+                if (s_BlockingDepth <= 0) return false;
+                title = s_BlockingTitle;
+                subtitle = s_BlockingSubtitle;
+            }
+            snapshot.Visible = true;
+            snapshot.Blocking = true;
+            snapshot.Cancellable = false;
+            // Indeterminate strip when frames still pump (e.g. between sync cliffs).
+            snapshot.ShowMovingStrip = true;
+            snapshot.Progress01 = -1f;
+            snapshot.Title = string.IsNullOrEmpty(title) ? "Working" : title;
+            snapshot.Subtitle = string.IsNullOrEmpty(subtitle) ? DefaultBlockingSubtitle : subtitle;
+            return true;
+        }
+
+        private static bool TryGetBrowseRefreshDisplaySnapshot(out DisplaySnapshot snapshot)
+        {
+            snapshot = default(DisplaySnapshot);
+            if (!s_BrowseRefreshActive) return false;
+
+            int done = s_BrowseRefreshDone;
+            int total = s_BrowseRefreshTotal;
+            string phase = s_BrowseRefreshPhase;
+
+            snapshot.Visible = true;
+            snapshot.Cancellable = false;
+            snapshot.Title = "Loading gallery";
+            if (total > 0)
+            {
+                snapshot.Progress01 = Mathf.Clamp01((float)done / total);
+                snapshot.ShowMovingStrip = true;
+                int pct = Mathf.Clamp(Mathf.RoundToInt(100f * done / Mathf.Max(1, total)), 0, 100);
+                string phaseLabel = string.IsNullOrEmpty(phase) ? "Items" : phase;
+                snapshot.Subtitle = phaseLabel + " " + done + "/" + total + " (" + pct + "%) — cannot cancel";
+            }
+            else
+            {
+                snapshot.Progress01 = -1f;
+                snapshot.ShowMovingStrip = true;
+                string basePhase = string.IsNullOrEmpty(phase)
+                    ? "Preparing items for browse"
+                    : phase;
+                snapshot.Subtitle = basePhase + " — cannot cancel";
+            }
+            return true;
         }
 
         internal static bool IsSceneLoadBannerActive => s_SceneLoadActive;
@@ -264,15 +465,63 @@ namespace VPB
             {
                 snapshot.Progress01 = Mathf.Clamp01((float)done / total);
                 snapshot.ShowMovingStrip = true;
-                snapshot.Subtitle = "Progress " + done + "/" + total;
-                if (!string.IsNullOrEmpty(current) && current != "Completed" && current != "Cancelled" && current != "Scanning...")
-                    snapshot.Subtitle += " | " + current;
+
+                float elapsed = 0f;
+                long origBytes = 0;
+                long compBytes = 0;
+                long skipped = 0;
+                long failed = 0;
+                try
+                {
+                    var stats = ImageLoadingMgr.singleton != null
+                        ? ImageLoadingMgr.singleton.CurrentZstdStats
+                        : null;
+                    if (stats != null)
+                    {
+                        if (stats.StartTime != default(DateTime))
+                            elapsed = (float)(DateTime.Now - stats.StartTime).TotalSeconds;
+                        origBytes = stats.TotalOriginalSize;
+                        compBytes = stats.TotalCompressedSize;
+                        skipped = stats.SkippedCount;
+                        failed = stats.FailedCount;
+                    }
+                }
+                catch { }
+
+                string focus = null;
+                if (!string.IsNullOrEmpty(current)
+                    && current != "Completed"
+                    && current != "Cancelled"
+                    && current != "Scanning...")
+                {
+                    focus = current;
+                }
+
+                snapshot.Subtitle = NativeTextureOnDemandCache.FormatLiveProgressLine(
+                    done, total, elapsed, focus, includeThroughput: true);
+
+                // Bytes + skip/fail — evaluation gulf for long compress jobs.
+                if (origBytes > 0 || compBytes > 0 || skipped > 0 || failed > 0)
+                {
+                    var sb = new System.Text.StringBuilder(snapshot.Subtitle, snapshot.Subtitle.Length + 48);
+                    if (origBytes > 0 || compBytes > 0)
+                    {
+                        sb.Append(" · ");
+                        if (decompress)
+                            sb.Append(FormatProgressBytes(compBytes)).Append("→").Append(FormatProgressBytes(origBytes));
+                        else
+                            sb.Append(FormatProgressBytes(origBytes)).Append("→").Append(FormatProgressBytes(compBytes));
+                    }
+                    if (skipped > 0) sb.Append(" · skip ").Append(skipped);
+                    if (failed > 0) sb.Append(" · fail ").Append(failed);
+                    snapshot.Subtitle = sb.ToString();
+                }
             }
             else if (current == "Scanning...")
             {
                 snapshot.Progress01 = -1f;
                 snapshot.ShowMovingStrip = true;
-                snapshot.Subtitle = "Scanning cache...";
+                snapshot.Subtitle = "Scanning cache folders…";
             }
             else if (current == "Completed" || current == "Cancelled")
             {
@@ -287,6 +536,18 @@ namespace VPB
                 snapshot.Subtitle = "All caches already compressed";
             }
             return true;
+        }
+
+        private static string FormatProgressBytes(long bytes)
+        {
+            if (bytes < 0) bytes = 0;
+            const long kb = 1024L;
+            const long mb = kb * 1024L;
+            const long gb = mb * 1024L;
+            if (bytes >= gb) return ((double)bytes / gb).ToString("0.00") + " GB";
+            if (bytes >= mb) return ((double)bytes / mb).ToString("0.0") + " MB";
+            if (bytes >= kb) return ((double)bytes / kb).ToString("0") + " KB";
+            return bytes + " B";
         }
 
         internal static void PollStartupCompletion()

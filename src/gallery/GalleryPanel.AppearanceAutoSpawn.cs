@@ -13,7 +13,7 @@ namespace VPB
 
         /// <summary>
         /// Appearance click/apply: use existing Person target, or spawn one when scene has none.
-        /// Power-user path — no confirm dialog; brief status covers change blindness.
+        /// Spawn is scene-mutating — confirm first (risk policy: high-cost scene change).
         /// </summary>
         private bool TryLoadAppearanceAutoSpawningIfNeeded(FileEntry file, UIDraggableItem existingDragger)
         {
@@ -38,13 +38,25 @@ namespace VPB
                 return true;
             }
 
-            if (_appearanceAutoSpawnCo != null)
-            {
-                try { StopCoroutine(_appearanceAutoSpawnCo); } catch { }
-                _appearanceAutoSpawnCo = null;
-            }
+            if (IsConfirmOverlayOpen())
+                return true;
 
-            _appearanceAutoSpawnCo = StartCoroutine(SpawnPersonThenLoadAppearanceCo(file));
+            FileEntry pending = file;
+            DisplayConfirm(
+                VPBTranslation.T("gallery.appearance.spawn_title", "Spawn Person?"),
+                VPBTranslation.T(
+                    "gallery.appearance.spawn_msg",
+                    "No Person in scene. Spawn one and load this appearance?\n\nEsc cancels."),
+                () =>
+                {
+                    if (_appearanceAutoSpawnBusy) return;
+                    if (_appearanceAutoSpawnCo != null)
+                    {
+                        try { StopCoroutine(_appearanceAutoSpawnCo); } catch { }
+                        _appearanceAutoSpawnCo = null;
+                    }
+                    _appearanceAutoSpawnCo = StartCoroutine(SpawnPersonThenLoadAppearanceCo(pending));
+                });
             return true;
         }
 

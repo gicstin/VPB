@@ -102,48 +102,29 @@ namespace VPB
 
             try
             {
-                // Changing the interaction away from the current try-on (applying a different
-                // preset/item, on this atom or another) auto-accepts it: commit the candidate and
-                // push its undo before starting a fresh session. The new session's baseline is the
-                // just-accepted look, so Revert returns to it rather than discarding it.
+                // Changing interaction away from the current try-on: prompt Keep vs Revert.
+                // Esc/Revert discards preview then starts the new try; Keep commits then starts.
+                // Cancel is not offered as "abort apply" here — user already chose a new item;
+                // Esc on the dialog = Revert path (safe default).
                 if (_tryOnActive)
                 {
+                    _tryOnDeferredNextFile = file;
                     string keptName = _tryOnCurrentName;
-                    TryOnKeep();
-                    try
-                    {
-                        ShowTemporaryStatus(
-                            string.Format(
-                                VPBTranslation.T(
-                                    "gallery.tryon.auto_kept",
-                                    "Try-On kept previous: {0}. New try started."),
-                                string.IsNullOrEmpty(keptName) ? "…" : keptName),
-                            2f);
-                    }
-                    catch { }
+                    DisplayConfirm(
+                        VPBTranslation.T("gallery.tryon.next_title", "Try-On still open"),
+                        string.Format(
+                            VPBTranslation.T(
+                                "gallery.tryon.next_msg",
+                                "Keep '{0}' before trying the next item?\n\nKeep = commit · Revert / Esc = discard preview, then try next."),
+                            string.IsNullOrEmpty(keptName) ? "…" : keptName),
+                        TryOnConfirmKeepThenDeferred,
+                        TryOnConfirmRevertThenDeferred,
+                        VPBTranslation.T("gallery.tryon.btn_keep", "Keep"),
+                        VPBTranslation.T("gallery.tryon.btn_revert", "Revert"));
+                    return true;
                 }
 
-                _tryOnBaseline = TryOnCaptureState(target);
-                if (_tryOnBaseline == null) return false; // capture failed, fall through
-                _tryOnAtomUid = target.uid;
-                _tryOnTouchedPhysical = false;
-                _tryOnActive = true;
-
-                // Candidate snapshot is captured lazily on first Compare.
-                _tryOnCandidate = null;
-                _tryOnComparing = false;
-                if (kind == TryOnKind.Pose || kind == TryOnKind.Plugins)
-                    _tryOnTouchedPhysical = true;
-
-                _tryOnCurrentName = TryOnNiceName(file);
-
-                // Apply the candidate live.
-                ExecuteAutoActionForFile(file);
-
-                TryOnShowBar();
-                TryOnUpdateLabel();
-                try { RefreshModeAmbientChrome(); } catch { }
-                return true;
+                return TryOnBeginSessionWithFile(file, kind, target);
             }
             catch (Exception ex)
             {
@@ -152,6 +133,59 @@ namespace VPB
                 try { TryOnEndSession(false); } catch { }
                 return false;
             }
+        }
+
+        private FileEntry _tryOnDeferredNextFile;
+
+        private void TryOnConfirmKeepThenDeferred()
+        {
+            FileEntry next = _tryOnDeferredNextFile;
+            _tryOnDeferredNextFile = null;
+            try { TryOnKeep(); } catch { }
+            TryOnContinueWithFile(next);
+        }
+
+        private void TryOnConfirmRevertThenDeferred()
+        {
+            FileEntry next = _tryOnDeferredNextFile;
+            _tryOnDeferredNextFile = null;
+            try { TryOnRevert(); } catch { }
+            TryOnContinueWithFile(next);
+        }
+
+        private void TryOnContinueWithFile(FileEntry next)
+        {
+            if (next == null) return;
+            TryOnKind kind = TryOnClassify(next);
+            if (kind == TryOnKind.None) return;
+            Atom target = GetBestTargetAtom();
+            if (target == null) return;
+            try { TryOnBeginSessionWithFile(next, kind, target); }
+            catch (Exception ex) { LogUtil.LogError("[VPB] TryOnContinueWithFile: " + ex); }
+        }
+
+        private bool TryOnBeginSessionWithFile(FileEntry file, TryOnKind kind, Atom target)
+        {
+            _tryOnBaseline = TryOnCaptureState(target);
+            if (_tryOnBaseline == null) return false;
+            try { ExitOtherStickyToolModes(StickyToolMode.TryOn); } catch { }
+            _tryOnAtomUid = target.uid;
+            _tryOnTouchedPhysical = false;
+            _tryOnActive = true;
+
+            _tryOnCandidate = null;
+            _tryOnComparing = false;
+            if (kind == TryOnKind.Pose || kind == TryOnKind.Plugins)
+                _tryOnTouchedPhysical = true;
+
+            _tryOnCurrentName = TryOnNiceName(file);
+
+            ExecuteAutoActionForFile(file);
+
+            TryOnShowBar();
+            TryOnUpdateLabel();
+            try { RefreshModeAmbientChrome(); } catch { }
+            return true;
         }
 
         private static string TryOnNiceName(FileEntry file)
@@ -271,10 +305,24 @@ namespace VPB
             TryOnUpdateLabel();
         }
 
-        // Called right before a full scene load replaces everything: drop the session silently.
+        // Called right before a full scene load replaces everything: drop the session.
         internal void TryOnAbandonForSceneLoad()
         {
+            bool wasActive = _tryOnActive;
+            _tryOnDeferredNextFile = null;
             if (_tryOnActive) TryOnEndSession(false);
+            if (wasActive)
+            {
+                try
+                {
+                    ShowTemporaryStatus(
+                        VPBTranslation.T(
+                            "gallery.tryon.abandoned_scene_load",
+                            "Try-On discarded — scene load replaced preview."),
+                        2f);
+                }
+                catch { }
+            }
         }
 
         private void TryOnEndSession(bool revertFirst)
@@ -290,8 +338,11 @@ namespace VPB
             _tryOnTouchedPhysical = false;
             _tryOnComparing = false;
             _tryOnCurrentName = null;
+            // Drop deferred next-apply only when ending without an explicit Keep/Revert continue path.
+            // Keep/Revert handlers null the deferred file before calling EndSession.
             TryOnHideBar();
             try { RefreshModeAmbientChrome(); } catch { }
+            try { ResetArmedApplySemanticsIfIdle(toast: false); } catch { }
         }
 
         // ---- UI ----

@@ -1031,9 +1031,7 @@ namespace VPB
             if (sr == null) sr = holderGo.GetComponentInParent<ScrollRect>();
             if (sr == null) return;
 
-            string pickTip = _userTagAvailMode == UserTagAvailMode.FilterByTags
-                ? GetUserTagPickRowTooltipFilter()
-                : VPBTranslation.T("gallery.usertags.pick_row_tooltip", "Click: toggle this tag on selected item(s). Drag to Applied below.");
+            string pickTip = GetUserTagWorkModePickTip();
             float rowH = SideTabVirtRowStridePx();
             if (rowH <= 1f) rowH = 37f;
 
@@ -1632,6 +1630,7 @@ namespace VPB
             AddHoverDelegate(inputGO);
 
             InputField input = inputGO.AddComponent<InputField>();
+            try { UI.NeutralizeSelectableColorTint(input); } catch { }
             RectTransform inputRT = inputGO.GetComponent<RectTransform>();
             inputRT.sizeDelta = new Vector2(width, 35);
             
@@ -1711,8 +1710,47 @@ namespace VPB
             inputGO.AddComponent<SearchInputESCHandler>().Initialize(input, clearBtnComponent, onEscape);
             // Standard editor shortcut: Ctrl+Backspace deletes previous word
             inputGO.AddComponent<CtrlBackspaceWordDeleteHandler>().Initialize(input);
+            // Tab/Down must not be eaten by Unity Selectable nav before HandleKeyboardInput.
+            try
+            {
+                SideSearchFocusKeys keys = inputGO.GetComponent<SideSearchFocusKeys>();
+                if (keys == null) keys = inputGO.AddComponent<SideSearchFocusKeys>();
+                keys.Panel = this;
+                keys.Field = input;
+            }
+            catch { }
 
             return input;
+        }
+
+        /// <summary>
+        /// Side-rail search: consume Tab (and Down in Settings) in OnGUI so EventSystem
+        /// cannot steal focus before <see cref="TryHandleKeyboardFocusTransfer"/>.
+        /// </summary>
+        private sealed class SideSearchFocusKeys : MonoBehaviour
+        {
+            public GalleryPanel Panel;
+            public InputField Field;
+
+            private void OnGUI()
+            {
+                if (Panel == null || Field == null || !Field.isFocused) return;
+                Event e = Event.current;
+                if (e == null || e.type != EventType.KeyDown) return;
+
+                if (e.keyCode == KeyCode.Tab)
+                {
+                    e.Use();
+                    return;
+                }
+
+                if (Panel.IsSettingsPanelOpen()
+                    && e.keyCode == KeyCode.DownArrow
+                    && !e.control && !e.alt && !e.command)
+                {
+                    e.Use();
+                }
+            }
         }
 
         private GameObject GetTabButton(Transform parent)
@@ -3171,7 +3209,7 @@ namespace VPB
             if (isSettingsRow)
             {
                 // Stale settings row after exit handoff — do not paint settings chrome into grid tiles.
-                if (!settingsListViewActive && !IsSettingsPanelOpen())
+                if (!settingsListViewActive)
                 {
                     FileButtonBinder.SetActive(b != null ? b.listRowTr : null, false);
                     FileButtonBinder.SetActive(b != null ? b.gridLabelTr : null, false);

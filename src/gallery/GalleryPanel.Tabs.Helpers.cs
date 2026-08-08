@@ -42,16 +42,16 @@ namespace VPB
             s_PrettyNameSampleCount = 0;
         }
 
-        private static readonly Color ColorInactiveRow = new Color(0.25f, 0.25f, 0.25f, 1f);
+        private static readonly Color ColorInactiveRow = GalleryUiColorTokens.RowIdle;
         /// <summary>Path side row with category count 0 — still listed, visually quieter.</summary>
-        private static readonly Color ColorPathZeroCount = new Color(0.16f, 0.16f, 0.16f, 1f);
-        private static readonly Color ColorPathZeroCountText = new Color(0.55f, 0.55f, 0.55f, 1f);
-        private static readonly Color ColorCancelRow = new Color(0.35f, 0.35f, 0.35f, 1f);
-        private static readonly Color ColorGroupRow = UI.ChromePanel;
-        private static readonly Color ColorDangerRow = UI.AccentRed;
-        private static readonly Color ColorDangerAllRow = new Color(0.8f, 0.2f, 0.2f, 1f);
-        private static readonly Color ColorNewItemRow = new Color(0.2f, 0.5f, 0.4f, 1f);
-        private static readonly Color ColorFacetActiveRow = new Color(0.35f, 0.35f, 0.6f, 1f);
+        private static readonly Color ColorPathZeroCount = GalleryUiColorTokens.RowZero;
+        private static readonly Color ColorPathZeroCountText = GalleryUiColorTokens.TextZeroCount;
+        private static readonly Color ColorCancelRow = GalleryUiColorTokens.SurfaceMid;
+        private static readonly Color ColorGroupRow = GalleryUiColorTokens.SurfacePanel;
+        private static readonly Color ColorDangerRow = GalleryUiColorTokens.AccentDanger;
+        private static readonly Color ColorDangerAllRow = GalleryUiColorTokens.AccentDangerStrong;
+        private static readonly Color ColorNewItemRow = GalleryUiColorTokens.AccentNew;
+        private static readonly Color ColorFacetActiveRow = GalleryUiColorTokens.AccentFacetGeneric;
 
         /// <summary>List row label: package uid (Creator.Package.Version) unless legacy file-name mode is on, or pretty mode is on (then the BA-style stripped name wins for every entry kind).</summary>
         private static string GetGalleryListRowDisplayName(FileEntry file)
@@ -263,7 +263,7 @@ namespace VPB
 
         private void RefreshFilesAndTabs()
         {
-            if (IsSettingsPanelOpen() || settingsListViewActive)
+            if (settingsListViewActive)
             {
                 RefreshInternalSettingsListRows(true);
                 // Settings chrome only — full side-tab rebuild not required for settings list rows.

@@ -87,6 +87,13 @@ namespace VPB
                 LogUtil.Log("[VPB import][diag] build: float chrome");
                 BuildImportSidebarFloatChrome();
                 LoadImportSidebarFloatGeometryFromConfig();
+                // Match QuickFilters / Settings: reparent to float host BEFORE applying float
+                // geometry. Saved center is canvas-local — Apply+Clamp under dock parent
+                // rewrites it into the wrong space and restore lands wrong.
+                if (importSidebarDetached)
+                    ApplyImportSidebarDetachChrome(reposition: true, persist: false);
+                else
+                    ApplyImportSidebarDockChrome(persist: false);
                 // Float entry lives on docked header (not scroll row).
 
                 // Re-run rect/font scaling whenever VPB's inner-pane scale changes (Settings UI scale slider).
@@ -195,13 +202,25 @@ namespace VPB
             importSidebarRT.anchorMin = new Vector2(0.5f, 0.5f);
             importSidebarRT.anchorMax = new Vector2(0.5f, 0.5f);
             importSidebarRT.pivot = new Vector2(0f, 1f);
+            // Pivot top-left: resize only — keep title corner fixed on UI scale.
+            // Center→topLeft re-apply (ApplyImportSidebarFloatAnchorsAndPos) drifts on size change.
+            Vector2 keepTopLeft = importSidebarRT.anchoredPosition;
             importSidebarRT.sizeDelta = new Vector2(w, h);
 
             if (importSidebarCollapsedTopLeftPos.HasValue && importSidebarFloatCollapsed)
                 importSidebarRT.anchoredPosition = importSidebarCollapsedTopLeftPos.Value;
-            else
+            else if (!importSidebarSavedFloatPosCenter.HasValue)
                 ApplyImportSidebarFloatAnchorsAndPos(s);
+            else
+                importSidebarRT.anchoredPosition = keepTopLeft;
             ClampImportSidebarFloatIntoHost();
+            if (!importSidebarFloatCollapsed)
+            {
+                // Memory + Instance fields only — BaseRect runs on every scale/rebuild.
+                // UI-scale hotkey deferred Save flushes disk.
+                CaptureImportSidebarFloatGeometryToMemory();
+                try { PersistImportSidebarFloatGeometryFieldsOnly(); } catch { }
+            }
 
             ApplyImportSidebarChromeHorizontalInsets(s, out float insetLeft, out float insetRight);
             LayoutImportSidebarInnerChrome(s, titleH, footerH, headerH, headerGap, applyH, reasonH, insetLeft, insetRight,
@@ -227,6 +246,9 @@ namespace VPB
                     // Match Filter Presets: sizeDelta only — offsetMin/Max fight point-Y anchors.
                     titleRT.sizeDelta = new Vector2(0f, titleH);
                 }
+                UI.LayoutFloatTitleWindowIcon(
+                    importSidebarFloatTitleBarGO,
+                    GalleryUiDesignTokens.FloatTitleWindowIconSizeRef * s);
             }
             if (importSidebarFloatFooterGO != null)
             {
@@ -488,9 +510,9 @@ namespace VPB
             if (bg != null)
             {
                 if (scenesLocked)
-                    bg.color = new Color(0.32f, 0.24f, 0.12f, 1f);
+                    bg.color = ImportSidebarScenesLockedHeaderBg;
                 else if (gatedClosed)
-                    bg.color = new Color(ColorCategory.r * 0.55f, ColorCategory.g * 0.55f, ColorCategory.b * 0.55f, 0.75f);
+                    bg.color = GalleryUiColorTokens.SurfaceMid;
                 else
                     bg.color = ImportSidebarHeaderBg;
             }
@@ -499,9 +521,9 @@ namespace VPB
                 if (scenesLocked)
                     importSidebarHeaderLabel.color = ImportSidebarScenesLockedBanner;
                 else if (gatedClosed)
-                    importSidebarHeaderLabel.color = new Color(0.82f, 0.82f, 0.82f, 0.9f);
+                    importSidebarHeaderLabel.color = GalleryUiColorTokens.TextMuted;
                 else
-                    importSidebarHeaderLabel.color = Color.white;
+                    importSidebarHeaderLabel.color = GalleryUiColorTokens.TextPrimary;
             }
             if (importSidebarHeaderBtn != null)
                 importSidebarHeaderBtn.interactable = !gatedClosed && !importSidebarDetached;
@@ -533,7 +555,7 @@ namespace VPB
                 labelHost.transform,
                 FormatSidePanelHeaderLabel(importSidebarOnLeft, SidePanelHeaderTranslation("gallery.import.sidebar_header", "Import")),
                 SidePanelHeaderFontRef);
-            importSidebarHeaderLabel.color = Color.white;
+            importSidebarHeaderLabel.color = GalleryUiColorTokens.TextPrimary;
             importSidebarHeaderLabel.fontStyle = FontStyle.Normal;
             importSidebarHeaderLabel.alignment = TextAnchor.MiddleCenter;
             importSidebarHeaderLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -550,7 +572,7 @@ namespace VPB
             floatBtn.name = "HeaderFloat";
             importSidebarHeaderFloatBtnGO = floatBtn;
             Image floatImg = floatBtn.GetComponent<Image>();
-            if (floatImg != null) floatImg.color = new Color(0.18f, 0.30f, 0.40f, 1f);
+            if (floatImg != null) floatImg.color = ImportSidebarSecondaryActionBg;
             Text floatTxt = floatBtn.GetComponentInChildren<Text>();
             if (floatTxt != null)
             {

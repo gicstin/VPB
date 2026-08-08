@@ -866,8 +866,8 @@ namespace VPB
 
         public void SetLayoutMode(GalleryLayoutMode mode, bool persistConfig = true, bool keepInternalSettingsMode = false)
         {
-            // Any explicit middle-layout switch must leave internal settings mode.
-            if (!keepInternalSettingsMode && (IsSettingsPanelOpen() || settingsListViewActive))
+            // Legacy middle-pane settings list only — float Settings stays open (modeless live preview).
+            if (!keepInternalSettingsMode && settingsListViewActive)
                 ExitInternalSettingsMode(true);
             if (layoutMode == mode) return;
             
@@ -912,7 +912,7 @@ namespace VPB
                         try { rgv.preserveCenterItemIndex = rgv.GetCenterItemIndex(); } catch { }
 
                         bool deferGridRefresh = keepInternalSettingsMode;
-                        if (IsSettingsPanelOpen() || settingsListViewActive)
+                        if (settingsListViewActive)
                         {
                             ApplyInternalSettingsListGridConfig(rgv, deferGridRefresh);
                         }
@@ -954,7 +954,7 @@ namespace VPB
                 var rgv = contentGO.GetComponent<RecyclingGridView>();
                 if (rgv == null) return;
                 // Settings owns 1-col list config; never stomp with multi-column while open.
-                if (IsSettingsPanelOpen() || settingsListViewActive)
+                if (settingsListViewActive)
                 {
                     ApplyInternalSettingsListGridConfig(rgv, deferRefresh: false);
                     return;
@@ -1352,6 +1352,7 @@ namespace VPB
                         rr.SizeOrInvalid = long.MinValue;
                         refRows.Add(rr);
                     }
+                    // Exact-key write only — no LIKE deletes / tree writes on category-count path.
                     try { VpbLocalDatabase.TryWriteSystemFilesForCacheKey(refKey, sig, refRows); } catch { }
                 }
             }
@@ -4123,6 +4124,8 @@ namespace VPB
 
             // Keep toolbox person-atom buttons in sync whenever the target list changes (same timing as category Show()).
             try { RefreshTboxPersonAtomButtonsAfterSceneLoad(); } catch { }
+            // Plugins float Person dest chips — same atom add/remove/scene-load path.
+            try { NotifyPluginsFloatSceneTargetsChanged(); } catch { }
         }
 
         /// <summary>Called after scene load/merge (deferred) and when the Target side tab may need rebuilt buttons.</summary>

@@ -606,8 +606,51 @@ namespace VPB
         }
         public void OpenCategoryPlugins()
         {
-            SetLastGalleryPage(GalleryPage.CategoryPlugins);
-            ShowGallery("Plugins", "cs|cslist|dll", "Custom/Scripts");
+            // Float overlay only — do not switch gallery category away from current (e.g. Clothing).
+            try
+            {
+                if (Gallery.singleton == null || Gallery.singleton.Panels == null || Gallery.singleton.Panels.Count == 0)
+                {
+                    // Ensure a pane exists without forcing Plugins grid.
+                    string title = "Scenes";
+                    string ext = "json";
+                    string path = "Saves/scene";
+                    try
+                    {
+                        if (VPBConfig.Instance != null && !string.IsNullOrEmpty(VPBConfig.Instance.LastGalleryCategory))
+                            title = VPBConfig.Instance.LastGalleryCategory;
+                    }
+                    catch { }
+                    if (m_GalleryCategories != null)
+                    {
+                        for (int i = 0; i < m_GalleryCategories.Count; i++)
+                        {
+                            var c = m_GalleryCategories[i];
+                            if (!string.Equals(c.name, title, StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            if (string.Equals(c.name, "Plugins", StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            ext = c.extension;
+                            path = c.path;
+                            title = c.name;
+                            break;
+                        }
+                    }
+                    ShowGallery(title, ext, path);
+                }
+                if (Gallery.singleton != null && Gallery.singleton.Panels != null)
+                {
+                    var panels = Gallery.singleton.Panels;
+                    for (int i = 0; i < panels.Count; i++)
+                    {
+                        GalleryPanel p = panels[i];
+                        if (p == null) continue;
+                        if (!p.IsVisible) continue;
+                        p.OpenPluginsFloat(forceShow: true);
+                    }
+                }
+            }
+            catch { }
         }
         public void OpenMiscCUA()
         {

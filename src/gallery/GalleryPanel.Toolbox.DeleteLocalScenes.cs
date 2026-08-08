@@ -200,7 +200,7 @@ namespace VPB
         }
 
         /// <summary>Moves scene JSON plus same-base .jpg/.png and optional .json.fav / .json.hide into <paramref name="deletedDir"/>.</summary>
-        private void PerformLocalScenesDeleteMove(List<LocalSceneDeleteItem> items, string deletedDir, out int moved, out int failed)
+        private void PerformLocalScenesDeleteMove(List<LocalSceneDeleteItem> items, string deletedDir, out int moved, out int failed, List<FileMoveUndoPair> undoOut = null)
         {
             moved = 0;
             failed = 0;
@@ -317,6 +317,13 @@ namespace VPB
 
                     moved++;
                     if (!string.IsNullOrEmpty(rel)) movedRelPaths.Add(rel);
+                    if (undoOut != null)
+                    {
+                        FileMoveUndoPair pair;
+                        pair.FromDeletedPath = dstJson;
+                        pair.ToOriginalPath = srcJson;
+                        undoOut.Add(pair);
+                    }
 
                     string srcDir = Path.GetDirectoryName(srcJson);
                     string dstDir = Path.GetDirectoryName(dstJson);

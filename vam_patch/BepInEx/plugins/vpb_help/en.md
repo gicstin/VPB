@@ -64,7 +64,8 @@ Title-bar search is a **universal filter**. Bare words match name/path/creator/u
 - Paste a full query (`#wet -nsfw -#old @Acid`) and press **Enter** — tokens explode into chips.
 - **Exclude** row stays visible whenever any chip exists (hint: *Drop chip here to exclude*).
 - **X** left of Include/Exclude — clears **all** search chips (and draft). Same as search-field clear. **Ctrl+Z** within 5s undoes.
-- **Ctrl+F** — focus title search (opens compact popup if needed) and select draft text. Brief highlight cues open. Popup stays until **Esc**, click outside (not chip rows), or click the compact search icon again.
+- **Ctrl+F** — focus title search (opens compact popup if needed) and select draft text. Brief highlight cues open. Popup stays until **Esc**, click outside (not chip rows), or click the compact search icon again. **In Settings**, Ctrl+F focuses the side-rail settings filter instead (no popup over the list).
+- **Tab** / **↓** (in search) — leave search and focus the grid (arrows work; draft and chips kept). **Tab** from the grid returns to search. **↑** on the first grid item also returns to search. **In Settings**, Tab/↓ from the filter focuses the settings list; Tab / ↑ from the first row returns to the filter; **Enter** / **Space** toggles the selected setting (Shift+Enter cycles backward).
 - **Drag** a chip onto **Exclude** / **Include** to change polarity (tags and bare terms). Chip **×** removes it.
 - **Backspace** on an empty draft removes the last chip. **ESC** closes the search field without clearing chips. Search **X** clears all search chips.
 - Drag a tag from the **Tags** side list (or detail tag chip) onto Include/Exclude to add a search chip (does not apply the tag to items).
@@ -222,7 +223,7 @@ A **tip strip** under the title bar shows basics until you dismiss it (×).
 - Side lists open from rail buttons in three clusters: **Layout** (float/follow/clone), **Browse** (import/tags/category/creator/path/history), **Tools** (remove/apply/save). Thin separators mark zones when side-button gaps are on.
 - Open facet shows a brighter selection rim (plus header label on the column).
 - **Right-click** a rail button to open that panel on the opposite edge.
-- {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options.
+- {{icon:settings|Settings}} side tab — appearance, layout, browse, input, hotkeys, performance, plugin options. **Ctrl+F** filters this list; **Tab** / **↓** moves into rows; **Enter** / **Space** toggles.
 
 ### Footer utilities
 - **U / R** — Undo / Redo
@@ -270,7 +271,8 @@ Press **?** or **F1** anytime the gallery is focused to jump here. **Esc** close
 - **Ctrl + mouse wheel** — grid columns (+ / − in footer too)
 
 ### Browse and search
-- **Ctrl+F** — focus title search (opens compact popup if needed)
+- **Ctrl+F** — focus title search (opens compact popup if needed). **In Settings**, focuses the side-rail settings filter (no popup over the list).
+- **Tab** / **↓** (in search) — focus grid for arrow selection (keeps draft/chips). **Tab** from grid returns to search. **↑** on first item returns to search. **In Settings**, Tab/↓ from filter → list; Tab / ↑ from first row → filter; **Enter** / **Space** toggles the selected setting.
 - **Alt+F** — open / close floating filter presets (hide keeps float; Dock reattaches)
 - **Alt+I** — open / close floating Scene Import (detach if needed; hide keeps float; Dock reattaches as side panel and stays open)
 - Filter presets open: **↑↓** / **Enter** / **D** / **Ctrl+S** / **Esc** / **U** (soft-delete undo)
