@@ -1,6 +1,7 @@
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEngine;
 
 namespace VPB
@@ -10,12 +11,16 @@ namespace VPB
     /// VPB's ImageLoadingMgr often finishes MaterialOptions custom textures before skin-wrap /
     /// cloth materials finish connecting. OnTexture*Loaded then paints a live MaterialOptions whose
     /// material slots are not ready yet (or get replaced). URL JSON stays correct; GPU tex/scale wrong.
-    /// After load + scene settle, Reload customTexture*Url and re-fire Tile/Offset Sync.
+    /// Fix: postfix DAZSkinWrap.InitMaterials → sync SetAllParameters; deferred multi-pass resync
+    /// for late reconnect; queue only pending URL slots.
     /// </summary>
     public static class DAZClothingHook
     {
         static readonly HashSet<int> s_PendingCustomTexResync =
             new HashSet<int>();
+
+        static FieldInfo s_MaterialsWereInitField;
+        static bool s_InsideSkinWrapGpuResync;
 
         public static void PatchAll(Harmony harmony)
         {
@@ -63,6 +68,22 @@ namespace VPB
                     harmony.Patch(
                         mLoadPresetPost,
                         postfix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PostLoadPresetPost)));
+                }
+
+                // Root-cause edge: first InitMaterials clones GPUmaterials after early OnTexture*Loaded
+                // may have painted pre-init / null-wrap slots. Re-push loaded customs onto clones.
+                var mInitMaterials = AccessTools.Method(typeof(DAZSkinWrap), "InitMaterials", Type.EmptyTypes);
+                if (mInitMaterials != null)
+                {
+                    s_MaterialsWereInitField = AccessTools.Field(typeof(DAZSkinWrap), "_materialsWereInit");
+                    harmony.Patch(
+                        mInitMaterials,
+                        prefix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PreInitMaterials)),
+                        postfix: new HarmonyMethod(typeof(DAZClothingHook), nameof(PostInitMaterials)));
+                }
+                else
+                {
+                    LogUtil.LogWarning("DAZClothingHook: DAZSkinWrap.InitMaterials not found; GPU-init texture rebind disabled.");
                 }
             }
             catch (Exception ex)
@@ -134,6 +155,59 @@ namespace VPB
 
         public static void PreRemoveAllClothing(DAZCharacterSelector __instance)
         {
+        }
+
+        /// <summary>
+        /// __state = true when this call will perform the one-shot GPUmaterials clone.
+        /// </summary>
+        public static void PreInitMaterials(DAZSkinWrap __instance, ref bool __state)
+        {
+            __state = false;
+            if (__instance == null || s_InsideSkinWrapGpuResync) return;
+            try
+            {
+                if (s_MaterialsWereInitField == null) return;
+                object v = s_MaterialsWereInitField.GetValue(__instance);
+                bool wereInit = v is bool && (bool)v;
+                if (wereInit) return;
+                // Match native InitMaterials gate — only when this call will clone.
+                if (__instance.GPUmaterials == null) return;
+                __state = true;
+            }
+            catch { __state = false; }
+        }
+
+        /// <summary>
+        /// After first InitMaterials clone: sync-push MaterialOptions customTexture* onto new GPUmaterials.
+        /// </summary>
+        public static void PostInitMaterials(DAZSkinWrap __instance, bool __state)
+        {
+            if (!__state || __instance == null) return;
+            if (s_InsideSkinWrapGpuResync) return;
+
+            try
+            {
+                s_InsideSkinWrapGpuResync = true;
+
+                MaterialOptions[] mos = null;
+                try { mos = __instance.GetComponents<MaterialOptions>(); } catch { }
+                if (mos == null || mos.Length == 0) return;
+
+                for (int i = 0; i < mos.Length; i++)
+                {
+                    MaterialOptions mo = mos[i];
+                    if (mo == null) continue;
+                    ClothingLoadingUtils.ReapplyMaterialOptionsAfterGpuInit(mo);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("DAZClothingHook: InitMaterials custom texture rebind failed: " + ex.Message);
+            }
+            finally
+            {
+                s_InsideSkinWrapGpuResync = false;
+            }
         }
 
         /// <summary>

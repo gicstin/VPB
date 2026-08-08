@@ -2010,11 +2010,24 @@ namespace VPB
             return false;
         }
 
+        // Warm-path yield tokens — reuse; avoid per-resync `new WaitForEndOfFrame` churn.
+        static readonly WaitForEndOfFrame s_WaitEof = new WaitForEndOfFrame();
+        static readonly WaitForSeconds s_WaitResyncShort = new WaitForSeconds(0.15f);
+        static readonly WaitForSeconds s_WaitResyncMedium = new WaitForSeconds(0.3f);
+
+        static MethodInfo s_SetAllParametersMethod;
+        static FieldInfo[] s_CustomTextureFields;
+        static bool s_CustomTextureReflectInit;
+
+        const int CustomTextureSlotCount = 6;
+        const int CustomTextureResyncPasses = 3;
+
         /// <summary>
         /// Issue #80: re-bind MaterialOptions customTexture* after clothing materials settle.
-        /// During scene launch, early passes can look correct then get wiped when settle reconnects
-        /// materials (GPU scale falls back to 1 → overstretched custom). Wait out scene-load, then
-        /// re-apply URL Reload + tile/offset Sync.
+        /// VPB cache often finishes OnTexture*Loaded before DAZSkinWrap.InitMaterials clones
+        /// GPUmaterials (or while skinWrap is still null). URL/fields stay correct; GPU slots wrong.
+        /// Prefer sync MaterialOptions.SetAllParameters (push already-loaded Texture2D), queue only
+        /// pending URL slots, then multi-pass across frames for late wrap reconnect.
         /// </summary>
         internal static IEnumerator DeferredClothingItemCustomTextureResyncCoroutine(
             DAZClothingItem item,
@@ -2025,21 +2038,14 @@ namespace VPB
                 while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
                     yield return null;
 
-                for (int i = 0; i < 5; i++)
-                    yield return new WaitForEndOfFrame();
-                yield return new WaitForSeconds(0.2f);
-
-                if (item != null && item.active)
-                    ResyncCustomTexturesUnder(item.transform);
-
-                // Cloth plugins / skin-wrap often reconnect shortly after load idle.
-                yield return new WaitForSeconds(0.5f);
-
-                if (item != null && item.active)
+                for (int pass = 0; pass < CustomTextureResyncPasses; pass++)
                 {
-                    // Second pass: tiles/offsets only unless URL bind still needed — avoid
-                    // double-queue of every custom tex when first pass already rebound from cache.
-                    ResyncCustomTextureTilesUnder(item.transform);
+                    for (int i = 0; i < 3; i++)
+                        yield return s_WaitEof;
+                    yield return pass == 0 ? s_WaitResyncShort : s_WaitResyncMedium;
+
+                    if (item == null || !item.active) break;
+                    ResyncCustomTexturesUnder(item.transform);
                 }
             }
             finally
@@ -2060,17 +2066,15 @@ namespace VPB
                 while (LogUtil.IsSceneLoading() || LogUtil.IsSceneLoadActive())
                     yield return null;
 
-                for (int i = 0; i < 5; i++)
-                    yield return new WaitForEndOfFrame();
-                yield return new WaitForSeconds(0.25f);
+                for (int pass = 0; pass < CustomTextureResyncPasses; pass++)
+                {
+                    for (int i = 0; i < 3; i++)
+                        yield return s_WaitEof;
+                    yield return pass == 0 ? s_WaitResyncShort : s_WaitResyncMedium;
 
-                if (atom != null)
+                    if (atom == null) break;
                     ResyncActiveClothingCustomTextures(atom);
-
-                yield return new WaitForSeconds(0.5f);
-
-                if (atom != null)
-                    ResyncActiveClothingCustomTextureTiles(atom);
+                }
             }
             finally
             {
@@ -2083,19 +2087,141 @@ namespace VPB
 
         /// <summary>
         /// Scene-load total end: materials/cloth settle after our early OnLoadComplete passes.
-        /// One cache-friendly rebind so tiles stick on final GPU materials (no forceReload decode).
+        /// Multi-pass sync rebind so tiles stick on final GPU materials (no forceReload decode).
         /// </summary>
         internal static IEnumerator DeferredPostSceneLoadClothingCustomTextureResyncCoroutine()
         {
-            for (int i = 0; i < 3; i++)
-                yield return new WaitForEndOfFrame();
-            yield return new WaitForSeconds(0.35f);
+            for (int pass = 0; pass < CustomTextureResyncPasses; pass++)
+            {
+                for (int i = 0; i < 3; i++)
+                    yield return s_WaitEof;
+                yield return pass == 0 ? s_WaitResyncShort : s_WaitResyncMedium;
 
-            ResyncAllPersonClothingCustomTextures();
+                ResyncAllPersonClothingCustomTextures();
+            }
+        }
 
-            yield return new WaitForEndOfFrame();
-            yield return new WaitForSeconds(0.15f);
-            ResyncAllPersonClothingCustomTextureTiles();
+        static void EnsureCustomTextureReflection()
+        {
+            if (s_CustomTextureReflectInit) return;
+            s_CustomTextureReflectInit = true;
+
+            try
+            {
+                s_SetAllParametersMethod = typeof(MaterialOptions).GetMethod(
+                    "SetAllParameters",
+                    BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            }
+            catch { s_SetAllParametersMethod = null; }
+
+            s_CustomTextureFields = new FieldInfo[CustomTextureSlotCount];
+            for (int i = 0; i < CustomTextureSlotCount; i++)
+            {
+                try
+                {
+                    s_CustomTextureFields[i] = typeof(MaterialOptions).GetField(
+                        "customTexture" + (i + 1),
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                }
+                catch { s_CustomTextureFields[i] = null; }
+            }
+        }
+
+        /// <summary>
+        /// True when any customTexture*Url is set (non-empty, not NULL).
+        /// </summary>
+        internal static bool MaterialOptionsHasCustomTextureUrl(MaterialOptions mo)
+        {
+            if (mo == null) return false;
+
+            List<string> names = null;
+            try { names = mo.GetUrlParamNames(); } catch { }
+            if (names == null || names.Count == 0) return false;
+
+            for (int i = 0; i < names.Count; i++)
+            {
+                string name = names[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                if (name.IndexOf("customTexture", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                JSONStorableUrl url = null;
+                try { url = mo.GetUrlJSONParam(name); } catch { }
+                if (url == null) continue;
+
+                string val = null;
+                try { val = url.val; } catch { }
+                if (string.IsNullOrEmpty(val)) continue;
+                if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// After DAZSkinWrap.InitMaterials clones GPUmaterials: push loaded customTexture* + params.
+        /// Does not queue image loads (safe inside SetMaterialTexture → InitMaterials).
+        /// </summary>
+        internal static void ReapplyMaterialOptionsAfterGpuInit(MaterialOptions mo)
+        {
+            if (mo == null) return;
+            if (!MaterialOptionsHasCustomTextureUrl(mo) && !HasAnyLoadedCustomTexture(mo)) return;
+
+            try { InvokeSetAllParameters(mo); }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] custom texture GPU reapply failed: " + ex.Message);
+            }
+
+            ResyncMaterialOptionsCustomTextureTiles(mo);
+        }
+
+        static bool HasAnyLoadedCustomTexture(MaterialOptions mo)
+        {
+            EnsureCustomTextureReflection();
+            if (mo == null || s_CustomTextureFields == null) return false;
+
+            for (int i = 0; i < s_CustomTextureFields.Length; i++)
+            {
+                FieldInfo fi = s_CustomTextureFields[i];
+                if (fi == null) continue;
+                try
+                {
+                    if (fi.GetValue(mo) != null) return true;
+                }
+                catch { }
+            }
+            return false;
+        }
+
+        static Texture2D GetLoadedCustomTexture(MaterialOptions mo, int slotIndex0)
+        {
+            EnsureCustomTextureReflection();
+            if (mo == null || s_CustomTextureFields == null) return null;
+            if (slotIndex0 < 0 || slotIndex0 >= s_CustomTextureFields.Length) return null;
+            FieldInfo fi = s_CustomTextureFields[slotIndex0];
+            if (fi == null) return null;
+            try { return fi.GetValue(mo) as Texture2D; }
+            catch { return null; }
+        }
+
+        static void InvokeSetAllParameters(MaterialOptions mo)
+        {
+            EnsureCustomTextureReflection();
+            if (mo == null || s_SetAllParametersMethod == null) return;
+            s_SetAllParametersMethod.Invoke(mo, null);
+        }
+
+        static int TryParseCustomTextureSlotIndex(string urlParamName)
+        {
+            // customTexture1Url .. customTexture6Url (and suffix variants containing the slot digit).
+            if (string.IsNullOrEmpty(urlParamName)) return -1;
+            if (!urlParamName.StartsWith("customTexture", StringComparison.OrdinalIgnoreCase)) return -1;
+
+            int start = "customTexture".Length;
+            if (start >= urlParamName.Length) return -1;
+            char c = urlParamName[start];
+            if (c < '1' || c > '6') return -1;
+            return c - '1';
         }
 
         internal static void ResyncAllPersonClothingCustomTextures()
@@ -2204,9 +2330,11 @@ namespace VPB
         }
 
         /// <summary>
-        /// Re-invoke SyncCustomTexture* without JSONStorableUrl.Reload.
-        /// Reload sets valueSetFromBrowse → forceReload → VPB evicts cache and VaM redecodes
-        /// (slow on every appearance Keep). Plain callback rebinds GPU from RAM/disk cache.
+        /// Issue #80 rebind:
+        /// 1) Sync MaterialOptions.SetAllParameters — push already-loaded customTexture* onto current
+        ///    DAZSkinWrap.GPUmaterials (no image queue, no forceReload).
+        /// 2) Queue only slots whose URL is set but Texture2D field still null (load never finished).
+        /// Avoid JSONStorableUrl.Reload (valueSetFromBrowse → forceReload → cache eviction).
         /// </summary>
         internal static void ReloadMaterialOptionsCustomTextures(MaterialOptions mo)
         {
@@ -2215,6 +2343,35 @@ namespace VPB
             List<string> names = null;
             try { names = mo.GetUrlParamNames(); } catch { }
             if (names == null || names.Count == 0) return;
+
+            bool anyCustomUrl = false;
+            for (int i = 0; i < names.Count; i++)
+            {
+                string name = names[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                if (name.IndexOf("customTexture", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                JSONStorableUrl url = null;
+                try { url = mo.GetUrlJSONParam(name); } catch { }
+                if (url == null) continue;
+
+                string val = null;
+                try { val = url.val; } catch { }
+                if (string.IsNullOrEmpty(val)) continue;
+                if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
+                anyCustomUrl = true;
+                break;
+            }
+
+            if (!anyCustomUrl && !HasAnyLoadedCustomTexture(mo)) return;
+
+            // Sync GPU push first — fixes the common case where OnTexture*Loaded already filled
+            // customTexture* fields but skin-wrap materials were not ready / were replaced.
+            try { InvokeSetAllParameters(mo); }
+            catch (Exception ex)
+            {
+                LogUtil.LogWarning("[VPB] custom texture SetAllParameters failed: " + ex.Message);
+            }
 
             for (int i = 0; i < names.Count; i++)
             {
@@ -2230,6 +2387,10 @@ namespace VPB
                 try { val = url.val; } catch { }
                 if (string.IsNullOrEmpty(val)) continue;
                 if (string.Equals(val, "NULL", StringComparison.OrdinalIgnoreCase)) continue;
+
+                int slot = TryParseCustomTextureSlotIndex(name);
+                if (slot >= 0 && GetLoadedCustomTexture(mo, slot) != null)
+                    continue; // already in RAM; SetAllParameters pushed it
 
                 try { ForceUrlCallback(url); }
                 catch (Exception ex)
