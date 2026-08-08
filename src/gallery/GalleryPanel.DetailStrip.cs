@@ -7389,7 +7389,7 @@ namespace VPB
                 }
             }
 
-            var headerDrag = _detailStripTagMenuHeaderGO.AddComponent<DetailStripTagMenuDrag>();
+            var headerDrag = _detailStripTagMenuHeaderGO.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _detailStripTagMenuPanelRT;
             headerDrag.OnMoved = DetailStripOnTagMenuDragged;
 
@@ -7471,7 +7471,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_detailStripTagMenuSearchRowGO);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<DetailStripTagMenuDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = _detailStripTagMenuPanelRT;
                 footerDrag.OnMoved = DetailStripOnTagMenuDragged;
             }
@@ -7496,7 +7496,7 @@ namespace VPB
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
             UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
-            var spacerDrag = footerSpacer.AddComponent<DetailStripTagMenuDrag>();
+            var spacerDrag = footerSpacer.AddComponent<UIFloatPanelDrag>();
             spacerDrag.Target = _detailStripTagMenuPanelRT;
             spacerDrag.OnMoved = DetailStripOnTagMenuDragged;
 
@@ -7520,7 +7520,7 @@ namespace VPB
             rhLe.preferredHeight = rhLe.minHeight = rhSz;
             rhLe.flexibleWidth = 0f;
             rhLe.flexibleHeight = 0f;
-            var resizer = _detailStripTagMenuResizeGO.AddComponent<DetailStripTagMenuResize>();
+            var resizer = _detailStripTagMenuResizeGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = _detailStripTagMenuPanelRT;
             resizer.GetMinSize = () =>
             {
@@ -7532,6 +7532,7 @@ namespace VPB
                 float sc = ChromeScale > 0f ? ChromeScale : 1f;
                 return new Vector2(DetailStripTagMenuMaxWidthRef * sc, DetailStripTagMenuMaxHeightRef * sc);
             };
+            resizer.OnResizing = DetailStripOnTagMenuResized;
             resizer.OnResized = DetailStripOnTagMenuResized;
             _detailStripTagMenuResizeGO.transform.SetAsLastSibling();
 
@@ -8118,7 +8119,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_detailStripTagMenuSearchRowGO);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<DetailStripTagMenuDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = _detailStripTagMenuPanelRT;
                 footerDrag.OnMoved = DetailStripOnTagMenuDragged;
             }
@@ -8127,10 +8128,10 @@ namespace VPB
             if (spacerTr != null)
             {
                 GameObject spacer = spacerTr.gameObject;
-                if (spacer.GetComponent<DetailStripTagMenuDrag>() == null)
+                if (spacer.GetComponent<UIFloatPanelDrag>() == null)
                 {
                     UI.EnsureFloatFooterSpacerDragHit(spacer);
-                    var spacerDrag = spacer.AddComponent<DetailStripTagMenuDrag>();
+                    var spacerDrag = spacer.AddComponent<UIFloatPanelDrag>();
                     spacerDrag.Target = _detailStripTagMenuPanelRT;
                     spacerDrag.OnMoved = DetailStripOnTagMenuDragged;
                 }
@@ -10383,51 +10384,6 @@ namespace VPB
                 }
             }
             return result;
-        }
-
-        /// <summary>Screen-space drag for detail-strip tag popup (Settings float pattern).</summary>
-        private sealed class DetailStripTagMenuDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Action OnMoved;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnMoved != null) OnMoved();
-            }
-        }
-
-        /// <summary>Bottom-right resize for quick-tag popup (dep-whitelist pattern).</summary>
-        private sealed class DetailStripTagMenuResize : MonoBehaviour, IBeginDragHandler, IDragHandler
-        {
-            public RectTransform Target;
-            public Func<Vector2> GetMinSize;
-            public Func<Vector2> GetMaxSize;
-            public Action OnResized;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                Vector2 min = GetMinSize != null ? GetMinSize() : new Vector2(420f, 260f);
-                Vector2 max = GetMaxSize != null ? GetMaxSize() : new Vector2(1400f, 1000f);
-                size.x = Mathf.Clamp(size.x, min.x, max.x);
-                size.y = Mathf.Clamp(size.y, min.y, max.y);
-                Target.sizeDelta = size;
-                if (OnResized != null) OnResized();
-            }
         }
 
         /// <summary>Esc/Enter/arrows/Space while quick-tag search focused.</summary>

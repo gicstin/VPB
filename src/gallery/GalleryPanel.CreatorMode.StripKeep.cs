@@ -521,7 +521,7 @@ namespace VPB
             StripKeepStyleTitleClose(closeGo, closeSz);
             AddTooltipPlain(closeGo, VPBTranslation.T("gallery.creator.strip_close_tip", "Close (Esc)"));
 
-            var headerDrag = header.AddComponent<StripKeepPanelDrag>();
+            var headerDrag = header.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _stripKeepPanelRT;
             headerDrag.OnMoved = StripKeepOnPanelMoved;
 
@@ -620,7 +620,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerStack);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<StripKeepPanelDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = _stripKeepPanelRT;
                 footerDrag.OnMoved = StripKeepOnPanelMoved;
             }
@@ -712,7 +712,7 @@ namespace VPB
                 preferredWidth: btnH, preferredHeight: btnH,
                 minWidth: btnH, minHeight: btnH,
                 flexibleWidth: 0f, flexibleHeight: 0f);
-            var resizer = _stripKeepResizeGO.AddComponent<StripKeepPanelResize>();
+            var resizer = _stripKeepResizeGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = _stripKeepPanelRT;
             resizer.GetMinSize = StripKeepPanelMinSizeScaled;
             resizer.GetMaxSize = StripKeepPanelMaxSizeScaled;

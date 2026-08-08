@@ -173,6 +173,8 @@ namespace VPB
                 CaptureImportSidebarFloatGeometryToMemory();
             else
                 RestoreImportSidebarExpandHeightIntoSavedSize();
+            // Flush geometry before dock — PersistDetachedState(false) skips size/pos write.
+            try { PersistImportSidebarFloatGeometryFieldsOnly(); } catch { }
             importSidebarFloatCollapsed = false;
             importSidebarExpandHeightRef = null;
             importSidebarCollapsedTopLeftPos = null;
@@ -288,7 +290,7 @@ namespace VPB
                 else SetStatus(null);
             };
 
-            var headerDrag = importSidebarFloatTitleBarGO.AddComponent<ImportSidebarPanelDrag>();
+            var headerDrag = importSidebarFloatTitleBarGO.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = importSidebarRT;
             headerDrag.OnMoved = OnImportSidebarFloatMoved;
 
@@ -313,7 +315,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(importSidebarFloatFooterGO);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<ImportSidebarPanelDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = importSidebarRT;
                 footerDrag.OnMoved = OnImportSidebarFloatMoved;
             }
@@ -356,7 +358,7 @@ namespace VPB
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
             UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
-            var spacerDrag = footerSpacer.AddComponent<ImportSidebarPanelDrag>();
+            var spacerDrag = footerSpacer.AddComponent<UIFloatPanelDrag>();
             spacerDrag.Target = importSidebarRT;
             spacerDrag.OnMoved = OnImportSidebarFloatMoved;
             Text footerGrip = UI.CreateLabel(footerSpacer, "\u2807", GalleryUiDesignTokens.PopupMenuRowFontRef,
@@ -383,7 +385,7 @@ namespace VPB
             if (rhImg != null) rhImg.raycastTarget = true;
             StyleImportSidebarFloatChromeIconBtn(
                 importSidebarFloatResizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
-            var resizer = importSidebarFloatResizeHandleGO.AddComponent<ImportSidebarPanelResize>();
+            var resizer = importSidebarFloatResizeHandleGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = importSidebarRT;
             resizer.GetMinSize = GetImportSidebarFloatMinSizeScaled;
             resizer.GetMaxSize = GetImportSidebarFloatMaxSizeScaled;
@@ -971,55 +973,6 @@ namespace VPB
             Transform t = go.transform;
             for (int i = 0; i < t.childCount; i++)
                 SetImportSidebarLayerRecursive(t.GetChild(i).gameObject, layer);
-        }
-
-        private sealed class ImportSidebarPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Action OnMoved;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnMoved != null) OnMoved();
-            }
-        }
-
-        private sealed class ImportSidebarPanelResize : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Func<Vector2> GetMinSize;
-            public Func<Vector2> GetMaxSize;
-            public Action OnResizing;
-            public Action OnResized;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                Vector2 min = GetMinSize != null ? GetMinSize() : new Vector2(220f, 320f);
-                Vector2 max = GetMaxSize != null ? GetMaxSize() : new Vector2(640f, 900f);
-                size.x = Mathf.Clamp(size.x, min.x, max.x);
-                size.y = Mathf.Clamp(size.y, min.y, max.y);
-                Target.sizeDelta = size;
-                if (OnResizing != null) OnResizing();
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnResized != null) OnResized();
-            }
         }
     }
 }

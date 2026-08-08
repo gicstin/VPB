@@ -278,13 +278,35 @@ namespace VPB
             catch { }
         }
 
+        /// <summary>
+        /// Open VaM main HUD on correct anchor: controller menu in VR, monitor when
+        /// MonitorRigActive / desktop. Never ShowMainHUDMonitor — that pins left monitor in VR.
+        /// </summary>
+        private void ShowPluginsFloatVamMainHud()
+        {
+            SuperController sc = SuperController.singleton;
+            if (sc == null) return;
+            try { sc.ShowMainHUDAuto(); }
+            catch
+            {
+                // Fallback if Auto missing on older builds.
+                try
+                {
+                    bool forceMonitor = false;
+                    try { forceMonitor = sc.IsMonitorOnly || sc.IsMonitorRigActive; } catch { }
+                    sc.ShowMainHUD(true, forceMonitor);
+                }
+                catch { }
+            }
+        }
+
         private void OpenPluginsFloatSessionUi()
         {
             try
             {
                 if (SuperController.singleton == null) return;
                 EnsurePluginsFloatEditMode();
-                SuperController.singleton.ShowMainHUDMonitor();
+                ShowPluginsFloatVamMainHud();
                 SuperController.singleton.activeUI = SuperController.ActiveUI.MainMenu;
                 if (SuperController.singleton.mainMenuTabSelector != null)
                     SuperController.singleton.mainMenuTabSelector.SetActiveTab("TabSessionPlugins");
@@ -321,7 +343,7 @@ namespace VPB
                 EnsurePluginsFloatEditMode();
                 if (atom.mainController != null)
                     SuperController.singleton.SelectController(atom.mainController, false, false, true);
-                SuperController.singleton.ShowMainHUDMonitor();
+                ShowPluginsFloatVamMainHud();
                 StartCoroutine(PluginsFloatWaitOpenPersonPluginsTab(atom));
             }
             catch (Exception ex)

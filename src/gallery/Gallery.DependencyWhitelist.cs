@@ -38,36 +38,6 @@ namespace VPB
 
         private readonly List<DepWhitelistRow> m_DepWhitelistRows = new List<DepWhitelistRow>();
 
-        private class DepWhitelistDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
-        {
-            public RectTransform Target;
-            public void OnBeginDrag(PointerEventData eventData) { }
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-        }
-
-        private class DepWhitelistResizeHandler : MonoBehaviour, IBeginDragHandler, IDragHandler
-        {
-            public RectTransform Target;
-            public Vector2 MinSize = new Vector2(650, 520);
-            public Vector2 MaxSize = new Vector2(1600, 1200);
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                size.x = Mathf.Clamp(size.x, MinSize.x, MaxSize.x);
-                size.y = Mathf.Clamp(size.y, MinSize.y, MaxSize.y);
-                Target.sizeDelta = size;
-            }
-        }
-
         private bool IsDependencyWhitelistUGUIVisible()
         {
             return m_DepWhitelistUGUIRoot != null && m_DepWhitelistUGUIRoot.activeSelf;
@@ -231,7 +201,7 @@ namespace VPB
             dragRT.pivot = new Vector2(0.5f, 1);
             dragRT.offsetMin = new Vector2(0, -130);
             dragRT.offsetMax = new Vector2(0, 0);
-            var dragger = dragBar.AddComponent<DepWhitelistDragHandler>();
+            var dragger = dragBar.AddComponent<UIFloatPanelDrag>();
             dragger.Target = panelRT;
 
             UI.CreateLabel(m_DepWhitelistUGUIPanel, "Dependency Whitelist", GalleryUiDesignTokens.FontRef, Color.white, TextAnchor.MiddleLeft, anchorPreset: AnchorPresets.hStretchTop, size: new Vector2(-120, 60), anchoredPosition: new Vector2(60, -10), name: "Title");
@@ -245,7 +215,7 @@ namespace VPB
             titleDragRT.pivot = new Vector2(0.5f, 1);
             titleDragRT.offsetMin = new Vector2(0, -60);
             titleDragRT.offsetMax = new Vector2(-70, 0);
-            var titleDragger = titleDrag.AddComponent<DepWhitelistDragHandler>();
+            var titleDragger = titleDrag.AddComponent<UIFloatPanelDrag>();
             titleDragger.Target = panelRT;
 
             var closeBtn = UI.CreateUIButton(m_DepWhitelistUGUIPanel, 50, 50, "X", 26, -10, -10, AnchorPresets.topRight, CloseDependencyWhitelistUGUI);
@@ -332,8 +302,10 @@ namespace VPB
             rhHoverBorder.hoverColor = new Color(1f, 1f, 0f, 1f);
             rhHoverBorder.borderSize = 2f;
 
-            var resizer = resizeHandle.AddComponent<DepWhitelistResizeHandler>();
+            var resizer = resizeHandle.AddComponent<UIFloatPanelResize>();
             resizer.Target = panelRT;
+            resizer.MinSizeFallback = new Vector2(650f, 520f);
+            resizer.MaxSizeFallback = new Vector2(1600f, 1200f);
 
             m_DepWhitelistUGUIRoot.SetActive(false);
         }

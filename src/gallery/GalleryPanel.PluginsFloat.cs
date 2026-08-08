@@ -286,7 +286,7 @@ namespace VPB
                 GalleryUiColorTokens.ChromeIconWell, HidePluginsFloat);
             if (closeBtn != null) closeBtn.name = "TitleClose";
 
-            var headerDrag = titleBar.AddComponent<RemapAtomUidsPanelDrag>();
+            var headerDrag = titleBar.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _pluginsFloatPanelRT;
             headerDrag.OnMoved = OnPluginsFloatMoved;
 
@@ -502,7 +502,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(_pluginsFloatFooter);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<RemapAtomUidsPanelDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = _pluginsFloatPanelRT;
                 footerDrag.OnMoved = OnPluginsFloatMoved;
             }
@@ -557,7 +557,7 @@ namespace VPB
                     UI.AddIconToButton(resizeHandle, rhSpr, 5f * s, UI.IconButtonBackdrop);
             }
             catch { }
-            var resizer = resizeHandle.AddComponent<RemapAtomUidsPanelResize>();
+            var resizer = resizeHandle.AddComponent<UIFloatPanelResize>();
             resizer.Target = _pluginsFloatPanelRT;
             resizer.GetMinSize = () => new Vector2(
                 GalleryUiDesignTokens.PluginsFloatMinWidthRef * _pluginsFloatChromeScale,

@@ -286,6 +286,20 @@ namespace VPB
         public const float QuickFiltersPanelWidthRef = 300f;
         /// <summary>Filter-presets list scrollbar — match dense secondary panels (import sidebar), not fat side-tab track.</summary>
         public const float QuickFiltersScrollBarWidthRef = 10f;
+        /// <summary>
+        /// VR float move: panel geometric center may travel this × parent half-extent from host origin.
+        /// Canvas is ~1200×800 — values near 1.0 stop at the frame; VR needs ~3–4× past that.
+        /// </summary>
+        public const float FloatVrTravelParentFraction = 3.5f;
+        /// <summary>
+        /// VR float move: hard cap on travel (host-local px) when parent rect is huge.
+        /// </summary>
+        public const float FloatVrMaxTravelRef = 10000f;
+        /// <summary>
+        /// VR float move: fallback travel when parent rect has no usable size.
+        /// </summary>
+        public const float FloatVrFallbackTravelRef = 4000f;
+
         /// <summary>Floating filter-presets window defaults / clamps (design px at scale 1).</summary>
         public const float QuickFiltersFloatDefaultHeightRef = 420f;
         public const float QuickFiltersFloatMinWidthRef = 220f;

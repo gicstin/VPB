@@ -269,7 +269,7 @@ namespace VPB
             if (collapseBtnGO != null)
                 collapsePaletteGO.transform.SetSiblingIndex(collapseBtnGO.transform.GetSiblingIndex());
 
-            var headerDrag = titleBarGO.AddComponent<QuickFiltersPanelDrag>();
+            var headerDrag = titleBarGO.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = containerRT;
             headerDrag.OnMoved = OnFloatMoved;
 
@@ -531,7 +531,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footerGO);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<QuickFiltersPanelDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = containerRT;
                 footerDrag.OnMoved = OnFloatMoved;
             }
@@ -632,7 +632,7 @@ namespace VPB
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f);
             UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
-            var spacerDrag = footerSpacer.AddComponent<QuickFiltersPanelDrag>();
+            var spacerDrag = footerSpacer.AddComponent<UIFloatPanelDrag>();
             spacerDrag.Target = containerRT;
             spacerDrag.OnMoved = OnFloatMoved;
 
@@ -644,7 +644,7 @@ namespace VPB
             Image rhImg = resizeHandleGO.GetComponent<Image>();
             if (rhImg != null) rhImg.raycastTarget = true;
             StyleChromeIconBtn(resizeHandleGO, rh, "vpb_icons/chevrons_down_right.png", UI.IconButtonBackdrop);
-            var resizer = resizeHandleGO.AddComponent<QuickFiltersPanelResize>();
+            var resizer = resizeHandleGO.AddComponent<UIFloatPanelResize>();
             resizer.Target = containerRT;
             resizer.GetMinSize = GetFloatMinSizeScaled;
             resizer.GetMaxSize = GetFloatMaxSizeScaled;
@@ -1233,6 +1233,7 @@ namespace VPB
                 {
                     // Pivot top-left: keep title corner fixed on UI scale / resize.
                     // Re-applying saved center→topLeft drifts the window when size changes.
+                    // Size already applied above from savedFloatSizeRef — do not touch anchors from docked parent.
                     containerRT.anchorMin = new Vector2(0.5f, 0.5f);
                     containerRT.anchorMax = new Vector2(0.5f, 0.5f);
                     containerRT.pivot = new Vector2(0f, 1f);
@@ -1240,6 +1241,7 @@ namespace VPB
                         containerRT.anchoredPosition = collapsedTopLeftPos.Value;
                     else
                     {
+                        // Keep top-left after sizeDelta write (pivot top-left); sync memory only.
                         // Memory + Instance fields only — no ScheduleSave (ApplyLayout is hot on rebuild).
                         // UI-scale hotkey deferred Save flushes disk.
                         CaptureFloatGeometryToMemory();
@@ -1265,13 +1267,26 @@ namespace VPB
                 -(GalleryUiDesignTokens.TitleBarHeightRef + gap) * s);
         }
 
+        /// <summary>
+        /// Apply float anchors + saved size + center→topLeft together.
+        /// Must set size before position — docked sizeDelta with saved center places wrong
+        /// top-left; ApplyLayout then grows size and Capture corrupts saved center (Import pattern).
+        /// </summary>
         private void ApplyFloatAnchorsAndPos(float s)
         {
             if (containerRT == null) return;
+            float ss = s > 0f ? s : 1f;
             containerRT.anchorMin = new Vector2(0.5f, 0.5f);
             containerRT.anchorMax = new Vector2(0.5f, 0.5f);
             containerRT.pivot = new Vector2(0f, 1f);
-            Vector2 size = containerRT.sizeDelta;
+
+            float wRef = ResolvePanelWidthRef();
+            float hRef = floatCollapsed
+                ? GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef
+                : ResolvePanelHeightRef();
+            Vector2 size = new Vector2(wRef * ss, hRef * ss);
+            containerRT.sizeDelta = size;
+
             Vector2 center = ResolveFloatCenterPos();
             containerRT.anchoredPosition = CenterToTopLeft(center, size);
         }
@@ -2831,6 +2846,8 @@ namespace VPB
                     CaptureFloatGeometryToMemory();
                 else
                     RestoreExpandHeightIntoSavedSize();
+                // Flush geometry before dock — PersistDetachedState(false) skips size/pos write.
+                try { PersistGeometryFieldsOnly(); } catch { }
                 floatCollapsed = false;
                 expandHeightRef = null;
                 collapsedTopLeftPos = null;
@@ -2930,7 +2947,13 @@ namespace VPB
                     }
                     else if (hadWorld && floatHost != null)
                     {
-                        // Keep on-screen place after pop-out (recognition > jump).
+                        // Seed float size first, then keep title corner in world space (recognition > jump).
+                        float ss = panel != null && panel.ChromeScale > 0f ? panel.ChromeScale : 1f;
+                        float wRef = ResolvePanelWidthRef();
+                        float hRef = floatCollapsed
+                            ? GalleryUiDesignTokens.QuickFiltersTitleBarHeightRef
+                            : ResolvePanelHeightRef();
+                        containerRT.sizeDelta = new Vector2(wRef * ss, hRef * ss);
                         containerRT.position = keepWorld;
                         savedFloatPosCenter = TopLeftToCenter(containerRT.anchoredPosition, containerRT.sizeDelta);
                     }
@@ -3073,55 +3096,6 @@ namespace VPB
             return new Vector2(
                 GalleryUiDesignTokens.QuickFiltersFloatMaxWidthRef * s,
                 GalleryUiDesignTokens.QuickFiltersFloatMaxHeightRef * s);
-        }
-
-        private sealed class QuickFiltersPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Action OnMoved;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnMoved != null) OnMoved();
-            }
-        }
-
-        private sealed class QuickFiltersPanelResize : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Func<Vector2> GetMinSize;
-            public Func<Vector2> GetMaxSize;
-            public Action OnResizing;
-            public Action OnResized;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                Vector2 min = GetMinSize != null ? GetMinSize() : new Vector2(220f, 200f);
-                Vector2 max = GetMaxSize != null ? GetMaxSize() : new Vector2(640f, 900f);
-                size.x = Mathf.Clamp(size.x, min.x, max.x);
-                size.y = Mathf.Clamp(size.y, min.y, max.y);
-                Target.sizeDelta = size;
-                if (OnResizing != null) OnResizing();
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnResized != null) OnResized();
-            }
         }
     }
 }

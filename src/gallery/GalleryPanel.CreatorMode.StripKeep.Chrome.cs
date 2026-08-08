@@ -375,52 +375,5 @@ namespace VPB
             }
             return rows < 1 ? 1 : rows;
         }
-
-        private sealed class StripKeepPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Action OnMoved;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnMoved != null) OnMoved();
-            }
-        }
-
-        private sealed class StripKeepPanelResize : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Func<Vector2> GetMinSize;
-            public Func<Vector2> GetMaxSize;
-            public Action OnResized;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                Vector2 min = GetMinSize != null ? GetMinSize() : new Vector2(420f, 420f);
-                Vector2 max = GetMaxSize != null ? GetMaxSize() : new Vector2(1200f, 1000f);
-                size.x = Mathf.Clamp(size.x, min.x, max.x);
-                size.y = Mathf.Clamp(size.y, min.y, max.y);
-                Target.sizeDelta = size;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnResized != null) OnResized();
-            }
-        }
     }
 }

@@ -802,7 +802,7 @@ namespace VPB
                 };
             }
 
-            var headerDrag = titleBar.AddComponent<RemapAtomUidsPanelDrag>();
+            var headerDrag = titleBar.AddComponent<UIFloatPanelDrag>();
             headerDrag.Target = _remapAtomUidsPanelRT;
             headerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
 
@@ -857,7 +857,7 @@ namespace VPB
             GameObject footerDragArea = UI.CreateFloatFooterDragArea(footer);
             if (footerDragArea != null)
             {
-                var footerDrag = footerDragArea.AddComponent<RemapAtomUidsPanelDrag>();
+                var footerDrag = footerDragArea.AddComponent<UIFloatPanelDrag>();
                 footerDrag.Target = _remapAtomUidsPanelRT;
                 footerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
             }
@@ -868,7 +868,7 @@ namespace VPB
             footerSpacer.AddComponent<RectTransform>();
             UI.AddLE(footerSpacer, flexibleWidth: 1f, minWidth: 8f * s);
             UI.EnsureFloatFooterSpacerDragHit(footerSpacer);
-            var spacerDrag = footerSpacer.AddComponent<RemapAtomUidsPanelDrag>();
+            var spacerDrag = footerSpacer.AddComponent<UIFloatPanelDrag>();
             spacerDrag.Target = _remapAtomUidsPanelRT;
             spacerDrag.OnMoved = OnRemapAtomUidsFloatMoved;
 
@@ -943,7 +943,7 @@ namespace VPB
                     UI.AddIconToButton(resizeHandle, rhSpr, 5f * s, UI.IconButtonBackdrop);
             }
             catch { }
-            var resizer = resizeHandle.AddComponent<RemapAtomUidsPanelResize>();
+            var resizer = resizeHandle.AddComponent<UIFloatPanelResize>();
             resizer.Target = _remapAtomUidsPanelRT;
             resizer.GetMinSize = () => new Vector2(RemapFloatMinWRef * _remapAtomUidsChromeScale, RemapFloatMinHRef * _remapAtomUidsChromeScale);
             resizer.GetMaxSize = () => new Vector2(RemapFloatMaxWRef * _remapAtomUidsChromeScale, RemapFloatMaxHRef * _remapAtomUidsChromeScale);
@@ -2157,53 +2157,6 @@ namespace VPB
             Transform t = go.transform;
             for (int i = 0; i < t.childCount; i++)
                 SetLayerRecursiveLocal(t.GetChild(i).gameObject, layer);
-        }
-
-        private sealed class RemapAtomUidsPanelDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Action OnMoved;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Target.anchoredPosition += eventData.delta;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnMoved != null) OnMoved();
-            }
-        }
-
-        private sealed class RemapAtomUidsPanelResize : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-        {
-            public RectTransform Target;
-            public Func<Vector2> GetMinSize;
-            public Func<Vector2> GetMaxSize;
-            public Action OnResized;
-
-            public void OnBeginDrag(PointerEventData eventData) { }
-
-            public void OnDrag(PointerEventData eventData)
-            {
-                if (Target == null || eventData == null) return;
-                Vector2 size = Target.sizeDelta;
-                size.x += eventData.delta.x;
-                size.y -= eventData.delta.y;
-                Vector2 min = GetMinSize != null ? GetMinSize() : new Vector2(420f, 280f);
-                Vector2 max = GetMaxSize != null ? GetMaxSize() : new Vector2(960f, 900f);
-                size.x = Mathf.Clamp(size.x, min.x, max.x);
-                size.y = Mathf.Clamp(size.y, min.y, max.y);
-                Target.sizeDelta = size;
-            }
-
-            public void OnEndDrag(PointerEventData eventData)
-            {
-                if (OnResized != null) OnResized();
-            }
         }
     }
 }
